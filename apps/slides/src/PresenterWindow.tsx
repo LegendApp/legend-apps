@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,7 @@ import {
 } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { EditableMarkdown } from "./EditableMarkdown";
+import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import {
   getPresentationDisplayId,
@@ -446,6 +448,15 @@ function launchDeckPath(launchArguments?: string[]) {
 }
 
 export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
+  const [editingDeck, setEditingDeck] = useState(false);
+  const editingDeckRef = useRef(false);
+  editingDeckRef.current = editingDeck;
+  const deckPath = useValue(slidesState$.deckPath);
+  const wasEditingDeck = useRef(false);
+  useEffect(() => {
+    if (wasEditingDeck.current && !editingDeck && deckPath) void loadDeck(deckPath, false);
+    wasEditingDeck.current = editingDeck;
+  }, [editingDeck, deckPath]);
   const presenter$ = useObservable<PresenterSession>({
     displays: [], selectedDisplayId: null, rehearsalEnabled: false,
     activeMode: null, notesEditing: false, presenterLayoutResetVersion: 0,
@@ -498,6 +509,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   }, [audience, setDisplays, setSelectedDisplayId]);
 
   const openDeck = useCallback(async () => {
+    if (editingDeckRef.current) { Alert.alert("Finish editing first", "Save your changes and choose Done Editing before opening another deck."); return; }
     const paths = await openFileDialog({
       allowedFileTypes: ["mdx"],
       allowsMultipleSelection: false,
@@ -523,7 +535,9 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   useEffect(() => {
     void refreshDisplays();
     const displaysSubscription = addDisplaysChangedListener(() => void refreshDisplays());
-    const recentSubscription = addRecentDocumentOpenListener(({ path }) => void loadDeck(path));
+    const recentSubscription = addRecentDocumentOpenListener(({ path }) => {
+      if (!editingDeckRef.current) void loadDeck(path);
+    });
     const closedSubscription = addWindowClosedListener((event) => {
       if (event.identifier === "slides-audience") {
         audience.closed();
@@ -545,6 +559,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
+      if (editingDeckRef.current) return false;
       if (presenter$.notesEditing.peek() && event.keyCode !== KeyCodes.KEY_PAGE_DOWN && event.keyCode !== KeyCodes.KEY_PAGE_UP) {
         return false;
       }
@@ -651,6 +666,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   return (
     <View style={styles.root}>
+      {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={() => setEditingDeck(false)} /> : <>
       <ConnectedPresenterToolbar
         presenter$={presenter$}
         audienceOpen={audienceOpen}
@@ -659,12 +675,14 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         onStart={startAudience}
         onStop={stopAudience}
       />
+      {!audienceOpen && deckPath && <Pressable accessibilityRole="button" onPress={() => setEditingDeck(true)} className="self-end px-4 py-2"><Text className="text-blue-300">Edit Source</Text></Pressable>}
       <PresenterDeckContent
         keyboardJump$={keyboardJump$}
         presenter$={presenter$}
         onNotesEditingChange={setNotesEditing}
         onSaveNotes={saveSpeakerNotes}
       />
+      </>}
     </View>
   );
 }

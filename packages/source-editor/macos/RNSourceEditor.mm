@@ -27,6 +27,8 @@ struct SourceLoadJob {
 
 @implementation RNSourceEditorHost {
   NSString *_path;
+  NSString *_initialSource;
+  BOOL _useInitialSource;
   BOOL _loaded, _waitingForFirstDraw;
   std::shared_ptr<SourceLoadJob> _loadJob;
 }
@@ -61,6 +63,8 @@ struct SourceLoadJob {
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps {
   const auto &next = *std::static_pointer_cast<const SourceEditorHostProps>(props);
   NSString *path = str(next.documentPath);
+  _initialSource = str(next.initialSource);
+  _useInitialSource = next.useInitialSource;
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
   [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
   _input.syntaxHighlightingInBackground = next.syntaxHighlightingInBackground;
@@ -74,6 +78,13 @@ struct SourceLoadJob {
   _loadJob = std::make_shared<SourceLoadJob>();
   _waitingForFirstDraw = NO;
   _input.onFirstDraw = nil;
+  if (_useInitialSource) {
+    [_input loadSource:_initialSource];
+    std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
+      .lineCount = (double)_input.lineCount, .firstId = 1, .complete = true, .error = "",
+    });
+    return;
+  }
   [self loadNextChunk:_loadJob first:YES];
 }
 - (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job first:(BOOL)first {
@@ -151,6 +162,7 @@ struct SourceLoadJob {
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
   _input.syntaxHighlightingInBackground = NO;
   _path = nil; _loaded = NO; [_input loadSource:@""];
+  _initialSource = nil; _useInitialSource = NO;
   [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];
 }
 - (void)dealloc { if (_loadJob) _loadJob->cancelled = true; }

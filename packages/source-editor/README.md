@@ -1,6 +1,6 @@
 # Source editor prototype
 
-Shared single-file editor work for Code and, later, Slides. The document is not
+Shared single-file editor work for Code and Slides. The document is not
 an array of editable inputs: a persistent AppKit input client owns text,
 selection, composition, and undo. LegendList owns the recycled visible rows.
 CoreText supplies the geometry for wrapping, drawing, hit testing, and the IME.
@@ -10,9 +10,15 @@ No NSTextView or Markdown block editor is used.
 
 Code opens UTF-8 files directly in this editor. The old read-only viewer and its
 separate loading/tokenization path are disabled in Code for now.
-Edits are intentionally not saved; switching files or closing the window discards
+In Code, edits are intentionally not saved; switching files or closing the window discards
 them. The window displays this limitation. Do not use it to author work that needs
 saving. Settings changes and reselecting the same file preserve the edit buffer.
+
+Slides seeds the same editor with `initialSource` and owns its draft/save workflow.
+Without that prop, file loading remains native and progressive. An in-memory seed
+is loaded once; remount with a different key when replacing it. `onChange` reports
+UTF-16 range edits, and `onSelectionChange` reports the selected range and logical
+line for preview/navigation integrations. Neither callback writes to disk.
 
 Implemented foundations:
 

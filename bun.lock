@@ -208,6 +208,7 @@
         "@legend-apps/recent-documents": "0.0.0",
         "@legend-apps/scaled-view": "0.0.0",
         "@legend-apps/settings-window": "0.0.0",
+        "@legend-apps/source-editor": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/syntax-parser": "0.0.0",
         "@legend-apps/window-manager": "0.0.0",
