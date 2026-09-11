@@ -67,6 +67,10 @@ Implemented foundations:
   matching rendering, wrapping, selection, and caret geometry. Theme/highlighting
   changes keep the native edit buffer and undo history; asset failures fall back
   to editable plain text with an error message.
+- Files with at least 10,000 loaded lines show a top-centered progress banner:
+  loaded line count while reading, then percentage during background highlighting.
+  It disappears when finished. Native progress is throttled to roughly 10 Hz
+  (with immediate phase changes), and updates only the banner, not editor rows.
 
 ## Validation
 
