@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 #include <utility>
+#include "../../../grammars/PackABI.h"
 
 namespace margelo::nitro::legendapps::syntaxparser {
 
@@ -44,6 +45,10 @@ public:
   TreeSitterHighlighter(const TreeSitterHighlighter&) = delete;
   TreeSitterHighlighter& operator=(const TreeSitterHighlighter&) = delete;
   static bool supports(const std::string& language);
+  // Call only after platform signature/integrity validation. Libraries must stay
+  // loaded for the process lifetime; active trees retain their language pointer.
+  static void registerPack(const LegendGrammarPackV1& pack);
+  std::vector<std::string> missingLanguages() const;
   static std::string themeScope(const std::string& capture);
   void reset();
   void edit(const TreeSitterEdit& edit);
@@ -54,7 +59,8 @@ public:
   // the identical worker-owned snapshot. edit/reset abandon a suspended job.
   bool parseSlice(const TreeSitterInput& input, double milliseconds, const std::atomic_bool* cancelled = nullptr);
   std::vector<TreeSitterSpan> highlight(uint32_t start, uint32_t end, const std::atomic_bool* cancelled = nullptr) const;
-  const std::vector<std::string>& captures() const;
+  std::vector<std::string> captures() const;
+  static size_t captureCount();
   static std::string rootScopeForCapture(uint32_t capture);
   std::string rootScope() const;
   // Last successful parse: edited text plus changed syntax, expanded to the

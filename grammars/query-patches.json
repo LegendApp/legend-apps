@@ -1,0 +1,10 @@
+{
+  "scss": [
+    {
+      "from": " (match? @variable",
+      "to": " (#match? @variable",
+      "count": 2,
+      "reason": "The pinned upstream query uses pre-modern predicate syntax; current Tree-sitter requires the # prefix."
+    }
+  ]
+}

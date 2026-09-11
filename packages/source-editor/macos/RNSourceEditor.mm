@@ -64,6 +64,11 @@ struct SourceLoadJob {
         .completedLines = (double)completed, .totalLines = (double)total, .active = (bool)active,
       });
     };
+    _input.onGrammarRequired = ^(NSString *language) {
+      RNSourceEditorHost *self = weakSelf;
+      if (!self || !self->_eventEmitter) return;
+      std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onGrammarRequired({.language = utf8String(language)});
+    };
   }
   return self;
 }
@@ -74,6 +79,7 @@ struct SourceLoadJob {
   _useInitialSource = next.useInitialSource;
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
   _input.syntaxBackend = str(next.syntaxBackend);
+  _input.grammarRevision = next.grammarRevision;
   [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
   _input.syntaxHighlightingInBackground = next.syntaxHighlightingInBackground;
   [super updateProps:props oldProps:oldProps];
@@ -173,6 +179,7 @@ struct SourceLoadJob {
   _input.syntaxHighlightingInBackground = NO;
   _input.sourceLoading = NO;
   _input.syntaxBackend = @"textmate";
+  _input.grammarRevision = 0;
   _path = nil; _loaded = NO; [_input loadSource:@""];
   _initialSource = nil; _useInitialSource = NO;
   [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];

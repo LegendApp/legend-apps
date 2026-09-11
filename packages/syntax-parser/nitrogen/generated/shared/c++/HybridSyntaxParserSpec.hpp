@@ -18,9 +18,10 @@ namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxHighlightResul
 // Forward declaration of `SyntaxFileLoadResult` to properly resolve imports.
 namespace margelo::nitro::legendapps::syntaxparser { struct SyntaxFileLoadResult; }
 
-#include "SyntaxHighlightResult.hpp"
-#include <NitroModules/Promise.hpp>
 #include <string>
+#include <NitroModules/Promise.hpp>
+#include <functional>
+#include "SyntaxHighlightResult.hpp"
 #include "SyntaxFileLoadResult.hpp"
 
 namespace margelo::nitro::legendapps::syntaxparser {
@@ -54,6 +55,9 @@ namespace margelo::nitro::legendapps::syntaxparser {
 
     public:
       // Methods
+      virtual bool isTreeGrammarLoaded(const std::string& language) = 0;
+      virtual std::string getGrammarPlatform() = 0;
+      virtual std::shared_ptr<Promise<std::string>> installTreeGrammar(const std::string& name, const std::string& url, const std::string& sha256, double bytes, const std::function<void(double /* completed */, double /* total */)>& progress) = 0;
       virtual std::shared_ptr<Promise<SyntaxHighlightResult>> highlightString(const std::string& source, const std::string& language, const std::string& theme) = 0;
       virtual std::shared_ptr<Promise<SyntaxFileLoadResult>> loadCodeFile(const std::string& filePath, const std::string& language, const std::string& theme, double initialLineCount) = 0;
 

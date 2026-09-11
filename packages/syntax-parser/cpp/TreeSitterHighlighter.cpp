@@ -17,9 +17,26 @@
 
 namespace margelo::nitro::legendapps::syntaxparser {
 namespace {
+std::mutex registryMutex;
+struct DynamicLanguage {
+  std::string name, scope, query;
+  TreeSitterLanguage entry;
+};
+std::map<std::string, std::unique_ptr<DynamicLanguage>> dynamicLanguages;
+std::vector<std::pair<std::string, std::string>>& captureCatalog() {
+  static auto result = [] {
+    std::vector<std::pair<std::string, std::string>> values;
+    for (const auto& capture : treeSitterCaptures) values.emplace_back(capture.name, capture.scope);
+    return values;
+  }();
+  return result;
+}
 const TreeSitterLanguage* findLanguage(std::string name) {
   // Language IDs/aliases are ASCII; do not depend on the process locale.
   for (auto& c : name) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+  for (const auto& alias : treeSitterCanonicalAliases) if (name == alias.name) { name = alias.canonical; break; }
+  std::lock_guard lock(registryMutex);
+  if (const auto found = dynamicLanguages.find(name); found != dynamicLanguages.end()) return &found->second->entry;
   for (const auto& alias : treeSitterAliases) if (name == alias.name) return &treeSitterLanguages[alias.index];
   return nullptr;
 }
@@ -51,6 +68,7 @@ bool cancelParse(TSParseState* state) {
 }
 struct Predicate {
   std::string operation, value;
+  std::vector<std::string> alternatives;
   uint32_t capture = 0;
   std::optional<std::regex> expression;
 };
@@ -71,6 +89,14 @@ std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
       if (p.operation == "is-not?") {
         p.value = text(steps[i++].value_id);
         if (p.value != "local") throw std::runtime_error("Unsupported query property: " + p.value);
+      } else if (p.operation == "any-of?" || p.operation == "has-ancestor?") {
+        if (i >= size || steps[i].type != TSQueryPredicateStepTypeCapture) throw std::runtime_error("Expected any-of capture");
+        p.capture = steps[i++].value_id;
+        while (i < size && steps[i].type != TSQueryPredicateStepTypeDone) {
+          if (steps[i].type != TSQueryPredicateStepTypeString) throw std::runtime_error("Expected any-of string");
+          p.alternatives.push_back(text(steps[i++].value_id));
+        }
+        if (p.alternatives.empty()) throw std::runtime_error("Empty any-of predicate");
       } else if (p.operation == "match?" || p.operation == "eq?") {
         if (steps[i].type != TSQueryPredicateStepTypeCapture) throw std::runtime_error("Expected predicate capture");
         p.capture = steps[i++].value_id;
@@ -85,6 +111,7 @@ std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
 }
 }
 struct TreeSitterHighlighter::Impl {
+  std::vector<std::string> missingLanguages;
   const TreeSitterLanguage* language = nullptr;
   TSParser* parser = ts_parser_new();
   std::shared_ptr<TSQuery> query;
@@ -121,6 +148,35 @@ struct TreeSitterHighlighter::Impl {
   ~Impl() { ts_tree_delete(tree); ts_query_cursor_delete(cursor); if (injectionCursor) ts_query_cursor_delete(injectionCursor); ts_parser_delete(parser); }
 };
 bool TreeSitterHighlighter::supports(const std::string& language) { return findLanguage(language) != nullptr; }
+void TreeSitterHighlighter::registerPack(const LegendGrammarPackV1& pack) {
+  if (pack.abi != 1 || !pack.name || !pack.scope || !pack.query || !pack.language)
+    throw std::runtime_error("Invalid grammar pack descriptor");
+  const auto* grammar = pack.language();
+  if (!grammar) throw std::runtime_error("Grammar factory returned no language");
+  const auto abi = ts_language_abi_version(grammar);
+  if (abi < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION || abi > TREE_SITTER_LANGUAGE_VERSION)
+    throw std::runtime_error("Incompatible grammar ABI");
+  uint32_t offset = 0; TSQueryError error;
+  auto query = std::unique_ptr<TSQuery, decltype(&ts_query_delete)>(
+    ts_query_new(grammar, pack.query, static_cast<uint32_t>(std::string_view(pack.query).size()), &offset, &error), ts_query_delete);
+  if (!query) throw std::runtime_error("Invalid pack query at " + std::to_string(offset));
+  compilePredicates(query.get());
+  std::lock_guard lock(registryMutex);
+  // Never replace a live language/query pair. Updates take effect next launch.
+  if (dynamicLanguages.count(pack.name)) return;
+  for (const auto& entry : treeSitterLanguages) if (std::string_view(entry.name) == pack.name) return;
+  auto value = std::make_unique<DynamicLanguage>();
+  value->name = pack.name; value->scope = pack.scope; value->query = pack.query;
+  const auto start = static_cast<uint32_t>(captureCatalog().size());
+  for (uint32_t i = 0; i < ts_query_capture_count(query.get()); ++i) {
+    uint32_t size; const auto* name = ts_query_capture_name_for_id(query.get(), i, &size);
+    captureCatalog().emplace_back(std::string(name, size), value->scope);
+  }
+  value->entry = {value->name.c_str(), value->scope.c_str(), pack.language, value->query.c_str(), start,
+    ts_query_capture_count(query.get())};
+  const auto name = value->name;
+  dynamicLanguages.emplace(name, std::move(value));
+}
 std::string TreeSitterHighlighter::themeScope(const std::string& capture) {
   const auto is = [&](const char* category) {
     const std::string_view prefix(category);
@@ -193,18 +249,26 @@ TreeSitterHighlighter::TreeSitterHighlighter(const std::string& language) : impl
     impl_->captures.emplace_back(name, size);
     const auto& entry = *impl_->language;
     uint32_t id = entry.captureOffset;
-    while (id < entry.captureOffset + entry.captureCount && impl_->captures.back() != treeSitterCaptures[id].name) ++id;
+    std::lock_guard registryLock(registryMutex);
+    while (id < entry.captureOffset + entry.captureCount && impl_->captures.back() != captureCatalog()[id].first) ++id;
     if (id == entry.captureOffset + entry.captureCount) throw std::runtime_error("Stale Tree-sitter capture catalog");
     impl_->captureIds.push_back(id);
   }
 }
-const std::vector<std::string>& TreeSitterHighlighter::captures() const {
-  static const auto catalog = [] { std::vector<std::string> result; for (const auto& capture : treeSitterCaptures) result.emplace_back(capture.name); return result; }();
-  return catalog;
+std::vector<std::string> TreeSitterHighlighter::captures() const {
+  std::lock_guard lock(registryMutex);
+  std::vector<std::string> result;
+  for (const auto& capture : captureCatalog()) result.push_back(capture.first);
+  return result;
+}
+size_t TreeSitterHighlighter::captureCount() {
+  std::lock_guard lock(registryMutex);
+  return captureCatalog().size();
 }
 std::string TreeSitterHighlighter::rootScopeForCapture(uint32_t capture) {
-  if (capture >= std::size(treeSitterCaptures)) throw std::out_of_range("Invalid capture ID");
-  return treeSitterCaptures[capture].scope;
+  std::lock_guard lock(registryMutex);
+  if (capture >= captureCatalog().size()) throw std::out_of_range("Invalid capture ID");
+  return captureCatalog()[capture].second;
 }
 std::string TreeSitterHighlighter::rootScope() const { return impl_->language->scope; }
 TreeSitterHighlighter::~TreeSitterHighlighter() = default;
@@ -314,6 +378,7 @@ bool TreeSitterHighlighter::parseSlice(const TreeSitterInput& input, double mill
 }
 std::pair<uint32_t, uint32_t> TreeSitterHighlighter::invalidatedRange() const { return impl_->invalidated; }
 std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uint32_t end, const std::atomic_bool* cancelled) const {
+  impl_->missingLanguages.clear();
   auto result = highlightBase(start, end);
   const std::string_view language = impl_->language->name;
   if ((language != "markdown" && language != "mdx") || start == end || impl_->injectionDepth >= 4) return result;
@@ -321,6 +386,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
   std::vector<Region> regions;
   const auto range = [](TSNode node) { return TSRange{ts_node_start_point(node), ts_node_end_point(node), ts_node_start_byte(node), ts_node_end_byte(node)}; };
   const auto add = [&](TSNode node, const char* target, bool excludeChildren) {
+    if (!findLanguage(target)) { impl_->missingLanguages.emplace_back(target); return; }
     Region region{node, target, {}};
     auto remaining = range(node);
     if (excludeChildren) {
@@ -369,6 +435,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
           name.push_back(static_cast<char>(c)); ++at;
         }
         if (const auto* target = findLanguage(name)) add(content, target->name, true);
+        else if (!name.empty()) impl_->missingLanguages.push_back(name);
       }
       continue; // Never interpret fence contents as host Markdown/MDX.
     }
@@ -430,6 +497,16 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     else combined.push_back({from, to - from, chosen->capture, chosen->captureId});
   }
   return combined;
+}
+std::vector<std::string> TreeSitterHighlighter::missingLanguages() const {
+  auto result = impl_->missingLanguages;
+  for (const auto& entry : impl_->injections) if (entry.second.highlighter) {
+    auto nested = entry.second.highlighter->missingLanguages();
+    result.insert(result.end(), nested.begin(), nested.end());
+  }
+  std::sort(result.begin(), result.end());
+  result.erase(std::unique(result.begin(), result.end()), result.end());
+  return result;
 }
 std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start, uint32_t end) const {
   if (!impl_->ready) throw std::logic_error("Parse must finish before highlighting");
@@ -545,7 +622,15 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
           for (uint16_t c = 0; c < match.capture_count; ++c) {
             if (match.captures[c].index != predicate.capture) continue;
             const auto value = nodeText(match.captures[c].node);
-            if (predicate.expression ? !std::regex_search(value, *predicate.expression) : value != predicate.value) accepted = false;
+            if (predicate.operation == "has-ancestor?") {
+              bool found = false;
+              for (auto parent = ts_node_parent(match.captures[c].node); !ts_node_is_null(parent); parent = ts_node_parent(parent)) {
+                if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), ts_node_type(parent)) != predicate.alternatives.end()) { found = true; break; }
+              }
+              if (!found) accepted = false;
+            } else if (predicate.operation == "any-of?") {
+              if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), value) == predicate.alternatives.end()) accepted = false;
+            } else if (predicate.expression ? !std::regex_search(value, *predicate.expression) : value != predicate.value) accepted = false;
           }
         }
         if (!accepted) break;

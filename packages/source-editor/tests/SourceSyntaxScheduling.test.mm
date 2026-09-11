@@ -178,6 +178,21 @@ int main(int argc, char **argv) {
         row.input = nil;
       }
       const auto fallbackCreations = textMateCreations;
+      __block NSUInteger grammarRequests = 0;
+      tree.onGrammarRequired = ^(NSString *language) {
+        assert([language isEqualToString:@"rust"]); ++grammarRequests;
+      };
+      [tree configureSyntaxLanguage:@"markdown" theme:@"dark-plus" enabled:YES];
+      NSString *fence = @"# Download test\n\n```rust\nfn main() {}\n```\n";
+      [tree loadSource:fence]; [tree recordStartupDraw];
+      waitFor(^bool { return [[tree valueForKey:@"treeNextLine"] unsignedIntegerValue] == tree.lineCount; });
+      assert(grammarRequests == 1);
+      const auto copiedBefore = [[tree valueForKey:@"treeCopiedUnits"] unsignedIntegerValue];
+      ++tree.grammarRevision;
+      assert([[tree valueForKey:@"treeCopiedUnits"] unsignedIntegerValue] == copiedBefore);
+      waitFor(^bool { return [[tree valueForKey:@"treeNextLine"] unsignedIntegerValue] == tree.lineCount; });
+      assert(grammarRequests == 1 && [tree.source isEqualToString:fence]);
+      tree.onGrammarRequired = nil;
       [tree configureSyntaxLanguage:@"unsupported-language" theme:@"dark-plus" enabled:YES];
       assert(textMateCreations == fallbackCreations + 1); // interim policy for remaining unsupported languages
       waitFor(^bool { return highlighted(tree) == tree.lineCount; });

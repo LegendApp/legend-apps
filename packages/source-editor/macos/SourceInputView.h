@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) void (^onSelection)(NSUInteger line, NSUInteger offset, NSUInteger length);
 @property (nonatomic, copy, nullable) void (^onSyntaxError)(NSString *error);
 @property (nonatomic, copy, nullable) void (^onSyntaxProgress)(NSUInteger completed, NSUInteger total, BOOL active);
+@property (nonatomic, copy, nullable) void (^onGrammarRequired)(NSString *language);
+@property (nonatomic) NSUInteger grammarRevision;
 @property (nonatomic, readonly) NSUInteger anchor;
 @property (nonatomic, readonly) NSUInteger head;
 @property (nonatomic, readonly) NSUInteger lineCount;

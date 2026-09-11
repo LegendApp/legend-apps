@@ -6,9 +6,10 @@ structure. Nested/real-code local edits measured below 1 ms in the native backen
 structural changes still require background scheduling. The earlier table is
 retained as a reproducible stress case, not a typical typing-latency estimate.
 
-The native backend now drives an opt-in shared source-editor worker. Select it
-with `SourceDocumentEditor syntaxBackend="tree-sitter"` or launch Code with
-`bun run code run macos -- --syntax-backend=tree-sitter /absolute/path/file.tsx`.
+The native backend drives the Code and Slides source editors. Other consumers
+can select it with `SourceDocumentEditor syntaxBackend="tree-sitter"`.
+See [downloadable grammar packs](../../grammars/README.md) for the root catalog,
+local pack builds, signing requirements, download progress, and release tooling.
 TextMate is still present during implementation, including Diff, but the
 approved target is its complete removal—not a supported dual-backend product.
 Diff will retain its on-demand policy on the same Tree-sitter engine. The earlier tables below describe the

@@ -69,6 +69,7 @@ static NSString *string(const std::u16string &text) {
   NSUInteger _treeCopiedUnits, _treeNextLine, _treeRevision, _treeVisibleRevision, _treeVisibleStart, _treeVisibleEnd;
   NSUInteger _treeKnownEnd, _treeDirtyEnd;
   BOOL _treeBusy, _treePrefixDone;
+  std::unordered_set<std::string> _requestedGrammarNames;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
@@ -183,6 +184,19 @@ static NSString *string(const std::u16string &text) {
   _sourceLoading = loading;
   if (!loading) [self scheduleSyntax];
 }
+- (void)setGrammarRevision:(NSUInteger)revision {
+  if (_grammarRevision == revision) return;
+  _grammarRevision = revision;
+  if (_treeSyntax) {
+    // A new embedded parser changes queries, not source text. Keep the worker's
+    // existing tree/mirror and retained colors instead of recopying a large file.
+    ++_treeRevision;
+    _treeVisibleRevision = NSNotFound;
+    _treeNextLine = _treeKnownEnd = 0;
+    _treeDirtyEnd = _document->lineCount();
+    [self scheduleSyntax];
+  }
+}
 - (void)setSyntaxHighlightingInBackground:(BOOL)enabled {
   if (_syntaxHighlightingInBackground == enabled) return;
   _syntaxHighlightingInBackground = enabled;
@@ -205,6 +219,7 @@ static NSString *string(const std::u16string &text) {
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
 }
 - (void)resetSyntax {
+  _requestedGrammarNames.clear();
   ++_syntaxGeneration;
   _syntaxNextLine = _syntaxKnownEnd = _syntaxDirtyEnd = 0;
   [self retireSyntax];
@@ -384,12 +399,13 @@ static NSString *string(const std::u16string &text) {
   const BOOL parse = prefix || (!_sourceLoading && _treeCopiedUnits == _document->length());
   const auto start = prefix ? 0 : visible ? from : _treeNextLine;
   const auto batch = prefix ? 128 : visible ? MIN(to - from, 256) : 512;
-  const BOOL needsCaptures = _treeCaptures.empty();
+  const auto capturedCount = _treeCaptures.size();
   _treeBusy = YES;
   __weak LESourceInputView *weakSelf = self;
   dispatch_async(_treeQueue, ^{
     std::vector<legend::source::SourceSyntaxRow> result;
     std::vector<std::string> captures;
+    std::vector<std::string> missingLanguages;
     std::pair<size_t, size_t> invalidated{0, 0};
     NSString *error = nil;
     try {
@@ -398,7 +414,8 @@ static NSString *string(const std::u16string &text) {
       if (parse && worker->parse()) {
         invalidated = worker->takeInvalidatedLines();
         if (start < worker->lineCount()) result = worker->highlight(start, batch);
-        if (needsCaptures) captures = worker->captures();
+        if (worker->captureCount() != capturedCount) captures = worker->captures();
+        missingLanguages = worker->missingLanguages();
       }
     } catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -413,6 +430,8 @@ static NSString *string(const std::u16string &text) {
         return;
       }
       if (prefix) self->_treePrefixDone = YES;
+      if (self.onGrammarRequired) for (const auto& language : missingLanguages)
+        if (self->_requestedGrammarNames.insert(language).second) self.onGrammarRequired([NSString stringWithUTF8String:language.c_str()]);
       if (revision == self->_treeRevision && parse) {
         if (invalidated.second > invalidated.first) {
           self->_treeNextLine = MIN(self->_treeNextLine, invalidated.first);
@@ -427,7 +446,7 @@ static NSString *string(const std::u16string &text) {
             self->_treeRows[id] = line.tokens; changed.insert(id);
           }
         }
-        if (self->_treeCaptures.empty()) { self->_treeCaptures = std::move(captures); [self refreshTreePalette]; }
+        if (!captures.empty()) { self->_treeCaptures = std::move(captures); [self refreshTreePalette]; }
         if (visible && !prefix) { self->_treeVisibleRevision = revision; self->_treeVisibleStart = from; self->_treeVisibleEnd = to; }
         if (start <= self->_treeNextLine) {
           self->_treeNextLine = MAX(self->_treeNextLine, start + result.size());

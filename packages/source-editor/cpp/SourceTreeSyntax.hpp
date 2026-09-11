@@ -99,7 +99,9 @@ public:
     }
     return rows;
   }
-  const std::vector<std::string>& captures() const { return parser_->captures(); }
+  std::vector<std::string> captures() const { return parser_->captures(); }
+  size_t captureCount() const { return tree::TreeSitterHighlighter::captureCount(); }
+  std::vector<std::string> missingLanguages() const { return parser_ ? parser_->missingLanguages() : std::vector<std::string>{}; }
   std::string rootScope() const { return parser_->rootScope(); }
   std::pair<size_t, size_t> takeInvalidatedLines() {
     auto range = invalidated_; invalidated_ = {0, 0}; return range;
