@@ -42,6 +42,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, nullable) LESourceLineLayout *textLayout;
 @property (nonatomic, copy, nullable) void (^onMetrics)(CGFloat height, CGFloat width);
 - (void)invalidateText;
+- (void)applyLineId:(uint64_t)lineId index:(NSUInteger)index;
 - (NSPoint)textPointForWindowPoint:(NSPoint)point;
 @end
 NS_ASSUME_NONNULL_END

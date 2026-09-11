@@ -130,14 +130,24 @@ int main() {
     revision = 0;
     [input loadSource:@"one\ntwo\nthree\nfour"];
     row.lineIndex = 3; row.lineId = 4; row.input = input;
+    [row layout];
+    LESourceLineLayout *unchangedLayout = row.textLayout;
     [input insertText:@"new\n" replacementRange:NSMakeRange(0, 0)];
+    [row layout];
+    assert(row.textLayout == unchangedLayout);
     assert(row.lineIndex == 4);
     assert([[input textForRow:row] isEqualToString:@"four"]);
     assert([input offsetForRow:row] == 18);
+    // A delayed Fabric commit for the same logical row must not restore its
+    // pre-edit index and make the gutter/content temporarily disappear.
+    [row applyLineId:4 index:3];
+    assert(row.lineIndex == 4 && [input offsetForRow:row] == 18);
     closeUndoGroup(input.undoManager);
     [input.undoManager undo];
     assert(row.lineIndex == 3);
     assert([[input textForRow:row] isEqualToString:@"four"]);
+    [row applyLineId:4 index:4];
+    assert(row.lineIndex == 3 && [input offsetForRow:row] != NSNotFound);
     revision = 0;
     [input loadSource:@"base"];
     input.undoManager.groupsByEvent = NO;
