@@ -6,6 +6,7 @@
 #import <objc/runtime.h>
 
 #if TARGET_OS_OSX
+#import "NativeMenuValidation.h"
 #import <AppKit/AppKit.h>
 
 @class RNNativeMenu;
@@ -428,6 +429,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
   }
 
   [RNNativeMenuBoundMenuItems() removeObjectForKey:item];
+  LegendSetConfiguredMenuEnabled(item, nil);
 
   id target = record[@"target"];
   item.target = target == (id)kCFNull ? nil : target;
@@ -590,7 +592,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 
   NSNumber *enabled = [config[@"enabled"] isKindOfClass:[NSNumber class]] ? config[@"enabled"] : nil;
   if (enabled) {
-    item.enabled = enabled.boolValue;
+    LegendSetConfiguredMenuEnabled(item, enabled);
   }
 
   NSNumber *hidden = [config[@"hidden"] isKindOfClass:[NSNumber class]] ? config[@"hidden"] : nil;
@@ -625,7 +627,7 @@ static BOOL RNNativeMenuHandleBoundSender(id sender)
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
-  return menuItem.enabled;
+  return LegendValidateConfiguredMenuItem(menuItem);
 }
 #endif
 
