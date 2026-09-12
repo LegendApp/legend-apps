@@ -2053,7 +2053,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
         existingRootView.backgroundColor = NSColor.clearColor;
       }
 
-      LegendApplyWindowTitleAndRepresentedURL(existingWindow, title, hasRepresentedURL, representedURLValue, title);
+      // A focus-only open must not replace document metadata with the module name.
+      if (LegendDictionaryHasKey(options, @"title") || hasRepresentedURL) {
+        NSString *explicitTitle = [options[@"title"] isKindOfClass:NSString.class] ? options[@"title"] : nil;
+        LegendApplyWindowTitleAndRepresentedURL(existingWindow, explicitTitle, hasRepresentedURL, representedURLValue, existingWindow.title);
+      }
       if (!appearance && darkAppearance) {
         existingWindow.appearance = darkAppearance;
       }
@@ -2076,7 +2080,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       LegendPrepareWindowForDisplay(existingWindow, backgroundColor);
       if (interceptClose) {
         [self.closeRequestIdentifiers addObject:identifier];
-      } else {
+      } else if (LegendDictionaryHasKey(options, @"interceptClose")) {
         [self.closeRequestIdentifiers removeObject:identifier];
       }
       self.moduleNames[identifier] = moduleName ?: @"";
