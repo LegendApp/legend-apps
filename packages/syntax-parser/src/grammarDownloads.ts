@@ -16,6 +16,7 @@ export function detectGrammar(path: string, firstLine = "") {
   const filename = path.split(/[\\/]/).pop()?.toLowerCase() ?? "";
   const exact = catalog.grammars.find((g) => (g.filenames as string[]).includes(filename));
   if (exact) return exact.name;
+  if (filename.startsWith("dockerfile.")) return "dockerfile";
   const extension = filename.includes(".") ? filename.split(".").pop()! : "";
   const match = catalog.grammars.find((g) => (g.extensions as string[]).includes(extension));
   if (match) return match.name;
@@ -69,7 +70,7 @@ export function createGrammarManager(io: GrammarIO) {
   async function acquire(name: string) {
     emit(name, { phase: "checking", error: undefined, completed: 0, total: 0 });
     try {
-      // A bundled grammar can still require separately installed inline parsers.
+      // A loaded grammar can still require separately installed inline parsers.
       const dependencies = byName.get(name)?.dependencies ?? [];
       if (io.loaded(name)) {
         for (const dependency of dependencies) await ensure(dependency);

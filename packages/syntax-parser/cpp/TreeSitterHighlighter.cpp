@@ -20,6 +20,7 @@ std::string TreeSitterHighlighter::languageForPath(std::string path) {
   for (auto& c : path) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
   const auto slash = path.find_last_of("/\\");
   const auto filename = path.substr(slash == std::string::npos ? 0 : slash + 1);
+  if (filename.rfind("dockerfile.", 0) == 0) return "dockerfile";
   for (const auto& entry : treeSitterFilenames) if (filename == entry.value) return entry.language;
   const auto dot = filename.find_last_of('.');
   if (dot != std::string::npos) {

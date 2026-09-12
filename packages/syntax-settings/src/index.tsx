@@ -2,7 +2,6 @@ import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
 import {
   ensureSyntaxTheme,
-  getAvailableSyntaxGrammars,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
   type SyntaxThemeAssetEntry,
@@ -181,7 +180,7 @@ export function SyntaxThemeSelectorSection({
     <SettingsSection
       card={false}
       contentClassName="gap-3"
-      description={description ?? "Choose the TextMate theme used for syntax colors in source views."}
+      description={description ?? "Choose the theme used for syntax colors in source views."}
       first={first}
       title={title ?? "Source"}
     >

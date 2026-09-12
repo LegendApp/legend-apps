@@ -15,7 +15,6 @@ Pod::Spec.new do |s|
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
     "HEADER_SEARCH_PATHS" => [
       "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
-      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build",
     ].join(" ")
   }
   s.dependency "React-Core"

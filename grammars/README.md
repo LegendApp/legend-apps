@@ -12,14 +12,17 @@ versioned library descriptor shared by the pack builder and the app runtime.
 Markdown block and inline, YAML, MDX, Bash, C, C++, Go, Rust, Java, Ruby,
 HTML, TOML, Lua, C#, Swift, Kotlin, Objective-C, XML, Dockerfile, JSON5, SCSS.
 
-The original ten parsers remain bundled during the distribution rollout; the
-other 18 are downloadable libraries. Keeping the existing subset usable is
-intentional while no release exists. Code, the Slides editor, and Diff now select
-Tree-sitter. Diff uses on-demand row queries and a provisional first-screen
-preview that is corrected after full parsing; its merge preview also uses
-Tree-sitter. Theme matching remains compatible with existing TextMate themes.
-Other legacy syntax-package consumers still need migration before deleting the
-TextMate runtime. The manager/installer is shared in `packages/syntax-parser`.
+No grammars are bundled in apps. All 28 parsers load on demand through the shared
+manager/installer in `packages/syntax-parser`; cached packs work offline.
+Code, the Slides source editor and code blocks, and Diff use Tree-sitter.
+Missing/unavailable packs render plain text with download progress and retry in
+source views. Until the first signed grammar release is published, fresh installs
+have no syntax highlighting. Theme colors remain compatible with VS Code themes,
+without the TextMate or Oniguruma runtimes.
+
+The ten vendored parser sources are test fixtures only, enabled exclusively with
+`LEGEND_SYNTAX_TEST_GRAMMARS` in standalone tests. Production builds compile
+only the Tree-sitter runtime and use an empty initial registry.
 
 Unsupported languages are not silently identified as a different grammar.
 Objective-C++ is not yet covered. Query acceptance does not imply language-server
@@ -37,13 +40,13 @@ bun run grammars:test --arch arm64
 
 Downloaded source goes into ignored `grammars/.cache/`; generated libraries,
 descriptors, licenses and manifests go into ignored `.legend/grammars/local/`.
-No compiled download assets are added to Git. Source for the original bundled
+No compiled download assets are added to Git. Source for the test-fixture
 parsers remains under `packages/syntax-parser/vendor/tree-sitter`.
 
 The fetch command verifies pinned revisions and copies upstream licenses. It
 generates Swift's missing parser from pinned `grammar.json` with Tree-sitter CLI
 0.25.10, ABI 14. Set `LEGEND_TREE_SITTER_CLI` to a local 0.25.10 executable to avoid
-installing the CLI through npm. After changing bundled pins, also run
+installing the CLI through npm. After changing test-fixture pins, also run
 `bun packages/syntax-parser/scripts/vendor-tree-sitter-grammars.ts` and regenerate
 the embedded queries/symbols with that package's existing scripts.
 

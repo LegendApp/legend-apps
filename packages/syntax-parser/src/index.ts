@@ -1,3 +1,5 @@
+import { isKnownGrammar } from "./grammarDownloads";
+import { treeGrammarManager } from "./treeGrammarService";
 import { NitroModules } from "react-native-nitro-modules";
 import { defaultSyntaxThemeName } from "./syntaxAssets";
 import type { SyntaxParser } from "./SyntaxParser.nitro";
@@ -12,36 +14,34 @@ function getSyntaxParser() {
   return syntaxParser;
 }
 
-export function highlightString(source: string, language = "typescript", theme = defaultSyntaxThemeName) {
-  return getSyntaxParser().highlightString(source, language, theme);
+export async function highlightString(source: string, language = "typescript", theme = defaultSyntaxThemeName) {
+  if (isKnownGrammar(language)) await treeGrammarManager.ensure(language).catch(() => {});
+  return getSyntaxParser().highlightTreeString(source, language, theme);
 }
 export function highlightTreeString(source: string, language: string, theme = defaultSyntaxThemeName) {
   return getSyntaxParser().highlightTreeString(source, language, theme);
 }
 
-export function loadCodeFile(
+export async function loadCodeFile(
   filePath: string,
   language = "typescript",
   theme = defaultSyntaxThemeName,
   initialLineCount = 200,
 ) {
+  if (isKnownGrammar(language)) await treeGrammarManager.ensure(language).catch(() => {});
   return getSyntaxParser().loadCodeFile(filePath, language, theme, initialLineCount);
 }
 
 export {
   bundledSyntaxThemes,
   defaultSyntaxThemeName,
-  ensureSyntaxGrammar,
-  ensureSyntaxGrammarsForPaths,
   ensureSyntaxTheme,
-  getAvailableSyntaxGrammars,
   getAvailableSyntaxThemes,
   getSyntaxAssetDirectoryUri,
   getSyntaxAssetStorage,
   getSyntaxLanguageForPath,
   getSyntaxTheme,
   isAvailableSyntaxThemeName,
-  isSyntaxGrammarInstalled,
   isSyntaxThemeInstalled,
   normalizeSyntaxThemeName,
   removeSyntaxAsset,
@@ -49,7 +49,6 @@ export {
   type SyntaxAssetEntry,
   type SyntaxAssetKind,
   type SyntaxAssetStatus,
-  type SyntaxGrammarAssetEntry,
   type SyntaxTheme,
   type SyntaxThemeAppearance,
   type SyntaxThemeAssetEntry,

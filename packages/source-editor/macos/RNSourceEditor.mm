@@ -178,7 +178,7 @@ struct SourceLoadJob {
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
   _input.syntaxHighlightingInBackground = NO;
   _input.sourceLoading = NO;
-  _input.syntaxBackend = @"textmate";
+  _input.syntaxBackend = @"tree-sitter";
   _input.grammarRevision = 0;
   _path = nil; _loaded = NO; [_input loadSource:@""];
   _initialSource = nil; _useInitialSource = NO;

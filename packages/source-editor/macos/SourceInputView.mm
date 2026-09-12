@@ -1,6 +1,6 @@
 #import "SourceInputView.h"
 #include "../cpp/SourceDocument.hpp"
-#include "../../syntax-parser/cpp/IncrementalSyntaxHighlighter.hpp"
+#include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 #include "../cpp/SourceTreeSyntax.hpp"
 #include <unordered_set>
 
@@ -26,7 +26,6 @@ static NSString *string(const std::u16string &text) {
 - (void)scheduleTreeSyntax;
 - (void)refreshTreePalette;
 - (std::vector<syntax::SyntaxStyle>)resolveTreeStyles:(const std::vector<std::vector<std::string>>&)scopes theme:(NSString *)theme;
-- (std::shared_ptr<syntax::IncrementalSyntaxHighlighter>)createSyntaxHighlighter;
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
 - (void)selectionDragTick;
@@ -41,13 +40,8 @@ static NSString *string(const std::u16string &text) {
   NSString *_compositionOriginal;
   NSRange _compositionRange;
   BOOL _needsSelectionReveal;
-  dispatch_queue_t _syntaxQueue;
-  std::shared_ptr<syntax::IncrementalSyntaxHighlighter> _syntax;
-  std::unordered_map<uint64_t, std::shared_ptr<const syntax::HighlightedSyntaxLine>> _highlightedRows;
   NSString *_syntaxLanguage, *_syntaxTheme;
-  BOOL _syntaxEnabled, _syntaxBusy;
-  uint64_t _syntaxGeneration;
-  NSUInteger _syntaxNextLine, _syntaxKnownEnd, _syntaxDirtyEnd, _syntaxJobEnd;
+  BOOL _syntaxEnabled;
   NSDictionary *_layoutAttributes;
   CGFloat _layoutWidth, _layoutLineHeight;
   BOOL _layoutWrap;
@@ -75,8 +69,6 @@ static NSString *string(const std::u16string &text) {
   if ((self = [super initWithFrame:frame])) {
     _rows = [NSHashTable weakObjectsHashTable];
     _history = [NSUndoManager new];
-    _syntaxQueue = dispatch_queue_create("app.legend.source-editor.syntax",
-      dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     [self loadSource:@""];
   }
   return self;
@@ -141,12 +133,6 @@ static NSString *string(const std::u16string &text) {
   auto change = _document->appendLoaded(std::move(chunk));
   const auto start = change.fallback ? change.fallback->startLine : change.startLine;
   if (_treeSyntax) { ++_treeRevision; _treeNextLine = MIN(_treeNextLine, start); _treeDirtyEnd = _document->lineCount(); }
-  if (_syntax && start < MAX(_syntaxNextLine, _syntaxBusy ? _syntaxJobEnd : 0)) {
-    ++_syntaxGeneration;
-    _syntaxNextLine = MIN(_syntaxNextLine, start);
-    _syntaxKnownEnd = MIN(_syntaxKnownEnd, start);
-    _syntaxDirtyEnd = _document->lineCount();
-  }
   for (LESourceRowView *row in _rows) {
     if (row.lineIndex < start) continue;
     if (change.fallback) {
@@ -175,8 +161,6 @@ static NSString *string(const std::u16string &text) {
   [self resetSyntax];
 }
 - (void)setSyntaxBackend:(NSString *)backend {
-  // Native launch override is convenient for A/B testing the exact same UI.
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--syntax-backend=tree-sitter"]) backend = @"tree-sitter";
   if ([_syntaxBackend isEqualToString:backend]) return;
   _syntaxBackend = [backend copy]; [self resetSyntax];
 }
@@ -203,27 +187,18 @@ static NSString *string(const std::u16string &text) {
   // Switching scheduling policies must preserve tokens, edits and undo.
   [self scheduleSyntax];
 }
-- (std::shared_ptr<syntax::IncrementalSyntaxHighlighter>)createSyntaxHighlighter {
-  return std::make_shared<syntax::IncrementalSyntaxHighlighter>(_syntaxLanguage.UTF8String, _syntaxTheme.UTF8String);
-}
 - (void)retireSyntax {
   if (_treeSyntax) _treeSyntax->cancelled = true;
   auto tree = std::move(_treeSyntax);
   auto rows = std::make_shared<decltype(_treeRows)>(std::move(_treeRows));
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)tree; (void)rows; });
   _treeColors = nil; _treeCaptures.clear(); _treeFontStyles.clear();
-  // Background mode can retain millions of token records. Move ownership in
-  // O(1), and release them off-main without delaying the next file's syntax queue.
-  auto retired = std::make_shared<std::pair<decltype(_syntax), decltype(_highlightedRows)>>(
-    std::move(_syntax), std::move(_highlightedRows));
-  dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
 }
 - (void)resetSyntax {
   _requestedGrammarNames.clear();
-  ++_syntaxGeneration;
-  _syntaxNextLine = _syntaxKnownEnd = _syntaxDirtyEnd = 0;
   [self retireSyntax];
-  if (_syntaxEnabled && [_syntaxBackend isEqualToString:@"tree-sitter"] && _syntaxLanguage
+  _treeNextLine = 0; _treeBusy = NO;
+  if (_syntaxEnabled && _syntaxLanguage
       && syntax::TreeSitterHighlighter::supports(_syntaxLanguage.UTF8String)) {
     _treeSyntax = std::make_shared<legend::source::SourceTreeSyntax>(_syntaxLanguage.UTF8String);
     _treeQueue = dispatch_queue_create("app.legend.source-editor.tree-sitter", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
@@ -231,94 +206,13 @@ static NSString *string(const std::u16string &text) {
     _treeVisibleRevision = NSNotFound;
     _treeBusy = _treePrefixDone = NO;
   }
-  _syntax = !_treeSyntax && _syntaxEnabled && _syntaxLanguage.length
-    ? [self createSyntaxHighlighter] : nullptr;
   if (self.onSyntaxError) self.onSyntaxError(@"");
   for (LESourceRowView *row in _rows) [row invalidateText];
   [self scheduleSyntax];
 }
 - (void)scheduleSyntax {
-  if (_treeSyntax) { [self scheduleTreeSyntax]; return; }
-  const BOOL active = _syntax && _syntaxHighlightingInBackground && _syntaxNextLine < _document->lineCount();
-  const auto now = NSProcessInfo.processInfo.systemUptime;
-  if (self.onSyntaxProgress && (now - _lastProgressAt >= 0.1 || active != _lastProgressActive
-      || (_document->lineCount() >= 10000 && _lastProgressTotal < 10000))) {
-    _lastProgressAt = now; _lastProgressActive = active; _lastProgressTotal = _document->lineCount();
-    self.onSyntaxProgress(_syntaxNextLine, _document->lineCount(), active);
-  }
-  if (!_syntax || _syntaxBusy || _syntaxNextLine >= _document->lineCount()) return;
-  // Both policies prioritize the first screen. Background mode then retains
-  // tokens through EOF, so scrolling does not trigger fresh highlighting.
-  NSUInteger viewportEnd = 128;
-  for (LESourceRowView *row in _rows) {
-    if ([self isCurrentRow:row]) viewportEnd = MAX(viewportEnd, row.lineIndex + 129);
-  }
-  const auto demandEnd = _syntaxHighlightingInBackground && _startupDrawn
-    ? _document->lineCount() : MIN(viewportEnd, _document->lineCount());
-  if (_syntaxNextLine >= demandEnd) return;
-  const auto start = _syntaxNextLine;
-  const auto generation = _syntaxGeneration;
-  const auto previousId = start ? _document->line(start - 1).id : 0;
-  // A far jump must carry exact multiline parser state through the prefix.
-  // Amortize queue/main-runloop handoffs instead of yielding every 128 lines.
-  // Keep the first-screen batch small and bound snapshots by both rows/bytes.
-  const bool catchingUp = start > 0 && (viewportEnd > start + 128 || (_syntaxHighlightingInBackground && _startupDrawn));
-  const size_t batchLimit = catchingUp ? 2048 : 128;
-  const size_t byteLimit = catchingUp ? 262144 : 32768;
-  std::vector<syntax::IncrementalSyntaxLine> lines;
-  lines.reserve(batchLimit);
-  size_t bytes = 0;
-  for (size_t index = start; index < demandEnd && lines.size() < batchLimit; ++index) {
-    const auto& line = _document->line(index);
-    NSData *data = [string(line.text) dataUsingEncoding:NSUTF8StringEncoding];
-    lines.push_back({line.id, data.length ? std::string(static_cast<const char *>(data.bytes), data.length) : std::string()});
-    bytes += data.length;
-    if (bytes >= byteLimit) break;
-  }
-  const auto highlighter = _syntax;
-  _syntaxBusy = YES;
-  _syntaxJobEnd = start + lines.size();
-  __weak LESourceInputView *weakSelf = self;
-  const auto priority = start < viewportEnd ? QOS_CLASS_USER_INITIATED : QOS_CLASS_UTILITY;
-  dispatch_async(_syntaxQueue, dispatch_block_create_with_qos_class(DISPATCH_BLOCK_ENFORCE_QOS_CLASS, priority, 0, ^{
-    syntax::IncrementalSyntaxBatch result;
-    NSString *error = nil;
-    try { result = highlighter->highlight(lines, previousId); }
-    catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
-    dispatch_async(dispatch_get_main_queue(), ^{
-      LESourceInputView *self = weakSelf;
-      if (!self) return;
-      self->_syntaxBusy = NO;
-      if (generation != self->_syntaxGeneration) {
-        // The discarded job may already have changed worker-side parser states.
-        // Those states cannot prove convergence with the still-displayed cache.
-        // Visit the remaining tail once before allowing early termination again.
-        self->_syntaxDirtyEnd = self->_document->lineCount();
-      } else {
-        if (error) {
-          self->_syntax.reset();
-          if (self.onSyntaxError) self.onSyntaxError(error);
-        } else {
-          for (const auto& line : result.lines) self->_highlightedRows[line->id] = line;
-          const auto end = start + result.lines.size();
-          // Once state converges past every pending edit, cached downstream
-          // lines remain valid. Resume any unfinished initial tokenization there.
-          self->_syntaxNextLine = result.converged && end >= self->_syntaxDirtyEnd
-            ? MAX(end, self->_syntaxKnownEnd) : end;
-          if (end >= self->_syntaxDirtyEnd) self->_syntaxDirtyEnd = 0;
-          self->_syntaxKnownEnd = MAX(self->_syntaxKnownEnd, self->_syntaxNextLine);
-          for (LESourceRowView *row in self->_rows) {
-            if (row.lineIndex >= start && row.lineIndex < self->_syntaxNextLine) [row invalidateText];
-          }
-        }
-      }
-      // Yield between background batches. Re-evaluate policy and document state
-      // on the next turn; edits, disabling, and recycling may have intervened.
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-        [weakSelf scheduleSyntax];
-      });
-    });
-  }));
+  if (_treeSyntax) [self scheduleTreeSyntax];
+  else if (self.onSyntaxProgress) self.onSyntaxProgress(0, _document->lineCount(), NO);
 }
 - (std::vector<syntax::SyntaxStyle>)resolveTreeStyles:(const std::vector<std::vector<std::string>>&)scopes theme:(NSString *)theme {
   return syntax::resolveSyntaxScopeStyles(theme.UTF8String, scopes, 0);
@@ -492,23 +386,7 @@ static NSString *string(const std::u16string &text) {
   }
   // A scheduling frontier is not a rendering-validity frontier. Stable line IDs
   // retain useful colors while a structural edit is being reparsed.
-  if (!_syntax) return;
-  const auto found = _highlightedRows.find(_document->line(index).id);
-  if (found == _highlightedRows.end()) return;
-  for (const auto& token : found->second->tokens) {
-    if (token.start >= text.length) continue;
-    NSRange range = NSMakeRange(token.start, MIN(token.length, text.length - token.start));
-    unsigned int rgb;
-    NSString *hex = [[NSString stringWithUTF8String:token.foreground.c_str()] stringByReplacingOccurrencesOfString:@"#" withString:@""];
-    if (hex.length == 6 && [[NSScanner scannerWithString:hex] scanHexInt:&rgb]) {
-      [text addAttribute:NSForegroundColorAttributeName value:[NSColor colorWithSRGBRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1] range:range];
-    }
-    NSFontTraitMask traits = 0;
-    if (token.fontStyle & 1) traits |= NSItalicFontMask;
-    if (token.fontStyle & 2) traits |= NSBoldFontMask;
-    if (traits) [text addAttribute:NSFontAttributeName value:[NSFontManager.sharedFontManager convertFont:font toHaveTrait:traits] range:range];
-    if (token.fontStyle & 4) [text addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:range];
-  }
+
 }
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(LESourceRowView *)row {
   if (row && row.bounds.size.width > 72) {
@@ -763,24 +641,7 @@ static NSString *string(const std::u16string &text) {
     }
     [self scheduleSyntax];
   }
-  if (_syntax) {
-    ++_syntaxGeneration;
-    const auto mapBoundary = [&](NSUInteger index) -> NSUInteger {
-      if (index <= change.startLine) return index;
-      if (index >= change.startLine + change.removedLineCount) return index - change.removedLineCount + change.lines.size();
-      return change.startLine + change.lines.size();
-    };
-    _syntaxKnownEnd = mapBoundary(_syntaxKnownEnd);
-    _syntaxDirtyEnd = MAX(mapBoundary(_syntaxDirtyEnd), change.startLine + change.lines.size());
-    _syntaxNextLine = MIN(_syntaxNextLine, change.startLine);
-    std::unordered_set<uint64_t> retained;
-    for (const auto& line : change.lines) retained.insert(line.id);
-    std::vector<uint64_t> retired;
-    for (auto id : oldIds) if (!retained.count(id)) { retired.push_back(id); _highlightedRows.erase(id); }
-    const auto highlighter = _syntax;
-    dispatch_async(_syntaxQueue, ^{ highlighter->erase(retired); });
-    [self scheduleSyntax];
-  }
+
   // The native buffer advances before Fabric receives the transaction. Keep
   // mounted rows attached to their logical IDs during that interval.
   for (LESourceRowView *row in _rows) {

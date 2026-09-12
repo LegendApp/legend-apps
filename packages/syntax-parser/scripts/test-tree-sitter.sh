@@ -5,21 +5,21 @@ tree_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-tree-sitter.XXXXXX")"
 tree_vendor="$syntax_root/vendor/tree-sitter"
 node "$syntax_root/scripts/embed-tree-sitter-queries.ts" --check
 node "$syntax_root/scripts/compile-tree-sitter.ts" "$tree_build"
-clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterHighlighter.test.cpp" \
+clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/test"
 "$tree_build/test"
-clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/MarkdownHighlighter.test.cpp" \
+clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/MarkdownHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/markdown-test"
 "$tree_build/markdown-test" "$syntax_root/../../apps/slides/examples/"*.mdx \
   "$syntax_root/../../apps/slides/decks/react-native-desktop/talk.mdx" "$syntax_root/TREE_SITTER.md"
 clang -std=c11 -O2 -I"$tree_vendor/runtime/include" -c "$tree_vendor/runtime/src/lib.c" -o "$tree_build/runtime.unprefixed"
 clang -std=c11 -O2 -I"$tree_vendor/javascript/src" -c "$tree_vendor/javascript/src/parser.c" -o "$tree_build/javascript-parser.unprefixed"
 clang -std=c11 -O2 -I"$tree_vendor/javascript/src" -c "$tree_vendor/javascript/src/scanner.c" -o "$tree_build/javascript-scanner.unprefixed"
-clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterIsolation.test.cpp" \
+clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterIsolation.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o "$tree_build/"*.unprefixed -o "$tree_build/isolation-test"
 "$tree_build/isolation-test"
 if [ "${1:-}" = "--benchmark" ]; then
-  source "$syntax_root/scripts/benchmark-tree-sitter.sh"
+  bash "$syntax_root/../diff-parser/tests/benchmark-syntax.sh" --benchmark "${@:2}"
 elif [ "${1:-}" = "--edit-benchmark" ]; then
   source "$syntax_root/scripts/benchmark-tree-sitter-edits.sh"
 fi

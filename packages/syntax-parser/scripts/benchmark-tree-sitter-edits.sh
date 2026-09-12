@@ -1,5 +1,5 @@
 # Sourced by test-tree-sitter.sh; uses the same pinned runtime and grammar objects.
-clang++ -std=c++20 -O2 -g -Wno-deprecated-declarations \
+clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -g -Wno-deprecated-declarations \
   "$syntax_root/tests/TreeSitterEditBenchmark.cpp" "$syntax_root/cpp/TreeSitterHighlighter.cpp" \
   "$tree_build/"*.o -o "$tree_build/edit-benchmark"
 for repetition in 1 2 3; do

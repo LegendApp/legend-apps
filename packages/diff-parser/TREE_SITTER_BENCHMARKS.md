@@ -106,3 +106,8 @@ repository (first and later hunks, Unicode, multiline comments). Restored
 side-by-side afterward. Opening the source worktree itself stalled in libgit2's
 `git_repository_open_ext` filesystem read before tokenization; that separate
 environment/repository-open issue was not changed or counted as a parser timing.
+
+The TextMate baseline above was measured before removing that dependency (commit
+`ef9ae4b`). Current benchmark scripts exercise Tree-sitter only; use that historical
+commit to reproduce the old-backend comparison. App builds no longer link either
+TextMate/Oniguruma or grammar parsers; standalone benchmarks opt into test fixtures.

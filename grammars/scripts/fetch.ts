@@ -15,7 +15,7 @@ function generateIfNeeded(destination: string) {
     execFileSync(cli, args, { cwd: destination, stdio: "inherit" });
   } else execFileSync("npx", ["--yes", "tree-sitter-cli@0.25.10", ...args], { cwd: destination, stdio: "inherit" });
 }
-for (const g of catalog.grammars.filter((g) => g.bundled === false)) {
+for (const g of catalog.grammars.filter((g) => !g.testFixture)) {
   if (selected >= 0 && process.argv[selected + 1] !== g.name) continue;
   const destination = sourceDirectory(g);
   const metadata = join(destination, "UPSTREAM.json");

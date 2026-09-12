@@ -18,10 +18,6 @@ Pod::Spec.new do |s|
       "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
       "$(PODS_ROOT)/LegendLibGit2/build/include",
       "$(PODS_ROOT)/LegendLibGit2/build/gen_headers",
-      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/src",
-      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build",
-      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/packages/tml-cpp/build/oniguruma/include",
-      "$(PODS_TARGET_SRCROOT)/../syntax-parser/vendor/TextMateLib/thirdparty/rapidjson/include",
     ].join(" "),
   }
   s.dependency "React-Core"

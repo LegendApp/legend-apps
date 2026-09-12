@@ -20,16 +20,7 @@ const macosRunOptionSpecs: OptionSpecs = {
 
 export function getDevSyntaxAssetSourceRoot() {
   return process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE
-    ?? path.join(
-      rootDir,
-      "packages",
-      "syntax-parser",
-      "vendor",
-      "TextMateLib",
-      "thirdparty",
-      "textmate-grammars-themes",
-      "packages",
-    );
+    ?? path.join(rootDir, "packages", "syntax-parser");
 }
 
 export function getSlidesCompilerPath() {

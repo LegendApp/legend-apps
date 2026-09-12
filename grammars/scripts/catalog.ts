@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 export const root = fileURLToPath(new URL("../../", import.meta.url));
 export type Grammar = {
-  bundled?: boolean;
+  bundled: false;
+  testFixture?: boolean;
   name: string; aliases: string[]; extensions: string[]; filenames: string[];
   scope: string; repository: string; revision: string; directory: string;
   symbol: string; query: string; inherits: string[]; refinements: string[]; dependencies: string[];
@@ -12,12 +13,13 @@ export type Grammar = {
 export const catalog: { schemaVersion: number; packABI: number; repository: string; grammars: Grammar[] } =
   JSON.parse(readFileSync(join(root, "grammars/catalog.json"), "utf8"));
 export function sourceDirectory(g: Grammar) {
-  return join(root, g.bundled === false ? `grammars/.cache/${g.name}` : `packages/syntax-parser/vendor/tree-sitter/${g.name}`);
+  return join(root, g.testFixture ? `packages/syntax-parser/vendor/tree-sitter/${g.name}` : `grammars/.cache/${g.name}`);
 }
 export function validateCatalog() {
   const names = new Set<string>();
   const ids = new Set(catalog.grammars.map((g) => g.name));
   for (const g of catalog.grammars) {
+    if (g.bundled !== false) throw Error(`Grammar must be downloadable, not bundled: ${g.name}`);
     if (!/^[\w-]+\/[\w.-]+$/.test(g.repository) || !/^[a-f0-9]{40}$/.test(g.revision)
       || !/^tree_sitter_[a-z0-9_]+$/.test(g.symbol)) throw Error(`Invalid pinned source: ${g.name}`);
     for (const name of [g.name, ...g.aliases]) {

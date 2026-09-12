@@ -16,7 +16,7 @@ function binaryFor(arch: string) {
   // Fail clearly if this host cannot execute an architecture. Never publish a
   // pack that only passed a cross-compile without its parser/query being run.
   const build = mkdtempSync(join(tmpdir(), `legend-grammar-pack-test-${arch}-`));
-  run("node", ["packages/syntax-parser/scripts/compile-tree-sitter.ts", build, "--arch", arch]);
+  run("node", ["packages/syntax-parser/scripts/compile-tree-sitter.ts", build, "--runtime-only", "--arch", arch]);
   const objects = readdirSync(build).filter((name) => name.endsWith(".o")).map((name) => join(build, name));
   const binary = join(build, "pack-test");
   run("clang++", ["-std=c++20", "-arch", arch, "-O2", "-Wall", "-Wextra", "-Werror", "grammars/tests/Pack.test.cpp",

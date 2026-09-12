@@ -10,7 +10,7 @@ const manifest = JSON.parse(readFileSync(join(root, "../../grammars/catalog.json
 const scratch = mkdtempSync(join(tmpdir(), "legend-tree-grammars-"));
 const downloaded = new Map<string, string>();
 for (const grammar of manifest.grammars) {
-  if (grammar.bundled === false) continue;
+  if (!grammar.testFixture) continue;
   if (!/^[a-z0-9-]+$/.test(grammar.name) || !/^[\w-]+\/[\w-]+$/.test(grammar.repository)
     || !/^[a-f0-9]{40}$/.test(grammar.revision)) throw new Error("Invalid pinned grammar manifest");
   const key = `${grammar.repository}@${grammar.revision}`;
@@ -37,4 +37,4 @@ for (const grammar of manifest.grammars) {
   writeFileSync(join(destination, "UPSTREAM.json"), JSON.stringify({ repository: grammar.repository, revision: grammar.revision,
     ...(grammar.name === "mdx" ? { patch: "scripts/patch-mdx-grammar.ts", generator: "tree-sitter-cli@0.25.10", abi: 14 } : {}) }, null, 2) + "\n");
 }
-console.log(`Vendored ${manifest.grammars.length} pinned grammars. Scratch: ${scratch}`);
+console.log(`Vendored ${manifest.grammars.filter((g: { testFixture?: boolean }) => g.testFixture).length} pinned test grammars. Scratch: ${scratch}`);

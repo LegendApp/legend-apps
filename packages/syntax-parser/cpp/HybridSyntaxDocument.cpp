@@ -53,18 +53,19 @@ std::vector<SyntaxLineRange> indexLines(const SyntaxSource& source) {
 HybridSyntaxDocument::HybridSyntaxDocument(
     std::string filePath,
     std::shared_ptr<const SyntaxSource> source,
-    std::shared_ptr<TextMateHighlighterContext> context,
+    std::shared_ptr<TreeSitterLineHighlighter> context,
     std::vector<SyntaxLineRange> lines,
     double mapFileMs,
     double indexLinesMs,
-    double contextMs)
+    double contextMs,
+    std::string theme)
     : HybridObject(TAG),
       filePath_(std::move(filePath)),
       source_(std::move(source)),
       context_(std::move(context)),
       lines_(std::move(lines)),
       tokenCache_(lines_.size()),
-      nextState_(textmate_get_initial_state()),
+      theme_(std::move(theme)),
       mapFileMs_(mapFileMs),
       indexLinesMs_(indexLinesMs),
       contextMs_(contextMs),
@@ -83,7 +84,7 @@ std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadFile(
   const auto mappedAt = SyntaxClock::now();
   auto lines = indexLines(*source);
   const auto indexedAt = SyntaxClock::now();
-  auto context = getHighlighterContext(language, theme);
+  auto context = TreeSitterHighlighter::supports(language) ? std::make_shared<TreeSitterLineHighlighter>(language) : nullptr;
   const auto contextReadyAt = SyntaxClock::now();
   return std::make_shared<HybridSyntaxDocument>(
       normalizeFilePath(filePath),
@@ -92,7 +93,7 @@ std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadFile(
       std::move(lines),
       elapsedSyntaxMs(startedAt, mappedAt),
       elapsedSyntaxMs(mappedAt, indexedAt),
-      elapsedSyntaxMs(indexedAt, contextReadyAt));
+      elapsedSyntaxMs(indexedAt, contextReadyAt), theme);
 }
 
 std::shared_ptr<HybridSyntaxDocument> HybridSyntaxDocument::loadPlainFile(const std::string& filePath) {
@@ -274,18 +275,27 @@ void HybridSyntaxDocument::ensureTokenized(size_t endExclusive) {
   const auto end = std::min(lines_.size(), endExclusive);
   if (context_ && tokenizedLineCount_ < end) {
     const auto startedAt = SyntaxClock::now();
-    std::lock_guard<std::mutex> contextLock(context_->mutex);
-
-    while (tokenizedLineCount_ < end) {
-      auto tokenizedLine = tokenizeSyntaxLine(
-          *context_,
-          lineText(tokenizedLineCount_),
-          nextState_,
-          styleState_);
-      tokenCount_ += tokenizedLine.tokenCount;
-      tokenCache_[tokenizedLineCount_] = CachedSyntaxLine{std::move(tokenizedLine.tokens)};
-      tokenizedLineCount_ += 1;
+    if (!prepared_) {
+      if (sourceLines_.empty()) {
+        sourceLines_.reserve(lines_.size());
+        for (size_t i = 0; i < lines_.size(); ++i) sourceLines_.push_back(lineText(i));
+      }
+      while (!context_->prepare(sourceLines_, 256)) std::this_thread::yield();
+      prepared_ = true;
+      std::vector<std::vector<std::string>> scopes;
+      const auto captures = context_->captures();
+      for (size_t id = 0; id < captures.size(); ++id)
+        scopes.push_back({TreeSitterHighlighter::rootScopeForCapture(id), TreeSitterHighlighter::themeScope(captures[id])});
+      styleState_.styles = resolveSyntaxScopeStyles(theme_, scopes, 0);
+      sourceLines_.clear();
     }
+    for (const auto& row : context_->highlight(tokenizedLineCount_, end - tokenizedLineCount_)) {
+      std::vector<SyntaxTokenRun> tokens;
+      for (const auto& token : row.tokens) tokens.emplace_back(token.start, token.length, token.capture);
+      tokenCount_ += tokens.size();
+      tokenCache_[row.index] = CachedSyntaxLine{std::move(tokens)};
+    }
+    tokenizedLineCount_ = end;
 
     tokenizeMs_ += elapsedSyntaxMs(startedAt, SyntaxClock::now());
   }
