@@ -41,6 +41,7 @@ const codeWindowsConfig = {
     identifier: codeViewerWindowIdentifier,
     options: {
       restoreOnLaunch: true,
+      interceptClose: true,
       title: "Legend Code",
       windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
     },

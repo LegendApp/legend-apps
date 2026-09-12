@@ -4,6 +4,7 @@ import { useNativeMenu, type NativeMenuActionHandlers, type NativeMenuConfig } f
 import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
 import { usePrimaryWindowLifecycle } from "@legend-apps/windows";
 import { useEffect, useMemo, useState } from "react";
+export { createDocumentTransitionGuard } from "./documentTransition";
 
 export type DocumentAppController = {
   isDocumentWindowOpen: () => boolean;

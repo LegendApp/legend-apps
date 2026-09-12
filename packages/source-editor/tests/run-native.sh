@@ -2,6 +2,18 @@
 set -euo pipefail
 source_editor_dir="$(cd "$(dirname "$0")/.." && pwd)"
 source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
+clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit "$source_editor_dir/tests/NativeMenuValidation.test.mm" -o "$source_editor_build/menu-test"
+"$source_editor_build/menu-test"
+rm "$source_editor_build/menu-test"
+clang++ -std=c++20 -O2 -fobjc-arc -framework Foundation "$source_editor_dir/tests/SourceFileSession.test.mm" "$source_editor_dir/macos/SourceFileSession.mm" -o "$source_editor_build/file-test"
+"$source_editor_build/file-test"
+rm "$source_editor_build/file-test"
+clang++ -std=c++20 -O2 "$source_editor_dir/tests/SourceEditing.test.cpp" -o "$source_editor_build/editing-test"
+"$source_editor_build/editing-test"
+rm "$source_editor_build/editing-test"
+clang++ -std=c++20 -O2 -fobjc-arc -framework Foundation "$source_editor_dir/tests/SourceSearch.test.mm" "$source_editor_dir/macos/SourceSearch.mm" -o "$source_editor_build/search-test"
+"$source_editor_build/search-test"
+rm "$source_editor_build/search-test"
 trap 'rm -f "$source_editor_build/document-test" "$source_editor_build/layout-test" "$source_editor_build/input-test" "$source_editor_build/syntax-test" "$source_editor_build/reader-test" "$source_editor_build/append-test" "$source_editor_build/scheduling-test" "$source_editor_build/tree-test" "$source_editor_build/theme-test" "$source_editor_build/"*.o; rmdir "$source_editor_build"' EXIT
 syntax_parser_dir="$source_editor_dir/../syntax-parser"
 tree_vendor="$syntax_parser_dir/vendor/tree-sitter"
@@ -14,6 +26,8 @@ syntax_flags=(
   -I"$source_editor_headers/Public/ReactCommon" -I"$source_editor_headers/Public/React-callinvoker"
 )
 syntax_sources=(
+  "$source_editor_dir/macos/SourceFileSession.mm"
+  "$source_editor_dir/macos/SourceSearch.mm" "$source_editor_dir/macos/SourceSearchPanel.mm"
   "$syntax_parser_dir/cpp/TreeSitterHighlighter.cpp" "$source_editor_build/"*.o
   "$syntax_parser_dir/cpp/SyntaxHighlighter.cpp" "$syntax_parser_dir/cpp/SyntaxTheme.mm"
 )

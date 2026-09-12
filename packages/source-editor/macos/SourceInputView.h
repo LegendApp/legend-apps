@@ -1,4 +1,5 @@
 #import "SourceLineLayout.h"
+#import "SourceFileSession.h"
 #include <memory>
 namespace legend::source { class SourceDocument; }
 
@@ -19,6 +20,22 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *syntaxBackend;
 @property (nonatomic) BOOL sourceLoading;
 @property (nonatomic, copy, nullable) void (^onFirstDraw)(void);
+@property (nonatomic, copy, nullable) void (^onDocumentState)(BOOL dirty, NSString *path);
+@property (nonatomic, strong, nullable) LESourceFileSession *fileSession;
+@property (nonatomic) BOOL fileReadComplete;
+@property (nonatomic, readonly) BOOL dirty;
+@property (nonatomic, readonly) uint64_t documentRevision;
+- (void)showFindPanel;
+- (void)showGoToLine;
+- (void)copySourceWithCompletion:(void (^)(NSString *_Nullable source, NSString *_Nullable error))completion;
+- (void)saveToPath:(NSString *)path completion:(void (^)(BOOL saved, NSString *error))completion;
+- (void)saveAs:(BOOL)saveAs completion:(void (^)(BOOL saved, NSString *error))completion;
+- (void)confirmDiscardWithCompletion:(void (^)(BOOL allow))completion;
+@property (nonatomic, copy) NSString *indentUnit;
+@property (nonatomic) BOOL automaticPairs;
+- (BOOL)performEditingCommand:(NSString *)command;
+- (void)selectLine:(NSUInteger)line;
+- (void)replaceSelectionWithText:(NSString *)text;
 - (void)adoptDocument:(std::shared_ptr<legend::source::SourceDocument>)document;
 - (NSDictionary *)appendDocument:(legend::source::SourceDocument &&)chunk;
 - (void)requestVisibleSyntax;
