@@ -6,22 +6,21 @@ structure. Nested/real-code local edits measured below 1 ms in the native backen
 structural changes still require background scheduling. The earlier table is
 retained as a reproducible stress case, not a typical typing-latency estimate.
 
-The native backend drives the Code and Slides source editors. Other consumers
-can select it with `SourceDocumentEditor syntaxBackend="tree-sitter"`.
+The native backend drives the Code and Slides source editors. It is also the default backend for every `SourceDocumentEditor` consumer.
 See [downloadable grammar packs](../../grammars/README.md) for the root catalog,
 local pack builds, signing requirements, download progress, and release tooling.
 Diff now uses the same engine for native diff rows and merge previews, retaining
 on-demand row queries. See [Diff benchmarks](../diff-parser/TREE_SITTER_BENCHMARKS.md).
-TextMate remains for other legacy consumers and theme matching; complete removal
-of its grammar engine remains the target. The earlier tables below describe the
+All syntax consumers now use Tree-sitter; TextMate/Oniguruma and bundled grammar
+assets have been removed. The two small theme files use a native rule matcher. The earlier tables below describe the
 pre-integration prototype, not the new prefix-first editor startup.
 
 ## Native API
 
 `cpp/TreeSitterHighlighter.hpp` exposes a serial-worker-owned parser for
-the shared pinned language registry. It currently includes JavaScript/JSX,
-TypeScript/TSX, JSON (including JSONC/JSONL), CSS, Python, YAML, Markdown and MDX, with case-insensitive
-aliases. JSON5 is not treated as JSON. `supports()` reports actual compiled coverage.
+the shared pinned language registry. It starts with no installed grammars and registers downloaded packs on demand,
+with case-insensitive aliases from the shared catalog. JSON5 is not treated as
+JSON. `supports()` reports actually loaded coverage, not catalog availability.
 The backend is independent of React, Fabric, AppKit, LegendList and disk loading.
 
 - `parse(TreeSitterInput)` reads bounded UTF-16 chunks from a caller-owned immutable
@@ -120,7 +119,9 @@ consistency, lazy first-window reads, cache eviction, bounded history, cancellat
 and retry. The real example decks and talk deck are loaded and checked after edits
 at the beginning, middle and end, including undo back to the original spans.
 
-The benchmark requires the existing TextMate static libraries and Code's generated
+The historical TextMate comparisons can be reproduced from commit `ef9ae4b`,
+before removing that dependency. Current scripts benchmark Tree-sitter only.
+The historical benchmark required the TextMate static libraries and Code's generated
 Pods headers (as the existing source-editor native suite does). It builds native
 code with `-O2` and runs each backend in a separate process. Three repetitions
 alternate backend order. Inputs are identical synthetic repeated/unique TS/TSX

@@ -10,8 +10,8 @@ using Clock = std::chrono::steady_clock;
 template<class F> double timed(F f) { const auto start = Clock::now(); f(); return std::chrono::duration<double, std::milli>(Clock::now() - start).count(); }
 
 int main(int argc, char** argv) {
-  assert(argc == 6);
-  const std::string backend = argv[1], language = argv[2], path = argv[3], root = argv[4], position = argv[5];
+  assert(argc == 4);
+  const std::string backend = "tree-sitter", language = argv[1], path = argv[2], position = argv[3];
   std::ifstream file(path); std::ostringstream stream; stream << file.rdbuf();
   const auto source = stream.str(); assert(!source.empty());
   const auto lines = splitSyntaxLines(source);
@@ -20,7 +20,6 @@ int main(int argc, char** argv) {
   double setup = 0, first = 0, previewMs = 0, warm = 0, maxSlice = 0;
   size_t tokens = 0, queriedLines = 0;
   std::unique_ptr<TreeSitterLineHighlighter> tree;
-  std::shared_ptr<TextMateHighlighterContext> context;
   SyntaxScopeState scopes;
   std::vector<std::vector<SyntaxScopeTokenRun>> cache(lines.size());
   auto publish = [&](const std::vector<TreeLine>& rows) {
@@ -50,32 +49,6 @@ int main(int argc, char** argv) {
       publish(rows);
       queriedLines += rows.size();
       for (const auto& row : rows) tokens += row.tokens.size();
-    });
-    warm = timed([&] { auto copy = std::vector(cache.begin() + start, cache.begin() + end); assert(copy.size() == end - start); });
-  } else {
-    setup = timed([&] {
-      const auto onig = textmate_oniglib_create(); const auto registry = textmate_registry_create(onig);
-      for (const std::string name : {"javascript", "typescript", "tsx"})
-        assert(textmate_registry_add_grammar_from_file(registry, (root + "/tm-grammars/grammars/" + name + ".json").c_str()));
-      std::ifstream theme(root + "/tm-themes/themes/dark-plus.json"); std::ostringstream json; json << theme.rdbuf();
-      assert(textmate_registry_set_theme(registry, json.str().c_str()));
-      const auto scope = language == "javascript" ? "source.js" : language == "tsx" ? "source.tsx" : "source.ts";
-      const auto grammar = textmate_registry_load_grammar(registry, scope); assert(grammar);
-      context = std::make_shared<TextMateHighlighterContext>(onig, registry, grammar, textmate_registry_get_color_map(registry));
-    });
-    auto state = textmate_get_initial_state();
-    first = timed([&] {
-      // Exact old Diff algorithm: tokenize every preceding source line and
-      // retain its scope tokens, even when only the final hunk is requested.
-      for (size_t index = 0; index < end;) {
-        maxSlice = std::max(maxSlice, timed([&] {
-          const auto stop = std::min(end, index + 256);
-          for (; index < stop; ++index) {
-            cache[index] = tokenizeSyntaxScopeLine(*context, lines[index], state, scopes).tokens;
-            tokens += cache[index].size(); ++queriedLines;
-          }
-        }));
-      }
     });
     warm = timed([&] { auto copy = std::vector(cache.begin() + start, cache.begin() + end); assert(copy.size() == end - start); });
   }

@@ -7,15 +7,16 @@
 using namespace margelo::nitro::legendapps::syntaxparser;
 int main(int argc, char** argv) {
   assert(argc == 2);
+  assert(TreeSitterHighlighter::captureCount() == 0);
+  for (const auto* name : {"javascript", "typescript", "tsx", "json", "css", "python", "markdown", "markdown-inline", "yaml", "mdx"})
+    assert(!TreeSitterHighlighter::supports(name));
   void* library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
   if (!library) throw std::runtime_error(dlerror());
   auto factory = reinterpret_cast<LegendGrammarPackFactory>(dlsym(library, "legend_grammar_pack_v1"));
   if (!factory) throw std::runtime_error("Missing pack export");
   auto pack = *factory();
   const std::string language = pack.name;
-  // A unique ID ensures this uses the downloaded parser, never a bundled one.
-  const std::string name = std::string("pack-test-") + pack.name;
-  pack.name = name.c_str();
+  const std::string name = pack.name;
   TreeSitterHighlighter::registerPack(pack);
   TreeSitterHighlighter highlighter(name);
   const std::map<std::string, std::u16string> samples = {

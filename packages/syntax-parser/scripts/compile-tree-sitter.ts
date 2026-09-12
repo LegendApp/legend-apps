@@ -12,9 +12,9 @@ mkdirSync(output, { recursive: true });
 const archIndex = process.argv.indexOf("--arch");
 const arch = archIndex < 0 ? undefined : process.argv[archIndex + 1];
 if (arch && !["arm64", "x86_64"].includes(arch)) throw Error("Invalid build architecture");
-const grammars: { name: string }[] = JSON.parse(readFileSync(join(root, "../../grammars/catalog.json"), "utf8")).grammars.filter((g: { bundled?: boolean }) => g.bundled !== false);
+const grammars: { name: string }[] = JSON.parse(readFileSync(join(root, "../../grammars/catalog.json"), "utf8")).grammars.filter((g: { testFixture?: boolean }) => g.testFixture);
 const sources = [{ name: "runtime", file: join(vendor, "runtime/src/lib.c"), include: join(vendor, "runtime/include") }];
-for (const { name } of grammars) {
+for (const { name } of process.argv.includes("--runtime-only") ? [] : grammars) {
   for (const kind of ["parser", "scanner"]) {
     const file = join(vendor, name, "src", `${kind}.c`);
     if (existsSync(file)) sources.push({ name: `${name}-${kind}`, file, include: join(vendor, name, "src") });

@@ -2,6 +2,7 @@
 
 #include "NativeTextSource.hpp"
 #include "SyntaxHighlighter.hpp"
+#include "TreeSitterLineHighlighter.hpp"
 
 #include "../nitrogen/generated/shared/c++/HybridSyntaxDocumentSpec.hpp"
 
@@ -31,11 +32,12 @@ public:
   HybridSyntaxDocument(
       std::string filePath,
       std::shared_ptr<const SyntaxSource> source,
-      std::shared_ptr<TextMateHighlighterContext> context,
+      std::shared_ptr<TreeSitterLineHighlighter> context,
       std::vector<SyntaxLineRange> lines,
       double mapFileMs,
       double indexLinesMs,
-      double contextMs);
+      double contextMs,
+      std::string theme = "dark-plus");
   ~HybridSyntaxDocument() override;
 
   static std::shared_ptr<HybridSyntaxDocument> loadFile(
@@ -64,11 +66,13 @@ private:
 
   std::string filePath_;
   std::shared_ptr<const SyntaxSource> source_;
-  std::shared_ptr<TextMateHighlighterContext> context_;
+  std::shared_ptr<TreeSitterLineHighlighter> context_;
   std::vector<SyntaxLineRange> lines_;
   std::vector<std::optional<CachedSyntaxLine>> tokenCache_;
   SyntaxStyleState styleState_;
-  TextMateStateStack nextState_;
+  std::string theme_;
+  std::vector<std::string> sourceLines_;
+  bool prepared_ = false;
   size_t tokenizedLineCount_ = 0;
   double tokenCount_ = 0;
   double mapFileMs_ = 0;

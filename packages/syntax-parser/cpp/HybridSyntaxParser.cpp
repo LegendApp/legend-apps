@@ -32,41 +32,7 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightStr
     const std::string& source,
     const std::string& language,
     const std::string& theme) {
-  return Promise<SyntaxHighlightResult>::async([source, language, theme]() -> SyntaxHighlightResult {
-    const auto startedAt = SyntaxClock::now();
-    const auto context = getHighlighterContext(language, theme);
-    std::lock_guard<std::mutex> contextLock(context->mutex);
-
-    const auto lines = splitSyntaxLines(source);
-    std::vector<SyntaxRenderLine> renderLines;
-    SyntaxStyleState styleState;
-    renderLines.reserve(lines.size());
-
-    TextMateStateStack state = textmate_get_initial_state();
-    double tokenCount = 0;
-
-    for (size_t lineIndex = 0; lineIndex < lines.size(); lineIndex += 1) {
-      auto tokenizedLine = tokenizeSyntaxLine(*context, lines[lineIndex], state, styleState);
-      tokenCount += tokenizedLine.tokenCount;
-      renderLines.push_back(SyntaxRenderLine(
-          static_cast<double>(lineIndex),
-          lines[lineIndex],
-          std::move(tokenizedLine.tokens)));
-    }
-
-    const auto finishedAt = SyntaxClock::now();
-    SyntaxHighlightTiming timing(
-        static_cast<double>(lines.size()),
-        tokenCount,
-        static_cast<double>(styleState.styles.size()),
-        0,
-        0,
-        0,
-        0,
-        elapsedSyntaxMs(startedAt, finishedAt),
-        elapsedSyntaxMs(startedAt, finishedAt));
-    return SyntaxHighlightResult(std::move(renderLines), std::move(styleState.styles), timing);
-  });
+  return highlightTreeString(source, language, theme);
 }
 
 std::shared_ptr<Promise<SyntaxFileLoadResult>> HybridSyntaxParser::loadCodeFile(
@@ -107,10 +73,18 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightTre
     if (TreeSitterHighlighter::supports(language)) {
       TreeSitterLineHighlighter highlighter(language);
       while (!highlighter.prepare(lines, 256)) std::this_thread::yield();
+      const auto plainStyleId = highlighter.captures().size();
       for (size_t start = 0; start < lines.size(); start += 128) {
         for (const auto& row : highlighter.highlight(start, 128)) {
           std::vector<SyntaxTokenRun> tokens;
-          for (const auto& token : row.tokens) tokens.emplace_back(token.start, token.length, token.capture);
+          size_t cursor = 0;
+          for (const auto& token : row.tokens) {
+            if (token.start > cursor) tokens.emplace_back(cursor, token.start - cursor, plainStyleId);
+            tokens.emplace_back(token.start, token.length, token.capture);
+            cursor = token.start + token.length;
+          }
+          const auto length = static_cast<size_t>(utf16Length(lines[row.index]));
+          if (cursor < length) tokens.emplace_back(cursor, length - cursor, plainStyleId);
           tokenCount += tokens.size();
           rendered.emplace_back(row.index, lines[row.index], std::move(tokens));
         }
@@ -119,6 +93,7 @@ std::shared_ptr<Promise<SyntaxHighlightResult>> HybridSyntaxParser::highlightTre
       std::vector<std::vector<std::string>> scopes;
       for (size_t id = 0; id < captures.size(); ++id)
         scopes.push_back({TreeSitterHighlighter::rootScopeForCapture(id), TreeSitterHighlighter::themeScope(captures[id])});
+      scopes.push_back({}); // Plain gaps must not disappear in string-rendering consumers.
       styles = resolveSyntaxScopeStyles(theme, scopes, 0);
     } else {
       for (size_t index = 0; index < lines.size(); ++index) rendered.emplace_back(index, lines[index], std::vector<SyntaxTokenRun>{});

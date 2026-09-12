@@ -25,7 +25,9 @@
         "cjs"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "typescript",
@@ -50,7 +52,9 @@
         "cts"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "tsx",
@@ -74,7 +78,9 @@
         "tsx"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "json",
@@ -96,7 +102,9 @@
         "jsonl"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "css",
@@ -113,7 +121,9 @@
         "css"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "python",
@@ -134,7 +144,9 @@
         "pyi"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "markdown",
@@ -160,7 +172,9 @@
       "dependencies": [
         "markdown-inline",
         "yaml"
-      ]
+      ],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "markdown-inline",
@@ -179,7 +193,9 @@
       ],
       "extensions": [],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "yaml",
@@ -199,7 +215,9 @@
         "yml"
       ],
       "filenames": [],
-      "dependencies": []
+      "dependencies": [],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "mdx",
@@ -222,7 +240,9 @@
       "dependencies": [
         "markdown-inline",
         "yaml"
-      ]
+      ],
+      "bundled": false,
+      "testFixture": true
     },
     {
       "name": "bash",
