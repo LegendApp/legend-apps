@@ -1,10 +1,12 @@
 #import "../macos/SourceInputView.h"
+#import "../macos/SourceSearchPanel.h"
 #include "../cpp/SourceDocument.hpp"
 #include <cassert>
 #include <iostream>
 
 @interface LESourceInputView (SelectionTests)
 - (void)selectionDragTick;
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item;
 @end
 @interface TestSourceCanvas : NSView
 @end
@@ -16,9 +18,108 @@ static const NSRange implicitRange = {NSNotFound, 0};
 static void closeUndoGroup(NSUndoManager *history) {
   while (history.groupingLevel > 0) [history endUndoGrouping];
 }
+static void awaitCompletion(BOOL (^finished)(void)) {
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+  while (!finished() && deadline.timeIntervalSinceNow > 0) {
+    [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.005]];
+  }
+  assert(finished());
+}
 int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
+    {
+      LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      [input loadSource:[@"sample\n" stringByPaddingToLength:700000 withString:@"sample\n" startingAtIndex:0]];
+      LESourceSearchPanel *search = [[LESourceSearchPanel alloc] initWithInput:input];
+      [search show];
+      NSSearchField *query = [search valueForKey:@"query"];
+      NSTextField *status = [search valueForKey:@"status"];
+      query.stringValue = @"absent";
+      [search invalidate];
+      query.stringValue = @"sample";
+      [search invalidate];
+      awaitCompletion(^BOOL { return [status.stringValue isEqual:@"1 / 100000"]; });
+      [search close];
+    }
+    {
+      LESourceInputView *saving = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      saving.undoManager.groupsByEvent = NO;
+      NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
+      assert([@"original\r\n" writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil]);
+      [saving loadSource:@"original\r\n"];
+      saving.fileSession = [[LESourceFileSession alloc] initWithPath:path signature:[LESourceFileSession signatureAtPath:path] hasBOM:NO];
+      saving.fileReadComplete = YES;
+      [saving replaceSelectionWithText:@"first "];
+      closeUndoGroup(saving.undoManager);
+      __block BOOL done = NO;
+      [saving saveToPath:path completion:^(BOOL saved, NSString *error) { assert(saved && !error.length); done = YES; }];
+      [saving replaceSelectionWithText:@"second "];
+      closeUndoGroup(saving.undoManager);
+      awaitCompletion(^BOOL { return done; });
+      assert(saving.dirty);
+      assert([[NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] isEqual:@"first original\r\n"]);
+      [saving.undoManager undo]; assert(!saving.dirty);
+      [saving.undoManager redo]; assert(saving.dirty);
+      assert([NSFileManager.defaultManager removeItemAtPath:path error:nil]);
+
+      // Both documents have revision zero: identity must also invalidate the snapshot.
+      [saving loadSource:[@"x" stringByPaddingToLength:70000 withString:@"x" startingAtIndex:0]];
+      done = NO;
+      [saving copySourceWithCompletion:^(NSString *source, NSString *error) { assert(!source && error.length); done = YES; }];
+      [saving loadSource:@"replacement"];
+      awaitCompletion(^BOOL { return done; });
+    }
+    {
+      LESourceInputView *editing = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      editing.undoManager.groupsByEvent = NO;
+      [editing.undoManager beginUndoGrouping];
+      [editing insertText:@"(" replacementRange:implicitRange];
+      [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"()"] && editing.head == 1 && editing.dirty);
+      NSMenuItem *undoItem = [[NSMenuItem alloc] initWithTitle:@"Undo" action:@selector(undo:) keyEquivalent:@"z"];
+      NSMenuItem *findItem = [[NSMenuItem alloc] initWithTitle:@"Find" action:@selector(performFindPanelAction:) keyEquivalent:@"f"];
+      findItem.tag = NSFindPanelActionShowFindPanel;
+      assert([editing respondsToSelector:undoItem.action] && [editing validateUserInterfaceItem:undoItem]);
+      assert([editing respondsToSelector:findItem.action] && [editing validateUserInterfaceItem:findItem]);
+      [editing.undoManager undo]; assert([editing.source isEqual:@""] && !editing.dirty);
+      [editing.undoManager redo]; assert([editing.source isEqual:@"()"] && editing.dirty);
+      [editing loadSource:@""];
+      [editing.undoManager beginUndoGrouping];
+      [editing insertText:@"[" replacementRange:implicitRange];
+      [editing insertText:@"]" replacementRange:implicitRange];
+      [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"[]"] && editing.head == 2);
+      [editing loadSource:@""];
+      [editing.undoManager beginUndoGrouping];
+      [editing insertText:@"{" replacementRange:implicitRange];
+      [editing deleteBackward:nil];
+      [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@""]);
+      [editing loadSource:@"word"];
+      [editing setAccessibilitySelectedTextRange:NSMakeRange(0, 4)];
+      [editing.undoManager beginUndoGrouping];
+      [editing insertText:@"\"" replacementRange:implicitRange];
+      [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"\"word\""] && NSEqualRanges(editing.selectedRange, NSMakeRange(1, 4)));
+      [editing loadSource:@"// comment"];
+      [editing setAccessibilitySelectedTextRange:NSMakeRange(10, 0)];
+      [editing.undoManager beginUndoGrouping];
+      [editing insertText:@"(" replacementRange:implicitRange];
+      [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"// comment("]);
+      [editing loadSource:@""]; editing.automaticPairs = NO;
+      [editing.undoManager beginUndoGrouping]; [editing insertText:@"(" replacementRange:implicitRange]; [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"("]);
+      editing.automaticPairs = YES;
+      [editing loadSource:[@"x" stringByPaddingToLength:3000 withString:@"x" startingAtIndex:0]];
+      [editing setAccessibilitySelectedTextRange:NSMakeRange(3000, 0)];
+      [editing.undoManager beginUndoGrouping]; [editing insertText:@"(" replacementRange:implicitRange]; [editing.undoManager endUndoGrouping];
+      assert(editing.source.length == 3001 && editing.head == 3001);
+      [editing loadSource:@""];
+      [editing.undoManager beginUndoGrouping]; [editing insertText:@"(" replacementRange:NSMakeRange(0, 0)]; [editing.undoManager endUndoGrouping];
+      assert([editing.source isEqual:@"("]); // Explicit replacement/paste stays literal.
+    }
     // Forward deletion must remove one grapheme, not one UTF-16 code unit.
     for (NSString *grapheme in @[@"😀", @"👩🏽‍💻", @"é", @"🇨🇦", @"\r\n"]) {
       LESourceInputView *unicode = [[LESourceInputView alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];

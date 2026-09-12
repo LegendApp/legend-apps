@@ -8,15 +8,32 @@ import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
 import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "../codeFiles";
+import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
+import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addNativeMenuActionListener } from "@legend-apps/native-menu";
+import { setCodeViewerWindowOptions } from "../codeWindows";
+import { codeMenuOwnerId, codeViewerWindowIdentifier } from "../appConstants";
+
+const mockEditorCommand = jest.fn(async () => true);
 
 jest.mock("@legend-apps/document-app", () => ({
+  createDocumentTransitionGuard: jest.requireActual("../../../../packages/document-app/src/documentTransition").createDocumentTransitionGuard,
   getLaunchDocumentPath: jest.fn(() => null),
   getFilename: (path: string) => path.split("/").pop(),
   openSelectedDocumentPath: jest.fn(),
   useWatchedDocumentReload: jest.fn(),
 }));
+jest.mock("@legend-apps/app-exit", () => ({ addAppExitListener: jest.fn(() => ({ remove() {} })), completeAppExit: jest.fn() }));
+jest.mock("@legend-apps/window-manager", () => ({ addWindowCloseRequestedListener: jest.fn(() => ({ remove() {} })), closeWindow: jest.fn() }));
+jest.mock("@legend-apps/native-menu", () => ({ addNativeMenuActionListener: jest.fn(() => ({ remove() {} })), updateMenuItems: jest.fn() }));
 jest.mock("@legend-apps/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
-jest.mock("@legend-apps/source-editor", () => ({ SourceDocumentEditor: "SourceDocumentEditor" }));
+jest.mock("@legend-apps/source-editor", () => {
+  const React = require("react");
+  return { SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
+    React.useImperativeHandle(ref, () => ({ command: mockEditorCommand }), []);
+    return React.createElement("SourceDocumentEditor", props);
+  }) };
+});
 jest.mock("@legend-apps/source-viewer", () => ({
   SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
   useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
@@ -53,6 +70,7 @@ describe("Code default editor", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    mockEditorCommand.mockReset().mockResolvedValue(true);
     jest.replaceProperty(process, "argv", ["node", "code"]);
     jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
     jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
@@ -68,7 +86,7 @@ describe("Code default editor", () => {
   it("opens directly in the editor without loading or mounting the old viewer", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]} />); });
     expect(JSON.stringify(renderer.toJSON())).toContain("No file open");
-    expect(JSON.stringify(renderer.toJSON())).toContain("Edits are not saved");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Save with");
     expect(openButton().props.accessibilityLabel).toBe("Open File");
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     await act(async () => requestCodeViewerFile("/one.ts"));
@@ -139,6 +157,57 @@ describe("Code default editor", () => {
     expect(editor()).not.toBe(first);
     expect(editor().props.filePath).toBe("/two.tsx");
     expect(editor().props.language).toBe("tsx");
+  });
+
+  it("preserves edits when opening another file is cancelled or saving fails", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    const first = editor();
+    mockEditorCommand.mockResolvedValueOnce(false);
+    await act(async () => requestCodeViewerFile("/two.ts"));
+    expect(editor()).toBe(first);
+    mockEditorCommand.mockRejectedValueOnce(new Error("File changed outside the editor"));
+    await act(async () => requestCodeViewerFile("/two.ts"));
+    expect(editor()).toBe(first);
+    expect(JSON.stringify(renderer.toJSON())).toContain("File changed outside the editor");
+  });
+
+  it("updates the Save As title and language without remounting, then can reopen the original", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    const first = editor();
+    await act(async () => editor().props.onDocumentState({ dirty: false, path: "/copy.py" }));
+    expect(editor()).toBe(first);
+    expect(editor().props.language).toBe("python");
+    expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/copy.py" }));
+    await act(async () => requestCodeViewerFile("/copy.py"));
+    expect(editor()).toBe(first);
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    expect(editor()).not.toBe(first);
+  });
+
+  it("guards close and quit, routes menu commands and toggles pairing", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    const close = jest.mocked(addWindowCloseRequestedListener).mock.calls[0][0];
+    const quit = jest.mocked(addAppExitListener).mock.calls[0][0];
+    const menu = jest.mocked(addNativeMenuActionListener).mock.calls[0][0];
+    mockEditorCommand.mockResolvedValueOnce(false);
+    await act(async () => close({ identifier: codeViewerWindowIdentifier }));
+    expect(closeWindow).not.toHaveBeenCalled();
+    await act(async () => close({ identifier: codeViewerWindowIdentifier }));
+    expect(closeWindow).toHaveBeenCalledWith(codeViewerWindowIdentifier);
+    mockEditorCommand.mockResolvedValueOnce(false);
+    await act(async () => quit({ reason: "requested" }));
+    expect(completeAppExit).toHaveBeenLastCalledWith(false);
+    await act(async () => quit({ reason: "requested" }));
+    expect(completeAppExit).toHaveBeenLastCalledWith(true);
+    for (const itemId of ["save", "saveAs", "find", "goToLine", "indent", "toggleComment", "duplicateLine", "moveLineUp"]) {
+      await act(async () => menu({ ownerId: codeMenuOwnerId, menuId: "editor", itemId }));
+      expect(mockEditorCommand).toHaveBeenLastCalledWith(itemId);
+    }
+    await act(async () => menu({ ownerId: codeMenuOwnerId, menuId: "editor", itemId: "automaticPairs" }));
+    expect(editor().props.automaticPairs).toBe(false);
   });
 
   it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {

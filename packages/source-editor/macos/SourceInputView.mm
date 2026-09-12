@@ -1,8 +1,11 @@
 #import "SourceInputView.h"
+#include "../cpp/SourceEditing.hpp"
+#import "SourceSearchPanel.h"
 #include "../cpp/SourceDocument.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 #include "../cpp/SourceTreeSyntax.hpp"
 #include <unordered_set>
+#include <map>
 
 using legend::source::SourceDocument;
 namespace syntax = margelo::nitro::legendapps::syntaxparser;
@@ -39,6 +42,7 @@ static NSString *string(const std::u16string &text) {
   CGFloat _preferredX;
   NSString *_compositionOriginal;
   NSRange _compositionRange;
+  uint64_t _compositionState;
   BOOL _needsSelectionReveal;
   NSString *_syntaxLanguage, *_syntaxTheme;
   BOOL _syntaxEnabled;
@@ -51,6 +55,10 @@ static NSString *string(const std::u16string &text) {
   NSPoint _dragPoint;
   BOOL _dragActive, _dragMoved;
   BOOL _startupDrawn;
+  uint64_t _editState, _savedState, _nextEditState;
+  BOOL _saving, _savePanelVisible;
+  LESourceSearchPanel *_searchPanel;
+  std::map<NSUInteger, unichar> _pairedClosers;
   NSTimeInterval _lastProgressAt;
   BOOL _lastProgressActive;
   NSUInteger _lastProgressTotal;
@@ -69,6 +77,8 @@ static NSString *string(const std::u16string &text) {
   if ((self = [super initWithFrame:frame])) {
     _rows = [NSHashTable weakObjectsHashTable];
     _history = [NSUndoManager new];
+    _indentUnit = @"  ";
+    _automaticPairs = YES;
     [self loadSource:@""];
   }
   return self;
@@ -78,6 +88,7 @@ static NSString *string(const std::u16string &text) {
 - (BOOL)resignFirstResponder { [self endSelectionDrag]; return [super resignFirstResponder]; }
 - (void)viewDidMoveToWindow { [super viewDidMoveToWindow]; [self endSelectionDrag]; }
 - (void)dealloc {
+  [_searchPanel close];
   [self retireSyntax];
   auto retired = std::move(_document);
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
@@ -112,7 +123,96 @@ static NSString *string(const std::u16string &text) {
   [self adoptDocument:std::make_shared<SourceDocument>(utf16(source))];
 }
 - (NSUInteger)lineCount { return _document->lineCount(); }
+- (BOOL)dirty { return _editState != _savedState; }
+- (uint64_t)documentRevision { return _document->revision(); }
+- (void)showFindPanel {
+  if (!_searchPanel) _searchPanel = [[LESourceSearchPanel alloc] initWithInput:self];
+  [_searchPanel show];
+}
+- (void)showGoToLine {
+  NSAlert *alert = [NSAlert new]; alert.messageText = @"Go to Line";
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 220, 24)];
+  field.stringValue = [NSString stringWithFormat:@"%lu", _document->position(_head).line + 1];
+  alert.accessoryView = field;
+  [alert addButtonWithTitle:@"Go"]; [alert addButtonWithTitle:@"Cancel"];
+  [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse result) {
+    if (result == NSAlertFirstButtonReturn && field.integerValue > 0) { [self selectLine:field.integerValue - 1]; [self.window makeFirstResponder:self]; }
+  }];
+  [alert.window makeFirstResponder:field];
+}
+- (void)publishDocumentState {
+  if (self.fileSession) self.window.documentEdited = self.dirty;
+  if (self.onDocumentState) self.onDocumentState(self.dirty, self.fileSession.path ?: @"");
+}
+- (void)copySourceChunk:(NSMutableString *)source offset:(NSUInteger)offset document:(std::shared_ptr<SourceDocument>)document revision:(uint64_t)revision completion:(void (^)(NSString *, NSString *))completion {
+  if (_document != document || _document->revision() != revision) { completion(nil, @"The document changed. Please try again."); return; }
+  const auto count = MIN((NSUInteger)65536, _document->length() - offset);
+  [source appendString:string(_document->slice(offset, count))];
+  if (offset + count == _document->length()) { completion(source, nil); return; }
+  dispatch_async(dispatch_get_main_queue(), ^{ [self copySourceChunk:source offset:offset + count document:document revision:revision completion:completion]; });
+}
+- (void)copySourceWithCompletion:(void (^)(NSString *, NSString *))completion {
+  [self copySourceChunk:[NSMutableString new] offset:0 document:_document revision:_document->revision() completion:completion];
+}
+- (void)saveToPath:(NSString *)path completion:(void (^)(BOOL, NSString *))completion {
+  [self unmarkText];
+  if (_saving || !self.fileReadComplete || !self.fileSession) { completion(NO, @"Wait until the file finishes loading or saving."); return; }
+  _saving = YES;
+  const auto state = _editState;
+  const auto document = _document;
+  LESourceFileSession *session = self.fileSession;
+  [self copySourceWithCompletion:^(NSString *source, NSString *error) {
+    if (!source) { self->_saving = NO; completion(NO, error); return; }
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      NSError *failure = nil;
+      const BOOL saved = [session writeSource:source toPath:path error:&failure];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        self->_saving = NO;
+        if (saved && self->_document == document) {
+          self->_savedState = state;
+          self.window.representedURL = [NSURL fileURLWithPath:session.path];
+          [self publishDocumentState];
+        }
+        completion(saved, failure.localizedDescription ?: @"");
+      });
+    });
+  }];
+}
+- (void)saveAs:(BOOL)saveAs completion:(void (^)(BOOL, NSString *))completion {
+  if (_saving || _savePanelVisible) { completion(NO, @"Wait until saving finishes."); return; }
+  if (!saveAs) { [self saveToPath:self.fileSession.path completion:completion]; return; }
+  _savePanelVisible = YES;
+  NSSavePanel *panel = [NSSavePanel savePanel];
+  panel.nameFieldStringValue = self.fileSession.path.lastPathComponent ?: @"Untitled.txt";
+  panel.directoryURL = [NSURL fileURLWithPath:self.fileSession.path.stringByDeletingLastPathComponent ?: NSTemporaryDirectory()];
+  [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse result) {
+    self->_savePanelVisible = NO;
+    if (result != NSModalResponseOK) { completion(NO, @""); return; }
+    [self saveToPath:panel.URL.path completion:completion];
+  }];
+}
+- (void)confirmDiscardWithCompletion:(void (^)(BOOL))completion {
+  [self unmarkText];
+  if (_saving || _savePanelVisible) { completion(NO); return; }
+  if (!self.dirty) { completion(YES); return; }
+  NSAlert *alert = [NSAlert new];
+  alert.messageText = @"Save your changes?";
+  alert.informativeText = @"Your changes will be lost if you don't save them.";
+  [alert addButtonWithTitle:@"Save"]; [alert addButtonWithTitle:@"Cancel"]; [alert addButtonWithTitle:@"Don't Save"];
+  [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse result) {
+    if (result == NSAlertThirdButtonReturn) completion(YES);
+    else if (result == NSAlertFirstButtonReturn) [self saveAs:NO completion:^(BOOL saved, NSString *error) {
+      if (error.length) { NSAlert *failure = [NSAlert new]; failure.messageText = error; [failure beginSheetModalForWindow:self.window completionHandler:nil]; }
+      completion(saved && !self.dirty);
+    }];
+    else completion(NO);
+  }];
+}
 - (void)adoptDocument:(std::shared_ptr<SourceDocument>)document {
+  _pairedClosers.clear();
+  [_searchPanel close]; _searchPanel = nil;
+  _editState = _savedState = 0; _nextEditState = 1;
+  if (self.fileSession) self.window.documentEdited = NO;
   _startupDrawn = NO;
   [self endSelectionDrag];
   _layoutAttributes = nil;
@@ -569,6 +669,17 @@ static NSString *string(const std::u16string &text) {
   } else return NO;
   return YES;
 }
+- (void)undo:(id)sender { [self unmarkText]; [_history undo]; }
+- (void)redo:(id)sender { [self unmarkText]; [_history redo]; }
+- (void)performFindPanelAction:(id)sender {
+  if ([sender tag] == NSTextFinderActionShowFindInterface || [sender tag] == NSTextFinderActionShowReplaceInterface) [self showFindPanel];
+}
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
+  if (item.action == @selector(undo:)) return _history.canUndo || self.hasMarkedText;
+  if (item.action == @selector(redo:)) return _history.canRedo && !self.hasMarkedText;
+  if (item.action == @selector(performFindPanelAction:)) return item.tag == NSTextFinderActionShowFindInterface || item.tag == NSTextFinderActionShowReplaceInterface;
+  return YES;
+}
 - (void)doCommandBySelector:(SEL)selector {
   if ([self respondsToSelector:selector]) {
     void (*invoke)(id, SEL, id) = (void (*)(id, SEL, id))[self methodForSelector:selector];
@@ -576,17 +687,65 @@ static NSString *string(const std::u16string &text) {
   }
   else [super doCommandBySelector:selector];
 }
+- (void)applyEditingPlan:(const legend::source::EditingPlan&)plan {
+  [self unmarkText];
+  [_history beginUndoGrouping];
+  [self replaceRange:NSMakeRange(plan.offset, plan.removed) text:string(plan.text) recordUndo:YES];
+  _anchor = MIN(plan.anchor, _document->length()); _head = MIN(plan.head, _document->length());
+  [_history endUndoGrouping];
+  [self publishSelection];
+}
+- (void)selectLine:(NSUInteger)line {
+  const auto offset = _document->lineOffset(MIN(line, _document->lineCount() - 1));
+  [self setAccessibilitySelectedTextRange:NSMakeRange(offset, 0)];
+}
+- (void)replaceSelectionWithText:(NSString *)text {
+  [_history beginUndoGrouping];
+  [self insertText:text replacementRange:self.selectedRange];
+  [_history endUndoGrouping];
+}
+- (BOOL)performEditingCommand:(NSString *)command {
+  using namespace legend::source;
+  [self unmarkText];
+  if ([command isEqual:@"indent"] || [command isEqual:@"outdent"]) [self applyEditingPlan:indentLines(*_document, _anchor, _head, utf16(self.indentUnit), [command isEqual:@"outdent"])];
+  else if ([command isEqual:@"duplicateLine"]) [self applyEditingPlan:duplicateLines(*_document, _anchor, _head)];
+  else if ([command isEqual:@"moveLineUp"] || [command isEqual:@"moveLineDown"]) [self applyEditingPlan:moveLines(*_document, _anchor, _head, [command isEqual:@"moveLineDown"])];
+  else if ([command isEqual:@"toggleComment"]) {
+    NSString *marker = nil;
+    if ([@[@"javascript", @"typescript", @"tsx", @"c", @"cpp", @"c_sharp", @"csharp", @"java", @"kotlin", @"swift", @"rust", @"go", @"dart", @"scala", @"zig", @"wgsl", @"glsl", @"scss", @"jsonc", @"php", @"protobuf"] containsObject:_syntaxLanguage]) marker = @"//";
+    else if ([@[@"python", @"ruby", @"bash", @"fish", @"powershell", @"yaml", @"toml", @"make", @"cmake", @"r", @"perl", @"julia", @"hcl", @"nix", @"elixir", @"graphql", @"dockerfile", @"gitignore"] containsObject:_syntaxLanguage]) marker = @"#";
+    else if ([@[@"sql", @"lua"] containsObject:_syntaxLanguage]) marker = @"--";
+    else if ([@[@"latex", @"erlang"] containsObject:_syntaxLanguage]) marker = @"%";
+    else if ([@[@"ini", @"clojure"] containsObject:_syntaxLanguage]) marker = @";";
+    if (!marker) return NO;
+    [self applyEditingPlan:toggleComments(*_document, _anchor, _head, utf16(marker))];
+  } else return NO;
+  return YES;
+}
 - (void)replaceRange:(NSRange)range text:(NSString *)text recordUndo:(BOOL)recordUndo {
   if (range.location > _document->length() || range.length > _document->length() - range.location) return;
   // NSTextInputContext may reuse a mutable insertion string after this call.
   // Undo must retain the edit's original length, not that transient object's.
   text = [text copy];
   NSUInteger insertedLength = text.length;
+  if (!range.length && !insertedLength) return;
+  const uint64_t previousState = _editState;
+  if (_history.isUndoing || _history.isRedoing) _pairedClosers.clear();
+  else {
+    std::map<NSUInteger, unichar> mapped;
+    for (const auto& [offset, closer] : _pairedClosers) {
+      if (offset < range.location) mapped[offset] = closer;
+      else if (offset >= NSMaxRange(range)) mapped[offset - range.length + insertedLength] = closer;
+    }
+    _pairedClosers = std::move(mapped);
+  }
   if (recordUndo) {
     NSString *before = string(_document->slice(range.location, range.length));
     NSUInteger anchor = _anchor, head = _head;
     [_history registerUndoWithTarget:self handler:^(LESourceInputView *target) {
       [target replaceRange:NSMakeRange(range.location, insertedLength) text:before recordUndo:YES];
+      target->_editState = previousState;
+      [target publishDocumentState];
       target->_anchor = anchor;
       target->_head = head;
       [target publishSelection];
@@ -601,6 +760,9 @@ static NSString *string(const std::u16string &text) {
   const auto oldEnd = MIN(_document->lineCount(), _document->position(NSMaxRange(range)).line + 2);
   for (size_t i = oldStart ? oldStart - 1 : 0; i < oldEnd; ++i) oldIds.push_back(_document->line(i).id);
   auto change = _document->replace(range.location, range.length, utf16(text));
+  [_searchPanel invalidate];
+  _editState = _nextEditState++;
+  [self publishDocumentState];
   if (_treeSyntax) {
     ++_treeRevision;
     const auto map = [&](NSUInteger index) -> NSUInteger {
@@ -677,7 +839,47 @@ static NSString *string(const std::u16string &text) {
 - (void)insertText:(id)value replacementRange:(NSRange)replacement {
   NSString *text = [value isKindOfClass:NSAttributedString.class] ? [value string] : value;
   NSRange range = replacement.location != NSNotFound ? replacement : ([self hasMarkedText] ? _marked : self.selectedRange);
+  if (range.location > _document->length() || range.length > _document->length() - range.location) return;
   BOOL composing = [self hasMarkedText];
+  if (self.automaticPairs && !composing && replacement.location == NSNotFound && text.length == 1) {
+    const unichar character = [text characterAtIndex:0];
+    const auto tracked = _pairedClosers.find(range.location);
+    if (!range.length && tracked != _pairedClosers.end() && tracked->second == character) {
+      _pairedClosers.erase(tracked); _anchor = _head = range.location + 1; [self publishSelection]; return;
+    }
+    const unichar close = character == '(' ? ')' : character == '[' ? ']' : character == '{' ? '}' : character == '"' || character == '\'' ? character : 0;
+    const auto at = _document->position(range.location);
+    // Ordinary typing never scans the line. On exceptionally long lines, keep
+    // punctuation literal rather than paying an unbounded context-scan cost.
+    if (close && at.column <= 2048) {
+    const auto prefix = _document->line(at.line).text.substr(0, at.column);
+    bool safe = true; char16_t quote = 0;
+    for (size_t i = 0; i < prefix.size(); ++i) {
+      const auto c = prefix[i];
+      if (c == u'\\') { ++i; continue; }
+      if (quote) { if (c == quote) quote = 0; }
+      else if (c == u'\'' || c == u'"' || c == u'`') quote = c;
+      else if (c == u'#' || (c == u'/' && i + 1 < prefix.size() && (prefix[i + 1] == u'/' || prefix[i + 1] == u'*'))) { safe = false; break; }
+    }
+    safe = safe && !quote;
+    const auto tokens = _treeRows.find(_document->line(at.line).id);
+    if (tokens != _treeRows.end()) for (const auto& token : tokens->second) {
+      if (token.start <= at.column && token.start + token.length > at.column && token.capture < _treeCaptures.size()) {
+        const auto& category = _treeCaptures[token.capture];
+        if (category.starts_with("comment") || category.starts_with("string")) safe = false;
+      }
+    }
+    if ((character == '\'' || character == '"') && !prefix.empty() && ((prefix.back() >= u'a' && prefix.back() <= u'z') || (prefix.back() >= u'A' && prefix.back() <= u'Z') || (prefix.back() >= u'0' && prefix.back() <= u'9') || prefix.back() == u'_')) safe = false;
+    if (safe && close) {
+      NSString *selected = string(_document->slice(range.location, range.length));
+      NSString *paired = [NSString stringWithFormat:@"%@%@%C", text, selected, close];
+      [self replaceRange:range text:paired recordUndo:YES];
+      _pairedClosers[range.location + paired.length - 1] = close;
+      _anchor = range.location + 1; _head = _anchor + range.length;
+      [self publishSelection]; return;
+    }
+    }
+  }
   [self replaceRange:range text:text recordUndo:!composing];
   if (composing) {
     _marked = NSMakeRange(range.location, text.length);
@@ -694,6 +896,7 @@ static NSString *string(const std::u16string &text) {
   NSRange range = replacement.location != NSNotFound ? replacement : ([self hasMarkedText] ? _marked : self.selectedRange);
   if (range.location > _document->length() || range.length > _document->length() - range.location) return;
   if (![self hasMarkedText]) {
+    _compositionState = _editState;
     _compositionOriginal = string(_document->slice(range.location, range.length));
     _compositionRange = range;
   }
@@ -708,8 +911,11 @@ static NSString *string(const std::u16string &text) {
   NSRange range = _marked;
   NSString *before = _compositionOriginal ?: @"";
   NSRange oldSelection = _compositionRange;
+  const auto previousState = _compositionState;
   [_history registerUndoWithTarget:self handler:^(LESourceInputView *target) {
     [target replaceRange:range text:before recordUndo:YES];
+    target->_editState = previousState;
+    [target publishDocumentState];
     target->_anchor = oldSelection.location;
     target->_head = NSMaxRange(oldSelection);
     [target publishSelection];
@@ -759,10 +965,14 @@ static NSString *string(const std::u16string &text) {
 - (void)cut:(id)sender { [self copy:sender]; [self insertText:@"" replacementRange:NSMakeRange(NSNotFound, 0)]; }
 - (void)paste:(id)sender {
   NSString *text = [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
-  if (text) [self insertText:text replacementRange:NSMakeRange(NSNotFound, 0)];
+  if (text) [self insertText:text replacementRange:self.selectedRange];
 }
-- (void)insertNewline:(id)sender { [self insertText:@"\n" replacementRange:NSMakeRange(NSNotFound, 0)]; }
-- (void)insertTab:(id)sender { [self insertText:@"\t" replacementRange:NSMakeRange(NSNotFound, 0)]; }
+- (void)insertNewline:(id)sender { [self applyEditingPlan:legend::source::newline(*_document, _anchor, _head, utf16(self.indentUnit))]; }
+- (void)insertTab:(id)sender {
+  if (self.selectedRange.length) [self performEditingCommand:@"indent"];
+  else [self insertText:self.indentUnit replacementRange:NSMakeRange(NSNotFound, 0)];
+}
+- (void)insertBacktab:(id)sender { [self performEditingCommand:@"outdent"]; }
 - (NSUInteger)adjacentOffset:(NSInteger)direction {
   auto position = _document->position(_head);
   auto &line = _document->line(position.line);
@@ -781,6 +991,13 @@ static NSString *string(const std::u16string &text) {
 }
 - (void)deleteBackward:(id)sender {
   NSRange range = self.selectedRange;
+  if (self.automaticPairs && !range.length && range.location > 0 && _pairedClosers.count(range.location)) {
+    const auto before = _document->slice(range.location - 1, 1)[0];
+    const auto after = _pairedClosers[range.location];
+    if ((before == u'(' && after == ')') || (before == u'[' && after == ']') || (before == u'{' && after == '}') || ((before == u'\'' || before == u'"') && before == after)) {
+      [self insertText:@"" replacementRange:NSMakeRange(range.location - 1, 2)]; return;
+    }
+  }
   if (!range.length) { range.location = [self adjacentOffset:-1]; range.length = _head - range.location; }
   [self insertText:@"" replacementRange:range];
 }

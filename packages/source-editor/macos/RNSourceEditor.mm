@@ -18,9 +18,11 @@ struct SourceLoadJob {
   std::atomic<bool> cancelled{false};
   std::unique_ptr<legend::source::SourceFileReader> reader;
   uint64_t nextId = 1;
+  NSDictionary *signature;
+  bool hasBOM = false;
 };
 
-@interface RNSourceEditorHost ()
+@interface RNSourceEditorHost () <RCTSourceEditorHostViewProtocol>
 - (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job first:(BOOL)first;
 - (void)resumeAfterFirstDraw:(std::shared_ptr<SourceLoadJob>)job;
 @end
@@ -30,6 +32,7 @@ struct SourceLoadJob {
   NSString *_initialSource;
   BOOL _useInitialSource;
   BOOL _loaded, _waitingForFirstDraw;
+  uint64_t _commandGeneration;
   std::shared_ptr<SourceLoadJob> _loadJob;
 }
 + (ComponentDescriptorProvider)componentDescriptorProvider { return concreteComponentDescriptorProvider<SourceEditorHostComponentDescriptor>(); }
@@ -69,6 +72,10 @@ struct SourceLoadJob {
       if (!self || !self->_eventEmitter) return;
       std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onGrammarRequired({.language = utf8String(language)});
     };
+    _input.onDocumentState = ^(BOOL dirty, NSString *path) {
+      RNSourceEditorHost *self = weakSelf;
+      if (self && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onDocumentState({.dirty = (bool)dirty, .path = utf8String(path)});
+    };
   }
   return self;
 }
@@ -80,6 +87,8 @@ struct SourceLoadJob {
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
   _input.syntaxBackend = str(next.syntaxBackend);
   _input.grammarRevision = next.grammarRevision;
+  _input.automaticPairs = next.automaticPairs;
+  _input.indentUnit = str(next.indentUnit);
   [_input configureSyntaxLanguage:str(next.syntaxLanguage) theme:str(next.syntaxTheme) enabled:next.syntaxHighlightingEnabled];
   _input.syntaxHighlightingInBackground = next.syntaxHighlightingInBackground;
   [super updateProps:props oldProps:oldProps];
@@ -88,6 +97,8 @@ struct SourceLoadJob {
   [super finalizeUpdates:mask];
   if (_loaded || !_eventEmitter || !_path.length) return;
   _loaded = YES;
+  _input.fileReadComplete = NO;
+  _input.fileSession = nil;
   if (_loadJob) _loadJob->cancelled = true;
   _loadJob = std::make_shared<SourceLoadJob>();
   _waitingForFirstDraw = NO;
@@ -112,8 +123,12 @@ struct SourceLoadJob {
       NSString *error = @"";
       BOOL complete = NO;
       try {
-        if (!job->reader) job->reader = std::make_unique<legend::source::SourceFileReader>(path.fileSystemRepresentation);
+        if (!job->reader) {
+          job->signature = [LESourceFileSession signatureAtPath:path];
+          job->reader = std::make_unique<legend::source::SourceFileReader>(path.fileSystemRepresentation);
+        }
         auto source = job->reader->next(first ? 16384 : 1048576, first ? 128 : 16384);
+        job->hasBOM = job->reader->hasBOM();
         complete = job->reader->done();
         chunk = std::make_shared<legend::source::SourceDocument>(source, job->nextId);
         job->nextId += chunk->lineCount() - 1;
@@ -127,6 +142,8 @@ struct SourceLoadJob {
         if (!self || job->cancelled || self->_loadJob != job || !self->_eventEmitter) return;
         auto emitter = std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter);
         self->_input.sourceLoading = !complete && !error.length;
+        self->_input.fileReadComplete = complete && !error.length;
+        if (first) self->_input.fileSession = [[LESourceFileSession alloc] initWithPath:path signature:job->signature hasBOM:job->hasBOM];
         if (first) {
           if (!error.length) {
             chunk->useEditIdRange();
@@ -169,7 +186,26 @@ struct SourceLoadJob {
   _input.onFirstDraw = nil;
   [self loadNextChunk:job first:NO];
 }
+- (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args {
+  RCTSourceEditorHostHandleCommand(self, commandName, args);
+}
+- (void)execute:(double)requestId command:(NSString *)command argument:(NSString *)argument {
+  __weak RNSourceEditorHost *weakSelf = self;
+  const auto generation = _commandGeneration;
+  void (^finish)(BOOL, NSString *) = ^(BOOL allowed, NSString *error) {
+    RNSourceEditorHost *self = weakSelf;
+    if (self && self->_commandGeneration == generation && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onCommandResult({.id = requestId, .allowed = (bool)allowed, .error = utf8String(error)});
+  };
+  if ([command isEqual:@"save"] || [command isEqual:@"saveAs"]) [_input saveAs:[command isEqual:@"saveAs"] completion:finish];
+  else if ([command isEqual:@"confirmClose"]) [_input confirmDiscardWithCompletion:^(BOOL allow) { finish(allow, @""); }];
+  else if ([command isEqual:@"find"]) { [_input showFindPanel]; finish(YES, @""); }
+  else if ([command isEqual:@"goToLine"]) { [_input showGoToLine]; finish(YES, @""); }
+  else if ([_input performEditingCommand:command]) finish(YES, @"");
+  else if ([command isEqual:@"toggleComment"]) finish(NO, @"Line comments are not available for this language.");
+  else finish(NO, @"Unknown editor command");
+}
 - (void)prepareForRecycle {
+  ++_commandGeneration;
   [super prepareForRecycle];
   if (_loadJob) _loadJob->cancelled = true;
   _loadJob.reset();
@@ -178,6 +214,10 @@ struct SourceLoadJob {
   if (self.window.firstResponder == _input) [self.window makeFirstResponder:nil];
   _input.syntaxHighlightingInBackground = NO;
   _input.sourceLoading = NO;
+  _input.fileReadComplete = NO;
+  _input.fileSession = nil;
+  _input.automaticPairs = YES;
+  _input.indentUnit = @"  ";
   _input.syntaxBackend = @"tree-sitter";
   _input.grammarRevision = 0;
   _path = nil; _loaded = NO; [_input loadSource:@""];

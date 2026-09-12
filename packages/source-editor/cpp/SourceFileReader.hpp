@@ -13,6 +13,7 @@ class SourceFileReader {
   std::ifstream file_;
   std::string pending_;
   bool eof_ = false, first_ = true;
+  bool hasBOM_ = false;
   size_t bytesRead_ = 0;
 
 public:
@@ -20,6 +21,7 @@ public:
     if (!file_) throw std::runtime_error("Unable to open source file: " + path);
   }
   bool done() const { return eof_ && pending_.empty(); }
+  bool hasBOM() const { return hasBOM_; }
   size_t bytesRead() const { return bytesRead_; }
 
   std::u16string next(size_t byteLimit = 262144, size_t lineLimit = 4096) {
@@ -36,7 +38,7 @@ public:
     }
     if (first_) {
       first_ = false;
-      if (pending_.starts_with("\xef\xbb\xbf")) pending_.erase(0, 3);
+      if (pending_.starts_with("\xef\xbb\xbf")) { hasBOM_ = true; pending_.erase(0, 3); }
     }
     const auto limit = std::min(byteLimit, pending_.size());
     std::u16string output;

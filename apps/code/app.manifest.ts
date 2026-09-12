@@ -38,7 +38,7 @@ const manifest = {
     macos: [
       {
         name: "Text file",
-        role: "Viewer",
+        role: "Editor",
         extensions: ["*"],
         contentTypes: ["public.text"],
       },

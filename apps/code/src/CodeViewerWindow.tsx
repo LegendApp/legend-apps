@@ -1,11 +1,14 @@
-import { openSelectedDocumentPath } from "@legend-apps/document-app";
+import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legend-apps/document-app";
+import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
+import { addNativeMenuActionListener, updateMenuItems } from "@legend-apps/native-menu";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
-import { SourceDocumentEditor } from "@legend-apps/source-editor";
+import { SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeFileTypes } from "./appConstants";
+import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
 import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import {
   useCodeFontFamilySetting,
@@ -30,7 +33,13 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
   const [filePath, setFilePath] = useState<string | null>(launchFile);
+  const [documentKey, setDocumentKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [documentPath, setDocumentPath] = useState<string | null>(launchFile);
+  const editor = useRef<SourceDocumentEditorHandle>(null);
+  const [automaticPairs, setAutomaticPairs] = useState(true);
+  useEffect(() => { updateMenuItems(codeMenuOwnerId, [{ id: "automaticPairs", checked: automaticPairs }]); }, [automaticPairs]);
+  const [transition] = useState(createDocumentTransitionGuard);
   const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef(launchFile);
   const loadedFileRequestVersionRef = useRef(0);
@@ -39,10 +48,30 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const mutedColor = displayTheme.colors.muted;
   const borderColor = displayTheme.colors.border;
 
-  const openFile = useCallback((path: string) => {
-    setError(null);
-    setFilePath(path);
-  }, []);
+  const openFile = useCallback(async (path: string) => {
+    if (path === documentPath) return;
+    try {
+      await transition(() => editor.current?.command("confirmClose") ?? Promise.resolve(true), () => {
+        setError(null); setFilePath(path); setDocumentPath(path); setDocumentKey((key) => key + 1);
+      });
+    } catch (cause) { setError(String(cause)); }
+  }, [documentPath, transition]);
+
+  useEffect(() => {
+    const prepare = () => editor.current?.command("confirmClose") ?? Promise.resolve(true);
+    const close = addWindowCloseRequestedListener((event) => {
+      if (event.identifier === codeViewerWindowIdentifier) void transition(prepare, async () => { await closeWindow(codeViewerWindowIdentifier); }).catch((cause) => setError(String(cause)));
+    });
+    const quit = addAppExitListener((event) => {
+      if (event.reason === "requested") void transition(prepare, () => {}).then(completeAppExit, (cause) => { setError(String(cause)); completeAppExit(false); });
+    });
+    const menu = addNativeMenuActionListener((event) => {
+      if (event.ownerId === codeMenuOwnerId && event.itemId === "automaticPairs") setAutomaticPairs((value) => !value);
+      if (event.ownerId === codeMenuOwnerId && ["save", "saveAs", "find", "goToLine", "indent", "outdent", "duplicateLine", "moveLineUp", "moveLineDown", "toggleComment"].includes(event.itemId))
+        void editor.current?.command(event.itemId).then((completed) => { if (completed) setError(null); }).catch((cause) => setError(String(cause)));
+    });
+    return () => { close.remove(); quit.remove(); menu.remove(); };
+  }, [transition]);
 
   const openCodeDialog = useCallback(async () => {
     try {
@@ -82,11 +111,11 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     setCodeViewerWindowOptions({
       appearance: syntaxTheme.appearance,
       backgroundColor: syntaxTheme.background,
-      filePath,
+      filePath: documentPath,
     }).catch((cause: unknown) => {
       console.error(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [filePath, syntaxTheme.appearance, syntaxTheme.background]);
+  }, [documentPath, syntaxTheme.appearance, syntaxTheme.background]);
 
   return (
     <View style={[styles.root, { backgroundColor }]}>
@@ -94,12 +123,17 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
       <View style={styles.list}>
         {filePath ? (
           <SourceDocumentEditor
-            key={filePath}
+            ref={editor}
+            automaticPairs={automaticPairs}
+            onDocumentState={(state) => {
+              if (state.path && state.path !== documentPath) { setDocumentPath(state.path); noteRecentDocument(state.path); }
+            }}
+            key={documentKey}
             filePath={filePath}
             fontFamily={fontFamily}
             fontSize={fontSize}
             foreground={foregroundColor}
-            language={getCodeLanguage(filePath)}
+            language={getCodeLanguage(documentPath ?? filePath)}
             syntaxTheme={selectedSyntaxTheme}
             syntaxHighlightingEnabled={syntaxHighlightingEnabled}
             syntaxHighlightingMode="background"
@@ -119,7 +153,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
               <Text style={[styles.openButtonText, { color: foregroundColor }]}>Open File</Text>
             </Pressable>
             <Text style={[styles.emptyText, { color: mutedColor }]}>
-              Edits are not saved · switching files or closing discards them
+              Save with ⌘S · Save As with ⇧⌘S
             </Text>
           </View>
         )}

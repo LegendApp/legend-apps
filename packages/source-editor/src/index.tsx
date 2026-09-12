@@ -1,8 +1,8 @@
 import { LegendList, useRecyclingState, type LegendListDataSourceRenderItemProps, type LegendListRef } from "@legendapp/list/react-native";
 import { defaultSyntaxThemeName, getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
-import { useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import SourceEditorHost from "./SourceEditorHostNativeComponent";
+import SourceEditorHost, { Commands } from "./SourceEditorHostNativeComponent";
 import SourceEditorRow from "./SourceEditorRowNativeComponent";
 import { createSourceProgress } from "./sourceProgress";
 import { SourceProgressBanner } from "./SourceProgressBanner";
@@ -11,7 +11,9 @@ import { GrammarProgressBanner } from "./GrammarProgressBanner";
 import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
 
 export type SourceDocumentEditorProps = {
-  /** Prototype: UTF-8 input only, disk is never modified. */
+  ref?: Ref<SourceDocumentEditorHandle>;
+  onDocumentState?: (state: { dirty: boolean; path: string }) => void;
+  /** UTF-8 input; disk changes only through explicit save/saveAs commands. */
   filePath: string;
   /** Optional in-memory seed. Remount with a new key to replace the document. */
   initialSource?: string;
@@ -21,6 +23,8 @@ export type SourceDocumentEditorProps = {
   foreground?: string;
   wrap?: boolean;
   language?: string;
+  indentUnit?: string;
+  automaticPairs?: boolean;
   syntaxTheme?: string;
   /** Unknown or unavailable languages remain plain text; grammars download on demand. */
   syntaxBackend?: "tree-sitter";
@@ -29,6 +33,9 @@ export type SourceDocumentEditorProps = {
   syntaxHighlightingMode?: "viewport" | "background";
   onLoad?: () => void;
   onChange?: (change: SourceEdit) => void;
+};
+export type SourceDocumentEditorHandle = {
+  command: (command: string, argument?: string) => Promise<boolean>;
 };
 
 function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
@@ -46,10 +53,27 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
   />;
 }
 
-export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true,
+export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, indentUnit = "  ", automaticPairs = true,
   language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
   syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange,
 }: SourceDocumentEditorProps) {
+  const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
+  const pending = useRef(new Map<number, { resolve: (value: boolean) => void; reject: (error: Error) => void }>());
+  const requestId = useRef(0);
+  useImperativeHandle(ref, () => ({
+    command(command, argument = "") {
+      return new Promise<boolean>((resolve, reject) => {
+        if (!host.current) { resolve(false); return; }
+        const id = ++requestId.current;
+        pending.current.set(id, { resolve, reject });
+        Commands.execute(host.current, id, command, argument);
+      });
+    },
+  }), []);
+  useEffect(() => () => {
+    for (const request of pending.current.values()) request.resolve(false);
+    pending.current.clear();
+  }, []);
   const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
   const [error, setError] = useState("");
   const [syntaxError, setSyntaxError] = useState("");
@@ -68,6 +92,15 @@ export function SourceDocumentEditor({ filePath, fontFamily = "Menlo", fontSize 
     ? <EditorLine item={item} index={index} fontFamily={fontFamily} fontSize={fontSize} foreground={foreground} wrap={wrap} /> : null;
 
   return <SourceEditorHost
+    ref={host}
+    automaticPairs={automaticPairs}
+    indentUnit={indentUnit}
+    onDocumentState={({ nativeEvent }) => onDocumentState?.(nativeEvent)}
+    onCommandResult={({ nativeEvent }) => {
+      const request = pending.current.get(nativeEvent.id);
+      pending.current.delete(nativeEvent.id);
+      if (nativeEvent.error) request?.reject(new Error(nativeEvent.error)); else request?.resolve(nativeEvent.allowed);
+    }}
     documentPath={filePath}
     initialSource={initialSource}
     useInitialSource={initialSource !== undefined}
