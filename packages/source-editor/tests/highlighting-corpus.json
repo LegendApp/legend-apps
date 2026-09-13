@@ -1,0 +1,14 @@
+[
+  { "name": "TypeScript compiler", "language": "javascript", "path": "node_modules/.bun/@ts-morph+common@0.28.1/node_modules/@ts-morph/common/dist/typescript.js" },
+  { "name": "React compiler", "language": "javascript", "path": "node_modules/.bun/babel-plugin-react-compiler@1.0.0/node_modules/babel-plugin-react-compiler/dist/index.js" },
+  { "name": "DOM declarations", "language": "typescript", "path": "node_modules/.bun/@typescript+typescript-darwin-arm64@7.0.2/node_modules/@typescript/typescript-darwin-arm64/lib/lib.dom.d.ts" },
+  { "name": "CSS type declarations", "language": "typescript", "path": "node_modules/.bun/csstype@3.2.3/node_modules/csstype/index.d.ts" },
+  { "name": "Diff viewer", "language": "tsx", "path": "apps/diff/src/DiffViewerWindow.tsx" },
+  { "name": "Markdown editor", "language": "tsx", "path": "packages/markdown-document/src/MarkdownDocument.tsx" },
+  { "name": "Python AST", "language": "python", "path": "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/ast.py" },
+  { "name": "Tailwind", "language": "css", "path": "node_modules/.bun/tailwindcss@4.2.4/node_modules/tailwindcss/index.css" },
+  { "name": "DevTools messages", "language": "json", "path": "node_modules/.bun/@react-native+debugger-frontend@0.81.6/node_modules/@react-native/debugger-frontend/dist/third-party/front_end/core/i18n/locales/en-US.json" },
+  { "name": "TypeBox documentation", "language": "markdown", "path": "node_modules/.bun/@sinclair+typebox@0.34.49/node_modules/@sinclair/typebox/readme.md" },
+  { "name": "Desktop talk", "language": "mdx", "path": "apps/slides/decks/react-native-desktop/talk.mdx" },
+  { "name": "Joi minified", "language": "javascript", "path": "node_modules/.bun/joi@17.13.3/node_modules/joi/dist/joi-browser.min.js" }
+]

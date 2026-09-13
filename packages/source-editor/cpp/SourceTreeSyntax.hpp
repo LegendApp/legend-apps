@@ -84,9 +84,10 @@ public:
     const auto last = end == document_.lineCount() ? document_.length() : document_.lineOffset(end);
     const auto spans = parser_->highlight(static_cast<uint32_t>(first), static_cast<uint32_t>(last), &cancelled);
     std::vector<SourceSyntaxRow> rows;
+    rows.reserve(end - start);
     size_t token = 0;
-    for (auto index = start; index < end; ++index) {
-      const auto offset = document_.lineOffset(index), finish = offset + document_.line(index).text.size();
+    document_.forEachLine(start, end - start, [&](size_t index, size_t offset, const Line& line) {
+      const auto finish = offset + line.text.size();
       SourceSyntaxRow row{index, {}};
       while (token < spans.size() && spans[token].start + spans[token].length <= offset) ++token;
       for (auto i = token; i < spans.size() && spans[i].start < finish; ++i) {
@@ -96,7 +97,7 @@ public:
           spans[i].captureId});
       }
       rows.push_back(std::move(row));
-    }
+    });
     return rows;
   }
   std::vector<std::string> captures() const { return parser_->captures(); }
