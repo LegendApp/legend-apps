@@ -1,5 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
-import { useEffectTime } from "../shared/effectRuntime";
+import type { Observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+import { useEffectTime$ } from "../shared/effectRuntime";
 
 type FrameBudgetProps = {
   budgetMs?: number;
@@ -16,16 +18,17 @@ function BudgetRow({
   budgetMs,
   color,
   label,
-  playhead,
+  time$,
+  cycleSeconds,
   workMs,
 }: {
   budgetMs: number;
   color: string;
   label: string;
-  playhead: number;
+  time$: Observable<number>;
+  cycleSeconds: number;
   workMs: number;
 }) {
-  const missed = workMs > budgetMs;
 
   return (
     <View style={styles.budgetRow}>
@@ -34,22 +37,11 @@ function BudgetRow({
         <Text style={[styles.workValue, { color }]}>{workMs.toFixed(0)} ms work</Text>
       </View>
       <View style={styles.timeline}>
-        {Array.from({ length: frames }, (_, index) => {
-          const current = Math.floor(playhead * frames) === index;
-          const workWidth = Math.min(frameWidth * 1.8, frameWidth * workMs / budgetMs);
-          const hasWork = !missed || index % 2 === 0;
-          const withinBudgetWidth = Math.min(frameWidth - 16, workWidth);
-          const overrunWidth = Math.max(0, workWidth - withinBudgetWidth);
-          return (
-            <View key={index} style={[styles.frameCell, current && { backgroundColor: `${color}14` }]}>
-              <Text style={styles.frameNumber}>{index + 1}</Text>
-              {hasWork && <View style={[styles.workBlock, { backgroundColor: color, width: withinBudgetWidth }]} />}
-              {hasWork && missed && <View style={[styles.overrunBlock, { backgroundColor: color, width: overrunWidth }]} />}
-              {missed && <View style={styles.budgetBoundary} />}
-            </View>
-          );
-        })}
-        <View style={[styles.playhead, { backgroundColor: color, left: Math.min(timelineWidth - 3, playhead * timelineWidth), shadowColor: color }]} />
+        {Array.from({ length: frames }, (_, index) => (
+          <BudgetFrame key={index} index={index} time$={time$} cycleSeconds={cycleSeconds}
+            budgetMs={budgetMs} color={color} workMs={workMs} />
+        ))}
+        <BudgetPlayhead time$={time$} cycleSeconds={cycleSeconds} color={color} />
       </View>
     </View>
   );
@@ -61,9 +53,7 @@ export function FrameBudget({
   heavyWorkMs = 24,
   lightWorkMs = 6,
 }: FrameBudgetProps) {
-  const time = useEffectTime(3.7);
-  const playhead = time % cycleSeconds / cycleSeconds;
-  const stepped = Math.floor(playhead * frames) / (frames - 1);
+  const time$ = useEffectTime$(3.7);
 
   return (
     <View style={styles.frame}>
@@ -74,8 +64,8 @@ export function FrameBudget({
       <View style={styles.preview}>
         <Text style={styles.previewLabel}>RESULT</Text>
         <View style={styles.previewTrack}>
-          <View style={[styles.cursor, styles.smoothCursor, { left: playhead * 1050 }]} />
-          <View style={[styles.cursor, styles.jankCursor, { left: stepped * 1050 }]} />
+          <BudgetCursor time$={time$} cycleSeconds={cycleSeconds} />
+          <BudgetCursor time$={time$} cycleSeconds={cycleSeconds} stepped />
         </View>
         <View style={styles.legend}>
           <View style={[styles.legendDot, { backgroundColor: "#67e8f9" }]} />
@@ -84,11 +74,43 @@ export function FrameBudget({
           <Text style={styles.legendText}>work crosses the boundary</Text>
         </View>
       </View>
-      <BudgetRow budgetMs={budgetMs} color="#67e8f9" label="Light frame" playhead={playhead} workMs={lightWorkMs} />
-      <BudgetRow budgetMs={budgetMs} color="#fb7185" label="Heavy frame" playhead={playhead} workMs={heavyWorkMs} />
+      <BudgetRow budgetMs={budgetMs} color="#67e8f9" label="Light frame" time$={time$} cycleSeconds={cycleSeconds} workMs={lightWorkMs} />
+      <BudgetRow budgetMs={budgetMs} color="#fb7185" label="Heavy frame" time$={time$} cycleSeconds={cycleSeconds} workMs={heavyWorkMs} />
       <Text style={styles.caption}>A reusable timing explanation, not a measurement from the comparison.</Text>
     </View>
   );
+}
+
+type BudgetClockProps = { time$: Observable<number>; cycleSeconds: number };
+
+function BudgetPlayhead({ time$, cycleSeconds, color }: BudgetClockProps & { color: string }) {
+  const left = useValue(() => Math.min(timelineWidth - 3, time$.get() % cycleSeconds / cycleSeconds * timelineWidth));
+  return <View style={[styles.playhead, { backgroundColor: color, left, shadowColor: color }]} />;
+}
+
+function BudgetCursor({ time$, cycleSeconds, stepped }: BudgetClockProps & { stepped?: boolean }) {
+  const left = useValue(() => {
+    const playhead = time$.get() % cycleSeconds / cycleSeconds;
+    return (stepped ? Math.floor(playhead * frames) / (frames - 1) : playhead) * 1050;
+  });
+  return <View style={[styles.cursor, stepped ? styles.jankCursor : styles.smoothCursor, { left }]} />;
+}
+
+function BudgetFrame({ index, time$, cycleSeconds, budgetMs, color, workMs }: BudgetClockProps & {
+  index: number; budgetMs: number; color: string; workMs: number;
+}) {
+  const current = useValue(() => Math.floor(time$.get() % cycleSeconds / cycleSeconds * frames) === index);
+  const missed = workMs > budgetMs;
+  const workWidth = Math.min(frameWidth * 1.8, frameWidth * workMs / budgetMs);
+  const hasWork = !missed || index % 2 === 0;
+  const withinBudgetWidth = Math.min(frameWidth - 16, workWidth);
+  const overrunWidth = Math.max(0, workWidth - withinBudgetWidth);
+  return <View style={[styles.frameCell, current && { backgroundColor: `${color}14` }]}>
+    <Text style={styles.frameNumber}>{index + 1}</Text>
+    {hasWork && <View style={[styles.workBlock, { backgroundColor: color, width: withinBudgetWidth }]} />}
+    {hasWork && missed && <View style={[styles.overrunBlock, { backgroundColor: color, width: overrunWidth }]} />}
+    {missed && <View style={styles.budgetBoundary} />}
+  </View>;
 }
 
 const styles = StyleSheet.create({

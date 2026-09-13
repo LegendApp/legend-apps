@@ -1,5 +1,6 @@
 import { useSlideLifecycle } from "@legend-apps/presentation";
-import { useEffect, useState } from "react";
+import { useObservable, useValue } from "@legendapp/state/react";
+import { useEffect } from "react";
 
 export function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -14,9 +15,10 @@ export function stage(time: number, start: number, duration: number) {
   return smooth((time - start) / duration);
 }
 
-export function useEffectTime(previewTime: number) {
+export function useEffectTime$(previewTime: number) {
   const { isActive, isPreview, startedAt } = useSlideLifecycle();
-  const [time, setTime] = useState(isPreview ? previewTime : 0);
+  const time$ = useObservable(isPreview ? previewTime : 0);
+  const setTime = time$.set;
 
   useEffect(() => {
     if (isPreview) {
@@ -33,7 +35,12 @@ export function useEffectTime(previewTime: number) {
     setTime(Math.max(0, performance.now() - epoch) / 1000);
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [isActive, isPreview, previewTime, startedAt]);
+  }, [isActive, isPreview, previewTime, startedAt, setTime]);
 
-  return time;
+  return time$;
+}
+
+// Fully animated effects can read time directly; mixed figures pass time$ to animated leaves.
+export function useEffectTime(previewTime: number) {
+  return useValue(useEffectTime$(previewTime));
 }

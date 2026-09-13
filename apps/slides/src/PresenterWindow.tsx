@@ -1,5 +1,5 @@
 import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legend-apps/file-dialog";
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
@@ -251,15 +251,14 @@ function PresenterWorkspace({
   showNext,
   showNotes,
 }: PresenterWorkspaceProps) {
-  const [layout, setLayout] = useState(getPresenterLayout);
-  const layoutRef = useRef(layout);
+  const layout$ = useObservable(() => getPresenterLayout());
+  const layout = useValue(layout$);
   const workspaceSizeRef = useRef({ height: 0, width: 0 });
 
   useEffect(() => {
     if (resetVersion === 0) return;
-    layoutRef.current = defaultPresenterLayout;
-    setLayout(defaultPresenterLayout);
-  }, [resetVersion]);
+    layout$.set(defaultPresenterLayout);
+  }, [resetVersion, layout$]);
 
   const handleWorkspaceLayout = useCallback((event: LayoutChangeEvent) => {
     workspaceSizeRef.current = event.nativeEvent.layout;
@@ -269,13 +268,12 @@ function PresenterWorkspace({
     const availableSize = divider === "previews"
       ? workspaceSizeRef.current.width
       : workspaceSizeRef.current.height;
-    const nextLayout = resizePresenterLayout(layoutRef.current, divider, delta, availableSize);
-    if (nextLayout === layoutRef.current) return;
-    layoutRef.current = nextLayout;
-    setLayout(nextLayout);
-  }, []);
+    const nextLayout = resizePresenterLayout(layout$.peek(), divider, delta, availableSize);
+    if (nextLayout === layout$.peek()) return;
+    layout$.set(nextLayout);
+  }, [layout$]);
 
-  const persistLayout = useCallback(() => rememberPresenterLayout(layoutRef.current), []);
+  const persistLayout = useCallback(() => rememberPresenterLayout(layout$.peek()), [layout$]);
   const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
 
   return (
@@ -350,19 +348,17 @@ function PresenterToolbar({
   const rehearsalPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
-  const runningRef = useRef(false);
+  const timerRunning$ = useObservable(false);
   const timerStateRef = useRef(initialPresenterTimerState);
   const audienceOpenRef = useRef(false);
   const previousSlideRef = useRef(currentSlide);
   const editingRef = useRef(isEditing);
-  const [elapsed, setElapsed] = useState(0);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const elapsedRef = useRef(elapsed);
-  elapsedRef.current = elapsed;
+  const elapsed$ = useObservable(0);
+  const setElapsed = elapsed$.set;
 
   const updateTimerClock = useCallback((nextRunning: boolean, restart: boolean) => {
     const now = Date.now();
-    const wasRunning = runningRef.current;
+    const wasRunning = timerRunning$.peek();
     if (restart) {
       elapsedBeforeRun.current = 0;
       startedAt.current = now;
@@ -374,10 +370,9 @@ function PresenterToolbar({
       setElapsed(elapsedBeforeRun.current);
     }
     if (nextRunning !== wasRunning) {
-      runningRef.current = nextRunning;
-      setTimerRunning(nextRunning);
+      timerRunning$.set(nextRunning);
     }
-  }, []);
+  }, [setElapsed, timerRunning$]);
 
   const applyTimerEvent = useCallback((event: PresenterTimerEvent) => {
     const transition = transitionPresenterTimer(timerStateRef.current, event, {
@@ -414,35 +409,28 @@ function PresenterToolbar({
     }
   }, [applyTimerEvent, audienceOpen, isEditing]);
 
-  useEffect(() => {
-    if (!timerRunning) {
-      return;
-    }
+  useObserveEffect((event) => {
+    if (!timerRunning$.get()) return;
     const interval = setInterval(() => {
-      setElapsed(elapsedBeforeRun.current + Date.now() - startedAt.current);
+      elapsed$.set(elapsedBeforeRun.current + Date.now() - startedAt.current);
     }, 1000);
-    return () => clearInterval(interval);
-  }, [timerRunning]);
+    event.onCleanup = () => clearInterval(interval);
+  });
 
-  useEffect(() => {
+  useObserveEffect(() => {
     void setWindowOptions("slides-presenter", {
       windowStyle: {
         toolbarItems: createPresenterToolbarItems({
-          audienceOpen,
-          displays,
-          elapsed: elapsedRef.current,
-          hasDeck,
-          rehearsalEnabled,
-          selectedDisplayId,
-          timerRunning,
+          audienceOpen, displays, elapsed: elapsed$.peek(), hasDeck,
+          rehearsalEnabled, selectedDisplayId, timerRunning: timerRunning$.get(),
         }),
       },
     });
-  }, [audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId, timerRunning]);
+  }, [audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
 
-  useEffect(() => {
-    void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed));
-  }, [elapsed]);
+  useObserveEffect(() => {
+    void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed$.get()));
+  });
 
   useEffect(() => {
     const subscription = addWindowToolbarItemSelectedListener((event) => {
@@ -482,12 +470,16 @@ function launchDeckPath(launchArguments?: string[]) {
 }
 
 export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
-  const [displays, setDisplays] = useState<Display[]>([]);
-  const [selectedDisplayId, setSelectedDisplayId] = useState<string | null>(null);
-  const [rehearsalEnabled, setRehearsalEnabled] = useState(false);
-  const [activeMode, setActiveMode] = useState<PresenterMode | null>(null);
-  const [notesEditing, setNotesEditing] = useState(false);
-  const [presenterLayoutResetVersion, setPresenterLayoutResetVersion] = useState(0);
+  const presenter$ = useObservable<PresenterSession>({
+    displays: [], selectedDisplayId: null, rehearsalEnabled: false,
+    activeMode: null, notesEditing: false, presenterLayoutResetVersion: 0,
+  });
+  const setDisplays = presenter$.displays.set;
+  const setSelectedDisplayId = presenter$.selectedDisplayId.set;
+  const setRehearsalEnabled = presenter$.rehearsalEnabled.set;
+  const setActiveMode = presenter$.activeMode.set;
+  const setNotesEditing = presenter$.notesEditing.set;
+  const setPresenterLayoutResetVersion = presenter$.presenterLayoutResetVersion.set;
   const keyboardJump$ = useObservable("");
   const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const audienceOpen = useValue(slidesState$.audienceOpen);
@@ -527,7 +519,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       if (nextDisplays.some((display) => display.id === remembered)) return remembered ?? null;
       return nextDisplays.find((display) => !display.isMain)?.id ?? nextDisplays[0]?.id ?? null;
     });
-  }, [audience]);
+  }, [audience, setDisplays, setSelectedDisplayId]);
 
   const openDeck = useCallback(async () => {
     const paths = await openFileDialog({
@@ -545,7 +537,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const resetPresenterLayout = useCallback(() => {
     resetStoredPresenterLayout();
     setPresenterLayoutResetVersion((version) => version + 1);
-  }, []);
+  }, [setPresenterLayoutResetVersion]);
 
   useSlidesMenus(openDeck, audienceOpen, blackout, resetPresenterLayout, openSlidesSettingsWindow);
 
@@ -573,11 +565,11 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       recentSubscription.remove();
       closedSubscription.remove();
     };
-  }, [audience, launchArguments, refreshDisplays]);
+  }, [audience, launchArguments, refreshDisplays, setActiveMode]);
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
-      if (notesEditing && event.keyCode !== KeyCodes.KEY_PAGE_DOWN && event.keyCode !== KeyCodes.KEY_PAGE_UP) {
+      if (presenter$.notesEditing.peek() && event.keyCode !== KeyCodes.KEY_PAGE_DOWN && event.keyCode !== KeyCodes.KEY_PAGE_UP) {
         return false;
       }
       if (nextKeyCodes.has(event.keyCode)) {
@@ -630,7 +622,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         clearTimeout(keyboardJumpTimeout.current);
       }
     };
-  }, [closeAudience, keyboardJump$, notesEditing, audienceOpen]);
+  }, [closeAudience, keyboardJump$, presenter$, audienceOpen]);
 
   useEffect(() => {
     void setPreventDisplaySleep(audienceOpen);
@@ -641,26 +633,27 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     };
   }, [audienceOpen]);
 
-  const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
   const startAudience = useCallback(async () => {
+    const { displays, selectedDisplayId, rehearsalEnabled } = presenter$.peek();
+    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     await openAudience(rehearsalEnabled ? undefined : selectedDisplay);
     setActiveMode(mode);
-  }, [openAudience, rehearsalEnabled, selectedDisplay]);
+  }, [openAudience, setActiveMode, presenter$]);
   const stopAudience = useCallback(async () => {
     await closeAudience();
     setActiveMode(null);
     setSlidesState({ deckLocked: false });
-  }, [closeAudience]);
+  }, [closeAudience, setActiveMode]);
 
   const selectDisplay = useCallback((displayId: string) => {
     setSelectedDisplayId(displayId);
     rememberPresentationDisplayId(displayId);
-  }, []);
+  }, [setSelectedDisplayId]);
 
   const selectMode = useCallback((mode: PresenterMode) => {
     setRehearsalEnabled(mode === "rehearsal");
-  }, []);
+  }, [setRehearsalEnabled]);
 
   const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string) => {
     try {
@@ -682,32 +675,45 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   return (
     <View style={styles.root}>
       <ConnectedPresenterToolbar
-        activeMode={activeMode}
+        presenter$={presenter$}
         audienceOpen={audienceOpen}
-        displays={displays}
-        isEditing={notesEditing}
         onDisplayChange={selectDisplay}
         onModeChange={selectMode}
         onStart={startAudience}
         onStop={stopAudience}
-        rehearsalEnabled={rehearsalEnabled}
-        selectedDisplayId={selectedDisplayId}
       />
       <PresenterDeckContent
         keyboardJump$={keyboardJump$}
-        notesEditable={!audienceOpen || activeMode === "rehearsal"}
+        presenter$={presenter$}
         onNotesEditingChange={setNotesEditing}
         onSaveNotes={saveSpeakerNotes}
-        resetVersion={presenterLayoutResetVersion}
       />
     </View>
   );
 }
 
-function ConnectedPresenterToolbar(props: Omit<Parameters<typeof PresenterToolbar>[0], "currentSlide" | "hasDeck">) {
+type PresenterSession = {
+  displays: Display[];
+  selectedDisplayId: string | null;
+  rehearsalEnabled: boolean;
+  activeMode: PresenterMode | null;
+  notesEditing: boolean;
+  presenterLayoutResetVersion: number;
+};
+
+function ConnectedPresenterToolbar({ presenter$, ...props }: Omit<PresenterToolbarProps,
+  "currentSlide" | "hasDeck" | "activeMode" | "displays" | "isEditing" | "rehearsalEnabled" | "selectedDisplayId"
+> & { presenter$: Observable<PresenterSession> }) {
+  const activeMode = useValue(presenter$.activeMode);
+  const displays = useValue(presenter$.displays);
+  const isEditing = useValue(presenter$.notesEditing);
+  const rehearsalEnabled = useValue(presenter$.rehearsalEnabled);
+  const selectedDisplayId = useValue(presenter$.selectedDisplayId);
   const currentSlide = useValue(slidesState$.currentSlide);
   const hasDeck = useValue(() => Boolean(slidesState$.compiled.get()));
-  return <PresenterToolbar {...props} currentSlide={currentSlide} hasDeck={hasDeck} />;
+  return <PresenterToolbar {...props} currentSlide={currentSlide} hasDeck={hasDeck}
+    activeMode={activeMode} displays={displays} isEditing={isEditing}
+    rehearsalEnabled={rehearsalEnabled} selectedDisplayId={selectedDisplayId} />;
 }
 
 function KeyboardJump({ value$ }: { value$: Observable<string> }) {
@@ -715,13 +721,14 @@ function KeyboardJump({ value$ }: { value$: Observable<string> }) {
   return value ? <Text style={styles.keyboardJump}>Jump to {value} ↵</Text> : null;
 }
 
-function PresenterDeckContent({ keyboardJump$, notesEditable, onNotesEditingChange, onSaveNotes, resetVersion }: {
+function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange, onSaveNotes }: {
   keyboardJump$: Observable<string>;
-  notesEditable: boolean;
+  presenter$: Observable<PresenterSession>;
   onNotesEditingChange: (editing: boolean) => void;
   onSaveNotes: (path: string, index: number, notes: string) => Promise<void>;
-  resetVersion: number;
 }) {
+  const notesEditable = useValue(() => !slidesState$.audienceOpen.get() || presenter$.activeMode.get() === "rehearsal");
+  const resetVersion = useValue(presenter$.presenterLayoutResetVersion);
   const hasDeck = useValue(() => Boolean(slidesState$.compiled.get()));
   const currentSlide = useValue(slidesState$.currentSlide);
   const currentStep = useValue(slidesState$.currentStep);
