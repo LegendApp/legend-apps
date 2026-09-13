@@ -11,7 +11,6 @@ import {
     useId,
     useImperativeHandle,
     useRef,
-    useState,
 } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon } from "../systems/Icon";
@@ -409,21 +408,12 @@ interface SubProps {
 
 function Sub({ children, className = "" }: SubProps) {
     const submenuId = useId();
-    const [isOpen, setIsOpen] = useState(false);
     const { level } = useContext(SubmenuContext);
     const subRef = useRef<View>(null);
-
-    useObserveEffect(() => {
-        const activeSubmenuId = state$.activeSubmenuId.get();
-        if (activeSubmenuId !== null && activeSubmenuId !== submenuId && isOpen) {
-            setIsOpen(false);
-        }
-    });
 
     useMount(() => {
         const unsubscribe = state$.isDropdownOpen.onChange(() => {
             if (!state$.isDropdownOpen.get()) {
-                setIsOpen(false);
                 state$.activeSubmenuId.set(null);
             }
         });
@@ -492,14 +482,10 @@ function SubContent({
     maxHeightClassName,
     directionalHint = "rightTopEdge",
 }: SubContentProps) {
-    const [isOpen, setIsOpen] = useState(false);
     const { parentRef, submenuId } = useContext(SubmenuContext);
     const contextValue = useDropdownContext();
 
-    useObserveEffect(() => {
-        const activeSubmenuId = state$.activeSubmenuId.get();
-        setIsOpen(activeSubmenuId === submenuId);
-    });
+    const isOpen = useValue(() => state$.activeSubmenuId.get() === submenuId);
 
     if (!isOpen || !parentRef) {
         return null;

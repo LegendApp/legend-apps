@@ -233,10 +233,10 @@ export function useLibraryToggle() {
 }
 
 interface QueueExporterArgs {
-    queueTracks: LocalTrack[];
+    getQueueTracks: () => LocalTrack[];
 }
 
-export function useQueueExporter({ queueTracks }: QueueExporterArgs) {
+export function useQueueExporter({ getQueueTracks }: QueueExporterArgs) {
     const confirmOverwrite = useCallback(async (playlistName: string): Promise<boolean> => {
         return await new Promise((resolve) => {
             Alert.alert(
@@ -260,6 +260,7 @@ export function useQueueExporter({ queueTracks }: QueueExporterArgs) {
                 return false;
             }
 
+            const queueTracks = getQueueTracks();
             if (queueTracks.length === 0) {
                 showToast("No tracks to save", "error");
                 return false;
@@ -310,7 +311,7 @@ export function useQueueExporter({ queueTracks }: QueueExporterArgs) {
                 return false;
             }
         },
-        [confirmOverwrite, queueTracks],
+        [confirmOverwrite, getQueueTracks],
     );
 
     return { handleSavePlaylist };

@@ -1,5 +1,5 @@
 import type { Observable } from "@legendapp/state";
-import { useObserveEffect, useValue } from "@legendapp/state/react";
+import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GestureResponderEvent, LayoutChangeEvent } from "react-native";
 import { PanResponder, Pressable, View } from "react-native";
@@ -35,29 +35,18 @@ export function PlaybackTimelineSlider({
     const [isHovered, setIsHovered] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [sliderWidth, setSliderWidth] = useState(0);
-    const [progress, setProgress] = useState(0);
     const [panResponder, setPanResponder] = useState<ReturnType<typeof PanResponder.create> | null>(null);
     const isDisabledRef = useRefValue(disabledProp);
     const isDisabled = disabledProp;
     const lastCommittedValueRef = useRef<number | null>(null);
 
-    const updateProgress = useCallback(() => {
-        const value = $value.get();
-        const maximumValue = $maximumValue.get();
-        const nextProgress = maximumValue > minimumValue ? (value - minimumValue) / (maximumValue - minimumValue) : 0;
-        setProgress(Math.max(0, Math.min(1, nextProgress)));
-    }, [$maximumValue, $value, minimumValue]);
-
-    useObserveEffect(updateProgress);
-
     const updateValueFromLocation = useCallback(
         (locationX: number) => {
             if (sliderWidth > 0) {
-                const maximumValue = $maximumValue.get();
+                const maximumValue = $maximumValue.peek();
                 const percentage = Math.max(0, Math.min(1, locationX / sliderWidth));
                 const newValue = minimumValue + percentage * (maximumValue - minimumValue);
                 $value.set(newValue);
-                setProgress(percentage);
 
                 if (newValue !== lastCommittedValueRef.current) {
                     onSlidingComplete?.(newValue);
@@ -70,7 +59,6 @@ export function PlaybackTimelineSlider({
 
     const handleTrackLayout = (event: LayoutChangeEvent) => {
         setSliderWidth(event.nativeEvent.layout.width);
-        updateProgress();
     };
 
     useEffect(() => {
@@ -137,12 +125,20 @@ export function PlaybackTimelineSlider({
                     className="rounded-full overflow-hidden"
                     style={{ backgroundColor: maximumTrackTintColor, height: isHovered || isDragging ? 8 : 3 }}
                 >
-                    <View
-                        className="h-full rounded-l-full"
-                        style={{ backgroundColor: minimumTrackTintColor, width: `${progress * 100}%` }}
-                    />
+                    <PlaybackTimelineFill $value={$value} $maximumValue={$maximumValue} minimumValue={minimumValue} color={minimumTrackTintColor} />
                 </View>
             </Pressable>
         </View>
     );
+}
+
+function PlaybackTimelineFill({ $value, $maximumValue, minimumValue, color }: Pick<PlaybackTimelineSliderProps, "$value" | "$maximumValue" | "minimumValue"> & { color: string }) {
+    const progress = useValue(() => {
+        const maximumValue = $maximumValue.get();
+        const value = $value.get();
+        return maximumValue > minimumValue
+            ? Math.max(0, Math.min(1, (value - minimumValue) / (maximumValue - minimumValue)))
+            : 0;
+    });
+    return <View className="h-full rounded-l-full" style={{ backgroundColor: color, width: `${progress * 100}%` }} />;
 }
