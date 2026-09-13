@@ -34,6 +34,10 @@ if (arch !== "arm" && arch !== "x86") {
   throw new Error(`Unsupported benchmark architecture: ${arch}`);
 }
 
+// Only this export process and its build child use the plain-code benchmark profile.
+// Separate Pods/DerivedData also make --skip-build select a benchmark binary only.
+process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
+
 if (!process.argv.includes("--skip-build")) {
   runCommand("bun", ["scripts/build-app.ts", "chat-history", "macos", arch], {
     cwd: rootDir,
