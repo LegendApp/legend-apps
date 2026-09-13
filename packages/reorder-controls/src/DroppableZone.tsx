@@ -37,7 +37,7 @@ export const DroppableZone = ({
 
     // Access the current values of observables
     const draggedItem = useValue(draggedItem$);
-    const activeDropZone = useValue(activeDropZone$);
+    const isActive = useValue(() => draggedItem !== null && activeDropZone$.get() === id);
 
     // Keep track of the zone's layout
     const layoutRef = useRef<LayoutRectangle>({
@@ -85,9 +85,6 @@ export const DroppableZone = ({
             requestAnimationFrame(updateRectFromWindow);
         }
     }, [draggedItem]);
-
-    // Determine if this zone is active (has a dragged item over it)
-    const isActive = draggedItem !== null && activeDropZone === id;
 
     const renderedChildren = typeof children === "function" ? children(isActive) : children;
 
