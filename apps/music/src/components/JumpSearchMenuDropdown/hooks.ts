@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { playlistNavigationState$ } from "../../state/playlistNavigationState";
 import KeyboardManager, { type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
@@ -150,7 +150,7 @@ export function useDropdownKeyboardNavigation({
     onSubmit,
     onEscape,
 }: UseDropdownKeyboardNavigationOptions) {
-    const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    const highlightedIndex$ = useObservable(-1);
     const modifierStateRef = useRef(createDefaultModifierState());
 
     const resetModifiers = useCallback(() => {
@@ -169,17 +169,17 @@ export function useDropdownKeyboardNavigation({
 
     useEffect(() => {
         if (!isOpen || resultsLength === 0) {
-            setHighlightedIndex(-1);
+            highlightedIndex$.set(-1);
             return;
         }
 
-        setHighlightedIndex((prev) => {
+        highlightedIndex$.set((prev) => {
             if (prev < 0 || prev >= resultsLength) {
                 return 0;
             }
             return prev;
         });
-    }, [isOpen, resultsLength]);
+    }, [highlightedIndex$, isOpen, resultsLength]);
 
     useEffect(() => {
         const removeKeyDown = KeyboardManager.addKeyDownListener((event) => {
@@ -196,7 +196,7 @@ export function useDropdownKeyboardNavigation({
             }
 
             if (event.keyCode === KeyCodes.KEY_DOWN) {
-                setHighlightedIndex((prev) => {
+                highlightedIndex$.set((prev) => {
                     if (prev < 0) {
                         return 0;
                     }
@@ -206,7 +206,7 @@ export function useDropdownKeyboardNavigation({
             }
 
             if (event.keyCode === KeyCodes.KEY_UP) {
-                setHighlightedIndex((prev) => {
+                highlightedIndex$.set((prev) => {
                     if (prev < 0) {
                         return resultsLength - 1;
                     }
@@ -219,6 +219,7 @@ export function useDropdownKeyboardNavigation({
                 const action = getQueueAction({
                     modifierState: modifierStateRef.current,
                 });
+                const highlightedIndex = highlightedIndex$.peek();
                 const index = highlightedIndex >= 0 ? highlightedIndex : 0;
                 onSubmit(index, action);
                 resetModifiers();
@@ -240,11 +241,10 @@ export function useDropdownKeyboardNavigation({
             removeKeyDown();
             removeKeyUp();
         };
-    }, [highlightedIndex, isOpen, onEscape, onSubmit, resetModifiers, resultsLength, updateModifierState]);
+    }, [highlightedIndex$, isOpen, onEscape, onSubmit, resetModifiers, resultsLength, updateModifierState]);
 
     return {
-        highlightedIndex,
-        setHighlightedIndex,
+        highlightedIndex$,
         modifierStateRef,
         resetModifiers,
     };
