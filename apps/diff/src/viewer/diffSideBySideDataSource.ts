@@ -8,6 +8,8 @@ import type {
 } from "@legend-apps/diff-parser";
 import type { DataSourceMutationBatch, LegendListDataSource } from "@legendapp/list/react-native";
 
+import { observable } from "@legendapp/state";
+
 type MutationListener = (batch: DataSourceMutationBatch) => void;
 
 function toMutationBatch(commit: DiffSideBySideProjectionCommit): DataSourceMutationBatch {
@@ -26,11 +28,13 @@ function toMutationBatch(commit: DiffSideBySideProjectionCommit): DataSourceMuta
 }
 
 export class DiffSideBySideDataSource implements LegendListDataSource<number | undefined> {
+  readonly revision$ = observable(0);
   private readonly listeners = new Set<MutationListener>();
   private readonly projection: DiffSideBySideProjection;
 
   constructor(document: DiffDocument, collapsedFileIndexes: readonly number[]) {
     this.projection = document.createSideBySideProjection([...collapsedFileIndexes]);
+    this.revision$.set(this.projection.revision);
   }
 
   getLength() {
@@ -118,6 +122,7 @@ export class DiffSideBySideDataSource implements LegendListDataSource<number | u
     if (commit.changed) {
       const batch = toMutationBatch(commit);
       this.listeners.forEach((listener) => listener(batch));
+      this.revision$.set(commit.revision);
     }
     return commit;
   }

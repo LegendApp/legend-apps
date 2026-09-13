@@ -16,8 +16,8 @@ import {
   type VirtualizedDocumentVisibleRangeInfo,
 } from "@legend-apps/virtualized-document";
 import type { Observable } from "@legendapp/state";
-import { useObserveEffect } from "@legendapp/state/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
 import {
   diffProgressiveInitialPaintRowCount,
@@ -293,19 +293,7 @@ export function useDiffLoadedModel({
   useEffect(() => () => {
     sideBySideDataSource?.dispose();
   }, [sideBySideDataSource]);
-  const subscribeToSideBySideDataSource = useCallback(
-    (onStoreChange: () => void) => sideBySideDataSource?.subscribe(onStoreChange) ?? (() => {}),
-    [sideBySideDataSource],
-  );
-  const getSideBySideRevision = useCallback(
-    () => sideBySideDataSource?.getRevision() ?? 0,
-    [sideBySideDataSource],
-  );
-  const sideBySideRevision = useSyncExternalStore(
-    subscribeToSideBySideDataSource,
-    getSideBySideRevision,
-    getSideBySideRevision,
-  );
+  const sideBySideRevision = useValue(() => sideBySideDataSource?.revision$.get() ?? 0);
   useLayoutEffect(() => {
     if (sideBySideDataSource && state.status === "loaded") {
       sideBySideDataSource.refresh();

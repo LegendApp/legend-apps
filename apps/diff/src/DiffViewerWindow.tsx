@@ -59,7 +59,6 @@ import {
   createDiffCompareSource,
   createDiffCompareSourceForRef,
   loadDiffCompareRepoState,
-  type DiffCompareRepoState,
 } from "./diffCompareTargets";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
 import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
@@ -165,7 +164,6 @@ import { DiffUnifiedInlineMergeDataSource } from "./viewer/diffUnifiedInlineMerg
 import {
   createActiveDiffSearchHighlightMap,
   createDiffSearchHighlightMap,
-  createDiffSearchResults,
   getDiffSearchSubmitIndex,
   parseDiffSearchQuery,
   type DiffSearchResult,
@@ -560,7 +558,7 @@ type DiffLoadedBodyProps = {
   activeFileIndex$: Observable<number | null>;
   activeItemCount: number;
   backgroundColor: string;
-  collapsedSidebarFolders: ReadonlySet<string>;
+  collapsedSidebarFolders$: Observable<Set<string>>;
   diffPaneHeight$: Observable<number>;
   diffTopChromeHeight: number;
   diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
@@ -594,7 +592,7 @@ type DiffLoadedBodyProps = {
   renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
   renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
   requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   rowHeight: number;
   sidebarCollapsed: boolean;
@@ -627,7 +625,7 @@ type DiffSplitBodyProps = DiffLoadingSplitBodyProps & {
 
 type DiffLoadedSidebarPaneProps = Pick<
   DiffLoadedBodyProps,
-  | "collapsedSidebarFolders"
+  | "collapsedSidebarFolders$"
   | "handleSidebarListLayout"
   | "mutedColor"
   | "renderSidebarEntry"
@@ -641,7 +639,7 @@ type DiffLoadedSidebarPaneProps = Pick<
 type DiffLoadedContentPaneProps = Omit<
   DiffLoadedBodyProps,
   | "backgroundColor"
-  | "collapsedSidebarFolders"
+  | "collapsedSidebarFolders$"
   | "handleSidebarListLayout"
   | "handleSplitViewResize"
   | "mutedColor"
@@ -668,7 +666,6 @@ type DiffRowConfig = {
 type DiffNativeRowConfigProps = {
   addAccentColor: string;
   addBackgroundColor: string;
-  activeSearchHighlightByRowIndex: string;
   activeSearchHighlightColor: string;
   activeSearchRowHighlightColor: string;
   changeBarWidth: number;
@@ -689,7 +686,6 @@ type DiffNativeRowConfigProps = {
   removeAccentColor: string;
   removeBackgroundColor: string;
   rowHeight: number;
-  searchHighlightByRowIndex: string;
   searchHighlightColor: string;
   showWhitespaceCharacters: boolean;
   syntaxHighlightingEnabled: boolean;
@@ -1185,7 +1181,7 @@ function DiffUnsavedMergeDraftBannerWithSavingState({
   onDiscard: () => void;
   onSave: () => void;
   primaryColor: string;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
   const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
   return (
@@ -1205,7 +1201,7 @@ function DiffNativeMenuSavingStateController({
   resolvingMergeConflictKeys$,
 }: {
   hasUnsavedMergeDrafts: boolean;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
   const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
   return (
@@ -1656,7 +1652,7 @@ const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
 
 const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
   backgroundColor,
-  collapsedSidebarFolders,
+  collapsedSidebarFolders$,
   handleSidebarListLayout,
   mutedColor,
   renderSidebarEntry,
@@ -1672,6 +1668,7 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
     () => [styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }],
     [sidebarListHeight],
   );
+  const collapsedSidebarFolders = useValue(collapsedSidebarFolders$);
   const sidebarEntries = useMemo(
     () => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [],
     [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
@@ -1727,13 +1724,20 @@ function DiffNativeRowConfigView({
   splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
   syntaxTokenizationState$: Observable<{ ranges: string; version: number }>;
 }) {
+  const { searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
+  const searchHighlights = useValue(() => createDiffSearchHighlightPayload(createDiffSearchHighlightMap(searchResults$.get())));
+  const activeSearchHighlights = useValue(() => {
+    const results = searchResults$.get();
+    const index = Math.min(activeSearchResultIndex$.get(), Math.max(0, results.length - 1));
+    return createDiffSearchHighlightPayload(createActiveDiffSearchHighlightMap(results[index] ?? null));
+  });
   const tokenizationState = useValue(() => syntaxTokenizationState$.get());
   const horizontalViewportWidth = useValue(() => splitPaneMetrics$.contentWidth.get());
   return (
     <DiffNativeRowConfig
       addAccentColor={nativeRowConfig.addAccentColor}
       addBackgroundColor={nativeRowConfig.addBackgroundColor}
-      activeSearchHighlightByRowIndex={nativeRowConfig.activeSearchHighlightByRowIndex}
+      activeSearchHighlightByRowIndex={activeSearchHighlights}
       activeSearchHighlightColor={nativeRowConfig.activeSearchHighlightColor}
       activeSearchRowHighlightColor={nativeRowConfig.activeSearchRowHighlightColor}
       changeBarWidth={nativeRowConfig.changeBarWidth}
@@ -1756,7 +1760,7 @@ function DiffNativeRowConfigView({
       removeAccentColor={nativeRowConfig.removeAccentColor}
       removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
       rowHeight={nativeRowConfig.rowHeight}
-      searchHighlightByRowIndex={nativeRowConfig.searchHighlightByRowIndex}
+      searchHighlightByRowIndex={searchHighlights}
       searchHighlightColor={nativeRowConfig.searchHighlightColor}
       showWhitespaceCharacters={nativeRowConfig.showWhitespaceCharacters}
       style={styles.nativeDiffRowConfig}
@@ -2066,7 +2070,7 @@ function DiffMergeCenterGutter({
   mutedColor: string;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
   primaryColor: string;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
   const conflictKey = block ? getMergeConflictKey(file, block) : null;
   const resolvingState = useValue(() => {
@@ -2138,7 +2142,7 @@ function DiffMergeLineRow({
   mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
   mergeRender$: Observable<DiffMergeRenderState>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
   row: DiffMergeDisplayRow | undefined;
   rowIndex: number;
 }) {
@@ -2249,7 +2253,7 @@ function DiffMergeObservableLineRow({
   mergeRender$: Observable<DiffMergeRenderState>;
   mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
   const location = mergeItemIndexAllocator.locationByItemIndex.get(itemIndex);
   useValue(() => (
@@ -2311,7 +2315,7 @@ function useDiffInlineMergeModel({
   horizontalConfigId: string;
   mergeState: DiffMergeState;
   onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<ReadonlySet<string>>;
+  resolvingMergeConflictKeys$: Observable<Set<string>>;
   rowHeight: number;
   showOnlyHunks: boolean;
   sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
@@ -2485,7 +2489,13 @@ function useDiffInlineMergeModel({
       }
     }
     return indexes;
-  }, [files, inlineList.listIndexByFileIndex, sideBySideDataSource, sideBySideMergeItems.itemIndexesByFileIndex, viewMode]);
+  }, [
+    files,
+    inlineList.listIndexByFileIndex,
+    sideBySideDataSource,
+    sideBySideMergeItems.itemIndexesByFileIndex,
+    viewMode,
+  ]);
 
   const mergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
   const publishedMergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
@@ -2613,7 +2623,14 @@ function useDiffInlineMergeModel({
     return () => {
       cancelled = true;
     };
-  }, [dataVersion, mergeDisplayModelByPath, mergeState, mergeSyntaxByPath$, syntaxHighlightingEnabled, syntaxThemeName]);
+  }, [
+    dataVersion,
+    mergeDisplayModelByPath,
+    mergeState,
+    mergeSyntaxByPath$,
+    syntaxHighlightingEnabled,
+    syntaxThemeName,
+  ]);
 
   const emptyMessage = mergeState.status === "loading"
     ? "Checking merge conflicts..."
@@ -2782,22 +2799,20 @@ function DiffStatisticsPanel({
 }
 
 function DiffSearchStatusPanel({
-  activeResultIndex,
   borderColor,
   foregroundColor,
   mutedColor,
-  query,
-  resultCount,
   syntaxAppearance,
 }: {
-  activeResultIndex: number;
   borderColor: string;
   foregroundColor: string;
   mutedColor: string;
-  query: ReturnType<typeof parseDiffSearchQuery>;
-  resultCount: number;
   syntaxAppearance: "dark" | "light";
 }) {
+  const { searchQuery$, searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
+  const query = parseDiffSearchQuery(useValue(searchQuery$));
+  const resultCount = useValue(() => searchResults$.get().length);
+  const activeResultIndex = useValue(activeSearchResultIndex$);
   if (!query.term) {
     return null;
   }
@@ -2831,19 +2846,19 @@ function DiffCompareRefPrompt({
   foregroundColor,
   mutedColor,
   onCancel,
-  onChangeValue,
   onSubmit,
-  value,
 }: {
   backgroundColor: string;
   borderColor: string;
   foregroundColor: string;
   mutedColor: string;
   onCancel: () => void;
-  onChangeValue: (value: string) => void;
   onSubmit: () => void;
-  value: string;
 }) {
+  const { compareRefPromptVisible$, compareRefInput$ } = useDiffViewerModel();
+  const visible = useValue(compareRefPromptVisible$);
+  const value = useValue(compareRefInput$);
+  if (!visible) return null;
   return (
     <View style={styles.compareRefPromptOverlay}>
       <Pressable accessibilityLabel="Cancel compare ref" onPress={onCancel} style={StyleSheet.absoluteFill} />
@@ -2851,7 +2866,7 @@ function DiffCompareRefPrompt({
         <Text style={[styles.compareRefPromptTitle, { color: foregroundColor }]}>Compare Against</Text>
         <TextInput
           autoFocus
-          onChangeText={onChangeValue}
+          onChangeText={compareRefInput$.set}
           onSubmitEditing={onSubmit}
           placeholder="Branch, tag, commit, or ref"
           placeholderTextColor={mutedColor}
@@ -2907,6 +2922,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
   const model = useDiffViewerModel();
   const {
+    compareRepoState$,
+    compareRefPromptVisible$,
+    compareRefInput$,
+    collapsedSidebarFolders$,
+    searchQuery$,
+    activeSearchResultIndex$,
+    searchResults$,
+    setSearchQuery,
     activeFileIndex$,
     collapsedFileIndexes$,
     diffPaneHeight$,
@@ -2956,21 +2979,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
   const savingMergeDraftsRef = useRef(false);
   const suppressFileWatcherReloadUntilRef = useRef(0);
   const syntaxTokenizationState$ = useObservable({ ranges: "", version: 0 });
-  const resolvingMergeConflictKeys$ = useObservable<ReadonlySet<string>>(new Set());
-  const resolvingMergeConflictKeysRef = useRef<ReadonlySet<string>>(new Set());
+  const resolvingMergeConflictKeys$ = useObservable<Set<string>>(new Set());
   const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
   const prepareMergeDraftsForTransitionRef = useRef<(reason: UnsavedDiffMergeDraftReason) => Promise<boolean>>(async () => true);
   const sourceTransitionInFlightRef = useRef(false);
-  const [compareRepoState, setCompareRepoState] = useState<DiffCompareRepoState | null>(null);
-  const [compareRefPromptVisible, setCompareRefPromptVisible] = useState(false);
-  const [compareRefInput, setCompareRefInput] = useState("");
-  const [collapsedSidebarFolders, setCollapsedSidebarFolders] = useState<ReadonlySet<string>>(() => new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
-  const searchQueryRef = useRef("");
+  const setCompareRepoState = compareRepoState$.set;
+  const setCompareRefPromptVisible = compareRefPromptVisible$.set;
+  const setCompareRefInput = compareRefInput$.set;
+  const setCollapsedSidebarFolders = useCallback((next: Set<string> | ((current: Set<string>) => Set<string>)) => {
+    collapsedSidebarFolders$.set(typeof next === "function" ? next(collapsedSidebarFolders$.peek()) : next);
+  }, [collapsedSidebarFolders$]);
+  const setActiveSearchResultIndex = activeSearchResultIndex$.set;
   const lastSubmittedSearchQueryRef = useRef("");
-  const searchResultsRef = useRef<readonly DiffSearchResult[]>([]);
-  const activeSearchResultIndexRef = useRef(0);
 
   useEffect(() => () => {
     loadRequestIdRef.current += 1;
@@ -2987,7 +3007,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     mergeDraftsRef.current = new Map();
     mergeDraftsSourceKeyRef.current = null;
     mergeResolveQueuesRef.current = new Map();
-    resolvingMergeConflictKeysRef.current = new Set();
+    resolvingMergeConflictKeys$.set(new Set<string>());
 
     setDocumentErrorValue(null);
     setLoadProgressValue(emptyDiffLoadProgressState);
@@ -3005,10 +3025,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     setOpenErrorValue,
     setViewerState,
     state$,
+    resolvingMergeConflictKeys$,
   ]);
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
-    const currentKeys = resolvingMergeConflictKeysRef.current;
+    const currentKeys = resolvingMergeConflictKeys$.peek();
     if (currentKeys.has(key) !== active) {
       const nextKeys = new Set(currentKeys);
       if (active) {
@@ -3016,7 +3037,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       } else {
         nextKeys.delete(key);
       }
-      resolvingMergeConflictKeysRef.current = nextKeys;
       resolvingMergeConflictKeys$.set(nextKeys);
     }
   }, [resolvingMergeConflictKeys$]);
@@ -3087,7 +3107,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         cancelAnimationFrame(secondFrameId);
       }
     };
-  }, [compareRepoPath, compareRepoStateReady]);
+  }, [compareRepoPath, compareRepoStateReady, setCompareRepoState]);
 
   const diffPalette = useMemo(
     () => getDiffPalette(syntaxTheme, displayTheme.colors),
@@ -3128,7 +3148,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
 
   useEffect(() => {
     setCollapsedSidebarFolders(new Set());
-  }, [loadedDocumentId]);
+  }, [loadedDocumentId, setCollapsedSidebarFolders]);
 
   const {
     collapsedFileIndexList,
@@ -3157,53 +3177,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     () => createDiffUnifiedHunkRowIndexSet(renderViewMode === "unified" ? loadedDocument : null),
     [loadedDocument, loadedDocumentRowCount, renderViewMode],
   );
-  const searchResults = useMemo(
-    () => state.status === "loaded"
-      ? createDiffSearchResults(state.document, state.files, searchQuery)
-      : [],
-    [searchQuery, state],
-  );
-  const parsedSearchQuery = useMemo(() => parseDiffSearchQuery(searchQuery), [searchQuery]);
-  const searchHighlightByRowIndex = useMemo(() => createDiffSearchHighlightMap(searchResults), [searchResults]);
-  const searchHighlightByRowIndexPayload = useMemo(
-    () => createDiffSearchHighlightPayload(searchHighlightByRowIndex),
-    [searchHighlightByRowIndex],
-  );
-  const effectiveActiveSearchResultIndex = searchResults.length > 0
-    ? Math.min(activeSearchResultIndex, searchResults.length - 1)
-    : 0;
-  const activeSearchResult = searchResults[effectiveActiveSearchResultIndex] ?? null;
-  const activeSearchHighlightByRowIndex = useMemo(
-    () => createActiveDiffSearchHighlightMap(activeSearchResult),
-    [activeSearchResult],
-  );
-  const activeSearchHighlightByRowIndexPayload = useMemo(
-    () => createDiffSearchHighlightPayload(activeSearchHighlightByRowIndex),
-    [activeSearchHighlightByRowIndex],
-  );
-
-  useEffect(() => {
-    searchQueryRef.current = searchQuery;
-  }, [searchQuery]);
-
-  useEffect(() => {
-    searchResultsRef.current = searchResults;
-  }, [searchResults]);
-
-  useEffect(() => {
-    activeSearchResultIndexRef.current = activeSearchResultIndex;
-  }, [activeSearchResultIndex]);
-
-  useEffect(() => {
-    setActiveSearchResultIndex(0);
-  }, [loadedDocumentId, searchQuery]);
-
-  useEffect(() => {
-    setActiveSearchResultIndex((currentIndex) => (
-      searchResults.length === 0 ? 0 : Math.min(currentIndex, searchResults.length - 1)
-    ));
-  }, [searchResults.length]);
-
   const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
   useEffect(() => {
     if (loadedDocument) {
@@ -3317,7 +3290,11 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       document.stopBackgroundTokenization();
     }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled]);
+  }, [
+    state.status === "loaded" ? state.document : null,
+    state.status === "loaded" ? state.loadComplete : true,
+    syntaxHighlightingEnabled,
+  ]);
   useEffect(() => {
     if (state.status === "loaded" && state.loadComplete !== false && syntaxHighlightingEnabled) {
       const document = state.document;
@@ -3342,7 +3319,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       syntaxTokenizationState$.set({ ranges: "", version: 0 });
     }
     return undefined;
-  }, [state.status === "loaded" ? state.document : null, state.status === "loaded" ? state.loadComplete : true, syntaxHighlightingEnabled, syntaxTokenizationState$]);
+  }, [
+    state.status === "loaded" ? state.document : null,
+    state.status === "loaded" ? state.loadComplete : true,
+    syntaxHighlightingEnabled,
+    syntaxTokenizationState$,
+  ]);
   useEffect(() => {
     resetSideBySideRuntime();
     if (state.status === "loaded") {
@@ -3358,7 +3340,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     } else {
       activeFileIndex$.set(null);
     }
-  }, [activeFileIndex$, resetSideBySideRuntime, setCollapsedFileIndexesValue, state.status === "loaded" ? state.document : null]);
+  }, [
+    activeFileIndex$,
+    resetSideBySideRuntime,
+    setCollapsedFileIndexesValue,
+    state.status === "loaded" ? state.document : null,
+  ]);
   const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
     maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
     const currentState = state$.peek();
@@ -3783,7 +3770,18 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         setViewerState(emptyDiffViewerState);
       }
     }
-  }, [nativeDiffRows, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setViewerState, state$, windowIdentifier]);
+  }, [
+    nativeDiffRows,
+    setDocumentErrorValue,
+    setLoadProgressValue,
+    setLoadStatisticsValue,
+    setLoadingSourceValue,
+    setMergeStateValue,
+    setOpenErrorValue,
+    setViewerState,
+    state$,
+    windowIdentifier,
+  ]);
 
   useEffect(() => {
     const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
@@ -3813,7 +3811,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       currentState.source.kind !== "folder" ||
       draftEntries.length === 0 ||
       mergeDraftsSourceKeyRef.current !== sourceKey ||
-      resolvingMergeConflictKeysRef.current.size !== 0
+      resolvingMergeConflictKeys$.peek().size !== 0
     ) {
       return false;
     }
@@ -3851,7 +3849,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       savingMergeDraftsRef.current = false;
       setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, false);
     }
-  }, [mergeState$, setDocumentErrorValue, setMergeStateValue, setResolvingMergeConflictKeyActive, state$, waitForMergeResolveQueues]);
+  }, [
+    mergeState$,
+    setDocumentErrorValue,
+    setMergeStateValue,
+    setResolvingMergeConflictKeyActive,
+    state$,
+    waitForMergeResolveQueues,
+    resolvingMergeConflictKeys$,
+  ]);
 
   const saveMergeDraftsFromCommand = useCallback(() => {
     const hasSaveWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
@@ -3917,7 +3923,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
 
   const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
     const currentState = state$.peek();
-    const resolvingKeys = resolvingMergeConflictKeysRef.current;
+    const resolvingKeys = resolvingMergeConflictKeys$.peek();
     const conflictKey = getMergeConflictKey(file, block);
     if (
       currentState.status === "loaded" &&
@@ -4000,7 +4006,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         }
       });
     }
-  }, [getCurrentMergeFileForResolve, mergeState$, setDocumentErrorValue, setMergeStateValue, setResolvingMergeConflictKeyActive, state$]);
+  }, [
+    getCurrentMergeFileForResolve,
+    mergeState$,
+    setDocumentErrorValue,
+    setMergeStateValue,
+    setResolvingMergeConflictKeyActive,
+    state$,
+    resolvingMergeConflictKeys$,
+  ]);
 
   const discardMergeDrafts = useCallback(async () => {
     await waitForMergeResolveQueues();
@@ -4208,7 +4222,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       : currentSource?.kind === "git"
         ? currentSource.cwd
         : null;
-    const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState) : null;
+    const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState$.peek()) : null;
     if (!nextSource || loadingSource$.peek()) {
       return false;
     }
@@ -4217,7 +4231,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
     });
     return true;
-  }, [compareRepoState, loadSource, loadingSource$, setDocumentErrorValue, state$]);
+  }, [compareRepoState$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
 
   const openCompareRefPrompt = useCallback(() => {
     const currentSource = loadingSource$.peek() ?? state$.peek().source;
@@ -4233,15 +4247,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     setCompareRefInput("");
     setCompareRefPromptVisible(true);
     return true;
-  }, [loadingSource$, state$]);
+  }, [loadingSource$, state$, setCompareRefInput, setCompareRefPromptVisible]);
 
   const closeCompareRefPrompt = useCallback(() => {
     setCompareRefPromptVisible(false);
     setCompareRefInput("");
-  }, []);
+  }, [setCompareRefPromptVisible, setCompareRefInput]);
 
   const submitCompareRefPrompt = useCallback(() => {
-    const ref = compareRefInput.trim();
+    const ref = compareRefInput$.peek().trim();
     const currentSource = loadingSource$.peek() ?? state$.peek().source;
     const repoPath = currentSource?.kind === "folder"
       ? currentSource.value
@@ -4255,7 +4269,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
       });
     }
-  }, [closeCompareRefPrompt, compareRefInput, loadSource, loadingSource$, setDocumentErrorValue, state$]);
+  }, [closeCompareRefPrompt, compareRefInput$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
 
   const toggleShowOnlyHunks = useCallback(() => {
     const currentState = state$.peek();
@@ -4359,17 +4373,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       return false;
     }
 
-    searchQueryRef.current = value;
     setSearchQuery(value);
     focusDiffSearchToolbarItem(windowIdentifier, value).catch((error: unknown) => {
       console.error(error instanceof Error ? error.message : String(error));
     });
     return true;
-  }, [loadingSource$, state$, windowIdentifier]);
+  }, [loadingSource$, state$, windowIdentifier, setSearchQuery]);
 
   const focusSearch = useCallback(() => {
-    return focusSearchWithValue(searchQueryRef.current);
-  }, [focusSearchWithValue]);
+    return focusSearchWithValue(searchQuery$.peek());
+  }, [focusSearchWithValue, searchQuery$]);
 
   const focusFileSearch = useCallback(() => {
     return focusSearchWithValue("@");
@@ -4442,7 +4455,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     return {
       addAccentColor: palette.addAccent,
       addBackgroundColor: palette.addBackground,
-      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexPayload,
       activeSearchHighlightColor: diffActiveSearchHighlightColor,
       activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       changeBarWidth: diffUnifiedChangeBarWidth,
@@ -4463,14 +4475,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       removeAccentColor: palette.removeAccent,
       removeBackgroundColor: palette.removeBackground,
       rowHeight,
-      searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
       searchHighlightColor: diffSearchHighlightColor,
       showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
   }, [
-    activeSearchHighlightByRowIndexPayload,
     fontFamily,
     fontSize,
     foregroundColor,
@@ -4479,7 +4489,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     loadedDocumentId,
     mutedColor,
     rowHeight,
-    searchHighlightByRowIndexPayload,
     showWhitespaceCharacters,
     syntaxHighlightingEnabled,
     syntaxTheme.appearance,
@@ -4512,7 +4521,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     return {
       addAccentColor: palette.addAccent,
       addBackgroundColor: palette.addBackground,
-      activeSearchHighlightByRowIndex: activeSearchHighlightByRowIndexPayload,
       activeSearchHighlightColor: diffActiveSearchHighlightColor,
       activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
       changeBarWidth: 0,
@@ -4533,14 +4541,12 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       removeAccentColor: palette.removeAccent,
       removeBackgroundColor: palette.removeBackground,
       rowHeight,
-      searchHighlightByRowIndex: searchHighlightByRowIndexPayload,
       searchHighlightColor: diffSearchHighlightColor,
       showWhitespaceCharacters,
       syntaxHighlightingEnabled,
       themeName: listSyntaxTheme,
     };
   }, [
-    activeSearchHighlightByRowIndexPayload,
     fontFamily,
     fontSize,
     foregroundColor,
@@ -4549,7 +4555,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     loadedDocumentId,
     mutedColor,
     rowHeight,
-    searchHighlightByRowIndexPayload,
     sideBySideDataSource,
     showWhitespaceCharacters,
     syntaxHighlightingEnabled,
@@ -4660,7 +4665,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       }
     }
     return undefined;
-  }, [collapsedFileIndexList, getVisibleListIndex, loadedDocument, sideBySideListIndexByRowIndex, sideBySideRowCount, viewMode]);
+  }, [
+    collapsedFileIndexList,
+    getVisibleListIndex,
+    loadedDocument,
+    sideBySideListIndexByRowIndex,
+    sideBySideRowCount,
+    viewMode,
+  ]);
 
   const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
     const currentState = state$.peek();
@@ -4701,52 +4713,45 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     state$,
   ]);
 
-  const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResultsRef.current) => {
+  const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResults$.peek()) => {
     const resultCount = results.length;
     if (resultCount === 0) {
       return false;
     }
 
     const nextIndex = ((index % resultCount) + resultCount) % resultCount;
-    activeSearchResultIndexRef.current = nextIndex;
     setActiveSearchResultIndex(nextIndex);
     const result = results[nextIndex];
     if (result) {
       scrollToSearchResult(result);
     }
     return true;
-  }, [scrollToSearchResult]);
+  }, [scrollToSearchResult, searchResults$, setActiveSearchResultIndex]);
 
   const advanceSearchResult = useCallback((delta: number) => {
-    return activateSearchResult(activeSearchResultIndexRef.current + delta);
-  }, [activateSearchResult]);
+    return activateSearchResult(Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)) + delta);
+  }, [activateSearchResult, activeSearchResultIndex$, searchResults$]);
 
   const handleSearchChange = useCallback((value: string) => {
-    if (value !== searchQueryRef.current) {
+    if (value !== searchQuery$.peek()) {
       lastSubmittedSearchQueryRef.current = "";
     }
-    searchQueryRef.current = value;
     setSearchQuery(value);
-  }, []);
+  }, [searchQuery$, setSearchQuery]);
 
   const handleSearchSubmit = useCallback((value: string, direction: 1 | -1) => {
     const existingQuery = value === lastSubmittedSearchQueryRef.current;
     lastSubmittedSearchQueryRef.current = value;
-    searchQueryRef.current = value;
     setSearchQuery(value);
-    const currentState = state$.peek();
-    const results = currentState.status === "loaded"
-      ? createDiffSearchResults(currentState.document, currentState.files, value)
-      : [];
+    const results = searchResults$.peek();
     const nextIndex = getDiffSearchSubmitIndex({
-      activeIndex: activeSearchResultIndexRef.current,
+      activeIndex: Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)),
       direction,
       repeatedQuery: existingQuery,
       resultCount: results.length,
     });
-    searchResultsRef.current = results;
     return activateSearchResult(nextIndex, results);
-  }, [activateSearchResult, state$]);
+  }, [activateSearchResult, setSearchQuery, searchResults$, activeSearchResultIndex$]);
 
   useEffect(() => addKeyDownListener((event) => {
     let handled = false;
@@ -4777,7 +4782,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       }
       return nextFolders;
     });
-  }, []);
+  }, [setCollapsedSidebarFolders]);
   const sidebarRenderInitialState = useMemo(createDiffSidebarRenderState, []);
   const sidebarRender$ = useObservable(sidebarRenderInitialState) as unknown as Observable<DiffSidebarRenderState>;
 
@@ -4829,7 +4834,14 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     if (nextMetrics.contentHeight > 0 && previousDiffPaneHeight !== nextMetrics.contentHeight) {
       setDiffPaneHeightValue(nextMetrics.contentHeight);
     }
-  }, [diffPaneHeight$, setDiffPaneHeightValue, setSplitPaneMetricsValue, sidebarCollapsed$, sidebarWidth, splitPaneMetrics$]);
+  }, [
+    diffPaneHeight$,
+    setDiffPaneHeightValue,
+    setSplitPaneMetricsValue,
+    sidebarCollapsed$,
+    sidebarWidth,
+    splitPaneMetrics$,
+  ]);
 
   const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -4978,7 +4990,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
       sidebarBackgroundColor: diffPalette.sidebarBackground,
       sidebarWidth,
     }) : null).catch((error: unknown) => console.error("Failed to update Diff startup chrome:", error));
-  }, [backgroundColor, diffPalette.sidebarBackground, hasSplitBody, restoreWindowsOnStartup, sidebarWidth, syntaxTheme.appearance, windowIdentifier]);
+  }, [
+    backgroundColor,
+    diffPalette.sidebarBackground,
+    hasSplitBody,
+    restoreWindowsOnStartup,
+    sidebarWidth,
+    syntaxTheme.appearance,
+    windowIdentifier,
+  ]);
 
   let body: ReactNode;
   if (state.status === "fatal") {
@@ -5055,7 +5075,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         sidebar={(
           <DiffLoadedSidebarPane
             backgroundColor={diffPalette.sidebarBackground}
-            collapsedSidebarFolders={collapsedSidebarFolders}
+            collapsedSidebarFolders$={collapsedSidebarFolders$}
             handleSidebarListLayout={handleSidebarListLayout}
             mutedColor={mutedColor}
             renderSidebarEntry={renderSidebarEntry}
@@ -5133,7 +5153,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
 
   return (
     <>
-      <DiffWindowChromeController compareRepoState={compareRepoState} hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
+      <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
       <DiffNativeMenuSavingStateController
         hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
         resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
@@ -5188,26 +5208,19 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
           syntaxAppearance={syntaxTheme.appearance}
         />
         <DiffSearchStatusPanel
-          activeResultIndex={effectiveActiveSearchResultIndex}
           borderColor={diffPalette.border}
           foregroundColor={foregroundColor}
           mutedColor={mutedColor}
-          query={parsedSearchQuery}
-          resultCount={searchResults.length}
           syntaxAppearance={syntaxTheme.appearance}
         />
-        {compareRefPromptVisible ? (
-          <DiffCompareRefPrompt
-            backgroundColor={diffPalette.surface}
-            borderColor={diffPalette.border}
-            foregroundColor={foregroundColor}
-            mutedColor={mutedColor}
-            onCancel={closeCompareRefPrompt}
-            onChangeValue={setCompareRefInput}
-            onSubmit={submitCompareRefPrompt}
-            value={compareRefInput}
-          />
-        ) : null}
+        <DiffCompareRefPrompt
+          backgroundColor={diffPalette.surface}
+          borderColor={diffPalette.border}
+          foregroundColor={foregroundColor}
+          mutedColor={mutedColor}
+          onCancel={closeCompareRefPrompt}
+          onSubmit={submitCompareRefPrompt}
+        />
       </DiffDropSurface>
     </>
   );

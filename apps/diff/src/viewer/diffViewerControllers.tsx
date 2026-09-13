@@ -5,7 +5,7 @@ import { updateMenuItems, type NativeMenuItemPatch } from "@legend-apps/native-m
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-apps/source-viewer";
 import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-apps/window-manager";
 import { useWindowId } from "@legend-apps/windows";
-import { useObserveEffect } from "@legendapp/state/react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
@@ -243,12 +243,11 @@ export function DiffWindowToolbarItemController({
 }
 
 export function DiffWindowChromeController({
-  compareRepoState,
   hasUnsavedMergeDrafts,
 }: {
-  compareRepoState: DiffCompareRepoState | null;
   hasUnsavedMergeDrafts: boolean;
 }) {
+  const compareRepoState = useValue(useDiffViewerModel().compareRepoState$);
   const {
     loadingSource$,
     sidebarCollapsed$,

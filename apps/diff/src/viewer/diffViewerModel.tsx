@@ -4,9 +4,11 @@ import type {
   DiffLoadTiming,
   DiffRenderRow,
 } from "@legend-apps/diff-parser";
-import type { Observable } from "@legendapp/state";
+import { batch, type Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { createContext, type ReactNode, type SetStateAction, useCallback, useContext, useMemo } from "react";
+import type { DiffCompareRepoState } from "../diffCompareTargets";
+import { createDiffSearchResults, type DiffSearchResult } from "./diffSearch";
 import type { DiffOpenSource } from "../diffFiles";
 import type { DiffMergeState } from "../diffMerge";
 
@@ -148,6 +150,14 @@ export const emptyDiffLoadProgressState: DiffLoadProgressState = {
 };
 
 export type DiffViewerModel = {
+  compareRepoState$: Observable<DiffCompareRepoState | null>;
+  compareRefPromptVisible$: Observable<boolean>;
+  compareRefInput$: Observable<string>;
+  collapsedSidebarFolders$: Observable<Set<string>>;
+  searchQuery$: Observable<string>;
+  activeSearchResultIndex$: Observable<number>;
+  searchResults$: Observable<readonly DiffSearchResult[]>;
+  setSearchQuery: (value: string) => void;
   activeFileIndex$: Observable<number | null>;
   collapsedFileIndexes$: Observable<Set<number>>;
   diffPaneHeight$: Observable<number>;
@@ -196,6 +206,25 @@ export function DiffViewerModelProvider({
     ? initialSplitPaneMetrics.contentHeight
     : 0;
   const state$ = useObservable<DiffViewerState>(emptyDiffViewerState);
+  const compareRepoState$ = useObservable<DiffCompareRepoState | null>(null);
+  const compareRefPromptVisible$ = useObservable(false);
+  const compareRefInput$ = useObservable("");
+  const collapsedSidebarFolders$ = useObservable<Set<string>>(new Set());
+  const searchQuery$ = useObservable("");
+  const activeSearchResultIndex$ = useObservable(0);
+  const searchResults$ = useObservable<readonly DiffSearchResult[]>(() => {
+    const currentState = state$.get();
+    const query = searchQuery$.get();
+    return currentState.status === "loaded"
+      ? createDiffSearchResults(currentState.document, currentState.files, query)
+      : [];
+  });
+  const setSearchQuery = useCallback((value: string) => {
+    batch(() => {
+      if (searchQuery$.peek() !== value) activeSearchResultIndex$.set(0);
+      searchQuery$.set(value);
+    });
+  }, [activeSearchResultIndex$, searchQuery$]);
   const urlInput$ = useObservable("");
   const urlInputError$ = useObservable<string | null>(null);
   const openError$ = useObservable<DiffRecoverableError | null>(null);
@@ -216,8 +245,15 @@ export function DiffViewerModelProvider({
   const diffPaneHeight$ = useObservable(initialDiffPaneHeight);
   const activeFileIndex$ = useObservable<number | null>(null);
   const setViewerState = useCallback((nextState: DiffViewerState) => {
-    state$.set(nextState);
-  }, [state$]);
+    batch(() => {
+      const current = state$.peek();
+      if ((current.status === "loaded" ? current.document : null) !==
+          (nextState.status === "loaded" ? nextState.document : null)) {
+        activeSearchResultIndex$.set(0);
+      }
+      state$.set(nextState);
+    });
+  }, [activeSearchResultIndex$, state$]);
   const setUrlInputValue = useCallback((nextValue: string) => {
     urlInput$.set(nextValue);
   }, [urlInput$]);
@@ -292,6 +328,14 @@ export function DiffViewerModelProvider({
   }, [diffPaneHeight$]);
   const model = useMemo<DiffViewerModel>(
     () => ({
+      compareRepoState$,
+      compareRefPromptVisible$,
+      compareRefInput$,
+      collapsedSidebarFolders$,
+      searchQuery$,
+      activeSearchResultIndex$,
+      searchResults$,
+      setSearchQuery,
       activeFileIndex$,
       collapsedFileIndexes$,
       diffPaneHeight$,
@@ -321,6 +365,14 @@ export function DiffViewerModelProvider({
       urlInputError$,
     }),
     [
+      compareRepoState$,
+      compareRefPromptVisible$,
+      compareRefInput$,
+      collapsedSidebarFolders$,
+      searchQuery$,
+      activeSearchResultIndex$,
+      searchResults$,
+      setSearchQuery,
       activeFileIndex$,
       collapsedFileIndexes$,
       diffPaneHeight$,
