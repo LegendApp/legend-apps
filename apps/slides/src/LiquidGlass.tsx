@@ -1,5 +1,7 @@
-import { renderNativeChildren, useSlideLifecycle } from "@legend-apps/presentation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { renderNativeChildren, usePresentationValue } from "@legend-apps/presentation";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
+import { useEffect, type ReactNode } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Effect } from "./Effect";
 
@@ -39,46 +41,52 @@ export type LiquidGlassProps = {
 
 export function LiquidGlass({ children, overlay, active = false, blur = 24, refraction = 8,
   duration = 700, variant = "frosted", style }: LiquidGlassProps) {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   const target = active ? 1 : 0;
-  const [progress, setProgress] = useState(target);
-  const value = useRef(target);
+  const progress$ = useObservable(target);
+  const setProgress = progress$.set;
   useEffect(() => {
     if (isPreview || !isActive || duration <= 0) {
-      value.current = target;
       setProgress(target);
       return;
     }
-    const from = value.current;
+    const from = progress$.peek();
     if (from === target) return;
     const epoch = performance.now();
     let frame = 0;
     const update = (now: number) => {
       const fraction = Math.min(1, (now - epoch) / duration);
       const eased = fraction * fraction * (3 - 2 * fraction);
-      value.current = from + (target - from) * eased;
-      setProgress(value.current);
+      setProgress(from + (target - from) * eased);
       if (fraction < 1) frame = requestAnimationFrame(update);
     };
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [target, isActive, isPreview, duration]);
-  const displayedProgress = isPreview || !isActive ? target : progress;
+  }, [target, isActive, isPreview, duration, progress$, setProgress]);
+  const displayedProgress$ = useObservable(() => isPreview || !isActive ? target : progress$.get(), [isPreview, isActive, target]);
+  const blur$ = useObservable(() => Math.max(0, blur) * displayedProgress$.get(), [blur]);
+  const uniforms$ = useObservable(() => ({ progress: displayedProgress$.get(), liquid: variant === "liquid" ? 1 : 0 }), [variant]);
   return (
     <View style={[styles.surface, style]}>
-      <Effect shader={glassShader} blur={Math.max(0, blur) * displayedProgress}
+      <Effect shader={glassShader} blur={blur$}
         strength={Math.max(0, refraction)} speed={0}
-        uniforms={{ progress: displayedProgress, liquid: variant === "liquid" ? 1 : 0 }}>
+        uniforms={() => uniforms$.get()}>
         {children}
       </Effect>
-      {overlay !== undefined && <View pointerEvents={target ? "auto" : "none"}
-        accessibilityElementsHidden={!target} importantForAccessibility={target ? "auto" : "no-hide-descendants"}
-        style={[styles.overlay, { opacity: displayedProgress }]}>
+      {overlay !== undefined && <GlassOverlay progress$={displayedProgress$} target={target}>
         {renderNativeChildren(overlay, (text) => <Text>{text}</Text>)}
-      </View>}
+      </GlassOverlay>}
     </View>
   );
 }
+function GlassOverlay({ children, progress$, target }: { children: ReactNode; progress$: Observable<number>; target: number }) {
+  const opacity = useValue(progress$);
+  return <View pointerEvents={target ? "auto" : "none"}
+    accessibilityElementsHidden={!target} importantForAccessibility={target ? "auto" : "no-hide-descendants"}
+    style={[styles.overlay, { opacity }]}>{children}</View>;
+}
+
 const styles = StyleSheet.create({
   surface: { position: "relative", borderRadius: 28, overflow: "hidden" },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", padding: 48 },

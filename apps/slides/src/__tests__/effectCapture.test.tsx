@@ -1,6 +1,7 @@
 // @ts-nocheck Native rendering is mocked; this test exercises capture lifecycle.
 import { expect, mock, spyOn, test } from "bun:test";
 import React from "react";
+import { observable } from "@legendapp/state";
 import { act, create } from "react-test-renderer";
 import { PresentationProvider } from "@legend-apps/presentation";
 import { SlideCaptureContext } from "../SlideCaptureContext";
@@ -9,8 +10,10 @@ import "./nativeMock";
 const captures = [];
 const captureTargets = [];
 const runtimeEffect = {};
+let canvasRenders = 0;
 mock.module("@shopify/react-native-skia", () => ({
-  Blur: "blur", Canvas: "canvas", Group: ({ children, layer, ...props }) => <group {...props}>{layer}{children}</group>, Image: "image", Paint: "paint", RuntimeShader: "shader",
+  Blur: "blur", Canvas: ({ children, ...props }) => { canvasRenders++; return <canvas {...props}>{children}</canvas>; },
+  Fill: "fill", Shader: "aurora-shader", vec: (x, y) => [x, y], Group: ({ children, layer, ...props }) => <group {...props}>{layer}{children}</group>, Image: "image", Paint: "paint", RuntimeShader: "shader",
   Skia: { RuntimeEffect: { Make: () => runtimeEffect } },
   makeImageFromView: (ref) => {
     captureTargets.push(ref.current);
@@ -55,6 +58,19 @@ test("captures only a visible, measured stage and recaptures after scale changes
     expect(captureTargets[0]).toBe(source.props.ref.current);
     expect(source.findAllByType("canvas")).toHaveLength(0);
     expect(source.props.style).toBeUndefined();
+    const blur$ = observable(0);
+    const progress$ = observable(0);
+    await act(() => renderer.update(content(0.5, { isPreview: true, isActive: false }, {
+      blur: blur$, uniforms: () => ({ progress: progress$.get() }),
+    })));
+    const beforeAnimation = canvasRenders;
+    for (const value of [0.25, 0.5, 1]) {
+      await act(() => { blur$.set(value * 24); progress$.set(value); });
+      expect(renderer.root.findByType("shader").props.uniforms.progress).toBe(value);
+      expect(renderer.root.findByType("blur").props.blur).toBe(value * 24 * 2);
+    }
+    expect(canvasRenders).toBe(beforeAnimation);
+    expect(captures).toHaveLength(0);
     await act(() => renderer.update(content(0.5, { isPreview: false, isActive: true, startedAt: 1000 })));
     await flushFrame(3500);
     expect(renderer.root.findByType("shader").props.uniforms.time).toBe(2.5);
@@ -99,5 +115,43 @@ test("captures only a visible, measured stage and recaptures after scale changes
     globalThis.requestAnimationFrame = originalRequest;
     globalThis.cancelAnimationFrame = originalCancel;
     log.mockRestore();
+  }
+});
+
+test("Aurora ticks only its shader and cancels its clock when inactive or unmounted", async () => {
+  const { AmbientAurora } = await import("../../decks/react-native-desktop/packs/backgrounds/AmbientAurora");
+  const frames = new Map();
+  let frameId = 0;
+  let now = 1000;
+  const originalRequest = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+  const clock = spyOn(performance, "now").mockImplementation(() => now);
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  globalThis.requestAnimationFrame = (callback) => { frames.set(++frameId, callback); return frameId; };
+  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+  const content = (isActive, isPreview = false) => <PresentationProvider value={{ isActive, isPreview }}><AmbientAurora /></PresentationProvider>;
+  let tree;
+  try {
+    await act(() => { tree = create(content(true)); });
+    const before = canvasRenders;
+    for (const timestamp of [1016, 1032, 1048]) {
+      now = timestamp;
+      await act(() => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); });
+      expect(tree.root.findByType("aurora-shader").props.uniforms.time).toBeCloseTo((now - 1000) / 1000);
+    }
+    expect(canvasRenders).toBe(before);
+    await act(() => tree.update(content(false)));
+    expect(frames.size).toBe(0);
+    await act(() => tree.update(content(false, true)));
+    expect(tree.root.findByType("aurora-shader").props.uniforms.time).toBe(8);
+    expect(frames.size).toBe(0);
+    await act(() => tree.update(content(true)));
+    expect(frames.size).toBe(1);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    expect(frames.size).toBe(0);
+    globalThis.requestAnimationFrame = originalRequest;
+    globalThis.cancelAnimationFrame = originalCancel;
+    clock.mockRestore(); log.mockRestore();
   }
 });

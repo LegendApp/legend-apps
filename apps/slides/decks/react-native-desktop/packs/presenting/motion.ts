@@ -1,9 +1,10 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useEffect, useRef, useState } from "react";
 
 /** Retarget from the current value, including reversals midway through a transition. */
 export function useMotion(target: number[], duration = 600) {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   const key = JSON.stringify(target);
   const [value, setValue] = useState(target);
   const current = useRef(target);

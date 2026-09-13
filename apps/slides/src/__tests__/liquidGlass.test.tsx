@@ -9,7 +9,7 @@ import { PresentationProvider } from "@legend-apps/presentation";
 import "./nativeMock";
 import { Steps, resolveSteps } from "../steps";
 
-function loadGlass() {
+function loadGlass(onRender = () => {}) {
   const filename = `${import.meta.dir}/../LiquidGlass.tsx`;
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -18,14 +18,22 @@ function loadGlass() {
   });
   const module = { exports: {} };
   new Function("require", "module", "exports", code)(
-    (name) => name === "./Effect" ? { Effect: "effect" } : require(name), module, module.exports,
+    (name) => {
+      if (name === "./Effect") return { Effect: "effect" };
+      const exports = require(name);
+      return name === "@legend-apps/presentation" ? { ...exports, usePresentationValue(key) {
+        if (key === "isActive") onRender();
+        return exports.usePresentationValue(key);
+      } } : exports;
+    }, module, module.exports,
   );
   return module.exports.LiquidGlass;
 }
 
 test("glass reverses from its current blur and keeps the overlay outside the filter", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  const LiquidGlass = loadGlass();
+  let renders = 0;
+  const LiquidGlass = loadGlass(() => renders++);
   expect(resolveSteps(<Steps>{(step) => <LiquidGlass active={step >= 1} />}</Steps>).steps).toBe(2);
   expect(resolveSteps(<Steps count={4}>{(step) => <LiquidGlass active={step >= 3} />}</Steps>).steps).toBe(4);
   const frames = new Map();
@@ -47,10 +55,12 @@ test("glass reverses from its current blur and keeps the overlay outside the fil
   let tree;
   try {
     await act(() => { tree = create(content(0)); });
-    const blur = () => tree.root.findByType("effect").props.blur;
+    const blur = () => tree.root.findByType("effect").props.blur.peek();
     expect(blur()).toBe(0);
     await act(() => tree.update(content(1)));
+    const beforeAnimation = renders;
     await advance(350);
+    expect(renders).toBe(beforeAnimation);
     expect(blur()).toBeCloseTo(12);
     expect(tree.root.findByType("effect").findAllByType("overlay")).toHaveLength(0);
     await act(() => tree.update(content(0)));

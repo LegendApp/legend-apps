@@ -1,5 +1,5 @@
 import { Canvas, Fill, Shader, Skia, vec } from "@shopify/react-native-skia";
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -29,7 +29,8 @@ const nebulaEffect = Skia.RuntimeEffect.Make(`
 `);
 
 export function SkiaNebula() {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   const [time, setTime] = useState(isPreview ? 3.4 : 0);
 
   useEffect(() => {

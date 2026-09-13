@@ -1,4 +1,4 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMotion } from "./motion";
@@ -7,7 +7,9 @@ import { useMotion } from "./motion";
 export function FreezeFrame({ paused, children, annotation, previewTime = 1.5 }: {
   paused: boolean; children: (seconds: number) => ReactNode; annotation?: ReactNode; previewTime?: number;
 }) {
-  const { isActive, isPreview, startedAt } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const startedAt = usePresentationValue("startedAt");
   const [clock, setClock] = useState({ epoch: startedAt, seconds: 0 });
   const saved = useRef(clock);
   const [opacity] = useMotion([paused ? 1 : 0], 250);

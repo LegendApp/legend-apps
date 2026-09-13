@@ -1,4 +1,4 @@
-import { useSlideLifecycle, type TypeGPUScene, type TypeGPUSceneInstance } from "@legend-apps/presentation";
+import { usePresentationValue, type PresentationRuntime, type TypeGPUScene, type TypeGPUSceneInstance } from "@legend-apps/presentation";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   StyleSheet,
@@ -31,7 +31,11 @@ export function TypeGPU({
   transparent = false,
   width = 960,
 }: TypeGPUProps) {
-  const { isActive, isPreview, isPreparing, slideIndex, startedAt } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const isPreparing = usePresentationValue("isPreparing");
+  const slideIndex = usePresentationValue("slideIndex");
+  const startedAt = usePresentationValue("startedAt");
   const previewTime = isPreparing ? 0 : configuredPreviewTime;
   const canvasRef = useRef<CanvasRef>(null);
   const [error, setError] = useState<string>();
@@ -69,7 +73,7 @@ export function TypeGPU({
 function startTypeGPUCanvas({ canvasRef, height, playback, report, resume, scene, setError, width }: {
   canvasRef: RefObject<CanvasRef | null>;
   height: number;
-  playback: RefObject<Pick<ReturnType<typeof useSlideLifecycle>, "isActive" | "isPreview" | "startedAt"> & { previewTime: number }>;
+  playback: RefObject<Pick<PresentationRuntime, "isActive" | "isPreview" | "startedAt"> & { previewTime: number }>;
   report(caught: unknown): void;
   resume: RefObject<(() => void) | undefined>;
   scene: TypeGPUScene;

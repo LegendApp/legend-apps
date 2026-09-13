@@ -1,5 +1,5 @@
 import { Canvas, DiffRect, Path, RoundedRect, rect, rrect } from "@shopify/react-native-skia";
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { calloutBounds, relativeBounds, type Bounds } from "./geometry";
@@ -17,7 +17,8 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
   });
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [bounds, setBounds] = useState<Record<string, Bounds>>({});
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   useEffect(() => {
     if (!size.width || !size.height) return;
     let cancelled = false;
@@ -48,7 +49,8 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
               ref.current?.measureInWindow((tx, ty, tw, th) => {
                 if (tw > 0 && th > 0 && width > 0 && height > 0) result[id] = relativeBounds(
                   { x: tx, y: ty, width: tw, height: th }, { x, y, width, height }, size);
-                if (--pending === 0) finish();
+                pending -= 1;
+                if (pending === 0) finish();
               });
             }
           });

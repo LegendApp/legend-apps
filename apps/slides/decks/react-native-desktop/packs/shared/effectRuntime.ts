@@ -1,4 +1,4 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useEffect } from "react";
 
@@ -16,7 +16,9 @@ export function stage(time: number, start: number, duration: number) {
 }
 
 export function useEffectTime$(previewTime: number) {
-  const { isActive, isPreview, startedAt } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const startedAt = usePresentationValue("startedAt");
   const time$ = useObservable(isPreview ? previewTime : 0);
   const setTime = time$.set;
 

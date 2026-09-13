@@ -1,12 +1,13 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
-import { useEffect, useRef } from "react";
+import { usePresentationValue } from "@legend-apps/presentation";
+import { useEffect, useState } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 
 const travelDistance = 760;
 
 export function LifecycleAnimation() {
-  const { isActive, isPreview } = useSlideLifecycle();
-  const progress = useRef(new Animated.Value(isPreview ? 1 : 0)).current;
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const [progress] = useState(() => new Animated.Value(isPreview ? 1 : 0));
 
   useEffect(() => {
     progress.stopAnimation();

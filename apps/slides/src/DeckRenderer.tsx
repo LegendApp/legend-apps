@@ -1,4 +1,4 @@
-import { useValue } from "@legendapp/state/react";
+import { useObservable, useValue } from "@legendapp/state/react";
 import {
   Background,
   FocusRegion,
@@ -8,7 +8,8 @@ import {
   BackgroundHost,
   useBackgroundHost,
   useHasBackground,
-  PresentationProvider,
+  PresentationObservableProvider,
+  type PresentationRuntime,
   renderNativeChildren,
   type CompiledDeckProps,
   type CompiledSlideProps,
@@ -64,14 +65,6 @@ const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: bool
 
 function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, isPreparing, targetIndex, targetStep } = useContext(DeckRenderContext);
-  // An outgoing layer can become active again without remounting. Subscribe so
-  // React Compiler cannot retain a getSlidesState() snapshot from its exit.
-  const currentSlide = useValue(slidesState$.currentSlide);
-  const currentStep = useValue(slidesState$.currentStep);
-  const startedAt = useValue(slidesState$.slideStartedAt);
-  const stepEpochs = useValue(slidesState$.stepEpochs);
-  const direction = useValue(slidesState$.direction);
-  const stepStartedAt = useValue(slidesState$.stepStartedAt);
   const templates = useValue(slidesState$.templates);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
@@ -84,7 +77,8 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     })(),
     notes: element.props.notes,
   }));
-  const selectedIndex = Math.max(0, Math.min(targetIndex ?? currentSlide, elements.length - 1));
+  const requestedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
+  const selectedIndex = Math.max(0, Math.min(requestedIndex, elements.length - 1));
 
   useEffect(() => {
     const current = getSlidesState();
@@ -93,38 +87,32 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     }
   }, [configJson, elements.length]);
 
-  const selected = elements[selectedIndex];
-  if (!selected) {
-    return null;
-  }
-  const selectedMetadata = slides[selectedIndex].metadata;
   const stepCount = getSlideStepCount(slides[selectedIndex]);
-  const selectedStep = Math.max(0, Math.min(
-    targetStep ?? (selectedIndex === currentSlide ? currentStep : 0),
-    stepCount - 1,
-  ));
+  const runtime$ = useObservable<PresentationRuntime>(() => {
+    // Fixed previews do not subscribe to live navigation or animation epochs.
+    const currentSlide = isPreview ? selectedIndex : slidesState$.currentSlide.get();
+    const currentStep = isPreview ? targetStep ?? 0 : slidesState$.currentStep.get();
+    return {
+      currentSlide, currentStep, goTo: setCurrentSlide,
+      isActive: !isPreview && selectedIndex === currentSlide,
+      isPreview: Boolean(isPreview), isPreparing,
+      next: nextSlide, previous: previousSlide,
+      slideCount: elements.length, slideIndex: selectedIndex, stepCount,
+      stepIndex: Math.max(0, Math.min(targetStep ?? (selectedIndex === currentSlide ? currentStep : 0), stepCount - 1)),
+      startedAt: isPreview ? undefined : slidesState$.slideStartedAt.get(),
+      stepStartedAt: isPreview ? undefined : slidesState$.stepStartedAt.get(),
+      stepEpochs: isPreview ? undefined : slidesState$.stepEpochs.get(),
+      direction: isPreview ? undefined : slidesState$.direction.get(),
+    };
+  }, [isPreview, isPreparing, selectedIndex, targetStep, stepCount, elements.length]);
+  const selected = elements[selectedIndex];
+  if (!selected) return null;
+  const selectedMetadata = slides[selectedIndex].metadata;
   const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
   const Template = resolvedTemplate.component;
   const content = renderMdxChildren(resolved[selectedIndex].content);
   return (
-    <PresentationProvider value={{
-      currentSlide,
-      currentStep,
-      goTo: setCurrentSlide,
-      isActive: !isPreview && selectedIndex === currentSlide,
-      isPreview: Boolean(isPreview),
-      isPreparing,
-      next: nextSlide,
-      previous: previousSlide,
-      slideCount: elements.length,
-      slideIndex: selectedIndex,
-      stepCount,
-      stepIndex: selectedStep,
-      startedAt,
-      stepStartedAt,
-      stepEpochs,
-      direction,
-    }}>
+    <PresentationObservableProvider value={runtime$}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
         {resolvedTemplate.reference && !Template
           ? <MissingSlideTemplate reference={resolvedTemplate.reference} />
@@ -132,7 +120,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
           ? <Template deck={config} slide={selectedMetadata}>{content}</Template>
           : <View style={styles.slideContent}>{content}</View>}
       </SlideErrorBoundary>
-    </PresentationProvider>
+    </PresentationObservableProvider>
   );
 }
 
@@ -250,10 +238,10 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
 
 export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean }) {
   const hosted = useBackgroundHost();
-  const currentSlide = useValue(slidesState$.currentSlide);
+  const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled}>{children}</SlideCanvasContent>;
-  return hosted ? content : <BackgroundHost slideIndex={targetIndex ?? currentSlide} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
+  return hosted ? content : <BackgroundHost slideIndex={selectedIndex} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode; captureEnabled: boolean }) {

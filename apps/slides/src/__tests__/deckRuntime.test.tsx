@@ -96,3 +96,31 @@ test("render-prop steps receive the requested live or preview step without becom
     log.mockRestore();
   }
 });
+
+test("fixed previews stay idle while the audience advances slides and steps", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  let renders = 0;
+  function Probe() { renders++; return <runtime value={usePresentation()} />; }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}">{[0, 1].map((index) => <Slide key={index} metadataJson='{"steps":3}' notes=""><Probe /></Slide>)}</Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer isPreview targetIndex={1} targetStep={2} />); });
+    renders = 0;
+    for (const index of [1, 0, 1]) {
+      await act(() => setCurrentSlide(index));
+      await act(() => setSlidesState({ currentStep: 1, stepStartedAt: performance.now() }));
+    }
+    expect(renders).toBe(0);
+    expect(tree.root.findByType("runtime").props.value).toMatchObject({ slideIndex: 1, stepIndex: 2, isActive: false, isPreview: true });
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});

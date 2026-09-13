@@ -1,5 +1,7 @@
 import { Canvas, Fill, Shader, Skia, vec } from "@shopify/react-native-skia";
-import { useSlideLifecycle, useBackgroundSize } from "@legend-apps/presentation";
+import { usePresentationValue, useBackgroundSize } from "@legend-apps/presentation";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -30,10 +32,12 @@ const ambientAurora = Skia.RuntimeEffect.Make(`
 `);
 
 export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   const { width, height } = useBackgroundSize();
   const [epoch] = useState(() => performance.now());
-  const [time, setTime] = useState(isPreview ? 8 : 0);
+  const time$ = useObservable(isPreview ? 8 : 0);
+  const setTime = time$.set;
 
   useEffect(() => {
     if (isPreview) {
@@ -49,7 +53,7 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
     setTime(Math.max(0, performance.now() - epoch) / 1000);
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [isActive, isPreview, epoch]);
+  }, [isActive, isPreview, epoch, setTime]);
 
   if (!ambientAurora || width <= 0 || height <= 0) return null;
 
@@ -57,19 +61,16 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
     <View pointerEvents="none" style={styles.fill}>
       <Canvas style={styles.fill}>
         <Fill>
-          <Shader
-            source={ambientAurora}
-            uniforms={{
-              intensity,
-              phase: 0,
-              resolution: vec(width, height),
-              time,
-            }}
-          />
+          <AuroraShader time$={time$} intensity={intensity} width={width} height={height} />
         </Fill>
       </Canvas>
     </View>
   );
+}
+
+function AuroraShader({ time$, intensity, width, height }: { time$: Observable<number>; intensity: number; width: number; height: number }) {
+  const time = useValue(time$);
+  return ambientAurora ? <Shader source={ambientAurora} uniforms={{ intensity, phase: 0, resolution: vec(width, height), time }} /> : null;
 }
 
 const styles = StyleSheet.create({

@@ -1,11 +1,15 @@
-import { usePresentation } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useEffect, useState } from "react";
 import { glassTimeline } from "./packs/glass";
 
 const captions = ["We can fake the glass", "More refraction should help", "Perfect. Ship it."];
 
 export function GlassCaption() {
-  const { isActive, isPreview, isPreparing, stepIndex, stepEpochs } = usePresentation();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const isPreparing = usePresentationValue("isPreparing");
+  const stepIndex = usePresentationValue("stepIndex");
+  const stepEpochs = usePresentationValue("stepEpochs");
   const startedAt = stepEpochs?.[1];
   const [completedEpoch, setCompletedEpoch] = useState<number>();
 

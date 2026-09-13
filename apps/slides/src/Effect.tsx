@@ -13,14 +13,14 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, useSlideLifecycle } from "@legend-apps/presentation";
+import { renderNativeChildren, usePresentationValue } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 
 type EffectProps = {
-  blur?: number;
+  blur?: number | Observable<number>;
   children?: ReactNode;
   padding?: number;
   preset?: EffectPreset;
@@ -30,11 +30,11 @@ type EffectProps = {
   active?: boolean;
   strength?: number;
   style?: StyleProp<ViewStyle>;
-  uniforms?: Record<string, Uniform>;
+  uniforms?: Record<string, Uniform> | (() => Record<string, Uniform>);
 };
 
 type EffectCanvasProps = {
-  blur: number;
+  blur: number | Observable<number>;
   effect: SkRuntimeEffect;
   height: number;
   image: SkImage;
@@ -45,7 +45,7 @@ type EffectCanvasProps = {
   speed: number;
   startedAt?: number;
   strength: number;
-  uniforms?: Record<string, Uniform>;
+  uniforms?: Record<string, Uniform> | (() => Record<string, Uniform>);
   width: number;
 };
 
@@ -119,15 +119,17 @@ function AnimatedRuntimeShader({ clock$, effect, uniforms, width, height, pixelR
       ? clock$.time.get()
       : 0);
 
+  const resolvedBlur = useValue(blur);
+  const resolvedUniforms = useValue(() => typeof uniforms === "function" ? uniforms() : uniforms);
   const shaderUniforms = {
-    ...uniforms,
+    ...resolvedUniforms,
     resolution: [width * pixelRatio, height * pixelRatio],
     strength: strength * pixelRatio,
     time,
   };
 
   return <RuntimeShader source={effect} uniforms={shaderUniforms}>
-    {blur > 0 ? <Blur blur={blur * pixelRatio} mode="clamp" /> : null}
+    {resolvedBlur > 0 ? <Blur blur={resolvedBlur * pixelRatio} mode="clamp" /> : null}
   </RuntimeShader>;
 }
 
@@ -144,7 +146,11 @@ export function Effect({
   style,
   uniforms,
 }: EffectProps) {
-  const { isActive, isPreview, isPreparing, startedAt, stepStartedAt } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const isPreparing = usePresentationValue("isPreparing");
+  const startedAt = usePresentationValue("startedAt");
+  const stepStartedAt = usePresentationValue("stepStartedAt");
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
