@@ -883,6 +883,28 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("commits repeated edits without rendering the document owner or replacing its commands", async () => {
+    const renderSpy = jest.spyOn(MarkdownDocument as unknown as { render: (...args: unknown[]) => unknown }, "render");
+    try {
+      const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "First"), block("d1:b1", 1, "Second")]));
+      const { renderer, commandsRef, onError } = await renderDocument({ adapter });
+      const save = commandsRef.current?.save;
+      renderSpy.mockClear();
+      for (const markdown of ["First edited", "First edited twice", "Final edit"]) {
+        await changeText(editorInput(renderer), markdown);
+        expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+        await undo(commandsRef);
+        await redo(commandsRef);
+        expect(adapter.markdownById.get("d1:b0")).toBe(markdown);
+      }
+      expect(renderSpy).not.toHaveBeenCalled();
+      expect(commandsRef.current?.save).toBe(save);
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      renderSpy.mockRestore();
+    }
+  });
+
   it("does not rerender unrelated rendered rows after editing a block", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
