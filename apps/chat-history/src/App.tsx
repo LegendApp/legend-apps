@@ -1,3 +1,5 @@
+import { batch, ObservableHint, type Observable } from "@legendapp/state";
+import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import {
   createSidebarSplitViewTitlebarChrome,
   SidebarSplitView,
@@ -23,6 +25,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind } from "uniwind";
+import { createChatSessionState, type ChatSession } from "./chatSession";
 import { ChatComposer } from "./ChatComposer";
 import { ChatHistoryAppMenu } from "./ChatHistoryAppMenu";
 import {
@@ -91,18 +94,6 @@ const emptyTranscriptDataSource: LegendListDataSource<TranscriptListItem> = {
   getRevision: () => 0,
   subscribe: () => () => {},
 };
-type TranscriptState =
-  | { status: "idle" }
-  | { selectedId: string; status: "loading" }
-  | {
-    document: ChatDocument;
-    openedAt: number;
-    path: string;
-    phase?: "initial" | "switch";
-    selectedId: string;
-    status: "ready";
-  }
-  | { error: string; selectedId: string; status: "error" };
 
 type ChatSidebarEntry =
   | { id: string; summary: ChatSummary; type: "chat" }
@@ -155,12 +146,13 @@ function getChatSidebarItemSize(entry: ChatSidebarEntry) {
 function ChatSidebarRow({
   entry,
   onSelect,
-  selectedId,
+  selectedId$,
 }: {
   entry: ChatSidebarEntry;
   onSelect: (id: string) => void;
-  selectedId?: string;
+  selectedId$: Observable<string | undefined>;
 }) {
+  const selected = useValue(() => entry.type === "chat" && selectedId$.get() === entry.summary.id);
   const handlePress = useCallback(() => {
     if (entry.type === "chat") {
       onSelect(entry.summary.id);
@@ -177,7 +169,6 @@ function ChatSidebarRow({
   } else if (entry.type === "spacer") {
     row = <View style={styles.sidebarSectionSpacer} />;
   } else {
-    const selected = entry.summary.id === selectedId;
     row = (
       <View className="px-2" style={styles.sidebarItem}>
         <Pressable
@@ -209,15 +200,11 @@ function ChatSidebarRow({
   return row;
 }
 
-function ChatSidebar({
-  summaries,
-  selectedId,
-  onSelect,
-}: {
-  summaries: readonly ChatSummary[];
-  selectedId?: string;
+function ChatSidebar({ session$, onSelect }: {
+  session$: ChatSession;
   onSelect: (id: string) => void;
 }) {
+  const summaries = useValue(session$.summaries);
   const entries = useMemo(() => {
     const nextEntries: ChatSidebarEntry[] = [];
     for (const section of CHAT_PROVIDER_SECTIONS) {
@@ -238,8 +225,8 @@ function ChatSidebar({
     return nextEntries;
   }, [summaries]);
   const renderItem = useCallback(({ item }: LegendListRenderItemProps<ChatSidebarEntry>) => (
-    <ChatSidebarRow entry={item} onSelect={onSelect} selectedId={selectedId} />
-  ), [onSelect, selectedId]);
+    <ChatSidebarRow entry={item} onSelect={onSelect} selectedId$={session$.selectedId} />
+  ), [onSelect, session$]);
 
   return (
     <View className="flex-1 bg-surface-muted">
@@ -248,7 +235,6 @@ function ChatSidebar({
         contentInset={chatSidebarContentInset}
         data={entries}
         estimatedItemSize={CHAT_SIDEBAR_CHAT_ROW_HEIGHT}
-        extraData={selectedId}
         getFixedItemSize={getChatSidebarItemSize}
         getItemType={getChatSidebarItemType}
         keyExtractor={getChatSidebarItemKey}
@@ -498,16 +484,16 @@ function TranscriptList({
 function TranscriptPane({
   loadImages,
   onBenchmarkEvent,
-  selectedId,
-  state,
+  session$,
   topDelayMs,
 }: {
   loadImages: boolean;
   onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
-  selectedId?: string;
-  state: TranscriptState;
+  session$: ChatSession;
   topDelayMs?: number;
 }) {
+  const selectedId = useValue(session$.selectedId);
+  const state = useValue(session$.transcript);
   const isCurrentSelection = "selectedId" in state && state.selectedId === selectedId;
   const document = isCurrentSelection && state.status === "ready" ? state.document : undefined;
   const message = isCurrentSelection && state.status === "error"
@@ -546,21 +532,24 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
   const displayTheme = useSystemLegendDisplayTheme();
   const benchmark = useMemo(() => getChatBenchmarkConfig(launchArguments), [launchArguments]);
   const [savedSelection] = useState(() => benchmark ? {} : readSavedChatSelection());
-  const [summaries, setSummaries] = useState<ChatSummary[]>(() => savedSelection.selectedChat
-    ? [savedSelection.selectedChat]
-    : []);
-  const [selectedId, setSelectedId] = useState<string | undefined>(savedSelection.selectedId);
-  const [catalogError, setCatalogError] = useState<string | undefined>();
-  const [catalogLoading, setCatalogLoading] = useState(true);
-  const [transcriptState, setTranscriptState] = useState<TranscriptState>({ status: "idle" });
+  const session$ = useObservable(() => createChatSessionState(savedSelection));
+  const selectedDocumentKey$ = useObservable(() => {
+    const id = session$.selectedId.get();
+    const selected = session$.summaries.get().find((summary) => summary.id === id);
+    return selected ? JSON.stringify([selected.id, selected.provider, selected.path]) : "";
+  });
+  const setSummaries = session$.summaries.set;
+  const setSelectedId = session$.selectedId.set;
+  const setCatalogError = session$.catalogError.set;
+  const setCatalogLoading = session$.catalogLoading.set;
+  const setTranscriptState = session$.transcript.set;
   const benchmarkDiscoveryMsRef = useRef<number | undefined>(undefined);
   const loadGenerationRef = useRef(0);
   const switchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const windowShownRef = useRef(false);
-  const selectedSummary = summaries.find((summary) => summary.id === selectedId);
-  const selectedTitle = selectedSummary?.title;
-
-  useEffect(() => {
+  useObserveEffect(() => {
+    const selectedId = session$.selectedId.get();
+    const selectedTitle = session$.summaries.get().find((summary) => summary.id === selectedId)?.title;
     setMainWindowOptions({
       title: selectedTitle ?? "Legend Chat History",
       windowStyle: {
@@ -570,7 +559,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         titlebarSeparatorStyle: "shadow",
       },
     }).catch(reportChatHistoryWindowError);
-  }, [displayTheme.colors.windowBackground, selectedTitle]);
+  }, [displayTheme.colors.windowBackground]);
 
   useEffect(() => {
     let active = true;
@@ -595,10 +584,12 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
               visibleChats.push(target);
             }
           }
-          setSummaries(visibleChats);
-          setSelectedId(resolvedTargets[0].id);
-          setCatalogError(undefined);
-          setCatalogLoading(false);
+          batch(() => {
+            setSummaries(visibleChats);
+            setSelectedId(resolvedTargets[0].id);
+            setCatalogError(undefined);
+            setCatalogLoading(false);
+          });
         })
         .catch((error) => {
           if (active) {
@@ -620,19 +611,21 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         if (active && generation === catalogGeneration) {
           const sortedChats = [...recentChats].sort(sortChatsNewestFirst);
           // Preserve unchanged models so reopening does not reload the selected transcript.
-          setSummaries((previous) => sortedChats.map((summary) => {
-            const existing = previous.find((candidate) => candidate.id === summary.id);
-            return existing && existing.path === summary.path && existing.provider === summary.provider
-              && existing.title === summary.title && existing.updatedAt === summary.updatedAt
-              ? existing : summary;
-          }));
-          setSelectedId((currentId) => {
-            const preferredId = currentId ?? savedSelection.selectedId;
-            return sortedChats.some((summary) => summary.id === preferredId)
-              ? preferredId : sortedChats[0]?.id;
+          batch(() => {
+            setSummaries((previous) => sortedChats.map((summary) => {
+              const existing = previous.find((candidate) => candidate.id === summary.id);
+              return existing && existing.path === summary.path && existing.provider === summary.provider
+                && existing.title === summary.title && existing.updatedAt === summary.updatedAt
+                ? existing : summary;
+            }));
+            setSelectedId((currentId) => {
+              const preferredId = currentId ?? savedSelection.selectedId;
+              return sortedChats.some((summary) => summary.id === preferredId)
+                ? preferredId : sortedChats[0]?.id;
+            });
+            setCatalogError(undefined);
+            setCatalogLoading(false);
           });
-          setCatalogError(undefined);
-          setCatalogLoading(false);
         }
       })
       .catch((error) => {
@@ -654,10 +647,11 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       cancelPendingOpen();
       flushSelectedChatWrite();
     };
-  }, [benchmark]);
+  }, [benchmark, savedSelection, setCatalogError, setCatalogLoading, setSelectedId, setSummaries]);
 
-  useEffect(() => {
-    const selected = selectedSummary;
+  useObserveEffect((event) => {
+    selectedDocumentKey$.get();
+    const selected = session$.summaries.peek().find((summary) => summary.id === session$.selectedId.peek());
     if (selected) {
       const generation = loadGenerationRef.current + 1;
       const openedAt = benchmark ? performance.now() : 0;
@@ -669,6 +663,10 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
             : undefined
         : undefined;
       loadGenerationRef.current = generation;
+      event.onCleanup = () => {
+        if (loadGenerationRef.current === generation) loadGenerationRef.current += 1;
+        cancelPendingOpen();
+      };
       cancelPendingOpen();
       if (!benchmark) {
         writeSelectedChat(selected);
@@ -678,7 +676,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         .then((document) => {
           if (loadGenerationRef.current === generation) {
             setTranscriptState({
-              document,
+              document: ObservableHint.opaque(document),
               openedAt,
               path: selected.path,
               phase,
@@ -695,7 +693,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
           }
         });
     }
-  }, [benchmark, selectedSummary]);
+  }, [benchmark]);
 
   useEffect(() => () => {
     if (switchTimerRef.current !== undefined) {
@@ -705,7 +703,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
-  }, []);
+  }, [setSelectedId]);
   const handleBenchmarkEvent = useCallback((event: ChatBenchmarkEvent) => {
     if (!benchmark) {
       return;
@@ -726,7 +724,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
         setSelectedId(benchmark.targets[1].id);
       }, benchmark.switchDelayMs);
     }
-  }, [benchmark]);
+  }, [benchmark, setSelectedId]);
   const handleWindowLayout = useCallback(() => {
     if (benchmark && !windowShownRef.current) {
       windowShownRef.current = true;
@@ -734,11 +732,6 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
     }
   }, [benchmark]);
 
-  const emptyMessage = catalogLoading
-    ? "Scanning recent chats…"
-    : catalogError
-      ? catalogError
-      : "No local Codex or Claude transcripts found.";
   const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
     colorScheme: displayTheme.appearance ?? "light",
     contentBackgroundColor: displayTheme.colors.background,
@@ -755,14 +748,38 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       onLayout={benchmark ? handleWindowLayout : undefined}
       style={styles.root}
     >
-      <ChatSidebar summaries={summaries} selectedId={selectedId} onSelect={handleSelect} />
-      {summaries.length > 0 ? (
+      <ChatSidebar session$={session$} onSelect={handleSelect} />
+      <ChatContent
+        session$={session$}
+        loadImages={benchmark?.loadImages ?? true}
+        onBenchmarkEvent={benchmark ? handleBenchmarkEvent : undefined}
+        topDelayMs={benchmark?.topDelayMs}
+      />
+    </SidebarSplitView>
+  );
+}
+
+function ChatContent({ session$, loadImages, onBenchmarkEvent, topDelayMs }: {
+  session$: ChatSession;
+  loadImages: boolean;
+  onBenchmarkEvent?: (event: ChatBenchmarkEvent) => void;
+  topDelayMs?: number;
+}) {
+  const hasChats = useValue(() => session$.summaries.length > 0);
+  const catalogLoading = useValue(session$.catalogLoading);
+  const catalogError = useValue(session$.catalogError);
+  const emptyMessage = catalogLoading
+    ? "Scanning recent chats…"
+    : catalogError
+      ? catalogError
+      : "No local Codex or Claude transcripts found.";
+  return <>
+      {hasChats ? (
         <TranscriptPane
-          loadImages={benchmark?.loadImages ?? true}
-          onBenchmarkEvent={benchmark ? handleBenchmarkEvent : undefined}
-          selectedId={selectedId}
-          state={transcriptState}
-          topDelayMs={benchmark?.topDelayMs}
+          loadImages={loadImages}
+          onBenchmarkEvent={onBenchmarkEvent}
+          session$={session$}
+          topDelayMs={topDelayMs}
         />
       ) : (
         <View className="flex-1 items-center justify-center bg-background px-10">
@@ -772,8 +789,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
           </Text>
         </View>
       )}
-    </SidebarSplitView>
-  );
+  </>;
 }
 
 function reportChatHistoryWindowError(error: unknown) {
