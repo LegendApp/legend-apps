@@ -53,3 +53,53 @@ Tests cover LRU recency, reweighting, oversized admission, resource bounds, and
 code-tree reuse despite 400 inline paragraphs; Markdown edit/reset, cancellation,
 viewport and full-output parity remain covered. Actual editor row caching can
 avoid queries altogether; these repeat timings do not claim equivalent UI gains.
+
+## Index query patterns by symbol
+
+The retained runtime change replaces the query executor's per-node binary search
+with a compiled symbol-to-first-pattern table. All matching, predicate, precedence,
+wildcard, and capture machinery is unchanged. It costs four bytes per grammar
+symbol per compiled query. Pattern mutation invalidates the table and falls back
+to the original lookup. ERROR symbols outside the table also use that lookup.
+
+A separate C++ traversal for simple captures was rejected: although hashes matched,
+walking the tree twice made large JavaScript ~15–20% slower. No such path remains.
+
+Five fresh-process, interleaved runs per variant on all 15 real sources using the
+existing AppKit roundtrip benchmark. All 150 full-output hashes match. No task-owned
+builds, tests or profilers overlapped timings; desktop activity was uncontrolled.
+Medians, milliseconds from starting highlighting to final token publication:
+
+| Source | Before | After |
+| --- | ---: | ---: |
+| TypeScript compiler JavaScript, 9.11 MB | 365.96 | 320.44 |
+| React compiler JavaScript, 3.83 MB | 187.29 | 164.96 |
+| DOM declarations, 2.35 MB | 44.34 | 39.52 |
+| CSS type declarations | 11.77 | 10.29 |
+| Diff viewer TSX | 11.00 | 9.94 |
+| Markdown editor TSX | 5.68 | 5.04 |
+| Python AST | 2.61 | 2.38 |
+| Tailwind CSS | 1.10 | 0.98 |
+| DevTools JSON | 7.31 | 6.87 |
+| TypeBox Markdown | 50.46 | 49.71 |
+| Desktop MDX | 5.56 | 5.49 |
+| Joi minified JavaScript | 13.00 | 10.91 |
+| Property Information Markdown | 24.81 | 24.49 |
+| Syntax parser Markdown | 2.73 | 2.72 |
+| Showcase MDX | 13.75 | 13.78 |
+
+Large JavaScript gains are ~12%; minified JavaScript ~16%. Cold Markdown/MDX is
+largely unchanged because compilation/embedded parsing dominates there. Median
+peak RSS for the largest source changes from 362.10 to 362.35 MB.
+
+Raw observations, input SHA-256 identities and output hashes are in
+`../../source-editor/tests/highlighting-dispatch-results.json`. Fixture paths and
+the runner live alongside it in `highlighting-corpus.json` / `benchmark-corpus.ts`.
+The baseline already includes the compiled-query and embedded-cache fixes.
+
+Validation: complete native syntax and source-editor suites; query dispatch tests
+for hits/misses, ERROR, wildcard, empty queries and disabled patterns/captures;
+TypeScript typecheck; production (non-fixture) highlighter compilation. The vendored
+runtime patch is reapplied by the vendor script and checked by the syntax suite.
+Code/macOS verification was attempted but Bun startup timed out after 45 seconds.
+No new running-app binary, screenshot, or UI latency measurement is claimed.

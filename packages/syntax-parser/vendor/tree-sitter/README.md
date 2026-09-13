@@ -23,6 +23,14 @@ exports, then recompiles and rejects any unprefixed exports. This inspection is
 also part of every standalone test build. The isolation test links and exercises
 an unprefixed runtime/JavaScript grammar alongside ours.
 
+One local runtime patch, `../../patches/tree-sitter-query-dispatch.patch`, adds a
+symbol-indexed lookup for immutable query pattern maps. It preserves pattern order,
+wildcards, error-symbol fallback and the original matching state machine. Disabling
+a pattern invalidates the lookup and uses the original binary search. The vendor
+script reapplies it after fetching pinned sources, and native tests check that it
+is present. It changes no exported API or grammar pack ABI; keep it in sync when
+updating the runtime and rerun dispatch, traversal, isolation and corpus tests.
+
 Upstream queries stay unmodified; app refinements live in `../../queries/`.
 The MDX parser has one documented grammar extension for Slides' HTML-style note
 comments. `scripts/patch-mdx-grammar.ts` regenerates it with CLI 0.25.10/ABI 14

@@ -3,6 +3,7 @@ set -euo pipefail
 syntax_root="$(cd "$(dirname "$0")/.." && pwd)"
 tree_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-tree-sitter.XXXXXX")"
 tree_vendor="$syntax_root/vendor/tree-sitter"
+git -C "$syntax_root/../.." apply --reverse --check "$syntax_root/patches/tree-sitter-query-dispatch.patch"
 node "$syntax_root/scripts/embed-tree-sitter-queries.ts" --check
 node "$syntax_root/scripts/compile-tree-sitter.ts" "$tree_build"
 clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryRegex.test.cpp" -o "$tree_build/query-regex-test"
@@ -15,6 +16,9 @@ clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syn
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryTraversal.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/query-traversal-test"
 "$tree_build/query-traversal-test"
+clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryDispatch.test.cpp" \
+  "$tree_build/"*.o -o "$tree_build/query-dispatch-test"
+"$tree_build/query-dispatch-test"
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/MarkdownHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/markdown-test"
 "$tree_build/markdown-test" "$syntax_root/../../apps/slides/examples/"*.mdx \
