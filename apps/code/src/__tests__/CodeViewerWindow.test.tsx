@@ -62,6 +62,8 @@ describe("Code document list reuse", () => {
   });
   afterEach(async () => {
     if (renderer) await act(async () => renderer.unmount());
+    // State defers development-mode observer cleanup to a microtask for Strict Mode.
+    await act(async () => jest.runAllTicks());
     jest.useRealTimers();
   });
 
@@ -115,6 +117,26 @@ describe("Code document list reuse", () => {
     await act(async () => pending.shift()!.resolve(makeDocument("", 0)));
     expect(list()).toBe(mountedList);
     expect(list().props.data).toEqual([]);
+  });
+
+  it("keeps the document view idle when metadata changes", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/metadata.ts"));
+    await act(async () => pending.shift()!.resolve(makeDocument("metadata")));
+    const before = renderer.root.findByType(SourceDocumentView).props;
+    await act(async () => before.sourceRows.requestRange(0, 4, { reason: "highlight" }));
+    expect(renderer.root.findByType(SourceDocumentView).props).toBe(before);
+  });
+
+  it("does not replace a newer session when an earlier load finishes late", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/old.ts"));
+    const oldRequest = pending.shift()!;
+    await act(async () => requestCodeViewerFile("/new.ts"));
+    await act(async () => pending.shift()!.resolve(makeDocument("new")));
+    await act(async () => oldRequest.resolve(makeDocument("old")));
+    expect(list().props.dataKey).toBe("/new.ts");
+    expect(renderer.root.findByType(SourceDocumentView).props.sourceRows.getRow(0).text).toBe("new");
   });
 
   it("restarts initial requests for a new dataset and cancels old overscan work", async () => {
