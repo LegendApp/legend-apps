@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Animated, Text, View, type ViewProps } from "react-native";
 import { renderNativeChildren } from "./nativeChildren";
 import { identityCamera, validFocusRect, type FocusCamera, type FocusRect } from "./focusGeometry";
@@ -6,6 +6,8 @@ import { identityCamera, validFocusRect, type FocusCamera, type FocusRect } from
 type Entry = { id: string; kind: "region" | "element"; view: View };
 export type FocusSurface = {
   root: View | null;
+  setRoot(root: View | null): void;
+  setLayout(layout: { width: number; height: number }): void;
   entries: Set<Entry>;
   width: number;
   height: number;
@@ -21,7 +23,12 @@ export const FocusSurfaceContext = createContext<{ surface: FocusSurface; motion
 const InsideSharedElement = createContext(false);
 
 export function createFocusSurface(): FocusSurface {
-  return { root: null, entries: new Set(), width: 0, height: 0 };
+  const surface: FocusSurface = {
+    root: null, entries: new Set(), width: 0, height: 0,
+    setRoot(root) { surface.root = root; },
+    setLayout({ width, height }) { surface.width = width; surface.height = height; },
+  };
+  return surface;
 }
 
 /** Layout measurements ignore animated transforms and the physical display scale. */
@@ -75,10 +82,12 @@ export function focusCameraStyle(motion?: FocusMotion) {
 /** Root stays untransformed so measurement never samples the moving camera. */
 export function FocusStage({ children }: { children: ReactNode }) {
   const context = useContext(FocusSurfaceContext);
+  const surface = context?.surface;
+  const setRoot = useCallback((view: View | null) => { surface?.setRoot(view); }, [surface]);
   return (
-    <View collapsable={false} ref={(view) => { if (context) context.surface.root = view; }}
+    <View collapsable={false} ref={setRoot}
       onLayout={(event) => {
-        if (context) Object.assign(context.surface, event.nativeEvent.layout);
+        surface?.setLayout(event.nativeEvent.layout);
       }} style={{ flex: 1 }}>
       <Animated.View style={[{ flex: 1, overflow: "visible" }, focusCameraStyle(context?.motion)]}>
         {children}

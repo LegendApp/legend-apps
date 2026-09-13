@@ -53,7 +53,11 @@ test("live shared children retain their instance and follow the same rectangle t
     const measured = await measureFocusSurface(surface);
     expect(measured.regions.get("detail")).toEqual(region);
     expect(measured.elements.get("live")).toEqual(source);
+    const root = surface.root;
+    await act(() => tree.root.findAllByType("view")[0].props.onLayout({ nativeEvent: { layout: { width: 1920, height: 1080 } } }));
+    expect([surface.width, surface.height]).toEqual([1920, 1080]);
     await act(() => tree.update(render(motion)));
+    expect(surface.root).toBe(root);
     const shared = tree.root.findAllByType("layer").find((layer) => layer.props.style[1]?.transform?.length === 4);
     const transform = shared.props.style[1].transform;
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
@@ -74,6 +78,7 @@ test("live shared children retain their instance and follow the same rectangle t
     if (tree) await act(() => tree.unmount());
   }
   expect(surface.entries.size).toBe(0);
+  expect(surface.root).toBeNull();
 });
 
 test("ambiguous IDs and unmeasurable views are omitted without stalling navigation", async () => {
