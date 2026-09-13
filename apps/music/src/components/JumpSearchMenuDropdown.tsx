@@ -1,4 +1,5 @@
 import { LegendList } from "@legendapp/list/react-native";
+import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { forwardRef, useCallback, useEffect, useMemo, useRef } from "react";
 import { type GestureResponderEvent, Text, useWindowDimensions, View } from "react-native";
@@ -65,7 +66,7 @@ export const JumpSearchMenuDropdown = forwardRef<DropdownMenuRootRef, JumpSearch
             [onSelectLibraryItem, onSelectPlaylist, onSelectTrack],
         );
 
-        const { highlightedIndex, modifierStateRef, resetModifiers } = useDropdownKeyboardNavigation({
+        const { highlightedIndex$, modifierStateRef, resetModifiers } = useDropdownKeyboardNavigation({
             isOpen,
             resultsLength: searchResults.length,
             onEscape: () => handleOpenChange(false),
@@ -147,38 +148,10 @@ export const JumpSearchMenuDropdown = forwardRef<DropdownMenuRootRef, JumpSearch
 
         const renderItem = useCallback(
             ({ item: result, index }: { item: SearchResult; index: number }) => {
-                const isHighlighted = highlightedIndex === index;
-
-                const handleDropdownSelect = (event?: NativeMouseEvent | GestureResponderEvent) => {
-                    const action = getActionFromEvent(event);
-                    handleItemSelect(result, action);
-                };
-
-                const handleContentSelect = (action: QueueAction) => {
-                    handleItemSelect(result, action);
-                };
-
-                return (
-                    <DropdownMenu.Item
-                        key={`${result.type}-${result.item.id}`}
-                        variant="unstyled"
-                        onSelect={handleDropdownSelect}
-                        className={cn(
-                            "hover:bg-white/10 rounded-md w-full overflow-hidden",
-                            isHighlighted && "bg-white/20",
-                        )}
-                    >
-                        <SearchResultContent
-                            result={result}
-                            index={index}
-                            highlighted={isHighlighted}
-                            onSelect={handleContentSelect}
-                            getActionFromEvent={getActionFromEvent}
-                        />
-                    </DropdownMenu.Item>
-                );
+                return <SearchResultRow key={`${result.type}-${result.item.id}`} result={result} index={index} highlightedIndex$={highlightedIndex$}
+                    onSelect={handleItemSelect} getActionFromEvent={getActionFromEvent} />;
             },
-            [getActionFromEvent, handleItemSelect, highlightedIndex],
+            [getActionFromEvent, handleItemSelect, highlightedIndex$],
         );
 
         return (
@@ -219,7 +192,6 @@ export const JumpSearchMenuDropdown = forwardRef<DropdownMenuRootRef, JumpSearch
                                             data={searchResults}
                                             keyExtractor={keyExtractor}
                                             style={{ maxHeight: 256 }}
-                                            extraData={{ highlightedIndex }}
                                             getFixedItemSize={getFixedItemSize}
                                             getItemType={getItemType}
                                             renderItem={renderItem}
@@ -236,6 +208,25 @@ export const JumpSearchMenuDropdown = forwardRef<DropdownMenuRootRef, JumpSearch
         );
     },
 );
+
+function SearchResultRow({ result, index, highlightedIndex$, onSelect, getActionFromEvent }: {
+    result: SearchResult;
+    index: number;
+    highlightedIndex$: Observable<number>;
+    onSelect: (result: SearchResult, action: QueueAction) => void;
+    getActionFromEvent: SearchResultContentProps["getActionFromEvent"];
+}) {
+    const highlighted = useValue(() => highlightedIndex$.get() === index);
+    const handleDropdownSelect = useCallback((event?: NativeMouseEvent | GestureResponderEvent) => {
+        onSelect(result, getActionFromEvent(event));
+    }, [getActionFromEvent, onSelect, result]);
+    const handleContentSelect = useCallback((action: QueueAction) => onSelect(result, action), [onSelect, result]);
+    return <DropdownMenu.Item variant="unstyled" onSelect={handleDropdownSelect}
+        className={cn("hover:bg-white/10 rounded-md w-full overflow-hidden", highlighted && "bg-white/20")}>
+        <SearchResultContent result={result} index={index} highlighted={result.type !== "track" && highlighted}
+            onSelect={handleContentSelect} getActionFromEvent={getActionFromEvent} />
+    </DropdownMenu.Item>;
+}
 
 interface SearchResultContentProps {
     result: SearchResult;
@@ -262,7 +253,6 @@ function SearchResultContent({ result, index, highlighted, onSelect, getActionFr
 
     if (result.type === "track") {
         return (
-            // <View className={cn(highlighted && "bg-white/10")}>
             <TrackItem
                 track={result.item}
                 index={index}
