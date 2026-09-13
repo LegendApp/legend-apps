@@ -16,12 +16,13 @@ case "${LEGEND_BENCH_PREDICATES:-optimized}" in
 esac
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 "${LEGEND_BENCH_OPT:--O2}" -g -fobjc-arc -framework AppKit -framework CoreText \
   "${source_editor_flags[@]}" \
+  -iquote "$source_editor_root/packages/syntax-parser/cpp" \
   -I"$source_editor_headers/Public" -I"$source_editor_headers/Public/NitroModules" \
   -I"$source_editor_headers/Private/NitroModules" -I"$source_editor_headers/Public/React-jsi" \
   -I"$source_editor_headers/Public/ReactCommon" -I"$source_editor_headers/Public/React-callinvoker" \
   packages/source-editor/tests/SourceHighlightBenchmark.mm \
   packages/source-editor/macos/SourceInputView.mm packages/source-editor/macos/SourceLineLayout.mm \
   packages/source-editor/macos/SourceFileSession.mm packages/source-editor/macos/SourceSearch.mm \
-  packages/source-editor/macos/SourceSearchPanel.mm packages/syntax-parser/cpp/TreeSitterHighlighter.cpp \
+  packages/source-editor/macos/SourceSearchPanel.mm "${LEGEND_BENCH_HIGHLIGHTER:-packages/syntax-parser/cpp/TreeSitterHighlighter.cpp}" \
   packages/syntax-parser/cpp/SyntaxHighlighter.cpp packages/syntax-parser/cpp/SyntaxTheme.mm \
   "$source_editor_output/"*.o -o "$source_editor_output/highlight-benchmark"
