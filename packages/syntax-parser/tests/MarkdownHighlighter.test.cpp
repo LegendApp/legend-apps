@@ -36,6 +36,32 @@ static void expect(TreeSitterHighlighter& h, const std::u16string& source, const
   std::cerr << '\n'; assert(false);
 }
 int main(int argc, char** argv) {
+  for (const auto* language : {"markdown", "mdx"}) for (const std::u16string prefix : {u"", u"> "}) {
+    // A single embedded construct can span hundreds of included ranges. Query
+    // it once, but never color the excluded quote/list continuation markers.
+    std::u16string source = prefix + u"```typescript\r\n" + prefix + u"/* a long comment\r\n";
+    for (int i = 0; i < 330; ++i) source += prefix + u"continued 😀\r\n";
+    source += prefix + u"end */\r\n" + prefix + u"const value = 42;\r\n" + prefix + u"```\r\n\r\n"
+      + prefix + u"**strong\r\n" + prefix + u"across lines**\r\n";
+    TreeSitterHighlighter h(language); assert(h.parse(input(source)));
+    auto original = h.highlight(0, source.size());
+    for (uint32_t from = 0; from < source.size(); from += 101) {
+      const auto to = std::min<uint32_t>(source.size(), from + 211);
+      std::vector<TreeSitterSpan> clipped;
+      for (auto span : original) {
+        const auto end = std::min(to, span.start + span.length);
+        span.start = std::max(from, span.start);
+        if (span.start < end) { span.length = end - span.start; clipped.push_back(span); }
+      }
+      equal(clipped, h.highlight(from, to));
+    }
+    for (const auto& span : original) if (span.capture == "comment" || span.capture == "text.strong")
+      assert(source.substr(span.start, span.length).find(u"> ") == std::u16string::npos);
+    const auto at = source.find(u"continued");
+    replace(h, source, at, 9, u"*/ const changed = 2; /*");
+    TreeSitterHighlighter fresh(language); assert(fresh.parse(input(source)));
+    equal(h.highlight(0, source.size()), fresh.highlight(0, source.size()));
+  }
   for (const char* language : {"markdown", "md", "mdx"}) {
     TreeSitterHighlighter h(language);
     std::u16string source = u"---\r\ntitle: Demo\r\nactive: true\r\n---\r\n\r\n# Heading 👋\r\n\r\nPlain **bold** and *italic* and `inlineCode`.\r\n\r\n[docs](https://example.com)\r\n\r\n> Quoted **strong** text.\r\n\r\n```tsx title=demo\r\nconst demo = <View opacity={0.5} />;\r\n```\r\n\r\n~~~python\r\ndef greeting():\r\n    return 42\r\n~~~\r\n\r\n```unknown\r\nconst notCode = 1;\r\n```\r\n";

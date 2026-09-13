@@ -407,6 +407,9 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     if (excludeChildren) {
       for (uint32_t i = 0; i < ts_node_named_child_count(node); ++i) {
         const auto child = range(ts_node_named_child(node, i));
+        // Top-level Markdown continuation markers can be zero-width. They
+        // exclude no text and must not fragment an otherwise contiguous range.
+        if (child.start_byte == child.end_byte) continue;
         if (remaining.start_byte < child.start_byte) region.ranges.push_back({remaining.start_point, child.start_point, remaining.start_byte, child.start_byte});
         remaining.start_byte = child.end_byte; remaining.start_point = child.end_point;
       }
@@ -486,11 +489,22 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     cached.touched = ++impl_->injectionClock;
     // Captures such as emphasis can span excluded blockquote/list continuations.
     // Clip them back to included ranges so embedded styles cannot color markers.
+    // Query the visible region once: a quote or fenced block can contain hundreds
+    // of included ranges, and querying each one repeats the same tree traversal.
+    const auto regionStart = std::max(start, region.ranges.front().start_byte / 2);
+    const auto regionEnd = std::min(end, region.ranges.back().end_byte / 2);
+    if (regionStart >= regionEnd) continue;
+    const auto spans = child.highlight(regionStart, regionEnd, cancelled);
+    size_t firstSpan = 0;
     for (const auto& included : region.ranges) {
       const auto from = std::max(start, included.start_byte / 2), to = std::min(end, included.end_byte / 2);
       if (from >= to) continue;
-      auto spans = child.highlight(from, to, cancelled);
-      embedded.insert(embedded.end(), std::make_move_iterator(spans.begin()), std::make_move_iterator(spans.end()));
+      while (firstSpan < spans.size() && spans[firstSpan].start + spans[firstSpan].length <= from) ++firstSpan;
+      for (auto i = firstSpan; i < spans.size() && spans[i].start < to; ++i) {
+        const auto clippedStart = std::max(from, spans[i].start);
+        embedded.push_back({clippedStart, std::min(to, spans[i].start + spans[i].length) - clippedStart,
+          spans[i].capture, spans[i].captureId});
+      }
     }
   }
   if (embedded.empty()) return result;
