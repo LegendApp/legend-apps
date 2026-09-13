@@ -29,7 +29,7 @@ The second virtualized-document commit fixes a compiler incompatibility found du
 - Native document handles, cancellation tokens, timers, event history, and list mutation protocols remain imperative where they are not rendered state.
 - Small local inputs, hover/drag controls, measured geometry, and lazy native-object allocations remain where moving storage would not narrow updates.
 - Slides' other fully animated deck figures retain the scalar `useEffectTime` API, now backed by the observable clock. They still render when their animated output changes. FrameBudget demonstrates passing the clock to smaller visual consumers.
-- The unused `deckEditorSession` helper and public `presentation.useStep` API remain the audit's conditional follow-ups. No active app/deck consumers were found; they were not proposed as necessary current migrations.
+- The unused `deckEditorSession` helper was removed in the follow-up below. The public `presentation.useStep` API has no active app/deck consumers; its elapsed-time return value still intentionally updates its caller.
 
 ## Validation
 
@@ -64,3 +64,26 @@ Bun's filesystem access stalled in the original Documents checkout. Tests and ap
 This was source-level validation with deterministic render tests. No native UI profiling, device flows, release builds, or measured device speedups are claimed.
 
 Pre-existing Chat History layout/configuration changes, `scripts/lib/macosWorkspaces.ts`, and `artifacts/` were preserved and excluded from the migration commits.
+
+
+## Follow-up: document metadata, presentation context, and animation leaves
+
+The second audit found remaining boundaries beyond the original external-store replacements. These are now migrated:
+
+- **Markdown document:** observable document metadata replaces React snapshot ownership. Commands read the current snapshot when invoked; the document subscribes only to status, errors, and the loaded document ID. Data-source revision updates reach the selection-anchor publisher directly.
+- **Presentation:** context carries a stable observable runtime. `usePresentationValue` subscribes to a named field; `usePresentation$` exposes the stable handle. The existing snapshot provider and whole-runtime hooks remain available for callers that need those contracts. Background registration retains the observable handle instead of republishing snapshots on step changes.
+- **Slides:** deck runtime is derived from the canonical Slides observable. Fixed previews do not subscribe to audience navigation or epochs; outgoing live layers still deactivate and reactivate correctly. Active deck components and examples use field subscriptions. LiquidGlass progress reaches blur, shader uniforms, and overlay opacity leaves; Aurora clock ticks reach only its shader. The unused `deckEditorSession` store was deleted.
+- **Music:** AI prompt, modal, availability, and generation state have observable ownership. Prompt edits update the input and submit availability without rendering the toolbar. The generation command checks current pending state to prevent duplicate concurrent requests.
+
+Deterministic before/after checks against the previous committed implementations:
+
+| Workload | Before | After |
+| --- | ---: | ---: |
+| Three Markdown edits, each followed by undo and redo: document owner renders | 9 | 0 |
+| Five Music prompt edits: toolbar renders | 5 | 0 |
+
+Additional regressions verify field isolation for both presentation provider APIs, fixed preview isolation, outgoing-slide reactivation, animation reversal, shader/blur updates without Canvas renders or recapture, Aurora pause/preview/unmount cleanup, and generation request exclusion. These are render-boundary measurements, not device CPU or frame-time benchmarks.
+
+Validation: **546 tests passed** (330 Markdown document, 100 Music, 116 Slides/presentation), repository typecheck, and macOS configuration verification for Markdown, Music, and Slides. Strict React Compiler verification passed for all 452 app/package source files (one fewer after deleting the unused store). The 21 changed source files, including deck/example files outside the standard source scan, were also checked separately. That broader check exposed and fixed captured decrement syntax in Attention, a render-time native ref read in LifecycleAnimation, and Game of Life GPU setup nested inside the compiled React effect (moved to an imperative lifecycle function).
+
+The new presentation dependency is JavaScript-only; no native dependency graph or generated native projects changed. Concurrent Chat History highlighting/export work and investigation artifacts are excluded from these commits.
