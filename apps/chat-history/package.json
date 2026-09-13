@@ -15,6 +15,7 @@
     "@legend-apps/windows": "0.0.0",
     "@legendapp/list": "catalog:",
     "react-native-enriched-markdown": "^1.0.2",
-    "uniwind": "^1.6.3"
+    "uniwind": "^1.6.3",
+    "@legendapp/state": "catalog:"
   }
 }

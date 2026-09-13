@@ -1,3 +1,4 @@
+import { Profiler } from "react";
 import { getRecentChats, openChat, type ChatDocument, type ChatSummary } from "@legend-apps/chat-history";
 import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions } from "@legend-apps/window-manager";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -134,6 +135,46 @@ describe("Chat History host window", () => {
     expect(setMainWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Saved" }));
   });
 
+  it("updates only the old and new selected sidebar rows", async () => {
+    const chats: ChatSummary[] = [3, 2, 1].map((id) => ({
+      id: String(id), path: `/${id}.jsonl`, title: String(id), provider: "codex", updatedAt: id,
+    }));
+    jest.mocked(getRecentChats).mockResolvedValueOnce(chats);
+    await act(async () => { renderer = create(<App />); });
+    const sidebar = renderer!.root.findAllByType("LegendList" as never)[0]!;
+    const renders = new Map<string, number>();
+    let rows!: ReactTestRenderer;
+    try {
+      await act(async () => {
+        rows = create(<>{chats.map((summary) => (
+          <Profiler key={summary.id} id={summary.id} onRender={(id) => renders.set(id, (renders.get(id) ?? 0) + 1)}>
+            {sidebar.props.renderItem({ item: { type: "chat", id: summary.id, summary } })}
+          </Profiler>
+        ))}</>);
+      });
+      renders.clear();
+      await act(async () => rows.root.findAllByType("Pressable" as never)[1]!.props.onPress());
+      expect(renders.get("3")).toBe(1);
+      expect(renders.get("2")).toBe(1);
+      expect(renders.has("1")).toBe(false);
+      expect(rows.root.findAllByType("Pressable" as never)[1]!.props.accessibilityState.selected).toBe(true);
+    } finally {
+      if (rows) await act(async () => rows.unmount());
+    }
+  });
+
+  it("releases a pending document after the window unmounts", async () => {
+    const selected: ChatSummary = { id: "one", path: "/one.jsonl", title: "One", provider: "codex", updatedAt: 1 };
+    jest.mocked(getRecentChats).mockResolvedValueOnce([selected]);
+    let resolveOpen!: (document: ChatDocument) => void;
+    jest.mocked(openChat).mockReturnValueOnce(new Promise((resolve) => { resolveOpen = resolve; }));
+    await act(async () => { renderer = create(<App />); });
+    await act(async () => renderer.unmount());
+    const releaseNativeResources = jest.fn();
+    await act(async () => resolveOpen({ releaseNativeResources } as unknown as ChatDocument));
+    expect(releaseNativeResources).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes on reopen while retaining an unchanged selected transcript", async () => {
     const original: ChatSummary = { id: "old", title: "Original", path: "/old.jsonl", provider: "codex", updatedAt: 1 };
     const latest: ChatSummary = { id: "new", title: "New", path: "/new.jsonl", provider: "codex", updatedAt: 2 };
@@ -146,7 +187,9 @@ describe("Chat History host window", () => {
     expect(getRecentChats).toHaveBeenCalledTimes(2);
     expect(openChat).toHaveBeenCalledTimes(1);
     const sidebar = renderer!.root.findAllByType("LegendList" as never)[0]!;
-    expect(sidebar.props.extraData).toBe(original.id);
+    expect(sidebar.props.extraData).toBeUndefined();
+    const row = sidebar.props.renderItem({ item: { type: "chat", id: original.id, summary: original } });
+    expect(row.props.selectedId$.peek()).toBe(original.id);
     expect(sidebar.props.data.some((entry: { summary?: ChatSummary }) => entry.summary?.id === latest.id)).toBe(true);
     await act(async () => { reopen({ hasVisibleWindows: true }); });
     expect(getRecentChats).toHaveBeenCalledTimes(2);

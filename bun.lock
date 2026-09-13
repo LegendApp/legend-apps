@@ -38,6 +38,7 @@
         "@legend-apps/window-manager": "0.0.0",
         "@legend-apps/windows": "0.0.0",
         "@legendapp/list": "catalog:",
+        "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "^1.0.2",
         "uniwind": "^1.6.3",
       },
