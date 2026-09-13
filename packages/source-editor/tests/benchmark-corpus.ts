@@ -19,6 +19,8 @@ for (const fixture of fixtures) {
     for (const variant of order) {
       const result = JSON.parse(execFileSync(binaries[variant], [resolve(fixture.path), fixture.language, "roundtrip"], { encoding: "utf8", timeout: 180000 }));
       if (!result.hash || !Number.isFinite(result.highlight_ms)) throw new Error("Missing benchmark output");
+      if (result.completion_wait_ms !== undefined && (!Number.isFinite(result.completion_wait_ms)
+        || result.completion_wait_ms < 0 || result.highlight_ms < result.publish_ms)) throw new Error("Invalid completion timestamp");
       if (expected.has(fixture.name) && expected.get(fixture.name) !== result.hash) throw new Error(`Token mismatch: ${fixture.name}, variant ${variant}`);
       expected.set(fixture.name, result.hash);
       records.push({ fixture: fixture.name, variant, repetition, ...result });

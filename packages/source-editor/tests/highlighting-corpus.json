@@ -10,5 +10,8 @@
   { "name": "DevTools messages", "language": "json", "path": "node_modules/.bun/@react-native+debugger-frontend@0.81.6/node_modules/@react-native/debugger-frontend/dist/third-party/front_end/core/i18n/locales/en-US.json" },
   { "name": "TypeBox documentation", "language": "markdown", "path": "node_modules/.bun/@sinclair+typebox@0.34.49/node_modules/@sinclair/typebox/readme.md" },
   { "name": "Desktop talk", "language": "mdx", "path": "apps/slides/decks/react-native-desktop/talk.mdx" },
-  { "name": "Joi minified", "language": "javascript", "path": "node_modules/.bun/joi@17.13.3/node_modules/joi/dist/joi-browser.min.js" }
+  { "name": "Joi minified", "language": "javascript", "path": "node_modules/.bun/joi@17.13.3/node_modules/joi/dist/joi-browser.min.js" },
+  { "name": "Property Information documentation", "language": "markdown", "path": "node_modules/.bun/property-information@7.2.0/node_modules/property-information/readme.md" },
+  { "name": "Syntax parser documentation", "language": "markdown", "path": "packages/syntax-parser/TREE_SITTER.md" },
+  { "name": "Slides showcase", "language": "mdx", "path": "apps/slides/examples/showcase.mdx" }
 ]

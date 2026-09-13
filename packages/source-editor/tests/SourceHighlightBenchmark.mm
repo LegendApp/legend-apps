@@ -73,6 +73,8 @@ int main(int argc, char **argv) { @autoreleasepool {
   __block bool done = false;
   __block size_t next = 0, tokens = 0, batches = 0;
   __block double work = 0, publish = 0, maximumBatch = 0;
+  __block Clock::time_point highlightStarted;
+  __block double completionMs = 0;
   __block uint64_t hash = 1469598103934665603ULL;
   std::unordered_map<size_t, std::vector<SourceSyntaxToken>> retained;
   auto *cache = &retained;
@@ -86,6 +88,9 @@ int main(int argc, char **argv) { @autoreleasepool {
       (*cache)[row.index] = std::move(row.tokens);
     }
     publish += ms(began);
+    // Timestamp the final publication, not the next run-loop wakeup. Otherwise
+    // the harness's 1 ms polling interval distorts small-file comparisons.
+    if (next == parser->lineCount()) completionMs = ms(highlightStarted);
   };
   __block void (^step)(void);
   step = ^{
@@ -102,6 +107,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     } else { consume(std::move(rows)); if (next == parser->lineCount()) done = true; }
   };
   start = Clock::now();
+  highlightStarted = start;
   if (mode == "roundtrip") {
     dispatch_async(queue, step);
     while (!done) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
@@ -120,10 +126,11 @@ int main(int argc, char **argv) { @autoreleasepool {
     while (!complete.load(std::memory_order_acquire)) [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
     pump = nil;
   }
-  const auto total = ms(start); step = nil;
+  const auto completionWait = ms(start) - completionMs; step = nil;
   rusage usage{}; getrusage(RUSAGE_SELF, &usage);
   std::cout << "{\"mode\":\"" << mode << "\",\"bytes\":" << bytes << ",\"lines\":" << worker.lineCount()
-    << ",\"mirror_ms\":" << mirror << ",\"parse_ms\":" << parse << ",\"highlight_ms\":" << total
+    << ",\"mirror_ms\":" << mirror << ",\"parse_ms\":" << parse << ",\"highlight_ms\":" << completionMs
+    << ",\"completion_wait_ms\":" << completionWait
     << ",\"query_rows_ms\":" << work << ",\"publish_ms\":" << publish << ",\"max_batch_ms\":" << maximumBatch
     << ",\"batches\":" << batches << ",\"tokens\":" << tokens << ",\"hash\":\"" << hash
     << "\",\"peak_bytes\":" << usage.ru_maxrss << "}\n";
