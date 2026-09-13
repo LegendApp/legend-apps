@@ -42,26 +42,10 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
     const shuffleEnabled = useValue(settings$.playback.shuffle);
     const repeatMode = useValue(settings$.playback.repeatMode);
     const playbackControlsLayout = usePlaybackControlLayout();
-    const localTracks = useValue(localMusicState$.tracks);
-    const localPlaylists = useValue(localMusicState$.playlists);
-    const libraryTracks = useValue(library$.tracks);
-    const queueTracks = useValue(queue$.tracks);
     const { width: windowWidth } = useWindowDimensions();
     const [layoutWidth, setLayoutWidth] = useState(0);
-    const dropdownMenuRef = useRef<DropdownMenuRootRef>(null);
 
-    const { playlistMap, tracksByPath } = usePlaylistOptions({
-        tracks: localTracks,
-        playlists: localPlaylists,
-    });
     const { isLibraryOpen, toggleLibraryWindow } = useLibraryToggle();
-    const { handleTrackSelect, handleLibraryItemSelect, handleSearchPlaylistSelect } = usePlaylistQueueHandlers({
-        playlistMap,
-        tracksByPath,
-        localTracks,
-        libraryTracks,
-    });
-    const { handleSavePlaylist } = useQueueExporter({ queueTracks });
 
     const configuredControls = controlsOverride?.length
         ? controlsOverride
@@ -69,16 +53,6 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
           ? playbackControlsLayout.shown
           : DEFAULT_PLAYBACK_BUTTONS;
     const controls = configuredControls.filter((controlId, index, array) => array.indexOf(controlId) === index);
-
-    const hasSearchControl = controls.includes("search");
-
-    useOnHotkeys(
-        hasSearchControl
-            ? {
-                  Search: () => dropdownMenuRef.current?.open(),
-              }
-            : {},
-    );
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const nextWidth = event.nativeEvent.layout.width;
@@ -180,24 +154,11 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
                     }
                     case "search":
                         return (
-                            <JumpSearchMenuDropdown
-                                key="search"
-                                ref={dropdownMenuRef}
-                                tracks={localTracks}
-                                playlists={localPlaylists}
-                                onSelectTrack={handleTrackSelect}
-                                onSelectLibraryItem={handleLibraryItemSelect}
-                                onSelectPlaylist={handleSearchPlaylistSelect}
-                                dropdownWidth={dropdownWidth}
-                            />
+                            <PlaybackSearchControl key="search" dropdownWidth={dropdownWidth} />
                         );
                     case "savePlaylist":
                         return SUPPORT_PLAYLISTS ? (
-                            <SavePlaylistDropdown
-                                key="savePlaylist"
-                                disabled={queueTracks.length === 0}
-                                onSave={handleSavePlaylist}
-                            />
+                            <PlaybackSaveControl key="savePlaylist" />
                         ) : null;
                     case "toggleLibrary": {
                         const icon: SFSymbol = isLibraryOpen ? "play.square.stack.fill" : "play.square.stack";
@@ -224,4 +185,36 @@ export function PlaybackControls({ className, controls: controlsOverride }: Play
             })}
         </View>
     );
+}
+
+function PlaybackSearchControl({ dropdownWidth }: { dropdownWidth: number }) {
+    const localTracks = useValue(localMusicState$.tracks);
+    const localPlaylists = useValue(localMusicState$.playlists);
+    const libraryTracks = useValue(library$.tracks);
+    const dropdownMenuRef = useRef<DropdownMenuRootRef>(null);
+    const { playlistMap, tracksByPath } = usePlaylistOptions({
+        tracks: localTracks,
+        playlists: localPlaylists,
+    });
+    const { handleTrackSelect, handleLibraryItemSelect, handleSearchPlaylistSelect } = usePlaylistQueueHandlers({
+        playlistMap,
+        tracksByPath,
+        localTracks,
+        libraryTracks,
+    });
+
+    useOnHotkeys({ Search: () => dropdownMenuRef.current?.open() });
+    return (
+        <JumpSearchMenuDropdown ref={dropdownMenuRef} tracks={localTracks} playlists={localPlaylists}
+            onSelectTrack={handleTrackSelect} onSelectLibraryItem={handleLibraryItemSelect}
+            onSelectPlaylist={handleSearchPlaylistSelect} dropdownWidth={dropdownWidth} />
+    );
+}
+
+const getQueueTracks = () => queue$.tracks.peek();
+
+function PlaybackSaveControl() {
+    const isQueueEmpty = useValue(() => queue$.tracks.get().length === 0);
+    const { handleSavePlaylist } = useQueueExporter({ getQueueTracks });
+    return <SavePlaylistDropdown disabled={isQueueEmpty} onSave={handleSavePlaylist} />;
 }

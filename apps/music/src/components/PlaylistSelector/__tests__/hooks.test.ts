@@ -34,7 +34,7 @@ function renderQueueExporter(queueTracks: LocalTrack[]) {
     let exporter: ReturnType<typeof useQueueExporter> | undefined;
 
     function Harness() {
-        const value = useQueueExporter({ queueTracks });
+        const value = useQueueExporter({ getQueueTracks: () => queueTracks });
         React.useEffect(() => {
             exporter = value;
         }, [value]);
@@ -49,7 +49,7 @@ function renderQueueExporter(queueTracks: LocalTrack[]) {
         throw new Error("Failed to render queue exporter harness");
     }
 
-    return { exporter, renderer };
+    return { exporter, renderer, setQueueTracks: (tracks: LocalTrack[]) => { queueTracks = tracks; } };
 }
 
 describe("generateM3UPlaylist", () => {
@@ -82,6 +82,16 @@ describe("useQueueExporter", () => {
 
     afterEach(() => {
         localMusicState$.playlists.set([]);
+    });
+
+    it("reads the current queue when saving without a hook render", async () => {
+        const { exporter, renderer, setQueueTracks } = renderQueueExporter([createTrack("old")]);
+        setQueueTracks([]);
+        let result = true;
+        await act(async () => { result = await exporter.handleSavePlaylist("Current queue"); });
+        expect(result).toBe(false);
+        expect(showToast).toHaveBeenCalledWith("No tracks to save", "error");
+        act(() => renderer.unmount());
     });
 
     it("refuses to save an empty queue", async () => {

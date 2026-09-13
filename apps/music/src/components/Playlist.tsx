@@ -81,7 +81,9 @@ const normalizeTrackPath = (path: string): string => {
 
 export function Playlist() {
     perfCount("Playlist.render");
-    const localMusicState = useValue(localMusicState$);
+    const localTracks = useValue(localMusicState$.tracks);
+    const hasLibraryTracks = localTracks.length > 0;
+    const isDefaultPlaylistSelected = useValue(localMusicState$.isLocalFilesSelected);
     const libraryPaths = useValue(librarySettings$.paths);
     const queueTracks = useValue(queue$.tracks);
     const playlistStyle = useValue(settings$.general.playlistStyle);
@@ -89,8 +91,6 @@ export function Playlist() {
     const currentTrackSnapshot = localPlayerState$.currentTrack.peek() as Partial<QueuedTrack> | null;
     const currentTrackIndexSnapshot = localPlayerState$.currentIndex.peek();
     const hasConfiguredLibrary = libraryPaths.length > 0;
-    const hasLibraryTracks = localMusicState.tracks.length > 0;
-    const isDefaultPlaylistSelected = localMusicState.isLocalFilesSelected;
     const queueAIPlaylist = useMemo<PlaylistAIContext>(
         () => ({
             id: "queue",
@@ -109,14 +109,14 @@ export function Playlist() {
     );
     const existingTrackPathSet = useMemo(() => {
         const set = new Set<string>();
-        for (const track of localMusicState.tracks) {
+        for (const track of localTracks) {
             const normalized = normalizeTrackPath(track.filePath);
             if (normalized) {
                 set.add(normalized);
             }
         }
         return set;
-    }, [localMusicState.tracks]);
+    }, [localTracks]);
     const [isDragOver, setIsDragOver] = useState(false);
     const skipClickRef = useRef(false);
     const skipBackgroundClearRef = useRef(false);
@@ -836,52 +836,7 @@ export function Playlist() {
     );
 
     const emptyStateContent = isQueueEmpty ? (
-        localMusicState.isScanning ? (
-            <>
-                <Text className="text-white font-medium text-base">Scanning your library…</Text>
-                <Text className="text-white/70 text-sm mt-2">
-                    {localMusicState.scanTrackTotal > 0 &&
-                    localMusicState.scanTrackTotal >= localMusicState.scanTrackProgress &&
-                    localMusicState.scanTrackProgress > 0
-                        ? `${localMusicState.scanTrackProgress}/${localMusicState.scanTrackTotal} tracks`
-                        : `${localMusicState.scanTrackProgress} tracks processed`}
-                </Text>
-                {localMusicState.scanTotal > 0 ? (
-                    <Text className="text-white/50 text-xs mt-1">
-                        Folders {localMusicState.scanProgress}/{localMusicState.scanTotal}
-                    </Text>
-                ) : null}
-                <Text className="text-white/50 text-xs mt-4 text-center max-w-sm">
-                    You can still drag songs or folders here while we finish scanning.
-                </Text>
-                {isDragOver ? (
-                    <Text className="text-blue-300 text-sm mt-6 font-medium">Drop to add these tracks</Text>
-                ) : null}
-            </>
-        ) : hasLibraryTracks ? (
-            <>
-                <Text className="text-white font-semibold text-base">No tracks queued yet</Text>
-                <Text className="text-white/70 text-xs mt-2 text-center max-w-sm">
-                    Open your library to pick what plays next.
-                </Text>
-                <Button variant="primary" size="small" className="mt-4" onClick={handleAddLibraryTracks}>
-                    <Text className="text-white text-sm">Open Media Library</Text>
-                </Button>
-                {isDragOver ? (
-                    <Text className="text-blue-300 text-sm mt-6 font-medium">Drop to add these tracks</Text>
-                ) : null}
-            </>
-        ) : (
-            <>
-                <Text className="text-white font-semibold text-base">Add music to get started</Text>
-                <Text className="text-white/70 text-sm mt-2 text-center max-w-sm">
-                    Drag songs or folders here, or choose your library folders.
-                </Text>
-                <Button variant="primary" size="small" className="mt-4" onClick={handleOpenLibrarySettings}>
-                    <Text className="text-white text-sm">Open Library Settings</Text>
-                </Button>
-            </>
-        )
+        <PlaylistEmptyState isDragOver={isDragOver} onOpenLibrary={handleAddLibraryTracks} onOpenSettings={handleOpenLibrarySettings} />
     ) : null;
 
     const getFixedItemSize = useCallback(() => {
@@ -1028,7 +983,7 @@ export function Playlist() {
             </DragDropView>
             <AIButtons
                 canUseAI
-                libraryTracks={localMusicState.tracks}
+                libraryTracks={localTracks}
                 onAddTracks={handleAddAITracksToQueue}
                 playlist={queueAIPlaylist}
             />
@@ -1156,5 +1111,72 @@ function PlaylistDropZone({ position, allowDrop, onDrop }: PlaylistDropZoneProps
                 />
             )}
         </DroppableZone>
+    );
+}
+
+function PlaylistEmptyState({ isDragOver, onOpenLibrary, onOpenSettings }: {
+    isDragOver: boolean;
+    onOpenLibrary: () => void;
+    onOpenSettings: () => void;
+}) {
+    const isScanning = useValue(localMusicState$.isScanning);
+    const hasLibraryTracks = useValue(() => localMusicState$.tracks.get().length > 0);
+    return (
+        isScanning ? (
+            <PlaylistScanStatus isDragOver={isDragOver} />
+        ) : hasLibraryTracks ? (
+            <>
+                <Text className="text-white font-semibold text-base">No tracks queued yet</Text>
+                <Text className="text-white/70 text-xs mt-2 text-center max-w-sm">
+                    Open your library to pick what plays next.
+                </Text>
+                <Button variant="primary" size="small" className="mt-4" onClick={onOpenLibrary}>
+                    <Text className="text-white text-sm">Open Media Library</Text>
+                </Button>
+                {isDragOver ? (
+                    <Text className="text-blue-300 text-sm mt-6 font-medium">Drop to add these tracks</Text>
+                ) : null}
+            </>
+        ) : (
+            <>
+                <Text className="text-white font-semibold text-base">Add music to get started</Text>
+                <Text className="text-white/70 text-sm mt-2 text-center max-w-sm">
+                    Drag songs or folders here, or choose your library folders.
+                </Text>
+                <Button variant="primary" size="small" className="mt-4" onClick={onOpenSettings}>
+                    <Text className="text-white text-sm">Open Library Settings</Text>
+                </Button>
+            </>
+        )
+    );
+}
+
+function PlaylistScanStatus({ isDragOver }: { isDragOver: boolean }) {
+    const scanTrackTotal = useValue(localMusicState$.scanTrackTotal);
+    const scanTrackProgress = useValue(localMusicState$.scanTrackProgress);
+    const scanTotal = useValue(localMusicState$.scanTotal);
+    const scanProgress = useValue(localMusicState$.scanProgress);
+    return (
+            <>
+                <Text className="text-white font-medium text-base">Scanning your library…</Text>
+                <Text className="text-white/70 text-sm mt-2">
+                    {scanTrackTotal > 0 &&
+                    scanTrackTotal >= scanTrackProgress &&
+                    scanTrackProgress > 0
+                        ? `${scanTrackProgress}/${scanTrackTotal} tracks`
+                        : `${scanTrackProgress} tracks processed`}
+                </Text>
+                {scanTotal > 0 ? (
+                    <Text className="text-white/50 text-xs mt-1">
+                        Folders {scanProgress}/{scanTotal}
+                    </Text>
+                ) : null}
+                <Text className="text-white/50 text-xs mt-4 text-center max-w-sm">
+                    You can still drag songs or folders here while we finish scanning.
+                </Text>
+                {isDragOver ? (
+                    <Text className="text-blue-300 text-sm mt-6 font-medium">Drop to add these tracks</Text>
+                ) : null}
+            </>
     );
 }
