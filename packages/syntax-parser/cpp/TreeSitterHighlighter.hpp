@@ -51,6 +51,7 @@ public:
   static void registerPack(const LegendGrammarPackV1& pack);
 #ifdef LEGEND_SYNTAX_TEST_GRAMMARS
   static size_t queryCompilationCount();
+  size_t codeInjectionParseCount() const;
 #endif
   std::vector<std::string> missingLanguages() const;
   static std::string themeScope(const std::string& capture);

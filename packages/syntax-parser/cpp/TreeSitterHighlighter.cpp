@@ -1,5 +1,6 @@
 #include "TreeSitterHighlighter.hpp"
 #include "QueryRegex.hpp"
+#include "WeightedLruCache.hpp"
 #include "../vendor/tree-sitter/Symbols.h"
 #include "../vendor/tree-sitter/runtime/include/tree_sitter/api.h"
 #include "../vendor/tree-sitter/queries/Highlights.hpp"
@@ -158,11 +159,15 @@ struct TreeSitterHighlighter::Impl {
     std::string language;
     std::unique_ptr<TreeSitterHighlighter> highlighter;
     size_t revision = 0;
-    uint64_t touched = 0;
   };
-  std::unordered_map<const void*, Injection> injections;
+  // Cheap inline nodes must not evict costly code trees. Bound each tier by
+  // both entry count and source bytes, with constant-time LRU eviction.
+  WeightedLruCache<const void*, Injection> inlineInjections{128, 128 * 1024};
+  WeightedLruCache<const void*, Injection> codeInjections{64, 2 * 1024 * 1024};
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+  size_t codeInjectionParses = 0;
+#endif
   std::vector<TreeSitterEdit> injectionEdits;
-  uint64_t injectionClock = 0;
   unsigned injectionDepth = 0;
   std::shared_ptr<const Predicates> predicates;
   std::vector<Capture> captureScratch;
@@ -185,6 +190,7 @@ struct TreeSitterHighlighter::Impl {
 bool TreeSitterHighlighter::supports(const std::string& language) { return findLanguage(language) != nullptr; }
 #ifdef LEGEND_SYNTAX_TEST_GRAMMARS
 size_t TreeSitterHighlighter::queryCompilationCount() { return queryCompilations.load(); }
+size_t TreeSitterHighlighter::codeInjectionParseCount() const { return impl_->codeInjectionParses; }
 #endif
 void TreeSitterHighlighter::registerPack(const LegendGrammarPackV1& pack) {
   if (pack.abi != 1 || !pack.name || !pack.scope || !pack.query || !pack.language)
@@ -310,7 +316,7 @@ std::string TreeSitterHighlighter::rootScopeForCapture(uint32_t capture) {
 std::string TreeSitterHighlighter::rootScope() const { return impl_->language->scope; }
 TreeSitterHighlighter::~TreeSitterHighlighter() = default;
 void TreeSitterHighlighter::reset() {
-  impl_->injections.clear(); impl_->injectionEdits.clear();
+  impl_->inlineInjections.clear(); impl_->codeInjections.clear(); impl_->injectionEdits.clear();
   ts_parser_reset(impl_->parser); ts_tree_delete(impl_->tree); impl_->tree = nullptr;
   impl_->length = 0; impl_->ready = false;
   impl_->suspended = false;
@@ -327,7 +333,9 @@ void TreeSitterHighlighter::edit(const TreeSitterEdit& edit) {
   ts_tree_edit(impl_->tree, &native);
   // Apply edits lazily to a reused embedded tree only when its region is needed.
   // Bound both history and cached trees; retained row colors live in the editor.
-  if (impl_->injectionEdits.size() == 256) { impl_->injections.clear(); impl_->injectionEdits.clear(); }
+  if (impl_->injectionEdits.size() == 256) {
+    impl_->inlineInjections.clear(); impl_->codeInjections.clear(); impl_->injectionEdits.clear();
+  }
   impl_->injectionEdits.push_back(edit);
   const auto map = [&](uint32_t offset) {
     if (offset <= edit.start) return offset;
@@ -483,11 +491,12 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
   if (ts_query_cursor_did_exceed_match_limit(impl_->injectionCursor)) throw std::runtime_error("Embedded query match limit exceeded");
   std::vector<TreeSitterSpan> embedded;
   for (const auto& region : regions) {
-    if (impl_->injections.size() >= 128 && !impl_->injections.count(region.node.id)) {
-      const auto oldest = std::min_element(impl_->injections.begin(), impl_->injections.end(), [](const auto& a, const auto& b) { return a.second.touched < b.second.touched; });
-      impl_->injections.erase(oldest);
-    }
-    auto& cached = impl_->injections[region.node.id];
+    size_t sourceBytes = 0;
+    for (const auto& range : region.ranges) sourceBytes += range.end_byte - range.start_byte;
+    auto& cache = region.language == std::string_view("markdown-inline") ? impl_->inlineInjections : impl_->codeInjections;
+    Impl::Injection transient;
+    auto* retained = cache.acquire(region.node.id, sourceBytes);
+    auto& cached = retained ? *retained : transient;
     const bool created = !cached.highlighter || cached.language != region.language;
     if (created) {
       cached.highlighter = std::make_unique<TreeSitterHighlighter>(region.language);
@@ -503,12 +512,14 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     if (!ts_parser_set_included_ranges(child.impl_->parser, region.ranges.data(), static_cast<uint32_t>(region.ranges.size())))
       throw std::runtime_error("Invalid embedded language ranges");
     if (created || changed || !child.impl_->ready) {
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+      if (region.language != std::string_view("markdown-inline")) ++impl_->codeInjectionParses;
+#endif
       while (!child.parseSlice(impl_->input, 4, cancelled)) {
         if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
         std::this_thread::yield();
       }
     } else child.impl_->input = impl_->input; // Refresh the reader's lifetime even with an unchanged tree.
-    cached.touched = ++impl_->injectionClock;
     // Captures such as emphasis can span excluded blockquote/list continuations.
     // Clip them back to included ranges so embedded styles cannot color markers.
     // Query the visible region once: a quote or fenced block can contain hundreds
@@ -517,6 +528,10 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     const auto regionEnd = std::min(end, region.ranges.back().end_byte / 2);
     if (regionStart >= regionEnd) continue;
     const auto spans = child.highlight(regionStart, regionEnd, cancelled);
+    if (!retained) {
+      auto missing = child.missingLanguages();
+      impl_->missingLanguages.insert(impl_->missingLanguages.end(), missing.begin(), missing.end());
+    }
     size_t firstSpan = 0;
     for (const auto& included : region.ranges) {
       const auto from = std::max(start, included.start_byte / 2), to = std::min(end, included.end_byte / 2);
@@ -551,10 +566,12 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
 }
 std::vector<std::string> TreeSitterHighlighter::missingLanguages() const {
   auto result = impl_->missingLanguages;
-  for (const auto& entry : impl_->injections) if (entry.second.highlighter) {
-    auto nested = entry.second.highlighter->missingLanguages();
+  const auto collect = [&](const Impl::Injection& entry) { if (entry.highlighter) {
+    auto nested = entry.highlighter->missingLanguages();
     result.insert(result.end(), nested.begin(), nested.end());
-  }
+  } };
+  impl_->inlineInjections.forEach(collect);
+  impl_->codeInjections.forEach(collect);
   std::sort(result.begin(), result.end());
   result.erase(std::unique(result.begin(), result.end()), result.end());
   return result;

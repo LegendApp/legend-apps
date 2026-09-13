@@ -185,6 +185,23 @@ int main(int argc, char** argv) {
     TreeSitterHighlighter fresh("mdx"); assert(fresh.parse(input(source)));
     equal(h.highlight(10, source.size(), &cancel), fresh.highlight(10, source.size()));
   }
+  {
+    // Hundreds of cheap inline regions must not evict the preceding code tree.
+    std::u16string source = u"```typescript\nconst preserved = 42;\n```\n\n";
+    for (int i = 0; i < 400; ++i) source += u"Paragraph with **bold**.\n\n";
+    TreeSitterHighlighter h("markdown"); assert(h.parse(input(source)));
+    const auto original = h.highlight(0, source.size());
+    assert(h.codeInjectionParseCount() == 1);
+    equal(original, h.highlight(0, source.size()));
+    equal(original, h.highlight(0, source.size()));
+    assert(h.codeInjectionParseCount() == 1);
+    replace(h, source, source.find(u"42"), 2, u"'changed'");
+    TreeSitterHighlighter fresh("markdown"); assert(fresh.parse(input(source)));
+    equal(h.highlight(0, source.size()), fresh.highlight(0, source.size()));
+    assert(h.codeInjectionParseCount() > 1);
+    h.reset(); assert(h.parse(input(source)));
+    equal(h.highlight(0, source.size()), fresh.highlight(0, source.size()));
+  }
   for (int i = 1; i < argc; ++i) {
     legend::source::SourceFileReader file(argv[i]);
     std::u16string source;
