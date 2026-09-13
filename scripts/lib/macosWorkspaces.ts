@@ -11,6 +11,7 @@ import {
   macOSXcodeProjectName,
 } from "./macosShell";
 import { runCommand } from "./run";
+import { getMacOSReleaseMarkdownConfig, getMacOSReleaseProfile } from "./macosReleaseProfile";
 import type { AppManifest } from "./types";
 
 const macosSourceDir = path.join(shellDir, "macos");
@@ -36,11 +37,11 @@ export function getMacOSAppDevProjectPath(appId: string) {
 }
 
 export function getMacOSReleaseWorkspaceDir(appId: string) {
-  return path.join(workspaceRoot, "release", appId, "macos");
+  return path.join(getMacOSReleaseAppRootDir(appId), "macos");
 }
 
 export function getMacOSReleaseAppRootDir(appId: string) {
-  return path.join(workspaceRoot, "release", appId);
+  return path.join(workspaceRoot, getMacOSReleaseProfile(appId), appId);
 }
 
 export function getMacOSReleaseProjectPath(appId: string) {
@@ -58,7 +59,7 @@ export function getMacOSReleaseDerivedDataPath(workspaceDir: string, arch: "arm"
 export function ensureMacOSReleaseWorkspace(manifest: AppManifest, configPath: string) {
   const workspaceDir = getMacOSReleaseWorkspaceDir(manifest.id);
   fs.mkdirSync(workspaceDir, { recursive: true });
-  const didUpdateWorkspaceLinks = ensureReleaseWorkspaceLinks();
+  const didUpdateWorkspaceLinks = ensureReleaseWorkspaceLinks(manifest.id);
   const didUpdateAppLinks = ensureReleaseAppRoot(manifest, configPath);
   clearRelocatedDerivedData(workspaceDir, didUpdateWorkspaceLinks || didUpdateAppLinks);
   copyMacOSTemplate(workspaceDir);
@@ -104,8 +105,8 @@ function copyAppMacOSTemplate(workspaceDir: string, manifest: AppManifest) {
   });
 }
 
-function ensureReleaseWorkspaceLinks() {
-  return ensureWorkspaceLinks(path.join(workspaceRoot, "release"));
+function ensureReleaseWorkspaceLinks(appId: string) {
+  return ensureWorkspaceLinks(path.dirname(getMacOSReleaseAppRootDir(appId)));
 }
 
 function ensureDevWorkspaceLinks() {
@@ -276,7 +277,12 @@ function writeReleasePackageJson(manifest: AppManifest, configPath: string, appR
   const packageJsonPath = path.join(appRoot, "package.json");
   const packageJson = {
     ...shellPackage,
-    name: `shell-${manifest.id}-release`,
+    name: `shell-${manifest.id}-${getMacOSReleaseProfile(manifest.id)}`,
+    "enriched-markdown": getMacOSReleaseMarkdownConfig(
+      manifest.id,
+      shellPackage["enriched-markdown"],
+      appPackage["enriched-markdown"],
+    ),
     dependencies: filterDependencies({
       ...shellPackage.dependencies,
       ...appPackage.dependencies,
@@ -293,6 +299,7 @@ function writeReleasePackageJson(manifest: AppManifest, configPath: string, appR
 
 function readJson(filePath: string) {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+    "enriched-markdown"?: Record<string, unknown>;
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   } & Record<string, unknown>;
@@ -426,6 +433,8 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
     addFile(hash, path.join(appsDir, config.id, "package.json"));
   }
   addFile(hash, path.join(workspaceDir, "Podfile"));
+  // App/profile overrides control which native Markdown sources CocoaPods compiles.
+  addFile(hash, path.join(workspaceDir, "..", "package.json"));
 
   if (config.activeNativePackages?.some((pkg) => pkg.root === "packages/diff-parser")) {
     addFile(hash, path.join(rootDir, "packages/libgit2/LegendLibGit2.podspec"));
