@@ -49,6 +49,9 @@ public:
   // Call only after platform signature/integrity validation. Libraries must stay
   // loaded for the process lifetime; active trees retain their language pointer.
   static void registerPack(const LegendGrammarPackV1& pack);
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+  static size_t queryCompilationCount();
+#endif
   std::vector<std::string> missingLanguages() const;
   static std::string themeScope(const std::string& capture);
   void reset();

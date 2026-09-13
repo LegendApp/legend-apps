@@ -32,9 +32,11 @@ std::string TreeSitterHighlighter::languageForPath(std::string path) {
 }
 namespace {
 std::mutex registryMutex;
+struct CompiledQuery;
 struct DynamicLanguage {
   std::string name, scope, query;
   TreeSitterLanguage entry;
+  std::shared_ptr<const CompiledQuery> compiled;
 };
 std::map<std::string, std::unique_ptr<DynamicLanguage>> dynamicLanguages;
 std::vector<std::pair<std::string, std::string>>& captureCatalog() {
@@ -123,6 +125,24 @@ std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
   }
   return result;
 }
+// Pack validation and worker construction share the same immutable artifact.
+// Parsers, cursors and predicate-result caches remain worker-local.
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+std::atomic_size_t queryCompilations{0};
+#endif
+struct CompiledQuery {
+  std::shared_ptr<TSQuery> query;
+  std::shared_ptr<const Predicates> predicates;
+  CompiledQuery(const TSLanguage* grammar, const char* source) {
+    uint32_t offset = 0; TSQueryError error;
+    query = {ts_query_new(grammar, source, static_cast<uint32_t>(std::string_view(source).size()), &offset, &error), ts_query_delete};
+    if (!query) throw std::runtime_error("Invalid Tree-sitter query at " + std::to_string(offset) + " error " + std::to_string(error));
+    predicates = compilePredicates(query.get());
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+    ++queryCompilations;
+#endif
+  }
+};
 }
 struct TreeSitterHighlighter::Impl {
   std::vector<std::string> missingLanguages;
@@ -163,6 +183,9 @@ struct TreeSitterHighlighter::Impl {
   ~Impl() { ts_tree_delete(tree); ts_query_cursor_delete(cursor); if (injectionCursor) ts_query_cursor_delete(injectionCursor); ts_parser_delete(parser); }
 };
 bool TreeSitterHighlighter::supports(const std::string& language) { return findLanguage(language) != nullptr; }
+#ifdef LEGEND_SYNTAX_TEST_GRAMMARS
+size_t TreeSitterHighlighter::queryCompilationCount() { return queryCompilations.load(); }
+#endif
 void TreeSitterHighlighter::registerPack(const LegendGrammarPackV1& pack) {
   if (pack.abi != 1 || !pack.name || !pack.scope || !pack.query || !pack.language)
     throw std::runtime_error("Invalid grammar pack descriptor");
@@ -171,16 +194,14 @@ void TreeSitterHighlighter::registerPack(const LegendGrammarPackV1& pack) {
   const auto abi = ts_language_abi_version(grammar);
   if (abi < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION || abi > TREE_SITTER_LANGUAGE_VERSION)
     throw std::runtime_error("Incompatible grammar ABI");
-  uint32_t offset = 0; TSQueryError error;
-  auto query = std::unique_ptr<TSQuery, decltype(&ts_query_delete)>(
-    ts_query_new(grammar, pack.query, static_cast<uint32_t>(std::string_view(pack.query).size()), &offset, &error), ts_query_delete);
-  if (!query) throw std::runtime_error("Invalid pack query at " + std::to_string(offset));
-  compilePredicates(query.get());
+  auto compiled = std::make_shared<CompiledQuery>(grammar, pack.query);
+  const auto& query = compiled->query;
   std::lock_guard lock(registryMutex);
   // Never replace a live language/query pair. Updates take effect next launch.
   if (dynamicLanguages.count(pack.name)) return;
   for (const auto& entry : treeSitterLanguages) if (std::string_view(entry.name) == pack.name) return;
   auto value = std::make_unique<DynamicLanguage>();
+  value->compiled = std::move(compiled);
   value->name = pack.name; value->scope = pack.scope; value->query = pack.query;
   const auto start = static_cast<uint32_t>(captureCatalog().size());
   for (uint32_t i = 0; i < ts_query_capture_count(query.get()); ++i) {
@@ -233,19 +254,20 @@ TreeSitterHighlighter::TreeSitterHighlighter(const std::string& language) : impl
   if (!ts_parser_set_language(impl_->parser, grammar)) throw std::runtime_error("Incompatible Tree-sitter grammar ABI");
   // TSQuery is immutable; mutable cursors/parsers stay local to each worker.
   static std::mutex mutex;
-  static std::map<std::string, std::shared_ptr<TSQuery>> queries;
+  static std::map<std::string, std::shared_ptr<const CompiledQuery>> queries;
   std::lock_guard lock(mutex);
   auto& cached = queries[canonical];
   if (!cached) {
-    const std::string query = impl_->language->query;
-    uint32_t offset = 0; TSQueryError error;
-    cached = {ts_query_new(grammar, query.data(), static_cast<uint32_t>(query.size()), &offset, &error), ts_query_delete};
-    if (!cached) throw std::runtime_error("Invalid " + canonical + " Tree-sitter query at " + std::to_string(offset) + " error " + std::to_string(error));
+    {
+      std::lock_guard registryLock(registryMutex);
+      const auto found = dynamicLanguages.find(canonical);
+      if (found != dynamicLanguages.end()) cached = found->second->compiled;
+    }
+    // Only fixture grammars bypass pack registration.
+    if (!cached) cached = std::make_shared<CompiledQuery>(grammar, impl_->language->query);
   }
-  impl_->query = cached;
-  static std::map<std::string, std::shared_ptr<const Predicates>> predicates;
-  if (!predicates[canonical]) predicates[canonical] = compilePredicates(cached.get());
-  impl_->predicates = predicates[canonical];
+  impl_->query = cached->query;
+  impl_->predicates = cached->predicates;
   if (canonical == "markdown" || canonical == "mdx") {
     static std::map<std::string, std::shared_ptr<TSQuery>> injections;
     auto& injection = injections[canonical];
@@ -259,8 +281,8 @@ TreeSitterHighlighter::TreeSitterHighlighter(const std::string& language) : impl
     impl_->injectionQuery = injection;
     impl_->injectionCursor = ts_query_cursor_new();
   }
-  for (uint32_t i = 0; i < ts_query_capture_count(cached.get()); ++i) {
-    uint32_t size; const auto* name = ts_query_capture_name_for_id(cached.get(), i, &size);
+  for (uint32_t i = 0; i < ts_query_capture_count(impl_->query.get()); ++i) {
+    uint32_t size; const auto* name = ts_query_capture_name_for_id(impl_->query.get(), i, &size);
     impl_->captures.emplace_back(name, size);
     const auto& entry = *impl_->language;
     uint32_t id = entry.captureOffset;

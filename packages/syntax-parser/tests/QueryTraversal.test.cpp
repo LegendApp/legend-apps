@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <random>
+#include <thread>
 
 using namespace margelo::nitro::legendapps::syntaxparser;
 extern "C" const TSLanguage* tree_sitter_javascript();
@@ -51,7 +52,16 @@ int main() {
     ((identifier) @builtin (#match? @builtin "^[A-Z]") (#match? @builtin "^[A-Z_][A-Z\\d_]+$"))
     (array (identifier)+ @element)
   )";
+  const auto compilations = TreeSitterHighlighter::queryCompilationCount();
   TreeSitterHighlighter::registerPack({1, "query-traversal-test", "source.js", query, tree_sitter_javascript});
+  assert(TreeSitterHighlighter::queryCompilationCount() == compilations + 1);
+  std::vector<std::thread> workers;
+  for (int i = 0; i < 8; ++i) workers.emplace_back([] {
+    TreeSitterHighlighter highlighter("query-traversal-test");
+    assert(highlighter.rootScope() == "source.js");
+  });
+  for (auto& worker : workers) worker.join();
+  assert(TreeSitterHighlighter::queryCompilationCount() == compilations + 1);
   const std::u16string original = u"const alpha = BETA; const other = Gamma; same(alpha, other); [alpha, BETA, same]; // 😀\r\n";
   for (const auto* language : {"query-traversal-test", "javascript", "typescript", "tsx"}) {
     verify(language, original);
