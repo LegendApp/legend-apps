@@ -11,6 +11,7 @@ runtime_root="$download_root/tree-sitter-208c6cac1453315e979f05ab34b6d4f7cd0340b
 mkdir -p "$vendor_root/runtime" "$vendor_root/queries"
 cp -R "$runtime_root/lib/src" "$runtime_root/lib/include" "$vendor_root/runtime/"
 cp "$runtime_root/LICENSE" "$vendor_root/runtime/LICENSE"
+git -C "$parser_root/../.." apply "$parser_root/patches/tree-sitter-query-dispatch.patch"
 node "$parser_root/scripts/vendor-tree-sitter-grammars.ts"
 node "$parser_root/scripts/embed-tree-sitter-queries.ts"
 node "$parser_root/scripts/compile-tree-sitter.ts" "$download_root/build" --update-symbols

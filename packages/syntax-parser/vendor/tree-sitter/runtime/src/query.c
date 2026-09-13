@@ -298,6 +298,8 @@ struct TSQuery {
   Array(CaptureQuantifiers) capture_quantifiers;
   Array(QueryStep) steps;
   Array(PatternEntry) pattern_map;
+  // Legend: immutable symbol dispatch avoids binary search at every visited node.
+  Array(uint32_t) pattern_map_offsets;
   Array(TSQueryPredicateStep) predicate_steps;
   Array(QueryPattern) patterns;
   Array(StepOffset) step_offsets;
@@ -2794,6 +2796,7 @@ TSQuery *ts_query_new(
   *self = (TSQuery) {
     .steps = array_new(),
     .pattern_map = array_new(),
+    .pattern_map_offsets = array_new(),
     .captures = symbol_table_new(),
     .capture_quantifiers = array_new(),
     .predicate_values = symbol_table_new(),
@@ -2906,6 +2909,15 @@ TSQuery *ts_query_new(
   }
 
   array_delete(&self->string_buffer);
+  array_grow_by(&self->pattern_map_offsets, ts_language_symbol_count(language));
+  for (uint32_t i = 0; i < self->pattern_map_offsets.size; i++) {
+    self->pattern_map_offsets.contents[i] = UINT32_MAX;
+  }
+  // Reverse iteration keeps the first entry for each symbol, preserving pattern order.
+  for (uint32_t i = self->pattern_map.size; i > self->wildcard_root_pattern_count; i--) {
+    TSSymbol symbol = array_get(&self->steps, array_get(&self->pattern_map, i - 1)->step_index)->symbol;
+    if (symbol < self->pattern_map_offsets.size) self->pattern_map_offsets.contents[symbol] = i - 1;
+  }
   return self;
 }
 
@@ -2913,6 +2925,7 @@ void ts_query_delete(TSQuery *self) {
   if (self) {
     array_delete(&self->steps);
     array_delete(&self->pattern_map);
+    array_delete(&self->pattern_map_offsets);
     array_delete(&self->predicate_steps);
     array_delete(&self->patterns);
     array_delete(&self->step_offsets);
@@ -3068,6 +3081,8 @@ void ts_query_disable_pattern(
   TSQuery *self,
   uint32_t pattern_index
 ) {
+  // Rare query mutation falls back to the original lookup, never stale offsets.
+  array_clear(&self->pattern_map_offsets);
   // Remove the given pattern from the pattern map. Its steps will still
   // be in the `steps` array, but they will never be read.
   for (unsigned i = 0; i < self->pattern_map.size; i++) {
@@ -3803,7 +3818,14 @@ static inline bool ts_query_cursor__advance(
 
         // Add new states for any patterns whose root node matches this node.
         unsigned i;
-        if (ts_query__pattern_map_search(self->query, symbol, &i)) {
+        bool has_pattern;
+        if (symbol < self->query->pattern_map_offsets.size) {
+          i = self->query->pattern_map_offsets.contents[symbol];
+          has_pattern = i != UINT32_MAX;
+        } else {
+          has_pattern = ts_query__pattern_map_search(self->query, symbol, &i);
+        }
+        if (has_pattern) {
           PatternEntry *pattern = array_get(&self->query->pattern_map, i);
 
           QueryStep *step = array_get(&self->query->steps, pattern->step_index);
