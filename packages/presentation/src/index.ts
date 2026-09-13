@@ -1,5 +1,5 @@
 export { Background, BackgroundHost, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
-export { PresentationProvider, usePresentation, useSlideLifecycle, useStep } from "./runtime";
+export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
 export { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, createFocusSurface, measureFocusSurface, createFocusMotion } from "./focus";

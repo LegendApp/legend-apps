@@ -1,9 +1,11 @@
 import { createContext, useContext, useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
-import { PresentationProvider, usePresentation } from "./runtime";
+import { useObservable, useValue } from "@legendapp/state/react";
+import type { Observable } from "@legendapp/state";
+import { PresentationObservableProvider, usePresentation$ } from "./runtime";
 import type { PresentationRuntime } from "./types";
 
-type Entry = { children: ReactNode; runtime: PresentationRuntime; priority: number };
+type Entry = { children: ReactNode; runtime$: Observable<PresentationRuntime>; priority: number };
 type Registry = (id: string, entry: Entry | undefined) => void;
 const RegistryContext = createContext<Registry | null>(null);
 const SizeContext = createContext({ width: 1920, height: 1080 });
@@ -12,12 +14,12 @@ const HasBackgroundContext = createContext(false);
 /** Declare in a template or slide. Higher priority overrides the template background. */
 export function Background({ children, priority = 0 }: { children?: ReactNode; priority?: number }) {
   const register = useContext(RegistryContext);
-  const runtime = usePresentation();
+  const runtime$ = usePresentation$();
   const id = useId();
   useLayoutEffect(() => {
-    register?.(id, { children, runtime, priority });
+    register?.(id, { children, runtime$, priority });
     return () => register?.(id, undefined);
-  }, [register, id, children, runtime, priority]);
+  }, [register, id, children, runtime$, priority]);
   return null;
 }
 
@@ -38,8 +40,8 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
     return { ...current, [id]: entry };
   }));
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const selected = Object.values(entries).filter((entry) => entry.runtime.slideIndex === slideIndex)
-    .sort((a, b) => b.priority - a.priority)[0];
+  const selected = useValue(() => Object.values(entries).filter((entry) => entry.runtime$.slideIndex.get() === slideIndex)
+    .sort((a, b) => b.priority - a.priority)[0]);
   return (
     <RegistryContext.Provider value={register}>
       <HasBackgroundContext.Provider value={Boolean(selected)}>
@@ -49,7 +51,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
         }}>
           <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
             <SizeContext.Provider value={size}>
-              {selected && <PresentationProvider value={{ ...selected.runtime, isActive: !isPreview, isPreview, isPreparing: false }}>{selected.children}</PresentationProvider>}
+              {selected && <SelectedBackground entry={selected} isPreview={isPreview} />}
             </SizeContext.Provider>
           </View>
           {children}
@@ -58,6 +60,11 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
     </RegistryContext.Provider>
   );
 }
+function SelectedBackground({ entry, isPreview }: { entry: Entry; isPreview: boolean }) {
+  const runtime$ = useObservable(() => ({ ...entry.runtime$.get(), isActive: !isPreview, isPreview, isPreparing: false }), [entry, isPreview]);
+  return <PresentationObservableProvider value={runtime$}>{entry.children}</PresentationObservableProvider>;
+}
+
 const styles = StyleSheet.create({
   host: { flex: 1, overflow: "hidden" },
   background: { ...StyleSheet.absoluteFillObject, zIndex: 0 },

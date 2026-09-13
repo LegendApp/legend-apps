@@ -620,6 +620,7 @@
       "name": "@legend-apps/presentation",
       "version": "0.0.0",
       "dependencies": {
+        "@legendapp/state": "catalog:",
         "@mdx-js/mdx": "^3.1.1",
         "esbuild": "^0.25.9",
         "react": "catalog:",
