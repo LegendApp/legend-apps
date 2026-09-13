@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { observable, ObservableHint, type OpaqueObject } from "@legendapp/state";
 import type { ComponentType } from "react";
 import type { DeckConfig, PresentationTemplates, SlideConfig } from "@legend-apps/presentation";
 import type { CompileDeckSuccess } from "@legend-apps/presentation";
@@ -33,7 +33,12 @@ export type SlidesState = {
   templates: PresentationTemplates;
 };
 
-let state: SlidesState = {
+// Compiled components and template functions are data, not computed observables.
+type SlidesObservableState = Omit<SlidesState, "component"> & {
+  compiled: OpaqueObject<{ component: ComponentType<any> }> | null;
+};
+
+export const slidesState$ = observable<SlidesObservableState>({
   deckLocked: false,
   displayMessage: "",
   runtimeErrors: [],
@@ -43,7 +48,7 @@ let state: SlidesState = {
   blackout: false,
   buildErrors: [],
   buildWarnings: [],
-  component: null,
+  compiled: null,
   config: {},
   currentSlide: 0,
   currentStep: 0,
@@ -55,15 +60,16 @@ let state: SlidesState = {
   revision: 0,
   slides: [],
   status: "idle",
-  templates: {},
-};
-const listeners = new Set<() => void>();
+  templates: ObservableHint.opaque({}),
+});
 
 export function getSlidesState() {
-  return state;
+  const { compiled, ...state } = slidesState$.peek();
+  return { ...state, component: compiled?.component ?? null };
 }
 
 export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesState) => Partial<SlidesState>)) {
+  const state = getSlidesState();
   const next = { ...state, ...(typeof update === "function" ? update(state) : update) };
   next.currentStep = Math.max(0, Math.min(next.currentStep, getSlideStepCount(next.slides[next.currentSlide]) - 1));
   // Both windows share one clock, including when the audience opens mid-slide.
@@ -82,18 +88,14 @@ export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesS
     next.stepEpochs = Object.fromEntries(Object.entries(state.stepEpochs).filter(([step]) => Number(step) <= next.currentStep));
     if (next.currentStep > state.currentStep) next.stepEpochs[next.currentStep] = next.stepStartedAt;
   }
-  state = next;
-  listeners.forEach((listener) => listener());
-}
-
-export function useSlidesState<T>(selector: (value: SlidesState) => T) {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => selector(state),
-  );
+  const { component, ...data } = next;
+  const compiled = slidesState$.compiled.peek();
+  slidesState$.set({
+    ...data,
+    compiled: component === compiled?.component ? compiled : component ? ObservableHint.opaque({ component }) : null,
+    pendingDeck: data.pendingDeck ? ObservableHint.opaque(data.pendingDeck) : null,
+    templates: ObservableHint.opaque(data.templates),
+  });
 }
 
 export function getSlideStepCount(slide: DeckSlide | undefined) {
@@ -120,6 +122,7 @@ export function setCurrentSlide(index: number) {
 }
 
 export function nextSlide() {
+  const state = getSlidesState();
   const target = getNextPresentationTarget(state);
   if (target.slideIndex === state.currentSlide && target.stepIndex !== state.currentStep) {
     setSlidesState({ currentStep: target.stepIndex });
@@ -131,6 +134,7 @@ export function nextSlide() {
 }
 
 export function previousSlide() {
+  const state = getSlidesState();
   if (state.currentStep > 0) {
     setSlidesState({ currentStep: state.currentStep - 1 });
     return;
@@ -145,6 +149,7 @@ export function previousSlide() {
 }
 
 export function reportSlideError(error: unknown, slideIndex: number, isPreview: boolean) {
+  const state = getSlidesState();
   const message = `Slide ${slideIndex + 1}${isPreview ? " (preview)" : ""}: ${error instanceof Error ? error.message : String(error)}`;
   if (!state.runtimeErrors.includes(message)) {
     setSlidesState({ runtimeErrors: [...state.runtimeErrors.slice(-19), message] });
@@ -152,5 +157,6 @@ export function reportSlideError(error: unknown, slideIndex: number, isPreview: 
 }
 
 export function retrySlideContent() {
+  const state = getSlidesState();
   setSlidesState({ retryRevision: state.retryRevision + 1, runtimeErrors: [] });
 }
