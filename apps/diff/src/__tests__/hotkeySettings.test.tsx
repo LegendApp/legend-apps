@@ -1,3 +1,4 @@
+import { Profiler } from "react";
 import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { act, fireEvent, render } from "@testing-library/react-native";
@@ -51,6 +52,35 @@ describe("Diff hotkey settings", () => {
   afterEach(() => {
     mockKeyDownListeners.clear();
     mockKeyUpListeners.clear();
+  });
+
+  it("only updates the previous and next capture controls when switching capture", async () => {
+    const renders = [0, 0, 0];
+    const transitions: string[] = [];
+    const view = await render(<>
+      {[KeyCodes.KEY_R, KeyCodes.KEY_S, KeyCodes.KEY_T].map((key, index) => (
+        <Profiler key={key} id={String(index)} onRender={() => { renders[index]! += 1; }}>
+          <HotkeyCapture value={key} onChange={() => {}} onCaptureChange={(active) => transitions.push(`${index}:${active}`)} />
+        </Profiler>
+      ))}
+    </>);
+    const initial = [...renders];
+    await fireEvent.press(view.getByText("R"));
+    expect(renders[0]).toBeGreaterThan(initial[0]!);
+    expect(renders.slice(1)).toEqual(initial.slice(1));
+    const first = [...renders];
+    await fireEvent.press(view.getByText("S"));
+    expect(renders[0]).toBeGreaterThan(first[0]!);
+    expect(renders[1]).toBeGreaterThan(first[1]!);
+    expect(renders[2]).toBe(first[2]);
+    expect(transitions).toEqual(["0:true", "0:false", "1:true"]);
+    await act(() => {
+      for (const listener of mockKeyDownListeners) {
+        listener({ keyCode: KeyCodes.KEY_ESCAPE, modifiers: 0 });
+      }
+    });
+    expect(transitions.at(-1)).toBe("1:false");
+    await view.unmount();
   });
 
   it("commits a modified shortcut when its non-modifier key is released", async () => {
