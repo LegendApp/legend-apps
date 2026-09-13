@@ -12,7 +12,8 @@ import {
   type ViewabilityConfig,
   useAdaptiveRender,
 } from "@legendapp/list/react-native";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type Ref } from "react";
+import { observable, type Observable } from "@legendapp/state";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ReactElement, type Ref } from "react";
 import type {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -68,16 +69,8 @@ export type VirtualizedDocumentRowsState<TRow, TStyle, TTiming> = {
   itemIndexes: Array<number | undefined>;
   itemCount: number;
   requestRange: (start: number, count: number, options?: VirtualizedDocumentRequestOptions) => void;
-  styles: readonly TStyle[];
-  timing: TTiming | null;
-};
-
-type InternalRowsState<TDocument, TRow, TStyle, TTiming> = {
-  dataVersion: number;
-  document: TDocument | null;
-  itemCount: number;
-  styles: readonly TStyle[];
-  timing: TTiming | null;
+  styles$: Observable<readonly TStyle[]>;
+  timing$: Observable<TTiming | null>;
 };
 
 export type VirtualizedFixedDocumentListRenderRowProps<TRow> = {
@@ -257,19 +250,6 @@ function recordCallbackDebug(debugName: string | undefined, event: string, batch
   }
 }
 
-function createRowsState<TDocument, TRow, TStyle, TTiming>(
-  snapshot: VirtualizedDocumentSnapshot<TDocument, TRow, TStyle, TTiming> | null,
-  dataVersion: number,
-): InternalRowsState<TDocument, TRow, TStyle, TTiming> {
-  return {
-    dataVersion,
-    document: snapshot?.document ?? null,
-    itemCount: snapshot?.itemCount ?? 0,
-    styles: snapshot?.styles ?? [],
-    timing: snapshot?.timing ?? null,
-  };
-}
-
 function VirtualizedFixedDocumentListRowContent<TRow>({
   index,
   listIndex,
@@ -365,86 +345,65 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   requestRows,
   snapshot,
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
-  const [rowsState, setRowsState] = useState(() => createRowsState(snapshot, 0));
-  const rowsStateRef = useRef(rowsState);
-  const snapshotDocument = snapshot?.document ?? null;
-  const activeRowsState = rowsState.document === snapshotDocument
-    ? rowsState
-    : createRowsState(snapshot, rowsState.dataVersion + 1);
-
-  useEffect(() => {
-    setRowsState((currentRowsState) => {
-      const nextRowsState = createRowsState(snapshot, currentRowsState.dataVersion + 1);
-      rowsStateRef.current = nextRowsState;
-      debugLog(debugName, "rows.reset", {
-        dataVersion: nextRowsState.dataVersion,
-        itemCount: nextRowsState.itemCount,
-      });
-      return nextRowsState;
-    });
-  }, [debugName, snapshot]);
-
-  useEffect(() => {
-    rowsStateRef.current = activeRowsState;
-  }, [activeRowsState]);
+  const nextDataVersion = useRef(0);
+  // A new snapshot owns a fresh metadata session. Native document handles stay opaque to State.
+  const session = useMemo(() => ({
+    active: true,
+    document: snapshot?.document ?? null,
+    dataVersion: nextDataVersion.current++,
+    itemCount: snapshot?.itemCount ?? 0,
+    metadata$: observable({
+      styles: snapshot?.styles ?? [],
+      timing: snapshot?.timing ?? null,
+    }) as unknown as {
+      peek(): { styles: readonly TStyle[]; timing: TTiming | null };
+      set(value: { styles: readonly TStyle[]; timing: TTiming | null }): void;
+      styles: Observable<readonly TStyle[]>;
+      timing: Observable<TTiming | null>;
+    },
+  }), [snapshot]);
+  useLayoutEffect(() => {
+    session.active = true;
+    debugLog(debugName, "rows.reset", { dataVersion: session.dataVersion, itemCount: session.itemCount });
+    return () => { session.active = false; };
+  }, [debugName, session]);
 
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    const loadedRowsState = rowsStateRef.current;
-    if (loadedRowsState.document && requestRows) {
-      const requestStartedAt = instrumentationNowMs();
-      const safeStart = Math.max(0, Math.floor(start));
-      const safeEnd = Math.min(loadedRowsState.itemCount, safeStart + Math.max(0, Math.ceil(count)));
-
-      if (safeStart < safeEnd) {
-        const result = requestRows(loadedRowsState.document, safeStart, safeEnd - safeStart, options);
-        debugLog(debugName, "rows.request", {
-          count: safeEnd - safeStart,
-          durationMs: Number((instrumentationNowMs() - requestStartedAt).toFixed(1)),
-          force: options?.force === true,
-          reason: options?.reason ?? "unknown",
-          start: safeStart,
-        });
-
-        if (result?.styles || result?.timing) {
-          setRowsState((currentRowsState) => {
-            const isLoadedDocumentCurrent = rowsStateRef.current.document === loadedRowsState.document;
-            if (currentRowsState.document !== loadedRowsState.document && !isLoadedDocumentCurrent) {
-              debugLog(debugName, "rows.stateSkipped", {
-                reason: options?.reason ?? "unknown",
-              });
-              return currentRowsState;
-            }
-
-            const baseRowsState = currentRowsState.document === loadedRowsState.document
-              ? currentRowsState
-              : loadedRowsState;
-            const nextRowsState = {
-              ...baseRowsState,
-              styles: result.styles ?? baseRowsState.styles,
-              timing: result.timing ?? baseRowsState.timing,
-            };
-            rowsStateRef.current = nextRowsState;
-            return nextRowsState;
-          });
-        }
-
-      }
+    if (!session.active || !session.document || !requestRows) return;
+    const requestStartedAt = instrumentationNowMs();
+    const safeStart = Math.max(0, Math.floor(start));
+    const safeEnd = Math.min(session.itemCount, safeStart + Math.max(0, Math.ceil(count)));
+    if (safeStart >= safeEnd) return;
+    const result = requestRows(session.document, safeStart, safeEnd - safeStart, options);
+    debugLog(debugName, "rows.request", {
+      count: safeEnd - safeStart,
+      durationMs: Number((instrumentationNowMs() - requestStartedAt).toFixed(1)),
+      force: options?.force === true,
+      reason: options?.reason ?? "unknown",
+      start: safeStart,
+    });
+    if (!session.active) {
+      debugLog(debugName, "rows.stateSkipped", { reason: options?.reason ?? "unknown" });
+      return;
     }
-  }, [debugName, requestRows]);
+    if (result?.styles || result?.timing) {
+      const current = session.metadata$.peek();
+      session.metadata$.set({
+        styles: result.styles ?? current.styles,
+        timing: result.timing ?? current.timing,
+      });
+    }
+  }, [debugName, requestRows, session]);
 
-  const itemIndexes = useMemo(
-    () => createIdentityIndexArray(activeRowsState.itemCount),
-    [activeRowsState.itemCount],
-  );
-
-  return {
-    dataVersion: activeRowsState.dataVersion,
-    itemCount: activeRowsState.itemCount,
+  const itemIndexes = useMemo(() => createIdentityIndexArray(session.itemCount), [session.itemCount]);
+  return useMemo(() => ({
+    dataVersion: session.dataVersion,
+    itemCount: session.itemCount,
     itemIndexes,
     requestRange,
-    styles: activeRowsState.styles,
-    timing: activeRowsState.timing,
-  };
+    styles$: session.metadata$.styles,
+    timing$: session.metadata$.timing,
+  }), [itemIndexes, requestRange, session]);
 }
 
 export function VirtualizedFixedDocumentList<TRow>({
