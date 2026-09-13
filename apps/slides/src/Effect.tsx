@@ -1,3 +1,5 @@
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import {
   Blur,
   Canvas,
@@ -62,7 +64,8 @@ function EffectCanvas({
   uniforms,
   width,
 }: EffectCanvasProps) {
-  const [clock, setClock] = useState({ epoch: startedAt, time: isPreview ? previewTime : 0 });
+  const clock$ = useObservable({ epoch: startedAt, time: isPreview ? previewTime : 0 });
+  const setClock = clock$.set;
   const pixelRatio = PixelRatio.get();
 
   useEffect(() => {
@@ -84,20 +87,8 @@ function EffectCanvas({
     setClock({ epoch: startedAt, time: Math.max(0, performance.now() - epoch) / 1000 * speed });
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
-  }, [animationEnabled, isActive, isPreview, previewTime, speed, startedAt]);
+  }, [animationEnabled, isActive, isPreview, previewTime, speed, startedAt, setClock]);
 
-  const time = isPreview
-    ? animationEnabled ? previewTime : 0
-    : animationEnabled && clock.epoch === startedAt
-      ? clock.time
-      : 0;
-
-  const shaderUniforms = {
-    ...uniforms,
-    resolution: [width * pixelRatio, height * pixelRatio],
-    strength: strength * pixelRatio,
-    time,
-  };
 
   return (
     <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -105,9 +96,9 @@ function EffectCanvas({
         <Group
           layer={(
             <Paint>
-              <RuntimeShader source={effect} uniforms={shaderUniforms}>
-                {blur > 0 ? <Blur blur={blur * pixelRatio} mode="clamp" /> : null}
-              </RuntimeShader>
+              <AnimatedRuntimeShader clock$={clock$} effect={effect} uniforms={uniforms}
+                width={width} height={height} pixelRatio={pixelRatio} strength={strength}
+                isPreview={isPreview} previewTime={previewTime} animationEnabled={animationEnabled} startedAt={startedAt} blur={blur} />
             </Paint>
           )}
           transform={[{ scale: pixelRatio }]}
@@ -117,6 +108,27 @@ function EffectCanvas({
       </Group>
     </Canvas>
   );
+}
+
+function AnimatedRuntimeShader({ clock$, effect, uniforms, width, height, pixelRatio, strength, isPreview, previewTime, animationEnabled, startedAt, blur }: Pick<EffectCanvasProps,
+  "effect" | "uniforms" | "width" | "height" | "strength" | "isPreview" | "previewTime" | "animationEnabled" | "startedAt" | "blur"
+> & { clock$: Observable<{ epoch: number | undefined; time: number }>; pixelRatio: number }) {
+  const time = useValue(() => isPreview
+    ? animationEnabled ? previewTime : 0
+    : animationEnabled && clock$.epoch.get() === startedAt
+      ? clock$.time.get()
+      : 0);
+
+  const shaderUniforms = {
+    ...uniforms,
+    resolution: [width * pixelRatio, height * pixelRatio],
+    strength: strength * pixelRatio,
+    time,
+  };
+
+  return <RuntimeShader source={effect} uniforms={shaderUniforms}>
+    {blur > 0 ? <Blur blur={blur * pixelRatio} mode="clamp" /> : null}
+  </RuntimeShader>;
 }
 
 export function Effect({
