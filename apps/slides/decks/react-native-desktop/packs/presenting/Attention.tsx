@@ -1,3 +1,5 @@
+import { batch, observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { Canvas, DiffRect, Path, RoundedRect, rect, rrect } from "@shopify/react-native-skia";
 import { usePresentationValue } from "@legend-apps/presentation";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -7,7 +9,8 @@ import { useMotion } from "./motion";
 
 type Register = (id: string, ref: RefObject<View | null> | undefined) => void;
 const Registration = createContext<Register>(() => {});
-const Measurements = createContext<{ width: number; height: number; targets: Record<string, Bounds> }>({ width: 0, height: 0, targets: {} });
+type MeasurementState = { width: number; height: number; targets: Record<string, Bounds> };
+const Measurements = createContext(observable<MeasurementState>({ width: 0, height: 0, targets: {} }));
 
 export function AttentionStage({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const host = useRef<View>(null);
@@ -15,12 +18,13 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
   const [register] = useState<Register>(() => (id: string, ref: RefObject<View | null> | undefined) => {
     if (ref) targets.current.set(id, ref); else targets.current.delete(id);
   });
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const [bounds, setBounds] = useState<Record<string, Bounds>>({});
+  const measurements$ = useObservable<MeasurementState>({ width: 0, height: 0, targets: {} });
+  const width = useValue(measurements$.width);
+  const height = useValue(measurements$.height);
   const isActive = usePresentationValue("isActive");
   const isPreview = usePresentationValue("isPreview");
   useEffect(() => {
-    if (!size.width || !size.height) return;
+    if (!width || !height) return;
     let cancelled = false;
     let frame = 0;
     let last = -Infinity;
@@ -34,7 +38,7 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
         const view = host.current;
         if (view) {
           measuring = true;
-          view.measureInWindow((x, y, width, height) => {
+          view.measureInWindow((x, y, hostWidth, hostHeight) => {
             if (cancelled) return;
             const entries = [...targets.current].filter(([, ref]) => ref.current);
             const result: Record<string, Bounds> = {};
@@ -42,13 +46,25 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
             const finish = () => {
               measuring = false;
               if (cancelled) return;
-              setBounds((previous) => JSON.stringify(previous) === JSON.stringify(result) ? previous : result);
+              // Publish only changed targets so other annotations keep their geometry and render identity.
+              batch(() => {
+                for (const id of Object.keys(measurements$.targets.peek())) {
+                  if (!result[id]) measurements$.targets[id].delete();
+                }
+                for (const [id, next] of Object.entries(result)) {
+                  const previous = measurements$.targets[id].peek();
+                  if (!previous || previous.x !== next.x || previous.y !== next.y
+                    || previous.width !== next.width || previous.height !== next.height) {
+                    measurements$.targets[id].set(next);
+                  }
+                }
+              });
             };
             if (!pending) finish();
             for (const [id, ref] of entries) {
               ref.current?.measureInWindow((tx, ty, tw, th) => {
-                if (tw > 0 && th > 0 && width > 0 && height > 0) result[id] = relativeBounds(
-                  { x: tx, y: ty, width: tw, height: th }, { x, y, width, height }, size);
+                if (targets.current.get(id) === ref && tw > 0 && th > 0 && hostWidth > 0 && hostHeight > 0) result[id] = relativeBounds(
+                  { x: tx, y: ty, width: tw, height: th }, { x, y, width: hostWidth, height: hostHeight }, { width, height });
                 pending -= 1;
                 if (pending === 0) finish();
               });
@@ -60,11 +76,11 @@ export function AttentionStage({ children, style }: { children: ReactNode; style
     };
     frame = requestAnimationFrame(tick);
     return () => { cancelled = true; cancelAnimationFrame(frame); };
-  }, [size, isActive, isPreview]);
+  }, [width, height, isActive, isPreview, measurements$]);
   return <Registration.Provider value={register}>
-    <Measurements.Provider value={{ ...size, targets: bounds }}>
+    <Measurements.Provider value={measurements$}>
       <View ref={host} collapsable={false} style={[styles.stage, style]} onLayout={({ nativeEvent: { layout } }) =>
-        setSize((old) => old.width === layout.width && old.height === layout.height ? old : { width: layout.width, height: layout.height })}>
+        batch(() => { measurements$.width.set(layout.width); measurements$.height.set(layout.height); })}>
         {children}
       </View>
     </Measurements.Provider>
@@ -79,8 +95,10 @@ export function AttentionTarget({ id, children, style }: { id: string; children:
 }
 
 export function Spotlight({ target, darkness = 0.78, padding = 18 }: { target?: string; darkness?: number; padding?: number }) {
-  const { width, height, targets } = useContext(Measurements);
-  const box = target ? targets[target] : undefined;
+  const measurements$ = useContext(Measurements);
+  const width = useValue(measurements$.width);
+  const height = useValue(measurements$.height);
+  const box = useValue(() => target ? measurements$.targets[target].get() : undefined);
   const [x, y, w, h, opacity] = useMotion(box ? [box.x - padding, box.y - padding, box.width + padding * 2, box.height + padding * 2, 1] : [0, 0, width, height, 0]);
   if (!width || !height) return null;
   return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity }]}>
@@ -94,9 +112,11 @@ export function Spotlight({ target, darkness = 0.78, padding = 18 }: { target?: 
 export function Callout({ target, children, side = "above", width: requestedWidth = 380 }: {
   target: string; children: ReactNode; side?: "above" | "below" | "left" | "right"; width?: number;
 }) {
-  const { width, height, targets } = useContext(Measurements);
+  const measurements$ = useContext(Measurements);
+  const width = useValue(measurements$.width);
+  const height = useValue(measurements$.height);
   const [labelHeight, setLabelHeight] = useState(90);
-  const box = targets[target];
+  const box = useValue(() => measurements$.targets[target].get());
   if (!box || !width || !height) return null;
   const label = calloutBounds(box, { width, height }, Math.min(requestedWidth, width - 24), labelHeight, side);
   const cx = box.x + box.width / 2;
