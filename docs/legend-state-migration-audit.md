@@ -33,15 +33,15 @@ The second virtualized-document commit fixes a compiler incompatibility found du
 
 ## Validation
 
-**800 tests passed** across the affected suites:
+**808 tests passed** across the affected suites (278 Diff/Slides/presentation tests rerun after the compiler fixes; the unaffected suites retain their earlier results):
 
 | Suite | Tests |
 | --- | ---: |
-| Slides and presentation | 106 |
+| Slides and presentation | 112 |
 | Markdown document | 329 |
 | Markdown app/toolbar | 70 |
 | Chat History | 28 |
-| Diff, including shared hotkey capture | 164 |
+| Diff, including shared hotkey capture | 166 |
 | Music | 98 |
 | Code and shared document rows | 5 |
 
@@ -49,9 +49,17 @@ Focused regressions cover selected-row isolation, playback-fill isolation, captu
 
 Typecheck passed. macOS app verification passed for Slides, Markdown, Chat History, Diff, Music, and Code. No native dependencies were added, so native projects were not regenerated.
 
-Strict React Compiler checks passed for 22 of the 25 changed non-test TypeScript files. The three remaining failures also occur in the pre-migration baseline: DiffViewerWindow's native merge-row ref read, diffLoadedDocumentModel's conditional dependency expression, and PresenterWindow's resize-handler refs. The new shared-row compiler failure was fixed and rechecked.
+Strict React Compiler verification now passes for **all 453 app/package TypeScript source files**, with compiled React output in 179 files. The original three failing files and three additional failures found by the repository-wide check have been fixed:
 
-Bun's filesystem access stalled in the original Documents checkout. Tests and app verification therefore ran against a synchronized source/dependency copy at `/tmp/legend-state-validation-20260913`; typecheck and the compiler checks ran against the original checkout. Chat History uses its Jest configuration; a mistaken direct Bun-test invocation could not load React Native's Flow source and was replaced by the successful Jest run.
+| App/package | Fix | Commit |
+| --- | --- | --- |
+| Diff | Merge rows subscribe directly to opaque per-file render models. Document allocators and native data sources have explicit document-owned state, preserving identity across edits and collapse changes without render-time ref reads or incomplete memo dependencies. | `588adf1` |
+| Slides | Resize responders retain native handlers and receive committed callbacks; speaker-note error formatting avoids a compiler capture bug. Step animations retain their interpolation origin across unrelated renders. GPU setup/frame callbacks have a separate imperative lifecycle, avoiding unsupported compiler try/catch syntax without changing cleanup behavior. | `5cbb736` |
+| Presentation | Focus surfaces expose native root/layout setters, and the root callback remains stable across motion updates. | `e1010b9` |
+
+New regressions cover compiled merge-row isolation and removal, initial collapsed projections and document disposal, resize direction/callback changes, forward/reverse step animation, and GPU setup failure, render failure, and late resource cleanup. Focus tests also check root identity, layout publication, and unmount cleanup. Typecheck and Diff/Slides macOS app verification were rerun successfully.
+
+Bun's filesystem access stalled in the original Documents checkout. Tests and app verification therefore ran against a synchronized source/dependency copy at `/tmp/legend-state-validation-20260913`; typecheck and targeted compiler checks ran against the original checkout, and full repository compiler verification ran against the synchronized copy. Chat History uses its Jest configuration; a mistaken direct Bun-test invocation could not load React Native's Flow source and was replaced by the successful Jest run.
 
 This was source-level validation with deterministic render tests. No native UI profiling, device flows, release builds, or measured device speedups are claimed.
 
