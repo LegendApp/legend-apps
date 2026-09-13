@@ -129,7 +129,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
     snapshot: documentSnapshot,
   });
   const currentDocument = state.status === "loaded" ? state.document : null;
-  const stylesForState = sourceRows.styles;
+  const stylesForState = useValue(sourceRows.styles$);
+  const sourceTiming = useValue(sourceRows.timing$);
   const tokenStyleById = useMemo(() => createSyntaxStyleMap(stylesForState), [stylesForState]);
   const visibleFilePath = state.filePath ?? launchFile;
   const fileName = visibleFilePath ? getFilename(visibleFilePath) : "No file";
@@ -298,8 +299,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             {fileName}
           </Text>
           <Text style={[styles.subtitle, { color: mutedColor }]} numberOfLines={1}>
-            {state.status === "loaded" && sourceRows.timing
-              ? formatTimingSummary(sourceRows.timing)
+            {state.status === "loaded" && sourceTiming
+              ? formatTimingSummary(sourceTiming)
               : visibleFilePath ?? "Open a .ts or .tsx file"}
           </Text>
         </View>
