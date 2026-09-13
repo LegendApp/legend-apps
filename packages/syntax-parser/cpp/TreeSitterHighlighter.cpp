@@ -1,4 +1,5 @@
 #include "TreeSitterHighlighter.hpp"
+#include "QueryRegex.hpp"
 #include "../vendor/tree-sitter/Symbols.h"
 #include "../vendor/tree-sitter/runtime/include/tree_sitter/api.h"
 #include "../vendor/tree-sitter/queries/Highlights.hpp"
@@ -83,7 +84,7 @@ struct Predicate {
   std::string operation, value;
   std::vector<std::string> alternatives;
   uint32_t capture = 0;
-  std::optional<std::regex> expression;
+  std::optional<QueryRegex> expression;
 };
 struct Capture { uint32_t start, end, pattern, name; };
 struct Event { uint32_t offset, index; bool enter; };
@@ -114,7 +115,7 @@ std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
         if (steps[i].type != TSQueryPredicateStepTypeCapture) throw std::runtime_error("Expected predicate capture");
         p.capture = steps[i++].value_id;
         p.value = text(steps[i++].value_id);
-        if (p.operation == "match?") p.expression.emplace(p.value, std::regex::ECMAScript | std::regex::optimize);
+        if (p.operation == "match?") p.expression.emplace(p.value);
       } else throw std::runtime_error("Unsupported query predicate: " + p.operation);
       if (i >= size || steps[i++].type != TSQueryPredicateStepTypeDone) throw std::runtime_error("Invalid query predicate arguments");
       (*result)[pattern].push_back(std::move(p));
@@ -151,6 +152,7 @@ struct TreeSitterHighlighter::Impl {
   // Builtin names are checked against lexical declarations lazily, only when a
   // builtin predicate is encountered. Cache per scope/tree, never across edits.
   std::unordered_map<const void*, std::vector<std::string>> bindings;
+  QueryRegexCache regexCache;
   TSTree* tree = nullptr;
   uint32_t length = 0;
   uint32_t dirtyStart = 0, dirtyEnd = UINT32_MAX;
@@ -643,7 +645,9 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
               if (!found) accepted = false;
             } else if (predicate.operation == "any-of?") {
               if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), value) == predicate.alternatives.end()) accepted = false;
-            } else if (predicate.expression ? !std::regex_search(value, *predicate.expression) : value != predicate.value) accepted = false;
+            } else if (predicate.expression ? !(predicate.expression->general()
+                ? impl_->regexCache.search(value, predicate.expression->expression())
+                : predicate.expression->search(value)) : value != predicate.value) accepted = false;
           }
         }
         if (!accepted) break;
