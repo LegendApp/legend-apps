@@ -1,8 +1,35 @@
 // @ts-nocheck Native views are mocked.
 import { expect, test } from "bun:test";
 import React from "react";
-import "./nativeMock";
+import { act, create } from "react-test-renderer";
+import { transitions } from "./nativeMock";
+const { PresentationProvider } = await import("@legend-apps/presentation");
 const { Step, Steps, resolveSteps, stepStyle } = await import("../steps");
+
+test("step interpolation retains its starting style across unrelated renders and reverse navigation", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const content = (stepIndex, text, isPreview = false) => (
+    <PresentationProvider value={{ stepIndex, isPreview, isActive: true }}>
+      <Step at={1}>{text}</Step>
+    </PresentationProvider>
+  );
+  let tree;
+  const initialTransitionCount = transitions.length;
+  try {
+    await act(() => { tree = create(content(0, "first")); });
+    await act(() => tree.update(content(1, "first")));
+    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(0);
+    await act(() => tree.update(content(1, "updated content")));
+    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(0);
+    await act(() => tree.update(content(0, "updated content")));
+    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(1);
+    await act(() => tree.update(content(0, "preview", true)));
+    expect(tree.root.findByType("layer").props.style.opacity).toBe(0);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    transitions.splice(initialTransitionCount);
+  }
+});
 
 test("reveal ordering includes list items, shared positions, exits and animation triggers", () => {
   const result = resolveSteps(<>
