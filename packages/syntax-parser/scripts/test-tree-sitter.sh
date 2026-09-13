@@ -10,6 +10,9 @@ clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryRegex.test
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/test"
 "$tree_build/test"
+clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryTraversal.test.cpp" \
+  "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/query-traversal-test"
+"$tree_build/query-traversal-test"
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/MarkdownHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/markdown-test"
 "$tree_build/markdown-test" "$syntax_root/../../apps/slides/examples/"*.mdx \

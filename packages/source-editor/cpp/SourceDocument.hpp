@@ -148,6 +148,17 @@ class SourceDocument {
     append(node->right.get(), lineEnd, start, end, output);
   }
 
+  template <typename Visitor>
+  static void visitLines(const Node *node, size_t baseLine, size_t baseOffset,
+      size_t start, size_t end, const Visitor &visitor) {
+    if (!node || end <= baseLine || start >= baseLine + node->count) return;
+    const auto index = baseLine + count(node->left);
+    const auto offset = baseOffset + units(node->left);
+    visitLines(node->left.get(), baseLine, baseOffset, start, end, visitor);
+    if (start <= index && index < end) visitor(index, offset, node->line);
+    visitLines(node->right.get(), index + 1, offset + node->line.size(), start, end, visitor);
+  }
+
 public:
   explicit SourceDocument(const std::u16string &source = u"", uint64_t firstId = 1) {
     nextId_ = firstId;
@@ -192,6 +203,14 @@ public:
   size_t lineCount() const { return count(root_); }
   size_t length() const { return units(root_); }
   uint64_t revision() const { return revision_; }
+
+  // O(log(lines) + count), without copying text or allocating an iterator stack.
+  // The visitor must not mutate this document or retain line references across edits.
+  template <typename Visitor>
+  void forEachLine(size_t start, size_t count, const Visitor &visitor) const {
+    if (start > lineCount()) throw std::out_of_range("source line range");
+    visitLines(root_.get(), 0, 0, start, start + std::min(count, lineCount() - start), visitor);
+  }
 
   const Line &line(size_t index) const {
     if (index >= lineCount()) throw std::out_of_range("source line");

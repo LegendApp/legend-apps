@@ -532,11 +532,18 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
   ts_query_cursor_exec(cursor, impl_->query.get(), ts_tree_root_node(impl_->tree));
   auto& captures = impl_->captureScratch; captures.clear();
   auto& events = impl_->eventScratch; events.clear();
-  TSQueryMatch match; uint32_t index;
-  const auto nodeText = [&](TSNode node) {
-    std::string result;
+  TSQueryMatch match;
+  // Several patterns commonly inspect the same identifier. Reuse just that
+  // text, scoped to this immutable highlight call (never across edits/trees).
+  std::string predicateText;
+  uint32_t predicateStart = UINT32_MAX, predicateEnd = UINT32_MAX;
+  const auto nodeText = [&](TSNode node) -> const std::string& {
+    const auto begin = ts_node_start_byte(node) / 2;
     const auto end = ts_node_end_byte(node) / 2;
-    for (auto offset = ts_node_start_byte(node) / 2; offset < end;) {
+    if (begin == predicateStart && end == predicateEnd) return predicateText;
+    predicateStart = begin; predicateEnd = end;
+    auto& result = predicateText; result.clear();
+    for (auto offset = begin; offset < end;) {
       auto chunk = impl_->input.read(offset);
       if (chunk.empty()) throw std::runtime_error("Premature EOF in predicate input");
       const auto count = std::min<size_t>(chunk.size(), end - offset);
@@ -626,42 +633,45 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
     }
     return false;
   };
-  uint32_t checkedMatch = UINT32_MAX; bool accepted = false;
-  while (ts_query_cursor_next_capture(cursor, &match, &index)) {
-    if (checkedMatch != match.id) {
-      checkedMatch = match.id; accepted = true;
-      for (const auto& predicate : (*impl_->predicates)[match.pattern_index]) {
-        if (predicate.operation == "is-not?") {
-          if (isLocal(match.captures[0].node)) { accepted = false; break; }
-        } else {
-          for (uint16_t c = 0; c < match.capture_count; ++c) {
-            if (match.captures[c].index != predicate.capture) continue;
-            const auto value = nodeText(match.captures[c].node);
-            if (predicate.operation == "has-ancestor?") {
-              bool found = false;
-              for (auto parent = ts_node_parent(match.captures[c].node); !ts_node_is_null(parent); parent = ts_node_parent(parent)) {
-                if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), ts_node_type(parent)) != predicate.alternatives.end()) { found = true; break; }
-              }
-              if (!found) accepted = false;
-            } else if (predicate.operation == "any-of?") {
-              if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), value) == predicate.alternatives.end()) accepted = false;
-            } else if (predicate.expression ? !(predicate.expression->general()
+  // The sweep below already sorts captures. Asking the cursor to sort each
+  // capture as well repeats work and can re-evaluate a multi-capture match.
+  while (ts_query_cursor_next_match(cursor, &match)) {
+    bool accepted = true;
+    for (const auto& predicate : (*impl_->predicates)[match.pattern_index]) {
+      if (predicate.operation == "is-not?") {
+        if (isLocal(match.captures[0].node)) { accepted = false; break; }
+      } else {
+        for (uint16_t c = 0; c < match.capture_count; ++c) {
+          if (match.captures[c].index != predicate.capture) continue;
+          const auto& value = nodeText(match.captures[c].node);
+          if (predicate.operation == "has-ancestor?") {
+            bool found = false;
+            for (auto parent = ts_node_parent(match.captures[c].node); !ts_node_is_null(parent); parent = ts_node_parent(parent)) {
+              if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), ts_node_type(parent)) != predicate.alternatives.end()) { found = true; break; }
+            }
+            if (!found) accepted = false;
+          } else if (predicate.operation == "any-of?") {
+            if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), value) == predicate.alternatives.end()) accepted = false;
+          } else if (predicate.expression
+            ? !(predicate.expression->general()
                 ? impl_->regexCache.search(value, predicate.expression->expression())
-                : predicate.expression->search(value)) : value != predicate.value) accepted = false;
-          }
+                : predicate.expression->search(value))
+            : value != predicate.value) accepted = false;
         }
-        if (!accepted) break;
       }
+      if (!accepted) break;
     }
     if (!accepted) continue;
-    auto capture = match.captures[index];
-    const auto from = ts_node_start_byte(capture.node) / 2, to = ts_node_end_byte(capture.node) / 2;
-    // Error recovery can produce zero-width missing nodes. They must not leave
-    // a phantom active capture after equal-position sweep events.
-    if (from >= to || to <= start || from >= end) continue;
-    const auto id = static_cast<uint32_t>(captures.size());
-    captures.push_back({from, to, match.pattern_index, capture.index});
-    events.push_back({std::max(from, start), id, true}); events.push_back({std::min(to, end), id, false});
+    for (uint32_t index = 0; index < match.capture_count; ++index) {
+      auto capture = match.captures[index];
+      const auto from = ts_node_start_byte(capture.node) / 2, to = ts_node_end_byte(capture.node) / 2;
+      // Error recovery can produce zero-width missing nodes. They must not leave
+      // a phantom active capture after equal-position sweep events.
+      if (from >= to || to <= start || from >= end) continue;
+      const auto id = static_cast<uint32_t>(captures.size());
+      captures.push_back({from, to, match.pattern_index, capture.index});
+      events.push_back({std::max(from, start), id, true}); events.push_back({std::min(to, end), id, false});
+    }
   }
   if (ts_query_cursor_did_exceed_match_limit(cursor)) throw std::runtime_error("Tree-sitter query match limit exceeded");
   std::sort(events.begin(), events.end(), [](const Event& a, const Event& b) { return a.offset < b.offset; });

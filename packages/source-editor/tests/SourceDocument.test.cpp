@@ -22,6 +22,17 @@ static void verify(const SourceDocument &document, const std::u16string &expecte
     offset += line.size();
   }
   assert(offset == expected.size());
+  for (const auto start : {size_t(0), document.lineCount() / 2, document.lineCount()}) {
+    for (const auto count : {size_t(0), size_t(1), size_t(7), SIZE_MAX}) {
+      size_t visited = 0;
+      document.forEachLine(start, count, [&](size_t index, size_t at, const legend::source::Line& line) {
+        assert(index == start + visited++);
+        assert(at == document.lineOffset(index));
+        assert(&line == &document.line(index));
+      });
+      assert(visited == std::min(count, document.lineCount() - start));
+    }
+  }
   SourceDocument rebuilt(expected);
   assert(document.lineCount() == rebuilt.lineCount());
   for (size_t i = 0; i < document.lineCount(); ++i) {
@@ -41,6 +52,13 @@ static void verify(const SourceDocument &document, const std::u16string &expecte
 }
 
 int main() {
+  {
+    SourceDocument empty;
+    bool threw = false;
+    try { empty.forEachLine(2, 1, [](auto, auto, const auto&) {}); }
+    catch (const std::out_of_range&) { threw = true; }
+    assert(threw);
+  }
   for (const auto &text : {u"", u"one", u"one\n", u"\n\n", u"a\r\nb\rc\n", u"\U0001f600\n中文\ne\u0301"}) {
     SourceDocument document(text);
     verify(document, text);
