@@ -5,6 +5,8 @@ tree_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-tree-sitter.XXXXXX")"
 tree_vendor="$syntax_root/vendor/tree-sitter"
 node "$syntax_root/scripts/embed-tree-sitter-queries.ts" --check
 node "$syntax_root/scripts/compile-tree-sitter.ts" "$tree_build"
+clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryRegex.test.cpp" -o "$tree_build/query-regex-test"
+"$tree_build/query-regex-test"
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/TreeSitterHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/test"
 "$tree_build/test"
