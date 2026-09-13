@@ -1,4 +1,4 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import {
   Root as TypeGPURoot,
   useBindGroup,
@@ -143,7 +143,8 @@ const initialParams = {
 };
 
 function BoidsScene() {
-  const { isActive, isPreview } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
   const root = useRoot();
   const previewRendered = useRef(false);
   const even = useRef(false);

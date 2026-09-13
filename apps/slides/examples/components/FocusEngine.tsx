@@ -1,10 +1,10 @@
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 import { useEffect, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 
 /** A live native animation that continues while its shared wrapper moves. */
 export function FocusEngine() {
-  const { isActive } = useSlideLifecycle();
+  const isActive = usePresentationValue("isActive");
   const [rotation] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!isActive) return;

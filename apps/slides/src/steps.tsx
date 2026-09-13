@@ -1,6 +1,6 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Animated, View, type ViewStyle } from "react-native";
-import { useSlideLifecycle } from "@legend-apps/presentation";
+import { usePresentationValue } from "@legend-apps/presentation";
 
 type Transition = "fade" | "fade-up" | "slide-up" | "none" | { duration?: number };
 type StepProps = {
@@ -25,7 +25,9 @@ export function stepStyle(step: number, { at = 1, until, initial, states, transi
 }
 
 export function Step(props: StepProps) {
-  const { stepIndex, isPreview, isActive } = useSlideLifecycle();
+  const stepIndex = usePresentationValue("stepIndex");
+  const isPreview = usePresentationValue("isPreview");
+  const isActive = usePresentationValue("isActive");
   const { at, until, initial, states, transition } = props;
   const target = useMemo(() => stepStyle(stepIndex, { at, until, initial, states, transition }), [stepIndex, at, until, initial, states, transition]);
   const [progress] = useState(() => new Animated.Value(1));
@@ -82,7 +84,7 @@ function getStateCount(count: number | undefined) {
 }
 
 export function Steps({ children }: StepsProps) {
-  const { stepIndex } = useSlideLifecycle();
+  const stepIndex = usePresentationValue("stepIndex");
   return <View>{typeof children === "function" ? children(stepIndex) : children}</View>;
 }
 
