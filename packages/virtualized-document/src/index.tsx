@@ -338,6 +338,12 @@ function getDocumentRangeForListRange(
       };
 }
 
+// Versions identify allocated document sessions; gaps from discarded renders are harmless.
+let nextDocumentRowsVersion = 0;
+function allocateDocumentRowsVersion() {
+  return nextDocumentRowsVersion++;
+}
+
 export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   debugName,
   getStyles,
@@ -345,12 +351,11 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
   requestRows,
   snapshot,
 }: UseVirtualizedDocumentRowsOptions<TDocument, TRow, TStyle, TTiming>): VirtualizedDocumentRowsState<TRow, TStyle, TTiming> {
-  const nextDataVersion = useRef(0);
+  const disposedSessions = useRef(new WeakSet<object>());
   // A new snapshot owns a fresh metadata session. Native document handles stay opaque to State.
   const session = useMemo(() => ({
-    active: true,
     document: snapshot?.document ?? null,
-    dataVersion: nextDataVersion.current++,
+    dataVersion: allocateDocumentRowsVersion(),
     itemCount: snapshot?.itemCount ?? 0,
     metadata$: observable({
       styles: snapshot?.styles ?? [],
@@ -363,13 +368,13 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
     },
   }), [snapshot]);
   useLayoutEffect(() => {
-    session.active = true;
+    disposedSessions.current.delete(session);
     debugLog(debugName, "rows.reset", { dataVersion: session.dataVersion, itemCount: session.itemCount });
-    return () => { session.active = false; };
+    return () => { disposedSessions.current.add(session); };
   }, [debugName, session]);
 
   const requestRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    if (!session.active || !session.document || !requestRows) return;
+    if (disposedSessions.current.has(session) || !session.document || !requestRows) return;
     const requestStartedAt = instrumentationNowMs();
     const safeStart = Math.max(0, Math.floor(start));
     const safeEnd = Math.min(session.itemCount, safeStart + Math.max(0, Math.ceil(count)));
@@ -382,7 +387,7 @@ export function useVirtualizedDocumentRows<TDocument, TRow, TStyle, TTiming>({
       reason: options?.reason ?? "unknown",
       start: safeStart,
     });
-    if (!session.active) {
+    if (disposedSessions.current.has(session)) {
       debugLog(debugName, "rows.stateSkipped", { reason: options?.reason ?? "unknown" });
       return;
     }
