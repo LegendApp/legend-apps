@@ -1,24 +1,25 @@
+import { useValue } from "@legendapp/state/react";
 import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { setSlidesState, useSlidesState } from "./slidesStore";
+import { setSlidesState, slidesState$ } from "./slidesStore";
 
 export function AudienceWindow() {
-  const currentSlide = useSlidesState((state) => state.currentSlide);
-  const color = useSlidesState((state) => state.config.theme?.backgroundColor ?? "#111827");
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   return <BackgroundHost slideIndex={currentSlide} color={color}><AudienceContent /></BackgroundHost>;
 }
 
 function AudienceContent() {
   const hasBackground = useHasBackground();
-  const currentSlide = useSlidesState((state) => state.currentSlide);
-  const blackout = useSlidesState((state) => state.blackout);
-  const slides = useSlidesState((state) => state.slides);
-  const defaultTransition = useSlidesState((state) => state.config.transition);
-  const revision = useSlidesState((state) => state.revision);
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const blackout = useValue(slidesState$.blackout);
+  const slides = useValue(slidesState$.slides);
+  const defaultTransition = useValue(slidesState$.config.transition);
+  const revision = useValue(slidesState$.revision);
   const slideCount = slides.length;
   const [surfaces] = useState(() => new Map<number, FocusSurface>());
   const [transitionState, setTransitionState] = useState(() => ({

@@ -1,3 +1,5 @@
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legend-apps/file-dialog";
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
@@ -39,7 +41,7 @@ import {
   resetPresenterLayout as resetStoredPresenterLayout,
 } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
-import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
@@ -101,9 +103,9 @@ function Button({ disabled, label, onPress }: { disabled?: boolean; label: strin
 }
 
 function SlideCounter({ index }: { index: number }) {
-  const total = useSlidesState((state) => state.slides.length);
-  const step = useSlidesState((state) => state.currentStep);
-  const stepCount = useSlidesState((state) => getSlideStepCount(state.slides[index]));
+  const total = useValue(() => slidesState$.slides.length);
+  const step = useValue(slidesState$.currentStep);
+  const stepCount = useValue(() => getSlideStepCount(slidesState$.slides[index].get()));
   if (total === 0) return null;
   return (
     <View pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
@@ -146,7 +148,7 @@ function SpeakerNotes({
   slideIndex: number;
   weight: number;
 }) {
-  const currentStep = useSlidesState((state) => state.currentStep);
+  const currentStep = useValue(slidesState$.currentStep);
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
       <ScrollView key={`${deckPath}:${slideIndex}`} contentContainerStyle={styles.notesContent} style={styles.notes}>
@@ -486,10 +488,10 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const [activeMode, setActiveMode] = useState<PresenterMode | null>(null);
   const [notesEditing, setNotesEditing] = useState(false);
   const [presenterLayoutResetVersion, setPresenterLayoutResetVersion] = useState(0);
-  const [keyboardJump, setKeyboardJump] = useState("");
-  const keyboardJumpRef = useRef("");
+  const keyboardJump$ = useObservable("");
   const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const state = useSlidesState((value) => value);
+  const audienceOpen = useValue(slidesState$.audienceOpen);
+  const blackout = useValue(slidesState$.blackout);
   const [audience] = useState(() => createAudienceSession({
     async open(display) {
       const frame = display?.frame;
@@ -545,7 +547,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     setPresenterLayoutResetVersion((version) => version + 1);
   }, []);
 
-  useSlidesMenus(openDeck, state.audienceOpen, state.blackout, resetPresenterLayout, openSlidesSettingsWindow);
+  useSlidesMenus(openDeck, audienceOpen, blackout, resetPresenterLayout, openSlidesSettingsWindow);
 
   const openAudience = audience.open;
   const closeAudience = audience.close;
@@ -594,34 +596,30 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         setCurrentSlide(Number.MAX_SAFE_INTEGER);
         return true;
       }
-      if (event.keyCode === KeyCodes.KEY_ESCAPE && state.audienceOpen) {
+      if (event.keyCode === KeyCodes.KEY_ESCAPE && audienceOpen) {
         void closeAudience();
         return true;
       }
       const digit = digitKeyCodes.get(event.keyCode);
       if (digit !== undefined) {
-        const nextJump = `${keyboardJumpRef.current}${digit}`.replace(/^0+/, "").slice(0, 4);
-        keyboardJumpRef.current = nextJump;
-        setKeyboardJump(nextJump);
+        const nextJump = `${keyboardJump$.peek()}${digit}`.replace(/^0+/, "").slice(0, 4);
+        keyboardJump$.set(nextJump);
         if (keyboardJumpTimeout.current) {
           clearTimeout(keyboardJumpTimeout.current);
         }
         keyboardJumpTimeout.current = setTimeout(() => {
-          keyboardJumpRef.current = "";
-          setKeyboardJump("");
+          keyboardJump$.set("");
         }, 2500);
         return true;
       }
-      if (event.keyCode === KeyCodes.KEY_RETURN && keyboardJumpRef.current) {
-        setCurrentSlide(Number(keyboardJumpRef.current) - 1);
-        keyboardJumpRef.current = "";
-        setKeyboardJump("");
+      if (event.keyCode === KeyCodes.KEY_RETURN && keyboardJump$.peek()) {
+        setCurrentSlide(Number(keyboardJump$.peek()) - 1);
+        keyboardJump$.set("");
         return true;
       }
-      if (event.keyCode === KeyCodes.KEY_DELETE && keyboardJumpRef.current) {
-        const nextJump = keyboardJumpRef.current.slice(0, -1);
-        keyboardJumpRef.current = nextJump;
-        setKeyboardJump(nextJump);
+      if (event.keyCode === KeyCodes.KEY_DELETE && keyboardJump$.peek()) {
+        const nextJump = keyboardJump$.peek().slice(0, -1);
+        keyboardJump$.set(nextJump);
         return true;
       }
       return false;
@@ -632,24 +630,18 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         clearTimeout(keyboardJumpTimeout.current);
       }
     };
-  }, [closeAudience, notesEditing, state.audienceOpen]);
+  }, [closeAudience, keyboardJump$, notesEditing, audienceOpen]);
 
   useEffect(() => {
-    void setPreventDisplaySleep(state.audienceOpen);
+    void setPreventDisplaySleep(audienceOpen);
     return () => {
-      if (state.audienceOpen) {
+      if (audienceOpen) {
         void setPreventDisplaySleep(false);
       }
     };
-  }, [state.audienceOpen]);
+  }, [audienceOpen]);
 
   const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
-  const currentNotes = state.slides[state.currentSlide]?.notes;
-  const nextTarget = getNextPresentationTarget(state);
-  const notesEditable = !state.audienceOpen || activeMode === "rehearsal";
-  const showNext = state.config.presenter?.showNext !== false;
-  const showNotes = state.config.presenter?.showNotes !== false;
-
   const startAudience = useCallback(async () => {
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     await openAudience(rehearsalEnabled ? undefined : selectedDisplay);
@@ -687,18 +679,12 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     }
   }, []);
 
-  useEffect(() => {
-    const filename = state.deckPath?.split(/[\\/]/).pop();
-    void setWindowTitle("slides-presenter", filename ? `${filename} — Legend Slides` : "Legend Slides");
-  }, [state.deckPath]);
   return (
     <View style={styles.root}>
-      <PresenterToolbar
+      <ConnectedPresenterToolbar
         activeMode={activeMode}
-        audienceOpen={state.audienceOpen}
-        currentSlide={state.currentSlide}
+        audienceOpen={audienceOpen}
         displays={displays}
-        hasDeck={Boolean(state.component)}
         isEditing={notesEditing}
         onDisplayChange={selectDisplay}
         onModeChange={selectMode}
@@ -707,56 +693,129 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         rehearsalEnabled={rehearsalEnabled}
         selectedDisplayId={selectedDisplayId}
       />
-      {state.component ? (
+      <PresenterDeckContent
+        keyboardJump$={keyboardJump$}
+        notesEditable={!audienceOpen || activeMode === "rehearsal"}
+        onNotesEditingChange={setNotesEditing}
+        onSaveNotes={saveSpeakerNotes}
+        resetVersion={presenterLayoutResetVersion}
+      />
+    </View>
+  );
+}
+
+function ConnectedPresenterToolbar(props: Omit<Parameters<typeof PresenterToolbar>[0], "currentSlide" | "hasDeck">) {
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const hasDeck = useValue(() => Boolean(slidesState$.compiled.get()));
+  return <PresenterToolbar {...props} currentSlide={currentSlide} hasDeck={hasDeck} />;
+}
+
+function KeyboardJump({ value$ }: { value$: Observable<string> }) {
+  const value = useValue(value$);
+  return value ? <Text style={styles.keyboardJump}>Jump to {value} ↵</Text> : null;
+}
+
+function PresenterDeckContent({ keyboardJump$, notesEditable, onNotesEditingChange, onSaveNotes, resetVersion }: {
+  keyboardJump$: Observable<string>;
+  notesEditable: boolean;
+  onNotesEditingChange: (editing: boolean) => void;
+  onSaveNotes: (path: string, index: number, notes: string) => Promise<void>;
+  resetVersion: number;
+}) {
+  const hasDeck = useValue(() => Boolean(slidesState$.compiled.get()));
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const currentStep = useValue(slidesState$.currentStep);
+  const deckPath = useValue(slidesState$.deckPath);
+  const currentNotes = useValue(() => slidesState$.slides[currentSlide].notes.get());
+  const nextSlideIndex = useValue(() => getNextPresentationTarget({
+    currentSlide, currentStep, slides: slidesState$.slides.get(),
+  }).slideIndex);
+  const nextStepIndex = useValue(() => getNextPresentationTarget({
+    currentSlide, currentStep, slides: slidesState$.slides.get(),
+  }).stepIndex);
+  const nextTarget = { slideIndex: nextSlideIndex, stepIndex: nextStepIndex };
+  const showNext = useValue(() => slidesState$.config.presenter.showNext.get() !== false);
+  const showNotes = useValue(() => slidesState$.config.presenter.showNotes.get() !== false);
+  useEffect(() => {
+    const filename = deckPath?.split(/[\\/]/).pop();
+    void setWindowTitle("slides-presenter", filename ? `${filename} — Legend Slides` : "Legend Slides");
+  }, [deckPath]);
+  return (
+    <>
+      {hasDeck ? (
         <View style={styles.presenter}>
-          {keyboardJump && <Text style={styles.keyboardJump}>Jump to {keyboardJump} ↵</Text>}
+          <KeyboardJump value$={keyboardJump$} />
 
           <PresenterWorkspace
-            currentIndex={state.currentSlide}
-            currentStep={state.currentStep}
-            deckPath={state.deckPath ?? ""}
+            currentIndex={currentSlide}
+            currentStep={currentStep}
+            deckPath={deckPath ?? ""}
             nextIndex={nextTarget.slideIndex}
             nextStep={nextTarget.stepIndex}
             notesEditable={notesEditable}
             notes={currentNotes}
-            onNotesEditingChange={setNotesEditing}
-            onSaveNotes={saveSpeakerNotes}
-            resetVersion={presenterLayoutResetVersion}
+            onNotesEditingChange={onNotesEditingChange}
+            onSaveNotes={onSaveNotes}
+            resetVersion={resetVersion}
             showNext={showNext}
             showNotes={showNotes}
           />
 
-          {state.blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
-          {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
-          {state.status === "building" && <Text style={styles.statusMessage}>Compiling changes…</Text>}
-          {state.pendingDeck && (
-            <View style={styles.updateBanner}>
-              <Text style={styles.statusMessage}>Update ready: {state.pendingDeck.path.split("/").pop()}</Text>
-              <Button label="Apply Update" onPress={applyPendingDeck} />
-            </View>
-          )}
-          {(state.buildErrors.length > 0 || state.buildWarnings.length > 0) && (
-            <View style={styles.errors}>
-              <Text style={styles.errorTitle}>Build output</Text>
-              {[...state.buildErrors, ...state.buildWarnings].map((message, index) => <Text key={`${index}:${message}`} style={styles.errorText}>{message}</Text>)}
-              <Text style={styles.lastGood}>Showing the last successful build.</Text>
-            </View>
-          )}
-          {state.runtimeErrors.length > 0 && (
-            <View style={styles.errors}>
-              <Text style={styles.errorTitle}>Slide errors</Text>
-              {state.runtimeErrors.map((message) => <Text key={message} selectable style={styles.errorText}>{message}</Text>)}
-              <Button label="Retry Slide Content" onPress={retrySlideContent} />
-            </View>
-          )}
+          <PresenterStatus />
         </View>
       ) : (
-        <View style={styles.empty}>
-          {state.status === "building" ? <ActivityIndicator /> : <Text style={styles.emptyTitle}>No deck open</Text>}
-          <Text style={styles.emptyBody}>Use File → Open… or press ⌘O.</Text>
-          {state.buildErrors.map((message) => <Text key={message} style={styles.errorText}>{message}</Text>)}
+        <EmptyPresenter />
+      )}
+    </>
+  );
+}
+
+function PresenterStatus() {
+  const blackout = useValue(slidesState$.blackout);
+  const state = {
+    displayMessage: useValue(slidesState$.displayMessage),
+    status: useValue(slidesState$.status),
+    pendingDeck: useValue(slidesState$.pendingDeck),
+    buildErrors: useValue(slidesState$.buildErrors),
+    buildWarnings: useValue(slidesState$.buildWarnings),
+    runtimeErrors: useValue(slidesState$.runtimeErrors),
+  };
+  return (
+    <>
+      {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
+      {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
+      {state.status === "building" && <Text style={styles.statusMessage}>Compiling changes…</Text>}
+      {state.pendingDeck && (
+        <View style={styles.updateBanner}>
+          <Text style={styles.statusMessage}>Update ready: {state.pendingDeck.path.split("/").pop()}</Text>
+          <Button label="Apply Update" onPress={applyPendingDeck} />
         </View>
       )}
+      {(state.buildErrors.length > 0 || state.buildWarnings.length > 0) && (
+        <View style={styles.errors}>
+          <Text style={styles.errorTitle}>Build output</Text>
+          {[...state.buildErrors, ...state.buildWarnings].map((message, index) => <Text key={`${index}:${message}`} style={styles.errorText}>{message}</Text>)}
+          <Text style={styles.lastGood}>Showing the last successful build.</Text>
+        </View>
+      )}
+      {state.runtimeErrors.length > 0 && (
+        <View style={styles.errors}>
+          <Text style={styles.errorTitle}>Slide errors</Text>
+          {state.runtimeErrors.map((message) => <Text key={message} selectable style={styles.errorText}>{message}</Text>)}
+          <Button label="Retry Slide Content" onPress={retrySlideContent} />
+        </View>
+      )}
+    </>
+  );
+}
+
+function EmptyPresenter() {
+  const state = { status: useValue(slidesState$.status), buildErrors: useValue(slidesState$.buildErrors) };
+  return (
+    <View style={styles.empty}>
+      {state.status === "building" ? <ActivityIndicator /> : <Text style={styles.emptyTitle}>No deck open</Text>}
+      <Text style={styles.emptyBody}>Use File → Open… or press ⌘O.</Text>
+      {state.buildErrors.map((message) => <Text key={message} style={styles.errorText}>{message}</Text>)}
     </View>
   );
 }

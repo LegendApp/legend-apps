@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "@babel/core";
 import React from "react";
+import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
 import { usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState } from "../slidesStore";
@@ -18,6 +19,8 @@ function compiledRenderer() {
     plugins: [[require.resolve("babel-plugin-react-compiler"), { target: "19" }]],
   });
   const nativeLeaves = {
+    // Keep tracking in the same ESM instance as slidesStore in this CJS harness.
+    "@legendapp/state/react": stateReact,
     "@legend-apps/scaled-view": { ScaledView: "scaled-view" },
     "react-native": {
       View: "view", Text: "text", Image: "image", Pressable: "pressable", Linking: {},

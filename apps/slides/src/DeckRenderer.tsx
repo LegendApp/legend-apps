@@ -1,3 +1,4 @@
+import { useValue } from "@legendapp/state/react";
 import {
   Background,
   FocusRegion,
@@ -30,7 +31,7 @@ import {
   type TextStyle,
   type ViewProps,
 } from "react-native";
-import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, useSlidesState } from "./slidesStore";
+import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
@@ -65,13 +66,13 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, isPreparing, targetIndex, targetStep } = useContext(DeckRenderContext);
   // An outgoing layer can become active again without remounting. Subscribe so
   // React Compiler cannot retain a getSlidesState() snapshot from its exit.
-  const currentSlide = useSlidesState((state) => state.currentSlide);
-  const currentStep = useSlidesState((state) => state.currentStep);
-  const startedAt = useSlidesState((state) => state.slideStartedAt);
-  const stepEpochs = useSlidesState((state) => state.stepEpochs);
-  const direction = useSlidesState((state) => state.direction);
-  const stepStartedAt = useSlidesState((state) => state.stepStartedAt);
-  const templates = useSlidesState((state) => state.templates);
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const currentStep = useValue(slidesState$.currentStep);
+  const startedAt = useValue(slidesState$.slideStartedAt);
+  const stepEpochs = useValue(slidesState$.stepEpochs);
+  const direction = useValue(slidesState$.direction);
+  const stepStartedAt = useValue(slidesState$.stepStartedAt);
+  const templates = useValue(slidesState$.templates);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
@@ -136,7 +137,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
 }
 
 function MarkdownText({ children, style }: { children?: ReactNode; style?: StyleProp<TextStyle> }) {
-  const theme = useSlidesState((state) => state.config.theme);
+  const theme = useValue(slidesState$.config.theme);
   const themeStyle = {
     ...(theme?.color ? { color: theme.color } : {}),
     ...(theme?.fontFamily ? { fontFamily: theme.fontFamily } : {}),
@@ -221,9 +222,9 @@ export function DeckRenderer({
   targetIndex?: number;
   targetStep?: number;
 }) {
-  const Component = useSlidesState((state) => state.component);
-  const revision = useSlidesState((state) => state.revision);
-  const retryRevision = useSlidesState((state) => state.retryRevision);
+  const Component = useValue(() => slidesState$.compiled.get()?.component ?? null);
+  const revision = useValue(slidesState$.revision);
+  const retryRevision = useValue(slidesState$.retryRevision);
   if (!Component) {
     return null;
   }
@@ -249,15 +250,15 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
 
 export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean }) {
   const hosted = useBackgroundHost();
-  const currentSlide = useSlidesState((state) => state.currentSlide);
-  const color = useSlidesState((state) => state.config.theme?.backgroundColor ?? "#111827");
+  const currentSlide = useValue(slidesState$.currentSlide);
+  const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled}>{children}</SlideCanvasContent>;
   return hosted ? content : <BackgroundHost slideIndex={targetIndex ?? currentSlide} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode; captureEnabled: boolean }) {
   const hasBackground = useHasBackground();
-  const config = useSlidesState((state) => state.config);
+  const config = useValue(slidesState$.config);
   const [size, setSize] = React.useState({ width: 0, height: 0 });
   const aspectParts = config.aspectRatio?.split(/[/:]/).map(Number) ?? [];
   const aspectRatio = aspectParts.length === 2 && aspectParts.every((value) => Number.isFinite(value) && value > 0)
