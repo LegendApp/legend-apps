@@ -23,6 +23,9 @@ Pod::Spec.new do |s|
   }
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++17",
+    # This library's query/token loops are hot even in a React Native Debug app.
+    # Keep debug symbols, but do not turn every STL/regex operation into a call.
+    "GCC_OPTIMIZATION_LEVEL" => "2",
     "OTHER_CFLAGS" => '$(inherited) -include "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/Symbols.h"',
     "OTHER_CPLUSPLUSFLAGS" => '$(inherited) -include "$(PODS_TARGET_SRCROOT)/vendor/tree-sitter/Symbols.h"',
     "HEADER_SEARCH_PATHS" => [
