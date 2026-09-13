@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import type { PresentationRuntime } from "./types";
 
 const defaultRuntime: PresentationRuntime = {
@@ -15,14 +17,26 @@ const defaultRuntime: PresentationRuntime = {
   stepIndex: 0,
 };
 
-const PresentationContext = createContext(defaultRuntime);
+const PresentationContext = createContext(observable(defaultRuntime));
 
 export function PresentationProvider({ children, value }: { children: ReactNode; value: PresentationRuntime }) {
-  return <PresentationContext.Provider value={value}>{children}</PresentationContext.Provider>;
+  const runtime$ = useObservable(() => value, [value]);
+  return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
+}
+
+export const PresentationObservableProvider = PresentationContext.Provider;
+
+export function usePresentation$() {
+  return useContext(PresentationContext);
+}
+
+export function usePresentationValue<K extends Exclude<keyof PresentationRuntime, "goTo" | "next" | "previous">>(key: K): PresentationRuntime[K] {
+  const runtime$ = usePresentation$();
+  return useValue(() => runtime$[key].get()) as PresentationRuntime[K];
 }
 
 export function usePresentation() {
-  return useContext(PresentationContext);
+  return useValue(usePresentation$());
 }
 
 export function useSlideLifecycle() {
