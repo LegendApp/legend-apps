@@ -13,6 +13,9 @@ Pod::Spec.new do |s|
   s.frameworks = "AppKit", "CoreText"
   s.pod_target_xcconfig = {
     "CLANG_CXX_LANGUAGE_STANDARD" => "c++20",
+    # Document indexing and row-token construction need optimized native loops
+    # in Debug too; this does not change the app's JS debugging configuration.
+    "GCC_OPTIMIZATION_LEVEL" => "2",
     "HEADER_SEARCH_PATHS" => [
       "\"$(PODS_ROOT)/Headers/Private/Yoga\"",
     ].join(" ")
