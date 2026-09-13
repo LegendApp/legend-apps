@@ -17,18 +17,15 @@ import {
   type Display,
   WindowStyleMask,
 } from "@legend-apps/window-manager";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  type GestureResponderEvent,
   type LayoutChangeEvent,
-  type PanResponderGestureState,
 } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { EditableMarkdown } from "./EditableMarkdown";
@@ -41,6 +38,7 @@ import {
   resetPresenterLayout as resetStoredPresenterLayout,
 } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
+import { createPresenterResizeResponder } from "./presenterResizeResponder";
 import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
@@ -173,32 +171,10 @@ type ResizeHandleProps = {
 };
 
 function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleProps) {
-  const lastDeltaRef = useRef(0);
-  const onResizeRef = useRef(onResize);
-  const onResizeEndRef = useRef(onResizeEnd);
-  onResizeRef.current = onResize;
-  onResizeEndRef.current = onResizeEnd;
-  const [panResponder] = useState(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => {
-      lastDeltaRef.current = 0;
-    },
-    onPanResponderMove: (_event: GestureResponderEvent, gesture: PanResponderGestureState) => {
-      const totalDelta = direction === "horizontal" ? gesture.dx : gesture.dy;
-      const delta = totalDelta - lastDeltaRef.current;
-      lastDeltaRef.current = totalDelta;
-      if (delta !== 0) onResizeRef.current(delta);
-    },
-    onPanResponderRelease: () => {
-      lastDeltaRef.current = 0;
-      onResizeEndRef.current();
-    },
-    onPanResponderTerminate: () => {
-      lastDeltaRef.current = 0;
-      onResizeEndRef.current();
-    },
-  }));
+  const [resizeResponder] = useState(() => createPresenterResizeResponder({ direction, onResize, onResizeEnd }));
+  useLayoutEffect(() => {
+    resizeResponder.updateCallbacks({ direction, onResize, onResizeEnd });
+  }, [direction, onResize, onResizeEnd, resizeResponder]);
 
   return (
     <View
@@ -215,7 +191,7 @@ function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleP
         // React Native macOS supports resize cursors that are missing from the core ViewStyle type.
         { cursor: direction === "horizontal" ? "ew-resize" : "ns-resize" } as any,
       ]}
-      {...panResponder.panHandlers}
+      {...resizeResponder.panHandlers}
     >
       <View style={direction === "horizontal" ? styles.horizontalResizeLine : styles.verticalResizeLine} />
     </View>
@@ -665,8 +641,9 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
           }
         : {});
     } catch (error) {
+      const displayMessage = `Speaker notes: ${error instanceof Error ? error.message : String(error)}`;
       setSlidesState((current) => current.deckPath === deckPath
-        ? { displayMessage: `Speaker notes: ${error instanceof Error ? error.message : String(error)}` }
+        ? { displayMessage }
         : {});
       throw error;
     }

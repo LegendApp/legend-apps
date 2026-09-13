@@ -1,4 +1,4 @@
-import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Animated, View, type ViewStyle } from "react-native";
 import { useSlideLifecycle } from "@legend-apps/presentation";
 
@@ -26,11 +26,15 @@ export function stepStyle(step: number, { at = 1, until, initial, states, transi
 
 export function Step(props: StepProps) {
   const { stepIndex, isPreview, isActive } = useSlideLifecycle();
-  const target = useMemo(() => stepStyle(stepIndex, props), [stepIndex, props.at, props.until, props.initial, props.states, props.transition]);
-  const progress = useRef(new Animated.Value(1)).current;
-  const previous = useRef(target);
+  const { at, until, initial, states, transition } = props;
+  const target = useMemo(() => stepStyle(stepIndex, { at, until, initial, states, transition }), [stepIndex, at, until, initial, states, transition]);
+  const [progress] = useState(() => new Animated.Value(1));
+  let [range, setRange] = useState(() => ({ from: target, to: target }));
+  if (range.to !== target) {
+    range = { from: range.to, to: target };
+    setRange(range);
+  }
   useEffect(() => {
-    previous.current = target;
     if (isPreview || !isActive || props.transition === "none") {
       progress.setValue(1);
       return;
@@ -56,7 +60,7 @@ export function Step(props: StepProps) {
       [key, interpolate(start && typeof start === "object" ? (start as Record<string, unknown>)[key] : value, value)]));
     return end;
   }
-  const animatedStyle = isPreview || props.transition === "none" ? target : interpolate(previous.current, target);
+  const animatedStyle = isPreview || props.transition === "none" ? target : interpolate(range.from, target);
 
   const hidden = target.opacity === 0;
   return <Animated.View accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}
