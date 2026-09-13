@@ -294,6 +294,7 @@ function editorInput(root: TestRenderer.ReactTestRenderer | TestRenderer.ReactTe
 
 function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.find((node) => (
+    typeof node.props.activeBlockId === "string" &&
     typeof node.props.onBeginEditing === "function" &&
     typeof node.props.onEditorFrameChange === "function"
   ));
