@@ -71,7 +71,7 @@ import type {
 } from "./types";
 import { useLatestRef } from "./useLatestRef";
 
-function ObservableMarkdownNativeEditorHost({ activeBlockId$, draftMarkdown$, documentRenderState$, ...props }: Omit<Parameters<typeof MarkdownNativeEditorHost>[0], "activeBlockId" | "activeBlockMarkdown"> & {
+function ObservableMarkdownNativeEditorHost({ activeBlockId$, draftMarkdown$, documentRenderState$, ...props }: Omit<Parameters<typeof MarkdownNativeEditorHost>[0], "activeBlockId" | "activeBlockMarkdown" | "textSelectionJson"> & {
   activeBlockId$: Observable<string | null>;
   draftMarkdown$: Observable<string>;
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
@@ -80,7 +80,11 @@ function ObservableMarkdownNativeEditorHost({ activeBlockId$, draftMarkdown$, do
   const activeBlockMarkdown = useValue(() => activeBlockId
     ? documentRenderState$.activeBlocksById.get(activeBlockId).block.markdown.get() ?? draftMarkdown$.get()
     : "");
-  return <MarkdownNativeEditorHost {...props} activeBlockId={activeBlockId ?? ""} activeBlockMarkdown={activeBlockMarkdown} />;
+  const textSelectionJson = useValue(() => {
+    const selection = documentRenderState$.blockSelection.get()?.textSelection;
+    return selection ? JSON.stringify(selection) : "";
+  });
+  return <MarkdownNativeEditorHost textSelectionJson={textSelectionJson} {...props} activeBlockId={activeBlockId ?? ""} activeBlockMarkdown={activeBlockMarkdown} />;
 }
 
 const typingHistoryGroupTimeoutMs = 1000;
@@ -523,7 +527,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       activationMode: "programmatic" as ActiveBlockRenderState["activationMode"],
     });
     const activeBlockId = useValue(activeEditor$.blockId);
-    const blockSelection = useValue(documentRenderState$.blockSelection);
+    const hasBlockSelection = useValue(() => documentRenderState$.blockSelection.get() !== null);
     const blockSelectionInputText$ = useObservable("");
     const layoutMetrics$ = useObservable({
       containerWindowY: 0,
@@ -1687,6 +1691,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const replaceBlockSelection = useCallback(
       async (markdown: string) => {
+        const blockSelection = documentRenderState$.blockSelection.peek();
         const documentState = documentState$.peek();
         if (documentState.status !== "loaded" || !adapter.applyTransaction || !blockSelection) {
           return;
@@ -1791,7 +1796,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       },
       [adapter,
         applyTransactionResult,
-        blockSelection,
+        documentRenderState$,
         commitActiveBlock,
         clearTypingHistoryGroup,
         documentState$,
@@ -1801,7 +1806,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
-        validateTransactionResult, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
+        validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
 
     const replaceActiveBlockMarkdown = useCallback(
@@ -2063,10 +2068,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const formatCurrentBlockRange = useCallback(
       (transform: (markdown: string) => string) => {
+        const blockSelection = documentRenderState$.blockSelection.peek();
         async function runFormat() {
           if (blockSelection) {
             const selectedBlocks = await loadSelectedBlockMarkdown(blockSelection);
-            if (selectedBlocks) {
+            if (selectedBlocks && documentRenderState$.blockSelection.peek() === blockSelection) {
               await replaceBlockSelection(transform(selectedBlocks.markdown));
             }
             return;
@@ -2079,7 +2085,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         runFormat().catch(reportAsyncError);
       },
-      [blockSelection,
+      [documentRenderState$,
         loadSelectedBlockMarkdown,
         replaceActiveBlockMarkdown,
         replaceBlockSelection,
@@ -2416,6 +2422,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const handleBlockSelectionKeyPress = useCallback(
       (event: { nativeEvent: { key: string } }) => {
+        const blockSelection = documentRenderState$.blockSelection.peek();
         if (!blockSelection) {
           return;
         }
@@ -2425,17 +2432,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           replaceBlockSelection("").catch(reportAsyncError);
         }
       },
-      [blockSelection, replaceBlockSelection, reportAsyncError],
+      [documentRenderState$, replaceBlockSelection, reportAsyncError],
     );
 
     const handleBlockSelectionInputChange = useCallback(
       (text: string) => {
+        const blockSelection = documentRenderState$.blockSelection.peek();
         blockSelectionInputText$.set("");
         if (blockSelection && text.length > 0) {
           replaceBlockSelection(text).catch(reportAsyncError);
         }
       },
-      [blockSelection, blockSelectionInputText$, replaceBlockSelection, reportAsyncError],
+      [documentRenderState$, blockSelectionInputText$, replaceBlockSelection, reportAsyncError],
     );
 
     const hydrateRemainingBlocks = useCallback(
@@ -2643,7 +2651,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return state.status === "loaded" ? state.snapshot.documentId : undefined;
     });
     useEffect(() => {
-      if (!blockSelection) {
+      if (!hasBlockSelection) {
         return;
       }
       if (activeEditor$.blockId.peek()) {
@@ -2654,7 +2662,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         blockSelectionInputRef.current?.focus();
       }, 0);
       return () => clearTimeout(timeout);
-    }, [blockSelection, activeEditor$]);
+    }, [hasBlockSelection, activeEditor$]);
 
     useEffect(() => {
       if (!loadedDocumentId) {
@@ -3137,8 +3145,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }),
       [renderCommentBubble, resolvedMarkdownLayout, resolvedMarkdownStyle],
     );
-    const textSelectionAnchorId = blockSelection?.textSelection?.anchor.blockId;
-    const textSelectionFocusId = blockSelection?.textSelection?.focus.blockId;
+    const textSelectionAnchorId = useValue(() => documentRenderState$.blockSelection.get()?.textSelection?.anchor.blockId);
+    const textSelectionFocusId = useValue(() => documentRenderState$.blockSelection.get()?.textSelection?.focus.blockId);
     const alwaysRenderActiveBlock = useMemo(
       () => {
         const keys = new Set<string>();
@@ -3207,7 +3215,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const selectionToolbarAnchorPublisherProps = useMemo<MarkdownBlockSelectionAnchorPublisherProps>(() => ({
       dataRevision$: blockDataRevision$,
       documentRenderState$,
-      enabled: selectionToolbarAnchor === undefined && blockSelection !== null,
+      enabled: selectionToolbarAnchor === undefined && hasBlockSelection,
       getBlockIdAtIndex,
       getBlockIndexById,
       inactiveOverlayWidth$,
@@ -3218,7 +3226,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectionAnchor$,
     }), [
       blockDataRevision$,
-      blockSelection,
+      hasBlockSelection,
       documentRenderState$,
       getBlockIdAtIndex,
       getBlockIndexById,
@@ -3435,7 +3443,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           documentRenderState$={documentRenderState$}
           containerRef={containerRef}
           markdownLayoutConfigJson={nativeMarkdownLayoutConfigJson}
-          textSelectionJson={blockSelection?.textSelection ? JSON.stringify(blockSelection.textSelection) : ""}
           onTextSelectionChange={handleNativeTextSelectionChange}
           onTextSelectionReveal={handleNativeTextSelectionReveal}
           onTextSelectionAction={handleNativeTextSelectionAction}

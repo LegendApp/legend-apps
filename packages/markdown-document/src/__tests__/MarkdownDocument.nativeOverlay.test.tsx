@@ -1567,3 +1567,32 @@ describe("MarkdownDocument native row editor", () => {
   });
 
 });
+
+it("updates native selection offsets without rendering the document owner", async () => {
+  const renderSpy = jest.spyOn(MarkdownDocument as unknown as { render: (...args: unknown[]) => unknown }, "render");
+  const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "alpha"), block("b", 1, "bravo")]));
+  let renderer!: TestRenderer.ReactTestRenderer;
+  try {
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />); });
+    await flushPromises();
+    const send = async (offset: number) => {
+      const selection = {
+        anchor: { blockId: "a", index: 0, offset: 1, beforeMarkdown: "a", afterMarkdown: "lpha" },
+        focus: { blockId: "b", index: 1, offset, beforeMarkdown: "bravo".slice(0, offset), afterMarkdown: "bravo".slice(offset) },
+        sameBlockMarkdown: "",
+      };
+      await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: true } }));
+    };
+    await send(0);
+    renderSpy.mockClear();
+    for (const offset of [1, 2, 3, 4, 5]) await send(offset);
+    expect(JSON.parse(nativeHost(renderer).props.textSelectionJson).focus.offset).toBe(5);
+    expect(renderSpy).not.toHaveBeenCalled();
+    await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: "", dragging: false } }));
+    expect(nativeHost(renderer).props.textSelectionJson).toBe("");
+    expect(renderSpy).toHaveBeenCalled();
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    renderSpy.mockRestore();
+  }
+});
