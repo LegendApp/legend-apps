@@ -1,5 +1,5 @@
 import { getCodexAvailability } from "@legend-apps/codex";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 
 import { Button } from "./Button";
@@ -8,7 +8,8 @@ import { useToast } from "./Toast";
 import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import type { LocalTrack } from "../systems/LocalMusicState";
-import { useValue } from "@legendapp/state/react";
+import { batch, type Observable } from "@legendapp/state";
+import { Show, useObservable, useValue } from "@legendapp/state/react";
 import { spotifyStatus$ } from "../providers/spotify/provider";
 import { appleMusicStatus$ } from "../providers/appleMusic/provider";
 import {
@@ -128,12 +129,17 @@ export function AIButtons(props: AIButtonsProps) {
 
 function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
     const showToast = useToast();
-    const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false);
-    const [isPromptOpen, setIsPromptOpen] = useState(false);
-    const [prompt, setPrompt] = useState("");
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [generationError, setGenerationError] = useState<string | null>(null);
-    const [aiToolState, setAIToolState] = useState<AIToolState>({ status: "checking" });
+    const state$ = useObservable({
+        isSourcePickerOpen: false,
+        isPromptOpen: false,
+        prompt: "",
+        isGenerating: false,
+        generationError: null as string | null,
+        aiToolState: { status: "checking" } as AIToolState,
+    });
+    const isGenerating = useValue(state$.isGenerating);
+    const generationError = useValue(state$.generationError);
+    const aiToolState = useValue(state$.aiToolState);
     const defaultSources = useValue(settings$.ai.defaultSources);
     const overrideSources = useValue(settings$.ai.playlistSourceOverrides[playlist.id]);
     const spotifyStatus = useValue(spotifyStatus$);
@@ -143,7 +149,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         hasSourceOverride ? overrideSources : defaultSources,
         AI_SOURCE_IDS,
     );
-    const trimmedPrompt = prompt.trim();
     let unavailableMessage: string | null = null;
     if (!canUseAI) {
         unavailableMessage = disabledReason ?? "AI cannot edit this playlist in its current state.";
@@ -184,7 +189,7 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         getCodexAvailability()
             .then((availability) => {
                 if (isMounted) {
-                    setAIToolState(availability.available
+                    state$.aiToolState.set(availability.available
                         ? { status: "available" }
                         : {
                             message: availability.message,
@@ -194,7 +199,7 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
             })
             .catch((error: unknown) => {
                 if (isMounted) {
-                    setAIToolState({
+                    state$.aiToolState.set({
                         message: `Could not start Codex: ${errorMessage(error)}`,
                         status: "unavailable",
                     });
@@ -204,16 +209,18 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [state$]);
 
     const handleGenerate = useCallback(
         async (userPrompt?: string) => {
-            if (!canGenerate) {
+            if (unavailableMessage !== null || state$.isGenerating.peek()) {
                 return;
             }
 
-            setIsGenerating(true);
-            setGenerationError(null);
+            batch(() => {
+                state$.isGenerating.set(true);
+                state$.generationError.set(null);
+            });
             try {
                 const result = await generatePlaylistExtension({
                     libraryTracks,
@@ -254,12 +261,12 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to generate playlist tracks";
-                setGenerationError(message);
+                state$.generationError.set(message);
                 showToast(message, "error");
             }
-            setIsGenerating(false);
+            state$.isGenerating.set(false);
         },
-        [canGenerate, libraryTracks, onAddTracks, playlist, showToast, sources],
+        [unavailableMessage, libraryTracks, onAddTracks, playlist, showToast, sources, state$],
     );
 
     const handleSourceToggle = useCallback((source: MusicProviderId, checked: boolean) => {
@@ -282,32 +289,35 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
     }, [playlist.id, sources]);
 
     const handleSubmitPrompt = useCallback(() => {
+        const trimmedPrompt = state$.prompt.peek().trim();
         if (!trimmedPrompt) {
             showToast("Enter a prompt first", "error");
             return;
         }
         if (!canGenerate) {
             const message = unavailableMessage ?? "AI playlist generation is unavailable.";
-            setGenerationError(message);
+            state$.generationError.set(message);
             showToast(message, "error");
             return;
         }
 
-        setIsPromptOpen(false);
-        setPrompt("");
+        batch(() => {
+            state$.isPromptOpen.set(false);
+            state$.prompt.set("");
+        });
         void handleGenerate(trimmedPrompt);
-    }, [canGenerate, handleGenerate, showToast, trimmedPrompt, unavailableMessage]);
+    }, [canGenerate, handleGenerate, showToast, unavailableMessage, state$]);
 
     const handleAutoGenerate = useCallback(() => {
         if (playlist.trackPaths.length === 0) {
             const message = "Add at least one seed track for Auto, or use Prompt.";
-            setGenerationError(message);
+            state$.generationError.set(message);
             showToast(message, "error");
             return;
         }
 
         void handleGenerate();
-    }, [handleGenerate, playlist.trackPaths.length, showToast]);
+    }, [handleGenerate, playlist.trackPaths.length, showToast, state$]);
 
     return (
         <>
@@ -327,7 +337,7 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                     accessibilityLabel={`AI sources: ${sourceSummary(sources)}`}
                     accessibilityRole="button"
                     tooltip="Choose AI music sources"
-                    onClick={() => setIsSourcePickerOpen(true)}
+                    onClick={() => state$.isSourcePickerOpen.set(true)}
                 >
                     <Text className="text-xs font-medium text-text-secondary" numberOfLines={1}>
                         {hasSourceOverride
@@ -357,10 +367,10 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                     tooltip={unavailableMessage ?? "Prompt AI to add songs"}
                     disabled={!canPromptGenerate}
                     className={!canPromptGenerate ? "opacity-50" : undefined}
-                    onClick={() => setIsPromptOpen(true)}
+                    onClick={() => state$.isPromptOpen.set(true)}
                 />
             </View>
-            {isSourcePickerOpen ? (
+            <Show if={state$.isSourcePickerOpen}>
                 <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
                     <View className="w-[380px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
                         <View className="gap-1">
@@ -390,14 +400,14 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                                         : "Change the defaults in Settings → General → AI playlists."}
                                 </Text>
                             </View>
-                            <Button size="small" variant="accent" onClick={() => setIsSourcePickerOpen(false)}>
+                            <Button size="small" variant="accent" onClick={() => state$.isSourcePickerOpen.set(false)}>
                                 Done
                             </Button>
                         </View>
                     </View>
                 </View>
-            ) : null}
-            {isPromptOpen ? (
+            </Show>
+            <Show if={state$.isPromptOpen}>
                 <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
                     <View className="w-[440px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
                         <View className="gap-1">
@@ -406,15 +416,7 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                                 {playlist.name}
                             </Text>
                         </View>
-                        <TextInput
-                            multiline
-                            value={prompt}
-                            onChangeText={setPrompt}
-                            placeholder="More upbeat, less acoustic, similar era..."
-                            placeholderTextColor="rgba(255,255,255,0.35)"
-                            className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
-                            textAlignVertical="top"
-                        />
+                        <PromptInput prompt$={state$.prompt} />
                         <View className="gap-2">
                             <Text className="text-xs font-medium text-text-secondary">Find tracks in</Text>
                             <SourcePolicyChoices
@@ -448,27 +450,36 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                                 accessibilityLabel="Cancel prompt"
                                 accessibilityRole="button"
                                 onClick={() => {
-                                    setIsPromptOpen(false);
-                                    setPrompt("");
+                                    state$.isPromptOpen.set(false);
+                                    state$.prompt.set("");
                                 }}
                             >
                                 Cancel
                             </Button>
-                            <Button
-                                size="small"
-                                variant="accent"
-                                accessibilityLabel="Generate playlist"
-                                accessibilityRole="button"
-                                disabled={!trimmedPrompt || !canGenerate}
-                                className={!trimmedPrompt || !canGenerate ? "opacity-50" : undefined}
-                                onClick={handleSubmitPrompt}
-                            >
-                                Generate
-                            </Button>
+                            <PromptSubmit prompt$={state$.prompt} canGenerate={canGenerate} onSubmit={handleSubmitPrompt} />
                         </View>
                     </View>
                 </View>
-            ) : null}
+            </Show>
         </>
     );
+}
+
+function PromptInput({ prompt$ }: { prompt$: Observable<string> }) {
+    const prompt = useValue(prompt$);
+    return <TextInput
+        multiline value={prompt} onChangeText={(value) => prompt$.set(value)}
+        placeholder="More upbeat, less acoustic, similar era..."
+        placeholderTextColor="rgba(255,255,255,0.35)"
+        className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
+        textAlignVertical="top"
+    />;
+}
+
+function PromptSubmit({ prompt$, canGenerate, onSubmit }: { prompt$: Observable<string>; canGenerate: boolean; onSubmit: () => void }) {
+    const enabled = useValue(() => canGenerate && prompt$.get().trim().length > 0);
+    return <Button size="small" variant="accent" accessibilityLabel="Generate playlist" accessibilityRole="button"
+        disabled={!enabled} className={!enabled ? "opacity-50" : undefined} onClick={onSubmit}>
+        Generate
+    </Button>;
 }

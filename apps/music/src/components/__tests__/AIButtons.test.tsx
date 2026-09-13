@@ -18,7 +18,7 @@ jest.mock("@legend-apps/codex", () => ({
 jest.mock("../Toast", () => ({
     __esModule: true,
     showToast: jest.fn(),
-    useToast: () => mockShowToast,
+    useToast: jest.fn(() => mockShowToast),
 }));
 
 jest.mock("../TooltipProvider", () => ({
@@ -357,6 +357,39 @@ describe("AIButtons", () => {
         act(() => {
             renderer.unmount();
         });
+    });
+
+    it("keeps the toolbar idle while the prompt and submit availability update", async () => {
+        const renderer = await renderAIButtons();
+        const toolbarRenders = jest.requireMock("../Toast").useToast as jest.Mock;
+        await act(async () => findButton(renderer, "Prompt").props.onPress({ nativeEvent: { button: 0 } }));
+        toolbarRenders.mockClear();
+        const input = renderer.root.findByType("TextInput" as any);
+        for (const prompt of [" ", "m", "more", "more energy", ""]) {
+            await act(async () => input.props.onChangeText(prompt));
+            expect(input.props.value).toBe(prompt);
+            expect(findButton(renderer, "Generate").props.disabled).toBe(!prompt.trim());
+        }
+        expect(toolbarRenders).not.toHaveBeenCalled();
+        await act(async () => findButton(renderer, "Cancel prompt").props.onPress({ nativeEvent: { button: 0 } }));
+        await act(async () => findButton(renderer, "Prompt").props.onPress({ nativeEvent: { button: 0 } }));
+        expect(renderer.root.findByType("TextInput" as any).props.value).toBe("");
+        await act(async () => renderer.unmount());
+    });
+
+    it("accepts only one generation while a request is in flight", async () => {
+        let finish!: (value: Awaited<ReturnType<typeof generatePlaylistExtension>>) => void;
+        mockGeneratePlaylistExtension.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+        const renderer = await renderAIButtons();
+        const press = findButton(renderer, "Auto").props.onPress;
+        await act(async () => {
+            press({ nativeEvent: { button: 0 } });
+            press({ nativeEvent: { button: 0 } });
+        });
+        expect(mockGeneratePlaylistExtension).toHaveBeenCalledTimes(1);
+        await act(async () => finish({ tracks: [], unresolvedCount: 0, rawResult: { model: "test", output: "{}", threadId: "1", turnId: "1", userAgent: "test" } }));
+        expect(findButton(renderer, "Auto").props.disabled).toBe(false);
+        await act(async () => renderer.unmount());
     });
 
     it("passes Undo through the success toast", async () => {
