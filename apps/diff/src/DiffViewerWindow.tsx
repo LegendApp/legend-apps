@@ -48,7 +48,7 @@ import {
   LegendList,
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
-import { batch, computed, type Observable } from "@legendapp/state";
+import { batch, computed, ObservableHint, type OpaqueObject, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
@@ -1859,7 +1859,7 @@ type DiffMergeFileRenderModel = {
   showOnlyHunks: boolean;
 };
 
-type DiffMergeVersionByKey = Record<string, number | undefined>;
+type DiffMergeFileRenderByPath = Record<string, OpaqueObject<DiffMergeFileRenderModel> | undefined>;
 
 function createMergeSyntaxStyleMap(styles: readonly SyntaxStyle[]): SyntaxStyleMap {
   return new Map(styles.map((style) => [style.id, style]));
@@ -2238,8 +2238,7 @@ function DiffMergePlaceholderRow({
 
 function DiffMergeObservableLineRow({
   itemIndex,
-  mergeFileRenderByPathRef,
-  mergeFileVersionByPath$,
+  mergeFileRenderByPath$,
   mergeItemIndexAllocator,
   mergeRender$,
   mergeSyntaxByPath$,
@@ -2247,8 +2246,7 @@ function DiffMergeObservableLineRow({
   resolvingMergeConflictKeys$,
 }: {
   itemIndex: number;
-  mergeFileRenderByPathRef: RefObject<ReadonlyMap<string, DiffMergeFileRenderModel>>;
-  mergeFileVersionByPath$: Observable<DiffMergeVersionByKey>;
+  mergeFileRenderByPath$: Observable<DiffMergeFileRenderByPath>;
   mergeItemIndexAllocator: DiffInlineMergeItemIndexAllocator;
   mergeRender$: Observable<DiffMergeRenderState>;
   mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
@@ -2256,14 +2254,7 @@ function DiffMergeObservableLineRow({
   resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
   const location = mergeItemIndexAllocator.locationByItemIndex.get(itemIndex);
-  useValue(() => (
-    location
-      ? mergeFileVersionByPath$[location.filePath].get()
-      : undefined
-  ));
-  const renderFile = location
-    ? mergeFileRenderByPathRef.current.get(location.filePath)
-    : undefined;
+  const renderFile = useValue(() => location ? mergeFileRenderByPath$[location.filePath].get() : undefined);
 
   let content: ReactElement;
   if (location && renderFile) {
@@ -2371,17 +2362,20 @@ function useDiffInlineMergeModel({
     return map;
   }, [horizontalConfigId, mergeDisplayModelByPath, mergeState, showOnlyHunks]);
 
-  const mergeItemIndexAllocatorRef = useRef({
+  // Allocation identity belongs to the document, including across edits and collapse changes.
+  let [mergeDocumentSession, setMergeDocumentSession] = useState(() => ({
     allocator: createDiffInlineMergeItemIndexAllocator(),
     documentId,
-  });
-  if (mergeItemIndexAllocatorRef.current.documentId !== documentId) {
-    mergeItemIndexAllocatorRef.current = {
+  }));
+  if (mergeDocumentSession.documentId !== documentId) {
+    mergeDocumentSession = {
       allocator: createDiffInlineMergeItemIndexAllocator(),
       documentId,
     };
+    setMergeDocumentSession(mergeDocumentSession);
   }
-  const getMergeItemIndex = mergeItemIndexAllocatorRef.current.allocator.getItemIndex;
+  const mergeItemIndexAllocator = mergeDocumentSession.allocator;
+  const getMergeItemIndex = mergeItemIndexAllocator.getItemIndex;
 
   const emptyMergeFileByPath = useMemo(() => new Map<string, DiffMergeConflictFile>(), []);
   const mergeFileByPath = mergeState.status === "ready" ? mergeState.fileByPath : emptyMergeFileByPath;
@@ -2405,16 +2399,22 @@ function useDiffInlineMergeModel({
     }
     return { itemIndexesByFileIndex, rowByItemIndex };
   }, [files, getMergeItemIndex, mergeDisplayModelByPath, mergeFileByPath, viewMode]);
-  const sideBySideInlineDataSource = useMemo(
-    () => sideBySideDataSource
-      ? new DiffSideBySideInlineMergeDataSource(
-          sideBySideDataSource,
-          files,
-          sideBySideMergeItems.itemIndexesByFileIndex,
-        )
+  let [sideBySideSession, setSideBySideSession] = useState(() => ({
+    base: sideBySideDataSource,
+    source: sideBySideDataSource
+      ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
       : null,
-    [sideBySideDataSource],
-  );
+  }));
+  if (sideBySideSession.base !== sideBySideDataSource) {
+    sideBySideSession = {
+      base: sideBySideDataSource,
+      source: sideBySideDataSource
+        ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
+        : null,
+    };
+    setSideBySideSession(sideBySideSession);
+  }
+  const sideBySideInlineDataSource = sideBySideSession.source;
   useEffect(() => () => {
     sideBySideInlineDataSource?.dispose();
   }, [sideBySideInlineDataSource]);
@@ -2443,17 +2443,18 @@ function useDiffInlineMergeModel({
       unifiedItemIndexes,
     ],
   );
-  const unifiedDataSourceRef = useRef<{
-    documentId: number;
-    source: DiffUnifiedInlineMergeDataSource;
-  } | null>(null);
-  if (unifiedDataSourceRef.current?.documentId !== documentId) {
-    unifiedDataSourceRef.current = {
+  let [unifiedSession, setUnifiedSession] = useState(() => ({
+    documentId,
+    source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
+  }));
+  if (unifiedSession.documentId !== documentId) {
+    unifiedSession = {
       documentId,
       source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
     };
+    setUnifiedSession(unifiedSession);
   }
-  const unifiedDataSource = unifiedDataSourceRef.current.source;
+  const unifiedDataSource = unifiedSession.source;
   useLayoutEffect(() => {
     unifiedDataSource.update(unifiedInlineList.itemIndexes);
   }, [unifiedDataSource, unifiedInlineList.itemIndexes]);
@@ -2497,41 +2498,23 @@ function useDiffInlineMergeModel({
     viewMode,
   ]);
 
-  const mergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
-  const publishedMergeFileRenderByPathRef = useRef<ReadonlyMap<string, DiffMergeFileRenderModel>>(mergeFileRenderByPath);
-  const mergeFileVersionByPath$ = useObservable<DiffMergeVersionByKey>({});
-  const mergeObservableVersionRef = useRef(0);
-
+  const mergeFileRenderByPath$ = useObservable<DiffMergeFileRenderByPath>(() =>
+    Object.fromEntries([...mergeFileRenderByPath].map(([path, model]) => [path, ObservableHint.opaque(model)])),
+  );
   useLayoutEffect(() => {
-    const previousFileRenderByPath = publishedMergeFileRenderByPathRef.current;
-    mergeFileRenderByPathRef.current = mergeFileRenderByPath;
-
+    const previous = mergeFileRenderByPath$.peek();
     batch(() => {
-      previousFileRenderByPath.forEach((_previousRenderFile, filePath) => {
-        if (!mergeFileRenderByPath.has(filePath)) {
-          mergeObservableVersionRef.current += 1;
-          mergeFileVersionByPath$[filePath].set(mergeObservableVersionRef.current);
+      for (const path of Object.keys(previous)) {
+        if (!mergeFileRenderByPath.has(path)) mergeFileRenderByPath$[path].delete();
+      }
+      for (const [path, model] of mergeFileRenderByPath) {
+        const old = previous[path];
+        if (!old || old.file !== model.file || old.horizontalConfigId !== model.horizontalConfigId || old.showOnlyHunks !== model.showOnlyHunks) {
+          mergeFileRenderByPath$[path].set(ObservableHint.opaque(model));
         }
-      });
-      mergeFileRenderByPath.forEach((renderFile, filePath) => {
-        const previousRenderFile = previousFileRenderByPath.get(filePath);
-        if (
-          !previousRenderFile ||
-          previousRenderFile.file !== renderFile.file ||
-          previousRenderFile.horizontalConfigId !== renderFile.horizontalConfigId ||
-          previousRenderFile.showOnlyHunks !== renderFile.showOnlyHunks
-        ) {
-          mergeObservableVersionRef.current += 1;
-          mergeFileVersionByPath$[filePath].set(mergeObservableVersionRef.current);
-        }
-      });
+      }
     });
-
-    publishedMergeFileRenderByPathRef.current = mergeFileRenderByPath;
-  }, [
-    mergeFileRenderByPath,
-    mergeFileVersionByPath$,
-  ]);
+  }, [mergeFileRenderByPath, mergeFileRenderByPath$]);
 
   const activeRowByItemIndex = viewMode === "unified"
     ? inlineList.rowByItemIndex
@@ -2558,9 +2541,8 @@ function useDiffInlineMergeModel({
       return (
         <DiffMergeObservableLineRow
           itemIndex={index}
-          mergeFileRenderByPathRef={mergeFileRenderByPathRef}
-          mergeFileVersionByPath$={mergeFileVersionByPath$}
-          mergeItemIndexAllocator={mergeItemIndexAllocatorRef.current.allocator}
+          mergeFileRenderByPath$={mergeFileRenderByPath$}
+          mergeItemIndexAllocator={mergeItemIndexAllocator}
           mergeRender$={mergeRender$}
           mergeSyntaxByPath$={mergeSyntaxByPath$}
           onResolveMergeConflict={onResolveMergeConflict}
@@ -2569,7 +2551,8 @@ function useDiffInlineMergeModel({
       );
     },
     [
-      mergeFileVersionByPath$,
+      mergeFileRenderByPath$,
+      mergeItemIndexAllocator,
       mergeRender$,
       mergeSyntaxByPath$,
       onResolveMergeConflict,

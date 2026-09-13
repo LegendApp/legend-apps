@@ -17,7 +17,7 @@ import {
 } from "@legend-apps/virtualized-document";
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DiffSettingsFile } from "../diffSettings";
 import {
   diffProgressiveInitialPaintRowCount,
@@ -284,12 +284,20 @@ export function useDiffLoadedModel({
     () => createCollapsedFileIndexList(collapsedFileIndexes),
     [collapsedFileIndexes],
   );
-  const sideBySideDataSource = useMemo(
-    () => state.status === "loaded" && viewMode !== "unified"
-      ? new DiffSideBySideDataSource(state.document, collapsedFileIndexList)
-      : null,
-    [state.status === "loaded" ? state.document : null, viewMode === "unified"],
-  );
+  const sideBySideDocument = viewMode === "unified" ? null : snapshotDocument;
+  // Collapse changes update the existing native projection; only a new document owns a new source.
+  let [sideBySideSession, setSideBySideSession] = useState(() => ({
+    document: sideBySideDocument,
+    source: sideBySideDocument ? new DiffSideBySideDataSource(sideBySideDocument, collapsedFileIndexList) : null,
+  }));
+  if (sideBySideSession.document !== sideBySideDocument) {
+    sideBySideSession = {
+      document: sideBySideDocument,
+      source: sideBySideDocument ? new DiffSideBySideDataSource(sideBySideDocument, collapsedFileIndexList) : null,
+    };
+    setSideBySideSession(sideBySideSession);
+  }
+  const sideBySideDataSource = sideBySideSession.source;
   useEffect(() => () => {
     sideBySideDataSource?.dispose();
   }, [sideBySideDataSource]);
