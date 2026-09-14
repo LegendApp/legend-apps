@@ -10,13 +10,17 @@ import { useEmbeddedGrammars, useTreeGrammar } from "./useTreeGrammar";
 import { GrammarProgressBanner } from "./GrammarProgressBanner";
 import { SourceLanguageSelector } from "./SourceLanguageSelector";
 import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
+import { getPreparedDocumentMetadata } from "./preparedDocument";
 import { SourceHeightCache } from "./SourceHeightCache";
+export { prepareDocument, cancelPreparedDocument } from "./preparedDocument";
 
 export type SourceDocumentEditorProps = {
   ref?: Ref<SourceDocumentEditorHandle>;
   onDocumentState?: (state: { dirty: boolean; path: string }) => void;
   /** UTF-8 input; disk changes only through explicit save/saveAs commands. */
   filePath: string;
+  /** Single-use token returned by prepareDocument(path), owned by the open action. */
+  preparedDocumentId?: string;
   /** Optional in-memory seed. Remount with a new key to replace the document. */
   initialSource?: string;
   onSelectionChange?: (selection: { line: number; start: number; length: number }) => void;
@@ -67,7 +71,7 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heigh
 
 export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, indentUnit = "  ", automaticPairs = true,
   language: preferredLanguage, showLanguageSelector = true, showFileLoadingBanner = true, syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
-  syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange,
+  syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange, preparedDocumentId,
 }: SourceDocumentEditorProps) {
   const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
   const pending = useRef(new Map<number, { resolve: (value: boolean) => void; reject: (error: Error) => void }>());
@@ -86,12 +90,14 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     for (const request of pending.current.values()) request.resolve(false);
     pending.current.clear();
   }, []);
-  const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(null);
-  const [error, setError] = useState("");
+  const [prepared] = useState(() => initialSource === undefined ? getPreparedDocumentMetadata(preparedDocumentId, filePath) : null);
+  const [dataSource, setDataSource] = useState<SourceLineDataSource | null>(() => prepared && !prepared.error
+    ? new SourceLineDataSource(prepared.lineCount, prepared.firstId) : null);
+  const [error, setError] = useState(prepared?.error ?? "");
   const [syntaxError, setSyntaxError] = useState("");
-  const [loadingTail, setLoadingTail] = useState(false);
+  const [loadingTail, setLoadingTail] = useState(!!prepared && !prepared.complete && !prepared.error);
   const [progress] = useState(createSourceProgress);
-  const [sourcePrefix, setSourcePrefix] = useState(() => initialSource?.slice(0, 512) ?? "");
+  const [sourcePrefix, setSourcePrefix] = useState(() => initialSource?.slice(0, 512) ?? prepared?.sourcePrefix ?? "");
   const [languageOverride, setLanguageOverride] = useState("auto");
   const language = languageOverride === "auto" ? preferredLanguage || detectGrammar(filePath, sourcePrefix) : languageOverride;
   const grammar = useTreeGrammar(language, syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled);
@@ -102,7 +108,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     && (syntaxBackend !== "tree-sitter" || (grammar.known && grammar.ready));
   const highlightError = syntaxHighlightingEnabled ? syntaxError : "";
   const list = useRef<LegendListRef>(null);
-  const sourceRef = useRef<SourceLineDataSource | null>(null);
+  const sourceRef = useRef<SourceLineDataSource | null>(dataSource);
   const [heights] = useState(() => new SourceHeightCache());
   const [viewportWidth, setViewportWidth] = useState(0);
   const lineHeight = Math.ceil(fontSize * 1.6);
@@ -132,6 +138,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       if (nativeEvent.error) request?.reject(new Error(nativeEvent.error)); else request?.resolve(nativeEvent.allowed);
     }}
     documentPath={filePath}
+    preparedDocumentId={initialSource === undefined ? preparedDocumentId : undefined}
     initialSource={initialSource}
     useInitialSource={initialSource !== undefined}
     syntaxLanguage={syntaxBackend === "tree-sitter" ? grammar.name : language}
@@ -166,10 +173,17 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       setSourcePrefix(nativeEvent.sourcePrefix ?? "");
       setLoadingTail(!nativeEvent.complete && !nativeEvent.error);
       if (!nativeEvent.error) {
-        const source = new SourceLineDataSource(nativeEvent.lineCount, nativeEvent.firstId);
-        sourceRef.current = source;
-        setDataSource(source);
+        // A prepared first chunk already seeded the list before native mounting.
+        // Keep its identity: onReady acknowledges adoption, not a second document.
+        if (!sourceRef.current) {
+          const source = new SourceLineDataSource(nativeEvent.lineCount, nativeEvent.firstId);
+          sourceRef.current = source;
+          setDataSource(source);
+        }
         onLoad?.();
+      } else {
+        sourceRef.current = null;
+        setDataSource(null);
       }
     }}
     onAppend={({ nativeEvent }) => {

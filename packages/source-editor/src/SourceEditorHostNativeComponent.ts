@@ -5,6 +5,7 @@ import type { DirectEventHandler, Double, WithDefault } from "react-native/Libra
 
 export interface NativeProps extends ViewProps {
   documentPath: string;
+  preparedDocumentId?: string;
   automaticPairs?: WithDefault<boolean, true>;
   indentUnit?: WithDefault<string, "  ">;
   initialSource?: string;

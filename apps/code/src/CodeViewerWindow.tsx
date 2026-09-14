@@ -3,7 +3,7 @@ import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
 import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
 import { addNativeMenuActionListener, updateMenuItems } from "@legend-apps/native-menu";
 import { noteRecentDocument } from "@legend-apps/recent-documents";
-import { SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
+import { cancelPreparedDocument, prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,14 +17,15 @@ import {
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
-import { codeViewerFileRequest$ } from "./codeViewerRequests";
+import { codeViewerFileRequest$, consumeCodeViewerFileRequest } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
 type CodeViewerWindowProps = {
   launchArguments?: string[];
+  preparedDocumentId?: string;
 };
 
-export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
+export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPreparedDocumentId }: CodeViewerWindowProps) {
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
@@ -34,6 +35,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
   const [filePath, setFilePath] = useState<string | null>(launchFile);
   const [documentKey, setDocumentKey] = useState(0);
+  const [preparedDocumentId, setPreparedDocumentId] = useState(launchPreparedDocumentId);
   const [error, setError] = useState<string | null>(null);
   const [documentPath, setDocumentPath] = useState<string | null>(launchFile);
   const editor = useRef<SourceDocumentEditorHandle>(null);
@@ -43,17 +45,31 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef(launchFile);
   const loadedFileRequestVersionRef = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const borderColor = displayTheme.colors.border;
 
-  const openFile = useCallback(async (path: string) => {
-    if (path === documentPath) return;
+  useEffect(() => () => cancelPreparedDocument(preparedDocumentId), [preparedDocumentId]);
+
+  const openFile = useCallback(async (path: string, preparedId?: string) => {
+    if (path === documentPath) { cancelPreparedDocument(preparedId); return; }
+    let token = preparedId;
+    let accepted = false;
     try {
-      await transition(() => editor.current?.command("confirmClose") ?? Promise.resolve(true), () => {
-        setError(null); setFilePath(path); setDocumentPath(path); setDocumentKey((key) => key + 1);
+      // Begin I/O before prompting/rendering, but never replace the dirty buffer
+      // unless its transition guard approves the open.
+      token ??= prepareDocument(path);
+      accepted = await transition(() => editor.current?.command("confirmClose") ?? Promise.resolve(true), () => {
+        if (!mounted.current) { cancelPreparedDocument(token); return; }
+        setError(null); setPreparedDocumentId(token); setFilePath(path); setDocumentPath(path); setDocumentKey((key) => key + 1);
       });
     } catch (cause) { setError(String(cause)); }
+    finally { if (!accepted) cancelPreparedDocument(token); }
   }, [documentPath, transition]);
 
   useEffect(() => {
@@ -94,12 +110,14 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
 
   useEffect(() => {
     if (fileRequest.path && loadedFileRequestVersionRef.current !== fileRequest.version) {
+      const request = consumeCodeViewerFileRequest(fileRequest.version);
+      if (!request?.path) return;
       loadedFileRequestVersionRef.current = fileRequest.version;
       // Launch props and later open requests are separate inputs. Updating the
       // launch marker here would replay the original file after this transition.
-      openFile(fileRequest.path);
+      openFile(request.path, request.preparedDocumentId);
     }
-  }, [fileRequest.path, fileRequest.version, openFile]);
+  }, [fileRequest.path, fileRequest.version, fileRequest.preparedDocumentId, openFile]);
 
   // The native editor owns its buffer. Do not reload on settings changes or
   // filesystem notifications: that would discard unsaved edits and undo history.
@@ -130,6 +148,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             }}
             key={documentKey}
             filePath={filePath}
+            preparedDocumentId={preparedDocumentId}
             fontFamily={fontFamily}
             fontSize={fontSize}
             foreground={foregroundColor}

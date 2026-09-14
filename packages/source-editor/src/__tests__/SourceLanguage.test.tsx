@@ -1,6 +1,11 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SourceDocumentEditor } from "../index";
+import NativeSourceDocuments from "../NativeSourceDocuments";
+
+jest.mock("../NativeSourceDocuments", () => ({ __esModule: true, default: {
+  prepare: jest.fn(), snapshot: jest.fn(() => ""), cancel: jest.fn(),
+} }));
 
 jest.mock("@legend-apps/syntax-parser", () => ({
   ...jest.requireActual("../../../syntax-parser/src/grammarDownloads"), defaultSyntaxThemeName: "dark-plus",
@@ -18,6 +23,7 @@ jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList", use
 
 describe("shared editor language selection", () => {
   let renderer: ReactTestRenderer;
+  beforeEach(() => { jest.mocked(NativeSourceDocuments.snapshot).mockReset().mockReturnValue(""); });
   afterEach(async () => { await act(async () => renderer?.unmount()); });
   it("uses prepared exact heights before row mounting and rejects stale resize/edit batches", async () => {
     await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" />); });
@@ -48,6 +54,42 @@ describe("shared editor language selection", () => {
   });
   const host = () => renderer.root.findByType("SourceEditorHost" as never);
   const select = () => renderer.root.findByType("SelectControl" as never);
+  it("mounts prepared rows in the first render and keeps them on native adoption", async () => {
+    const metadata = { lineCount: 129, firstId: 1, complete: false, error: "", sourcePrefix: "#!/bin/bash\n" };
+    jest.mocked(NativeSourceDocuments.snapshot).mockReturnValue(JSON.stringify(metadata));
+    const commits = jest.fn();
+    await act(async () => { renderer = create(<React.Profiler id="editor" onRender={commits}>
+      <SourceDocumentEditor filePath="/script" preparedDocumentId="prepared" />
+    </React.Profiler>); });
+    const source = renderer.root.findByType("LegendList" as never).props.dataSource;
+    expect(source.getLength()).toBe(129);
+    expect(host().props.preparedDocumentId).toBe("prepared");
+    expect(host().props.syntaxLanguage).toBe("bash");
+    const initialCommits = commits.mock.calls.length;
+    await act(async () => host().props.onReady({ nativeEvent: metadata }));
+    expect(commits).toHaveBeenCalledTimes(initialCommits);
+    expect(renderer.root.findByType("LegendList" as never).props.dataSource).toBe(source);
+    await act(async () => host().props.onAppend({ nativeEvent: { complete: true, error: "", json: JSON.stringify({
+      startLine: 128, retainedId: "129", firstId: 130, count: 10, revision: 1, lineCount: 139,
+    }) } }));
+    expect(source.getLength()).toBe(139);
+    expect(source.getKey(138)).toBe("139");
+  });
+  it("uses the ready event when preparation is still pending", async () => {
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" preparedDocumentId="pending" />); });
+    expect(renderer.root.findAllByType("LegendList" as never)).toHaveLength(0);
+    expect(host().props.preparedDocumentId).toBe("pending");
+    await act(async () => host().props.onReady({ nativeEvent: {
+      lineCount: 2, firstId: 1, complete: true, error: "", sourcePrefix: "",
+    } }));
+    expect(renderer.root.findByType("LegendList" as never).props.dataSource.getLength()).toBe(2);
+  });
+  it("does not replace an in-memory draft with a prepared disk buffer", async () => {
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/deck.mdx" initialSource="# Unsaved draft" preparedDocumentId="disk-token" />); });
+    expect(NativeSourceDocuments.snapshot).not.toHaveBeenCalled();
+    expect(host().props.preparedDocumentId).toBeUndefined();
+    expect(host().props.initialSource).toBe("# Unsaved draft");
+  });
   it("mounts the native host without a loading placeholder, then displays the ready document", async () => {
     const onLoad = jest.fn();
     await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" showLanguageSelector={false} onLoad={onLoad} />); });
