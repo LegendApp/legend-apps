@@ -3,16 +3,17 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { progressLabel, type createSourceProgress } from "./sourceProgress";
 import SourceEditorProgressRing from "./SourceEditorProgressRingNativeComponent";
 
-export function SourceProgressBanner({ progress, loading }: { progress: ReturnType<typeof createSourceProgress>; loading: boolean }) {
+export function SourceProgressBanner({ progress, loading, showFileLoadingBanner = true }: { progress: ReturnType<typeof createSourceProgress>; loading: boolean; showFileLoadingBanner?: boolean }) {
   const value = useSyncExternalStore(progress.subscribe, progress.getSnapshot, progress.getSnapshot);
   const label = progressLabel(value, loading);
   if (!label) return null;
-  if (!loading) {
+  if (!loading || !showFileLoadingBanner) {
     const percent = Math.min(99, Math.max(0, Math.floor(value.completedLines / value.totalLines * 100)));
     return <View pointerEvents="none" style={styles.highlighting}
       accessible accessibilityRole="progressbar" accessibilityLabel={label}
-      accessibilityValue={{ min: 0, max: 100, now: percent }}>
-      <SourceEditorProgressRing progress={percent / 100} style={styles.ring} />
+      accessibilityValue={loading ? undefined : { min: 0, max: 100, now: percent }}>
+      {loading ? <ActivityIndicator size="small" color="#60a5fa" style={styles.ring} />
+        : <SourceEditorProgressRing progress={percent / 100} style={styles.ring} />}
     </View>;
   }
   return <View pointerEvents="none" style={styles.banner}>

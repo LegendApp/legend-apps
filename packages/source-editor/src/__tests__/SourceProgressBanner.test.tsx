@@ -2,6 +2,11 @@ import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SourceProgressBanner, progressBannerStyles } from "../SourceProgressBanner";
 import { createSourceProgress } from "../sourceProgress";
+import { GrammarProgressBanner } from "../GrammarProgressBanner";
+import { useGrammarProgress } from "../useTreeGrammar";
+
+jest.mock("../useTreeGrammar", () => ({ useGrammarProgress: jest.fn() }));
+jest.mock("@legend-apps/syntax-parser", () => ({ treeGrammarManager: { ensure: jest.fn() } }));
 
 jest.mock("react-native", () => ({
   ...jest.requireActual("react-native"), ActivityIndicator: "ActivityIndicator",
@@ -52,5 +57,28 @@ describe("editor progress presentation", () => {
     progress.update({ completedLines: 0, totalLines: 9999, active: true });
     await act(async () => { renderer = create(<SourceProgressBanner progress={progress} loading={false} />); });
     expect(renderer.toJSON()).toBeNull();
+  });
+
+  it("keeps Code file loading at the bottom right, then replaces it with highlighting progress", async () => {
+    const progress = createSourceProgress();
+    progress.update({ completedLines: 5000, totalLines: 10000, active: true });
+    await act(async () => { renderer = create(<SourceProgressBanner progress={progress} loading showFileLoadingBanner={false} />); });
+    expect((renderer.toJSON() as any).props.style).toBe(progressBannerStyles.highlighting);
+    expect(renderer.root.findAllByType("Text" as never)).toHaveLength(0);
+    expect(renderer.root.findAllByType("ActivityIndicator" as never)).toHaveLength(1);
+    expect(renderer.root.findAllByType("SourceEditorProgressRing" as never)).toHaveLength(0);
+    await act(async () => renderer.update(<SourceProgressBanner progress={progress} loading={false} showFileLoadingBanner={false} />));
+    expect(renderer.root.findAllByType("ActivityIndicator" as never)).toHaveLength(0);
+    expect(renderer.root.findByType("SourceEditorProgressRing" as never).props.progress).toBe(0.5);
+  });
+
+  it.each(["downloading", "error"])("retains the top grammar %s notice in Code", async phase => {
+    jest.mocked(useGrammarProgress).mockReturnValue({ language: "typescript", phase, completed: 5, total: 10,
+      error: phase === "error" ? "Grammar download failed" : undefined } as ReturnType<typeof useGrammarProgress>);
+    await act(async () => { renderer = create(<GrammarProgressBanner languages={["typescript"]}
+      progress={createSourceProgress()} loading showFileLoadingBanner={false} />); });
+    expect((renderer.toJSON() as any).props.style).toBe(progressBannerStyles.banner);
+    expect(JSON.stringify(renderer.toJSON())).toContain(phase === "error" ? "Grammar download failed" : "Downloading typescript grammar");
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === "Retry grammar download").length > 0).toBe(phase === "error");
   });
 });

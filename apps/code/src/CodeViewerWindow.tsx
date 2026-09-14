@@ -137,6 +137,7 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             syntaxTheme={selectedSyntaxTheme}
             syntaxHighlightingEnabled={syntaxHighlightingEnabled}
             syntaxHighlightingMode="background"
+            showFileLoadingBanner={false}
             syntaxBackend="tree-sitter"
             onLoad={onEditorLoad}
           />

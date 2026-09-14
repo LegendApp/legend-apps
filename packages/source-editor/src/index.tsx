@@ -29,6 +29,8 @@ export type SourceDocumentEditorProps = {
   automaticPairs?: boolean;
   /** Offer an override without replacing the document, selection, or undo history. */
   showLanguageSelector?: boolean;
+  /** Reserve the top overlay for grammar downloads/errors when false. */
+  showFileLoadingBanner?: boolean;
   syntaxTheme?: string;
   /** Unknown or unavailable languages remain plain text; grammars download on demand. */
   syntaxBackend?: "tree-sitter";
@@ -64,7 +66,7 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heigh
 }
 
 export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, indentUnit = "  ", automaticPairs = true,
-  language: preferredLanguage, showLanguageSelector = true, syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
+  language: preferredLanguage, showLanguageSelector = true, showFileLoadingBanner = true, syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
   syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange,
 }: SourceDocumentEditorProps) {
   const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
@@ -213,8 +215,8 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       style={styles.root}
     /> : null}
     {!error && !highlightError && (syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled
-      ? <GrammarProgressBanner languages={[grammar.name, ...embeddedGrammars.languages]} progress={progress} loading={loadingTail} />
-      : <SourceProgressBanner progress={progress} loading={loadingTail} />)}
+      ? <GrammarProgressBanner languages={[grammar.name, ...embeddedGrammars.languages]} progress={progress} loading={loadingTail} showFileLoadingBanner={showFileLoadingBanner} />
+      : <SourceProgressBanner progress={progress} loading={loadingTail} showFileLoadingBanner={showFileLoadingBanner} />)}
     {showLanguageSelector && <SourceLanguageSelector value={languageOverride} onChange={setLanguageOverride} />}
   </SourceEditorHost>;
 }

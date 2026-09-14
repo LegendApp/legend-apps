@@ -5,11 +5,11 @@ import { progressBannerStyles as styles } from "./SourceProgressBanner";
 import { SourceProgressBanner } from "./SourceProgressBanner";
 import type { createSourceProgress } from "./sourceProgress";
 
-export function GrammarProgressBanner({ languages, progress, loading }: {
-  languages: readonly string[]; progress: ReturnType<typeof createSourceProgress>; loading: boolean;
+export function GrammarProgressBanner({ languages, progress, loading, showFileLoadingBanner }: {
+  languages: readonly string[]; progress: ReturnType<typeof createSourceProgress>; loading: boolean; showFileLoadingBanner?: boolean;
 }) {
   const state = useGrammarProgress(languages);
-  if (!state) return <SourceProgressBanner progress={progress} loading={loading} />;
+  if (!state) return <SourceProgressBanner progress={progress} loading={loading} showFileLoadingBanner={showFileLoadingBanner} />;
   const language = state.language;
   const percent = state.total > 0 ? Math.floor(Math.min(1, state.completed / state.total) * 100) : undefined;
   const label = state.phase === "error" ? state.error
