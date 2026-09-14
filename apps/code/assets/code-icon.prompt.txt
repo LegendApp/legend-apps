@@ -1,0 +1,9 @@
+Generated with the built-in image generation tool.
+
+Use case: logo-brand.
+Create one finished 1024x1024 macOS app icon for Legend Code, matching the visual family of the two reference app icons.
+Input image 1: Diff, style reference only. Input image 2: Chat History, style reference only.
+Subject: a clear centered </> code symbol. The left and right angle brackets are thick sculpted folded ribbons in rich cyan to deep teal, with gently rounded ends. A slim warm ivory forward slash sits between them. Keep all three shapes separated and immediately readable at small sizes.
+Style: match the references' premium tactile 3D enamel/ribbon construction, subtle bevels, thin bright edge highlights, realistic folded depth and soft contact shadows. Front-facing composition, no perspective tilt.
+Background: full-bleed dark charcoal subtly textured surface with gentle top-left lighting and dark vignette, closely matching the references. Centered mark occupies approximately 65 percent of canvas width and height with generous balanced margins.
+Constraints: no words, letters, watermark, frame, outer rounded-square tile or extra objects. Code glyph only. Cohesive sibling to both reference icons, but distinct cyan palette.
