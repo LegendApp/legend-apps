@@ -1206,6 +1206,22 @@ static NSString *string(const std::u16string &text) {
   if (!range.length) { range.location = [self adjacentOffset:-1]; range.length = _head - range.location; }
   [self insertText:@"" replacementRange:range];
 }
+- (void)deleteToBeginningOfLine:(id)sender {
+  NSRange range = self.selectedRange;
+  if (!range.length) {
+    auto position = _document->position(_head);
+    LESourceRowView *reference = nil;
+    for (LESourceRowView *row in _rows) {
+      if (![self isCurrentRow:row] || row.bounds.size.width <= 72) continue;
+      reference = row;
+      if (row.lineIndex == position.line) break;
+    }
+    LESourceLineLayout *layout = [self layoutForLine:position.line referenceRow:reference];
+    NSUInteger start = _document->lineOffset(position.line) + [layout beginningOfVisualLineAtOffset:position.column];
+    range = NSMakeRange(start, _head - start);
+  }
+  if (range.length) [self insertText:@"" replacementRange:range];
+}
 - (void)deleteForward:(id)sender {
   NSRange range = self.selectedRange;
   if (!range.length) range.length = [self adjacentOffset:1] - _head;

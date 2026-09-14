@@ -184,6 +184,11 @@
   return low;
 }
 
+- (NSUInteger)beginningOfVisualLineAtOffset:(NSUInteger)offset
+{
+  return _ranges[[self visualLineAtOffset:offset downstream:YES]].rangeValue.location;
+}
+
 - (NSRect)caretRectAtOffset:(NSUInteger)offset downstream:(BOOL)downstream
 {
   NSUInteger row = [self visualLineAtOffset:offset downstream:downstream];
