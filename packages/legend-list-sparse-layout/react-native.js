@@ -5872,23 +5872,15 @@ function calculateItemsInView(ctx, params = {}) {
     let foundEnd = false;
     let nextTop;
     let nextBottom;
-    let maxIndexRendered = 0;
-    for (let i = 0; i < prevNumContainers; i++) {
-      const key = peek$(ctx, `containerItemKey${i}`);
-      if (key !== void 0) {
-        const index = indexByKey.get(key);
-        if (index !== void 0) {
-          maxIndexRendered = Math.max(maxIndexRendered, index);
-        }
-      }
-    }
     const visibleRange = {
       endNoBuffer: null,
       firstFullyOnScreenIndex: void 0,
       firstVisibleIndex: null,
       startNoBuffer: null
     };
-    for (let i = Math.max(0, loopStart); i < dataLength && (!foundEnd || i <= maxIndexRendered); i++) {
+    // Positions come from the layout store; old mounted containers are reconciled
+    // separately below. Never scan the skipped gap after an upward scroll jump.
+    for (let i = Math.max(0, loopStart); i < dataLength && !foundEnd; i++) {
       const id = (_j = idCache[i]) != null ? _j : getId(state, i);
       const top = layout.getOffset(i);
       if (top === void 0 && layoutStoreMaterializedRange) {
