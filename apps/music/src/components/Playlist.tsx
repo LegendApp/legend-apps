@@ -1,6 +1,6 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { type ElementRef, useCallback, useMemo, useRef, useState } from "react";
+import { type ElementRef, memo, useCallback, useMemo, useRef, useState } from "react";
 import { findNodeHandle, type GestureResponderEvent, Platform, StyleSheet, Text, UIManager, View } from "react-native";
 import { AIButtons, type AIButtonsAddResult } from "./AIButtons";
 import { Button } from "./Button";
@@ -34,7 +34,7 @@ import { settings$ } from "../systems/Settings";
 import { state$, stateSaved$ } from "../systems/State";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { cn } from "@legend-apps/classnames";
-import { perfCount, perfLog } from "@legend-apps/runtime-utils";
+import { perfCount, perfLog, useStableCallback } from "@legend-apps/runtime-utils";
 import { buildTrackContextMenuItems, handleTrackContextMenuSelection } from "../utils/trackContextMenu";
 import {
     type DragData,
@@ -85,7 +85,8 @@ export function Playlist() {
     const hasLibraryTracks = localTracks.length > 0;
     const isDefaultPlaylistSelected = useValue(localMusicState$.isLocalFilesSelected);
     const libraryPaths = useValue(librarySettings$.paths);
-    const queueTracks = useValue(queue$.tracks);
+    // Snapshot membership so in-place queue edits also invalidate derived IDs and command data.
+    const queueTracks = useValue(() => queue$.tracks.get().slice());
     const playlistStyle = useValue(settings$.general.playlistStyle);
     const queueLength = queueTracks.length;
     const currentTrackSnapshot = localPlayerState$.currentTrack.peek() as Partial<QueuedTrack> | null;
@@ -212,7 +213,7 @@ export function Playlist() {
         [handleTrackClickBase],
     );
 
-    const handleTrackContextMenu = useCallback(
+    const handleTrackContextMenu = useStableCallback(
         async (index: number, event: NativeMouseEvent) => {
             const x = event.pageX ?? event.x ?? 0;
             const y = event.pageY ?? event.y ?? 0;
@@ -224,7 +225,6 @@ export function Playlist() {
                 filePath: playlist[index]?.filePath,
             });
         },
-        [playlist, playlistContextMenuItems],
     );
 
     const handleTrackMouseDown = useCallback(
@@ -288,7 +288,7 @@ export function Playlist() {
         }
     }, []);
 
-    const handleNativeDragStart = useCallback(
+    const handleNativeDragStart = useStableCallback(
         (queueEntryId?: string) => {
             skipClickRef.current = true;
             if (!queueEntryId) {
@@ -311,7 +311,6 @@ export function Playlist() {
             requestAnimationFrame(updateDropAreaWindowRect);
             activeNativePlaylistDragRef.current = queueEntryId;
         },
-        [activeDropZone$, draggedItem$, queueLength, updateDropAreaWindowRect],
     );
 
     const showDropFeedback = useCallback((feedback: DropFeedback) => {
@@ -418,7 +417,7 @@ export function Playlist() {
         return false;
     }, []);
 
-    const handleDropAtPosition = useCallback(
+    const handleDropAtPosition = useStableCallback(
         (item: DraggedItem<DragData>, targetPosition: number) => {
             const data = item.data;
             if (!data) {
@@ -473,7 +472,6 @@ export function Playlist() {
                 }
             }
         },
-        [playlist, queueTracks, showDropFeedback, syncSelectionAfterReorder],
     );
 
     const handleNativeTracksDrop = useCallback(
@@ -615,7 +613,7 @@ export function Playlist() {
         ],
     );
 
-    const handleTrackDoubleClick = (index: number) => {
+    const handleTrackDoubleClick = useStableCallback((index: number) => {
         const track = playlist[index];
 
         // Don't allow clicking on separator items
@@ -628,7 +626,7 @@ export function Playlist() {
         }
         handleTrackClickBase(index);
         localAudioControls.playTrackAtIndex(index);
-    };
+    });
 
     const handleDirectoryDrop = useCallback(
         async (directories: string[]) => {
@@ -854,62 +852,11 @@ export function Playlist() {
                 return null;
             }
 
-            const trackContent = (
-                <TrackItem
-                    track={track}
-                    index={index}
-                    onClick={handleTrackClick}
-                    onDoubleClick={handleTrackDoubleClick}
-                    selectedIndices$={selectedIndices$}
-                    onMouseDown={handleTrackMouseDown}
-                    onRightClick={handleTrackContextMenu}
-                    disableHover
-                    artistMaxWidth="50%"
-                />
-            );
-
-            if (Platform.OS === "macos") {
-                return (
-                    <View>
-                        <TrackDragSource
-                            tracks={[convertTrackToNativeDrag(track)]}
-                            onDragStart={() => handleNativeDragStart(track.queueEntryId)}
-                            className="w-full"
-                        >
-                            {trackContent}
-                        </TrackDragSource>
-                        <PlaylistDropZone
-                            position={index + 1}
-                            allowDrop={allowPlaylistDrop}
-                            onDrop={handleDropAtPosition}
-                        />
-                    </View>
-                );
-            }
-
-            return (
-                <View>
-                    <DraggableItem
-                        id={track.queueEntryId}
-                        zoneId={PLAYLIST_DRAG_ZONE_ID}
-                        data={
-                            {
-                                type: "playlist-track",
-                                queueEntryId: track.queueEntryId,
-                            } satisfies PlaylistDragData
-                        }
-                        onDragStart={handleReorderDragStart}
-                        className="w-full"
-                    >
-                        {trackContent}
-                    </DraggableItem>
-                    <PlaylistDropZone
-                        position={index + 1}
-                        allowDrop={allowPlaylistDrop}
-                        onDrop={handleDropAtPosition}
-                    />
-                </View>
-            );
+            return <QueuePlaylistRow queueEntryId={queueEntryId} index={index} isMissing={Boolean(track.isMissing)}
+                selectedIndices$={selectedIndices$} onClick={handleTrackClick} onDoubleClick={handleTrackDoubleClick}
+                onMouseDown={handleTrackMouseDown} onRightClick={handleTrackContextMenu}
+                onNativeDragStart={handleNativeDragStart} onReorderDragStart={handleReorderDragStart}
+                allowDrop={allowPlaylistDrop} onDrop={handleDropAtPosition} />;
         },
         [
             allowPlaylistDrop,
@@ -990,6 +937,41 @@ export function Playlist() {
         </View>
     );
 }
+
+type QueuePlaylistRowProps = Pick<Parameters<typeof TrackItem>[0],
+    "index" | "selectedIndices$" | "onClick" | "onDoubleClick" | "onMouseDown" | "onRightClick"> & {
+    queueEntryId: string;
+    isMissing: boolean;
+    onNativeDragStart: (queueEntryId: string) => void;
+    onReorderDragStart: () => void;
+    allowDrop: PlaylistDropZoneProps["allowDrop"];
+    onDrop: PlaylistDropZoneProps["onDrop"];
+};
+
+// List render callbacks run again on append; unchanged entry props must stop at this boundary.
+const QueuePlaylistRow = memo(function QueuePlaylistRow({ queueEntryId, index, isMissing,
+    onNativeDragStart, onReorderDragStart, allowDrop, onDrop, ...itemProps
+}: QueuePlaylistRowProps) {
+    const queuedTrack = useValue(() => queue$.tracks[index].get());
+    if (!queuedTrack || queuedTrack.queueEntryId !== queueEntryId) return null;
+    const track = { ...queuedTrack, index, isMissing: Boolean(queuedTrack.isMissing || isMissing) };
+    const trackContent = <TrackItem {...itemProps} index={index} track={track} disableHover artistMaxWidth="50%" />;
+    return <View>
+        {Platform.OS === "macos" ? (
+            <TrackDragSource tracks={[convertTrackToNativeDrag(track)]}
+                onDragStart={() => onNativeDragStart(queueEntryId)} className="w-full">
+                {trackContent}
+            </TrackDragSource>
+        ) : (
+            <DraggableItem id={queueEntryId} zoneId={PLAYLIST_DRAG_ZONE_ID}
+                data={{ type: "playlist-track", queueEntryId } satisfies PlaylistDragData}
+                onDragStart={onReorderDragStart} className="w-full">
+                {trackContent}
+            </DraggableItem>
+        )}
+        <PlaylistDropZone position={index + 1} allowDrop={allowDrop} onDrop={onDrop} />
+    </View>;
+});
 
 const styles = StyleSheet.create({
     container: {
