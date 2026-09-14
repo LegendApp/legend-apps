@@ -1,4 +1,5 @@
 // @ts-nocheck Bun tests run separately from the workspace typecheck.
+import benchmarkMarkdownConfig from "../../../apps/chat-history/scripts/benchmark-markdown.json";
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { getMacOSReleaseMarkdownConfig, getMacOSReleaseProfile } from "../macosReleaseProfile";
@@ -16,12 +17,13 @@ test("regular Chat History retains syntax highlighting and the existing release 
   delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
   expect(getMacOSReleaseProfile("chat-history")).toBe("release");
   expect(getMacOSReleaseMarkdownConfig("chat-history", shellConfig, chatConfig).enableCodeHighlight).toBe(true);
+  expect(getMacOSReleaseMarkdownConfig("chat-history", shellConfig, chatConfig).codeHighlightLanguages).toBeUndefined();
   expect(getMacOSReleaseWorkspaceDir("chat-history")).toEndWith("/release/chat-history/macos");
 });
 
-test("benchmark exports disable only highlighting and use separate Pods and build output", () => {
+test("benchmark exports retain highlighting and use separate Pods and build output", () => {
   process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
-  expect(getMacOSReleaseMarkdownConfig("chat-history", shellConfig, chatConfig)).toEqual({ ...shellConfig, ...chatConfig, enableCodeHighlight: false });
+  expect(getMacOSReleaseMarkdownConfig("chat-history", shellConfig, chatConfig)).toEqual({ ...shellConfig, ...chatConfig, ...benchmarkMarkdownConfig });
   expect(getMacOSReleaseAppRootDir("chat-history")).toEndWith("/benchmark/chat-history");
   expect(getMacOSReleaseWorkspaceDir("chat-history")).toEndWith("/benchmark/chat-history/macos");
   delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
@@ -33,4 +35,15 @@ test("the benchmark flag leaves other apps and their explicit Markdown settings 
   expect(getMacOSReleaseProfile("slides")).toBe("release");
   expect(getMacOSReleaseMarkdownConfig("slides", shellConfig).enableCodeHighlight).toBe(true);
   expect(getMacOSReleaseMarkdownConfig("slides", shellConfig, { enableMath: false })).toEqual({ ...shellConfig, enableMath: false });
+});
+
+test("benchmark grammars override app policy without mutating either configuration", () => {
+  const appConfig = { codeHighlightLanguages: ["json"] };
+  process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
+  const benchmark = getMacOSReleaseMarkdownConfig("chat-history", shellConfig, appConfig);
+  expect(benchmark.codeHighlightLanguages).toEqual(benchmarkMarkdownConfig.codeHighlightLanguages);
+  benchmark.codeHighlightLanguages.pop();
+  expect(benchmarkMarkdownConfig.codeHighlightLanguages).toHaveLength(19);
+  delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
+  expect(getMacOSReleaseMarkdownConfig("chat-history", shellConfig, appConfig).codeHighlightLanguages).toEqual(["json"]);
 });

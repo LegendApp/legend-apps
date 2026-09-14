@@ -7392,3 +7392,14 @@ index e25e4e0..845ed94 100644
 +  windowX: number;
 +  windowY: number;
 +}
+diff --git a/cpp/highlight/CodeBlockHighlighter.cpp b/cpp/highlight/CodeBlockHighlighter.cpp
+--- a/cpp/highlight/CodeBlockHighlighter.cpp
++++ b/cpp/highlight/CodeBlockHighlighter.cpp
+@@ -49,2 +49,7 @@
+ constexpr CaptureMapping kCaptureMappings[] = {
++    // The bundled Markdown grammar uses the legacy text.* capture names.
++    {"text.title", HighlightTokenType::Function},
++    {"text.literal", HighlightTokenType::String},
++    {"text.uri", HighlightTokenType::Property},
++    {"text.reference", HighlightTokenType::Property},
+     {"keyword", HighlightTokenType::Keyword},

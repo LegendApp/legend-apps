@@ -34,7 +34,7 @@ if (arch !== "arm" && arch !== "x86") {
   throw new Error(`Unsupported benchmark architecture: ${arch}`);
 }
 
-// Only this export process and its build child use the plain-code benchmark profile.
+// Only this export process and its build child use the isolated benchmark profile.
 // Separate Pods/DerivedData also make --skip-build select a benchmark binary only.
 process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
 

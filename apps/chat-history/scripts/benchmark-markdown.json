@@ -1,0 +1,24 @@
+{
+  "enableCodeHighlight": true,
+  "codeHighlightLanguages": [
+    "bash",
+    "c",
+    "cpp",
+    "c-sharp",
+    "css",
+    "go",
+    "html",
+    "java",
+    "javascript",
+    "json",
+    "markdown",
+    "php",
+    "python",
+    "ruby",
+    "rust",
+    "swift",
+    "typescript",
+    "tsx",
+    "yaml"
+  ]
+}
