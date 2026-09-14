@@ -95,8 +95,14 @@ export function createGrammarManager(io: GrammarIO) {
         for (const dependency of pack.dependencies) await ensure(dependency);
         const artifact = pack.platforms[io.platform()];
         if (!artifact) throw Error(`No ${io.platform()} grammar for ${name}`);
-        emit(name, { phase: "downloading", total: artifact.bytes });
-        await io.install(name, artifact, (completed, total) => emit(name, { completed, total }));
+        // Installation may only verify/load a disk-cached pack. Native progress
+        // is emitted only for an actual network download.
+        let installing = true;
+        try {
+          await io.install(name, artifact, (completed, total) => {
+            if (installing) emit(name, { phase: "downloading", completed, total });
+          });
+        } finally { installing = false; }
         if (!io.loaded(name)) throw Error(`Grammar did not load: ${name}`);
       }
       emit(name, { phase: "ready" });

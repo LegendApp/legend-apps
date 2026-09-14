@@ -81,4 +81,10 @@ describe("editor progress presentation", () => {
     expect(JSON.stringify(renderer.toJSON())).toContain(phase === "error" ? "Grammar download failed" : "Downloading typescript grammar");
     expect(renderer.root.findAll(node => node.props.accessibilityLabel === "Retry grammar download").length > 0).toBe(phase === "error");
   });
+  it("does not show a top banner while checking a cached grammar", async () => {
+    jest.mocked(useGrammarProgress).mockReturnValue({ language: "tsx", phase: "checking", completed: 0, total: 0 });
+    await act(async () => { renderer = create(<GrammarProgressBanner languages={["tsx"]}
+      progress={createSourceProgress()} loading={false} showFileLoadingBanner={false} />); });
+    expect(renderer.toJSON()).toBeNull();
+  });
 });

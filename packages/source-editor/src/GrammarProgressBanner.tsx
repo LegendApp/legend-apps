@@ -9,11 +9,10 @@ export function GrammarProgressBanner({ languages, progress, loading, showFileLo
   languages: readonly string[]; progress: ReturnType<typeof createSourceProgress>; loading: boolean; showFileLoadingBanner?: boolean;
 }) {
   const state = useGrammarProgress(languages);
-  if (!state) return <SourceProgressBanner progress={progress} loading={loading} showFileLoadingBanner={showFileLoadingBanner} />;
+  if (!state || state.phase === "checking") return <SourceProgressBanner progress={progress} loading={loading} showFileLoadingBanner={showFileLoadingBanner} />;
   const language = state.language;
   const percent = state.total > 0 ? Math.floor(Math.min(1, state.completed / state.total) * 100) : undefined;
   const label = state.phase === "error" ? state.error
-    : state.phase === "checking" ? `Preparing ${language} highlighting…`
     : `Downloading ${language} grammar…${percent === undefined ? "" : ` ${percent}%`}`;
   return <View style={styles.banner} pointerEvents="box-none">
     <View style={styles.surface} accessibilityRole={state.phase === "error" ? "alert" : "progressbar"}
