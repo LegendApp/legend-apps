@@ -1,5 +1,5 @@
 import { LegendList, useRecyclingState, type LegendListDataSourceRenderItemProps, type LegendListRef } from "@legendapp/list/react-native";
-import { defaultSyntaxThemeName, getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
+import { defaultSyntaxThemeName, detectGrammar } from "@legend-apps/syntax-parser";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import SourceEditorHost, { Commands } from "./SourceEditorHostNativeComponent";
@@ -8,6 +8,7 @@ import { createSourceProgress } from "./sourceProgress";
 import { SourceProgressBanner } from "./SourceProgressBanner";
 import { useEmbeddedGrammars, useTreeGrammar } from "./useTreeGrammar";
 import { GrammarProgressBanner } from "./GrammarProgressBanner";
+import { SourceLanguageSelector } from "./SourceLanguageSelector";
 import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
 
 export type SourceDocumentEditorProps = {
@@ -25,6 +26,8 @@ export type SourceDocumentEditorProps = {
   language?: string;
   indentUnit?: string;
   automaticPairs?: boolean;
+  /** Offer an override without replacing the document, selection, or undo history. */
+  showLanguageSelector?: boolean;
   syntaxTheme?: string;
   /** Unknown or unavailable languages remain plain text; grammars download on demand. */
   syntaxBackend?: "tree-sitter";
@@ -54,7 +57,7 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap }: {
 }
 
 export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, indentUnit = "  ", automaticPairs = true,
-  language = getSyntaxLanguageForPath(filePath), syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
+  language: preferredLanguage, showLanguageSelector = true, syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
   syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange,
 }: SourceDocumentEditorProps) {
   const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
@@ -79,6 +82,9 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
   const [syntaxError, setSyntaxError] = useState("");
   const [loadingTail, setLoadingTail] = useState(false);
   const [progress] = useState(createSourceProgress);
+  const [sourcePrefix, setSourcePrefix] = useState(() => initialSource?.slice(0, 512) ?? "");
+  const [languageOverride, setLanguageOverride] = useState("auto");
+  const language = languageOverride === "auto" ? preferredLanguage || detectGrammar(filePath, sourcePrefix) : languageOverride;
   const grammar = useTreeGrammar(language, syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled);
   const embeddedGrammars = useEmbeddedGrammars(filePath);
   // The native resolver reads installed assets or the app's resource bundles.
@@ -116,6 +122,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     style={styles.root}
     onReady={({ nativeEvent }) => {
       setError(nativeEvent.error);
+      setSourcePrefix(nativeEvent.sourcePrefix ?? "");
       setLoadingTail(!nativeEvent.complete && !nativeEvent.error);
       if (!nativeEvent.error) {
         const source = new SourceLineDataSource(nativeEvent.lineCount, nativeEvent.firstId);
@@ -165,6 +172,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     {!error && !highlightError && (syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled
       ? <GrammarProgressBanner languages={[grammar.name, ...embeddedGrammars.languages]} progress={progress} loading={loadingTail} />
       : <SourceProgressBanner progress={progress} loading={loadingTail} />)}
+    {showLanguageSelector && <SourceLanguageSelector value={languageOverride} onChange={setLanguageOverride} />}
   </SourceEditorHost>;
 }
 const styles = StyleSheet.create({

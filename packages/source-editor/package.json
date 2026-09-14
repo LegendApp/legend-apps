@@ -15,6 +15,6 @@
       }
     }
   },
-  "dependencies": { "@legendapp/list": "catalog:", "@legend-apps/syntax-parser": "workspace:*" },
+  "dependencies": { "@legendapp/list": "catalog:", "@legend-apps/design-system": "workspace:*", "@legend-apps/syntax-parser": "workspace:*" },
   "peerDependencies": { "react": "catalog:", "react-native": "catalog:" }
 }

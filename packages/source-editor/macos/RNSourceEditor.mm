@@ -108,6 +108,7 @@ struct SourceLoadJob {
     [_input loadSource:_initialSource];
     std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
       .lineCount = (double)_input.lineCount, .firstId = 1, .complete = true, .error = "",
+      .sourcePrefix = utf8String([_initialSource substringToIndex:MIN((NSUInteger)512, _initialSource.length)]),
     });
     return;
   }
@@ -121,6 +122,7 @@ struct SourceLoadJob {
     @autoreleasepool {
       std::shared_ptr<legend::source::SourceDocument> chunk;
       NSString *error = @"";
+      NSString *sourcePrefix = @"";
       BOOL complete = NO;
       try {
         if (!job->reader) {
@@ -129,6 +131,7 @@ struct SourceLoadJob {
         }
         auto source = job->reader->next(first ? 16384 : 1048576, first ? 128 : 16384);
         job->hasBOM = job->reader->hasBOM();
+        if (first) sourcePrefix = [[NSString alloc] initWithCharacters:(const unichar *)source.data() length:std::min<size_t>(512, source.size())];
         complete = job->reader->done();
         chunk = std::make_shared<legend::source::SourceDocument>(source, job->nextId);
         job->nextId += chunk->lineCount() - 1;
@@ -150,7 +153,7 @@ struct SourceLoadJob {
             [self->_input adoptDocument:chunk];
           }
           emitter->onReady({.lineCount = chunk ? (double)chunk->lineCount() : 0, .firstId = 1,
-            .complete = (bool)complete, .error = utf8String(error)});
+            .complete = (bool)complete, .error = utf8String(error), .sourcePrefix = utf8String(sourcePrefix)});
         } else {
           NSString *json = @"";
           if (!error.length && chunk->length()) {
