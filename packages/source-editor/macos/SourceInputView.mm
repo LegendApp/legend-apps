@@ -1325,6 +1325,15 @@ static NSString *string(const std::u16string &text) {
   // Messaging nil returns 0, which is NOT our invalid-offset sentinel.
   if (!self.input) return;
   [self layoutSubtreeIfNeeded];
+  // A deleted line can still occupy its old container until Fabric removes it.
+  // Preserve that position's gutter, but never draw stale text or selection.
+  NSUInteger gutterIndex = _presentedLineIndex == NSNotFound ? self.lineIndex : _presentedLineIndex;
+  if (gutterIndex != NSNotFound) {
+    [[NSString stringWithFormat:@"%lu", gutterIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
+      NSFontAttributeName:[NSFont fontWithName:@"Menlo" size:MAX(10, self.fontSize - 1)] ?: [NSFont systemFontOfSize:12],
+      NSForegroundColorAttributeName:[(self.foreground ?: NSColor.textColor) colorWithAlphaComponent:0.5],
+    }];
+  }
   NSUInteger offset = [self.input offsetForRow:self];
   if (offset == NSNotFound) return;
   NSUInteger start = MIN(self.input.anchor, self.input.head), end = MAX(self.input.anchor, self.input.head);
@@ -1344,11 +1353,6 @@ static NSString *string(const std::u16string &text) {
     __weak LESourceInputView *input = self.input;
     dispatch_async(dispatch_get_main_queue(), ^{ [input requestVisibleSyntax]; });
   }
-  NSUInteger gutterIndex = _presentedLineIndex == NSNotFound ? self.lineIndex : _presentedLineIndex;
-  [[NSString stringWithFormat:@"%lu", gutterIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
-    NSFontAttributeName:[NSFont fontWithName:@"Menlo" size:MAX(10, self.fontSize - 1)] ?: [NSFont systemFontOfSize:12],
-    NSForegroundColorAttributeName:[(self.foreground ?: NSColor.textColor) colorWithAlphaComponent:0.5],
-  }];
   if (self.window.firstResponder == self.input && self.input.head >= offset && self.input.head <= offset + _cachedText.length) {
     NSRect caret = [_textLayout caretRectAtOffset:self.input.head - offset downstream:YES];
     caret.origin.x += 64; [self.foreground setFill]; NSRectFill(caret);
