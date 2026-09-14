@@ -61,7 +61,8 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
   );
 }
 function SelectedBackground({ entry, isPreview }: { entry: Entry; isPreview: boolean }) {
-  const runtime$ = useObservable(() => ({ ...entry.runtime$.get(), isActive: !isPreview, isPreview, isPreparing: false }), [entry, isPreview]);
+  const sourceRuntime$ = entry.runtime$;
+  const runtime$ = useObservable(() => ({ ...sourceRuntime$.get(), isActive: !isPreview, isPreview, isPreparing: false }), [sourceRuntime$, isPreview]);
   return <PresentationObservableProvider value={runtime$}>{entry.children}</PresentationObservableProvider>;
 }
 
