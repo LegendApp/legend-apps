@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { progressLabel, type createSourceProgress } from "./sourceProgress";
+import SourceEditorProgressRing from "./SourceEditorProgressRingNativeComponent";
 
 export function SourceProgressBanner({ progress, loading }: { progress: ReturnType<typeof createSourceProgress>; loading: boolean }) {
   const value = useSyncExternalStore(progress.subscribe, progress.getSnapshot, progress.getSnapshot);
@@ -11,9 +12,7 @@ export function SourceProgressBanner({ progress, loading }: { progress: ReturnTy
     return <View pointerEvents="none" style={styles.highlighting}
       accessible accessibilityRole="progressbar" accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: percent }}>
-      <View style={styles.circle}>
-        <View style={[styles.fill, { height: `${percent}%` }]} />
-      </View>
+      <SourceEditorProgressRing progress={percent / 100} style={styles.ring} />
     </View>;
   }
   return <View pointerEvents="none" style={styles.banner}>
@@ -27,9 +26,8 @@ export function SourceProgressBanner({ progress, loading }: { progress: ReturnTy
 }
 
 export const progressBannerStyles = StyleSheet.create({
-  highlighting: { position: "absolute", bottom: 8, right: 12, width: 20, height: 20, zIndex: 35 },
-  circle: { flex: 1, borderRadius: 10, borderWidth: 1, borderColor: "#60a5fa", backgroundColor: "#202020e6", overflow: "hidden" },
-  fill: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#60a5fa" },
+  highlighting: { position: "absolute", bottom: 16, right: 16, width: 20, height: 20, overflow: "hidden", zIndex: 35 },
+  ring: { width: 20, height: 20, flexShrink: 0 },
   banner: { position: "absolute", top: 10, left: 0, right: 0, alignItems: "center", zIndex: 35 },
   surface: { flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 16, paddingVertical: 8,
     maxWidth: "95%",
