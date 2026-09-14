@@ -83,6 +83,31 @@ int main() {
     }
     assert(row == chunked.visualLineCount);
     CFRelease(reference);
+    // Fast long-line caret positions must agree with CoreText's original line,
+    // not a reshaped substring. Include kerning/ligatures, tabs and bidi edges.
+    for (NSString *fragment in @[@"const value = 42; ", @"fi ffi\t👩🏽‍💻 é 中文 אבג العربية xyz ", @"AV fi ffi office "]) {
+      NSString *source = [fragment stringByPaddingToLength:6000 withString:fragment startingAtIndex:0];
+      NSMutableAttributedString *styled = [attributed(source) mutableCopy];
+      if ([fragment hasPrefix:@"AV"]) {
+        [styled addAttribute:NSFontAttributeName value:[NSFont fontWithName:@"Times-Roman" size:14] range:NSMakeRange(0, source.length)];
+        [styled addAttribute:NSLigatureAttributeName value:@1 range:NSMakeRange(0, source.length)];
+      }
+      for (NSUInteger i = 0; i < source.length; i += 7)
+        [styled addAttribute:NSForegroundColorAttributeName value:(i % 2 ? NSColor.redColor : NSColor.blueColor)
+                       range:NSMakeRange(i, MIN(NSUInteger{7}, source.length - i))];
+      auto actual = [[LESourceLineLayout alloc] initWithText:styled width:800 lineHeight:22 wrap:NO];
+      CTLineRef expected = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)styled);
+      for (NSUInteger i = 0; i <= source.length; ++i) {
+        const auto x = [actual caretRectAtOffset:i downstream:YES].origin.x;
+        const auto referenceX = CTLineGetOffsetForStringIndex(expected, i, nullptr);
+        assert(fabs(x - referenceX) < 0.01);
+        if (fragment.length == 18 && i % 13 == 0) {
+          const auto point = NSMakePoint(x + 0.25, 11);
+          assert([actual offsetAtPoint:point] == (NSUInteger)CTLineGetStringIndexForPosition(expected, point));
+        }
+      }
+      CFRelease(expected);
+    }
     NSString *longUnicode = [@"hello 👩🏽‍💻 " stringByPaddingToLength:12000 withString:@"word abc 中文 " startingAtIndex:0];
     auto unicodeLayout = layout(longUnicode, 173);
     [longUnicode enumerateSubstringsInRange:NSMakeRange(0, longUnicode.length) options:NSStringEnumerationByComposedCharacterSequences
