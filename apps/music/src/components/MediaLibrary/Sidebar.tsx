@@ -1,6 +1,6 @@
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { useCallback, useRef } from "react";
+import { memo, useCallback, useRef } from "react";
 import {
     Alert,
     Platform,
@@ -59,7 +59,6 @@ export function MediaLibrarySidebar() {
     const selectedView = useValue(libraryUI$.selectedView);
     const playlists = useValue(localMusicState$.playlists);
     const providerPlaylists = useValue(providerLibrary$.playlists);
-    const selectedProviderPlaylist = useValue(providerLibrary$.selectedPlaylist);
     const spotifyStatus = useValue(spotifyStatus$);
     const appleMusicStatus = useValue(appleMusicStatus$);
     const listItemStyles = useListItemStyles();
@@ -402,36 +401,10 @@ export function MediaLibrarySidebar() {
                         <Text className="h-7 px-2 text-xs font-semibold leading-7 text-white/40 uppercase tracking-wider">
                             Streaming Playlists
                         </Text>
-                        {providerPlaylists.map((playlist) => {
-                            const isSelected = selectedView === "provider-playlist"
-                                && selectedProviderPlaylist?.provider === playlist.provider
-                                && selectedProviderPlaylist.id === playlist.id;
-                            return (
-                                <Button
-                                    key={`${playlist.provider}:${playlist.id}`}
-                                    className={listItemStyles.getRowClassName({
-                                        variant: "compact",
-                                        isSelected,
-                                        className: "h-7 rounded-md px-2 gap-2",
-                                    })}
-                                    onClick={() => void handleSelectProviderPlaylist(playlist)}
-                                    onDoubleClick={() => {
-                                        void selectProviderPlaylist(playlist)
-                                            .then(() => {
-                                                const tracks = providerLibrary$.selectedTracks.peek();
-                                                if (tracks.length > 0) localAudioControls.queue.append(tracks);
-                                            })
-                                            .catch((error) => showToast(error instanceof Error ? error.message : `Could not load ${playlist.name}.`, "error"));
-                                    }}
-                                >
-                                    <ProviderBadge provider={playlist.provider} compact />
-                                    <Text className={cn("flex-1 text-sm", isSelected ? listItemStyles.text.primary : listItemStyles.text.secondary)} numberOfLines={1}>
-                                        {playlist.name}
-                                    </Text>
-                                    <Text className={listItemStyles.getMetaClassName()}>{playlist.trackCount || ""}</Text>
-                                </Button>
-                            );
-                        })}
+                        {providerPlaylists.map((playlist) => (
+                            <ProviderPlaylistRow key={`${playlist.provider}:${playlist.id}`} playlist={playlist}
+                                onSelect={handleSelectProviderPlaylist} />
+                        ))}
                     </View>
                 ) : null}
 
@@ -463,6 +436,34 @@ export function MediaLibrarySidebar() {
         </View>
     );
 }
+
+const ProviderPlaylistRow = memo(function ProviderPlaylistRow({ playlist, onSelect }: {
+    playlist: ProviderPlaylist;
+    onSelect: (playlist: ProviderPlaylist) => void;
+}) {
+    const isSelected = useValue(() => libraryUI$.selectedView.get() === "provider-playlist"
+        && providerLibrary$.selectedPlaylist.provider.get() === playlist.provider
+        && providerLibrary$.selectedPlaylist.id.get() === playlist.id);
+    const listItemStyles = useListItemStyles();
+    return <Button
+        className={listItemStyles.getRowClassName({ variant: "compact", isSelected, className: "h-7 rounded-md px-2 gap-2" })}
+        onClick={() => void onSelect(playlist)}
+        onDoubleClick={() => {
+            void selectProviderPlaylist(playlist)
+                .then(() => {
+                    const tracks = providerLibrary$.selectedTracks.peek();
+                    if (tracks.length > 0) localAudioControls.queue.append(tracks);
+                })
+                .catch((error) => showToast(error instanceof Error ? error.message : `Could not load ${playlist.name}.`, "error"));
+        }}
+    >
+        <ProviderBadge provider={playlist.provider} compact />
+        <Text className={cn("flex-1 text-sm", isSelected ? listItemStyles.text.primary : listItemStyles.text.secondary)} numberOfLines={1}>
+            {playlist.name}
+        </Text>
+        <Text className={listItemStyles.getMetaClassName()}>{playlist.trackCount || ""}</Text>
+    </Button>;
+});
 
 type PlaylistEditingState = {
     tempPlaylistId: string | null;
