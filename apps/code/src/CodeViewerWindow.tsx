@@ -95,7 +95,8 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   useEffect(() => {
     if (fileRequest.path && loadedFileRequestVersionRef.current !== fileRequest.version) {
       loadedFileRequestVersionRef.current = fileRequest.version;
-      loadedLaunchFileRef.current = fileRequest.path;
+      // Launch props and later open requests are separate inputs. Updating the
+      // launch marker here would replay the original file after this transition.
       openFile(fileRequest.path);
     }
   }, [fileRequest.path, fileRequest.version, openFile]);
