@@ -17,5 +17,8 @@
     "react-native-enriched-markdown": "^1.0.2",
     "uniwind": "^1.6.3",
     "@legendapp/state": "catalog:"
+  },
+  "enriched-markdown": {
+    "enableCodeHighlight": true
   }
 }
