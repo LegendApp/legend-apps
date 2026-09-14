@@ -1210,6 +1210,18 @@ static NSString *string(const std::u16string &text) {
   NSRange range = self.selectedRange;
   if (!range.length) {
     auto position = _document->position(_head);
+    if (position.column == 0) {
+      const auto &line = _document->line(position.line);
+      range.length = line.text.size() + line.ending.size();
+      // Remove the separator before a final line with no following newline.
+      if (line.ending.empty() && position.line > 0) {
+        NSUInteger separator = _document->line(position.line - 1).ending.size();
+        range.location -= separator;
+        range.length += separator;
+      }
+      if (range.length) [self insertText:@"" replacementRange:range];
+      return;
+    }
     LESourceRowView *reference = nil;
     for (LESourceRowView *row in _rows) {
       if (![self isCurrentRow:row] || row.bounds.size.width <= 72) continue;

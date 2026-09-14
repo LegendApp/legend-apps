@@ -54,8 +54,6 @@ int main() {
       [input.undoManager undo];
       assert([input.source isEqual:@"first\r\n  hello 👩🏽‍💻 world"]);
       [input.undoManager redo];
-      [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
-      assert([input.source isEqual:@"first\r\n world"]); // Do not eat the previous newline.
       [input setAccessibilitySelectedTextRange:NSMakeRange(2, 7)];
       [input.undoManager beginUndoGrouping];
       [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
@@ -73,6 +71,36 @@ int main() {
       [input.undoManager endUndoGrouping];
       assert([input.source isEqual:expected] && input.head == start);
       row.input = nil;
+    }
+    {
+      // Column zero deletes the logical line, including its line separator.
+      NSArray *cases = @[
+        @[@"first\nmiddle\nlast", @0, @"middle\nlast", @0],
+        @[@"first\nmiddle\nlast", @6, @"first\nlast", @6],
+        @[@"first\nmiddle\nlast", @13, @"first\nmiddle", @12],
+        @[@"first\r\nmiddle\r\nlast", @7, @"first\r\nlast", @7],
+        @[@"first\r\nlast", @7, @"first", @5],
+        @[@"first\n\nlast", @6, @"first\nlast", @6],
+        @[@"first\r\n", @7, @"first", @5],
+        @[@"only", @0, @"", @0],
+        @[@"", @0, @"", @0],
+      ];
+      for (NSArray *example in cases) {
+        LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+        input.undoManager.groupsByEvent = NO;
+        [input loadSource:example[0]];
+        __block NSUInteger edits = 0;
+        input.onEdit = ^(NSString *) { ++edits; };
+        [input setAccessibilitySelectedTextRange:NSMakeRange([example[1] unsignedIntegerValue], 0)];
+        [input.undoManager beginUndoGrouping];
+        [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
+        [input.undoManager endUndoGrouping];
+        assert([input.source isEqual:example[2]] && input.head == [example[3] unsignedIntegerValue]);
+        if ([example[0] length]) {
+          [input.undoManager undo]; assert([input.source isEqual:example[0]]);
+          [input.undoManager redo]; assert([input.source isEqual:example[2]]);
+        } else assert(edits == 0);
+      }
     }
     {
       // The deleted row remains mounted until Fabric removes its container.
