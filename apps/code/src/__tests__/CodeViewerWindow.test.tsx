@@ -158,6 +158,22 @@ describe("Code default editor", () => {
     expect(editor().props.language).toBe("tsx");
   });
 
+  it("keeps a second file open when the window originally launched with a document", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]} />); });
+    expect(editor().props.filePath).toBe("/one.ts");
+    await act(async () => requestCodeViewerFile("/two.tsx"));
+    expect(editor().props.filePath).toBe("/two.tsx");
+    expect(mockEditorCommand).toHaveBeenCalledTimes(1);
+    const second = editor();
+    await act(async () => renderer.update(<CodeViewerWindow launchArguments={["/one.ts"]} />));
+    expect(editor()).toBe(second);
+    expect(editor().props.filePath).toBe("/two.tsx");
+    await act(async () => requestCodeViewerFile("/three.md"));
+    expect(editor().props.filePath).toBe("/three.md");
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    expect(editor().props.filePath).toBe("/one.ts");
+  });
+
   it("preserves edits when opening another file is cancelled or saving fails", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow />); });
     await act(async () => requestCodeViewerFile("/one.ts"));
