@@ -65,6 +65,29 @@ describe("downloadable grammars", () => {
     const f = fixture(); f.installed.add("python"); f.io.manifest = async () => { throw Error("offline"); };
     await createGrammarManager(f.io).ensure("python"); expect(f.calls).toEqual([]);
   });
+  test("disk-cached TSX packs load without reporting a download", async () => {
+    const f = fixture(manifest(["tsx"]));
+    f.io.install = async (name) => { await Promise.resolve(); f.installed.add(name); };
+    const manager = createGrammarManager(f.io), phases: string[] = [];
+    manager.subscribe("tsx", () => phases.push(manager.getSnapshot("tsx").phase));
+    await manager.ensure("tsx");
+    expect(phases).toEqual(["checking", "ready"]);
+  });
+  test("download progress begins on native notification and cannot reopen ready status", async () => {
+    const f = fixture();
+    let notify!: (completed: number, total: number) => void;
+    f.io.install = async (name, _artifact, progress) => {
+      notify = progress;
+      expect(manager.getSnapshot(name).phase).toBe("checking");
+      progress(0, 100);
+      expect(manager.getSnapshot(name).phase).toBe("downloading");
+      f.installed.add(name);
+    };
+    const manager = createGrammarManager(f.io);
+    await manager.ensure("python");
+    notify(100, 100);
+    expect(manager.getSnapshot("python").phase).toBe("ready");
+  });
   test("installs dependencies before the requesting language", async () => {
     const data = manifest(["mdx", "markdown-inline", "yaml"]);
     data.packs.mdx.dependencies = ["markdown-inline", "yaml"];

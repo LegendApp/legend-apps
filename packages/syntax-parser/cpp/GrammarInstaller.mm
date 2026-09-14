@@ -104,6 +104,7 @@ std::string installGrammarPack(const std::string& name, const std::string& url,
       }
     }
     if (![files fileExistsAtPath:path]) {
+      progress(0, size);
       NSString *temporary = [base stringByAppendingPathComponent:[@"download-" stringByAppendingString:NSUUID.UUID.UUIDString]];
       LEGGrammarDownload *delegate = [LEGGrammarDownload new];
       delegate.destination = temporary; delegate.expectedSize = static_cast<int64_t>(size);
@@ -118,6 +119,7 @@ std::string installGrammarPack(const std::string& name, const std::string& url,
         if (delegate.failure) throw std::runtime_error(delegate.failure.UTF8String);
         verify(temporary, digest, static_cast<uint64_t>(size));
         if (![files moveItemAtPath:temporary toPath:path error:&error]) throw std::runtime_error("Cannot install grammar atomically");
+        progress(size, size);
       } catch (...) { [files removeItemAtPath:temporary error:nil]; throw; }
     }
     verify(path, digest, static_cast<uint64_t>(size));
@@ -126,7 +128,6 @@ std::string installGrammarPack(const std::string& name, const std::string& url,
     auto factory = reinterpret_cast<LegendGrammarPackFactory>(dlsym(handle, "legend_grammar_pack_v1"));
     if (!factory || !factory() || !factory()->name || name != factory()->name) { dlclose(handle); throw std::runtime_error("Grammar pack identity mismatch"); }
     try { TreeSitterHighlighter::registerPack(*factory()); } catch (...) { dlclose(handle); throw; }
-    progress(size, size);
     return name; // Keep the library mapped while any syntax tree can reference it.
   }
 }
