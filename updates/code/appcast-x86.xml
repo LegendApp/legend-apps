@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Legend Code</title>
+        <item>
+            <title>0.0.1</title>
+            <pubDate>Mon, 14 Sep 2026 15:04:18 +0200</pubDate>
+            <sparkle:version>1000.0.1</sparkle:version>
+            <sparkle:shortVersionString>0.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/LegendApp/legend-apps/releases/download/code-v0.0.1/Legend-Code-0.0.1-x86.zip" length="7528038" type="application/octet-stream" sparkle:edSignature="6R8H7zt90KFEugdH8xyCYHp//4TQRgJwB1/EDyhD/CCVVTTlJMox9oUqT+hUHj8I7W/xd4QVwxG4nzovrwrFDg=="/>
+        </item>
+    </channel>
+</rss>
