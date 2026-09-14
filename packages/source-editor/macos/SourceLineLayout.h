@@ -12,6 +12,8 @@ NS_ASSUME_NONNULL_BEGIN
                        width:(CGFloat)width
                   lineHeight:(CGFloat)lineHeight
                         wrap:(BOOL)wrap;
+// Returns NO without mutation when the existing geometry cannot be reused.
+- (BOOL)updateText:(NSAttributedString *)text width:(CGFloat)width lineHeight:(CGFloat)lineHeight wrap:(BOOL)wrap;
 - (NSUInteger)offsetAtPoint:(NSPoint)point;
 - (NSRect)caretRectAtOffset:(NSUInteger)offset downstream:(BOOL)downstream;
 - (NSArray<NSValue *> *)rectsForRange:(NSRange)range;

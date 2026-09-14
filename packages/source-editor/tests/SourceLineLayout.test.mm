@@ -132,6 +132,38 @@ int main() {
       assert(actual.count <= 11);
     }
     assert([unicodeLayout rectsForRange:NSMakeRange(0, 0) visibleRect:NSMakeRect(0, 0, 100, 100)].count == 0);
+    NSMutableAttributedString *updated = [attributed(longUnicode) mutableCopy];
+    auto reused = [[LESourceLineLayout alloc] initWithText:updated width:173 lineHeight:22 wrap:YES];
+    NSArray *originalLines = [reused valueForKey:@"lines"];
+    [updated addAttribute:NSForegroundColorAttributeName value:NSColor.redColor range:NSMakeRange(7000, 500)];
+    assert([reused updateText:updated width:173 lineHeight:22 wrap:YES]);
+    NSArray *changedLines = [reused valueForKey:@"lines"];
+    assert(originalLines[0] == changedLines[0]);
+    NSUInteger replacements = 0;
+    for (NSUInteger i = 0; i < originalLines.count; ++i) replacements += originalLines[i] != changedLines[i];
+    assert(replacements > 0 && replacements < originalLines.count);
+    auto fresh = [[LESourceLineLayout alloc] initWithText:updated width:173 lineHeight:22 wrap:YES];
+    assert(reused.height == fresh.height && reused.width == fresh.width);
+    assert([[reused rectsForRange:selection] isEqualToArray:[fresh rectsForRange:selection]]);
+    // Compare the attributed glyph runs as well as geometry: reused lines must
+    // actually paint the new colors, not just preserve their old metrics.
+    NSArray *freshLines = [fresh valueForKey:@"lines"];
+    for (NSUInteger i = 0; i < freshLines.count; ++i) {
+      NSArray *a = (__bridge NSArray *)CTLineGetGlyphRuns((__bridge CTLineRef)changedLines[i]);
+      NSArray *b = (__bridge NSArray *)CTLineGetGlyphRuns((__bridge CTLineRef)freshLines[i]);
+      assert(a.count == b.count);
+      for (NSUInteger j = 0; j < a.count; ++j) {
+        assert(CFEqual(CTRunGetAttributes((__bridge CTRunRef)a[j]), CTRunGetAttributes((__bridge CTRunRef)b[j])));
+      }
+    }
+    assert(![reused updateText:updated width:174 lineHeight:22 wrap:YES]);
+    assert(![reused updateText:updated width:173 lineHeight:23 wrap:YES]);
+    assert(![reused updateText:updated width:173 lineHeight:22 wrap:NO]);
+    [updated addAttribute:NSFontAttributeName value:[NSFont systemFontOfSize:30] range:NSMakeRange(7000, 500)];
+    assert(![reused updateText:updated width:173 lineHeight:22 wrap:YES]);
+    assert([reused valueForKey:@"lines"] == changedLines); // failed update is atomic
+    [updated replaceCharactersInRange:NSMakeRange(0, 1) withString:@"different"];
+    assert(![reused updateText:updated width:173 lineHeight:22 wrap:YES]);
     std::cout << "SourceLineLayout: all assertions passed\n";
   }
 }
