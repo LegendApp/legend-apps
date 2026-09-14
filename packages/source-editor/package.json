@@ -6,9 +6,10 @@
   "react-native": "src/index.tsx",
   "codegenConfig": {
     "name": "RNSourceEditorSpec",
-    "type": "components",
+    "type": "all",
     "jsSrcsDir": "src",
     "ios": {
+      "modulesProvider": { "NativeSourceDocuments": "RNSourceDocuments" },
       "componentProvider": {
         "SourceEditorHost": "RNSourceEditorHost",
         "SourceEditorProgressRing": "RNSourceEditorProgressRing",

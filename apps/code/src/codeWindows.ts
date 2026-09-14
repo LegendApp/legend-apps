@@ -1,6 +1,7 @@
 import { createSettingsWindowOptions } from "@legend-apps/settings-window";
 import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
 import { openWindow, setWindowOptions } from "@legend-apps/window-manager";
+import { cancelPreparedDocument, prepareDocument } from "@legend-apps/source-editor/preload";
 import {
   codeSettingsWindowIdentifier,
   codeSettingsWindowModuleName,
@@ -8,7 +9,7 @@ import {
   codeViewerWindowModuleName,
 } from "./appConstants";
 import { getCodeSyntaxTheme } from "./codeSettings";
-import { getFilename } from "./codeFiles";
+import { getFilename, getLaunchCodeFile } from "./codeFiles";
 import { SettingsWindow } from "./SettingsWindow";
 
 function createCodeViewerWindowStyle({
@@ -65,11 +66,18 @@ export function openCodeSettingsWindow() {
   return CodeWindowsNavigator.open(codeSettingsWindowModuleName as CodeWindow);
 }
 
-export function openCodeViewerWindow(launchArguments?: string[]) {
-  return CodeWindowsNavigator.open(codeViewerWindowModuleName as CodeWindow, {
-    initialProperties: launchArguments ? { launchArguments } : undefined,
-    windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
-  });
+export async function openCodeViewerWindow(launchArguments?: string[]) {
+  const path = getLaunchCodeFile(launchArguments);
+  const preparedDocumentId = path ? prepareDocument(path) : undefined;
+  try {
+    return await CodeWindowsNavigator.open(codeViewerWindowModuleName as CodeWindow, {
+      initialProperties: { launchArguments, preparedDocumentId },
+      windowStyle: createCodeViewerWindowStyle({ includeFrame: true }),
+    });
+  } catch (error) {
+    cancelPreparedDocument(preparedDocumentId);
+    throw error;
+  }
 }
 
 export function focusCodeViewerWindow() {

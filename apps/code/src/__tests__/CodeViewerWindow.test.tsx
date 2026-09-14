@@ -13,6 +13,7 @@ import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
 import { addNativeMenuActionListener } from "@legend-apps/native-menu";
 import { setCodeViewerWindowOptions } from "../codeWindows";
 import { codeMenuOwnerId, codeViewerWindowIdentifier } from "../appConstants";
+import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
 
 const mockEditorCommand = jest.fn(async () => true);
 
@@ -29,10 +30,14 @@ jest.mock("@legend-apps/native-menu", () => ({ addNativeMenuActionListener: jest
 jest.mock("@legend-apps/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
 jest.mock("@legend-apps/source-editor", () => {
   const React = require("react");
-  return { SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
+  return { prepareDocument: jest.fn((path: string) => `prepared:${path}`), cancelPreparedDocument: jest.fn(), SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
     React.useImperativeHandle(ref, () => ({ command: mockEditorCommand }), []);
     return React.createElement("SourceDocumentEditor", props);
   }) };
+});
+jest.mock("@legend-apps/source-editor/preload", () => {
+  const editor = jest.requireMock("@legend-apps/source-editor");
+  return { prepareDocument: editor.prepareDocument, cancelPreparedDocument: editor.cancelPreparedDocument };
 });
 jest.mock("@legend-apps/source-viewer", () => ({
   SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
@@ -89,6 +94,10 @@ describe("Code default editor", () => {
     expect(openButton().props.accessibilityLabel).toBe("Open File");
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     await act(async () => requestCodeViewerFile("/one.ts"));
+    expect(prepareDocument).toHaveBeenCalledTimes(1);
+    expect(prepareDocument).toHaveBeenCalledWith("/one.ts");
+    expect(editor().props.preparedDocumentId).toBe("prepared:/one.ts");
+    expect(codeViewerFileRequest$.path.peek()).toBeNull();
     expect(editor().props.filePath).toBe("/one.ts");
     expect(editor().props.language).toBe("typescript");
     expect(editor().props.syntaxHighlightingEnabled).toBe(true);
@@ -182,10 +191,40 @@ describe("Code default editor", () => {
     mockEditorCommand.mockResolvedValueOnce(false);
     await act(async () => requestCodeViewerFile("/two.ts"));
     expect(editor()).toBe(first);
+    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+    jest.mocked(cancelPreparedDocument).mockClear();
     mockEditorCommand.mockRejectedValueOnce(new Error("File changed outside the editor"));
     await act(async () => requestCodeViewerFile("/two.ts"));
     expect(editor()).toBe(first);
     expect(JSON.stringify(renderer.toJSON())).toContain("File changed outside the editor");
+    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+  });
+
+  it("passes a launch preparation through without starting a duplicate read", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token" />); });
+    expect(editor().props.preparedDocumentId).toBe("launch-token");
+    expect(prepareDocument).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+    expect(cancelPreparedDocument).toHaveBeenCalledWith("launch-token");
+  });
+
+  it("does not replay an old request when the viewer is reopened", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow />); });
+    await act(async () => requestCodeViewerFile("/one.ts"));
+    await act(async () => renderer.unmount());
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/new.ts"]} preparedDocumentId="new-token" />); });
+    expect(editor().props.filePath).toBe("/new.ts");
+    expect(editor().props.preparedDocumentId).toBe("new-token");
+  });
+
+  it("disposes an in-flight preparation if the window closes during confirmation", async () => {
+    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]} />); });
+    let confirm!: (allow: boolean) => void;
+    mockEditorCommand.mockImplementationOnce(() => new Promise((resolve) => { confirm = resolve; }));
+    await act(async () => requestCodeViewerFile("/two.ts"));
+    await act(async () => renderer.unmount());
+    await act(async () => confirm(true));
+    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
   });
 
   it("updates the Save As title and language without remounting, then can reopen the original", async () => {

@@ -1,7 +1,5 @@
 #import "RNSourceEditor.h"
-#include "../cpp/SourceFileReader.hpp"
-#include "../cpp/SourceDocument.hpp"
-#include <atomic>
+#import "SourceDocumentLoad.h"
 #import <react/renderer/components/RNSourceEditorSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSourceEditorSpec/EventEmitters.h>
 #import <react/renderer/components/RNSourceEditorSpec/Props.h>
@@ -14,22 +12,16 @@ static std::string utf8String(NSString *value) {
   return data.length ? std::string((const char *)data.bytes, data.length) : std::string();
 }
 
-struct SourceLoadJob {
-  std::atomic<bool> cancelled{false};
-  std::unique_ptr<legend::source::SourceFileReader> reader;
-  uint64_t nextId = 1;
-  NSDictionary *signature;
-  bool hasBOM = false;
-};
-
 @interface RNSourceEditorHost () <RCTSourceEditorHostViewProtocol>
-- (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job first:(BOOL)first;
+- (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job;
+- (void)adoptPreparedDocument:(std::shared_ptr<SourceLoadJob>)job;
 - (void)resumeAfterFirstDraw:(std::shared_ptr<SourceLoadJob>)job;
 @end
 
 @implementation RNSourceEditorHost {
   NSString *_path;
   NSString *_initialSource;
+  NSString *_preparedDocumentId;
   BOOL _useInitialSource;
   BOOL _loaded, _waitingForFirstDraw;
   uint64_t _commandGeneration;
@@ -87,6 +79,7 @@ struct SourceLoadJob {
   const auto &next = *std::static_pointer_cast<const SourceEditorHostProps>(props);
   NSString *path = str(next.documentPath);
   _initialSource = str(next.initialSource);
+  _preparedDocumentId = str(next.preparedDocumentId);
   _useInitialSource = next.useInitialSource;
   if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
   _input.syntaxBackend = str(next.syntaxBackend);
@@ -104,7 +97,7 @@ struct SourceLoadJob {
   _input.fileReadComplete = NO;
   _input.fileSession = nil;
   if (_loadJob) _loadJob->cancelled = true;
-  _loadJob = std::make_shared<SourceLoadJob>();
+  _loadJob.reset();
   _waitingForFirstDraw = NO;
   _input.onFirstDraw = nil;
   if (_useInitialSource) {
@@ -116,26 +109,58 @@ struct SourceLoadJob {
     });
     return;
   }
-  [self loadNextChunk:_loadJob first:YES];
+  if (_preparedDocumentId.length) {
+    _loadJob = [LESourcePreparedDocuments claim:_preparedDocumentId path:_path];
+    if (!_loadJob) {
+      std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
+        .lineCount = 0, .firstId = 1, .complete = true, .error = "Prepared document is unavailable. Reopen the file.", .sourcePrefix = "",
+      });
+      return;
+    }
+  } else {
+    _loadJob = startSourceDocumentLoad(_path);
+  }
+  auto job = _loadJob;
+  if (sourceDocumentLoadReady(job)) {
+    [self adoptPreparedDocument:job];
+  } else {
+    __weak RNSourceEditorHost *weakSelf = self;
+    dispatch_group_notify(job->ready, dispatch_get_main_queue(), ^{ [weakSelf adoptPreparedDocument:job]; });
+  }
 }
-- (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job first:(BOOL)first {
+- (void)adoptPreparedDocument:(std::shared_ptr<SourceLoadJob>)job {
+  if (job->cancelled || _loadJob != job || !_eventEmitter) return;
+  _input.sourceLoading = !job->complete && !job->error.length;
+  _input.fileReadComplete = job->complete && !job->error.length;
+  _input.fileSession = [[LESourceFileSession alloc] initWithPath:job->path signature:job->signature hasBOM:job->hasBOM];
+  auto document = std::move(job->firstDocument);
+  if (!job->error.length) {
+    document->useEditIdRange();
+    [_input adoptDocument:document];
+  }
+  std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
+    .lineCount = document ? (double)document->lineCount() : 0, .firstId = 1,
+    .complete = job->complete, .error = utf8String(job->error), .sourcePrefix = utf8String(job->sourcePrefix),
+  });
+  if (job->complete || job->error.length) return;
+  _waitingForFirstDraw = YES;
   __weak RNSourceEditorHost *weakSelf = self;
-  NSString *path = [_path copy];
+  _input.onFirstDraw = ^{ [weakSelf resumeAfterFirstDraw:job]; };
+  // Hidden windows may not draw. Never stall their loading indefinitely.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+    [weakSelf resumeAfterFirstDraw:job];
+  });
+}
+- (void)loadNextChunk:(std::shared_ptr<SourceLoadJob>)job {
+  __weak RNSourceEditorHost *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
     if (job->cancelled) return;
     @autoreleasepool {
       std::shared_ptr<legend::source::SourceDocument> chunk;
       NSString *error = @"";
-      NSString *sourcePrefix = @"";
       BOOL complete = NO;
       try {
-        if (!job->reader) {
-          job->signature = [LESourceFileSession signatureAtPath:path];
-          job->reader = std::make_unique<legend::source::SourceFileReader>(path.fileSystemRepresentation);
-        }
-        auto source = job->reader->next(first ? 16384 : 1048576, first ? 128 : 16384);
-        job->hasBOM = job->reader->hasBOM();
-        if (first) sourcePrefix = [[NSString alloc] initWithCharacters:(const unichar *)source.data() length:std::min<size_t>(512, source.size())];
+        auto source = job->reader->next(1048576, 16384);
         complete = job->reader->done();
         chunk = std::make_shared<legend::source::SourceDocument>(source, job->nextId);
         job->nextId += chunk->lineCount() - 1;
@@ -150,39 +175,20 @@ struct SourceLoadJob {
         auto emitter = std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter);
         self->_input.sourceLoading = !complete && !error.length;
         self->_input.fileReadComplete = complete && !error.length;
-        if (first) self->_input.fileSession = [[LESourceFileSession alloc] initWithPath:path signature:job->signature hasBOM:job->hasBOM];
-        if (first) {
-          if (!error.length) {
-            chunk->useEditIdRange();
-            [self->_input adoptDocument:chunk];
-          }
-          emitter->onReady({.lineCount = chunk ? (double)chunk->lineCount() : 0, .firstId = 1,
-            .complete = (bool)complete, .error = utf8String(error), .sourcePrefix = utf8String(sourcePrefix)});
-        } else {
-          NSString *json = @"";
-          if (!error.length && chunk->length()) {
-            NSDictionary *change = [self->_input appendDocument:std::move(*chunk)];
-            NSData *data = [NSJSONSerialization dataWithJSONObject:change options:0 error:nil];
-            json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-          }
-          emitter->onAppend({.json = utf8String(json), .complete = (bool)complete, .error = utf8String(error)});
+        NSString *json = @"";
+        if (!error.length && chunk->length()) {
+          NSDictionary *change = [self->_input appendDocument:std::move(*chunk)];
+          NSData *data = [NSJSONSerialization dataWithJSONObject:change options:0 error:nil];
+          json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
         }
+        emitter->onAppend({.json = utf8String(json), .complete = (bool)complete, .error = utf8String(error)});
         if (complete || error.length) return;
-        if (first) {
-          self->_waitingForFirstDraw = YES;
-          self->_input.onFirstDraw = ^{ [weakSelf resumeAfterFirstDraw:job]; };
-          // Hidden windows may not draw. Never stall their loading indefinitely.
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            [weakSelf resumeAfterFirstDraw:job];
-          });
-        } else {
-          // Backpressure: at most one decoded chunk waits for the main thread.
-          // Give input/layout a turn before integrating more background rows.
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            RNSourceEditorHost *self = weakSelf;
-            if (self && !job->cancelled && self->_loadJob == job) [self loadNextChunk:job first:NO];
-          });
-        }
+        // Backpressure: at most one decoded chunk waits for the main thread.
+        // Give input/layout a turn before integrating more background rows.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+          RNSourceEditorHost *self = weakSelf;
+          if (self && !job->cancelled && self->_loadJob == job) [self loadNextChunk:job];
+        });
       });
     }
   });
@@ -191,7 +197,7 @@ struct SourceLoadJob {
   if (!_waitingForFirstDraw || job->cancelled || _loadJob != job) return;
   _waitingForFirstDraw = NO;
   _input.onFirstDraw = nil;
-  [self loadNextChunk:job first:NO];
+  [self loadNextChunk:job];
 }
 - (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args {
   RCTSourceEditorHostHandleCommand(self, commandName, args);
@@ -233,7 +239,7 @@ struct SourceLoadJob {
   _input.syntaxBackend = @"tree-sitter";
   _input.grammarRevision = 0;
   _path = nil; _loaded = NO; [_input loadSource:@""];
-  _initialSource = nil; _useInitialSource = NO;
+  _initialSource = nil; _useInitialSource = NO; _preparedDocumentId = nil;
   [_input configureSyntaxLanguage:@"" theme:@"" enabled:NO];
 }
 - (void)dealloc { if (_loadJob) _loadJob->cancelled = true; }

@@ -20,6 +20,39 @@ is loaded once; remount with a different key when replacing it. `onChange` repor
 UTF-16 range edits, and `onSelectionChange` reports the selected range and logical
 line for preview/navigation integrations. Neither callback writes to disk.
 
+## Preparing before mount
+
+Code starts disk reads from its open actions, before scheduling an editor render
+or creating a window. Other disk-backed consumers can use the same lightweight API:
+
+```tsx
+import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor/preload";
+
+const token = prepareDocument(path); // queues native work; no synchronous file I/O
+// Pass to one editor after confirming any unsaved-document transition:
+<SourceDocumentEditor filePath={path} preparedDocumentId={token} />;
+// If the open is cancelled, superseded, fails, or its owner is disposed:
+cancelPreparedDocument(token);
+```
+
+Each token owns an independent native reader and a bounded first chunk (up to
+16 KiB / 128 newline boundaries), not a full-file cache. A memory-only snapshot
+lets React seed row metadata in the initial render when preparation has finished.
+The native host claims the token exactly once and adopts the same buffer without
+rereading it; `onReady` preserves the already-seeded data source. If the worker is
+still pending, the normal ready event supplies rows later. Neither path blocks
+the JS thread on disk. Further chunks retain the first-draw gate and backpressure.
+
+Cancellation before claim releases the pending session; after claim it is a
+no-op because the native view owns cancellation and recycling cleanup. A token
+must match its path and cannot be reused for a second editor. Remount with a new
+token for a new document. Do not combine it with `initialSource`: Slides' existing
+in-memory draft/undo/save ownership is unchanged. Consumers that omit a token
+still use the same native loader, starting at mount.
+
+After changing the native spec, run `bun run code pods macos` and rebuild Code;
+other consumers (including Slides) need regenerated pods/codegen and a rebuild too.
+
 Implemented foundations:
 
 - An indexed UTF-16 native buffer with stable logical-line IDs, exact newline
