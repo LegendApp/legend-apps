@@ -35,6 +35,39 @@ static void measure() {
       << " mirror_peak_bytes=" << mirrorPeak << " parsed_peak_bytes=" << parsePeak << " query_peak_bytes=" << peakBytes() << "\n";
 }
 int main(int argc, char**) {
+  // Model the editor's partial cache refresh, not just a full re-query. Local
+  // binding edits must update sibling references but leave outer scopes valid.
+  for (const char* language : {"javascript", "typescript", "tsx"}) {
+    const std::u16string initial = u"const outside = console.log;\n(function bundle() {\nfunction example() {\nconsole.log(42);\nif (true) { var local = 1; }\nconsole.log(local);\n}\nfunction sibling() { console.log(42); }\n})();\nconsole.log(42);\n";
+    for (const auto& edit : std::vector<std::pair<std::u16string, std::u16string>>{
+        {u"42", u"1234"}, {u"var local", u"var console"}, {u"var local = 1;", u""},
+        {u"console.log(local)", u"console.log(`hello\n${local}`)"},
+        {u"var local = 1;", u"var console = 1;\nvar local = 2;"},
+        {u"if (true)", u"if (false)"}, {u"function example", u"function console"},
+        {u"console.log(42);", u"/*"}}) {
+      SourceTreeSyntax edited(language);
+      auto text = initial;
+      edited.replace(0, 0, text); assert(edited.parse());
+      auto cached = edited.highlight(0, edited.lineCount());
+      const auto at = text.find(edit.first);
+      assert(at != std::u16string::npos);
+      edited.replace(at, edit.first.size(), edit.second); text.replace(at, edit.first.size(), edit.second);
+      assert(edited.parse());
+      const auto invalidated = edited.takeInvalidatedLines();
+      auto full = edited.highlight(0, edited.lineCount());
+      // Account for rows shifted by the edit before checking retained colors.
+      const auto delta = static_cast<ptrdiff_t>(full.size()) - static_cast<ptrdiff_t>(cached.size());
+      for (size_t row = 0; row < full.size(); ++row) {
+        if (row >= invalidated.first && row < invalidated.second) continue;
+        const auto old = row < invalidated.first ? row : row - delta;
+        assert(full[row].tokens == cached.at(old).tokens);
+      }
+      if (edit.first == u"42") assert(invalidated.second - invalidated.first <= 6);
+      compare(edited, text, language);
+      edited.replace(at, edit.second.size(), edit.first); text.replace(at, edit.second.size(), edit.first);
+      compare(edited, text, language);
+    }
+  }
   SourceTreeSyntax worker("tsx");
   std::u16string source = u"const x = <View title=\"😀\" />;\r\n";
   worker.replace(0, 0, source.substr(0, 12));
