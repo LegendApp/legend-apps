@@ -35,6 +35,28 @@ static void measure() {
       << " mirror_peak_bytes=" << mirrorPeak << " parsed_peak_bytes=" << parsePeak << " query_peak_bytes=" << peakBytes() << "\n";
 }
 int main(int argc, char**) {
+  {
+    SourceTreeSyntax sliced("typescript");
+    std::u16string text;
+    for (size_t i = 0; i < 10000; ++i) text += u"const sample = 42;\n";
+    sliced.replace(0, 0, text);
+    assert(!sliced.parseSlice(0.01));
+    // An edit between slices must abandon suspended state even before a first
+    // tree exists, including same-length edits (length isn't a revision ID).
+    sliced.replace(6, 6, u"edited"); text.replace(6, 6, u"edited");
+    compare(sliced, text, "typescript");
+    sliced.replace(0, 0, u"/*"); text.insert(0, u"/*");
+    assert(!sliced.parseSlice(0.0001));
+    sliced.replace(0, 2, u""); text.erase(0, 2);
+    compare(sliced, text, "typescript");
+    std::atomic_bool stop{true};
+    assert(!sliced.parseSlice(4, &stop));
+    bool threw = false;
+    try { sliced.highlight(0, 80, &stop); } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+    stop = false;
+    compare(sliced, text, "typescript");
+  }
   // Model the editor's partial cache refresh, not just a full re-query. Local
   // binding edits must update sibling references but leave outer scopes valid.
   for (const char* language : {"javascript", "typescript", "tsx"}) {

@@ -50,10 +50,18 @@ public:
       {static_cast<uint32_t>(a.line), static_cast<uint32_t>(a.column)},
       {static_cast<uint32_t>(b.line), static_cast<uint32_t>(b.column)},
       {static_cast<uint32_t>(c.line), static_cast<uint32_t>(c.column)}});
+    else if (parser_) parser_->reset(); // Abandon a suspended first parse before mutating its snapshot.
     dirty_ = true;
   }
   bool parse() {
+    while (!cancelled) { if (parseSlice()) return true; std::this_thread::yield(); }
+    return false;
+  }
+  // Return to the owner's serial queue between slices. replace() abandons any
+  // suspended parse before the next slice observes its new snapshot.
+  bool parseSlice(double milliseconds = 4, const std::atomic_bool* interrupted = nullptr) {
     if (cancelled) return false;
+    if (interrupted && interrupted->load()) return false;
     if (!dirty_) return true;
     if (!parser_) parser_ = std::make_unique<tree::TreeSitterHighlighter>(language_);
     if (document_.length() > UINT32_MAX / 2) throw std::length_error("Source exceeds Tree-sitter's coordinate limit");
@@ -66,10 +74,7 @@ public:
       }
       return std::u16string_view(readBuffer_).substr(offset - readStart_);
     }};
-    // The serial job owns this snapshot until completion: queued mutations cannot
-    // change it between slices. Yield CPU without restarting on every keystroke.
-    bool ok = false;
-    while (!cancelled && !(ok = parser_->parseSlice(input, 4, &cancelled))) std::this_thread::yield();
+    const bool ok = parser_->parseSlice(input, milliseconds, interrupted ? interrupted : &cancelled);
     if (ok) {
       parsed_ = true; dirty_ = false;
       const auto range = parser_->invalidatedRange();
@@ -77,12 +82,12 @@ public:
     }
     return ok;
   }
-  std::vector<SourceSyntaxRow> highlight(size_t start, size_t count) {
+  std::vector<SourceSyntaxRow> highlight(size_t start, size_t count, const std::atomic_bool* interrupted = nullptr) {
     if (dirty_) throw std::logic_error("Source syntax is not parsed");
     const auto end = std::min(start + count, document_.lineCount());
     const auto first = document_.lineOffset(start);
     const auto last = end == document_.lineCount() ? document_.length() : document_.lineOffset(end);
-    const auto spans = parser_->highlight(static_cast<uint32_t>(first), static_cast<uint32_t>(last), &cancelled);
+    const auto spans = parser_->highlight(static_cast<uint32_t>(first), static_cast<uint32_t>(last), interrupted ? interrupted : &cancelled);
     std::vector<SourceSyntaxRow> rows;
     rows.reserve(end - start);
     size_t token = 0;

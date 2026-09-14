@@ -72,7 +72,7 @@ public:
   // containing top-level construct for query/lexical-scope dependencies.
   std::pair<uint32_t, uint32_t> invalidatedRange() const;
 private:
-  std::vector<TreeSitterSpan> highlightBase(uint32_t start, uint32_t end) const;
+  std::vector<TreeSitterSpan> highlightBase(uint32_t start, uint32_t end, const std::atomic_bool* cancelled) const;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

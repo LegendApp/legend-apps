@@ -70,7 +70,8 @@ static NSString *string(const std::u16string &text) {
   std::vector<int> _treeFontStyles;
   NSUInteger _treeCopiedUnits, _treeNextLine, _treeRevision, _treeVisibleRevision, _treeVisibleStart, _treeVisibleEnd;
   NSUInteger _treeKnownEnd, _treeDirtyEnd;
-  BOOL _treeBusy, _treePrefixDone;
+  BOOL _treeBusy, _treePrefixDone, _treeParsePending;
+  std::shared_ptr<std::atomic_bool> _treeJobCancellation;
   std::unordered_set<std::string> _requestedGrammarNames;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -288,6 +289,7 @@ static NSString *string(const std::u16string &text) {
   [self scheduleSyntax];
 }
 - (void)retireSyntax {
+  if (_treeJobCancellation) *_treeJobCancellation = true;
   if (_treeSyntax) _treeSyntax->cancelled = true;
   auto tree = std::move(_treeSyntax);
   auto rows = std::make_shared<decltype(_treeRows)>(std::move(_treeRows));
@@ -304,7 +306,7 @@ static NSString *string(const std::u16string &text) {
     _treeQueue = dispatch_queue_create("app.legend.source-editor.tree-sitter", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
     _treeCopiedUnits = _treeNextLine = _treeRevision = _treeKnownEnd = _treeDirtyEnd = 0;
     _treeVisibleRevision = NSNotFound;
-    _treeBusy = _treePrefixDone = NO;
+    _treeBusy = _treePrefixDone = _treeParsePending = NO;
   }
   if (self.onSyntaxError) self.onSyntaxError(@"");
   for (LESourceRowView *row in _rows) [row invalidateText];
@@ -381,6 +383,7 @@ static NSString *string(const std::u16string &text) {
   if (!prefix && !copying && !visible && (!_syntaxHighlightingInBackground || _treeNextLine >= _document->lineCount())) return;
   const auto offset = _treeCopiedUnits;
   size_t count = MIN(prefix ? 16384 : 262144, _document->length() - offset);
+  if (_treeParsePending) count = 0; // Resume the same mirror; don't append the prefix twice.
   if (prefix && _document->lineCount() > 128) count = MIN(count, _document->lineOffset(128));
   // A read boundary must not cut a surrogate pair. A parser job only reads its
   // worker mirror, which cannot change until that job returns.
@@ -390,11 +393,13 @@ static NSString *string(const std::u16string &text) {
   }
   auto chunk = std::make_shared<const std::u16string>(_document->slice(offset, count));
   _treeCopiedUnits += count;
-  const BOOL parse = prefix || (!_sourceLoading && _treeCopiedUnits == _document->length());
+  const BOOL parse = _treeParsePending || prefix || (!_sourceLoading && _treeCopiedUnits == _document->length());
   const auto start = prefix ? 0 : visible ? from : _treeNextLine;
   const auto batch = prefix ? 128 : visible ? MIN(to - from, 256) : 512;
   const auto capturedCount = _treeCaptures.size();
   _treeBusy = YES;
+  auto interrupted = std::make_shared<std::atomic_bool>(false);
+  _treeJobCancellation = interrupted;
   __weak LESourceInputView *weakSelf = self;
   dispatch_async(_treeQueue, ^{
     std::vector<legend::source::SourceSyntaxRow> result;
@@ -402,20 +407,22 @@ static NSString *string(const std::u16string &text) {
     std::vector<std::string> missingLanguages;
     std::pair<size_t, size_t> invalidated{0, 0};
     NSString *error = nil;
+    bool complete = false;
     try {
       if (worker->cancelled) return;
       if (!chunk->empty()) worker->replace(offset, 0, *chunk);
-      if (parse && worker->parse()) {
+      if (parse && (complete = worker->parseSlice(4, interrupted.get()))) {
         invalidated = worker->takeInvalidatedLines();
-        if (start < worker->lineCount()) result = worker->highlight(start, batch);
+        if (start < worker->lineCount()) result = worker->highlight(start, batch, interrupted.get());
         if (worker->captureCount() != capturedCount) captures = worker->captures();
         missingLanguages = worker->missingLanguages();
       }
-    } catch (const std::exception& cause) { error = [NSString stringWithUTF8String:cause.what()]; }
+    } catch (const std::exception& cause) { if (!interrupted->load()) error = [NSString stringWithUTF8String:cause.what()]; }
     dispatch_async(dispatch_get_main_queue(), ^{
       LESourceInputView *self = weakSelf;
       if (!self || self->_treeSyntax != worker) return;
       self->_treeBusy = NO;
+      self->_treeParsePending = parse && (!complete || interrupted->load());
       if (error) {
         // Keep the editor usable; unsupported/erroring syntax cannot block input.
         worker->cancelled = true;
@@ -423,10 +430,10 @@ static NSString *string(const std::u16string &text) {
         if (self.onSyntaxError) self.onSyntaxError(error);
         return;
       }
-      if (prefix) self->_treePrefixDone = YES;
+      if (prefix && complete && !interrupted->load()) self->_treePrefixDone = YES;
       if (self.onGrammarRequired) for (const auto& language : missingLanguages)
         if (self->_requestedGrammarNames.insert(language).second) self.onGrammarRequired([NSString stringWithUTF8String:language.c_str()]);
-      if (revision == self->_treeRevision && parse) {
+      if (revision == self->_treeRevision && parse && complete && !interrupted->load()) {
         if (invalidated.second > invalidated.first) {
           self->_treeNextLine = MIN(self->_treeNextLine, invalidated.first);
           self->_treeDirtyEnd = MAX(self->_treeDirtyEnd, invalidated.second);
@@ -451,7 +458,7 @@ static NSString *string(const std::u16string &text) {
           self->_treeKnownEnd = MAX(self->_treeKnownEnd, self->_treeNextLine);
         }
         for (LESourceRowView *row in self->_rows) if (changed.count(row.lineId)) [row invalidateText];
-      } else if (revision != self->_treeRevision && parse) {
+      } else if (parse && complete) {
         // An overlapping completion cannot establish validity for a newer
         // revision. Keep its old colors, but conservatively revalidate the tail.
         self->_treeNextLine = self->_treeKnownEnd = 0;
@@ -765,6 +772,7 @@ static NSString *string(const std::u16string &text) {
   [self publishDocumentState];
   if (_treeSyntax) {
     ++_treeRevision;
+    if (_treeJobCancellation) *_treeJobCancellation = true;
     const auto map = [&](NSUInteger index) -> NSUInteger {
       if (index <= change.startLine) return index;
       if (index >= change.startLine + change.removedLineCount) return index - change.removedLineCount + change.lines.size();

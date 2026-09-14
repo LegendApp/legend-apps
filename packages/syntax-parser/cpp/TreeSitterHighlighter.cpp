@@ -449,7 +449,8 @@ bool TreeSitterHighlighter::parseSlice(const TreeSitterInput& input, double mill
 std::pair<uint32_t, uint32_t> TreeSitterHighlighter::invalidatedRange() const { return impl_->invalidated; }
 std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uint32_t end, const std::atomic_bool* cancelled) const {
   impl_->missingLanguages.clear();
-  auto result = highlightBase(start, end);
+  if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
+  auto result = highlightBase(start, end, cancelled);
   const std::string_view language = impl_->language->name;
   if ((language != "markdown" && language != "mdx") || start == end || impl_->injectionDepth >= 4) return result;
   struct Region { TSNode node; const char* language; std::vector<TSRange> ranges; };
@@ -477,7 +478,11 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
   // A range-constrained query also skips long sibling lists inside a section;
   // enumerating every child in a manual DFS would make each viewport O(file).
   ts_query_cursor_set_byte_range(impl_->injectionCursor, bytes(start), bytes(end));
-  ts_query_cursor_exec(impl_->injectionCursor, impl_->injectionQuery.get(), ts_tree_root_node(impl_->tree));
+  TSQueryCursorOptions options{const_cast<std::atomic_bool*>(cancelled), [](TSQueryCursorState* state) {
+    const auto* flag = static_cast<const std::atomic_bool*>(state->payload);
+    return flag && flag->load(std::memory_order_relaxed);
+  }};
+  ts_query_cursor_exec_with_options(impl_->injectionCursor, impl_->injectionQuery.get(), ts_tree_root_node(impl_->tree), &options);
   TSQueryMatch match; uint32_t capture;
   while (ts_query_cursor_next_capture(impl_->injectionCursor, &match, &capture)) {
     if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
@@ -569,6 +574,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
       }
     }
   }
+  if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
   if (embedded.empty()) return result;
   std::sort(embedded.begin(), embedded.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
   std::vector<uint32_t> boundaries;
@@ -601,13 +607,17 @@ std::vector<std::string> TreeSitterHighlighter::missingLanguages() const {
   result.erase(std::unique(result.begin(), result.end()), result.end());
   return result;
 }
-std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start, uint32_t end) const {
+std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start, uint32_t end, const std::atomic_bool* cancelled) const {
   if (!impl_->ready) throw std::logic_error("Parse must finish before highlighting");
   if (start > end || end > impl_->length) throw std::out_of_range("Invalid highlighting range");
   if (start == end) return {};
   auto* cursor = impl_->cursor;
   ts_query_cursor_set_byte_range(cursor, bytes(start), bytes(end));
-  ts_query_cursor_exec(cursor, impl_->query.get(), ts_tree_root_node(impl_->tree));
+  TSQueryCursorOptions options{const_cast<std::atomic_bool*>(cancelled), [](TSQueryCursorState* state) {
+    const auto* flag = static_cast<const std::atomic_bool*>(state->payload);
+    return flag && flag->load(std::memory_order_relaxed);
+  }};
+  ts_query_cursor_exec_with_options(cursor, impl_->query.get(), ts_tree_root_node(impl_->tree), &options);
   auto& captures = impl_->captureScratch; captures.clear();
   auto& events = impl_->eventScratch; events.clear();
   TSQueryMatch match;
@@ -714,6 +724,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
   // The sweep below already sorts captures. Asking the cursor to sort each
   // capture as well repeats work and can re-evaluate a multi-capture match.
   while (ts_query_cursor_next_match(cursor, &match)) {
+    if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
     bool accepted = true;
     for (const auto& predicate : (*impl_->predicates)[match.pattern_index]) {
       if (predicate.operation == "is-not?") {
@@ -752,6 +763,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
     }
   }
   if (ts_query_cursor_did_exceed_match_limit(cursor)) throw std::runtime_error("Tree-sitter query match limit exceeded");
+  if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
   std::sort(events.begin(), events.end(), [](const Event& a, const Event& b) { return a.offset < b.offset; });
   // Innermost capture first, then latest query pattern for equal node ranges.
   // Nesting is shallow; retained contiguous storage avoids a node allocation

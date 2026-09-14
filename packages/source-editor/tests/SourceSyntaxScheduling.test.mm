@@ -1,5 +1,6 @@
 #import "../macos/SourceInputView.h"
 #include "../cpp/SourceDocument.hpp"
+#include "../cpp/SourceTreeSyntax.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 #include "../../syntax-parser/cpp/TreeSitterHighlighter.hpp"
 #include <cassert>
@@ -42,6 +43,27 @@ static void waitFor(bool (^condition)(void)) {
 
 int main(int argc, char **argv) {
   @autoreleasepool {
+    {
+      // A queued edit must run before a large initial parse finishes. Unlike a
+      // CPU yield inside parse(), one slice gives the serial executor back.
+      auto worker = std::make_shared<legend::source::SourceTreeSyntax>("typescript");
+      std::u16string source;
+      for (int i = 0; i < 100000; ++i) source += u"const sample = 42;\n";
+      worker->replace(0, 0, source);
+      auto queue = dispatch_queue_create("syntax-slice-test", DISPATCH_QUEUE_SERIAL);
+      __block bool complete = true;
+      dispatch_async(queue, ^{ complete = worker->parseSlice(); });
+      dispatch_sync(queue, ^{
+        assert(!complete);
+        worker->replace(6, 6, u"edited");
+      });
+      dispatch_sync(queue, ^{ assert(worker->parse()); });
+      source.replace(6, 6, u"edited");
+      legend::source::SourceTreeSyntax fresh("typescript");
+      fresh.replace(0, 0, source); assert(fresh.parse());
+      const auto actual = worker->highlight(0, 80), expected = fresh.highlight(0, 80);
+      for (size_t i = 0; i < actual.size(); ++i) assert(actual[i].tokens == expected[i].tokens);
+    }
     [NSApplication sharedApplication];
     {
       SchedulingInput *tree = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
