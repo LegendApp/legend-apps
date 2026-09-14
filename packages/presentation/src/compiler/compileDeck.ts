@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { transformSync } from "@babel/core";
 import { compile } from "@mdx-js/mdx";
 import { build, type BuildResult, type Loader, type Message, type Plugin } from "esbuild";
 import remarkFrontmatter from "remark-frontmatter";
@@ -12,6 +14,7 @@ import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 
+const blockScopingPlugin = createRequire(import.meta.url).resolve("@babel/plugin-transform-block-scoping");
 const hostModules = new Set([
   "react",
   "react/jsx-runtime",
@@ -314,8 +317,22 @@ export async function compileDeck(deckPath: string, options: { source?: string }
     if (!output) {
       return { success: false, errors: ["The compiler did not produce a deck bundle."], warnings: [] };
     }
+    // Hermes shares captured loop bindings without Babel's block-scope transform.
+    // Run it after bundling so esbuild's generated export getters are lowered too.
+    const code = transformSync(output.text, {
+      babelrc: false,
+      compact: false,
+      configFile: false,
+      filename: "deck.js",
+      plugins: [blockScopingPlugin],
+      sourceMaps: "inline",
+      sourceType: "script",
+    })?.code;
+    if (!code) {
+      return { success: false, errors: ["The compiler did not produce a Hermes-compatible deck bundle."], warnings: [] };
+    }
     return {
-      code: output.text,
+      code,
       dependencies: [...new Set([
         ...dependenciesFrom(result, path.dirname(absoluteDeckPath)),
         ...webviewDependencies,
