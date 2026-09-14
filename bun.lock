@@ -721,6 +721,7 @@
       "name": "@legend-apps/source-editor",
       "version": "0.0.0",
       "dependencies": {
+        "@legend-apps/design-system": "workspace:*",
         "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/list": "catalog:",
       },

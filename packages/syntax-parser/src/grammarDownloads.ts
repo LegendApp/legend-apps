@@ -12,6 +12,8 @@ export type GrammarIO = {
 const byName = new Map(catalog.grammars.flatMap((g) => [g.name, ...g.aliases].map((name) => [name, g] as const)));
 export function canonicalGrammar(language: string) { return byName.get(language.toLowerCase())?.name ?? language.toLowerCase(); }
 export function isKnownGrammar(language: string) { return byName.has(language.toLowerCase()); }
+export const grammarLanguageOptions = catalog.grammars.filter((g) => g.name !== "markdown-inline")
+  .map((g) => ({ label: g.name, value: g.name })).sort((a, b) => a.label.localeCompare(b.label));
 export function detectGrammar(path: string, firstLine = "") {
   const filename = path.split(/[\\/]/).pop()?.toLowerCase() ?? "";
   const exact = catalog.grammars.find((g) => (g.filenames as string[]).includes(filename));
@@ -20,10 +22,17 @@ export function detectGrammar(path: string, firstLine = "") {
   const extension = filename.includes(".") ? filename.split(".").pop()! : "";
   const match = catalog.grammars.find((g) => (g.extensions as string[]).includes(extension));
   if (match) return match.name;
-  if (firstLine.startsWith("#!")) {
-    if (/\bpython[\d.]*\b/.test(firstLine)) return "python";
-    if (/\b(node|bun|deno)\b/.test(firstLine)) return "javascript";
-    if (/\b(bash|sh|zsh)\b/.test(firstLine)) return "bash";
+  const shebang = firstLine.slice(0, 512).split(/[\r\n]/, 1)[0];
+  if (shebang.startsWith("#!")) {
+    // Inspect the interpreter, not arbitrary arguments containing language names.
+    const words = shebang.slice(2).trim().split(/\s+/);
+    let interpreter = words.shift()?.split("/").pop() ?? "";
+    if (interpreter === "env") interpreter = words.find((word) => !word.startsWith("-") && !word.includes("=")) ?? "";
+    if (/^python(?:\d+(?:\.\d+)*)?$/.test(interpreter)) return "python";
+    if (["node", "nodejs", "bun", "deno"].includes(interpreter)) return "javascript";
+    if (["bash", "sh", "zsh", "dash", "ksh"].includes(interpreter)) return "bash";
+    const interpreters: Record<string, string> = { ruby: "ruby", perl: "perl", php: "php", lua: "lua", fish: "fish", pwsh: "powershell", Rscript: "r", julia: "julia", elixir: "elixir", escript: "erlang" };
+    if (interpreters[interpreter]) return interpreters[interpreter];
   }
   return "";
 }

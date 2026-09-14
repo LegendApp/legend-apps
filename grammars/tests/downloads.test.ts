@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { canonicalGrammar, createGrammarManager, detectGrammar, validateGrammarManifest, type GrammarIO, type GrammarManifest } from "../../packages/syntax-parser/src/grammarDownloads";
-import { validateCatalog } from "../scripts/catalog";
+import { catalog, sourceDirectory, validateCatalog } from "../scripts/catalog";
 
 function manifest(names = ["python"]): GrammarManifest {
   return { schemaVersion: 1, packABI: 1, version: "1", packs: Object.fromEntries(names.map((name) => [name, {
@@ -19,6 +19,30 @@ function fixture(data = manifest()) {
 }
 describe("downloadable grammars", () => {
   test("catalog is pinned and dependency-safe", validateCatalog);
+  test("expanded file types resolve to the intended parser", () => {
+    const cases = { "schema.gql": "graphql", "main.tf": "hcl", "Makefile": "make", "CMakeLists.txt": "cmake",
+      ".editorconfig": "ini", "waves.wgsl": "wgsl", "shader.frag": "glsl", "schema.proto": "proto",
+      "App.vue": "vue", "App.svelte": "svelte", "Page.astro": "astro", "build.ps1": "powershell",
+      "schema.prisma": "prisma", "Main.ZIG": "zig", ".gitignore": "gitignore", "Deck.php": "php" };
+    for (const [path, language] of Object.entries(cases)) expect(detectGrammar(path)).toBe(language);
+    expect(detectGrammar("Native.mm")).toBe(""); // No misleading Objective-C++ fallback.
+    expect(catalog.grammars).toHaveLength(57);
+  });
+  test("isolates upstream common scanner headers by grammar", () => {
+    for (const name of ["php", "xml"]) expect(sourceDirectory(catalog.grammars.find((g) => g.name === name)!))
+      .toEndWith(`/grammars/.cache/${name}/grammar`);
+  });
+  test("extensionless interpreter detection is bounded and ignores arguments", () => {
+    expect(detectGrammar("build", "#!/usr/bin/env -S python3 -u")).toBe("python");
+    expect(detectGrammar("build", "#!/usr/bin/env fish")).toBe("fish");
+    expect(detectGrammar("build", "#!/usr/bin/env ruby")).toBe("ruby");
+    expect(detectGrammar("build", "#!/usr/bin/env pwsh")).toBe("powershell");
+    expect(detectGrammar("build", "#!/usr/bin/env Rscript")).toBe("r");
+    expect(detectGrammar("build", "#!/bin/echo python3")).toBe("");
+    expect(detectGrammar("build", "#!/bin/echo\npython3")).toBe("");
+    expect(detectGrammar("build.py", "#!/usr/bin/env ruby")).toBe("python");
+    expect(detectGrammar("build", "#!" + " ".repeat(512) + "python3")).toBe("");
+  });
   test("detects aliases, case-insensitive extensions, filenames, shebangs and unknown text", () => {
     expect(canonicalGrammar("JSX")).toBe("javascript");
     expect(detectGrammar("/src/Main.RS")).toBe("rust");
