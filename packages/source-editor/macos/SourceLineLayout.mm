@@ -184,16 +184,25 @@
 
 - (NSArray<NSValue *> *)rectsForRange:(NSRange)range
 {
+  return [self rectsForRange:range visibleRect:NSMakeRect(-CGFLOAT_MAX / 4, 0, CGFLOAT_MAX / 2, _height)];
+}
+
+- (NSArray<NSValue *> *)rectsForRange:(NSRange)range visibleRect:(NSRect)visibleRect
+{
   NSMutableArray<NSValue *> *rects = [NSMutableArray array];
-  if (range.location > _text.length || range.length == 0) return rects;
+  if (range.location > _text.length || range.length == 0 || NSIsEmptyRect(visibleRect)
+      || NSMaxY(visibleRect) <= 0 || NSMinY(visibleRect) >= _height) return rects;
   NSUInteger end = range.location + MIN(range.length, _text.length - range.location);
   NSUInteger first = [self visualLineAtOffset:range.location downstream:YES];
   NSUInteger last = [self visualLineAtOffset:end downstream:NO];
+  first = MAX(first, (NSUInteger)floor(MAX(0, NSMinY(visibleRect)) / _lineHeight));
+  last = MIN(last, (NSUInteger)ceil(MIN(_height, NSMaxY(visibleRect)) / _lineHeight) - 1);
   for (NSUInteger row = first; row <= last; row++) {
     NSRange lineRange = _ranges[row].rangeValue;
     CGFloat startX = [self offsetForIndex:MAX(range.location, lineRange.location) row:row];
     CGFloat endX = [self offsetForIndex:MIN(end, NSMaxRange(lineRange)) row:row];
-    [rects addObject:[NSValue valueWithRect:NSMakeRect(MIN(startX, endX), row * _lineHeight, fabs(endX - startX), _lineHeight)]];
+    NSRect rect = NSIntersectionRect(visibleRect, NSMakeRect(MIN(startX, endX), row * _lineHeight, fabs(endX - startX), _lineHeight));
+    if (!NSIsEmptyRect(rect)) [rects addObject:[NSValue valueWithRect:rect]];
   }
   return rects;
 }

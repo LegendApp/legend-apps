@@ -1168,7 +1168,7 @@ static NSString *string(const std::u16string &text) {
   NSUInteger localEnd = end > offset ? MIN(end - offset, _cachedText.length) : 0;
   if (localEnd > localStart) {
     [[NSColor.selectedTextBackgroundColor colorWithAlphaComponent:0.5] setFill];
-    for (NSValue *value in [_textLayout rectsForRange:NSMakeRange(localStart, localEnd - localStart)]) {
+    for (NSValue *value in [_textLayout rectsForRange:NSMakeRange(localStart, localEnd - localStart) visibleRect:NSOffsetRect(dirtyRect, -64, 0)]) {
       NSRect rect = value.rectValue; rect.origin.x += 64; NSRectFill(rect);
     }
   }

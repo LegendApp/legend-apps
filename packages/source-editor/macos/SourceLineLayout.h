@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSUInteger)offsetAtPoint:(NSPoint)point;
 - (NSRect)caretRectAtOffset:(NSUInteger)offset downstream:(BOOL)downstream;
 - (NSArray<NSValue *> *)rectsForRange:(NSRange)range;
+- (NSArray<NSValue *> *)rectsForRange:(NSRange)range visibleRect:(NSRect)visibleRect;
 - (NSUInteger)offsetByMovingVerticallyFrom:(NSUInteger)offset
                                 direction:(NSInteger)direction
                                preferredX:(CGFloat)x;
