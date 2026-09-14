@@ -6,28 +6,31 @@ import { createSourceProgress } from "../sourceProgress";
 jest.mock("react-native", () => ({
   ...jest.requireActual("react-native"), ActivityIndicator: "ActivityIndicator",
 }));
+jest.mock("../SourceEditorProgressRingNativeComponent", () => "SourceEditorProgressRing");
 
 describe("editor progress presentation", () => {
   let renderer: ReactTestRenderer;
   afterEach(async () => { await act(async () => renderer?.unmount()); });
 
-  it("fills a non-blocking bottom-right circle and hides it when highlighting finishes", async () => {
+  it("advances a hollow radial ring inside the bottom-right bounds and hides it on completion", async () => {
     const progress = createSourceProgress();
     progress.update({ completedLines: 2500, totalLines: 10000, active: true });
     await act(async () => { renderer = create(<SourceProgressBanner progress={progress} loading={false} />); });
     const root = () => renderer.toJSON() as { props: Record<string, any>; children: any[] };
-    const fill = () => root().children[0].children[0].props.style;
-    expect(root().props.style).toMatchObject({ position: "absolute", bottom: 8, right: 12 });
+    const ring = () => renderer.root.findByType("SourceEditorProgressRing" as never);
+    expect(root().props.style).toMatchObject({ position: "absolute", bottom: 16, right: 16, width: 20, height: 20, overflow: "hidden" });
     expect(root().props.pointerEvents).toBe("none");
     expect(root().props.accessibilityRole).toBe("progressbar");
     expect(root().props.accessibilityValue).toEqual({ min: 0, max: 100, now: 25 });
-    expect(fill()).toContainEqual({ height: "25%" });
+    expect(ring().props.progress).toBe(0.25);
+    expect(ring().props.style).toEqual({ width: 20, height: 20, flexShrink: 0 });
+    expect(root().children).toHaveLength(1);
     expect(renderer.root.findAllByType("Text" as never)).toHaveLength(0);
     expect(renderer.root.findAllByType("ActivityIndicator" as never)).toHaveLength(0);
     await act(async () => progress.update({ completedLines: 7500, totalLines: 10000, active: true }));
-    expect(fill()).toContainEqual({ height: "75%" });
+    expect(ring().props.progress).toBe(0.75);
     await act(async () => progress.update({ completedLines: 12000, totalLines: 10000, active: true }));
-    expect(fill()).toContainEqual({ height: "99%" });
+    expect(ring().props.progress).toBe(0.99);
     await act(async () => progress.update({ completedLines: 10000, totalLines: 10000, active: false }));
     expect(renderer.toJSON()).toBeNull();
   });

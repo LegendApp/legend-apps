@@ -2,6 +2,9 @@
 set -euo pipefail
 source_editor_dir="$(cd "$(dirname "$0")/.." && pwd)"
 source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
+clang++ -std=c++20 -O2 -fobjc-arc -framework Foundation -framework CoreGraphics -framework ImageIO "$source_editor_dir/tests/SourceProgressRing.test.mm" "$source_editor_dir/macos/SourceProgressRing.mm" -o "$source_editor_build/progress-ring-test"
+"$source_editor_build/progress-ring-test"
+rm "$source_editor_build/progress-ring-test"
 clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit "$source_editor_dir/tests/NativeMenuValidation.test.mm" -o "$source_editor_build/menu-test"
 "$source_editor_build/menu-test"
 rm "$source_editor_build/menu-test"
