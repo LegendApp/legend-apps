@@ -42,6 +42,39 @@ int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
     {
+      LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      input.undoManager.groupsByEvent = NO;
+      [input loadSource:@"first\r\n  hello 👩🏽‍💻 world"];
+      [input setAccessibilitySelectedTextRange:NSMakeRange(input.source.length - 6, 0)];
+      assert([input respondsToSelector:@selector(deleteToBeginningOfLine:)]);
+      [input.undoManager beginUndoGrouping];
+      [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
+      [input.undoManager endUndoGrouping];
+      assert([input.source isEqual:@"first\r\n world"] && input.head == 7);
+      [input.undoManager undo];
+      assert([input.source isEqual:@"first\r\n  hello 👩🏽‍💻 world"]);
+      [input.undoManager redo];
+      [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
+      assert([input.source isEqual:@"first\r\n world"]); // Do not eat the previous newline.
+      [input setAccessibilitySelectedTextRange:NSMakeRange(2, 7)];
+      [input.undoManager beginUndoGrouping];
+      [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
+      [input.undoManager endUndoGrouping];
+      assert([input.source isEqual:@"fiorld"]);
+      [input loadSource:@"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"];
+      LESourceRowView *row = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 0, 160, 22)];
+      [row applyLineId:1 index:0]; row.input = input; [row layout];
+      NSUInteger start = [row.textLayout beginningOfVisualLineAtOffset:25];
+      assert(start > 0 && start < 25);
+      NSString *expected = [input.source stringByReplacingCharactersInRange:NSMakeRange(start, 25 - start) withString:@""];
+      [input setAccessibilitySelectedTextRange:NSMakeRange(25, 0)];
+      [input.undoManager beginUndoGrouping];
+      [input doCommandBySelector:@selector(deleteToBeginningOfLine:)];
+      [input.undoManager endUndoGrouping];
+      assert([input.source isEqual:expected] && input.head == start);
+      row.input = nil;
+    }
+    {
       // The deleted row remains mounted until Fabric removes its container.
       LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
       [input loadSource:@"a\nb\nc"];

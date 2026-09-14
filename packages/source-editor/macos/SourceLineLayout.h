@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)updateText:(NSAttributedString *)text width:(CGFloat)width lineHeight:(CGFloat)lineHeight wrap:(BOOL)wrap;
 - (NSUInteger)offsetAtPoint:(NSPoint)point;
 - (NSRect)caretRectAtOffset:(NSUInteger)offset downstream:(BOOL)downstream;
+- (NSUInteger)beginningOfVisualLineAtOffset:(NSUInteger)offset;
 - (NSArray<NSValue *> *)rectsForRange:(NSRange)range;
 - (NSArray<NSValue *> *)rectsForRange:(NSRange)range visibleRect:(NSRect)visibleRect;
 - (NSUInteger)offsetByMovingVerticallyFrom:(NSUInteger)offset
