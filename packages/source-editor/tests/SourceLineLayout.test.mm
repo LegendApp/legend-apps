@@ -19,6 +19,22 @@ static LESourceLineLayout *layout(NSString *text, CGFloat width, BOOL wrap = YES
 
 int main() {
   @autoreleasepool {
+    // The short-line optimization must agree with CoreText at wrap boundaries,
+    // not merely ceil(characterCount / guessedColumns). Include fallback paths.
+    for (NSString *sample in @[@"const x = value + 123;", @"  hello world  ", @"\tvalue\t= 123;", @"👩🏽‍💻 中文 é", @""]) {
+      NSAttributedString *text = attributed(sample);
+      CTTypesetterRef typesetter = CTTypesetterCreateWithAttributedString((__bridge CFAttributedStringRef)text);
+      for (CGFloat width = 20; width <= 300; width += 0.5) {
+        NSUInteger offset = 0, rows = 0;
+        do {
+          NSUInteger count = CTTypesetterSuggestLineBreak(typesetter, offset, width);
+          if (!count && offset < sample.length) count = [sample rangeOfComposedCharacterSequenceAtIndex:offset].length;
+          offset += count; rows++;
+        } while (offset < sample.length);
+        assert(layout(sample, width).height == rows * 22);
+      }
+      CFRelease(typesetter);
+    }
     auto empty = layout(@"", 100);
     assert(empty.height == 22 && empty.visualLineCount == 1);
     assert([empty offsetAtPoint:NSMakePoint(50, 0)] == 0);

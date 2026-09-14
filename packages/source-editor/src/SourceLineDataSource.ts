@@ -24,6 +24,8 @@ function merge(left?: Node, right?: Node): Node | undefined {
 export class SourceLineDataSource implements LegendListDataSource<SourceLine> {
   private root?: Node;
   private revision = 0;
+  // Layout-only list transactions must not consume native edit revisions.
+  private documentRevision = 0;
   private random = 0x12345678;
   private cache = new Map<string, SourceLine>();
   private listeners = new Set<(batch: DataSourceMutationBatch) => void>();
@@ -55,6 +57,19 @@ export class SourceLineDataSource implements LegendListDataSource<SourceLine> {
   }
   getLength() { return size(this.root); }
   getRevision() { return this.revision; }
+  getDocumentRevision() { return this.documentRevision; }
+  invalidateHeights(indices: number[]) {
+    const sorted = [...new Set(indices)].sort((a, b) => a - b);
+    const operations: DataSourceOperation[] = [];
+    for (let i = 0; i < sorted.length;) {
+      const start = sorted[i];
+      let end = i + 1;
+      while (end < sorted.length && sorted[end] === sorted[end - 1] + 1) end++;
+      operations.push({ type: "update", index: start, count: end - i, layout: "invalidate" });
+      i = end;
+    }
+    if (operations.length) this.publish(this.getLength(), this.revision + 1, operations);
+  }
   getKey(index: number): string {
     if (!Number.isInteger(index) || index < 0 || index >= this.getLength()) throw new RangeError(`Missing source row ${index}`);
     let node = this.root;
@@ -88,20 +103,21 @@ export class SourceLineDataSource implements LegendListDataSource<SourceLine> {
   }
   append(change: SourceAppend) {
     const previousLength = this.getLength();
-    if (change.revision !== this.revision + 1 || change.startLine !== previousLength - 1
+    if (change.revision !== this.documentRevision + 1 || change.startLine !== previousLength - 1
       || change.retainedId !== this.getKey(change.startLine) || !Number.isSafeInteger(change.count) || change.count < 0
       || !Number.isSafeInteger(change.firstId) || change.firstId < 1
       || !Number.isSafeInteger(change.firstId + change.count)
       || previousLength + change.count !== change.lineCount) throw new Error("Out-of-sequence native source append");
     if (change.count) this.root = merge(this.root, this.node(change.firstId, change.count));
-    this.publish(previousLength, change.revision, [
+    this.documentRevision = change.revision;
+    this.publish(previousLength, this.revision + 1, [
       { type: "update", index: change.startLine, count: 1, layout: "preserve" },
       ...(change.count ? [{ type: "splice" as const, index: previousLength, deleteCount: 0, insertCount: change.count }] : []),
     ]);
   }
   apply(change: SourceEdit) {
     const previousLength = this.getLength();
-    if (change.revision !== this.revision + 1 || !Number.isSafeInteger(change.startLine) || !Number.isSafeInteger(change.removedLineCount)
+    if (change.revision !== this.documentRevision + 1 || !Number.isSafeInteger(change.startLine) || !Number.isSafeInteger(change.removedLineCount)
       || change.startLine < 0 || change.removedLineCount < 0
       || change.startLine + change.removedLineCount > previousLength
       || previousLength - change.removedLineCount + change.lines.length !== change.lineCount
@@ -131,6 +147,7 @@ export class SourceLineDataSource implements LegendListDataSource<SourceLine> {
     const [before, rest] = this.split(this.root, change.startLine);
     const [, after] = this.split(rest, change.removedLineCount);
     this.root = merge(merge(before, inserted), after);
-    this.publish(previousLength, change.revision, operations);
+    this.documentRevision = change.revision;
+    this.publish(previousLength, this.revision + 1, operations);
   }
 }

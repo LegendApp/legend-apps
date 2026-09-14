@@ -19,6 +19,33 @@ jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList", use
 describe("shared editor language selection", () => {
   let renderer: ReactTestRenderer;
   afterEach(async () => { await act(async () => renderer?.unmount()); });
+  it("uses prepared exact heights before row mounting and rejects stale resize/edit batches", async () => {
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" />); });
+    await act(async () => host().props.onReady({ nativeEvent: { lineCount: 3, firstId: 1, complete: true, error: "", sourcePrefix: "" } }));
+    const list = () => renderer.root.findByType("LegendList" as never);
+    await act(async () => list().props.onLayout({ nativeEvent: { layout: { width: 400 } } }));
+    const source = list().props.dataSource;
+    const key = () => list().props.renderItem({ item: source.getItem(0), index: 0 }).props.heightKey;
+    const send = async (event: unknown) => act(async () => host().props.onLineHeights({ nativeEvent: { json: JSON.stringify(event) } }));
+    const firstKey = key();
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBeUndefined();
+    await send({ key: firstKey, revision: 0, rows: [["1", 0, 69], ["wrong-id", 1, 100]] });
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBe(69);
+    expect(list().props.getFixedItemSize(source.getItem(1))).toBeUndefined();
+    await act(async () => list().props.onLayout({ nativeEvent: { layout: { width: 800 } } }));
+    await send({ key: firstKey, revision: 0, rows: [["1", 0, 69]] });
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBeUndefined();
+    await send({ key: key(), revision: 0, rows: [["1", 0, 23]] });
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBe(23);
+    await act(async () => host().props.onEdit({ nativeEvent: { json: JSON.stringify({
+      startLine: 0, removedLineCount: 1, lines: [{ id: "1" }], revision: 1, lineCount: 3,
+      offset: 0, removedLength: 0, insertedText: "more text",
+    }) } }));
+    await send({ key: key(), revision: 0, rows: [["1", 0, 23]] });
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBeUndefined();
+    await send({ key: key(), revision: 1, rows: [["1", 0, 46]] });
+    expect(list().props.getFixedItemSize(source.getItem(0))).toBe(46);
+  });
   const host = () => renderer.root.findByType("SourceEditorHost" as never);
   const select = () => renderer.root.findByType("SelectControl" as never);
   it("mounts the native host without a loading placeholder, then displays the ready document", async () => {

@@ -21,6 +21,7 @@ export interface NativeProps extends ViewProps {
   onReady?: DirectEventHandler<Readonly<{ lineCount: Double; firstId: Double; complete: boolean; error: string; sourcePrefix: string }>>;
   onAppend?: DirectEventHandler<Readonly<{ json: string; complete: boolean; error: string }>>;
   onEdit?: DirectEventHandler<Readonly<{ json: string }>>;
+  onLineHeights?: DirectEventHandler<Readonly<{ json: string }>>;
   onSelection?: DirectEventHandler<Readonly<{ line: Double; start: Double; length: Double }>>;
   onDocumentState?: DirectEventHandler<Readonly<{ dirty: boolean; path: string }>>;
   onCommandResult?: DirectEventHandler<Readonly<{ id: Double; allowed: boolean; error: string }>>;

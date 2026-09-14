@@ -133,6 +133,25 @@ The native test harness also uses the headers installed by that pod step.
 In a fresh worktree, initialize the existing TextMateLib submodules first:
 `git submodule update --init --recursive`.
 
+## Exact wrapped heights
+
+Wrapped row heights are prepared with the same CoreText layout used for drawing
+and hit testing. A serial native worker prioritizes 256 rows around the viewport,
+then prepares the remaining heights in batches (up to 64 rows / 16K UTF-16 units;
+one oversized logical line may exceed the unit budget). JavaScript retains only
+paged scalar heights by stable line ID. The list reads these synchronously;
+unknown heights still use native row measurement, never an authoritative guess.
+Only nearby drawable layouts occupy the bounded 8 MiB native cache. Width/font/
+theme changes invalidate the configuration, and revision checks discard stale
+edit results. Unwrapped rows use their exact constant line height without a
+whole-file layout pass.
+
+For short, printable ASCII in a monospace font, character count times the font's
+advance selects a possible single-line shortcut. CoreText checks the actual
+shaped width before skipping line-break calculation. Tabs, Unicode, and longer
+lines retain the full wrapping path. This avoids layout jumps from treating a
+monospace estimate as exact, but does not make arbitrary long-line layout free.
+
 ## Remaining prototype gates
 
 1. Extend runtime coverage to drag-autoscroll and real input-method composition.

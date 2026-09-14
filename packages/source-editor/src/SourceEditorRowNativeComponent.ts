@@ -4,12 +4,13 @@ import type { DirectEventHandler, Double } from "react-native/Libraries/Types/Co
 
 export interface NativeProps extends ViewProps {
   lineId: string;
+  heightKey?: string;
   lineIndex: Double;
   fontFamily: string;
   fontSize: Double;
   lineHeight: Double;
   foreground: string;
   wrap: boolean;
-  onMetrics?: DirectEventHandler<Readonly<{ lineId: string; height: Double; width: Double }>>;
+  onMetrics?: DirectEventHandler<Readonly<{ lineId: string; height: Double; width: Double; heightKey: string; viewportWidth: Double }>>;
 }
 export default codegenNativeComponent<NativeProps>("SourceEditorRow") as HostComponent<NativeProps>;

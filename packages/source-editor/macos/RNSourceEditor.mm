@@ -43,6 +43,10 @@ struct SourceLoadJob {
     _input.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self addSubview:_input];
     __weak RNSourceEditorHost *weakSelf = self;
+    _input.onLineHeights = ^(NSString *json) {
+      RNSourceEditorHost *self = weakSelf;
+      if (self && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onLineHeights({.json = utf8String(json)});
+    };
     _input.onEdit = ^(NSString *json) {
       RNSourceEditorHost *self = weakSelf;
       if (!self || !self->_eventEmitter) return;
@@ -193,6 +197,11 @@ struct SourceLoadJob {
   RCTSourceEditorHostHandleCommand(self, commandName, args);
 }
 - (void)execute:(double)requestId command:(NSString *)command argument:(NSString *)argument {
+  if ([command isEqual:@"prepareLineLayouts"]) {
+    id request = [NSJSONSerialization JSONObjectWithData:[argument dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    if ([request isKindOfClass:NSDictionary.class]) [_input requestLineLayouts:request];
+    return;
+  }
   __weak RNSourceEditorHost *weakSelf = self;
   const auto generation = _commandGeneration;
   void (^finish)(BOOL, NSString *) = ^(BOOL allowed, NSString *error) {
@@ -247,6 +256,7 @@ struct SourceLoadJob {
       if (!self || !self->_eventEmitter) return;
       std::static_pointer_cast<const SourceEditorRowEventEmitter>(self->_eventEmitter)->onMetrics({
         .lineId = std::to_string(self->_row.lineId), .height = height, .width = width,
+        .heightKey = utf8String(self->_row.heightKey ?: @""), .viewportWidth = self->_row.bounds.size.width,
       });
     };
   }
@@ -268,6 +278,8 @@ struct SourceLoadJob {
   const auto &next = *std::static_pointer_cast<const SourceEditorRowProps>(props);
   const auto &previous = *std::static_pointer_cast<const SourceEditorRowProps>(_props);
   [_row applyLineId:str(next.lineId).longLongValue index:MAX(0, next.lineIndex)];
+  _row.heightKey = str(next.heightKey);
+  if (next.heightKey != previous.heightKey) [_row invalidateText];
   _row.fontFamily = str(next.fontFamily);
   _row.fontSize = next.fontSize;
   _row.lineHeight = next.lineHeight;
@@ -284,6 +296,7 @@ struct SourceLoadJob {
 - (void)prepareForRecycle {
   [super prepareForRecycle];
   _row.input = nil; _row.lineId = 0; _row.lineIndex = 0;
+  _row.heightKey = @"";
   [_row invalidateText];
 }
 @end
