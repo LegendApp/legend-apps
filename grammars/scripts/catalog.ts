@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 export const root = fileURLToPath(new URL("../../", import.meta.url));
+export const sourcePatches: Record<string, { file: string; from: string; to: string; count: number }[]> =
+  JSON.parse(readFileSync(join(root, "grammars/source-patches.json"), "utf8"));
+export function sourcePatchHash(name: string) {
+  return createHash("sha256").update(JSON.stringify(sourcePatches[name] ?? [])).digest("hex");
+}
 export type Grammar = {
   bundled: false;
   testFixture?: boolean;
@@ -13,7 +19,9 @@ export type Grammar = {
 export const catalog: { schemaVersion: number; packABI: number; repository: string; grammars: Grammar[] } =
   JSON.parse(readFileSync(join(root, "grammars/catalog.json"), "utf8"));
 export function sourceDirectory(g: Grammar) {
-  return join(root, g.testFixture ? `packages/syntax-parser/vendor/tree-sitter/${g.name}` : `grammars/.cache/${g.name}`);
+  // Preserve a private parent for upstream ../../common scanner headers.
+  // XML and PHP both have common/scanner.h, but they are unrelated files.
+  return join(root, g.testFixture ? `packages/syntax-parser/vendor/tree-sitter/${g.name}` : `grammars/.cache/${g.name}/grammar`);
 }
 export function validateCatalog() {
   const names = new Set<string>();

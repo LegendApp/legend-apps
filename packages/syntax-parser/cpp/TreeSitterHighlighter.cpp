@@ -91,7 +91,7 @@ struct Predicate {
 };
 struct Capture { uint32_t start, end, pattern, name; };
 struct Event { uint32_t offset, index; bool enter; };
-using ActiveCapture = std::tuple<uint32_t, int64_t, uint32_t, uint32_t>;
+using ActiveCapture = std::tuple<int, uint32_t, int64_t, uint32_t, uint32_t>;
 using Predicates = std::vector<std::vector<Predicate>>;
 std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
   auto result = std::make_shared<Predicates>(ts_query_pattern_count(query));
@@ -114,11 +114,17 @@ std::shared_ptr<const Predicates> compilePredicates(TSQuery* query) {
           p.alternatives.push_back(text(steps[i++].value_id));
         }
         if (p.alternatives.empty()) throw std::runtime_error("Empty any-of predicate");
-      } else if (p.operation == "match?" || p.operation == "eq?") {
+      } else if (p.operation == "set!") {
+        p.value = text(steps[i++].value_id);
+        if (p.value != "priority" || i >= size || steps[i].type != TSQueryPredicateStepTypeString)
+          throw std::runtime_error("Unsupported query setting: " + p.value);
+        p.value = text(steps[i++].value_id);
+        (void)std::stoi(p.value);
+      } else if (p.operation == "match?" || p.operation == "not-match?" || p.operation == "eq?") {
         if (steps[i].type != TSQueryPredicateStepTypeCapture) throw std::runtime_error("Expected predicate capture");
         p.capture = steps[i++].value_id;
         p.value = text(steps[i++].value_id);
-        if (p.operation == "match?") p.expression.emplace(p.value);
+        if (p.operation != "eq?") p.expression.emplace(p.value);
       } else throw std::runtime_error("Unsupported query predicate: " + p.operation);
       if (i >= size || steps[i++].type != TSQueryPredicateStepTypeDone) throw std::runtime_error("Invalid query predicate arguments");
       (*result)[pattern].push_back(std::move(p));
@@ -170,6 +176,7 @@ struct TreeSitterHighlighter::Impl {
   std::vector<TreeSitterEdit> injectionEdits;
   unsigned injectionDepth = 0;
   std::shared_ptr<const Predicates> predicates;
+  std::vector<int> patternPriorities;
   std::vector<Capture> captureScratch;
   std::vector<Event> eventScratch;
   std::vector<ActiveCapture> activeScratch;
@@ -229,22 +236,36 @@ std::string TreeSitterHighlighter::themeScope(const std::string& capture) {
   if (is("comment")) return "comment.block";
   if (is("string.escape") || is("escape")) return "constant.character.escape";
   if (is("string")) return "string.quoted.double";
+  if (is("character")) return "string.quoted.single";
   if (is("number")) return "constant.numeric";
+  if (is("float")) return "constant.numeric";
   if (is("constant") || is("boolean")) return "constant.language";
   if (is("operator")) return "keyword.operator";
   if (is("keyword")) return "keyword.control";
+  if (is("conditional") || is("repeat") || is("exception") || is("include")) return "keyword.control";
+  if (is("storageclass")) return "storage.modifier";
+  if (is("preproc")) return "keyword.control.directive";
   if (is("function.builtin")) return "support.function";
-  if (is("function")) return "entity.name.function";
+  if (is("function") || is("method")) return "entity.name.function";
   if (is("type.builtin")) return "support.type";
   if (is("type") || is("constructor")) return "entity.name.type";
   if (is("tag")) return "entity.name.tag";
   if (is("attribute")) return "entity.other.attribute-name";
-  if (is("variable.parameter")) return "variable.parameter";
+  if (is("variable.parameter") || is("parameter")) return "variable.parameter";
   if (is("variable.builtin")) return "support.variable";
-  if (is("property")) return "variable.other.property";
+  if (is("property") || is("field") || is("variable.member")) return "variable.other.property";
   if (is("variable")) return "variable.other.readwrite";
-  if (is("punctuation")) return "punctuation";
-  if (is("text.title")) return "markup.heading";
+  if (is("punctuation") || is("delimiter")) return "punctuation";
+  if (is("label")) return "entity.name.label";
+  if (is("module") || is("namespace")) return "entity.name.namespace";
+  if (is("diff.plus")) return "markup.inserted";
+  if (is("diff.minus")) return "markup.deleted";
+  if (is("diff.delta")) return "markup.changed";
+  if (is("markup.heading") || is("text.title")) return "markup.heading";
+  if (is("markup.strong")) return "markup.bold";
+  if (is("markup.italic")) return "markup.italic";
+  if (is("markup.raw")) return "markup.inline.raw";
+  if (is("markup.link")) return "markup.underline.link";
   if (is("text.strong")) return "markup.bold";
   if (is("text.emphasis")) return "markup.italic";
   if (is("text.literal")) return "markup.inline.raw";
@@ -274,12 +295,19 @@ TreeSitterHighlighter::TreeSitterHighlighter(const std::string& language) : impl
   }
   impl_->query = cached->query;
   impl_->predicates = cached->predicates;
-  if (canonical == "markdown" || canonical == "mdx") {
+  impl_->patternPriorities.assign(impl_->predicates->size(), 100);
+  for (size_t pattern = 0; pattern < impl_->predicates->size(); ++pattern)
+    for (const auto& predicate : (*impl_->predicates)[pattern])
+      if (predicate.operation == "set!") impl_->patternPriorities[pattern] = std::stoi(predicate.value);
+  if (canonical == "markdown" || canonical == "mdx" || canonical == "vue" || canonical == "svelte" || canonical == "astro") {
     static std::map<std::string, std::shared_ptr<TSQuery>> injections;
     auto& injection = injections[canonical];
     if (!injection) {
-      const std::string source = std::string(canonical == "mdx" ? "(markdown_inline)" : "(inline)")
-        + " @region (pipe_table_cell) @region (minus_metadata) @region (fenced_code_block) @region";
+      const std::string source = canonical == "vue" ? "(raw_text) @region (directive_attribute (quoted_attribute_value (attribute_value) @region))"
+        : canonical == "svelte" ? "(raw_text) @region (svelte_raw_text) @region"
+        : canonical == "astro" ? "(raw_text) @region (frontmatter_js_block) @region (attribute_js_expr) @region (html_interpolation (permissible_text) @region)"
+        : std::string(canonical == "mdx" ? "(markdown_inline)" : "(inline)")
+          + " @region (pipe_table_cell) @region (minus_metadata) @region (fenced_code_block) @region";
       uint32_t offset = 0; TSQueryError error;
       injection = {ts_query_new(grammar, source.data(), static_cast<uint32_t>(source.size()), &offset, &error), ts_query_delete};
       if (!injection) throw std::runtime_error("Invalid embedded-region query for " + canonical);
@@ -451,12 +479,11 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
   impl_->missingLanguages.clear();
   if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
   auto result = highlightBase(start, end, cancelled);
-  const std::string_view language = impl_->language->name;
-  if ((language != "markdown" && language != "mdx") || start == end || impl_->injectionDepth >= 4) return result;
-  struct Region { TSNode node; const char* language; std::vector<TSRange> ranges; };
+  if (!impl_->injectionQuery || start == end || impl_->injectionDepth >= 4) return result;
+  struct Region { TSNode node; std::string language; std::vector<TSRange> ranges; };
   std::vector<Region> regions;
   const auto range = [](TSNode node) { return TSRange{ts_node_start_point(node), ts_node_end_point(node), ts_node_start_byte(node), ts_node_end_byte(node)}; };
-  const auto add = [&](TSNode node, const char* target, bool excludeChildren) {
+  const auto add = [&](TSNode node, const std::string& target, bool excludeChildren) {
     if (!findLanguage(target)) { impl_->missingLanguages.emplace_back(target); return; }
     Region region{node, target, {}};
     auto remaining = range(node);
@@ -489,6 +516,37 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     const auto node = match.captures[capture].node;
     if (ts_node_end_byte(node) <= bytes(start) || ts_node_start_byte(node) >= bytes(end)) continue;
     const std::string_view type = ts_node_type(node);
+    if (type == "raw_text") {
+      const auto parent = ts_node_parent(node);
+      const std::string_view parentType = ts_node_type(parent);
+      if (parentType == "interpolation") { add(node, "typescript", false); continue; }
+      if (parentType == "script_element" || parentType == "style_element") {
+        // A bounded start-tag read selects script/style dialect without copying
+        // the body or walking unrelated sections of a large component file.
+        const auto tag = ts_node_named_child(parent, 0);
+        std::string attributes;
+        const auto limit = std::min<uint32_t>(ts_node_end_byte(tag) / 2, ts_node_start_byte(tag) / 2 + 512);
+        for (auto at = ts_node_start_byte(tag) / 2; at < limit; ++at) {
+          const auto chunk = impl_->input.read(at);
+          if (chunk.empty()) throw std::runtime_error("Premature EOF in embedded language tag");
+          attributes.push_back(chunk.front() < 128 ? static_cast<char>(chunk.front()) : ' ');
+        }
+        static const std::regex lang(R"(\blang\s*=\s*["']?([a-zA-Z0-9_-]+))");
+        std::smatch dialect;
+        std::string target = parentType == "style_element" ? "css" : "javascript";
+        if (std::regex_search(attributes, dialect, lang)) {
+          target = dialect[1];
+          if (target == "ts") target = "typescript";
+          if (target == "js") target = "javascript";
+        }
+        add(node, target, false);
+      }
+      continue;
+    }
+    if (type == "svelte_raw_text" || type == "frontmatter_js_block" || type == "attribute_js_expr"
+      || type == "permissible_text" || type == "attribute_value") {
+      add(node, "typescript", false); continue;
+    }
     if (type == "inline" || type == "markdown_inline" || type == "pipe_table_cell") { add(node, "markdown-inline", true); continue; }
     if (type == "minus_metadata") { add(node, "yaml", false); continue; }
     if (type == "fenced_code_block") {
@@ -727,6 +785,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
     if (cancelled && cancelled->load(std::memory_order_relaxed)) throw std::runtime_error("Syntax highlighting cancelled");
     bool accepted = true;
     for (const auto& predicate : (*impl_->predicates)[match.pattern_index]) {
+      if (predicate.operation == "set!") continue;
       if (predicate.operation == "is-not?") {
         if (isLocal(match.captures[0].node)) { accepted = false; break; }
       } else {
@@ -742,9 +801,9 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
           } else if (predicate.operation == "any-of?") {
             if (std::find(predicate.alternatives.begin(), predicate.alternatives.end(), value) == predicate.alternatives.end()) accepted = false;
           } else if (predicate.expression
-            ? !(predicate.expression->general()
+            ? (predicate.expression->general()
                 ? impl_->regexCache.search(value, predicate.expression->expression())
-                : predicate.expression->search(value))
+                : predicate.expression->search(value)) == (predicate.operation == "not-match?")
             : value != predicate.value) accepted = false;
         }
       }
@@ -753,6 +812,9 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
     if (!accepted) continue;
     for (uint32_t index = 0; index < match.capture_count; ++index) {
       auto capture = match.captures[index];
+      // Spell-check metadata is not a visual capture and must not mask comments.
+      const auto& captureName = impl_->captures[capture.index];
+      if (captureName == "spell" || captureName == "nospell" || captureName.starts_with("_")) continue;
       const auto from = ts_node_start_byte(capture.node) / 2, to = ts_node_end_byte(capture.node) / 2;
       // Error recovery can produce zero-width missing nodes. They must not leave
       // a phantom active capture after equal-position sweep events.
@@ -773,7 +835,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
   uint32_t position = start;
   for (const auto& event : events) {
     if (position < event.offset && !active.empty()) {
-      const auto& capture = captures[std::get<3>(active.back())];
+      const auto& capture = captures[std::get<4>(active.back())];
       const auto& label = impl_->captures[capture.name];
       if (!result.empty() && result.back().start + result.back().length == position && result.back().capture == label)
         result.back().length += event.offset - position;
@@ -781,7 +843,7 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlightBase(uint32_t start,
     }
     position = event.offset;
     const auto& c = captures[event.index];
-    const auto key = std::make_tuple(c.start, -static_cast<int64_t>(c.end), c.pattern, event.index);
+    const auto key = std::make_tuple(impl_->patternPriorities[c.pattern], c.start, -static_cast<int64_t>(c.end), c.pattern, event.index);
     const auto at = std::lower_bound(active.begin(), active.end(), key);
     if (event.enter) active.insert(at, key);
     else if (at != active.end() && *at == key) active.erase(at);

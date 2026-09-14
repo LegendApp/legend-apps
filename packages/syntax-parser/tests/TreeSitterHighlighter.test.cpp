@@ -100,6 +100,12 @@ int main() {
   assert(TreeSitterHighlighter::themeScope("escape") == "constant.character.escape");
   assert(TreeSitterHighlighter::themeScope("property") == "variable.other.property");
   assert(TreeSitterHighlighter::themeScope("function.builtin") == "support.function");
+  assert(TreeSitterHighlighter::themeScope("markup.heading.1") == "markup.heading");
+  assert(TreeSitterHighlighter::themeScope("diff.plus") == "markup.inserted");
+  assert(TreeSitterHighlighter::themeScope("diff.minus") == "markup.deleted");
+  assert(TreeSitterHighlighter::themeScope("conditional") == "keyword.control");
+  assert(TreeSitterHighlighter::themeScope("method") == "entity.name.function");
+  assert(TreeSitterHighlighter::themeScope("variable.member") == "variable.other.property");
   assert(TreeSitterHighlighter::themeScope("embedded").empty());
   assert(TreeSitterHighlighter::themeScope("keywordish").empty());
   struct BindingFixture { std::u16string source; bool builtin; };

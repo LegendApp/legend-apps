@@ -1,0 +1,6 @@
+syntax = "proto3";
+package slides;
+message Deck {
+  string title = 1;
+  repeated string slides = 2;
+}

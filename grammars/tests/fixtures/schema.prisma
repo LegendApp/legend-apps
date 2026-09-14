@@ -1,0 +1,8 @@
+datasource db {
+  provider = "sqlite"
+  url = "file:./slides.db"
+}
+model Deck {
+  id Int @id @default(autoincrement())
+  title String
+}

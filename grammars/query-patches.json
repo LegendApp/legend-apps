@@ -6,5 +6,55 @@
       "count": 2,
       "reason": "The pinned upstream query uses pre-modern predicate syntax; current Tree-sitter requires the # prefix."
     }
+  ],
+  "cmake": [
+    {
+      "from": "#lua-match? @constant \"^[%u@][%u%d_]+$\"",
+      "to": "#match? @constant \"^[A-Z@][A-Z0-9_]+$\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    },
+    {
+      "from": "#lua-match? @keyword.directive \"^#!/\"",
+      "to": "#match? @keyword.directive \"^#!/\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    }
+  ],
+  "perl": [
+    {
+      "from": "#lua-match? @preproc \"^#!/\"",
+      "to": "#match? @preproc \"^#!/\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    }
+  ],
+  "glsl": [
+    {
+      "from": "#lua-match? @variable.builtin \"^gl_\"",
+      "to": "#match? @variable.builtin \"^gl_\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    }
+  ],
+  "zig": [
+    {
+      "from": "#lua-match? @type \"^[A-Z_][a-zA-Z0-9_]*\"",
+      "to": "#match? @type \"^[A-Z_][a-zA-Z0-9_]*\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    },
+    {
+      "from": "#lua-match? @constant \"^[A-Z][A-Z_0-9]+$\"",
+      "to": "#match? @constant \"^[A-Z][A-Z_0-9]+$\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    },
+    {
+      "from": "#lua-match? @comment.documentation \"^//!\"",
+      "to": "#match? @comment.documentation \"^//!\"",
+      "count": 1,
+      "reason": "Translate this pinned Lua pattern to an equivalent ECMAScript regex (no Lua pattern engine in the native highlighter)."
+    }
   ]
 }
