@@ -202,6 +202,30 @@ int main(int argc, char** argv) {
     h.reset(); assert(h.parse(input(source)));
     equal(h.highlight(0, source.size()), fresh.highlight(0, source.size()));
   }
+  {
+    // Every region is unique. Recycled parsers must discard their previous
+    // trees/ranges while preserving the output of independently parsed text.
+    std::u16string source;
+    std::vector<TreeSitterSpan> expected;
+    for (int i = 0; i < 600; ++i) {
+      const auto number = std::to_string(i);
+      const std::u16string id(number.begin(), number.end());
+      const auto paragraph = i % 3 == 0 ? u"**Entry " + id + u"** and *emphasis*."
+        : i % 3 == 1 ? u"Code `value" + id + u"` with 👋."
+        : u"[Link " + id + u"](https://example.com/" + id + u")";
+      TreeSitterHighlighter independent("markdown-inline"); assert(independent.parse(input(paragraph)));
+      for (auto span : independent.highlight(0, paragraph.size())) {
+        span.start += source.size(); expected.push_back(std::move(span));
+      }
+      source += paragraph + u"\n\n";
+    }
+    TreeSitterHighlighter h("markdown"); assert(h.parse(input(source)));
+    equal(expected, h.highlight(0, source.size()));
+    equal(expected, h.highlight(0, source.size()));
+    replace(h, source, source.size() / 2, 0, u"\nChanged `unique` paragraph.\n\n");
+    TreeSitterHighlighter fresh("markdown"); assert(fresh.parse(input(source)));
+    equal(h.highlight(0, source.size()), fresh.highlight(0, source.size()));
+  }
   for (int i = 1; i < argc; ++i) {
     legend::source::SourceFileReader file(argv[i]);
     std::u16string source;
