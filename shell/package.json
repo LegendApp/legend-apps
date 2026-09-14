@@ -10,6 +10,30 @@
     "premacos": "node ./scripts/ensure-xcode-env.js",
     "macos": "react-native run-macos"
   },
+  "enriched-markdown": {
+    "enableCodeHighlight": true,
+    "codeHighlightLanguages": [
+      "bash",
+      "c",
+      "c-sharp",
+      "cpp",
+      "css",
+      "go",
+      "html",
+      "java",
+      "javascript",
+      "json",
+      "markdown",
+      "php",
+      "python",
+      "ruby",
+      "rust",
+      "swift",
+      "tsx",
+      "typescript",
+      "yaml"
+    ]
+  },
   "dependencies": {
     "@legend-apps/appkit-split-view": "0.0.0",
     "expo": "~54.0.33",

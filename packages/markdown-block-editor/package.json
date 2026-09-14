@@ -22,6 +22,6 @@
     "@legend-apps/markdown-parser": "workspace:*",
     "react": "catalog:",
     "react-native": "catalog:",
-    "react-native-enriched-markdown": "*"
+    "react-native-enriched-markdown": "1.1.0-nightly-20260912-4c1270f48"
   }
 }

@@ -84,9 +84,12 @@
     "test-renderer": "1.1.0",
     "typescript": "~7.0.2"
   },
+  "trustedDependencies": [
+    "react-native-enriched-markdown"
+  ],
   "patchedDependencies": {
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
-    "react-native-enriched-markdown@0.7.4": "patches/react-native-enriched-markdown@0.7.4.patch",
+    "react-native-enriched-markdown@1.1.0-nightly-20260912-4c1270f48": "patches/react-native-enriched-markdown@1.1.0-nightly-20260912-4c1270f48.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch"
   },
   "catalog": {

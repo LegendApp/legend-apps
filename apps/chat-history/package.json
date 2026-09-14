@@ -14,7 +14,7 @@
     "@legend-apps/window-manager": "0.0.0",
     "@legend-apps/windows": "0.0.0",
     "@legendapp/list": "catalog:",
-    "react-native-enriched-markdown": "^0.7.4",
+    "react-native-enriched-markdown": "1.1.0-nightly-20260912-4c1270f48",
     "uniwind": "^1.6.3"
   }
 }
