@@ -15,6 +15,19 @@
 @end
 
 static const NSRange implicitRange = {NSNotFound, 0};
+static NSData *gutterPixels(LESourceRowView *row) {
+  [row layout];
+  NSMutableData *pixels = [NSMutableData dataWithLength:64 * 24 * 4];
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate(pixels.mutableBytes, 64, 24, 8, 64 * 4, space, kCGImageAlphaPremultipliedLast);
+  assert(context);
+  [NSGraphicsContext saveGraphicsState];
+  NSGraphicsContext.currentContext = [NSGraphicsContext graphicsContextWithCGContext:context flipped:YES];
+  [row drawRect:NSMakeRect(0, 0, 64, 24)];
+  [NSGraphicsContext restoreGraphicsState];
+  CGContextRelease(context); CGColorSpaceRelease(space);
+  return pixels;
+}
 static void closeUndoGroup(NSUndoManager *history) {
   while (history.groupingLevel > 0) [history endUndoGrouping];
 }
@@ -28,6 +41,33 @@ static void awaitCompletion(BOOL (^finished)(void)) {
 int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
+    {
+      LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      [input loadSource:@"a\nb\nc\nd"];
+      LESourceRowView *row = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 66, 400, 22)];
+      [row applyLineId:4 index:3]; row.input = input;
+      NSData *before = gutterPixels(row);
+      [input insertText:@"" replacementRange:NSMakeRange(0, 2)];
+      assert(row.lineIndex == 2); // Logical positions advance immediately for editing.
+      assert([gutterPixels(row) isEqual:before]); // But its view has not moved yet.
+      [row applyLineId:4 index:2]; [row setFrameOrigin:NSMakePoint(0, 44)];
+      NSData *after = gutterPixels(row);
+      assert(![after isEqual:before]);
+      [row applyLineId:4 index:3]; // Stale metrics commit cannot revert the gutter.
+      assert([gutterPixels(row) isEqual:after]);
+      [input insertText:@"new\n" replacementRange:NSMakeRange(0, 0)];
+      assert(row.lineIndex == 3);
+      assert([gutterPixels(row) isEqual:after]);
+      [row applyLineId:4 index:3]; [row setFrameOrigin:NSMakePoint(0, 66)];
+      assert([gutterPixels(row) isEqual:before]);
+      // Recycled views must not retain the previous document's gutter index.
+      row.input = nil;
+      LESourceInputView *other = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      [other loadSource:@"first\nsecond\nthird\nfourth"];
+      [row applyLineId:3 index:2]; row.input = other;
+      assert([gutterPixels(row) isEqual:after]);
+      row.input = nil;
+    }
     {
       // Prepare exact heights without mounting a single native row.
       LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];

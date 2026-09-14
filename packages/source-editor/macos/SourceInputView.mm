@@ -1266,11 +1266,13 @@ static NSString *string(const std::u16string &text) {
 @implementation LESourceRowView {
   NSString *_cachedText;
   CGFloat _cachedWidth;
+  NSUInteger _presentedLineIndex;
 }
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
     _fontSize = 14; _lineHeight = 22; _fontFamily = @"Menlo";
     _foreground = NSColor.textColor; _wrap = YES; _cachedWidth = -1;
+    _presentedLineIndex = NSNotFound;
   }
   return self;
 }
@@ -1279,15 +1281,25 @@ static NSString *string(const std::u16string &text) {
   if (_input == input) return;
   [_input unregisterRow:self];
   _input = input;
+  _presentedLineIndex = input ? self.lineIndex : NSNotFound;
   [input registerRow:self];
   [self invalidateText];
 }
 - (void)applyLineId:(uint64_t)lineId index:(NSUInteger)index {
   // Native edits renumber mounted rows before the Fabric commit arrives. A
   // metrics/style commit carrying an old index must not detach that same ID.
-  if (_lineId == lineId && _input && [_input offsetForRow:self] != NSNotFound) return;
+  if (_lineId == lineId && _input && [_input offsetForRow:self] != NSNotFound) {
+    // Keep the gutter at its presented position until Fabric moves this row.
+    // A stale commit must not undo a newer native edit's logical index.
+    if (index == _lineIndex && _presentedLineIndex != index) {
+      _presentedLineIndex = index;
+      self.needsDisplay = YES;
+    }
+    return;
+  }
   const BOOL replaced = _lineId != lineId;
   _lineId = lineId; _lineIndex = index;
+  _presentedLineIndex = index;
   if (replaced) [self invalidateText];
   else self.needsDisplay = YES;
 }
@@ -1332,7 +1344,8 @@ static NSString *string(const std::u16string &text) {
     __weak LESourceInputView *input = self.input;
     dispatch_async(dispatch_get_main_queue(), ^{ [input requestVisibleSyntax]; });
   }
-  [[NSString stringWithFormat:@"%lu", self.lineIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
+  NSUInteger gutterIndex = _presentedLineIndex == NSNotFound ? self.lineIndex : _presentedLineIndex;
+  [[NSString stringWithFormat:@"%lu", gutterIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
     NSFontAttributeName:[NSFont fontWithName:@"Menlo" size:MAX(10, self.fontSize - 1)] ?: [NSFont systemFontOfSize:12],
     NSForegroundColorAttributeName:[(self.foreground ?: NSColor.textColor) colorWithAlphaComponent:0.5],
   }];
