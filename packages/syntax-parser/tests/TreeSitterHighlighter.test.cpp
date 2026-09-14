@@ -26,6 +26,34 @@ void replace(TreeSitterHighlighter& h, std::u16string& source, uint32_t start, u
   assert(h.parse(input(source)));
 }
 int main() {
+  for (const char* language : {"javascript", "typescript", "tsx", "json", "python", "css", "markdown", "mdx"}) {
+    std::u16string source = u"const sample = console.log(42);\n";
+    TreeSitterHighlighter h(language);
+    assert(h.parse(input(source)));
+    std::atomic_bool stop{true};
+    bool threw = false;
+    try { h.highlight(0, source.size(), &stop); } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+    stop = false;
+    equal(h.highlight(0, source.size(), &stop), h.highlight(0, source.size()));
+  }
+  {
+    std::u16string source = u"console.log(Math.floor(42));\n";
+    TreeSitterHighlighter h("javascript");
+    std::atomic_bool stop{false};
+    bool querying = false;
+    assert(h.parse({static_cast<uint32_t>(source.size()), [&](uint32_t offset) {
+      if (querying) stop = true; // Cancellation while evaluating a predicate.
+      return std::u16string_view(source).substr(offset);
+    }}));
+    querying = true;
+    bool threw = false;
+    try { h.highlight(0, source.size(), &stop); } catch (const std::runtime_error&) { threw = true; }
+    assert(threw);
+    querying = false; stop = false;
+    TreeSitterHighlighter fresh("javascript"); assert(fresh.parse(input(source)));
+    equal(h.highlight(0, source.size(), &stop), fresh.highlight(0, source.size()));
+  }
   struct Fixture { const char* language; const char* scope; std::u16string source, needle, insertion; const char* capture; };
   const std::vector<Fixture> fixtures{
     {"javascript", "source.js", u"const item = <View title='hello'>Hi</View>;\n", u"View", u"/* 👋\r\n multiline */\n", "tag"},
