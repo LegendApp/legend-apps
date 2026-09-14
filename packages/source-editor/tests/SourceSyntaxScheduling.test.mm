@@ -29,15 +29,23 @@ namespace syntax = margelo::nitro::legendapps::syntaxparser;
 }
 @end
 
+@interface WindowedSyntaxRow : LESourceRowView
+@property (nonatomic) NSRect testVisibleRect;
+@end
+@implementation WindowedSyntaxRow
+- (NSRect)visibleRect { return self.testVisibleRect; }
+@end
+
 static NSUInteger highlighted(SchedulingInput *input) {
   return [[input valueForKey:@"treeNextLine"] unsignedIntegerValue];
 }
 static void drainFor(NSTimeInterval seconds) {
   [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];
 }
-static void waitFor(bool (^condition)(void)) {
+static void waitFor(bool (^condition)(void), int caller = __builtin_LINE()) {
   NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:10];
   while (!condition() && deadline.timeIntervalSinceNow > 0) drainFor(0.005);
+  if (!condition()) std::cerr << "Timed out at scheduling test line " << caller << '\n';
   assert(condition());
 }
 
@@ -65,6 +73,60 @@ int main(int argc, char **argv) {
       for (size_t i = 0; i < actual.size(); ++i) assert(actual[i].tokens == expected[i].tokens);
     }
     [NSApplication sharedApplication];
+    for (BOOL wrap : {NO, YES}) {
+      SchedulingInput *input = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+      input.syntaxHighlightingInBackground = NO;
+      input.onSyntaxError = ^(NSString *error) { assert(!error.length); };
+      NSMutableString *source = [NSMutableString new];
+      for (int i = 0; i < 6000; ++i) [source appendString:@"const value=42; "];
+      [input loadSource:source];
+      [input configureSyntaxLanguage:@"javascript" theme:@"dark-plus" enabled:YES];
+      [input recordStartupDraw];
+      WindowedSyntaxRow *row = [[WindowedSyntaxRow alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
+      row.wrap = wrap; row.lineIndex = 0; row.lineId = 1; row.input = input;
+      [row layout];
+      for (NSUInteger target : {NSUInteger{45008}, NSUInteger{75008}, NSUInteger{0}}) {
+        const auto caret = [row.textLayout caretRectAtOffset:target downstream:YES];
+        row.testVisibleRect = NSMakeRect(wrap ? 0 : caret.origin.x + 64, wrap ? caret.origin.y : 0, 600, 300);
+        [input requestVisibleSyntax];
+        waitFor(^bool {
+          [input requestVisibleSyntax];
+          return [[input valueForKey:@"treeVisibleRevision"] isEqual:[input valueForKey:@"treeRevision"]]
+            && [[input valueForKey:@"treeVisibleFromOffset"] unsignedIntegerValue] <= target
+            && [[input valueForKey:@"treeVisibleToOffset"] unsignedIntegerValue] > target;
+        });
+        assert([[input valueForKey:@"treeVisibleToOffset"] unsignedIntegerValue]
+          - [[input valueForKey:@"treeVisibleFromOffset"] unsignedIntegerValue] < source.length / 2);
+        waitFor(^bool {
+          [row layout]; NSAttributedString *text = [row.textLayout valueForKey:@"text"];
+          return [[text attribute:NSForegroundColorAttributeName atIndex:target effectiveRange:nil]
+            isEqual:[NSColor colorWithSRGBRed:0 green:0 blue:1 alpha:1]];
+        });
+      }
+      // Finishing a small invalidation can leave an unfinished background tail.
+      // An empty dirty interval must not reset that tail's character cursor.
+      [input setValue:@0 forKey:@"treeDirtyEnd"];
+      input.syntaxHighlightingInBackground = YES;
+      waitFor(^bool { return highlighted(input) == input.lineCount; });
+      input.undoManager.groupsByEvent = NO;
+      [input.undoManager beginUndoGrouping];
+      [input insertText:@"/*" replacementRange:NSMakeRange(75008, 5)];
+      [input.undoManager endUndoGrouping];
+      waitFor(^bool { return highlighted(input) == input.lineCount; });
+      [row layout];
+      NSAttributedString *commented = [row.textLayout valueForKey:@"text"];
+      assert(![[commented attribute:NSForegroundColorAttributeName atIndex:89997 effectiveRange:nil]
+        isEqual:[NSColor colorWithSRGBRed:0 green:0 blue:1 alpha:1]]);
+      [input.undoManager undo];
+      waitFor(^bool { return highlighted(input) == input.lineCount; });
+      [row layout];
+      NSAttributedString *restored = [row.textLayout valueForKey:@"text"];
+      assert([[restored attribute:NSForegroundColorAttributeName atIndex:90000 effectiveRange:nil]
+        isEqual:[NSColor colorWithSRGBRed:0 green:0 blue:1 alpha:1]]);
+      assert([input.source isEqualToString:source]);
+      row.input = nil;
+      [input configureSyntaxLanguage:@"javascript" theme:@"dark-plus" enabled:NO];
+    }
     {
       SchedulingInput *tree = [[SchedulingInput alloc] initWithFrame:NSMakeRect(0, 0, 600, 400)];
       tree.syntaxBackend = @"tree-sitter";

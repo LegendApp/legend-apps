@@ -68,8 +68,9 @@ static NSString *string(const std::u16string &text) {
   std::vector<std::string> _treeCaptures;
   NSArray<NSColor *> *_treeColors;
   std::vector<int> _treeFontStyles;
-  NSUInteger _treeCopiedUnits, _treeNextLine, _treeRevision, _treeVisibleRevision, _treeVisibleStart, _treeVisibleEnd;
+  NSUInteger _treeCopiedUnits, _treeNextLine, _treeRevision, _treeVisibleRevision;
   NSUInteger _treeKnownEnd, _treeDirtyEnd;
+  NSUInteger _treeNextColumn, _treeVisibleFromOffset, _treeVisibleToOffset, _treeVisibleNextOffset, _treeVisibleRequestRevision;
   BOOL _treeBusy, _treePrefixDone, _treeParsePending;
   std::shared_ptr<std::atomic_bool> _treeJobCancellation;
   std::unordered_set<std::string> _requestedGrammarNames;
@@ -233,7 +234,7 @@ static NSString *string(const std::u16string &text) {
 - (NSDictionary *)appendDocument:(SourceDocument &&)chunk {
   auto change = _document->appendLoaded(std::move(chunk));
   const auto start = change.fallback ? change.fallback->startLine : change.startLine;
-  if (_treeSyntax) { ++_treeRevision; _treeNextLine = MIN(_treeNextLine, start); _treeDirtyEnd = _document->lineCount(); }
+  if (_treeSyntax) { ++_treeRevision; _treeNextLine = MIN(_treeNextLine, start); _treeNextColumn = 0; _treeDirtyEnd = _document->lineCount(); }
   for (LESourceRowView *row in _rows) {
     if (row.lineIndex < start) continue;
     if (change.fallback) {
@@ -278,6 +279,7 @@ static NSString *string(const std::u16string &text) {
     ++_treeRevision;
     _treeVisibleRevision = NSNotFound;
     _treeNextLine = _treeKnownEnd = 0;
+    _treeNextColumn = 0;
     _treeDirtyEnd = _document->lineCount();
     [self scheduleSyntax];
   }
@@ -306,6 +308,8 @@ static NSString *string(const std::u16string &text) {
     _treeQueue = dispatch_queue_create("app.legend.source-editor.tree-sitter", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
     _treeCopiedUnits = _treeNextLine = _treeRevision = _treeKnownEnd = _treeDirtyEnd = 0;
     _treeVisibleRevision = NSNotFound;
+    _treeVisibleRequestRevision = NSNotFound;
+    _treeNextColumn = 0;
     _treeBusy = _treePrefixDone = _treeParsePending = NO;
   }
   if (self.onSyntaxError) self.onSyntaxError(@"");
@@ -377,7 +381,32 @@ static NSString *string(const std::u16string &text) {
   if (from == NSNotFound) { from = 0; to = MIN(_document->lineCount(), 128); }
   from = from > 32 ? from - 32 : 0;
   to = MIN(_document->lineCount(), MIN(from + 256, to + 32));
-  const BOOL visible = _treeVisibleRevision != revision || from != _treeVisibleStart || to != _treeVisibleEnd;
+  size_t visibleFirst = _document->lineOffset(from);
+  size_t visibleLast = to == _document->lineCount() ? _document->length() : _document->lineOffset(to);
+  // Mounted rows can include a very large logical line. Query the actual
+  // wrapped/horizontal viewport, not every character in that mounted row.
+  size_t geometryFirst = NSNotFound, geometryLast = 0;
+  bool hasLongRow = false;
+  for (LESourceRowView *row in _rows) {
+    if (![self isCurrentRow:row] || !row.textLayout || NSIsEmptyRect(row.visibleRect)) continue;
+    const auto length = _document->line(row.lineIndex).text.size();
+    hasLongRow |= length > 8192;
+    const auto rect = row.visibleRect;
+    const auto first = length > 8192 ? [row.textLayout offsetAtPoint:NSMakePoint(MAX(0, NSMinX(rect) - 64), NSMinY(rect))] : 0;
+    const auto last = length > 8192 ? [row.textLayout offsetAtPoint:NSMakePoint(MAX(0, NSMaxX(rect) - 64), NSMaxY(rect))] : length;
+    const auto column = (first > 1024 ? first - 1024 : 0) / 4096 * 4096;
+    geometryFirst = MIN(geometryFirst, _document->lineOffset(row.lineIndex) + column);
+    geometryLast = MAX(geometryLast, _document->lineOffset(row.lineIndex) + MIN(length, MAX(column + 8192, last + 1024)));
+  }
+  if (hasLongRow) {
+    visibleFirst = geometryFirst; visibleLast = geometryLast;
+  }
+  if (_treeVisibleRequestRevision != revision || _treeVisibleFromOffset != visibleFirst || _treeVisibleToOffset != visibleLast) {
+    _treeVisibleRequestRevision = revision;
+    _treeVisibleFromOffset = visibleFirst; _treeVisibleToOffset = visibleLast; _treeVisibleNextOffset = visibleFirst;
+    _treeVisibleRevision = NSNotFound;
+  }
+  const BOOL visible = _treeVisibleRevision != revision;
   const BOOL fullReady = !copying && !_sourceLoading;
   if (!prefix && !copying && !fullReady) return;
   if (!prefix && !copying && !visible && (!_syntaxHighlightingInBackground || _treeNextLine >= _document->lineCount())) return;
@@ -394,15 +423,19 @@ static NSString *string(const std::u16string &text) {
   auto chunk = std::make_shared<const std::u16string>(_document->slice(offset, count));
   _treeCopiedUnits += count;
   const BOOL parse = _treeParsePending || prefix || (!_sourceLoading && _treeCopiedUnits == _document->length());
-  const auto start = prefix ? 0 : visible ? from : _treeNextLine;
-  const auto batch = prefix ? 128 : visible ? MIN(to - from, 256) : 512;
+  const auto first = prefix ? 0 : visible ? _treeVisibleNextOffset : _document->lineOffset(_treeNextLine) + _treeNextColumn;
+  const auto position = _document->position(first);
+  const auto start = position.line;
+  const auto backgroundEnd = MIN(_document->lineCount(), start + 512);
+  const auto last = prefix ? _treeCopiedUnits : visible ? visibleLast
+    : backgroundEnd == _document->lineCount() ? _document->length() : _document->lineOffset(backgroundEnd);
   const auto capturedCount = _treeCaptures.size();
   _treeBusy = YES;
   auto interrupted = std::make_shared<std::atomic_bool>(false);
   _treeJobCancellation = interrupted;
   __weak LESourceInputView *weakSelf = self;
   dispatch_async(_treeQueue, ^{
-    std::vector<legend::source::SourceSyntaxRow> result;
+    legend::source::SourceSyntaxWindow result;
     std::vector<std::string> captures;
     std::vector<std::string> missingLanguages;
     std::pair<size_t, size_t> invalidated{0, 0};
@@ -413,7 +446,7 @@ static NSString *string(const std::u16string &text) {
       if (!chunk->empty()) worker->replace(offset, 0, *chunk);
       if (parse && (complete = worker->parseSlice(4, interrupted.get()))) {
         invalidated = worker->takeInvalidatedLines();
-        if (start < worker->lineCount()) result = worker->highlight(start, batch, interrupted.get());
+        if (first <= worker->length()) result = worker->highlightWindow(first, last, prefix || visible ? 8192 : 32768, interrupted.get());
         if (worker->captureCount() != capturedCount) captures = worker->captures();
         missingLanguages = worker->missingLanguages();
       }
@@ -435,24 +468,34 @@ static NSString *string(const std::u16string &text) {
         if (self->_requestedGrammarNames.insert(language).second) self.onGrammarRequired([NSString stringWithUTF8String:language.c_str()]);
       if (revision == self->_treeRevision && parse && complete && !interrupted->load()) {
         if (invalidated.second > invalidated.first) {
+          if (invalidated.first <= self->_treeNextLine) self->_treeNextColumn = 0;
           self->_treeNextLine = MIN(self->_treeNextLine, invalidated.first);
           self->_treeDirtyEnd = MAX(self->_treeDirtyEnd, invalidated.second);
         }
         std::unordered_set<uint64_t> changed;
-        for (const auto& line : result) {
+        for (const auto& line : result.rows) {
           if (line.index >= self->_document->lineCount()) continue;
           const auto id = self->_document->line(line.index).id;
-          auto found = self->_treeRows.find(id);
-          if (found == self->_treeRows.end() || found->second != line.tokens) {
-            self->_treeRows[id] = line.tokens; changed.insert(id);
-          }
+          if (legend::source::mergeSyntaxRow(self->_treeRows[id], line)) changed.insert(id);
         }
         if (!captures.empty()) { self->_treeCaptures = std::move(captures); [self refreshTreePalette]; }
-        if (visible && !prefix) { self->_treeVisibleRevision = revision; self->_treeVisibleStart = from; self->_treeVisibleEnd = to; }
-        if (start <= self->_treeNextLine) {
-          self->_treeNextLine = MAX(self->_treeNextLine, start + result.size());
-          if (self->_treeNextLine >= self->_treeDirtyEnd) {
-            self->_treeNextLine = MAX(self->_treeNextLine, self->_treeKnownEnd);
+        if (visible && !prefix) {
+          self->_treeVisibleNextOffset = result.nextOffset;
+          if (result.nextOffset >= visibleLast) self->_treeVisibleRevision = revision;
+        }
+        if (start < self->_treeNextLine || (start == self->_treeNextLine && position.column <= self->_treeNextColumn)) {
+          // A provisional mirror can end in the middle of the live document's
+          // line. Its EOF must not mark that whole live line complete.
+          const auto next = result.nextOffset == self->_document->length()
+            ? legend::source::Position{self->_document->lineCount(), 0} : self->_document->position(result.nextOffset);
+          if (next.line > self->_treeNextLine || (next.line == self->_treeNextLine && next.column > self->_treeNextColumn)) {
+            self->_treeNextLine = next.line; self->_treeNextColumn = next.column;
+          }
+          if (self->_treeDirtyEnd && self->_treeNextLine >= self->_treeDirtyEnd) {
+            if (self->_treeNextLine < self->_treeKnownEnd) {
+              self->_treeNextLine = self->_treeKnownEnd;
+              self->_treeNextColumn = 0;
+            }
             self->_treeDirtyEnd = 0;
           }
           self->_treeKnownEnd = MAX(self->_treeKnownEnd, self->_treeNextLine);
@@ -462,6 +505,7 @@ static NSString *string(const std::u16string &text) {
         // An overlapping completion cannot establish validity for a newer
         // revision. Keep its old colors, but conservatively revalidate the tail.
         self->_treeNextLine = self->_treeKnownEnd = 0;
+        self->_treeNextColumn = 0;
         self->_treeDirtyEnd = self->_document->lineCount();
       }
       const BOOL active = self->_sourceLoading || self->_treeCopiedUnits < self->_document->length()
@@ -779,6 +823,7 @@ static NSString *string(const std::u16string &text) {
       return change.startLine + change.lines.size();
     };
     _treeNextLine = MIN(_treeNextLine, change.startLine);
+    _treeNextColumn = 0;
     _treeKnownEnd = map(_treeKnownEnd);
     _treeDirtyEnd = MAX(map(_treeDirtyEnd), change.startLine + change.lines.size());
     // Mirror only the already-copied prefix. Edits beyond it will be included in
@@ -1129,6 +1174,12 @@ static NSString *string(const std::u16string &text) {
   }
   [_textLayout drawInContext:NSGraphicsContext.currentContext.CGContext origin:NSMakePoint(64, 0) dirtyRect:dirtyRect];
   if (_textLayout) [self.input recordStartupDraw];
+  // Scrolling within one mounted long row doesn't change its line index.
+  // Ask for its new character window after paint, outside the draw callback.
+  if (_cachedText.length > 8192) {
+    __weak LESourceInputView *input = self.input;
+    dispatch_async(dispatch_get_main_queue(), ^{ [input requestVisibleSyntax]; });
+  }
   [[NSString stringWithFormat:@"%lu", self.lineIndex + 1] drawAtPoint:NSMakePoint(8, 2) withAttributes:@{
     NSFontAttributeName:[NSFont fontWithName:@"Menlo" size:MAX(10, self.fontSize - 1)] ?: [NSFont systemFontOfSize:12],
     NSForegroundColorAttributeName:[(self.foreground ?: NSColor.textColor) colorWithAlphaComponent:0.5],

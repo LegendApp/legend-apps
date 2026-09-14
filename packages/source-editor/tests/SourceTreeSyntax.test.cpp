@@ -35,6 +35,33 @@ static void measure() {
       << " mirror_peak_bytes=" << mirrorPeak << " parsed_peak_bytes=" << parsePeak << " query_peak_bytes=" << peakBytes() << "\n";
 }
 int main(int argc, char**) {
+  for (const char* language : {"javascript", "typescript", "tsx", "json", "python", "css", "markdown", "mdx"}) {
+    SourceTreeSyntax windows(language);
+    std::u16string text = u"const sample = `👋 hello ${42}`; /* across\r\nlines */\n\n";
+    for (int i = 0; i < 1500; ++i) text += u"const value = '👋'; ";
+    text += u"\r\n";
+    windows.replace(0, 0, text); assert(windows.parse());
+    for (int edit = 0; edit < 2; ++edit) {
+      const auto whole = windows.highlight(0, windows.lineCount());
+      std::vector<std::vector<legend::source::SourceSyntaxToken>> cached(whole.size());
+      std::vector<legend::source::SourceSyntaxRow> patches;
+      for (size_t offset = 0; offset < text.size();) {
+        auto result = windows.highlightWindow(offset, text.size(), 127);
+        assert(result.nextOffset > offset && result.nextOffset - offset <= 127);
+        offset = result.nextOffset;
+        for (const auto& row : result.rows) patches.push_back(row);
+      }
+      // Out-of-order windows, repeat queries, plain gaps and split captures.
+      std::mt19937 random(42);
+      std::shuffle(patches.begin(), patches.end(), random);
+      for (const auto& row : patches) {
+        legend::source::mergeSyntaxRow(cached[row.index], row);
+        assert(!legend::source::mergeSyntaxRow(cached[row.index], row));
+      }
+      for (size_t row = 0; row < whole.size(); ++row) assert(whole[row].tokens == cached[row]);
+      windows.replace(0, 0, u"/*\n"); text.insert(0, u"/*\n"); assert(windows.parse());
+    }
+  }
   {
     SourceTreeSyntax sliced("typescript");
     std::u16string text;
