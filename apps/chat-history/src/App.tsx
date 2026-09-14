@@ -72,12 +72,6 @@ const DEMO_STREAM_RESPONSE = [
   "The response continues for another paragraph to make the test unambiguous on large displays. While reading it, notice that the content itself is ordinary selectable text and that the composer remains visible below the list. The demo is still intentionally inert: sending only mutates the temporary in-memory data source used by this screen. Switching chats or reopening the application discards the generated turn, and no provider session, local transcript, or remote model is affected.",
   "This is the final portion of the fake response. By now the assistant row should be at least one screen tall, and on most window sizes it should be considerably taller. The final sentence marks the true end of the generated content so it is easy to identify whether LegendList stops at the correct location: this line should be the end, with only the normal small amount of bottom spacing after it.",
 ].join("\n\n");
-const chatHistoryListContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: CHAT_HISTORY_TITLEBAR_HEIGHT,
-};
 const chatHistoryListViewabilityConfig = {
   startOffset: CHAT_HISTORY_TITLEBAR_HEIGHT,
 };
@@ -355,7 +349,7 @@ function TranscriptList({
               if (document.rowCount === 0 || firstVisibleIndexRef.current === 0) {
                 reportTopReady();
               } else {
-                void listRef.current?.scrollToIndex({ animated: false, index: 0 });
+                void listRef.current?.scrollToOffset({ animated: false, offset: 0 });
               }
             }, topDelayMs);
           }
@@ -454,7 +448,6 @@ function TranscriptList({
       <LegendList
         anchoredEndSpace={anchoredEndSpace}
         contentContainerStyle={listContentStyle}
-        contentInset={chatHistoryListContentInset}
         dataKey={dataKey}
         dataSource={dataSource}
         estimatedItemSize={500}
@@ -814,7 +807,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingTop: 12,
+    // Keep the first row below the overlay title bar at scroll offset zero.
+    paddingTop: CHAT_HISTORY_TITLEBAR_HEIGHT + 12,
   },
   composerOverlay: {
     bottom: 0,
