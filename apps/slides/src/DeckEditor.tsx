@@ -2,12 +2,13 @@ import { readTextFile, writeTextFileIfUnchanged } from "@legend-apps/file-dialog
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
 import { setWindowOptions } from "@legend-apps/window-manager";
+import { useValue } from "@legendapp/state/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { createDeckEditorSession, type DeckEditorSession, type DeckEditorSnapshot } from "./deckEditorSession";
 import { invalidateDeckBuild, previewDeckSource, setDraftReloadHandler } from "./deckLoader";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { useSlidesState } from "./slidesStore";
+import { slidesState$ } from "./slidesStore";
 
 function useEditorSession<T>(session: DeckEditorSession, select: (state: DeckEditorSnapshot) => T) {
   return useSyncExternalStore(session.subscribe, () => select(session.getSnapshot()), () => select(session.getSnapshot()));
@@ -61,7 +62,7 @@ function EditorToolbar({ session, onExit }: { session: DeckEditorSession; onExit
 
 function EditorPreview({ session }: { session: DeckEditorSession }) {
   const index = useEditorSession(session, selectedSlide);
-  const hasPreview = useSlidesState((value) => value.component !== null);
+  const hasPreview = useValue(() => slidesState$.compiled.get() !== null);
   return <View className="flex-1 bg-black">
     {hasPreview && <SlideCanvas targetIndex={index} isPreview><DeckRenderer targetIndex={index} isPreview /></SlideCanvas>}
   </View>;
@@ -70,7 +71,7 @@ function EditorPreview({ session }: { session: DeckEditorSession }) {
 function EditorStatus({ session }: { session: DeckEditorSession }) {
   const error = useEditorSession(session, (state) => state.error);
   const building = useEditorSession(session, (state) => state.status === "building");
-  const buildErrors = useSlidesState((value) => value.buildErrors);
+  const buildErrors = useValue(slidesState$.buildErrors);
   return <>
     {(error || buildErrors.length > 0) && <Text className="p-3 text-red-300">{error || buildErrors.join("\n")}</Text>}
     {building && <Text className="px-3 py-1 text-zinc-400">Updating preview…</Text>}
