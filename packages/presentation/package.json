@@ -4,6 +4,8 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/plugin-transform-block-scoping": "^7.28.6",
     "@legendapp/state": "catalog:",
     "@mdx-js/mdx": "^3.1.1",
     "esbuild": "^0.25.9",
@@ -15,5 +17,8 @@
     "typegpu": "^0.12.4",
     "unplugin-typegpu": "^0.12.3",
     "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5"
   }
 }
