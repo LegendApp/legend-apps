@@ -113,7 +113,10 @@ var ReanimatedPositionViewSticky = typedMemo(function ReanimatedPositionViewStic
 var ReanimatedPositionView = typedMemo(function ReanimatedPositionViewComponent(props) {
   const ctx = useStateContext();
   const { id, horizontal, style, refView, children, recycleItems, layoutTransition, ...rest } = props;
-  const [positionValue = POSITION_OUT_OF_VIEW] = useArr$([`containerPosition${id}`]);
+  const [positionValue = POSITION_OUT_OF_VIEW, layoutReady = true] = useArr$([
+    `containerPosition${id}`,
+    `containerLayoutReady${id}`
+  ]);
   const prevItemKeyRef = React__namespace.useRef(void 0);
   let shouldSkipTransitionForRecycleReuse = false;
   if (recycleItems && layoutTransition) {
@@ -127,8 +130,8 @@ var ReanimatedPositionView = typedMemo(function ReanimatedPositionViewComponent(
     prevItemKeyRef.current = void 0;
   }
   const viewStyle = React__namespace.useMemo(
-    () => [style, horizontal ? { left: positionValue } : { top: positionValue }],
-    [horizontal, positionValue, style]
+    () => [style, horizontal ? { left: positionValue } : { top: positionValue }, !layoutReady && { opacity: 0 }],
+    [horizontal, layoutReady, positionValue, style]
   );
   return /* @__PURE__ */ React__namespace.createElement(
     Reanimated__default.default.View,
@@ -136,7 +139,8 @@ var ReanimatedPositionView = typedMemo(function ReanimatedPositionViewComponent(
       layout: shouldSkipTransitionForRecycleReuse ? void 0 : layoutTransition,
       ref: refView,
       style: viewStyle,
-      ...rest
+      ...rest,
+      pointerEvents: layoutReady ? void 0 : "none"
     },
     children
   );
@@ -252,7 +256,7 @@ var LegendListForwardedRef = typedMemo(
       ...{
         renderScrollComponent: renderReanimatedScrollComponent,
         ...IsNewArchitecture ? { stickyPositionComponentInternal } : {}
-      }
+      } 
     };
     return /* @__PURE__ */ React__namespace.createElement(reactNative.LegendList, { ref: refFn, refScrollView: ref, ...legendListProps });
   })

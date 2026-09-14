@@ -10,7 +10,7 @@ interface MaintainVisibleContentPositionNormalized<ItemT = any> {
     shouldRestorePosition?: (item: ItemT, index: number, data: readonly ItemT[]) => boolean;
 }
 
-type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stylePaddingTop" | "totalSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerPosition${number}` | `containerSticky${number}`;
+type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stylePaddingTop" | "totalSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerLayoutReady${number}` | `containerPosition${number}` | `containerSticky${number}`;
 type LegendListListenerType = Extract<ListenerType, "activeStickyIndex" | "anchoredEndSpaceSize" | "footerSize" | "headerSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | "lastItemKeys" | "lastPositionUpdate" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "snapToOffsets" | "totalSize">;
 type ListenerTypeValueMap = {
     activeStickyIndex: number;
@@ -51,6 +51,8 @@ type ListenerTypeValueMap = {
     [K in ListenerType as K extends `containerDataVersion${number}` ? K : never]: number;
 } & {
     [K in ListenerType as K extends `containerItemKey${number}` ? K : never]: string;
+} & {
+    [K in ListenerType as K extends `containerLayoutReady${number}` ? K : never]: boolean;
 } & {
     [K in ListenerType as K extends `containerItemData${number}` ? K : never]: any;
 } & {
@@ -130,11 +132,6 @@ type LegendListState = {
     start: number;
     startBuffered: number;
 };
-interface LegendListKnownSizeEntry {
-    index: number;
-    /** Scroll-axis item size, excluding the list gap. */
-    size: number;
-}
 type LegendListRef$1 = {
     /**
      * Clears internal virtualization caches.
@@ -168,13 +165,6 @@ type LegendListRef$1 = {
      * Returns the internal state of the scroll virtualization.
      */
     getState(): LegendListState;
-    /**
-     * Atomically replaces the complete authoritative set of item-size exceptions.
-     * Omitted indexes use the currently configured estimated item size.
-     * Passing an empty array declares that every item uses the configured estimate.
-     * Entries must have strictly increasing, unique indexes. Invalid input is ignored and logged in development.
-     */
-    replaceKnownSizeEntries(entries: readonly LegendListKnownSizeEntry[]): void;
     /**
      * Reports an externally measured content inset. Pass null/undefined to clear.
      * Values are merged on top of props/animated/native insets.
@@ -299,7 +289,7 @@ type KeyboardChatComposerInsetListRef = {
 type KeyboardChatComposerRef = {
     current: Pick<View, "measure"> | null;
 };
-declare function useKeyboardChatComposerInset(listRef: KeyboardChatComposerInsetListRef, composerRef: KeyboardChatComposerRef, initialHeight?: number): {
+declare function useKeyboardChatComposerInset(_listRef: KeyboardChatComposerInsetListRef, composerRef: KeyboardChatComposerRef, initialHeight?: number): {
     contentInsetEndAdjustment: SharedValue<number>;
     onComposerLayout: (event: LayoutChangeEvent) => void;
 };

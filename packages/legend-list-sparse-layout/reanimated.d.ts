@@ -9,7 +9,7 @@ interface MaintainVisibleContentPositionNormalized<ItemT = any> {
     shouldRestorePosition?: (item: ItemT, index: number, data: readonly ItemT[]) => boolean;
 }
 
-type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stylePaddingTop" | "totalSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerPosition${number}` | `containerSticky${number}`;
+type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stylePaddingTop" | "totalSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerLayoutReady${number}` | `containerPosition${number}` | `containerSticky${number}`;
 type LegendListListenerType = Extract<ListenerType, "activeStickyIndex" | "anchoredEndSpaceSize" | "footerSize" | "headerSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | "lastItemKeys" | "lastPositionUpdate" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "snapToOffsets" | "totalSize">;
 type ListenerTypeValueMap = {
     activeStickyIndex: number;
@@ -50,6 +50,8 @@ type ListenerTypeValueMap = {
     [K in ListenerType as K extends `containerDataVersion${number}` ? K : never]: number;
 } & {
     [K in ListenerType as K extends `containerItemKey${number}` ? K : never]: string;
+} & {
+    [K in ListenerType as K extends `containerLayoutReady${number}` ? K : never]: boolean;
 } & {
     [K in ListenerType as K extends `containerItemData${number}` ? K : never]: any;
 } & {
@@ -126,7 +128,7 @@ interface AdaptiveRenderConfig {
     onChange?: (mode: AdaptiveRender, reason: AdaptiveRenderChangeReason) => void;
 }
 type BaseScrollViewProps<TScrollView> = Omit<TScrollView, "contentOffset" | "maintainVisibleContentPosition" | "stickyHeaderIndices" | "removeClippedSubviews" | "children" | "onScroll">;
-type DataSourceOperation =
+type DataSourceOperation = 
 /** Removes and inserts logical items at `index`. Inserted items begin with estimated layout. */
 {
     type: "splice";
@@ -261,11 +263,6 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      * @default undefined
      */
     estimatedItemSize?: number;
-    /**
-     * Returns an item-specific size estimate used before measurement. Unlike
-     * `getFixedItemSize`, the measured size remains authoritative.
-     */
-    getEstimatedItemSize?: (item: ItemT, index: number, type: TItemType) => number | undefined;
     /**
      * Estimated size of the ScrollView in pixels, a hint for the first render to improve performance
      * @default undefined
@@ -431,6 +428,20 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      * Configures the adaptive render signal. Items can use this to render a lighter version while scrolling quickly.
      */
     experimental_adaptiveRender?: AdaptiveRenderConfig;
+    /**
+     * Keeps a newly recycled item laid out but invisible until its size has been measured, so it is never painted at
+     * the estimated position it was recycled to. Only applies on the new architecture.
+     *
+     * This trades a possible flash at the wrong position for an extra render and native commit per recycled row, so it
+     * is worth enabling only for lists with dynamically sized items whose estimates are visibly wrong. Items with a
+     * size from `getFixedItemSize`, or with an already measured size, are exact and render immediately either way.
+     *
+     * Sticky headers are intentionally excluded. They are painted from a scroll-driven interpolation rather than the
+     * committed position, so hiding them would blink a header out mid-scroll without preventing a flash.
+     *
+     * @default false
+     */
+    experimental_hideItemsUntilMeasured?: boolean;
     /**
      * Function to call when the user pulls to refresh.
      */
@@ -634,11 +645,6 @@ type LegendListState = {
     start: number;
     startBuffered: number;
 };
-interface LegendListKnownSizeEntry {
-    index: number;
-    /** Scroll-axis item size, excluding the list gap. */
-    size: number;
-}
 type LegendListRef$1 = {
     /**
      * Clears internal virtualization caches.
@@ -672,13 +678,6 @@ type LegendListRef$1 = {
      * Returns the internal state of the scroll virtualization.
      */
     getState(): LegendListState;
-    /**
-     * Atomically replaces the complete authoritative set of item-size exceptions.
-     * Omitted indexes use the currently configured estimated item size.
-     * Passing an empty array declares that every item uses the configured estimate.
-     * Entries must have strictly increasing, unique indexes. Invalid input is ignored and logged in development.
-     */
-    replaceKnownSizeEntries(entries: readonly LegendListKnownSizeEntry[]): void;
     /**
      * Reports an externally measured content inset. Pass null/undefined to clear.
      * Values are merged on top of props/animated/native insets.

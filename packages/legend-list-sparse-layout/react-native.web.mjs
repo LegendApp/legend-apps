@@ -13,6 +13,76 @@ var View = forwardRef(function View2(props, ref) {
 });
 var Text = View;
 
+// src/core/IndexedData.ts
+var ArrayDataAdapter = class {
+  constructor(data, keyExtractor) {
+    this.data = data;
+    this.keyExtractor = keyExtractor;
+    this.kind = "array";
+  }
+  getItem(index) {
+    return index >= 0 && index < this.data.length ? this.data[index] : void 0;
+  }
+  getKey(index) {
+    return this.keyExtractor ? this.keyExtractor(this.data[index], index) : index;
+  }
+  getLegacyData() {
+    return this.data;
+  }
+  getLength() {
+    return this.data.length;
+  }
+  matches(data, keyExtractor) {
+    return this.data === data && this.keyExtractor === keyExtractor;
+  }
+};
+var DataSourceAdapter = class {
+  constructor(source) {
+    this.source = source;
+    this.kind = "dataSource";
+  }
+  getItem(index) {
+    return index >= 0 && index < this.source.getLength() ? this.source.getItem(index) : void 0;
+  }
+  getKey(index) {
+    return this.source.getKey(index);
+  }
+  getLegacyData() {
+    return void 0;
+  }
+  getLength() {
+    return this.source.getLength();
+  }
+};
+function getIndexedData(state) {
+  const { data, dataSource, keyExtractor } = state.props;
+  let indexedData = state.indexedData;
+  if (indexedData && data === void 0 && dataSource === void 0) {
+    return indexedData;
+  }
+  if (dataSource) {
+    if (!(indexedData instanceof DataSourceAdapter) || indexedData.source !== dataSource) {
+      indexedData = new DataSourceAdapter(dataSource);
+    }
+  } else if (!(indexedData instanceof ArrayDataAdapter) || !indexedData.matches(data != null ? data : [], keyExtractor)) {
+    indexedData = new ArrayDataAdapter(data != null ? data : [], keyExtractor);
+  }
+  state.indexedData = indexedData;
+  return indexedData;
+}
+function getDataItem(state, index) {
+  return getIndexedData(state).getItem(index);
+}
+function getDataKey(state, index) {
+  return getIndexedData(state).getKey(index);
+}
+function getDataLength(state) {
+  return getIndexedData(state).getLength();
+}
+function getLegacyData(state) {
+  return getIndexedData(state).getLegacyData();
+}
+
 // src/platform/Platform.ts
 var Platform = {
   // Widen the type to avoid unreachable-branch lints in cross-platform code that compares against other OSes
@@ -54,10 +124,6 @@ function getStylePaddingEnd(props) {
     return (props == null ? void 0 : props.stylePaddingBottom) || 0;
   }
   return (isHorizontalRTLProps(props) ? props.stylePaddingLeft : props.stylePaddingRight) || 0;
-}
-function getLogicalHorizontalMaxOffset(state, contentWidth) {
-  var _a3;
-  return (_a3 = getHorizontalMaxOffset(state, contentWidth)) != null ? _a3 : 0;
 }
 function getHorizontalInsetEnd(state, inset) {
   if (!inset) {
@@ -324,7 +390,7 @@ function getContentSize(ctx) {
   const footerSize = values.get("footerSize") || 0;
   const contentInsetEnd = getContentInsetEnd(ctx);
   const totalSize = (_b = (_a3 = state.pendingTotalSize) != null ? _a3 : state.totalSize) != null ? _b : values.get("totalSize");
-  const layoutSize = Math.max(0, totalSize - (state.props.data.length > 0 ? ctx.scrollAxisGap : 0));
+  const layoutSize = Math.max(0, totalSize - (getDataLength(state) > 0 ? ctx.scrollAxisGap : 0));
   return headerSize + footerSize + layoutSize + stylePaddingStart + alignItemsAtEndPadding + stylePaddingEnd + (contentInsetEnd || 0);
 }
 
@@ -580,76 +646,6 @@ function setInitialScrollSession(state, options = {}) {
   return state.initialScrollSession;
 }
 
-// src/core/IndexedData.ts
-var ArrayDataAdapter = class {
-  constructor(data, keyExtractor) {
-    this.data = data;
-    this.keyExtractor = keyExtractor;
-    this.kind = "array";
-  }
-  getItem(index) {
-    return index >= 0 && index < this.data.length ? this.data[index] : void 0;
-  }
-  getKey(index) {
-    return this.keyExtractor ? this.keyExtractor(this.data[index], index) : index;
-  }
-  getLegacyData() {
-    return this.data;
-  }
-  getLength() {
-    return this.data.length;
-  }
-  matches(data, keyExtractor) {
-    return this.data === data && this.keyExtractor === keyExtractor;
-  }
-};
-var DataSourceAdapter = class {
-  constructor(source) {
-    this.source = source;
-    this.kind = "dataSource";
-  }
-  getItem(index) {
-    return index >= 0 && index < this.source.getLength() ? this.source.getItem(index) : void 0;
-  }
-  getKey(index) {
-    return this.source.getKey(index);
-  }
-  getLegacyData() {
-    return void 0;
-  }
-  getLength() {
-    return this.source.getLength();
-  }
-};
-function getIndexedData(state) {
-  const { data, dataSource, keyExtractor } = state.props;
-  let indexedData = state.indexedData;
-  if (indexedData && data === void 0 && dataSource === void 0) {
-    return indexedData;
-  }
-  if (dataSource) {
-    if (!(indexedData instanceof DataSourceAdapter) || indexedData.source !== dataSource) {
-      indexedData = new DataSourceAdapter(dataSource);
-    }
-  } else if (!(indexedData instanceof ArrayDataAdapter) || !indexedData.matches(data != null ? data : [], keyExtractor)) {
-    indexedData = new ArrayDataAdapter(data != null ? data : [], keyExtractor);
-  }
-  state.indexedData = indexedData;
-  return indexedData;
-}
-function getDataItem(state, index) {
-  return getIndexedData(state).getItem(index);
-}
-function getDataKey(state, index) {
-  return getIndexedData(state).getKey(index);
-}
-function getDataLength(state) {
-  return getIndexedData(state).getLength();
-}
-function getLegacyData(state) {
-  return getIndexedData(state).getLegacyData();
-}
-
 // src/utils/checkThreshold.ts
 var HYSTERESIS_MULTIPLIER = 1.3;
 function isOutsideThresholdHysteresis(distance, atThreshold, threshold) {
@@ -758,6 +754,12 @@ function checkAtBottom(ctx, allowedEdge, allowGateCreatedInCurrentCheck) {
   } = state;
   const contentSize = getContentSize(ctx);
   resetSharedEdgeGateIfOutsideHysteresis(ctx);
+  if (getDataLength(state) === 0 && scrollLength > 0 && contentSize <= scrollLength) {
+    set$(ctx, "isAtEnd", true);
+    set$(ctx, "isNearEnd", true);
+    set$(ctx, "isWithinMaintainScrollAtEndThreshold", true);
+    return;
+  }
   if (contentSize > 0 && queuedInitialLayout) {
     const insetEnd = getContentInsetEnd(ctx);
     const distanceFromEnd = contentSize - scroll - scrollLength - insetEnd;
@@ -767,7 +769,7 @@ function checkAtBottom(ctx, allowedEdge, allowGateCreatedInCurrentCheck) {
     set$(
       ctx,
       "isWithinMaintainScrollAtEndThreshold",
-      isContentLess || distanceFromEnd <= maintainScrollAtEndThreshold * scrollLength
+      isContentLess || distanceFromEnd <= maintainScrollAtEndThreshold * scrollLength || state.pendingMaintainScrollAtEnd || maintainingScrollAtEnd === "animated" || maintainingScrollAtEnd === "instant"
     );
     const shouldSkipThresholdChecks = hasActiveInitialScroll(state) || maintainingScrollAtEnd;
     if (!shouldSkipThresholdChecks) {
@@ -1026,6 +1028,7 @@ function supersedeInitialScroll(ctx) {
 function finishInitialScroll(ctx, options) {
   var _a3, _b, _c;
   const state = ctx.state;
+  const freshDataTransitionEpoch = state.freshDataTransitionEpoch;
   if ((options == null ? void 0 : options.resolvedOffset) !== void 0) {
     syncInitialScrollOffset(state, options.resolvedOffset);
   } else if ((options == null ? void 0 : options.syncObservedOffset) && ((_a3 = state.initialScrollSession) == null ? void 0 : _a3.kind) === "offset") {
@@ -1035,9 +1038,13 @@ function finishInitialScroll(ctx, options) {
     }
   }
   const complete = () => {
-    var _a4, _b2, _c2, _d, _e;
-    const shouldReleaseDeferredPublicOnScroll = ((_a4 = state.initialScrollSession) == null ? void 0 : _a4.kind) === "bootstrap";
-    const finalScrollOffset = (_d = (_c2 = (_b2 = options == null ? void 0 : options.resolvedOffset) != null ? _b2 : state.scrollPending) != null ? _c2 : state.scroll) != null ? _d : 0;
+    var _a4, _b2, _c2, _d, _e, _f;
+    if (freshDataTransitionEpoch !== state.freshDataTransitionEpoch) {
+      (_a4 = options == null ? void 0 : options.onFinished) == null ? void 0 : _a4.call(options);
+      return;
+    }
+    const shouldReleaseDeferredPublicOnScroll = ((_b2 = state.initialScrollSession) == null ? void 0 : _b2.kind) === "bootstrap";
+    const finalScrollOffset = (_e = (_d = (_c2 = options == null ? void 0 : options.resolvedOffset) != null ? _c2 : state.scrollPending) != null ? _d : state.scroll) != null ? _e : 0;
     initialScrollWatchdog.clear(state);
     if ((options == null ? void 0 : options.preserveTarget) && state.initialScroll) {
       state.clearPreservedInitialScrollOnNextFinish = void 0;
@@ -1066,7 +1073,7 @@ function finishInitialScroll(ctx, options) {
     if (shouldReleaseDeferredPublicOnScroll) {
       releaseDeferredPublicOnScroll(ctx, finalScrollOffset);
     }
-    (_e = options == null ? void 0 : options.onFinished) == null ? void 0 : _e.call(options);
+    (_f = options == null ? void 0 : options.onFinished) == null ? void 0 : _f.call(options);
   };
   if (options == null ? void 0 : options.waitForCompletionFrame) {
     requestAnimationFrame(complete);
@@ -1219,10 +1226,22 @@ function getAlignItemsAtEndPadding(ctx) {
   return shouldPad ? Math.max(0, state.scrollLength - getRawContentLength(ctx) - getContentInsetEnd(ctx)) : 0;
 }
 function updateContentMetricsState(ctx) {
+  var _a3;
+  const { state } = ctx;
   const previousPadding = peek$(ctx, "alignItemsAtEndPadding") || 0;
   const nextPadding = getAlignItemsAtEndPadding(ctx);
   if (previousPadding !== nextPadding) {
-    set$(ctx, "alignItemsAtEndPadding", nextPadding);
+    const isAnimatedMaintainActive = state.maintainingScrollAtEnd === "pending-animated" || state.maintainingScrollAtEnd === "animated";
+    const isMaintainExpected = state.didContainersLayout && ((_a3 = state.props.maintainScrollAtEnd) == null ? void 0 : _a3.animated) && (isAnimatedMaintainActive || previousPadding > nextPadding && peek$(ctx, "isWithinMaintainScrollAtEndThreshold"));
+    if (isMaintainExpected && !isAnimatedMaintainActive && !state.pendingMaintainScrollAtEnd) {
+      state.scheduledWork.microtask(() => {
+        if (!state.maintainingScrollAtEnd && !state.pendingMaintainScrollAtEnd) {
+          set$(ctx, "alignItemsAtEndPadding", getAlignItemsAtEndPadding(ctx));
+        }
+      }, "alignItemsAtEndPaddingFallback");
+    } else if (!isMaintainExpected) {
+      set$(ctx, "alignItemsAtEndPadding", nextPadding);
+    }
   }
 }
 
@@ -1365,7 +1384,7 @@ function getItemSize(ctx, key, index, data, useAverageSize, preferCachedSize, no
   const {
     sizes,
     averageSizes,
-    props: { estimatedItemSize, getEstimatedItemSize, getItemType },
+    props: { estimatedItemSize, getItemType },
     scrollingTo
   } = state;
   const sizeKnown = state.sizesKnown.get(key);
@@ -1379,15 +1398,9 @@ function getItemSize(ctx, key, index, data, useAverageSize, preferCachedSize, no
     setSize(ctx, key, size, notifyTotalSize);
     return size;
   }
-  const itemType = (_b = resolved == null ? void 0 : resolved.itemType) != null ? _b : getItemType ? (_a3 = getItemType(data, index)) != null ? _a3 : "" : "";
+  (_b = resolved == null ? void 0 : resolved.itemType) != null ? _b : getItemType ? (_a3 = getItemType(data, index)) != null ? _a3 : "" : "";
   if (size === void 0 && renderedSize !== void 0) {
     return renderedSize;
-  }
-  if (size === void 0 && getEstimatedItemSize) {
-    const estimatedSize = getEstimatedItemSize(data, index, itemType);
-    if (estimatedSize !== void 0) {
-      size = estimatedSize + ctx.scrollAxisGap;
-    }
   }
   if (size === void 0) {
     size = estimatedItemSize + ctx.scrollAxisGap;
@@ -1452,13 +1465,42 @@ function materializeFixedLayoutStoreRangeAtOffsets(ctx, startOffset, endOffset) 
   return { didChange, range };
 }
 
+// src/core/rowSpanMutations.ts
+function moveSpans(spans, from, to, count) {
+  const moved = spans.slice(from, from + count);
+  if (to < from) {
+    spans.copyWithin(to + count, to, from);
+  } else {
+    spans.copyWithin(from, from + count, to + count);
+  }
+  for (let index = 0; index < count; index++) {
+    spans[to + index] = moved[index];
+  }
+}
+function spliceSpans(spans, index, deleteCount, insertCount, insertedSpan) {
+  const previousLength = spans.length;
+  const nextLength = previousLength - deleteCount + insertCount;
+  if (insertCount > deleteCount) {
+    spans.length = nextLength;
+    spans.copyWithin(index + insertCount, index + deleteCount, previousLength);
+  } else if (insertCount < deleteCount) {
+    spans.copyWithin(index + insertCount, index + deleteCount, previousLength);
+    spans.length = nextLength;
+  }
+  spans.fill(insertedSpan, index, index + insertCount);
+}
+
 // src/core/LayoutStoreRuntime.ts
 var LayoutStoreRuntime = class {
   constructor(store, estimatedSize) {
+    this.didFlushInitialEstimate = false;
+    this.pendingEstimateMeasurements = 0;
     this.propEstimatedSize = estimatedSize;
     this.store = store;
   }
   resetTransientState() {
+    this.didFlushInitialEstimate = false;
+    this.pendingEstimateMeasurements = 0;
     this.positionListenerOffsets = void 0;
   }
   clearRowSpanCache() {
@@ -1476,7 +1518,7 @@ var LayoutStoreRuntime = class {
     if (spans) {
       for (const operation of operations) {
         if (operation.type === "splice") {
-          spliceUnknownSpans(spans, operation.index, operation.deleteCount, operation.insertCount);
+          spliceSpans(spans, operation.index, operation.deleteCount, operation.insertCount, void 0);
         } else if (operation.type === "move" && operation.count > 0 && operation.from !== operation.to) {
           moveSpans(spans, operation.from, operation.to, operation.count);
         }
@@ -1485,48 +1527,8 @@ var LayoutStoreRuntime = class {
     return spans;
   }
 };
-function moveSpans(spans, from, to, count) {
-  const moved = spans.slice(from, from + count);
-  if (to < from) {
-    spans.copyWithin(to + count, to, from);
-  } else {
-    spans.copyWithin(from, from + count, to + count);
-  }
-  for (let index = 0; index < count; index++) {
-    spans[to + index] = moved[index];
-  }
-}
-function spliceUnknownSpans(spans, index, deleteCount, insertCount) {
-  const previousLength = spans.length;
-  const nextLength = previousLength - deleteCount + insertCount;
-  if (insertCount > deleteCount) {
-    spans.length = nextLength;
-    spans.copyWithin(index + insertCount, index + deleteCount, previousLength);
-  } else if (insertCount < deleteCount) {
-    spans.copyWithin(index + insertCount, index + deleteCount, previousLength);
-    spans.length = nextLength;
-  }
-  spans.fill(void 0, index, index + insertCount);
-}
 function areRowSpanCacheInputsEqual(prev, next) {
   return prev.data === next.data && Object.is(prev.dataKey, next.dataKey) && Object.is(prev.dataVersion, next.dataVersion) && Object.is(prev.extraData, next.extraData) && prev.numColumns === next.numColumns && prev.overrideItemLayout === next.overrideItemLayout;
-}
-
-// src/core/LayoutStore.ts
-function validateKnownSizeEntryOrder(entries) {
-  let previousIndex = -1;
-  for (const entry of entries) {
-    if (entry.index <= previousIndex) {
-      if (IS_DEV) {
-        console.error(
-          `[legend-list] replaceKnownSizeEntries requires strictly increasing, unique indexes. Received ${entry.index} after ${previousIndex}.`
-        );
-      }
-      return false;
-    }
-    previousIndex = entry.index;
-  }
-  return true;
 }
 
 // src/core/PrefixLayoutStore.ts
@@ -1612,6 +1614,10 @@ var SparseSequenceLayoutStore = class {
     const measuredCount = this.getMeasuredCount();
     return measuredCount > 0 ? getMeasuredSizeTotal(this.root) / measuredCount : void 0;
   }
+  getPositiveMeasuredAverageSize() {
+    const count = getPositiveMeasuredCount(this.root);
+    return count > 0 ? getMeasuredSizeTotal(this.root) / count : void 0;
+  }
   getMeasuredCount() {
     return getMeasuredCount(this.root);
   }
@@ -1673,37 +1679,51 @@ var SparseSequenceLayoutStore = class {
     const end = Math.min(this.length - 1, Math.trunc(endIndex));
     if (start <= end) {
       let offset = this.getOffset(start);
-      for (let index = start; index <= end; index++) {
-        const size = this.getSize(index);
-        callback(index, offset, size);
-        offset += size;
-      }
+      const visit = (node, baseIndex) => {
+        if (!node) return;
+        const pieceStart = baseIndex + getLogicalCount(node.left);
+        const pieceEnd = pieceStart + node.piece.count;
+        if (start < pieceStart) visit(node.left, baseIndex);
+        const first = Math.max(start, pieceStart);
+        const last = Math.min(end, pieceEnd - 1);
+        for (let index = first; index <= last; index++) {
+          const size = node.piece.type === PIECE_KNOWN ? node.piece.sizes[index - pieceStart] : this.estimatedSize;
+          callback(index, offset, size);
+          offset += size;
+        }
+        if (end >= pieceEnd) visit(node.right, pieceEnd);
+      };
+      visit(this.root, 0);
     }
   }
   replaceKnownSizeEntries(entries) {
+    const byIndex = /* @__PURE__ */ new Map();
     for (const entry of entries) {
       this.assertIndex(entry.index);
       normalizeSize(entry.size);
+      const existing = byIndex.get(entry.index);
+      if (entry.type === "measured") {
+        byIndex.set(entry.index, { kind: SIZE_MEASURED, size: entry.size });
+      } else if ((existing == null ? void 0 : existing.kind) !== SIZE_MEASURED) {
+        byIndex.set(entry.index, { kind: SIZE_CACHED, size: entry.size });
+      }
     }
-    if (!validateKnownSizeEntryOrder(entries)) {
-      return false;
-    }
+    const sortedEntries = Array.from(byIndex, ([index, entry]) => ({ index, ...entry })).sort(
+      (first, second) => first.index - second.index
+    );
     let root;
     let cursor = 0;
     let entryIndex = 0;
-    while (entryIndex < entries.length) {
-      const first = entries[entryIndex];
+    while (entryIndex < sortedEntries.length) {
+      const first = sortedEntries[entryIndex];
       if (first.index > cursor) {
         root = joinTrees(root, createUnknownNode(first.index - cursor));
         cursor = first.index;
       }
       const blockEntries = [];
-      while (entryIndex < entries.length && entries[entryIndex].index === cursor && blockEntries.length < KNOWN_BLOCK_CAPACITY) {
-        const entry = entries[entryIndex];
-        blockEntries.push({
-          kind: entry.type === "measured" ? SIZE_MEASURED : SIZE_CACHED,
-          size: entry.size
-        });
+      while (entryIndex < sortedEntries.length && sortedEntries[entryIndex].index === cursor && blockEntries.length < KNOWN_BLOCK_CAPACITY) {
+        const entry = sortedEntries[entryIndex];
+        blockEntries.push({ kind: entry.kind, size: entry.size });
         cursor++;
         entryIndex++;
       }
@@ -1713,7 +1733,6 @@ var SparseSequenceLayoutStore = class {
       root = joinTrees(root, createUnknownNode(this.length - cursor));
     }
     this.root = root;
-    return true;
   }
   invalidateRange(index, count) {
     assertMutationRange(this.length, index, count, "invalidateRange");
@@ -1755,7 +1774,7 @@ var SparseSequenceLayoutStore = class {
     var _a3;
     this.assertIndex(index);
     const normalizedSize = normalizeSize(size);
-    const located = findPieceAtIndex(this.root, index);
+    const located = findPieceAtIndexWithPath(this.root, index);
     const existingPiece = located == null ? void 0 : located.node.piece;
     const existing = located && (existingPiece == null ? void 0 : existingPiece.type) === PIECE_KNOWN ? {
       kind: existingPiece.kinds[located.offset],
@@ -1770,7 +1789,8 @@ var SparseSequenceLayoutStore = class {
         existingPiece.knownSizeTotal += normalizedSize - existing.size;
         existingPiece.measuredCount += existing.kind === SIZE_MEASURED ? 0 : 1;
         existingPiece.measuredSizeTotal += normalizedSize - previousMeasuredSize;
-        updatePathToIndex(this.root, index);
+        existingPiece.positiveMeasuredCount += Number(normalizedSize > 0) - Number(previousMeasuredSize > 0);
+        updatePaths([located.path]);
       }
     } else if (!this.tryAppendMeasuredToPreviousBlock(index, normalizedSize, located)) {
       const [before, fromIndex] = splitTree(this.root, index);
@@ -1803,6 +1823,7 @@ var SparseSequenceLayoutStore = class {
         previousPiece.count++;
         previousPiece.knownSizeTotal += size;
         previousPiece.measuredCount++;
+        previousPiece.positiveMeasuredCount += Number(size > 0);
         previousPiece.measuredSizeTotal += size;
         currentPiece.count--;
         updatePaths([previous.path, current.path]);
@@ -1838,6 +1859,7 @@ function createNode(piece) {
     measuredCount: 0,
     measuredSizeTotal: 0,
     piece,
+    positiveMeasuredCount: 0,
     priority: getNodePriority(nextNodeId++)
   });
 }
@@ -1847,6 +1869,7 @@ function updateNode(node) {
   node.knownCount = getKnownCount(node.left) + pieceStats.knownCount + getKnownCount(node.right);
   node.knownSizeTotal = getKnownSizeTotal(node.left) + pieceStats.knownSizeTotal + getKnownSizeTotal(node.right);
   node.measuredCount = getMeasuredCount(node.left) + pieceStats.measuredCount + getMeasuredCount(node.right);
+  node.positiveMeasuredCount = getPositiveMeasuredCount(node.left) + pieceStats.positiveMeasuredCount + getPositiveMeasuredCount(node.right);
   node.measuredSizeTotal = getMeasuredSizeTotal(node.left) + pieceStats.measuredSizeTotal + getMeasuredSizeTotal(node.right);
   return node;
 }
@@ -1855,8 +1878,9 @@ function getPieceStats(piece) {
     knownCount: piece.count,
     knownSizeTotal: piece.knownSizeTotal,
     measuredCount: piece.measuredCount,
-    measuredSizeTotal: piece.measuredSizeTotal
-  } : { knownCount: 0, knownSizeTotal: 0, measuredCount: 0, measuredSizeTotal: 0 };
+    measuredSizeTotal: piece.measuredSizeTotal,
+    positiveMeasuredCount: piece.positiveMeasuredCount
+  } : { knownCount: 0, knownSizeTotal: 0, measuredCount: 0, measuredSizeTotal: 0, positiveMeasuredCount: 0 };
 }
 function getLogicalCount(node) {
   var _a3;
@@ -1873,6 +1897,10 @@ function getKnownSizeTotal(node) {
 function getMeasuredCount(node) {
   var _a3;
   return (_a3 = node == null ? void 0 : node.measuredCount) != null ? _a3 : 0;
+}
+function getPositiveMeasuredCount(node) {
+  var _a3;
+  return (_a3 = node == null ? void 0 : node.positiveMeasuredCount) != null ? _a3 : 0;
 }
 function getMeasuredSizeTotal(node) {
   var _a3;
@@ -1899,7 +1927,20 @@ function getPiecePrefixSize(piece, count, estimatedSize) {
   return size;
 }
 function findPieceAtIndex(root, index) {
-  return findPieceAtIndexWithPath(root, index);
+  let node = root;
+  let remaining = index;
+  while (node) {
+    const leftCount = getLogicalCount(node.left);
+    if (remaining < leftCount) {
+      node = node.left;
+    } else if (remaining < leftCount + node.piece.count) {
+      return { node, offset: remaining - leftCount };
+    } else {
+      remaining -= leftCount + node.piece.count;
+      node = node.right;
+    }
+  }
+  return void 0;
 }
 function findPieceAtIndexWithPath(root, index) {
   let node = root;
@@ -1920,12 +1961,6 @@ function findPieceAtIndexWithPath(root, index) {
     }
   }
   return result;
-}
-function updatePathToIndex(root, index) {
-  const located = findPieceAtIndexWithPath(root, index);
-  if (located) {
-    updatePaths([located.path]);
-  }
 }
 function updatePaths(paths) {
   for (const path of paths) {
@@ -2046,6 +2081,7 @@ function mergePieces(left, right) {
       knownSizeTotal: left.knownSizeTotal + right.knownSizeTotal,
       measuredCount: left.measuredCount + right.measuredCount,
       measuredSizeTotal: left.measuredSizeTotal + right.measuredSizeTotal,
+      positiveMeasuredCount: left.positiveMeasuredCount + right.positiveMeasuredCount,
       sizes,
       type: PIECE_KNOWN
     };
@@ -2055,12 +2091,14 @@ function mergePieces(left, right) {
 function createKnownPiece(sizes, kinds, count) {
   let knownSizeTotal = 0;
   let measuredCount = 0;
+  let positiveMeasuredCount = 0;
   let measuredSizeTotal = 0;
   for (let index = 0; index < count; index++) {
     const size = sizes[index];
     knownSizeTotal += size;
     if (kinds[index] === SIZE_MEASURED) {
       measuredCount++;
+      positiveMeasuredCount += Number(size > 0);
       measuredSizeTotal += size;
     }
   }
@@ -2070,6 +2108,7 @@ function createKnownPiece(sizes, kinds, count) {
     knownSizeTotal,
     measuredCount,
     measuredSizeTotal,
+    positiveMeasuredCount,
     sizes,
     type: PIECE_KNOWN
   };
@@ -2160,6 +2199,7 @@ var RowLayoutStore = class {
   constructor(options) {
     this.knownSizes = /* @__PURE__ */ new Map();
     this.measuredCount = 0;
+    this.positiveMeasuredCount = 0;
     this.measuredSizeTotal = 0;
     this.lengthValue = normalizeLength2(options.length);
     this.estimatedSize = normalizeSize2(options.estimatedSize);
@@ -2174,6 +2214,7 @@ var RowLayoutStore = class {
   clearKnownSizes() {
     this.knownSizes.clear();
     this.measuredCount = 0;
+    this.positiveMeasuredCount = 0;
     this.measuredSizeTotal = 0;
     this.rowLayout = new PrefixLayoutStore(this.getRowCount(), this.estimatedSize);
   }
@@ -2225,6 +2266,9 @@ var RowLayoutStore = class {
   getMeasuredAverageSize() {
     return this.measuredCount > 0 ? this.measuredSizeTotal / this.measuredCount : void 0;
   }
+  getPositiveMeasuredAverageSize() {
+    return this.positiveMeasuredCount > 0 ? this.measuredSizeTotal / this.positiveMeasuredCount : void 0;
+  }
   getMeasuredCount() {
     return this.measuredCount;
   }
@@ -2239,30 +2283,50 @@ var RowLayoutStore = class {
       this.assertIndex(entry.index);
       normalizeSize2(entry.size);
     }
-    if (!validateKnownSizeEntryOrder(entries)) {
-      return false;
-    }
     const knownSizes = /* @__PURE__ */ new Map();
     for (const entry of entries) {
-      knownSizes.set(entry.index, {
-        kind: entry.type === "measured" ? SIZE_MEASURED2 : SIZE_CACHED2,
-        size: entry.size
-      });
+      const existing = knownSizes.get(entry.index);
+      if (entry.type === "measured") {
+        knownSizes.set(entry.index, { kind: SIZE_MEASURED2, size: entry.size });
+      } else if ((existing == null ? void 0 : existing.kind) !== SIZE_MEASURED2) {
+        knownSizes.set(entry.index, { kind: SIZE_CACHED2, size: entry.size });
+      }
     }
     this.knownSizes = knownSizes;
     this.rebuildRowsAndTotals();
-    return true;
   }
   invalidateRange(index, count) {
     assertMutationRange2(this.length, index, count, "invalidateRange");
-    if (count > 0) {
-      const end = index + count;
+    const end = index + count;
+    const changedRows = /* @__PURE__ */ new Set();
+    const invalidate = (knownIndex) => {
+      const entry = this.knownSizes.get(knownIndex);
+      if (entry) {
+        this.knownSizes.delete(knownIndex);
+        if (entry.kind === SIZE_MEASURED2) {
+          this.measuredCount--;
+          this.positiveMeasuredCount -= Number(entry.size > 0);
+          this.measuredSizeTotal -= entry.size;
+        }
+        changedRows.add(this.getRowIndex(knownIndex));
+      }
+    };
+    if (count < this.knownSizes.size) {
+      for (let knownIndex = index; knownIndex < end; knownIndex++) {
+        invalidate(knownIndex);
+      }
+    } else {
       for (const knownIndex of this.knownSizes.keys()) {
         if (knownIndex >= index && knownIndex < end) {
-          this.knownSizes.delete(knownIndex);
+          invalidate(knownIndex);
         }
       }
-      this.rebuildRowsAndTotals();
+    }
+    if (this.measuredCount === 0) {
+      this.measuredSizeTotal = 0;
+    }
+    for (const rowIndex of changedRows) {
+      this.syncRowHeight(rowIndex);
     }
   }
   move(from, to, count) {
@@ -2275,8 +2339,7 @@ var RowLayoutStore = class {
       this.knownSizes = knownSizes;
       const spans = this.getMutableSpans();
       if (spans) {
-        const moved = spans.splice(from, count);
-        spans.splice(to, 0, ...moved);
+        moveSpans(spans, from, to, count);
         this.spanInput = spans;
         this.spanTopology = createSpanTopology(this.length, this.numColumns, spans);
       }
@@ -2323,7 +2386,7 @@ var RowLayoutStore = class {
       this.knownSizes = knownSizes;
       const spans = this.getMutableSpans();
       if (spans) {
-        spans.splice(index, deleteCount, ...new Array(insertCount).fill(1));
+        spliceSpans(spans, index, deleteCount, insertCount, 1);
         this.spanInput = spans;
       }
       this.lengthValue += insertCount - deleteCount;
@@ -2353,6 +2416,7 @@ var RowLayoutStore = class {
       this.measuredCount++;
       this.measuredSizeTotal += normalizedSize;
     }
+    this.positiveMeasuredCount += Number(normalizedSize > 0) - Number((previous == null ? void 0 : previous.kind) === SIZE_MEASURED2 && previous.size > 0);
     this.knownSizes.set(index, { kind: SIZE_MEASURED2, size: normalizedSize });
     this.syncRowHeight(rowIndex);
     return previousRowHeight !== this.rowLayout.getSize(rowIndex);
@@ -2397,6 +2461,7 @@ var RowLayoutStore = class {
   }
   rebuildRowsAndTotals() {
     this.measuredCount = 0;
+    this.positiveMeasuredCount = 0;
     this.measuredSizeTotal = 0;
     this.rowLayout = new PrefixLayoutStore(this.getRowCount(), this.estimatedSize);
     const knownRows = /* @__PURE__ */ new Set();
@@ -2404,6 +2469,7 @@ var RowLayoutStore = class {
       knownRows.add(this.getRowIndex(index));
       if (entry.kind === SIZE_MEASURED2) {
         this.measuredCount++;
+        this.positiveMeasuredCount += Number(entry.size > 0);
         this.measuredSizeTotal += entry.size;
       }
     }
@@ -2495,7 +2561,7 @@ function createSpanTopology(length, numColumns, inputSpans) {
 function updateSpanTopologyTail(topology, length, numColumns, inputSpans, invalidationIndex) {
   var _a3, _b;
   const boundedIndex = Math.max(0, Math.min(length - 1, invalidationIndex));
-  const firstRowIndex = (_a3 = topology.itemRowIndexes[boundedIndex]) != null ? _a3 : 0;
+  const firstRowIndex = Math.max(0, ((_a3 = topology.itemRowIndexes[boundedIndex]) != null ? _a3 : 0) - 1);
   const startIndex = (_b = topology.rowStartIndexes[firstRowIndex]) != null ? _b : 0;
   topology.rowStartIndexes.length = firstRowIndex;
   topology.rowEndIndexes.length = firstRowIndex;
@@ -2546,581 +2612,111 @@ function normalizeSpan(span, numColumns) {
   return normalizedSpan;
 }
 
-// src/utils/updateSnapToOffsets.ts
-function updateSnapToOffsets(ctx) {
-  const state = ctx.state;
-  const {
-    props: { snapToIndices }
-  } = state;
-  const contentSize = state.props.horizontal ? getContentSize(ctx) : void 0;
-  const snapToOffsets = Array(snapToIndices.length);
-  for (let i = 0; i < snapToIndices.length; i++) {
-    const index = snapToIndices[i];
-    getId(state, index);
-    const logicalOffset = getLayoutOffset(ctx, index);
-    snapToOffsets[i] = logicalOffset === void 0 ? void 0 : toNativeHorizontalOffset(state, logicalOffset, contentSize);
+// src/utils/getScrollVelocity.ts
+var MAX_SCROLL_VELOCITY_WINDOW_MS = 1e3;
+var SCROLL_VELOCITY_HALF_LIFE_MS = 200;
+var getScrollVelocity = (state) => {
+  const { scrollHistory } = state;
+  const newestIndex = scrollHistory.length - 1;
+  if (newestIndex < 1) {
+    return 0;
   }
-  set$(ctx, "snapToOffsets", snapToOffsets);
-}
-
-// src/core/layoutStoreLifecycle.ts
-function clearLayoutStoreKnownSizes(ctx) {
-  const runtime = ctx.state.layoutStoreRuntime;
-  runtime == null ? void 0 : runtime.store.clearKnownSizes();
-  resetLayoutStoreRuntimeState(ctx.state);
-}
-function replaceLayoutStoreKnownSizeEntries(ctx, entries) {
-  const store = syncLayoutStoreStructure(ctx);
-  const runtime = ctx.state.layoutStoreRuntime;
-  if (!store || !runtime) {
-    return false;
+  const newest = scrollHistory[newestIndex];
+  if (Date.now() - newest.time > MAX_SCROLL_VELOCITY_WINDOW_MS) {
+    return 0;
   }
-  if (!store.replaceKnownSizeEntries(entries)) {
-    return false;
-  }
-  store.setEstimatedSize(runtime.propEstimatedSize);
-  runtime.resetTransientState();
-  ctx.state.pendingTotalSize = void 0;
-  syncLayoutStoreState(ctx);
-  return true;
-}
-function getActiveLayoutStoreRuntime(ctx) {
-  return ctx.state.layoutStoreRuntime;
-}
-function getActiveLayoutStore(ctx) {
-  var _a3;
-  return (_a3 = getActiveLayoutStoreRuntime(ctx)) == null ? void 0 : _a3.store;
-}
-function getSparseIdCacheSnapshot(state) {
-  const snapshot = /* @__PURE__ */ new Map();
-  for (const key of Object.keys(state.idCache)) {
-    const index = Number(key);
-    const id = state.idCache[index];
-    if (Number.isInteger(index) && id !== void 0) {
-      snapshot.set(index, id);
-    }
-  }
-  return snapshot;
-}
-function materializeLayoutStoreRange(ctx, startIndex, endIndex) {
-  const state = ctx.state;
-  const runtime = getActiveLayoutStoreRuntime(ctx);
-  const store = runtime == null ? void 0 : runtime.store;
-  let range;
-  if (store) {
-    const start = Math.max(0, Math.trunc(startIndex));
-    const end = Math.min(store.length - 1, Math.trunc(endIndex));
-    if (start <= end) {
-      range = { end, start };
-      store.forEachLayout(start, end, (index, offset) => {
-        var _a3;
-        const id = (_a3 = state.idCache[index]) != null ? _a3 : getId(state, index);
-        if (ctx.positionListeners.has(id)) {
-          notifyLayoutStorePosition(ctx, runtime, id, offset);
-        }
-        state.indexByKey.set(id, index);
-      });
-    }
-  }
-  return range;
-}
-function applyLayoutStoreSeed(store, seed) {
-  store.replaceKnownSizeEntries(seed.sizeEntries);
-}
-function resetLayoutStoreRuntimeState(state) {
-  var _a3;
-  (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.resetTransientState();
-}
-function setLayoutStoreMeasuredSize(ctx, index, size) {
-  const store = getActiveLayoutStore(ctx);
-  let didSet = false;
-  if (store == null ? void 0 : store.hasIndex(index)) {
-    const didChange = store.setMeasuredSize(index, size);
-    if (didChange) {
-      syncLayoutStoreState(ctx);
-    }
-    didSet = true;
-  }
-  return didSet;
-}
-function reconcileLayoutStoreDataChange(ctx, options) {
-  var _a3;
-  const state = ctx.state;
-  const store = getActiveLayoutStore(ctx);
-  let didReconcile = false;
-  if (store) {
-    const previousIdCache = (_a3 = options == null ? void 0 : options.previousIdCache) != null ? _a3 : getSparseIdCacheSnapshot(state);
-    state.indexByKey.clear();
-    state.idCache.length = 0;
-    resetLayoutStoreRuntimeState(state);
-    const seed = getLayoutStoreSeed(ctx, {
-      didKeyExtractorChange: options == null ? void 0 : options.didKeyExtractorChange,
-      mode: "reconcile",
-      previousIdCache
-    });
-    didReconcile = !seed.hasDuplicateKey;
-    if (didReconcile) {
-      applyLayoutStoreSeed(store, seed);
-    }
-  }
-  return didReconcile;
-}
-function syncActiveRowLayoutStoreSpans(ctx) {
-  const state = ctx.state;
-  const runtime = getActiveLayoutStoreRuntime(ctx);
-  const store = runtime == null ? void 0 : runtime.store;
-  const { numColumns, overrideItemLayout } = state.props;
-  const dataLength = getDataLength(state);
-  let didSync = false;
-  if (runtime && store instanceof RowLayoutStore && overrideItemLayout && numColumns > 1) {
-    const extraData = peek$(ctx, "extraData");
-    const cacheInput = getRowSpanCacheInput(state, extraData);
-    const cachedSpans = runtime.getCachedRowSpans(cacheInput);
-    const spanInvalidationIndex = state.dataSourceSpanInvalidationIndex;
-    if (!cachedSpans || spanInvalidationIndex !== void 0) {
-      const layoutConfig = { span: 1 };
-      const spans = cachedSpans != null ? cachedSpans : new Array(dataLength);
-      const startIndex = cachedSpans ? Math.max(0, Math.min(spanInvalidationIndex != null ? spanInvalidationIndex : 0, dataLength)) : 0;
-      for (let index = startIndex; index < dataLength; index++) {
-        layoutConfig.span = 1;
-        const item = getDataItem(state, index);
-        if (item !== void 0) {
-          overrideItemLayout(layoutConfig, item, index, numColumns, extraData);
-        }
-        spans[index] = layoutConfig.span;
-      }
-      store.resize(dataLength, spans, numColumns, spanInvalidationIndex);
-      runtime.setCachedRowSpans(cacheInput, spans);
-      state.dataSourceSpanInvalidationIndex = void 0;
-      didSync = true;
-    }
-  } else {
-    runtime == null ? void 0 : runtime.clearRowSpanCache();
-  }
-  return didSync;
-}
-function syncLayoutStoreStructure(ctx) {
-  var _a3;
-  const state = ctx.state;
-  const estimatedSize = getLayoutStorePropEstimatedSize(ctx);
-  const dataLength = getDataLength(state);
-  const nextStoreKind = getLayoutStoreKind(state);
-  let runtime = state.layoutStoreRuntime;
-  if (runtime && getLayoutStoreKindForStore(runtime.store) === nextStoreKind) {
-    if (runtime.store instanceof RowLayoutStore) {
-      if (!state.dataSourceMutationApplied || state.didColumnsChange) {
-        runtime.store.resize(dataLength, getReusableRowSpans(ctx, runtime), state.props.numColumns);
-      }
-    } else {
-      runtime.store.resize(dataLength);
-    }
-    if (estimatedSize !== runtime.propEstimatedSize) {
-      runtime.store.setEstimatedSize(estimatedSize);
-    }
-  } else {
-    const store = nextStoreKind === "row" ? new RowLayoutStore({
-      estimatedSize,
-      length: dataLength,
-      numColumns: state.props.numColumns
-    }) : new PrefixLayoutStore(dataLength, estimatedSize);
-    runtime = new LayoutStoreRuntime(store, estimatedSize);
-    state.layoutStoreRuntime = runtime;
-    if (canSeedLayoutStore(state)) {
-      const seed = getLayoutStoreSeed(ctx);
-      applyLayoutStoreSeed(runtime.store, seed);
-    }
-  }
-  runtime.propEstimatedSize = estimatedSize;
-  return (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.store;
-}
-function getRowSpanCacheInput(state, extraData) {
-  const { dataKey, dataVersion, numColumns, overrideItemLayout } = state.props;
-  return {
-    data: getIndexedData(state),
-    dataKey,
-    dataVersion,
-    extraData,
-    numColumns,
-    overrideItemLayout
-  };
-}
-function canSeedLayoutStore(state) {
-  return state.sizesKnown.size > 0 || state.sizes.size > 0;
-}
-function getReusableRowSpans(ctx, runtime) {
-  const state = ctx.state;
-  const { numColumns, overrideItemLayout } = state.props;
-  let spans;
-  if (overrideItemLayout && numColumns > 1) {
-    spans = runtime.getCachedRowSpans(getRowSpanCacheInput(state, peek$(ctx, "extraData")));
-  } else {
-    runtime.clearRowSpanCache();
-  }
-  return spans;
-}
-function getLayoutStoreKind(state) {
-  return state.props.numColumns > 1 ? "row" : "prefix";
-}
-function getLayoutStoreKindForStore(store) {
-  return store instanceof RowLayoutStore ? "row" : "prefix";
-}
-function rebuildLayoutStoreExact(ctx) {
-  var _a3;
-  const state = ctx.state;
-  const store = syncLayoutStoreStructure(ctx);
-  if (store) {
-    const seed = getLayoutStoreSeed(ctx);
-    applyLayoutStoreSeed(store, seed);
-  }
-  return (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.store;
-}
-function syncLayoutStoreState(ctx) {
-  const runtime = getActiveLayoutStoreRuntime(ctx);
-  let didSync = false;
-  if (runtime) {
-    const store = runtime.store;
-    addTotalSize(ctx, null, store.getTotalSize());
-    if (ctx.state.props.snapToIndices) {
-      updateSnapToOffsets(ctx);
-    }
-    syncLayoutStorePositionListeners(ctx, runtime);
-    didSync = true;
-  }
-  return didSync;
-}
-function syncLayoutStorePositionListeners(ctx, runtime) {
-  const state = ctx.state;
-  const store = runtime.store;
-  if (ctx.positionListeners.size > 0) {
-    for (const [key] of ctx.positionListeners) {
-      const index = state.indexByKey.get(key);
-      if (store.hasIndex(index)) {
-        notifyLayoutStorePosition(ctx, runtime, key, store.getOffset(index));
-      }
-    }
-  }
-}
-function notifyLayoutStorePosition(ctx, runtime, key, offset) {
-  let offsets = runtime.positionListenerOffsets;
-  if (!offsets) {
-    offsets = /* @__PURE__ */ new Map();
-    runtime.positionListenerOffsets = offsets;
-  }
-  if (offsets.get(key) !== offset) {
-    offsets.set(key, offset);
-    notifyPosition$(ctx, key, offset);
-  }
-}
-function getLayoutStorePropEstimatedSize(ctx) {
-  var _a3;
-  return ((_a3 = ctx.state.props.estimatedItemSize) != null ? _a3 : 100) + ctx.scrollAxisGap;
-}
-function getLayoutStoreSeed(ctx, options = { mode: "seed" }) {
-  var _a3, _b, _c;
-  const state = ctx.state;
-  const { data } = state.props;
-  const dataLength = getDataLength(state);
-  const sizeEntries = [];
-  const canSeedKnownSizes = state.sizesKnown.size > 0;
-  const canSeedCachedSizes = state.sizes.size > 0;
-  if (options.mode === "seed" && !canSeedKnownSizes && !canSeedCachedSizes) {
-    return { sizeEntries };
-  }
-  const previousData = state.previousData;
-  const statePendingDataComparison = state.pendingDataComparison;
-  const pendingDataComparison = statePendingDataComparison && statePendingDataComparison.previousData === previousData && statePendingDataComparison.nextData === data ? statePendingDataComparison : void 0;
-  let hasDuplicateKey = false;
-  const dataLengthDelta = previousData ? dataLength - previousData.length : 0;
-  const materializedIndices = options.mode === "reconcile" ? (_a3 = options.previousIdCache) == null ? void 0 : _a3.keys() : getSparseIdCacheSnapshot(state).keys();
-  for (const index of materializedIndices != null ? materializedIndices : []) {
-    const isIndexInRange = index >= 0 && index < dataLength;
-    if (!isIndexInRange && options.mode !== "reconcile") {
-      continue;
-    }
-    const previousKey = (_b = options.previousIdCache) == null ? void 0 : _b.get(index);
-    const canReusePreviousKey = isIndexInRange && options.mode === "reconcile" && !options.didKeyExtractorChange && previousKey !== void 0 && previousData !== void 0 && (previousData[index] === getDataItem(state, index) || (pendingDataComparison == null ? void 0 : pendingDataComparison.byIndex[index]) !== void 0);
-    let shouldSeedKey = isIndexInRange;
-    let targetIndex = index;
-    let key = canReusePreviousKey ? previousKey : isIndexInRange ? getId(state, index) : previousKey;
-    if (options.mode === "reconcile" && !canReusePreviousKey && !options.didKeyExtractorChange && previousKey !== void 0 && (!isIndexInRange || key !== previousKey)) {
-      shouldSeedKey = dataLengthDelta === 0 && isIndexInRange;
-      if (dataLengthDelta !== 0) {
-        const shiftedIndex = index + dataLengthDelta;
-        if (shiftedIndex >= 0 && shiftedIndex < dataLength) {
-          const shiftedKey = (_c = state.idCache[shiftedIndex]) != null ? _c : getId(state, shiftedIndex);
-          if (shiftedKey === previousKey) {
-            shouldSeedKey = true;
-            targetIndex = shiftedIndex;
-            key = previousKey;
-          }
-        }
-      }
-    }
-    if (!shouldSeedKey || key === void 0) {
-      continue;
-    }
-    if (options.mode === "reconcile") {
-      state.idCache[targetIndex] = key;
-      if (state.indexByKey.has(key)) {
-        hasDuplicateKey = true;
+  let direction = 0;
+  let weightedVelocity = 0;
+  let totalWeight = 0;
+  for (let i = newestIndex; i > 0; i--) {
+    const current = scrollHistory[i];
+    const previous = scrollHistory[i - 1];
+    const scrollDiff = current.scroll - previous.scroll;
+    const timeDiff = current.time - previous.time;
+    const deltaSign = Math.sign(scrollDiff);
+    if (deltaSign !== 0) {
+      if (direction === 0) {
+        direction = deltaSign;
+      } else if (deltaSign !== direction) {
         break;
       }
-      state.indexByKey.set(key, targetIndex);
     }
-    const knownSize = canSeedKnownSizes ? state.sizesKnown.get(key) : void 0;
-    if (knownSize !== void 0) {
-      sizeEntries.push({
-        index: targetIndex,
-        size: knownSize,
-        type: "measured"
-      });
-    } else {
-      const cachedSize = canSeedCachedSizes ? state.sizes.get(key) : void 0;
-      if (cachedSize !== void 0) {
-        sizeEntries.push({
-          index: targetIndex,
-          size: cachedSize,
-          type: "cached"
-        });
-      }
+    if (newest.time - previous.time > MAX_SCROLL_VELOCITY_WINDOW_MS) {
+      break;
     }
+    if (scrollDiff === 0 || timeDiff <= 0) {
+      continue;
+    }
+    const age = newest.time - current.time;
+    const weight = Math.exp(-age / SCROLL_VELOCITY_HALF_LIFE_MS);
+    weightedVelocity += scrollDiff / timeDiff * weight;
+    totalWeight += weight;
   }
-  return {
-    hasDuplicateKey,
-    sizeEntries
-  };
-}
+  return totalWeight > 0 ? weightedVelocity / totalWeight : 0;
+};
 
-// src/core/finishScrollTo.ts
-function finishScrollTo(ctx) {
-  var _a3, _b;
-  const state = ctx.state;
-  if (state == null ? void 0 : state.scrollingTo) {
-    cancelScrollCompletionChecks(state);
-    const resolvePendingScroll = state.pendingScrollResolve;
-    state.pendingScrollResolve = void 0;
-    const scrollingTo = state.scrollingTo;
-    state.scrollHistory.length = 0;
-    state.scrollingTo = void 0;
-    state.scrollTargetPinnedRange = void 0;
-    if (state.pendingTotalSize !== void 0) {
-      addTotalSize(ctx, null, state.pendingTotalSize);
-    }
-    {
-      state.scrollAdjustHandler.commitPendingAdjust(scrollingTo);
-    }
-    if (scrollingTo.isInitialScroll || state.initialScroll) {
-      const isOffsetSession = ((_a3 = state.initialScrollSession) == null ? void 0 : _a3.kind) === "offset";
-      const shouldPreserveResizeTarget = !!scrollingTo.isInitialScroll && !state.clearPreservedInitialScrollOnNextFinish && getDataLength(state) > 0 && ((_b = state.initialScroll) == null ? void 0 : _b.viewPosition) === 1;
-      finishInitialScroll(ctx, {
-        onFinished: () => {
-          resolvePendingScroll == null ? void 0 : resolvePendingScroll();
-        },
-        preserveTarget: isOffsetSession && getDataLength(state) === 0 || shouldPreserveResizeTarget,
-        recalculateItems: true,
-        schedulePreservedTargetClear: shouldPreserveResizeTarget,
-        syncObservedOffset: isOffsetSession,
-        waitForCompletionFrame: !!scrollingTo.waitForInitialScrollCompletionFrame
-      });
-      return;
-    }
-    recalculateSettledScroll(ctx);
-    resolvePendingScroll == null ? void 0 : resolvePendingScroll();
-  }
-}
-
-// src/core/doScrollTo.ts
-var SCROLL_END_IDLE_MS = 80;
-var SCROLL_END_MAX_MS = 1500;
-var SMOOTH_SCROLL_DURATION_MS = 320;
-var SCROLL_END_TARGET_EPSILON = 1;
-function doScrollTo(ctx, params) {
-  var _a3, _b;
-  const state = ctx.state;
-  const { animated, horizontal, offset } = params;
-  state.scheduledWork.cancel("platformScrollCompletion");
-  const scroller = state.refScroller.current;
-  const node = scroller == null ? void 0 : scroller.getScrollableNode();
-  if (!scroller || !node) {
-    return;
-  }
-  const isAnimated = !!animated;
-  const isHorizontal = !!horizontal;
-  const contentSize = isHorizontal ? getContentSize(ctx) : void 0;
-  const left = isHorizontal ? toNativeHorizontalOffset(state, offset, contentSize) : 0;
-  const top = isHorizontal ? 0 : offset;
-  scroller.scrollTo({ animated: isAnimated, x: left, y: top });
-  if (isAnimated) {
-    const target = (_b = (_a3 = scroller.getScrollEventTarget) == null ? void 0 : _a3.call(scroller)) != null ? _b : null;
-    listenForScrollEnd(ctx, {
-      readOffset: () => scroller.getCurrentScrollOffset(),
-      target,
-      targetOffset: offset
-    });
-  } else {
-    state.scroll = offset;
-    const targetToken = state.scrollingTo;
-    state.scheduledWork.timeout(
-      () => {
-        if (targetToken === state.scrollingTo) {
-          finishScrollTo(ctx);
-        }
-      },
-      100,
-      "platformScrollCompletion"
-    );
-  }
-}
-function listenForScrollEnd(ctx, params) {
-  const { readOffset, target, targetOffset } = params;
-  if (!target) {
-    finishScrollTo(ctx);
-    return;
-  }
-  const supportsScrollEnd = "onscrollend" in target;
-  let idleTimeout;
-  let settled = false;
-  const { scheduledWork, scrollingTo: targetToken } = ctx.state;
-  const maxTimeout = setTimeout(() => finish("max"), SCROLL_END_MAX_MS);
-  const cleanup = () => {
-    target.removeEventListener("scroll", onScroll2);
-    if (supportsScrollEnd) {
-      target.removeEventListener("scrollend", onScrollEnd);
-    }
-    if (idleTimeout !== void 0) {
-      clearTimeout(idleTimeout);
-    }
-    clearTimeout(maxTimeout);
-  };
-  const cancel = () => {
-    if (!settled) {
-      settled = true;
-      cleanup();
-    }
-  };
-  const finish = (reason) => {
-    if (settled) return;
-    if (targetToken !== ctx.state.scrollingTo) {
-      scheduledWork.cancel("platformScrollCompletion");
-      return;
-    }
-    const currentOffset = readOffset();
-    const isNearTarget = Math.abs(currentOffset - targetOffset) <= SCROLL_END_TARGET_EPSILON;
-    if (reason === "scrollend" && !isNearTarget) {
-      return;
-    }
-    scheduledWork.cancel("platformScrollCompletion");
-    finishScrollTo(ctx);
-  };
-  const onScroll2 = () => {
-    if (idleTimeout !== void 0) {
-      clearTimeout(idleTimeout);
-    }
-    idleTimeout = setTimeout(() => finish("idle"), SCROLL_END_IDLE_MS);
-  };
-  const onScrollEnd = () => finish("scrollend");
-  target.addEventListener("scroll", onScroll2);
-  if (supportsScrollEnd) {
-    target.addEventListener("scrollend", onScrollEnd);
-  } else {
-    idleTimeout = setTimeout(() => finish("idle"), SMOOTH_SCROLL_DURATION_MS);
-  }
-  scheduledWork.register("platformScrollCompletion", cancel);
-}
-
-// src/core/doMaintainScrollAtEnd.ts
-function doMaintainScrollAtEnd(ctx) {
-  const state = ctx.state;
-  const {
-    didContainersLayout,
-    pendingNativeMVCPAdjust,
-    refScroller,
-    props: { maintainScrollAtEnd }
-  } = state;
-  const isWithinMaintainScrollAtEndThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
-  const shouldMaintainScrollAtEnd = !!(isWithinMaintainScrollAtEndThreshold && maintainScrollAtEnd && didContainersLayout);
-  if (pendingNativeMVCPAdjust) {
-    state.pendingMaintainScrollAtEnd = shouldMaintainScrollAtEnd;
+// src/utils/hasActiveMVCPAnchorLock.ts
+function hasActiveMVCPAnchorLock(state) {
+  const lock = state.mvcpAnchorLock;
+  if (!lock) {
     return false;
   }
-  if (shouldMaintainScrollAtEnd) {
-    state.pendingMaintainScrollAtEnd = false;
-    const contentSize = getContentSize(ctx);
-    if (contentSize < state.scrollLength) {
-      state.scroll = 0;
-    }
-    if (!state.maintainingScrollAtEnd) {
-      const pendingState = maintainScrollAtEnd.animated ? "pending-animated" : "pending-instant";
-      const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
-      const scrollAtRequest = state.scroll;
-      state.maintainingScrollAtEnd = pendingState;
-      requestAnimationFrame(() => {
-        const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
-        const didScrollSinceRequest = state.scroll !== scrollAtRequest;
-        if (isStillWithinThreshold || !didScrollSinceRequest) {
-          state.maintainingScrollAtEnd = activeState;
-          const scroller = refScroller.current;
-          if (state.props.horizontal && isHorizontalRTL(state)) {
-            const currentContentSize = getContentSize(ctx);
-            const logicalEndOffset = getLogicalHorizontalMaxOffset(state, currentContentSize);
-            const nativeOffset = toNativeHorizontalOffset(state, logicalEndOffset, currentContentSize);
-            scroller == null ? void 0 : scroller.scrollTo({
-              animated: maintainScrollAtEnd.animated,
-              x: nativeOffset,
-              y: 0
-            });
-          } else {
-            scroller == null ? void 0 : scroller.scrollToEnd({
-              animated: maintainScrollAtEnd.animated
-            });
-          }
-          setTimeout(
-            () => {
-              if (state.maintainingScrollAtEnd === activeState) {
-                state.maintainingScrollAtEnd = void 0;
-                if (state.pendingMaintainScrollAtEnd) {
-                  doMaintainScrollAtEnd(ctx);
-                }
-              }
-            },
-            maintainScrollAtEnd.animated ? 500 : 0
-          );
-        } else if (state.maintainingScrollAtEnd === pendingState) {
-          state.maintainingScrollAtEnd = void 0;
-          state.pendingMaintainScrollAtEnd = false;
-        }
-      });
-    } else {
-      state.pendingMaintainScrollAtEnd = true;
-    }
-    return true;
+  if (Date.now() > lock.expiresAt) {
+    state.mvcpAnchorLock = void 0;
+    return false;
   }
-  state.pendingMaintainScrollAtEnd = false;
-  return false;
+  return true;
 }
 
-// src/utils/requestAdjust.ts
-function requestAdjust(ctx, positionDiff, dataChanged) {
-  const state = ctx.state;
-  if (Math.abs(positionDiff) > 0.1) {
-    const doit = () => {
-      {
-        state.scrollAdjustHandler.requestAdjust(positionDiff);
-        if (state.adjustingFromInitialMount) {
-          state.adjustingFromInitialMount--;
+// src/core/scrollRequestTracker.ts
+function getScrollRequestTracker(ctx) {
+  if (!ctx.scrollRequestTracker) {
+    let currentToken = 0;
+    let waitingToken;
+    const start = (resolve, isInternal = false) => {
+      const state = ctx.state;
+      if (!isInternal && (state.maintainingScrollAtEnd || state.pendingMaintainScrollAtEnd)) {
+        finishMaintainScrollAtEnd(ctx);
+      }
+      state.scheduledWork.cancel("imperativeScrollReady");
+      const token = ++currentToken;
+      settlePendingImperativeScroll(state);
+      state.pendingScrollResolve = resolve;
+      waitingToken = token;
+      return token;
+    };
+    const runNow = (token, resolve, run) => {
+      const state = ctx.state;
+      if (token !== currentToken) {
+        return;
+      }
+      waitingToken = void 0;
+      const didStartScroll = run();
+      if (!didStartScroll || !state.scrollingTo) {
+        if (state.pendingScrollResolve === resolve) {
+          state.pendingScrollResolve = void 0;
         }
+        resolve();
       }
     };
-    state.scroll += positionDiff;
-    state.scrollForNextCalculateItemsInView = void 0;
-    const readyToRender = peek$(ctx, "readyToRender");
-    if (readyToRender) {
-      doit();
-    } else {
-      state.adjustingFromInitialMount = (state.adjustingFromInitialMount || 0) + 1;
-      requestAnimationFrame(doit);
-    }
+    ctx.scrollRequestTracker = {
+      isCurrent: (token) => token === currentToken,
+      isWaitingToRun: () => waitingToken === currentToken && !!ctx.state.pendingScrollResolve,
+      runNow,
+      runNowIfIdle: (run) => {
+        const state = ctx.state;
+        if (state.pendingScrollResolve || state.scrollingTo) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+          const token = start(resolve, true);
+          runNow(token, resolve, run);
+        });
+      },
+      start
+    };
   }
+  return ctx.scrollRequestTracker;
 }
 
 // src/core/mvcp.ts
@@ -3261,7 +2857,7 @@ function resolvePendingNativeMVCPAdjust(ctx, newScroll) {
   }
   return false;
 }
-function prepareMVCP(ctx, dataChanged) {
+function prepareMVCP(ctx, dataChanged, adjustmentSource) {
   var _a3, _b, _c, _d;
   const state = ctx.state;
   const { idsInView, props } = state;
@@ -3284,7 +2880,6 @@ function prepareMVCP(ctx, dataChanged) {
   const isEndAnchoredScrollTarget = scrollTarget !== void 0 && getDataLength(state) > 0 && scrollTarget >= getDataLength(state) - 1 && (scrollingToViewPosition != null ? scrollingToViewPosition : 0) > 0;
   const shouldMVCP = dataChanged ? mvcpData : mvcpScroll;
   const indexByKey = state.indexByKey;
-  const resolveTargetIndex = () => scrollTarget !== void 0 && !dataChanged ? scrollTarget : targetId !== void 0 ? indexByKey.get(targetId) : void 0;
   const prevScroll = state.scroll;
   const prevTotalSize = getContentSize(ctx);
   if (shouldMVCP) {
@@ -3309,7 +2904,7 @@ function prepareMVCP(ctx, dataChanged) {
       }
     }
     if (targetId !== void 0 && prevPosition === void 0) {
-      const targetIndex = resolveTargetIndex();
+      const targetIndex = indexByKey.get(targetId);
       if (targetIndex !== void 0) {
         prevPosition = (_d = (_c = state.dataSourceAnchorPositions) == null ? void 0 : _c.get(targetId)) != null ? _d : getLayoutOffset(ctx, targetIndex);
       }
@@ -3359,7 +2954,7 @@ function prepareMVCP(ctx, dataChanged) {
         }
       }
       if (!skipTargetAnchor && targetId !== void 0 && prevPosition !== void 0) {
-        const targetIndex = resolveTargetIndex();
+        const targetIndex = indexByKey.get(targetId);
         const newPosition = getLayoutOffset(ctx, targetIndex);
         if (newPosition !== void 0) {
           const totalSize = getContentSize(ctx);
@@ -3417,62 +3012,6 @@ function prepareMVCP(ctx, dataChanged) {
   }
 }
 
-// src/utils/getScrollVelocity.ts
-var MAX_SCROLL_VELOCITY_WINDOW_MS = 1e3;
-var SCROLL_VELOCITY_HALF_LIFE_MS = 200;
-var getScrollVelocity = (state) => {
-  const { scrollHistory } = state;
-  const newestIndex = scrollHistory.length - 1;
-  if (newestIndex < 1) {
-    return 0;
-  }
-  const newest = scrollHistory[newestIndex];
-  if (Date.now() - newest.time > MAX_SCROLL_VELOCITY_WINDOW_MS) {
-    return 0;
-  }
-  let direction = 0;
-  let weightedVelocity = 0;
-  let totalWeight = 0;
-  for (let i = newestIndex; i > 0; i--) {
-    const current = scrollHistory[i];
-    const previous = scrollHistory[i - 1];
-    const scrollDiff = current.scroll - previous.scroll;
-    const timeDiff = current.time - previous.time;
-    const deltaSign = Math.sign(scrollDiff);
-    if (deltaSign !== 0) {
-      if (direction === 0) {
-        direction = deltaSign;
-      } else if (deltaSign !== direction) {
-        break;
-      }
-    }
-    if (newest.time - previous.time > MAX_SCROLL_VELOCITY_WINDOW_MS) {
-      break;
-    }
-    if (scrollDiff === 0 || timeDiff <= 0) {
-      continue;
-    }
-    const age = newest.time - current.time;
-    const weight = Math.exp(-age / SCROLL_VELOCITY_HALF_LIFE_MS);
-    weightedVelocity += scrollDiff / timeDiff * weight;
-    totalWeight += weight;
-  }
-  return totalWeight > 0 ? weightedVelocity / totalWeight : 0;
-};
-
-// src/utils/hasActiveMVCPAnchorLock.ts
-function hasActiveMVCPAnchorLock(state) {
-  const lock = state.mvcpAnchorLock;
-  if (!lock) {
-    return false;
-  }
-  if (Date.now() > lock.expiresAt) {
-    state.mvcpAnchorLock = void 0;
-    return false;
-  }
-  return true;
-}
-
 // src/utils/isInMVCPActiveMode.ts
 function isInMVCPActiveMode(state) {
   return state.dataChangeNeedsScrollUpdate || hasActiveMVCPAnchorLock(state);
@@ -3516,6 +3055,10 @@ function updateScroll(ctx, newScroll, forceUpdate, options) {
   state.scrollTime = currentTime;
   const scrollDelta = Math.abs(newScroll - prevScroll);
   const isUserScrollEvent = !!(options == null ? void 0 : options.fromNativeScrollEvent) && scrollDelta > 0.1 && !adjustChanged && scrollingTo === void 0 && !state.pendingNativeMVCPAdjust;
+  const didCancelMaintainScrollAtEnd = isUserScrollEvent && newScroll < prevScroll && !!(state.maintainingScrollAtEnd || state.pendingMaintainScrollAtEnd);
+  if (didCancelMaintainScrollAtEnd) {
+    finishMaintainScrollAtEnd(ctx);
+  }
   const allowedEdge = isUserScrollEvent ? beginReachedEdgeUserScroll(ctx, newScroll - prevScroll) : void 0;
   const didResolvePendingNativeMVCPAdjust = resolvePendingNativeMVCPAdjust(ctx, newScroll);
   const scrollLength = state.scrollLength;
@@ -3524,7 +3067,7 @@ function updateScroll(ctx, newScroll, forceUpdate, options) {
   updateAdaptiveRender(ctx, scrollVelocity, { forceLight: isLargeUserScrollJump });
   const lastCalculated = state.scrollLastCalculate;
   const useAggressiveItemRecalculation = isInMVCPActiveMode(state);
-  const shouldUpdate = useAggressiveItemRecalculation || didResolvePendingNativeMVCPAdjust || allowedEdge !== void 0 || forceUpdate || lastCalculated === void 0 || Math.abs(state.scroll - lastCalculated) > 2;
+  const shouldUpdate = useAggressiveItemRecalculation || didResolvePendingNativeMVCPAdjust || didCancelMaintainScrollAtEnd || allowedEdge !== void 0 || forceUpdate || lastCalculated === void 0 || Math.abs(state.scroll - lastCalculated) > 2;
   if (shouldUpdate) {
     state.scrollLastCalculate = state.scroll;
     state.ignoreScrollFromMVCPIgnored = false;
@@ -3559,6 +3102,775 @@ function updateScroll(ctx, newScroll, forceUpdate, options) {
     state.dataChangeNeedsScrollUpdate = false;
     state.lastScrollDelta = 0;
   }
+}
+
+// src/core/doMaintainScrollAtEnd.ts
+function interruptMaintainScrollAtEnd(ctx) {
+  var _a3;
+  const { state } = ctx;
+  const maintaining = state.maintainingScrollAtEnd;
+  const cancelActiveScroll = !!(maintaining === "animated" || maintaining === "instant" || maintaining && ((_a3 = state.scrollingTo) == null ? void 0 : _a3.isScrollToEnd));
+  if (cancelActiveScroll) {
+    cancelImperativeScroll(state);
+  }
+  if (maintaining || state.pendingMaintainScrollAtEnd) {
+    finishMaintainScrollAtEnd(ctx);
+  }
+  return cancelActiveScroll;
+}
+function finishMaintainScrollAtEnd(ctx) {
+  var _a3;
+  const { state } = ctx;
+  const currentPadding = peek$(ctx, "alignItemsAtEndPadding") || 0;
+  const nextPadding = getAlignItemsAtEndPadding(ctx);
+  state.maintainingScrollAtEnd = void 0;
+  state.pendingMaintainScrollAtEnd = false;
+  if (currentPadding !== nextPadding) {
+    set$(ctx, "alignItemsAtEndPadding", nextPadding);
+    state.scrollForNextCalculateItemsInView = void 0;
+    (_a3 = state.triggerCalculateItemsInView) == null ? void 0 : _a3.call(state, { forceFullItemPositions: true });
+    const nextScroll = clampScrollOffset(ctx, state.scroll + nextPadding - currentPadding);
+    requestAdjust(ctx, nextScroll - state.scroll);
+  }
+}
+function doMaintainScrollAtEnd(ctx) {
+  var _a3, _b, _c, _d, _e;
+  const state = ctx.state;
+  const {
+    didContainersLayout,
+    didFinishInitialScroll,
+    pendingNativeMVCPAdjust,
+    props: { maintainScrollAtEnd }
+  } = state;
+  const isWithinMaintainScrollAtEndThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+  const isReplayingPendingMaintain = !!state.pendingMaintainScrollAtEnd;
+  const shouldMaintainScrollAtEnd = !!(!((_a3 = ctx.scrollRequestTracker) == null ? void 0 : _a3.isWaitingToRun()) && (!state.scrollingTo || state.scrollingTo.isScrollToEnd) && (isWithinMaintainScrollAtEndThreshold || isReplayingPendingMaintain || ((_b = state.scrollingTo) == null ? void 0 : _b.isScrollToEnd)) && maintainScrollAtEnd && didFinishInitialScroll);
+  if (shouldMaintainScrollAtEnd && !state.scrollingTo) {
+    const scroller = state.refScroller.current;
+    const nativeMax = (_c = scroller == null ? void 0 : scroller.getMaxScrollOffset) == null ? void 0 : _c.call(scroller);
+    const observed = (_d = scroller == null ? void 0 : scroller.getCurrentScrollOffset) == null ? void 0 : _d.call(scroller);
+    if (nativeMax !== void 0 && observed !== void 0 && nativeMax < state.scroll - 1 && Math.abs(observed - nativeMax) <= 1) {
+      state.pendingMaintainScrollAtEnd = true;
+      state.scrollPending = observed;
+      updateScroll(ctx, observed, true, { markHasScrolled: false });
+    }
+  }
+  if (shouldMaintainScrollAtEnd && !didContainersLayout) {
+    state.pendingMaintainScrollAtEnd = true;
+    return false;
+  }
+  if (pendingNativeMVCPAdjust) {
+    state.pendingMaintainScrollAtEnd = shouldMaintainScrollAtEnd;
+    return false;
+  }
+  if (shouldMaintainScrollAtEnd && (state.scrollingTo || state.pendingScrollResolve)) {
+    state.pendingMaintainScrollAtEnd = true;
+    (_e = state.maintainingScrollAtEnd) != null ? _e : state.maintainingScrollAtEnd = maintainScrollAtEnd.animated ? "pending-animated" : "pending-instant";
+    return false;
+  }
+  if (shouldMaintainScrollAtEnd && didContainersLayout) {
+    state.pendingMaintainScrollAtEnd = false;
+    const contentSize = getContentSize(ctx);
+    if (contentSize < state.scrollLength) {
+      state.scroll = 0;
+    }
+    if (!state.maintainingScrollAtEnd) {
+      const pendingState = maintainScrollAtEnd.animated ? "pending-animated" : "pending-instant";
+      const activeState = maintainScrollAtEnd.animated ? "animated" : "instant";
+      const scrollAtRequest = state.scroll;
+      state.maintainingScrollAtEnd = pendingState;
+      requestAnimationFrame(() => {
+        if (state.maintainingScrollAtEnd !== pendingState) {
+          return;
+        }
+        const isStillWithinThreshold = peek$(ctx, "isWithinMaintainScrollAtEndThreshold");
+        const didScrollSinceRequest = state.scroll !== scrollAtRequest;
+        if (isReplayingPendingMaintain || isStillWithinThreshold || !didScrollSinceRequest) {
+          if (state.scrollingTo || state.pendingScrollResolve) {
+            state.pendingMaintainScrollAtEnd = true;
+            return;
+          }
+          state.maintainingScrollAtEnd = activeState;
+          const scrollPromise = getScrollRequestTracker(ctx).runNowIfIdle(
+            () => ctx.scrollToEnd({ animated: maintainScrollAtEnd.animated })
+          );
+          void scrollPromise.then(() => {
+            if (state.maintainingScrollAtEnd !== activeState) {
+              return;
+            }
+            if (state.pendingMaintainScrollAtEnd) {
+              state.maintainingScrollAtEnd = void 0;
+              doMaintainScrollAtEnd(ctx);
+            } else {
+              finishMaintainScrollAtEnd(ctx);
+            }
+          });
+        } else if (state.maintainingScrollAtEnd === pendingState) {
+          finishMaintainScrollAtEnd(ctx);
+        }
+      });
+    } else {
+      state.pendingMaintainScrollAtEnd = true;
+    }
+    return true;
+  }
+  finishMaintainScrollAtEnd(ctx);
+  return false;
+}
+
+// src/core/finishScrollTo.ts
+function finishScrollTo(ctx) {
+  var _a3, _b, _c;
+  const state = ctx.state;
+  if (state == null ? void 0 : state.scrollingTo) {
+    cancelScrollCompletionChecks(state);
+    const resolvePendingScroll = ((_a3 = ctx.scrollRequestTracker) == null ? void 0 : _a3.isWaitingToRun()) ? void 0 : state.pendingScrollResolve;
+    if (resolvePendingScroll) {
+      state.pendingScrollResolve = void 0;
+    }
+    const scrollingTo = state.scrollingTo;
+    state.scrollHistory.length = 0;
+    state.scrollingTo = void 0;
+    state.scrollTargetPinnedRange = void 0;
+    if (state.pendingTotalSize !== void 0) {
+      addTotalSize(ctx, null, state.pendingTotalSize);
+    }
+    {
+      state.scrollAdjustHandler.commitPendingAdjust(scrollingTo);
+    }
+    if (scrollingTo.isInitialScroll || state.initialScroll) {
+      const isOffsetSession = ((_b = state.initialScrollSession) == null ? void 0 : _b.kind) === "offset";
+      const shouldPreserveResizeTarget = !!scrollingTo.isInitialScroll && !state.clearPreservedInitialScrollOnNextFinish && getDataLength(state) > 0 && ((_c = state.initialScroll) == null ? void 0 : _c.viewPosition) === 1;
+      finishInitialScroll(ctx, {
+        onFinished: () => {
+          resolvePendingScroll == null ? void 0 : resolvePendingScroll();
+        },
+        preserveTarget: isOffsetSession && getDataLength(state) === 0 || shouldPreserveResizeTarget,
+        recalculateItems: true,
+        schedulePreservedTargetClear: shouldPreserveResizeTarget,
+        syncObservedOffset: isOffsetSession,
+        waitForCompletionFrame: !!scrollingTo.waitForInitialScrollCompletionFrame
+      });
+      return;
+    }
+    recalculateSettledScroll(ctx);
+    resolvePendingScroll == null ? void 0 : resolvePendingScroll();
+    if (state.pendingMaintainScrollAtEnd) {
+      state.maintainingScrollAtEnd = void 0;
+      doMaintainScrollAtEnd(ctx);
+    }
+  }
+}
+
+// src/core/doScrollTo.ts
+var SCROLL_END_IDLE_MS = 80;
+var SCROLL_END_MAX_MS = 1500;
+var SMOOTH_SCROLL_DURATION_MS = 320;
+var SCROLL_END_TARGET_EPSILON = 1;
+function doScrollTo(ctx, params) {
+  var _a3, _b, _c, _d, _e, _f;
+  const state = ctx.state;
+  const { animated, horizontal, offset } = params;
+  state.scheduledWork.cancel("platformScrollCompletion");
+  const scroller = state.refScroller.current;
+  const node = scroller == null ? void 0 : scroller.getScrollableNode();
+  if (!scroller || !node) {
+    return;
+  }
+  const isAnimated = !!animated;
+  const isHorizontal = !!horizontal;
+  const contentSize = isHorizontal ? getContentSize(ctx) : void 0;
+  const left = isHorizontal ? toNativeHorizontalOffset(state, offset, contentSize) : 0;
+  const top = isHorizontal ? 0 : offset;
+  scroller.scrollTo({ animated: isAnimated, x: left, y: top });
+  if (isAnimated) {
+    const targetOffset = Math.max(0, Math.min(offset, (_b = (_a3 = scroller.getMaxScrollOffset) == null ? void 0 : _a3.call(scroller)) != null ? _b : offset));
+    if (Math.abs(((_d = (_c = scroller.getCurrentScrollOffset) == null ? void 0 : _c.call(scroller)) != null ? _d : Number.NaN) - targetOffset) <= SCROLL_END_TARGET_EPSILON) {
+      const targetToken = state.scrollingTo;
+      state.scheduledWork.frame(() => {
+        if (targetToken === state.scrollingTo) finishScrollTo(ctx);
+      }, "platformScrollCompletion");
+      return;
+    }
+    const target = (_f = (_e = scroller.getScrollEventTarget) == null ? void 0 : _e.call(scroller)) != null ? _f : null;
+    listenForScrollEnd(ctx, {
+      readOffset: () => scroller.getCurrentScrollOffset(),
+      target,
+      targetOffset
+    });
+  } else {
+    state.scroll = offset;
+    const targetToken = state.scrollingTo;
+    state.scheduledWork.timeout(
+      () => {
+        if (targetToken === state.scrollingTo) {
+          finishScrollTo(ctx);
+        }
+      },
+      100,
+      "platformScrollCompletion"
+    );
+  }
+}
+function listenForScrollEnd(ctx, params) {
+  const { readOffset, target, targetOffset } = params;
+  if (!target) {
+    finishScrollTo(ctx);
+    return;
+  }
+  const supportsScrollEnd = "onscrollend" in target;
+  let idleTimeout;
+  let settled = false;
+  const { scheduledWork, scrollingTo: targetToken } = ctx.state;
+  const maxTimeout = setTimeout(() => finish("max"), SCROLL_END_MAX_MS);
+  const cleanup = () => {
+    target.removeEventListener("scroll", onScroll2);
+    if (supportsScrollEnd) {
+      target.removeEventListener("scrollend", onScrollEnd);
+    }
+    if (idleTimeout !== void 0) {
+      clearTimeout(idleTimeout);
+    }
+    clearTimeout(maxTimeout);
+  };
+  const cancel = () => {
+    if (!settled) {
+      settled = true;
+      cleanup();
+    }
+  };
+  const finish = (reason) => {
+    if (settled) return;
+    if (targetToken !== ctx.state.scrollingTo) {
+      scheduledWork.cancel("platformScrollCompletion");
+      return;
+    }
+    const currentOffset = readOffset();
+    const isNearTarget = Math.abs(currentOffset - targetOffset) <= SCROLL_END_TARGET_EPSILON;
+    if (reason === "scrollend" && !isNearTarget) {
+      return;
+    }
+    scheduledWork.cancel("platformScrollCompletion");
+    finishScrollTo(ctx);
+  };
+  const onScroll2 = () => {
+    if (idleTimeout !== void 0) {
+      clearTimeout(idleTimeout);
+    }
+    idleTimeout = setTimeout(() => finish("idle"), SCROLL_END_IDLE_MS);
+  };
+  const onScrollEnd = () => finish("scrollend");
+  target.addEventListener("scroll", onScroll2);
+  if (supportsScrollEnd) {
+    target.addEventListener("scrollend", onScrollEnd);
+  } else {
+    idleTimeout = setTimeout(() => finish("idle"), SMOOTH_SCROLL_DURATION_MS);
+  }
+  scheduledWork.register("platformScrollCompletion", cancel);
+}
+
+// src/utils/requestAdjust.ts
+function requestAdjust(ctx, positionDiff, source) {
+  const state = ctx.state;
+  if (Math.abs(positionDiff) > 0.1) {
+    const doit = () => {
+      {
+        state.scrollAdjustHandler.requestAdjust(positionDiff);
+        if (state.adjustingFromInitialMount) {
+          state.adjustingFromInitialMount--;
+        }
+      }
+    };
+    state.scroll += positionDiff;
+    state.scrollForNextCalculateItemsInView = void 0;
+    const readyToRender = peek$(ctx, "readyToRender");
+    if (readyToRender) {
+      doit();
+    } else {
+      state.adjustingFromInitialMount = (state.adjustingFromInitialMount || 0) + 1;
+      requestAnimationFrame(doit);
+    }
+  }
+}
+
+// src/utils/updateSnapToOffsets.ts
+function updateSnapToOffsets(ctx) {
+  const state = ctx.state;
+  const {
+    props: { snapToIndices }
+  } = state;
+  const contentSize = state.props.horizontal ? getContentSize(ctx) : void 0;
+  const snapToOffsets = Array(snapToIndices.length);
+  for (let i = 0; i < snapToIndices.length; i++) {
+    const index = snapToIndices[i];
+    getId(state, index);
+    const logicalOffset = getLayoutOffset(ctx, index);
+    snapToOffsets[i] = logicalOffset === void 0 ? void 0 : toNativeHorizontalOffset(state, logicalOffset, contentSize);
+  }
+  set$(ctx, "snapToOffsets", snapToOffsets);
+}
+
+// src/core/layoutStoreLifecycle.ts
+var INITIAL_ESTIMATE_FLUSH_THRESHOLD = 1;
+var INITIAL_ESTIMATE_FLUSH_MIN_MEASUREMENTS = 2;
+var PERIODIC_ESTIMATE_FLUSH_DELAY = 250;
+var PERIODIC_ESTIMATE_FLUSH_MAX_VELOCITY = 0.25;
+var PERIODIC_ESTIMATE_FLUSH_MIN_NEW_MEASUREMENTS = 4;
+function clearLayoutStoreKnownSizes(ctx) {
+  var _a3;
+  (_a3 = ctx.state.layoutStoreRuntime) == null ? void 0 : _a3.store.clearKnownSizes();
+  resetLayoutStoreRuntimeState(ctx.state);
+}
+function getActiveLayoutStoreRuntime(ctx) {
+  return ctx.state.layoutStoreRuntime;
+}
+function getActiveLayoutStore(ctx) {
+  var _a3;
+  return (_a3 = getActiveLayoutStoreRuntime(ctx)) == null ? void 0 : _a3.store;
+}
+function getSparseIdCacheSnapshot(state) {
+  const snapshot = /* @__PURE__ */ new Map();
+  for (const key of Object.keys(state.idCache)) {
+    const index = Number(key);
+    const id = state.idCache[index];
+    if (Number.isInteger(index) && id !== void 0) {
+      snapshot.set(index, id);
+    }
+  }
+  return snapshot;
+}
+function materializeLayoutStoreRange(ctx, startIndex, endIndex) {
+  const state = ctx.state;
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  const store = runtime == null ? void 0 : runtime.store;
+  let range;
+  if (store) {
+    const start = Math.max(0, Math.trunc(startIndex));
+    const end = Math.min(store.length - 1, Math.trunc(endIndex));
+    if (start <= end) {
+      range = { end, start };
+      store.forEachLayout(start, end, (index, offset) => {
+        var _a3;
+        const id = (_a3 = state.idCache[index]) != null ? _a3 : getId(state, index);
+        if (ctx.positionListeners.has(id)) {
+          notifyLayoutStorePosition(ctx, runtime, id, offset);
+        }
+        state.indexByKey.set(id, index);
+      });
+    }
+  }
+  return range;
+}
+function applyLayoutStoreSeed(store, seed) {
+  store.setEstimatedSize(seed.estimatedSize);
+  store.replaceKnownSizeEntries(seed.sizeEntries);
+}
+function getMaterializeRange(state, fallbackStart, fallbackEnd) {
+  const start = typeof state.startBuffered === "number" && state.startBuffered >= 0 ? state.startBuffered : fallbackStart;
+  const end = typeof state.endBuffered === "number" && state.endBuffered >= start ? state.endBuffered : fallbackEnd;
+  return { end, start };
+}
+function flushLayoutStoreEstimate(ctx, estimatedSize, anchorIndex, options) {
+  const state = ctx.state;
+  const store = getActiveLayoutStore(ctx);
+  let didFlush = false;
+  if (store && store.length > 0 && Math.abs(estimatedSize - store.getEstimatedSize()) > INITIAL_ESTIMATE_FLUSH_THRESHOLD) {
+    const canCorrectAnchor = state.didContainersLayout && state.props.maintainVisibleContentPosition.size;
+    if (!(options == null ? void 0 : options.requireAnchorCorrection) || anchorIndex === 0 || canCorrectAnchor) {
+      const clampedAnchorIndex = Math.min(Math.max(anchorIndex, 0), store.length - 1);
+      const oldAnchorTop = store.getOffset(clampedAnchorIndex);
+      store.setEstimatedSize(estimatedSize);
+      syncLayoutStoreState(ctx, options == null ? void 0 : options.notifyTotalSize);
+      const newAnchorTop = store.getOffset(clampedAnchorIndex);
+      const positionDiff = newAnchorTop - oldAnchorTop;
+      if (canCorrectAnchor) {
+        requestAdjust(ctx, positionDiff);
+      }
+      const range = getMaterializeRange(state, clampedAnchorIndex, clampedAnchorIndex);
+      materializeLayoutStoreRange(ctx, range.start, range.end);
+      didFlush = true;
+    }
+  }
+  return didFlush;
+}
+function maybeFlushInitialLayoutStoreEstimate(ctx, notifyTotalSize = true) {
+  var _a3;
+  const state = ctx.state;
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  const store = runtime == null ? void 0 : runtime.store;
+  let didFlush = false;
+  const startNoBuffer = state.startNoBuffer;
+  const endNoBuffer = state.endNoBuffer;
+  if (store && !runtime.didFlushInitialEstimate && typeof startNoBuffer === "number" && typeof endNoBuffer === "number" && startNoBuffer >= 0 && endNoBuffer >= startNoBuffer) {
+    let totalMeasuredSize = 0;
+    let measuredCount = 0;
+    let areAllVisibleSizesKnown = true;
+    for (let index = startNoBuffer; index <= endNoBuffer; index++) {
+      const id = (_a3 = state.idCache[index]) != null ? _a3 : getId(state, index);
+      const size = state.sizesKnown.get(id);
+      if (size === void 0) {
+        areAllVisibleSizesKnown = false;
+        break;
+      }
+      if (size > 0) {
+        totalMeasuredSize += size;
+        measuredCount++;
+      }
+    }
+    if (areAllVisibleSizesKnown && measuredCount >= INITIAL_ESTIMATE_FLUSH_MIN_MEASUREMENTS) {
+      const nextEstimate = totalMeasuredSize / measuredCount;
+      if (!state.scrollingTo) {
+        runtime.didFlushInitialEstimate = true;
+        runtime.pendingEstimateMeasurements = 0;
+        didFlush = flushLayoutStoreEstimate(ctx, nextEstimate, startNoBuffer, { notifyTotalSize });
+      }
+    }
+  }
+  return didFlush;
+}
+function hasEnoughNewMeasurementsForPeriodicFlush(runtime) {
+  return runtime.pendingEstimateMeasurements >= PERIODIC_ESTIMATE_FLUSH_MIN_NEW_MEASUREMENTS;
+}
+function shouldDeferPeriodicEstimateFlush(state) {
+  var _a3;
+  const recentScrollAge = state.scrollTime > 0 ? Date.now() - state.scrollTime : Number.POSITIVE_INFINITY;
+  return !state.didContainersLayout || hasActiveInitialScroll(state) || !!state.queuedInitialLayout || !!state.scrollingTo || !!state.pendingScrollToEnd || !!((_a3 = state.userScrollAnchorReset) == null ? void 0 : _a3.keys.size) || hasActiveMVCPAnchorLock(state) || recentScrollAge < PERIODIC_ESTIMATE_FLUSH_DELAY || Math.abs(getScrollVelocity(state)) > PERIODIC_ESTIMATE_FLUSH_MAX_VELOCITY;
+}
+function getEstimateFlushAnchorIndex(state) {
+  const dataLength = getDataLength(state);
+  let anchorIndex;
+  if (typeof state.firstFullyOnScreenIndex === "number" && state.firstFullyOnScreenIndex >= 0) {
+    anchorIndex = state.firstFullyOnScreenIndex;
+  } else if (typeof state.startNoBuffer === "number" && state.startNoBuffer >= 0) {
+    anchorIndex = state.startNoBuffer;
+  } else if (typeof state.startBuffered === "number" && state.startBuffered >= 0) {
+    anchorIndex = state.startBuffered;
+  }
+  return anchorIndex !== void 0 && dataLength > 0 ? Math.min(anchorIndex, dataLength - 1) : void 0;
+}
+function flushPeriodicLayoutStoreEstimate(ctx) {
+  const state = ctx.state;
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  let didFlush = false;
+  if (runtime && hasEnoughNewMeasurementsForPeriodicFlush(runtime)) {
+    if (shouldDeferPeriodicEstimateFlush(state)) {
+      schedulePeriodicLayoutStoreEstimateFlush(ctx);
+    } else {
+      const store = runtime.store;
+      const measuredAverage = store.getPositiveMeasuredAverageSize();
+      const anchorIndex = getEstimateFlushAnchorIndex(state);
+      runtime.pendingEstimateMeasurements = 0;
+      if (measuredAverage !== void 0 && anchorIndex !== void 0) {
+        didFlush = flushLayoutStoreEstimate(ctx, measuredAverage, anchorIndex, {
+          requireAnchorCorrection: true
+        });
+      }
+    }
+  }
+  return didFlush;
+}
+function schedulePeriodicLayoutStoreEstimateFlush(ctx) {
+  const state = ctx.state;
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  let didSchedule = false;
+  if (runtime && !state.scheduledWork.has("layoutStoreEstimateFlush") && hasEnoughNewMeasurementsForPeriodicFlush(runtime)) {
+    state.scheduledWork.timeout(
+      () => flushPeriodicLayoutStoreEstimate(ctx),
+      PERIODIC_ESTIMATE_FLUSH_DELAY,
+      "layoutStoreEstimateFlush"
+    );
+    didSchedule = true;
+  }
+  return didSchedule;
+}
+function resetLayoutStoreRuntimeState(state) {
+  var _a3;
+  state.scheduledWork.cancel("layoutStoreEstimateFlush");
+  (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.resetTransientState();
+}
+function setLayoutStoreMeasuredSize(ctx, index, size, notifyTotalSize = true) {
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  const store = runtime == null ? void 0 : runtime.store;
+  let didSet = false;
+  if (runtime && (store == null ? void 0 : store.hasIndex(index))) {
+    const previousCount = store.getMeasuredCount();
+    const previousSize = store.getSize(index);
+    const didChange = store.setMeasuredSize(index, size);
+    if (previousSize !== size || store.getMeasuredCount() !== previousCount) {
+      runtime.pendingEstimateMeasurements++;
+    }
+    if (didChange) {
+      syncLayoutStoreState(ctx, notifyTotalSize);
+    }
+    didSet = true;
+  }
+  return didSet;
+}
+function getLayoutStoreSeedEstimate(input) {
+  const { dataLength, fallbackSize, fallbackTotalSize, measuredCount, measuredTotalSize } = input;
+  return measuredCount >= INITIAL_ESTIMATE_FLUSH_MIN_MEASUREMENTS ? measuredTotalSize / measuredCount : dataLength > 0 ? fallbackTotalSize / dataLength : fallbackSize;
+}
+function reconcileLayoutStoreDataChange(ctx, options) {
+  var _a3;
+  const state = ctx.state;
+  const store = getActiveLayoutStore(ctx);
+  let didReconcile = false;
+  if (store) {
+    const previousIdCache = (_a3 = options == null ? void 0 : options.previousIdCache) != null ? _a3 : getSparseIdCacheSnapshot(state);
+    state.indexByKey.clear();
+    state.idCache.length = 0;
+    resetLayoutStoreRuntimeState(state);
+    const seed = getLayoutStoreSeed(ctx, {
+      didKeyExtractorChange: options == null ? void 0 : options.didKeyExtractorChange,
+      mode: "reconcile",
+      previousIdCache
+    });
+    didReconcile = !seed.hasDuplicateKey;
+    if (didReconcile) {
+      applyLayoutStoreSeed(store, seed);
+    }
+  }
+  return didReconcile;
+}
+function syncActiveRowLayoutStoreSpans(ctx) {
+  const state = ctx.state;
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  const store = runtime == null ? void 0 : runtime.store;
+  const { numColumns, overrideItemLayout } = state.props;
+  const dataLength = getDataLength(state);
+  let didSync = false;
+  if (runtime && store instanceof RowLayoutStore && overrideItemLayout && numColumns > 1) {
+    const extraData = peek$(ctx, "extraData");
+    const cacheInput = getRowSpanCacheInput(state, extraData);
+    const cachedSpans = runtime.getCachedRowSpans(cacheInput);
+    const spanInvalidationIndex = state.dataSourceSpanInvalidationIndex;
+    if (!cachedSpans || spanInvalidationIndex !== void 0) {
+      const layoutConfig = { span: 1 };
+      const spans = cachedSpans != null ? cachedSpans : new Array(dataLength);
+      const startIndex = cachedSpans ? Math.max(0, Math.min(spanInvalidationIndex != null ? spanInvalidationIndex : 0, dataLength)) : 0;
+      for (let index = startIndex; index < dataLength; index++) {
+        layoutConfig.span = 1;
+        const item = getDataItem(state, index);
+        if (item !== void 0) {
+          overrideItemLayout(layoutConfig, item, index, numColumns, extraData);
+        }
+        spans[index] = layoutConfig.span;
+      }
+      store.resize(dataLength, spans, numColumns, spanInvalidationIndex);
+      runtime.setCachedRowSpans(cacheInput, spans);
+      state.dataSourceSpanInvalidationIndex = void 0;
+      didSync = true;
+    }
+  } else {
+    runtime == null ? void 0 : runtime.clearRowSpanCache();
+  }
+  return didSync;
+}
+function syncLayoutStoreStructure(ctx) {
+  var _a3;
+  const state = ctx.state;
+  const estimatedSize = getLayoutStorePropEstimatedSize(ctx);
+  const dataLength = getDataLength(state);
+  const nextStoreKind = getLayoutStoreKind(state);
+  let runtime = state.layoutStoreRuntime;
+  if (runtime && getLayoutStoreKindForStore(runtime.store) === nextStoreKind) {
+    if (runtime.store instanceof RowLayoutStore) {
+      if (!state.dataSourceMutationApplied || state.didColumnsChange) {
+        runtime.store.resize(dataLength, getReusableRowSpans(ctx, runtime), state.props.numColumns);
+      }
+    } else {
+      runtime.store.resize(dataLength);
+    }
+    if (estimatedSize !== runtime.propEstimatedSize) {
+      runtime.store.setEstimatedSize(estimatedSize);
+    }
+  } else {
+    const store = nextStoreKind === "row" ? new RowLayoutStore({
+      estimatedSize,
+      length: dataLength,
+      numColumns: state.props.numColumns
+    }) : new PrefixLayoutStore(dataLength, estimatedSize);
+    runtime = new LayoutStoreRuntime(store, estimatedSize);
+    state.layoutStoreRuntime = runtime;
+    if (canSeedLayoutStore(state)) {
+      const seed = getLayoutStoreSeed(ctx);
+      applyLayoutStoreSeed(runtime.store, seed);
+    }
+  }
+  runtime.propEstimatedSize = estimatedSize;
+  return (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.store;
+}
+function getRowSpanCacheInput(state, extraData) {
+  const { dataKey, dataVersion, numColumns, overrideItemLayout } = state.props;
+  return {
+    data: getIndexedData(state),
+    dataKey,
+    dataVersion,
+    extraData,
+    numColumns,
+    overrideItemLayout
+  };
+}
+function canSeedLayoutStore(state) {
+  return state.sizesKnown.size > 0 || state.sizes.size > 0;
+}
+function getReusableRowSpans(ctx, runtime) {
+  const state = ctx.state;
+  const { numColumns, overrideItemLayout } = state.props;
+  let spans;
+  if (overrideItemLayout && numColumns > 1) {
+    spans = runtime.getCachedRowSpans(getRowSpanCacheInput(state, peek$(ctx, "extraData")));
+  } else {
+    runtime.clearRowSpanCache();
+  }
+  return spans;
+}
+function getLayoutStoreKind(state) {
+  return state.props.numColumns > 1 ? "row" : "prefix";
+}
+function getLayoutStoreKindForStore(store) {
+  return store instanceof RowLayoutStore ? "row" : "prefix";
+}
+function rebuildLayoutStoreExact(ctx) {
+  var _a3;
+  const state = ctx.state;
+  const store = syncLayoutStoreStructure(ctx);
+  if (store) {
+    const seed = getLayoutStoreSeed(ctx);
+    applyLayoutStoreSeed(store, seed);
+  }
+  return (_a3 = state.layoutStoreRuntime) == null ? void 0 : _a3.store;
+}
+function syncLayoutStoreState(ctx, notifyTotalSize = true) {
+  const runtime = getActiveLayoutStoreRuntime(ctx);
+  let didSync = false;
+  if (runtime) {
+    const store = runtime.store;
+    addTotalSize(ctx, null, store.getTotalSize(), notifyTotalSize);
+    if (ctx.state.props.snapToIndices) {
+      updateSnapToOffsets(ctx);
+    }
+    syncLayoutStorePositionListeners(ctx, runtime);
+    didSync = true;
+  }
+  return didSync;
+}
+function syncLayoutStorePositionListeners(ctx, runtime) {
+  const state = ctx.state;
+  const store = runtime.store;
+  if (ctx.positionListeners.size > 0) {
+    for (const [key] of ctx.positionListeners) {
+      const index = state.indexByKey.get(key);
+      if (store.hasIndex(index)) {
+        notifyLayoutStorePosition(ctx, runtime, key, store.getOffset(index));
+      }
+    }
+  }
+}
+function notifyLayoutStorePosition(ctx, runtime, key, offset) {
+  let offsets = runtime.positionListenerOffsets;
+  if (!offsets) {
+    offsets = /* @__PURE__ */ new Map();
+    runtime.positionListenerOffsets = offsets;
+  }
+  if (offsets.get(key) !== offset) {
+    offsets.set(key, offset);
+    notifyPosition$(ctx, key, offset);
+  }
+}
+function getLayoutStorePropEstimatedSize(ctx) {
+  var _a3;
+  return ((_a3 = ctx.state.props.estimatedItemSize) != null ? _a3 : 100) + ctx.scrollAxisGap;
+}
+function getLayoutStoreSeed(ctx, options = { mode: "seed" }) {
+  var _a3, _b, _c;
+  const state = ctx.state;
+  const { data, estimatedItemSize } = state.props;
+  const dataLength = getDataLength(state);
+  const fallbackSize = (estimatedItemSize != null ? estimatedItemSize : 100) + ctx.scrollAxisGap;
+  const sizeEntries = [];
+  const canSeedKnownSizes = state.sizesKnown.size > 0;
+  const canSeedCachedSizes = state.sizes.size > 0;
+  if (options.mode === "seed" && !canSeedKnownSizes && !canSeedCachedSizes) {
+    return { estimatedSize: fallbackSize, sizeEntries };
+  }
+  const previousData = state.previousData;
+  const statePendingDataComparison = state.pendingDataComparison;
+  const pendingDataComparison = statePendingDataComparison && statePendingDataComparison.previousData === previousData && statePendingDataComparison.nextData === data ? statePendingDataComparison : void 0;
+  const fallbackTotalSize = dataLength * fallbackSize;
+  let hasDuplicateKey = false;
+  let measuredCount = 0;
+  let measuredTotalSize = 0;
+  const dataLengthDelta = previousData ? dataLength - previousData.length : 0;
+  const materializedIndices = options.mode === "reconcile" ? (_a3 = options.previousIdCache) == null ? void 0 : _a3.keys() : getSparseIdCacheSnapshot(state).keys();
+  for (const index of materializedIndices != null ? materializedIndices : []) {
+    const isIndexInRange = index >= 0 && index < dataLength;
+    if (!isIndexInRange && options.mode !== "reconcile") {
+      continue;
+    }
+    const previousKey = (_b = options.previousIdCache) == null ? void 0 : _b.get(index);
+    const canReusePreviousKey = isIndexInRange && options.mode === "reconcile" && !options.didKeyExtractorChange && previousKey !== void 0 && previousData !== void 0 && (previousData[index] === getDataItem(state, index) || (pendingDataComparison == null ? void 0 : pendingDataComparison.byIndex[index]) !== void 0);
+    let shouldSeedKey = isIndexInRange;
+    let targetIndex = index;
+    let key = canReusePreviousKey ? previousKey : isIndexInRange ? getId(state, index) : previousKey;
+    if (options.mode === "reconcile" && !canReusePreviousKey && !options.didKeyExtractorChange && previousKey !== void 0 && (!isIndexInRange || key !== previousKey)) {
+      shouldSeedKey = dataLengthDelta === 0 && isIndexInRange;
+      if (dataLengthDelta !== 0) {
+        const shiftedIndex = index + dataLengthDelta;
+        if (shiftedIndex >= 0 && shiftedIndex < dataLength) {
+          const shiftedKey = (_c = state.idCache[shiftedIndex]) != null ? _c : getId(state, shiftedIndex);
+          if (shiftedKey === previousKey) {
+            shouldSeedKey = true;
+            targetIndex = shiftedIndex;
+            key = previousKey;
+          }
+        }
+      }
+    }
+    if (!shouldSeedKey || key === void 0) {
+      continue;
+    }
+    if (options.mode === "reconcile") {
+      state.idCache[targetIndex] = key;
+      if (state.indexByKey.has(key)) {
+        hasDuplicateKey = true;
+        break;
+      }
+      state.indexByKey.set(key, targetIndex);
+    }
+    const knownSize = canSeedKnownSizes ? state.sizesKnown.get(key) : void 0;
+    if (knownSize !== void 0) {
+      if (knownSize > 0) {
+        measuredCount++;
+        measuredTotalSize += knownSize;
+      }
+      sizeEntries.push({
+        index: targetIndex,
+        size: knownSize,
+        type: "measured"
+      });
+    } else {
+      const cachedSize = canSeedCachedSizes ? state.sizes.get(key) : void 0;
+      if (cachedSize !== void 0) {
+        sizeEntries.push({
+          index: targetIndex,
+          size: cachedSize,
+          type: "cached"
+        });
+      }
+    }
+  }
+  return {
+    estimatedSize: getLayoutStoreSeedEstimate({
+      dataLength,
+      fallbackSize,
+      fallbackTotalSize,
+      measuredCount,
+      measuredTotalSize
+    }),
+    hasDuplicateKey,
+    sizeEntries
+  };
 }
 
 // src/core/scrollTo.ts
@@ -4288,7 +4600,7 @@ function handleBootstrapInitialScrollFooterLayout(ctx, options) {
   }
 }
 function handleBootstrapInitialScrollLayoutChange(ctx) {
-  var _a3, _b, _c;
+  var _a3, _b;
   const state = ctx.state;
   const initialScroll = state.initialScroll;
   const bootstrapInitialScroll = getBootstrapInitialScrollSession(state);
@@ -4302,19 +4614,15 @@ function handleBootstrapInitialScrollLayoutChange(ctx) {
         if (state.didFinishInitialScroll) {
           schedulePreservedEndAnchorCorrection(ctx);
         } else if (scrollingTo) {
-          const existingWatchdog = initialScrollWatchdog.get(state);
-          scrollingTo.offset = resolvedOffset;
-          scrollingTo.targetOffset = resolvedOffset;
           state.initialScroll = {
             ...initialScroll,
             contentOffset: resolvedOffset
           };
-          state.hasScrolled = false;
-          initialScrollWatchdog.set(state, {
-            startScroll: (_c = existingWatchdog == null ? void 0 : existingWatchdog.startScroll) != null ? _c : state.scroll,
-            targetOffset: resolvedOffset
+          dispatchInitialScroll(ctx, {
+            forceScroll: true,
+            resolvedOffset,
+            target: state.initialScroll
           });
-          requestAdjust(ctx, offsetDiff);
         }
       }
     } else {
@@ -4442,7 +4750,7 @@ function updateContainerItemMetadata(state, containerId, itemIndex, itemData, it
   if ((previousMetadata == null ? void 0 : previousMetadata.dataChangeEpoch) === state.dataChangeEpoch && previousMetadata.getItemType === getItemType && previousMetadata.itemData === itemData && previousMetadata.itemIndex === itemIndex) {
     return previousMetadata;
   }
-  const resolvedItemType = getItemType ? (_a3 = getItemType(itemData, itemIndex)) != null ? _a3 : "" : void 0;
+  const resolvedItemType = itemData !== void 0 && getItemType ? (_a3 = getItemType(itemData, itemIndex)) != null ? _a3 : "" : void 0;
   const metadata = createContainerItemMetadata(state, itemIndex, itemData, resolvedItemType);
   state.containerItemMetadata.set(containerId, metadata);
   return metadata;
@@ -4456,7 +4764,7 @@ function resolveContainerItemMetadata(state, containerId, itemIndex, itemData) {
     metadata.fixedItemSize = void 0;
     metadata.getFixedItemSize = getFixedItemSize;
   }
-  if (getFixedItemSize && !metadata.didResolveFixedItemSize) {
+  if (itemData !== void 0 && getFixedItemSize && !metadata.didResolveFixedItemSize) {
     metadata.fixedItemSize = getFixedItemSize(itemData, itemIndex, (_a3 = metadata.itemType) != null ? _a3 : "");
     metadata.didResolveFixedItemSize = true;
   }
@@ -4694,6 +5002,11 @@ function handleInitialScrollDataChange(ctx, options) {
   const state = ctx.state;
   const previousInitialScrollDataLength = (_b = (_a3 = state.initialScrollSession) == null ? void 0 : _a3.previousDataLength) != null ? _b : 0;
   const shouldUseLatestInitialScroll = dataLength > 0 && (!state.hasHadNonEmptyData || didStartFreshData);
+  if (didStartFreshData) {
+    cancelImperativeScroll(state);
+    state.maintainingScrollAtEnd = void 0;
+    state.pendingMaintainScrollAtEnd = false;
+  }
   if (dataLength > 0) {
     state.hasHadNonEmptyData = true;
   }
@@ -4956,7 +5269,7 @@ function updateViewableItems(ctx, viewabilityConfigCallbackPairs, scrollSize, st
     if (viewabilityConfigCallbackPair.viewabilityConfig.minimumViewTime) {
       state.scheduledWork.timeout(() => {
         const currentPairs = state.viewabilityConfigCallbackPairs;
-        if ((!currentPairs || currentPairs.includes(viewabilityConfigCallbackPair)) && hasViewabilityConsumers(ctx, currentPairs != null ? currentPairs : [viewabilityConfigCallbackPair])) {
+        if (indexedData === getIndexedData(state) && (!currentPairs || currentPairs.includes(viewabilityConfigCallbackPair)) && hasViewabilityConsumers(ctx, currentPairs != null ? currentPairs : [viewabilityConfigCallbackPair])) {
           updateViewableItemsWithConfig(
             indexedData,
             viewabilityConfigCallbackPair,
@@ -5014,7 +5327,7 @@ function updateViewableItemsWithConfig(data, viewabilityConfigCallbackPair, stat
       const currentItem = currentIndex !== void 0 ? data.getItem(currentIndex) : void 0;
       const containerId = findContainerId(ctx, viewToken.key);
       let isStillViewable = false;
-      if (currentIndex !== void 0 && currentIndex >= start && currentIndex <= end && (currentItem !== void 0 || data.kind === "dataSource")) {
+      if (currentIndex !== void 0 && (currentItem !== void 0 || data.kind === "dataSource")) {
         isStillViewable = checkIsViewable(
           state,
           ctx,
@@ -5344,6 +5657,9 @@ function setDidLayout(ctx) {
   state.queuedInitialLayout = true;
   checkAtBottom(ctx);
   setInitialRenderState(ctx, { didLayout: true });
+  if (state.pendingMaintainScrollAtEnd) {
+    doMaintainScrollAtEnd(ctx);
+  }
 }
 
 // src/core/calculateItemsInView.ts
@@ -5626,7 +5942,7 @@ function calculateItemsInView(ctx, params = {}) {
       enableScrollForNextCalculateItemsInView,
       idCache,
       indexByKey,
-      minIndexSizeChanged,
+      positionRecalculationStartIndex,
       props: { alwaysRenderIndicesArr, alwaysRenderIndicesSet, getItemType, keyExtractor, onStickyHeaderChange },
       scrollForNextCalculateItemsInView,
       scrollLength,
@@ -5639,7 +5955,7 @@ function calculateItemsInView(ctx, params = {}) {
     const stickyHeaderIndicesArr = state.props.stickyHeaderIndicesArr || [];
     const stickyHeaderIndicesSet = state.props.stickyHeaderIndicesSet || EMPTY_INDEX_SET;
     const drawDistance = getEffectiveDrawDistance(ctx, params.drawDistanceMode);
-    const { doMVCP, forceFullItemPositions, initialLayout } = params;
+    const { doMVCP, forceFullItemPositions, mvcpAdjustmentSource, initialLayout } = params;
     const didDataChange = !!params.dataChanged;
     const isInitialLayout = !!initialLayout;
     const bootstrapInitialScrollState = ((_a3 = state.initialScrollSession) == null ? void 0 : _a3.kind) === "bootstrap" ? state.initialScrollSession.bootstrap : void 0;
@@ -5815,8 +6131,19 @@ function calculateItemsInView(ctx, params = {}) {
     }
     syncLayoutStoreState(ctx);
     totalSize = getContentSize(ctx);
-    if (minIndexSizeChanged !== void 0) {
-      state.minIndexSizeChanged = void 0;
+    const previousComputedScroll = scroll;
+    updateScroll2(nativeScrollState);
+    updateScrollRange();
+    if (scroll !== previousComputedScroll) {
+      layoutStoreMaterializedRange = materializeLayoutStoreOffsetRange(
+        ctx,
+        scrollTopBuffered,
+        scrollBottomBuffered
+      );
+      totalSize = getContentSize(ctx);
+    }
+    if (positionRecalculationStartIndex !== void 0) {
+      state.positionRecalculationStartIndex = void 0;
     }
     let protectedContainerKeys;
     if (didDataChange && doMVCP && state.props.maintainVisibleContentPosition.data && state.didContainersLayout && state.idsInView.length > 0) {
@@ -5837,8 +6164,8 @@ function calculateItemsInView(ctx, params = {}) {
     if (didMVCPAdjustScroll) {
       updateScroll2(state.scroll);
       updateScrollRange();
-      firstVisibleScroll = firstVisibleItemStartOffset >= scrollLength ? null : firstVisibleItemStartOffset > 0 ? scroll + firstVisibleItemStartOffset : void 0;
     }
+    firstVisibleScroll = firstVisibleItemStartOffset >= scrollLength ? null : firstVisibleItemStartOffset > 0 ? scroll + firstVisibleItemStartOffset : void 0;
     if (didDataChange) {
       stickyState = resolveStickyState();
     }
@@ -5852,14 +6179,7 @@ function calculateItemsInView(ctx, params = {}) {
       if (top === void 0) {
         break;
       }
-      const size = getVisibleLoopItemSize(
-        ctx,
-        state,
-        layout,
-        i,
-        id,
-        isInitialLayout && hasActiveInitialScroll(state)
-      );
+      const size = getVisibleLoopItemSize(ctx, state, layout, i, id, hasActiveInitialScroll(state));
       const bottom = top + size;
       if (bottom > scrollTopBuffered) {
         loopStart = i;
@@ -5885,8 +6205,6 @@ function calculateItemsInView(ctx, params = {}) {
       firstVisibleIndex: null,
       startNoBuffer: null
     };
-    // Positions come from the layout store; old mounted containers are reconciled
-    // separately below. Never scan the skipped gap after an upward scroll jump.
     for (let i = Math.max(0, loopStart); i < dataLength && !foundEnd; i++) {
       const id = (_j = idCache[i]) != null ? _j : getId(state, i);
       const top = layout.getOffset(i);
@@ -5896,14 +6214,7 @@ function calculateItemsInView(ctx, params = {}) {
       if (top === void 0) {
         continue;
       }
-      const size = getVisibleLoopItemSize(
-        ctx,
-        state,
-        layout,
-        i,
-        id,
-        isInitialLayout && hasActiveInitialScroll(state)
-      );
+      const size = getVisibleLoopItemSize(ctx, state, layout, i, id, hasActiveInitialScroll(state));
       if (!foundEnd) {
         trackVisibleRange(visibleRange, i, top, size, scroll, scrollBottom, firstVisibleScroll);
         if (startBuffered === null && top + size > scrollTopBuffered) {
@@ -6032,20 +6343,23 @@ function calculateItemsInView(ctx, params = {}) {
           if (oldKey && oldKey !== id) {
             containerItemKeys.delete(oldKey);
           }
+          state.containerItemMetadata.set(
+            containerIndex,
+            createContainerItemMetadata(state, i, indexedData.getItem(i), allocation.itemType)
+          );
           if (oldKey !== id) {
             changedContainerIds != null ? changedContainerIds : changedContainerIds = /* @__PURE__ */ new Set();
             changedContainerIds.add(containerIndex);
             state.containerItemGenerations[containerIndex] = ((_o = state.containerItemGenerations[containerIndex]) != null ? _o : 0) + 1;
+            if (state.props.hideItemsUntilMeasured) {
+              const isLayoutReady = state.sizesKnown.has(id) || resolveContainerItemMetadata(state, containerIndex, i, indexedData.getItem(i)).fixedItemSize !== void 0;
+              set$(ctx, `containerLayoutReady${containerIndex}`, isLayoutReady);
+            }
           }
-          const item = indexedData.getItem(i);
           indexByKey.set(id, i);
-          state.containerItemMetadata.set(
-            containerIndex,
-            createContainerItemMetadata(state, i, item, allocation.itemType)
-          );
           set$(ctx, `containerItemKey${containerIndex}`, id);
           set$(ctx, `containerItemIndex${containerIndex}`, i);
-          set$(ctx, `containerItemData${containerIndex}`, item);
+          set$(ctx, `containerItemData${containerIndex}`, indexedData.getItem(i));
           containerItemKeys.set(id, containerIndex);
           (_p = state.userScrollAnchorReset) == null ? void 0 : _p.keys.add(id);
           const containerSticky = `containerSticky${containerIndex}`;
@@ -6172,6 +6486,7 @@ function maybeUpdateAnchoredEndSpace(ctx) {
   const nextAnchorIndex = anchoredEndSpace == null ? void 0 : anchoredEndSpace.anchorIndex;
   let nextAnchorKey;
   let isReady = true;
+  let canUpdateSize = true;
   let nextSize = 0;
   if (anchoredEndSpace) {
     const { anchorIndex, anchorMaxSize, anchorOffset = 0 } = anchoredEndSpace;
@@ -6193,25 +6508,30 @@ function maybeUpdateAnchoredEndSpace(ctx) {
       contentBelowAnchor = Math.max(0, contentBelowAnchor - ctx.scrollAxisGap);
       contentBelowAnchor += (ctx.values.get("footerSize") || 0) + getStylePaddingEnd(state.props);
       isReady = !hasUnknownTailSize;
-      nextSize = hasUnknownTailSize ? previousSize || 0 : Math.max(0, state.scrollLength - contentBelowAnchor - anchorOffset);
+      const knownSizeBound = Math.max(0, state.scrollLength - contentBelowAnchor - anchorOffset);
+      nextSize = hasUnknownTailSize ? Math.min(previousSize || 0, knownSizeBound) : knownSizeBound;
     } else if (anchorIndex >= 0) {
       isReady = false;
+      canUpdateSize = false;
     }
   }
   const didSizeChange = previousSize !== nextSize && (previousSize !== void 0 || anchoredEndSpace !== void 0);
   const didEffectiveSizeChange = (previousSize || 0) !== nextSize;
+  const canApplySizeChange = canUpdateSize && (isReady || previousSize !== void 0);
   const didReadyAnchorChange = previousReadyAnchorIndex !== nextAnchorIndex || previousReadyAnchorKey !== nextAnchorKey;
-  if (isReady && (didSizeChange || didReadyAnchorChange)) {
+  const didBecomeReady = isReady && state.anchoredEndSpacePendingReady;
+  state.anchoredEndSpacePendingReady = !isReady;
+  if (canApplySizeChange && didSizeChange) {
+    set$(ctx, "anchoredEndSpaceSize", nextSize);
+    (_a3 = anchoredEndSpace == null ? void 0 : anchoredEndSpace.onSizeChanged) == null ? void 0 : _a3.call(anchoredEndSpace, nextSize);
+  }
+  if (canApplySizeChange && didEffectiveSizeChange) {
+    updateContentMetricsState(ctx);
+    updateScroll(ctx, state.scroll, true, { markHasScrolled: false });
+  }
+  if (isReady && (didSizeChange || didReadyAnchorChange || didBecomeReady)) {
     state.anchoredEndSpaceReadyAnchorIndex = nextAnchorIndex;
     state.anchoredEndSpaceReadyAnchorKey = nextAnchorKey;
-    if (didSizeChange) {
-      set$(ctx, "anchoredEndSpaceSize", nextSize);
-      (_a3 = anchoredEndSpace == null ? void 0 : anchoredEndSpace.onSizeChanged) == null ? void 0 : _a3.call(anchoredEndSpace, nextSize);
-    }
-    if (didEffectiveSizeChange) {
-      updateContentMetricsState(ctx);
-      updateScroll(ctx, state.scroll, true, { markHasScrolled: false });
-    }
     (_b = anchoredEndSpace == null ? void 0 : anchoredEndSpace.onReady) == null ? void 0 : _b.call(anchoredEndSpace, { anchorIndex: nextAnchorIndex, anchorKey: nextAnchorKey, size: nextSize });
   }
   return nextSize;
@@ -6229,9 +6549,12 @@ function runOrScheduleMVCPRecalculate(ctx) {
   } else {
     if (!state.mvcpAnchorLock) {
       state.scheduledWork.cancel("mvcpRecalculate");
-      calculateItemsInView(ctx, { doMVCP: true });
+      calculateItemsInView(ctx, { doMVCP: true, mvcpAdjustmentSource: "item-size" });
     } else if (!state.scheduledWork.has("mvcpRecalculate")) {
-      state.scheduledWork.frame(() => calculateItemsInView(ctx, { doMVCP: true }), "mvcpRecalculate");
+      state.scheduledWork.frame(
+        () => calculateItemsInView(ctx, { doMVCP: true, mvcpAdjustmentSource: "item-size" }),
+        "mvcpRecalculate"
+      );
     }
   }
 }
@@ -6287,6 +6610,7 @@ function flushItemSizeUpdates(ctx, result) {
   if (result.didChange && result.shouldMaintainScrollAtEnd) {
     doMaintainScrollAtEnd(ctx);
   }
+  schedulePeriodicLayoutStoreEstimateFlush(ctx);
 }
 function updateItemSizes(ctx, measurement) {
   if (activeItemSizeBatches) {
@@ -6304,14 +6628,21 @@ function updateItemSizesBatch(ctx, measurements) {
   var _a3;
   const state = ctx.state;
   const result = {};
-  for (const measurement of measurements) {
-    const ownsMeasuredItem = measurement.containerId === void 0 || peek$(ctx, `containerItemKey${measurement.containerId}`) === measurement.itemKey;
-    if (ownsMeasuredItem) {
-      const index = state.indexByKey.get(measurement.itemKey);
-      const itemData = index === void 0 ? void 0 : (_a3 = state.props.data) == null ? void 0 : _a3[index];
-      const metadata = measurement.containerId !== void 0 && index !== void 0 && itemData !== void 0 ? resolveContainerItemMetadata(state, measurement.containerId, index, itemData) : void 0;
-      const nextResult = applyItemSize(ctx, measurement.itemKey, measurement.size, metadata);
-      mergeItemSizeUpdateResult(result, nextResult);
+  const previousTotalSize = state.totalSize;
+  try {
+    for (const measurement of measurements) {
+      const ownsMeasuredItem = measurement.containerId === void 0 || peek$(ctx, `containerItemKey${measurement.containerId}`) === measurement.itemKey && (measurement.generation === void 0 || ((_a3 = state.containerItemGenerations[measurement.containerId]) != null ? _a3 : 0) === measurement.generation);
+      if (ownsMeasuredItem) {
+        const index = state.indexByKey.get(measurement.itemKey);
+        const itemData = index === void 0 ? void 0 : getDataItem(state, index);
+        const metadata = measurement.containerId !== void 0 && index !== void 0 && itemData !== void 0 ? resolveContainerItemMetadata(state, measurement.containerId, index, itemData) : void 0;
+        const nextResult = applyItemSize(ctx, measurement.itemKey, measurement.size, metadata);
+        mergeItemSizeUpdateResult(result, nextResult);
+      }
+    }
+  } finally {
+    if (state.totalSize !== previousTotalSize) {
+      set$(ctx, "totalSize", state.totalSize);
     }
   }
   flushItemSizeUpdates(ctx, result);
@@ -6328,14 +6659,8 @@ function applyItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
   } = state;
   if (!state.props.dataSource && !state.props.data) return { didMeasureUserScrollAnchorResetItem };
   const index = state.indexByKey.get(itemKey);
-  if (getFixedItemSize) {
-    if (index === void 0) {
-      return { didMeasureUserScrollAnchorResetItem };
-    }
-    const itemData = getDataItem(state, index);
-    if (itemData === void 0) {
-      return { didMeasureUserScrollAnchorResetItem };
-    }
+  const itemData = index === void 0 ? void 0 : getDataItem(state, index);
+  if (getFixedItemSize && itemData !== void 0) {
     if (!(resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.didResolveFixedItemSize)) {
       const type = (_b = resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.itemType) != null ? _b : getItemType ? (_a3 = getItemType(itemData, index)) != null ? _a3 : "" : "";
       resolvedMeasurementItem = {
@@ -6352,13 +6677,13 @@ function applyItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
   }
   let needsRecalculate = !didContainersLayout;
   let shouldMaintainScrollAtEnd = false;
-  let minIndexSizeChanged;
+  let positionRecalculationStartIndex;
   const prevSizeKnown = state.sizesKnown.get(itemKey);
   const applyMVCPAdjustment = state.props.maintainVisibleContentPosition.size ? prepareMVCP(ctx) : void 0;
-  const diff = updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem);
+  const diff = updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem, false);
   const size = roundSize(horizontal ? sizeObj.width : sizeObj.height);
   if (diff !== 0) {
-    minIndexSizeChanged = minIndexSizeChanged !== void 0 ? Math.min(minIndexSizeChanged, index) : index;
+    positionRecalculationStartIndex = positionRecalculationStartIndex !== void 0 ? Math.min(positionRecalculationStartIndex, index) : index;
     const { startBuffered, endBuffered } = state;
     needsRecalculate || (needsRecalculate = index >= startBuffered && index <= endBuffered);
     if (!needsRecalculate && state.containerItemKeys.has(itemKey)) {
@@ -6375,8 +6700,8 @@ function applyItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
       size
     });
   }
-  if (minIndexSizeChanged !== void 0) {
-    state.minIndexSizeChanged = state.minIndexSizeChanged !== void 0 ? Math.min(state.minIndexSizeChanged, minIndexSizeChanged) : minIndexSizeChanged;
+  if (positionRecalculationStartIndex !== void 0) {
+    state.positionRecalculationStartIndex = state.positionRecalculationStartIndex !== void 0 ? Math.min(state.positionRecalculationStartIndex, positionRecalculationStartIndex) : positionRecalculationStartIndex;
   }
   updateOtherAxisSizeIfNeeded(ctx, sizeObj, horizontal);
   if (didContainersLayout || checkAllSizesKnown(state, state.startBuffered, state.endBuffered)) {
@@ -6395,8 +6720,8 @@ function applyItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
     didMeasureUserScrollAnchorResetItem
   };
 }
-function updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
-  var _a3, _b, _c;
+function updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem, notifyTotalSize = true) {
+  var _a3, _b;
   const state = ctx.state;
   const {
     indexByKey,
@@ -6411,11 +6736,11 @@ function updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
     return 0;
   }
   const itemIndex = index;
-  const itemData = (_a3 = resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.itemData) != null ? _a3 : getDataItem(state, itemIndex);
+  const itemData = getDataItem(state, itemIndex);
   let itemType = resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.itemType;
   let fixedItemSize = resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.fixedItemSize;
-  if (getFixedItemSize && !(resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.didResolveFixedItemSize)) {
-    itemType = getItemType ? (_b = getItemType(itemData, itemIndex)) != null ? _b : "" : "";
+  if (itemData !== void 0 && getFixedItemSize && !(resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.didResolveFixedItemSize)) {
+    itemType = getItemType ? (_a3 = getItemType(itemData, itemIndex)) != null ? _a3 : "" : "";
     fixedItemSize = getFixedItemSize(itemData, itemIndex, itemType);
   }
   const resolvedItemSize = (resolvedMeasurementItem == null ? void 0 : resolvedMeasurementItem.didResolveFixedItemSize) || itemType !== void 0 || fixedItemSize !== void 0 ? {
@@ -6423,13 +6748,13 @@ function updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
     fixedItemSize,
     itemType
   } : void 0;
-  const prevSize = layoutStore && index !== void 0 ? layoutStore.getSize(index) : getItemSize(ctx, itemKey, itemIndex, itemData, void 0, void 0, void 0, resolvedItemSize);
+  const prevSize = layoutStore && index !== void 0 ? layoutStore.getSize(index) : getItemSize(ctx, itemKey, itemIndex, itemData, void 0, void 0, notifyTotalSize, resolvedItemSize);
   const rawSize = horizontal ? sizeObj.width : sizeObj.height;
   const prevSizeKnown = sizesKnown.get(itemKey);
   const size = Math.round(rawSize) ;
   sizesKnown.set(itemKey, size);
   if (fixedItemSize === void 0 && size > 0) {
-    itemType != null ? itemType : itemType = getItemType ? (_c = getItemType(itemData, itemIndex)) != null ? _c : "" : "";
+    itemType != null ? itemType : itemType = itemData !== void 0 && getItemType ? (_b = getItemType(itemData, itemIndex)) != null ? _b : "" : "";
     let averages = averageSizes[itemType];
     if (!averages) {
       averages = averageSizes[itemType] = { avg: 0, num: 0 };
@@ -6445,11 +6770,12 @@ function updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
     }
   }
   const didSizeChange = !prevSize || Math.abs(prevSize - size) > 0.1;
-  const didSetPrefixLayoutStoreSize = setLayoutStoreMeasuredSize(ctx, index, size);
+  const didSetPrefixLayoutStoreSize = setLayoutStoreMeasuredSize(ctx, index, size, notifyTotalSize);
   if (didSizeChange || didSetPrefixLayoutStoreSize) {
     if (!didSetPrefixLayoutStoreSize) {
-      setSize(ctx, itemKey, size);
+      setSize(ctx, itemKey, size, notifyTotalSize);
     }
+    maybeFlushInitialLayoutStoreEstimate(ctx, notifyTotalSize);
     return didSizeChange ? size - prevSize : 0;
   }
   return 0;
@@ -6615,6 +6941,30 @@ function useContainerItemSignals(containerContext) {
     itemKey
   };
 }
+function scheduleViewabilityConfigWarning(ctx, hookName, configId) {
+  let cancelled = false;
+  Promise.resolve().then(() => {
+    var _a3;
+    const viewabilityConfigCallbackPairs = (_a3 = ctx.state) == null ? void 0 : _a3.viewabilityConfigCallbackPairs;
+    if (!cancelled && ctx.state) {
+      if (!(viewabilityConfigCallbackPairs == null ? void 0 : viewabilityConfigCallbackPairs.length)) {
+        warnDevOnce(
+          `${hookName}-missing-viewability-config`,
+          `${hookName} requires viewability to be configured on the owning LegendList. Add viewabilityConfig with a visibility threshold.`
+        );
+      } else if (hookName === "useViewability" && !viewabilityConfigCallbackPairs.some((pair) => pair.viewabilityConfig.id === (configId != null ? configId : ""))) {
+        const configDescription = configId ? ` for configId "${configId}"` : "";
+        warnDevOnce(
+          `${hookName}-missing-viewability-config-${configId != null ? configId : "default"}`,
+          `${hookName}${configDescription} requires a matching viewabilityConfig.id on the owning LegendList. Add an id to viewabilityConfig and pass the same id to useViewability.`
+        );
+      }
+    }
+  });
+  return () => {
+    cancelled = true;
+  };
+}
 function useAdaptiveRender() {
   const [mode] = useArr$(["adaptiveRender"]);
   return mode;
@@ -6655,10 +7005,12 @@ function useViewability(callback, configId) {
     const key = containerId + (configId != null ? configId : "");
     const hadConsumers = hasViewabilityConsumers(ctx);
     ctx.mapViewabilityCallbacks.set(key, callback);
+    const cancelConfigWarning = IS_DEV ? scheduleViewabilityConfigWarning(ctx, "useViewability", configId) : void 0;
     if (!hadConsumers) {
       requestViewabilityRecalculation(ctx);
     }
     return () => {
+      cancelConfigWarning == null ? void 0 : cancelConfigWarning();
       ctx.mapViewabilityCallbacks.delete(key);
     };
   }, [ctx, callback, configId, containerContext]);
@@ -6683,10 +7035,12 @@ function useViewabilityAmount(callback) {
     const { containerId } = containerContext;
     const hadConsumers = hasViewabilityConsumers(ctx);
     ctx.mapViewabilityAmountCallbacks.set(containerId, callback);
+    const cancelConfigWarning = IS_DEV ? scheduleViewabilityConfigWarning(ctx, "useViewabilityAmount") : void 0;
     if (!hadConsumers) {
       requestViewabilityRecalculation(ctx);
     }
     return () => {
+      cancelConfigWarning == null ? void 0 : cancelConfigWarning();
       ctx.mapViewabilityAmountCallbacks.delete(containerId);
     };
   }, [ctx, callback, containerContext]);
@@ -6909,8 +7263,10 @@ function scheduleWebShrinkMeasurement(state, confirmMeasurement) {
   }
 }
 function processContainerLayout({ containerId, ctx, rectangle, ref, state }) {
+  var _a3;
   const listState = ctx.state;
   const currentItemKey = state.itemKey;
+  const generation = (_a3 = listState.containerItemGenerations[containerId]) != null ? _a3 : 0;
   state.didLayout = true;
   let layout = rectangle;
   const axis = state.horizontal ? "width" : "height";
@@ -6919,9 +7275,14 @@ function processContainerLayout({ containerId, ctx, rectangle, ref, state }) {
   const coreKnownSize = listState.sizesKnown.get(currentItemKey);
   const previousSize = coreKnownSize ;
   const applyLayout = () => {
+    var _a4;
+    if (state.itemKey !== currentItemKey || ((_a4 = listState.containerItemGenerations[containerId]) != null ? _a4 : 0) !== generation) {
+      return;
+    }
     state.lastSize = layout;
     updateItemSizes(ctx, {
       containerId,
+      generation,
       itemKey: currentItemKey,
       size: layout
     });
@@ -7064,15 +7425,14 @@ var Container = typedMemo(function Container2({
   const isHorizontalRTLList = isHorizontalRTL(ctx.state);
   const positionComponentInternal = ctx.state.props.positionComponentInternal;
   const stickyPositionComponentInternal = ctx.state.props.stickyPositionComponentInternal;
-  const [column = 0, span = 1, data, dataVersion, numColumns = 1, extraData, isSticky, itemIndex] = useArr$([
+  const [column = 0, span = 1, data, dataVersion, numColumns = 1, extraData, isSticky] = useArr$([
     `containerColumn${id}`,
     `containerSpan${id}`,
     `containerItemData${id}`,
     `containerDataVersion${id}`,
     "numColumns",
     "extraData",
-    `containerSticky${id}`,
-    `containerItemIndex${id}`
+    `containerSticky${id}`
   ]);
   const ref = useRef(null);
   const { onLayout, triggerLayout } = useContainerMeasurement({
@@ -7110,7 +7470,7 @@ var Container = typedMemo(function Container2({
   );
   const renderedItemInfo = useMemo(
     () => itemKey !== void 0 ? getRenderedItem2(itemKey, id) : null,
-    [itemKey, itemIndex, data, dataVersion, extraData]
+    [itemKey, data, dataVersion, extraData]
   );
   const { renderedItem } = renderedItemInfo || {};
   const contextValue = useMemo(() => {
@@ -7207,7 +7567,9 @@ function sortDOMElements(container, indexByElement) {
           break;
         }
       }
-      if (nextStableElement) {
+      if ("moveBefore" in container && typeof container.moveBefore === "function" && container.isConnected) {
+        container.moveBefore(element, nextStableElement);
+      } else if (nextStableElement) {
         container.insertBefore(element, nextStableElement);
       } else {
         container.appendChild(element);
@@ -7254,13 +7616,18 @@ function findLIS(arr) {
 // src/hooks/useDOMOrder.ts
 function useDOMOrder(ref) {
   const ctx = useStateContext();
-  const debounceRef = useRef(void 0);
   useEffect(() => {
+    let timeoutId;
+    let lastUpdateTime = 0;
+    let delay = 500;
     const unsubscribe = listen$(ctx, "lastPositionUpdate", () => {
-      if (debounceRef.current !== void 0) {
-        clearTimeout(debounceRef.current);
-      }
-      debounceRef.current = setTimeout(() => {
+      const container = ref.current;
+      const now = Date.now();
+      delay = container && "moveBefore" in container && typeof container.moveBefore === "function" && container.isConnected && (now - lastUpdateTime >= 1e3 || timeoutId !== void 0 && delay === 0) && now - ctx.state.scrollTime >= 500 ? 0 : 500;
+      lastUpdateTime = now;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        timeoutId = void 0;
         const parent = ref.current;
         if (parent) {
           const indexByElement = /* @__PURE__ */ new Map();
@@ -7273,14 +7640,11 @@ function useDOMOrder(ref) {
           }
           sortDOMElements(parent, indexByElement);
         }
-        debounceRef.current = void 0;
-      }, 500);
+      }, delay);
     });
     return () => {
       unsubscribe();
-      if (debounceRef.current !== void 0) {
-        clearTimeout(debounceRef.current);
-      }
+      clearTimeout(timeoutId);
     };
   }, [ctx]);
 }
@@ -7650,6 +8014,7 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
         return (_a4 = scrollRef.current) == null ? void 0 : _a4.getBoundingClientRect();
       },
       getCurrentScrollOffset,
+      getMaxScrollOffset,
       getScrollableNode: () => resolveScrollableNode(scrollRef.current, isWindowScroll),
       getScrollEventTarget: () => getScrollTarget(),
       getScrollResponder: () => resolveScrollableNode(scrollRef.current, isWindowScroll),
@@ -7755,6 +8120,22 @@ var ListComponentScrollView = forwardRef(function ListComponentScrollView2({
       scrollEventCoalescer.cancel();
     };
   }, [emitScrollEnd, getScrollTarget, handleScroll, scrollEventCoalescer]);
+  useEffect(() => {
+    const target = getScrollTarget();
+    if (!target) return;
+    const onWheel = (nativeEvent) => {
+      const event = nativeEvent;
+      const delta = horizontal ? event.deltaX || (event.shiftKey ? event.deltaY : 0) : event.deltaY;
+      if (delta < 0 && !event.ctrlKey && !event.defaultPrevented && (ctx.state.maintainingScrollAtEnd || ctx.state.pendingMaintainScrollAtEnd)) {
+        const offset = getCurrentScrollOffset();
+        if (interruptMaintainScrollAtEnd(ctx)) {
+          scrollToLocalOffset(offset, false);
+        }
+      }
+    };
+    target.addEventListener("wheel", onWheel, { passive: true });
+    return () => target.removeEventListener("wheel", onWheel);
+  }, [ctx, getCurrentScrollOffset, getScrollTarget, horizontal, scrollToLocalOffset]);
   useEffect(() => {
     const doScroll = () => {
       if (contentOffset) {
@@ -7964,8 +8345,11 @@ function ScrollAdjust() {
               window.getComputedStyle(contentNode)[axis.paddingEndProp]
             );
             const temporaryPaddingEnd = `${(currentPaddingEnd || 0) + pad}px`;
-            temporaryPaddingRef.current = { baseline: baselinePaddingEnd, value: temporaryPaddingEnd };
             contentNode.style[axis.paddingEndProp] = temporaryPaddingEnd;
+            temporaryPaddingRef.current = {
+              baseline: baselinePaddingEnd,
+              value: contentNode.style[axis.paddingEndProp]
+            };
             void contentNode.offsetHeight;
             scrollBy();
             if (resetPaddingRafRef.current !== void 0) {
@@ -8184,7 +8568,7 @@ var ListComponent = typedMemo(function ListComponent2({
         horizontal ? { height: "100%" } : {},
         contentContainerStyle,
         anchoredEndSpaceStyle,
-        { boxSizing: "border-box" }
+        { boxSizing: "border-box" } 
       ],
       contentOffset: initialContentOffset !== void 0 ? horizontal ? { x: initialContentOffset, y: 0 } : { x: 0, y: initialContentOffset } : void 0,
       horizontal,
@@ -8300,7 +8684,7 @@ function checkResetContainers(ctx, dataProp, { didColumnsChange = false, previou
       delete state.averageSizes[key];
     }
     clearLayoutStoreKnownSizes(ctx);
-    state.minIndexSizeChanged = 0;
+    state.positionRecalculationStartIndex = 0;
     state.scrollForNextCalculateItemsInView = void 0;
   }
   calculateItemsInView(ctx, { dataChanged: true, doMVCP: true });
@@ -8381,6 +8765,16 @@ function checkStructuralDataChange(state, dataProp, previousData) {
   return false;
 }
 
+// src/core/containerLayoutReady.ts
+var CONTAINER_LAYOUT_READY_PREFIX = "containerLayoutReady";
+function resetContainerLayoutReady(ctx) {
+  for (const signalName of ctx.values.keys()) {
+    if (signalName.startsWith(CONTAINER_LAYOUT_READY_PREFIX)) {
+      set$(ctx, signalName, void 0);
+    }
+  }
+}
+
 // src/core/DataSourceMutationCoordinator.ts
 function transformMoveIndex2(index, from, to, count) {
   let nextIndex = index;
@@ -8427,6 +8821,29 @@ function collectMaterializedEntries(ctx) {
     }
   }
   return byIndex;
+}
+function collectUpdatedEntries(ctx, operations) {
+  let count = 0;
+  for (const operation of operations) {
+    if (operation.type !== "update") return void 0;
+    count += operation.count;
+  }
+  if (count > ctx.state.indexByKey.size) return void 0;
+  const entries = /* @__PURE__ */ new Map();
+  for (const operation of operations) {
+    if (operation.type !== "update") return void 0;
+    for (let index = operation.index; index < operation.index + operation.count; index++) {
+      const key = ctx.state.idCache[index];
+      if (key === void 0 || ctx.state.indexByKey.get(key) !== index) return void 0;
+      const previous = entries.get(index);
+      entries.set(index, {
+        index,
+        invalidateLayout: (previous == null ? void 0 : previous.invalidateLayout) === true || operation.layout === "invalidate",
+        key
+      });
+    }
+  }
+  return entries;
 }
 function snapshotAnchorPositions(ctx) {
   var _a3, _b, _c;
@@ -8559,16 +8976,25 @@ function applyDataSourceMutationBatches(ctx, source, batches) {
   if (explicitReset) {
     return { applied: false, materializedCount: 0, resetReason: "the data source requested a reset" };
   }
-  let entries = collectMaterializedEntries(ctx);
+  const updatedEntries = collectUpdatedEntries(ctx, operations);
+  const isUpdateOnly = updatedEntries !== void 0;
+  let entries = updatedEntries != null ? updatedEntries : collectMaterializedEntries(ctx);
   const anchorPositions = snapshotAnchorPositions(ctx);
   const invalidatedKeys = /* @__PURE__ */ new Set();
   const removedKeys = /* @__PURE__ */ new Set();
   const rerenderKeys = /* @__PURE__ */ new Set();
-  for (const operation of operations) {
-    entries = applyOperationToEntries(entries, operation, invalidatedKeys, rerenderKeys, removedKeys);
+  if (updatedEntries) {
+    for (const entry of updatedEntries.values()) {
+      rerenderKeys.add(entry.key);
+      if (entry.invalidateLayout) invalidatedKeys.add(entry.key);
+    }
+  } else {
+    for (const operation of operations) {
+      entries = applyOperationToEntries(entries, operation, invalidatedKeys, rerenderKeys, removedKeys);
+    }
   }
   let resetReason;
-  const nextIndexByKey = /* @__PURE__ */ new Map();
+  const nextIndexByKey = isUpdateOnly ? state.indexByKey : /* @__PURE__ */ new Map();
   try {
     for (const entry of entries.values()) {
       const finalKey = source.getKey(entry.index);
@@ -8576,11 +9002,11 @@ function applyDataSourceMutationBatches(ctx, source, batches) {
         resetReason = `materialized key ${entry.key} changed at index ${entry.index}`;
         break;
       }
-      if (nextIndexByKey.has(entry.key)) {
+      if (!isUpdateOnly && nextIndexByKey.has(entry.key)) {
         resetReason = `materialized key ${entry.key} is duplicated`;
         break;
       }
-      nextIndexByKey.set(entry.key, entry.index);
+      if (!isUpdateOnly) nextIndexByKey.set(entry.key, entry.index);
     }
   } catch (error) {
     resetReason = `reading a materialized key failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -8619,19 +9045,20 @@ function applyDataSourceMutationBatches(ctx, source, batches) {
     (_b = state.layoutStoreRuntime) == null ? void 0 : _b.transformCachedRowSpans(operations);
   }
   (_c = state.dataSourceAnchorPositions) != null ? _c : state.dataSourceAnchorPositions = anchorPositions;
-  state.idCache.length = 0;
-  state.indexByKey.clear();
-  for (const entry of entries.values()) {
-    state.idCache[entry.index] = entry.key;
-    state.indexByKey.set(entry.key, entry.index);
+  if (!isUpdateOnly) {
+    state.idCache.length = 0;
+    state.indexByKey.clear();
+    for (const entry of entries.values()) {
+      state.idCache[entry.index] = entry.key;
+      state.indexByKey.set(entry.key, entry.index);
+    }
   }
   for (const key of removedKeys) {
     state.sizes.delete(key);
     state.sizesKnown.delete(key);
     state.containerItemKeys.delete(key);
-    (_d = state.pendingLayoutEffectMeasurements) == null ? void 0 : _d.delete(key);
-    (_e = state.userScrollAnchorReset) == null ? void 0 : _e.keys.delete(key);
-    (_g = (_f = state.layoutStoreRuntime) == null ? void 0 : _f.positionListenerOffsets) == null ? void 0 : _g.delete(key);
+    (_d = state.userScrollAnchorReset) == null ? void 0 : _d.keys.delete(key);
+    (_f = (_e = state.layoutStoreRuntime) == null ? void 0 : _e.positionListenerOffsets) == null ? void 0 : _f.delete(key);
     notifyPosition$(ctx, key, void 0);
   }
   for (const key of invalidatedKeys) {
@@ -8642,7 +9069,14 @@ function applyDataSourceMutationBatches(ctx, source, batches) {
     const containerId = state.containerItemKeys.get(key);
     const index = nextIndexByKey.get(key);
     if (containerId !== void 0 && index !== void 0) {
-      set$(ctx, `containerItemData${containerId}`, source.getItem(index));
+      const item = source.getItem(index);
+      if (invalidatedKeys.has(key)) {
+        state.containerItemGenerations[containerId] = ((_g = state.containerItemGenerations[containerId]) != null ? _g : 0) + 1;
+        state.containerItemMetadata.delete(containerId);
+      }
+      updateContainerItemMetadata(state, containerId, index, item);
+      set$(ctx, `containerItemIndex${containerId}`, index);
+      set$(ctx, `containerItemData${containerId}`, item);
       const versionKey = `containerDataVersion${containerId}`;
       set$(ctx, versionKey, ((_h = peek$(ctx, versionKey)) != null ? _h : 0) + 1);
     }
@@ -8679,7 +9113,7 @@ function applyDataSourceMutationBatches(ctx, source, batches) {
   state.endNoBuffer = state.endNoBuffer === null || finalLength === 0 ? null : transformClampedIndex(state.endNoBuffer);
   state.firstFullyOnScreenIndex = state.firstFullyOnScreenIndex === void 0 ? void 0 : transformClampedIndex(state.firstFullyOnScreenIndex);
   state.scrollForNextCalculateItemsInView = void 0;
-  return { applied: true, materializedCount: entries.size };
+  return { applied: true, materializedCount: isUpdateOnly ? state.indexByKey.size : entries.size };
 }
 
 // src/core/DataSourceObserver.ts
@@ -8790,30 +9224,30 @@ var DataSourceObserver = class {
 
 // src/core/doInitialAllocateContainers.ts
 function doInitialAllocateContainers(ctx) {
-  var _a3, _b, _c;
+  var _a3;
   const state = ctx.state;
   const {
     scrollLength,
-    props: { getEstimatedItemSize, getFixedItemSize, getItemType, numColumns, estimatedItemSize }
+    props: { getFixedItemSize, numColumns, estimatedItemSize }
   } = state;
   const dataLength = getDataLength(state);
   const drawDistance = getEffectiveDrawDistance(ctx);
   const hasContainers = peek$(ctx, "numContainers");
   if (scrollLength > 0 && dataLength > 0 && !hasContainers) {
     let averageItemSize;
-    if (getFixedItemSize || getEstimatedItemSize) {
+    if (getFixedItemSize) {
       let totalSize = 0;
       const num = Math.min(20, dataLength);
       for (let i = 0; i < num; i++) {
         const item = getDataItem(state, i);
-        if (item !== void 0) {
-          const itemType = (_a3 = getItemType == null ? void 0 : getItemType(item, i)) != null ? _a3 : "";
-          totalSize += (_c = getFixedItemLayoutSize(ctx, i, item)) != null ? _c : ((_b = getEstimatedItemSize == null ? void 0 : getEstimatedItemSize(item, i, itemType)) != null ? _b : estimatedItemSize) + ctx.scrollAxisGap;
-        }
+        totalSize += (_a3 = item !== void 0 ? getFixedItemLayoutSize(ctx, i, item) : void 0) != null ? _a3 : estimatedItemSize + ctx.scrollAxisGap;
       }
       averageItemSize = totalSize / num;
     } else {
       averageItemSize = estimatedItemSize + ctx.scrollAxisGap;
+    }
+    if (!(averageItemSize > 0)) {
+      averageItemSize = (estimatedItemSize > 0 ? estimatedItemSize : 100) + ctx.scrollAxisGap;
     }
     const numContainers = Math.max(
       1,
@@ -8990,11 +9424,29 @@ var ScheduledWork = class {
   constructor() {
     this.work = /* @__PURE__ */ new Map();
   }
+  microtask(callback, key) {
+    const pendingWork = this.work.get(key);
+    if (pendingWork == null ? void 0 : pendingWork.callback) {
+      pendingWork.callback = callback;
+    } else {
+      this.cancel(key);
+      const work = { callback, cancel: () => {
+      } };
+      this.work.set(key, work);
+      queueMicrotask(() => {
+        var _a3;
+        if (this.work.get(key) === work) {
+          this.work.delete(key);
+          (_a3 = work.callback) == null ? void 0 : _a3.call(work);
+        }
+      });
+    }
+  }
   timeout(callback, delay, key) {
     if (key) {
       this.cancel(key);
     }
-    const work = [void 0, clearTimeout];
+    const work = { cancel: () => clearTimeout(handle) };
     const handle = setTimeout(() => {
       const workKey = key != null ? key : handle;
       if (this.work.get(workKey) === work) {
@@ -9002,14 +9454,13 @@ var ScheduledWork = class {
         callback();
       }
     }, delay);
-    work[0] = handle;
     this.work.set(key != null ? key : handle, work);
   }
   frame(callback, key) {
     this.cancel(key);
-    const work = [void 0, cancelAnimationFrame];
+    const work = { cancel: () => cancelAnimationFrame(handle) };
     this.work.set(key, work);
-    work[0] = requestAnimationFrame(() => {
+    const handle = requestAnimationFrame(() => {
       if (this.work.get(key) === work) {
         this.work.delete(key);
         callback();
@@ -9018,22 +9469,21 @@ var ScheduledWork = class {
   }
   register(key, cancel) {
     this.cancel(key);
-    this.work.set(key, [void 0, cancel]);
+    this.work.set(key, { cancel });
   }
   cancel(key) {
     const work = this.work.get(key);
     if (work) {
       this.work.delete(key);
-      const [handle, cancel] = work;
-      cancel(handle);
+      work.cancel();
     }
   }
   has(key) {
     return this.work.has(key);
   }
   dispose() {
-    for (const [handle, cancel] of this.work.values()) {
-      cancel(handle);
+    for (const work of this.work.values()) {
+      work.cancel();
     }
     this.work.clear();
   }
@@ -9088,6 +9538,27 @@ var ScrollAdjustHandler = class {
     }
   }
 };
+
+// src/core/scrollToEnd.ts
+function scrollToEnd(ctx, options) {
+  const state = ctx.state;
+  const index = getDataLength(state) - 1;
+  if (index === -1) {
+    return false;
+  }
+  const paddingBottom = state.props.stylePaddingBottom || 0;
+  const footerSize = peek$(ctx, "footerSize") || 0;
+  scrollToIndex(ctx, {
+    ...options,
+    index,
+    viewOffset: -paddingBottom - footerSize + ((options == null ? void 0 : options.viewOffset) || 0),
+    viewPosition: 1
+  });
+  if (state.scrollingTo) {
+    state.scrollingTo.isScrollToEnd = true;
+  }
+  return true;
+}
 
 // src/core/updateContentInsetEndAdjustment.ts
 function updateContentInsetEndAdjustment(ctx, previousContentInsetEndAdjustment) {
@@ -9151,24 +9622,6 @@ function createColumnWrapperStyle(contentContainerStyle) {
   }
 }
 
-// src/core/scrollToEnd.ts
-function scrollToEnd(ctx, options) {
-  const state = ctx.state;
-  const index = getDataLength(state) - 1;
-  if (index === -1) {
-    return false;
-  }
-  const paddingBottom = state.props.stylePaddingBottom || 0;
-  const footerSize = peek$(ctx, "footerSize") || 0;
-  scrollToIndex(ctx, {
-    ...options,
-    index,
-    viewOffset: -paddingBottom - footerSize + ((options == null ? void 0 : options.viewOffset) || 0),
-    viewPosition: 1
-  });
-  return true;
-}
-
 // src/utils/createImperativeHandle.ts
 var DEFAULT_AVERAGE_ITEM_SIZE_TYPE = "default";
 function getAverageItemSizes(state) {
@@ -9191,9 +9644,9 @@ function triggerMountedContainerLayouts(ctx) {
 }
 function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
   const state = ctx.state;
+  const scrollRequestTracker = getScrollRequestTracker(ctx);
   const IMPERATIVE_SCROLL_SETTLE_MAX_WAIT_MS = 800;
   const IMPERATIVE_SCROLL_SETTLE_STABLE_FRAMES = 2;
-  let imperativeScrollToken = 0;
   const isSettlingAfterDataChange = () => !!state.didDataChange || !!state.didColumnsChange || state.scheduledWork.has("mvcpRecalculate") || state.ignoreScrollFromMVCP !== void 0;
   const isScrollToIndexReady = (targetIndex, allowEmpty = false) => {
     var _a3;
@@ -9215,7 +9668,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
     const startedAt = Date.now();
     let stableFrames = 0;
     const check = () => {
-      if (token !== imperativeScrollToken) {
+      if (!scrollRequestTracker.isCurrent(token)) {
         return;
       }
       if (isSettlingAfterDataChange() || !isReady()) {
@@ -9233,33 +9686,15 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
     state.scheduledWork.frame(check, "imperativeScrollReady");
   };
   const runScrollRequest = (token, resolve, run, isReady = () => true) => {
-    const runNow = () => {
-      if (token !== imperativeScrollToken) {
-        return;
-      }
-      const didStartScroll = run();
-      if (!didStartScroll || !state.scrollingTo) {
-        if (state.pendingScrollResolve === resolve) {
-          state.pendingScrollResolve = void 0;
-        }
-        resolve();
-      }
-    };
+    const runNow = () => scrollRequestTracker.runNow(token, resolve, run);
     if (isSettlingAfterDataChange() || !isReady()) {
       runWhenReady(token, runNow, isReady);
     } else {
       runNow();
     }
   };
-  const startImperativeScroll = (resolve) => {
-    state.scheduledWork.cancel("imperativeScrollReady");
-    const token = ++imperativeScrollToken;
-    settlePendingImperativeScroll(state);
-    state.pendingScrollResolve = resolve;
-    return token;
-  };
   const runScrollWithPromise = (run, isReady = () => true) => new Promise((resolve) => {
-    const token = startImperativeScroll(resolve);
+    const token = scrollRequestTracker.start(resolve);
     supersedeInitialScroll(ctx);
     runScrollRequest(token, resolve, run, isReady);
   });
@@ -9267,7 +9702,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
     const pendingScroll = state.pendingScrollToEnd;
     if (pendingScroll) {
       state.pendingScrollToEnd = void 0;
-      if (pendingScroll.token === imperativeScrollToken) {
+      if (scrollRequestTracker.isCurrent(pendingScroll.token)) {
         runScrollRequest(
           pendingScroll.token,
           pendingScroll.resolve,
@@ -9307,7 +9742,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
       delete state.averageSizes[key];
     }
     clearLayoutStoreKnownSizes(ctx);
-    state.minIndexSizeChanged = 0;
+    state.positionRecalculationStartIndex = 0;
     state.scrollForNextCalculateItemsInView = void 0;
     state.pendingTotalSize = void 0;
     state.totalSize = 0;
@@ -9322,27 +9757,6 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
     }
     triggerMountedContainerLayouts(ctx);
     (_b = state.triggerCalculateItemsInView) == null ? void 0 : _b.call(state, { forceFullItemPositions: true });
-  };
-  const replaceKnownSizeEntries = (entries) => {
-    var _a3;
-    const checkMVCP = prepareMVCP(ctx);
-    const layoutEntries = entries.map(({ index, size }) => ({
-      index,
-      size: size + ctx.scrollAxisGap,
-      type: "cached"
-    }));
-    const didReplace = replaceLayoutStoreKnownSizeEntries(ctx, layoutEntries);
-    if (didReplace) {
-      state.sizes.clear();
-      state.sizesKnown.clear();
-      for (const key in state.averageSizes) {
-        delete state.averageSizes[key];
-      }
-      state.minIndexSizeChanged = 0;
-      state.scrollForNextCalculateItemsInView = void 0;
-      checkMVCP == null ? void 0 : checkMVCP();
-      (_a3 = state.triggerCalculateItemsInView) == null ? void 0 : _a3.call(state, { forceFullItemPositions: true });
-    }
   };
   return {
     clearCaches,
@@ -9385,13 +9799,12 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
         scroll: state.scroll,
         scrollLength: state.scrollLength,
         scrollVelocity: getScrollVelocity(state),
-        sizeAtIndex: (index) => getLayoutSize(ctx, index),
+        sizeAtIndex: (index) => state.sizesKnown.get(getId(state, index)),
         sizes: state.sizesKnown,
         start: state.startNoBuffer,
         startBuffered: state.startBuffered
       };
     },
-    replaceKnownSizeEntries,
     reportContentInset: (inset) => {
       const didChange = setContentInsetOverride(ctx, inset);
       updateScroll(ctx, state.scroll, true, { markHasScrolled: false });
@@ -9417,7 +9830,7 @@ function createImperativeHandle(ctx, scheduleImperativeScrollCommit) {
     }),
     scrollToEnd: (options) => new Promise((resolve) => {
       var _a3;
-      const token = startImperativeScroll(resolve);
+      const token = scrollRequestTracker.start(resolve);
       state.pendingScrollToEnd = {
         options,
         resolve,
@@ -9539,18 +9952,18 @@ function getRenderedItem(ctx, key, containerId) {
   const useAssignedGeneration = metadata && metadata.dataChangeEpoch !== state.dataChangeEpoch;
   const {
     indexByKey,
-    props: { dataSource, getItemType, renderItem }
+    props: { data: currentData, dataSource: currentDataSource, getItemType, renderItem }
   } = state;
+  const data = useAssignedGeneration ? metadata.data : currentData;
   const index = (_a3 = metadata == null ? void 0 : metadata.itemIndex) != null ? _a3 : indexByKey.get(key);
   if (index === void 0) {
     return null;
   }
   let renderedItem = null;
   const extraData = peek$(ctx, "extraData");
-  const indexedData = getIndexedData(state);
+  const dataSource = useAssignedGeneration ? metadata.dataSource : currentDataSource;
   const item = useAssignedGeneration ? metadata.itemData : getDataItem(state, index);
-  const assignedDataSource = useAssignedGeneration ? metadata.dataSource : dataSource;
-  const shouldRender = assignedDataSource !== void 0 || !isNullOrUndefined(item);
+  const shouldRender = !!dataSource || !isNullOrUndefined(item);
   if (renderItem && shouldRender) {
     const sharedItemProps = {
       extraData,
@@ -9558,7 +9971,7 @@ function getRenderedItem(ctx, key, containerId) {
       item,
       type: useAssignedGeneration ? (_b = metadata.itemType) != null ? _b : "" : item !== void 0 && getItemType ? (_c = getItemType(item, index)) != null ? _c : "" : ""
     };
-    const itemProps = assignedDataSource !== void 0 ? { ...sharedItemProps, dataSource: assignedDataSource } : { ...sharedItemProps, data: useAssignedGeneration ? metadata.data : indexedData.getLegacyData() };
+    const itemProps = dataSource ? { ...sharedItemProps, dataSource } : { ...sharedItemProps, data };
     renderedItem = renderItem(itemProps);
   }
   return { index, item, renderedItem };
@@ -9701,11 +10114,6 @@ function areViewabilityConfigsEqual(a, b) {
 function areViewabilityConfigPairsEqual(a, b) {
   return (a == null ? void 0 : a.length) === (b == null ? void 0 : b.length) && (a === b || (a == null ? void 0 : a.every((pair, index) => areViewabilityConfigsEqual(pair.viewabilityConfig, b == null ? void 0 : b[index].viewabilityConfig))));
 }
-function shouldIgnoreTransientMacOSScrollMeasurement(options) {
-  {
-    return false;
-  }
-}
 var LegendListInner = typedForwardRef(function LegendListInner2(props, forwardedRef) {
   var _a3, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
   const noopOnScroll = useCallback((_event) => {
@@ -9732,7 +10140,6 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     estimatedItemSize = 100,
     estimatedListSize,
     extraData,
-    getEstimatedItemSize,
     getFixedItemSize,
     getItemType,
     horizontal,
@@ -9742,6 +10149,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     initialScrollIndex: initialScrollIndexProp,
     initialScrollOffset: initialScrollOffsetProp,
     experimental_adaptiveRender,
+    experimental_hideItemsUntilMeasured,
     itemsAreEqual,
     keyExtractor: keyExtractorProp,
     ListEmptyComponent,
@@ -9834,6 +10242,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   const shouldInitializeHorizontalRTL = !initialScrollAtEnd && !hasInitialScrollIndex && !hasInitialScrollOffset && isHorizontalRTLProps({ horizontal, rtl });
   const initialScrollUsesOffsetOnly = !initialScrollAtEnd && !hasInitialScrollIndex && (hasInitialScrollOffset || shouldInitializeHorizontalRTL);
   const usesBootstrapInitialScroll = initialScrollAtEnd || hasInitialScrollIndex;
+  const shouldBottomAlignNumericInitialScrollIndex = typeof initialScrollIndexProp === "number" && !hasInitialScrollOffset && dataLength > 1 && initialScrollIndexProp >= dataLength - 1;
   const initialScrollProp = initialScrollAtEnd ? {
     index: Math.max(0, dataLength - 1),
     preserveForBottomPadding: true,
@@ -9846,7 +10255,9 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     viewPosition: (_d = initialScrollIndexProp.viewPosition) != null ? _d : 0
   } : {
     index: initialScrollIndexProp != null ? initialScrollIndexProp : 0,
-    viewOffset: initialScrollOffsetProp != null ? initialScrollOffsetProp : 0
+    preserveForBottomPadding: shouldBottomAlignNumericInitialScrollIndex ? true : void 0,
+    viewOffset: initialScrollOffsetProp != null ? initialScrollOffsetProp : shouldBottomAlignNumericInitialScrollIndex ? -stylePaddingEndState : 0,
+    viewPosition: shouldBottomAlignNumericInitialScrollIndex ? 1 : void 0
   } : initialScrollUsesOffsetOnly ? {
     contentOffset: initialScrollOffsetProp != null ? initialScrollOffsetProp : 0,
     index: 0,
@@ -9906,6 +10317,8 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
         endReachedSnapshot: void 0,
         firstFullyOnScreenIndex: -1,
         freshDataTransitionEpoch: 0,
+        handledDataChangeEpoch: 0,
+        handledFreshDataTransitionEpoch: 0,
         hasHadNonEmptyData: dataLength > 0,
         idCache: [],
         idsInView: [],
@@ -9923,11 +10336,11 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
         lastLayout: void 0,
         lastScrollDelta: 0,
         loadStartTime: Date.now(),
-        minIndexSizeChanged: 0,
         nativeContentInset: void 0,
         nativeMarginTop: 0,
         pendingDataComparison: void 0,
         pendingNativeMVCPAdjust: void 0,
+        positionRecalculationStartIndex: 0,
         props: {},
         queuedCalculateItemsInView: 0,
         refScroller: { current: null },
@@ -9947,13 +10360,13 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
         startBuffered: -1,
         startNoBuffer: -1,
         startReachedSnapshot: void 0,
-        startReachedSnapshotDataChangeEpoch: void 0,
         stickyContainerPool: /* @__PURE__ */ new Set(),
         stickyContainers: /* @__PURE__ */ new Map(),
         totalSize: 0,
         viewabilityConfigCallbackPairs: void 0
       };
       const internalState = ctx.state;
+      ctx.scrollToEnd = (options) => scrollToEnd(ctx, options);
       internalState.triggerCalculateItemsInView = (params) => calculateItemsInView(ctx, params);
       internalState.reprocessCurrentScroll = () => updateScroll(ctx, internalState.scroll, true);
       set$(ctx, "maintainVisibleContentPosition", maintainVisibleContentPositionConfig);
@@ -9981,10 +10394,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   const previousDataLength = isFirstLocal ? 0 : (_n = state.dataSourcePreviousLength) != null ? _n : getDataLength(state);
   state.indexedData = indexedData;
   const previousAdaptiveRender = state.props.adaptiveRender;
+  const previousHideItemsUntilMeasured = state.props.hideItemsUntilMeasured;
   const didScrollAxisChange = !isFirstLocal && state.props.horizontal !== !!horizontal;
   const previousNumColumnsProp = state.props.numColumns;
   const didScrollAxisGapChange = !isFirstLocal && ctx.scrollAxisGap !== nextScrollAxisGap;
-  const wrappedGetEstimatedItemSize = useWrapIfItem(getEstimatedItemSize);
   const wrappedGetFixedItemSize = useWrapIfItem(getFixedItemSize);
   const wrappedGetItemType = useWrapIfItem(getItemType);
   const wrappedKeyExtractor = useWrapIfItem(keyExtractor);
@@ -10016,10 +10429,12 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   if (shouldResetFreshDataLayout) {
     state.freshDataTransitionEpoch += 1;
   }
+  const dataChangeEpoch = state.dataChangeEpoch;
+  const freshDataTransitionEpoch = state.freshDataTransitionEpoch;
   const throttledOnScroll = useThrottledOnScroll(onScrollProp != null ? onScrollProp : noopOnScroll, scrollEventThrottle != null ? scrollEventThrottle : 0);
   const throttleScrollFn = scrollEventThrottle && onScrollProp ? throttledOnScroll : onScrollProp;
   const didAnchoredEndSpaceAnchorIndexChange = !isFirstLocal && !didDataChangeLocal && ((_q = state.props.anchoredEndSpace) == null ? void 0 : _q.anchorIndex) !== (anchoredEndSpace == null ? void 0 : anchoredEndSpace.anchorIndex);
-  const shouldExactSyncLayoutStore = !isFirstLocal && !didDataChangeLocal && (state.props.estimatedItemSize !== estimatedItemSize || !!state.props.hasReliableKeyExtractor !== !!keyExtractorProp || didScrollAxisChange || didScrollAxisGapChange);
+  const shouldExactSyncLayoutStore = !isFirstLocal && !didDataChangeLocal && (state.props.estimatedItemSize !== estimatedItemSize || !!state.props.hasReliableKeyExtractor !== (!!dataSource || !!keyExtractorProp) || didScrollAxisChange || didScrollAxisGapChange);
   state.props = {
     adaptiveRender: experimental_adaptiveRender,
     alignItemsAtEnd,
@@ -10039,10 +10454,10 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     dataVersion,
     drawDistance,
     estimatedItemSize,
-    getEstimatedItemSize: wrappedGetEstimatedItemSize,
     getFixedItemSize: wrappedGetFixedItemSize,
     getItemType: wrappedGetItemType,
     hasReliableKeyExtractor: !!dataSource || !!keyExtractorProp,
+    hideItemsUntilMeasured: experimental_hideItemsUntilMeasured,
     horizontal: !!horizontal,
     itemsAreEqual,
     keyExtractor: wrappedKeyExtractor,
@@ -10141,6 +10556,9 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   if (!isFirstLocal && previousAdaptiveRender && !experimental_adaptiveRender) {
     resetAdaptiveRender(ctx);
   }
+  if (!isFirstLocal && previousHideItemsUntilMeasured && !experimental_hideItemsUntilMeasured) {
+    resetContainerLayoutReady(ctx);
+  }
   const memoizedLastItemKeys = useMemo(() => {
     if (!dataLength) return [];
     return Array.from({ length: Math.min(numColumnsProp, dataLength) }, (_, i) => getId(state, dataLength - 1 - i));
@@ -10199,7 +10617,11 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     useDevChecks(props);
   }
   useLayoutEffect(() => {
-    if (shouldResetFreshDataLayout) {
+    const didDataChange = state.handledDataChangeEpoch !== dataChangeEpoch;
+    const didStartFreshData = state.handledFreshDataTransitionEpoch !== freshDataTransitionEpoch;
+    state.handledDataChangeEpoch = dataChangeEpoch;
+    state.handledFreshDataTransitionEpoch = freshDataTransitionEpoch;
+    if (didStartFreshData) {
       resetInitialRenderState(ctx, {
         resetInitialScroll: !!initialScrollProp,
         resetLayout: true
@@ -10207,8 +10629,8 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
     }
     handleInitialScrollDataChange(ctx, {
       dataLength,
-      didDataChange: didDataChangeLocal,
-      didStartFreshData: shouldResetFreshDataLayout,
+      didDataChange,
+      didStartFreshData,
       initialScrollAtEnd,
       latestInitialScroll: initialScrollProp,
       latestInitialScrollSessionKind: initialScrollUsesOffsetOnly ? "offset" : "bootstrap",
@@ -10218,8 +10640,8 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   }, [
     dataLength,
     dataKey,
-    didDataChangeLocal,
-    shouldResetFreshDataLayout,
+    dataChangeEpoch,
+    freshDataTransitionEpoch,
     initialScrollAtEnd,
     stylePaddingEndState,
     usesBootstrapInitialScroll
@@ -10267,9 +10689,6 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
   );
   const onLayoutChange = useCallback(
     (layout, fromLayoutEffect) => {
-      if (shouldIgnoreTransientMacOSScrollMeasurement()) {
-        return;
-      }
       const previousScrollLength = state.scrollLength;
       const previousOtherAxisSize = state.otherAxisSize;
       handleLayout(ctx, layout, setCanRender);
@@ -10283,7 +10702,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
       }
       advanceCurrentInitialScrollSession(ctx);
     },
-    [dataLength, horizontal, initialScrollAtEnd, stylePaddingEndState, usesBootstrapInitialScroll]
+    [dataLength, initialScrollAtEnd, stylePaddingEndState, usesBootstrapInitialScroll]
   );
   const { onLayout } = useOnLayoutSync({
     onLayoutChange,
@@ -10419,6 +10838,7 @@ var LegendListInner = typedForwardRef(function LegendListInner2(props, forwarded
       onScroll: (event) => onScroll(ctx, event),
       onScrollBeginDrag: (event) => {
         var _a4, _b2;
+        interruptMaintainScrollAtEnd(ctx);
         prepareReachedEdgeForNextUserScroll(ctx);
         (_b2 = (_a4 = state.props).onScrollBeginDrag) == null ? void 0 : _b2.call(_a4, event);
       },

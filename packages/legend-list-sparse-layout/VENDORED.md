@@ -7,28 +7,29 @@ unstable npm package, Git branch, or downloadable artifact.
 ## Source
 
 - Repository: `https://github.com/LegendApp/legend-list`
-- Branch at build time: `codex/chat-tail-estimates`
-- Commit: `67a3cbc94c4f4109212a0cb5a21bccf4b7b0227d`
-- Base: Legend List `main` 3.3.5 at `80193ceda8f54b31e26b53f8a0ebb8cc07aa9bf0`
-- Built: 2026-09-05
-- Added API: `getEstimatedItemSize` supplies heterogeneous, non-authoritative
-  first-layout estimates while preserving measured sizes as authoritative.
-- Included fix: reject transient React Native macOS Fabric layout measurements
-  that exceed the window viewport or have no cross-axis size during bootstrap
-  initial scrolling. This prevents padding- or content-sized `onLayout`
-  measurements from replacing the real viewport and disabling virtualization.
-- Included fix: Legend List commit `6d423f31752d7c1db8b01ed4c66c06fb7a3b465e`
-  (`fix: keep recycled container renders coherent across prepends`), adapted
-  to preserve sparse `dataSource` assignments without reading additional rows.
-- Local fix: invalidate cached container children when the assigned index changes,
-  including retained data-source items shifted by an insertion or deletion.
-  Otherwise `renderItem` keeps a stale index even though the container moves.
-- Local fix: stop viewport discovery at the new buffered viewport. The legacy
-  `maxIndexRendered` tail bound caused upward scrollbar jumps to visit every
-  skipped row. Layout-store offsets no longer need that sequential update;
-  existing container reconciliation handles mounted, sticky and pinned rows
-  separately. Applied consistently to all six JS/MJS platform bundles.
-  Regression coverage: `node --test packages/legend-list-sparse-layout/tests/scroll-jumps.test.cjs`.
+- Branch at build time: `sparse-layout`
+- Commit: `a1fa07899669c4b2a5413740da36efb40aac95ba`
+- Base: Legend List `main` 3.3.10 at `e9f90bcfb4e8cce9111971f31d72d443d5989f0b`
+- Built: 2026-09-14
+- Architecture: sparse sequence and row layout stores with mutation-aware
+  indexed `dataSource` support.
+- Includes measurement invalidation guards, positive-size estimation, incremental
+  mutation batching, obsolete-source viewability guards, and bounded upward
+  viewport scans.
+- Includes the latest base's scroll/end-follow fixes and batched total-size
+  notifications integrated with sparse layout measurements and estimate updates.
+- Source validation: 1,870 tests passed; lint, source/public API type checks,
+  and `bun run build` passed.
+
+This snapshot replaces the previous `codex/chat-tail-estimates` build and its
+local bundle patches. JavaScript and declaration files are copied directly from
+the source build, without local bundle edits. The previous snapshot's
+`getEstimatedItemSize` API is not part of this branch; current app consumers do
+not reference it.
+
+Local regression tests are retained in `tests/`, including viewport-sized
+scrollbar jumps, rapid reversals, and recycled container assignments. Run them
+with `bun run test:legend-list` from the repository root.
 
 The files in this directory are the publish-ready output produced by running
 `bun run build` in the source checkout. The package version includes the source
@@ -38,7 +39,8 @@ commit prefix so Bun cannot silently substitute a public npm release.
 
 1. Rebase the source branch onto the intended Legend List release.
 2. Run its tests and `bun run build`.
-3. Replace this directory with the generated `dist` contents.
+3. Replace the generated package files with the new `dist` contents, preserving
+   `tests/` and updating this provenance record.
 4. Restore `private: true` and set the package version to
    `<base-version>-sparse-layout.<commit-prefix>`.
 5. Update the matching root catalog version, run `bun install`, and commit the
