@@ -115,6 +115,23 @@ int main() {
       NSRect caret = [unicodeLayout caretRectAtOffset:range.location downstream:YES];
       assert([unicodeLayout offsetAtPoint:NSMakePoint(caret.origin.x, caret.origin.y + 11)] == range.location);
     }];
+    NSRange selection = NSMakeRange(0, longUnicode.length);
+    auto allRects = [unicodeLayout rectsForRange:selection];
+    for (NSValue *viewport in @[[NSValue valueWithRect:NSMakeRect(10, 37, 100, 220)],
+                                [NSValue valueWithRect:NSMakeRect(0, -50, 800, 100)],
+                                [NSValue valueWithRect:NSMakeRect(0, unicodeLayout.height - 33, 800, 100)],
+                                [NSValue valueWithRect:NSMakeRect(0, unicodeLayout.height, 800, 100)],
+                                [NSValue valueWithRect:NSZeroRect]]) {
+      NSMutableArray *expected = [NSMutableArray array];
+      for (NSValue *value in allRects) {
+        NSRect clipped = NSIntersectionRect(value.rectValue, viewport.rectValue);
+        if (!NSIsEmptyRect(clipped)) [expected addObject:[NSValue valueWithRect:clipped]];
+      }
+      auto actual = [unicodeLayout rectsForRange:selection visibleRect:viewport.rectValue];
+      assert([actual isEqualToArray:expected]);
+      assert(actual.count <= 11);
+    }
+    assert([unicodeLayout rectsForRange:NSMakeRange(0, 0) visibleRect:NSMakeRect(0, 0, 100, 100)].count == 0);
     std::cout << "SourceLineLayout: all assertions passed\n";
   }
 }
