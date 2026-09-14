@@ -21,6 +21,40 @@ describe("shared editor language selection", () => {
   afterEach(async () => { await act(async () => renderer?.unmount()); });
   const host = () => renderer.root.findByType("SourceEditorHost" as never);
   const select = () => renderer.root.findByType("SelectControl" as never);
+  it("mounts the native host without a loading placeholder, then displays the ready document", async () => {
+    const onLoad = jest.fn();
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" showLanguageSelector={false} onLoad={onLoad} />); });
+    const originalHost = host();
+    expect(renderer.toJSON()).toMatchObject({ type: "SourceEditorHost", children: null });
+    expect(onLoad).not.toHaveBeenCalled();
+    await act(async () => host().props.onReady({ nativeEvent: {
+      lineCount: 200, firstId: 1, complete: true, error: "", sourcePrefix: "",
+    } }));
+    expect(host()).toBe(originalHost);
+    expect(renderer.root.findByType("LegendList" as never).props.dataSource.getLength()).toBe(200);
+    expect(onLoad).toHaveBeenCalledTimes(1);
+  });
+  it("still displays file-loading errors instead of leaving an unexplained blank editor", async () => {
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/missing.ts" showLanguageSelector={false} />); });
+    await act(async () => host().props.onReady({ nativeEvent: {
+      lineCount: 0, firstId: 1, complete: true, error: "File not found", sourcePrefix: "",
+    } }));
+    expect(renderer.root.findByType("Text" as never).props.children).toBe("File not found");
+    expect(renderer.root.findAllByType("LegendList" as never)).toHaveLength(0);
+  });
+  it("overlays the language selector without reserving space below the list", async () => {
+    await act(async () => { renderer = create(<SourceDocumentEditor filePath="/file.ts" />); });
+    await act(async () => host().props.onReady({ nativeEvent: {
+      lineCount: 200, firstId: 1, complete: true, error: "", sourcePrefix: "",
+    } }));
+    const overlay = select().parent!;
+    expect(overlay.props.className.split(" ")).toEqual(expect.arrayContaining(["absolute", "bottom-1", "right-10"]));
+    expect(overlay.props.pointerEvents).toBe("box-none");
+    expect(renderer.root.findByType("LegendList" as never).props.style).toEqual({ flex: 1 });
+    await act(async () => renderer.update(<SourceDocumentEditor filePath="/file.ts" showLanguageSelector={false} />));
+    expect(renderer.root.findAllByType("SelectControl" as never)).toHaveLength(0);
+    expect(renderer.root.findByType("LegendList" as never).props.style).toEqual({ flex: 1 });
+  });
   it("uses the bounded prefix for extensionless files and preserves the loaded buffer on override", async () => {
     await act(async () => { renderer = create(<SourceDocumentEditor filePath="/build" />); });
     const originalHost = host();

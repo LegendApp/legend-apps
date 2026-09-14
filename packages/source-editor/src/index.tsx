@@ -1,7 +1,7 @@
 import { LegendList, useRecyclingState, type LegendListDataSourceRenderItemProps, type LegendListRef } from "@legendapp/list/react-native";
 import { defaultSyntaxThemeName, detectGrammar } from "@legend-apps/syntax-parser";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import SourceEditorHost, { Commands } from "./SourceEditorHostNativeComponent";
 import SourceEditorRow from "./SourceEditorRowNativeComponent";
 import { createSourceProgress } from "./sourceProgress";
@@ -168,7 +168,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       estimatedItemSize={Math.ceil(fontSize * 1.6)}
       maintainVisibleContentPosition
       style={styles.root}
-    /> : !error ? <View><Text style={{ color: foreground }}>Loading editor…</Text></View> : null}
+    /> : null}
     {!error && !highlightError && (syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled
       ? <GrammarProgressBanner languages={[grammar.name, ...embeddedGrammars.languages]} progress={progress} loading={loadingTail} />
       : <SourceProgressBanner progress={progress} loading={loadingTail} />)}
