@@ -93,6 +93,7 @@ describe("Code default editor", () => {
     expect(editor().props.language).toBe("typescript");
     expect(editor().props.syntaxHighlightingEnabled).toBe(true);
     expect(editor().props.syntaxHighlightingMode).toBe("background");
+    expect(editor().props.showFileLoadingBanner).toBe(false);
     expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
     expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
     expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
