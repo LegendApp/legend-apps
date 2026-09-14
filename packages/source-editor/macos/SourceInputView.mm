@@ -553,6 +553,7 @@ static NSString *string(const std::u16string &text) {
   if (!_layoutAttributes || index >= _document->lineCount()) return nil;
   NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:string(_document->line(index).text) attributes:_layoutAttributes];
   [self applySyntaxToText:text line:index font:_layoutAttributes[NSFontAttributeName]];
+  if (row.textLayout && [row.textLayout updateText:text width:_layoutWidth lineHeight:_layoutLineHeight wrap:_layoutWrap]) return row.textLayout;
   return [[LESourceLineLayout alloc] initWithText:text width:_layoutWidth lineHeight:_layoutLineHeight wrap:_layoutWrap];
 }
 - (NSString *)source { return string(_document->text()); }

@@ -10,6 +10,8 @@
   NSArray *_lines;
   NSArray<NSValue *> *_ranges;
   NSArray<NSNumber *> *_chunkStarts;
+  NSArray<NSNumber *> *_chunkEnds;
+  CGFloat _layoutWidth;
   CGFloat _lineHeight;
   CGFloat _ascent;
   BOOL _wrap, _indexedCarets;
@@ -22,6 +24,7 @@
   if ((self = [super init])) {
     _text = [text copy];
     _wrap = wrap;
+    _layoutWidth = width;
     _lineHeight = MAX(1, lineHeight);
     NSFont *font = text.length ? [text attribute:NSFontAttributeName atIndex:0 effectiveRange:nil] : nil;
     font = font ?: [NSFont monospacedSystemFontOfSize:14 weight:NSFontWeightRegular];
@@ -29,6 +32,7 @@
     NSMutableArray *lines = [NSMutableArray array];
     NSMutableArray *ranges = [NSMutableArray array];
     NSMutableArray *chunkStarts = [NSMutableArray array];
+    NSMutableArray *chunkEnds = [NSMutableArray array];
     CTTypesetterRef typesetter = nil;
     NSUInteger chunkStart = 0, chunkEnd = 0;
     NSUInteger offset = 0;
@@ -65,6 +69,7 @@
       [lines addObject:CFBridgingRelease(line)];
       [ranges addObject:[NSValue valueWithRange:NSMakeRange(offset, count)]];
       [chunkStarts addObject:@(chunkStart)];
+      [chunkEnds addObject:@(chunkEnd)];
       _width = MAX(_width, CTLineGetTypographicBounds(line, nil, nil, nil));
       offset += count;
     } while (offset < text.length);
@@ -72,10 +77,68 @@
     _lines = lines;
     _ranges = ranges;
     _chunkStarts = chunkStarts;
+    _chunkEnds = chunkEnds;
     _visualLineCount = lines.count;
     _height = lines.count * _lineHeight;
   }
   return self;
+}
+
+- (BOOL)updateText:(NSAttributedString *)text width:(CGFloat)width lineHeight:(CGFloat)lineHeight wrap:(BOOL)wrap
+{
+  if (!_wrap || !wrap || width != _layoutWidth || MAX(1, lineHeight) != _lineHeight
+      || ![_text.string isEqualToString:text.string]) return NO;
+  if (text.length && ![[_text attribute:NSFontAttributeName atIndex:0 effectiveRange:nil]
+                       isEqual:[text attribute:NSFontAttributeName atIndex:0 effectiveRange:nil]]) return NO;
+  // Keep each typesetter's original context, including the lookahead past its
+  // last emitted row. Replacing isolated visual rows could change shaping.
+  NSMutableArray *lines = [_lines mutableCopy];
+  std::vector<NSRange> changes;
+  for (NSUInteger at = 0; at < text.length;) {
+    NSRange oldRange, newRange;
+    NSDictionary *oldAttributes = [_text attributesAtIndex:at effectiveRange:&oldRange];
+    NSDictionary *newAttributes = [text attributesAtIndex:at effectiveRange:&newRange];
+    NSUInteger end = MIN(NSMaxRange(oldRange), NSMaxRange(newRange));
+    if (![oldAttributes isEqualToDictionary:newAttributes]) {
+      if (!changes.empty() && NSMaxRange(changes.back()) == at) changes.back().length = end - changes.back().location;
+      else changes.push_back(NSMakeRange(at, end - at));
+    }
+    at = end;
+  }
+  for (NSUInteger row = 0; row < _lines.count;) {
+    NSUInteger start = _chunkStarts[row].unsignedIntegerValue;
+    NSUInteger end = _chunkEnds[row].unsignedIntegerValue;
+    NSUInteger next = row + 1;
+    while (next < _lines.count && _chunkStarts[next].unsignedIntegerValue == start
+           && _chunkEnds[next].unsignedIntegerValue == end) ++next;
+    NSRange chunkRange = NSMakeRange(start, end - start);
+    auto changed = std::lower_bound(changes.begin(), changes.end(), start,
+      [](NSRange range, NSUInteger offset) { return NSMaxRange(range) <= offset; });
+    if (changed != changes.end() && changed->location < end) {
+      NSAttributedString *chunk = [text attributedSubstringFromRange:chunkRange];
+      CTTypesetterRef typesetter = CTTypesetterCreateWithAttributedString((__bridge CFAttributedStringRef)chunk);
+      BOOL valid = YES;
+      for (NSUInteger i = row; i < next; ++i) {
+        NSRange range = _ranges[i].rangeValue;
+        CFIndex count = CTTypesetterSuggestLineBreak(typesetter, range.location - start, MAX(1, width));
+        if (count != (CFIndex)range.length) { valid = NO; break; }
+        CTLineRef replacement = CTTypesetterCreateLine(typesetter, CFRangeMake(range.location - start, range.length));
+        CTLineRef previous = (__bridge CTLineRef)_lines[i];
+        CGFloat a, d, l, oldA, oldD, oldL;
+        double newWidth = CTLineGetTypographicBounds(replacement, &a, &d, &l);
+        double oldWidth = CTLineGetTypographicBounds(previous, &oldA, &oldD, &oldL);
+        if (newWidth != oldWidth || a != oldA || d != oldD || l != oldL) valid = NO;
+        lines[i] = CFBridgingRelease(replacement);
+        if (!valid) break;
+      }
+      CFRelease(typesetter);
+      if (!valid) return NO;
+    }
+    row = next;
+  }
+  _text = [text copy];
+  _lines = lines;
+  return YES;
 }
 
 - (NSUInteger)visualLineAtOffset:(NSUInteger)offset downstream:(BOOL)downstream
