@@ -42,6 +42,20 @@ int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
     {
+      // The deleted row remains mounted until Fabric removes its container.
+      LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      [input loadSource:@"a\nb\nc"];
+      LESourceRowView *row = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 22, 400, 22)];
+      [row applyLineId:2 index:1]; row.input = input;
+      NSData *before = gutterPixels(row);
+      [input insertText:@"" replacementRange:NSMakeRange(1, 2)];
+      assert(row.lineIndex == NSNotFound);
+      assert([gutterPixels(row) isEqual:before]);
+      assert(!row.isAccessibilityElement);
+      row.input = nil;
+      assert(![gutterPixels(row) isEqual:before]);
+    }
+    {
       LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
       [input loadSource:@"a\nb\nc\nd"];
       LESourceRowView *row = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 66, 400, 22)];
