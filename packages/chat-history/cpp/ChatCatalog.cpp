@@ -205,6 +205,12 @@ void addProviderFiles(
 std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
   std::vector<ChatSummary> summaries;
   const char* homeValue = std::getenv("HOME");
+  // Only benchmark launches may use the isolated visual-fixture catalog.
+  if (std::getenv("CHAT_HISTORY_BENCHMARK_CONFIG") != nullptr) {
+    if (const char* fixtureHome = std::getenv("CHAT_HISTORY_BENCHMARK_HOME"); fixtureHome && *fixtureHome) {
+      homeValue = fixtureHome;
+    }
+  }
   if (homeValue != nullptr && limit > 0) {
     const fs::path home(homeValue);
     std::unordered_map<std::string, CatalogMetadata> codexMetadata;
