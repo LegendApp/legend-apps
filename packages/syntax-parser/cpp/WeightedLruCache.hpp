@@ -15,7 +15,9 @@ public:
   WeightedLruCache(size_t count, size_t weight) : countLimit_(count), weightLimit_(weight) {}
   WeightedLruCache(const WeightedLruCache&) = delete;
   WeightedLruCache& operator=(const WeightedLruCache&) = delete;
-  Value* acquire(const Key& key, size_t weight) {
+  // Optionally hand the last evicted value back to the caller for resource
+  // recycling. The caller must reset it before associating it with a new key.
+  Value* acquire(const Key& key, size_t weight, Value* evicted = nullptr) {
     auto found = entries_.find(key);
     if (!countLimit_ || weight > weightLimit_) {
       if (found != entries_.end()) {
@@ -33,6 +35,7 @@ public:
     // The requested entry is newest and fits by itself, so eviction never removes it.
     while (entries_.size() > countLimit_ || weight_ > weightLimit_) {
       const auto oldest = entries_.find(order_.front());
+      if (evicted) *evicted = std::move(oldest->second.value);
       weight_ -= oldest->second.weight; entries_.erase(oldest); order_.pop_front();
     }
     return &found->second.value;

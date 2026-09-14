@@ -582,9 +582,16 @@ std::vector<TreeSitterSpan> TreeSitterHighlighter::highlight(uint32_t start, uin
     size_t sourceBytes = 0;
     for (const auto& range : region.ranges) sourceBytes += range.end_byte - range.start_byte;
     auto& cache = region.language == std::string_view("markdown-inline") ? impl_->inlineInjections : impl_->codeInjections;
-    Impl::Injection transient;
-    auto* retained = cache.acquire(region.node.id, sourceBytes);
+    Impl::Injection transient, recycled;
+    auto* retained = cache.acquire(region.node.id, sourceBytes, &recycled);
     auto& cached = retained ? *retained : transient;
+    // Reuse allocations, never syntax from another region. Reset even when
+    // the two regions happen to contain identical text.
+    if (!cached.highlighter && recycled.highlighter && recycled.language == region.language) {
+      cached = std::move(recycled);
+      cached.highlighter->reset();
+      cached.revision = impl_->injectionEdits.size();
+    }
     const bool created = !cached.highlighter || cached.language != region.language;
     if (created) {
       cached.highlighter = std::make_unique<TreeSitterHighlighter>(region.language);

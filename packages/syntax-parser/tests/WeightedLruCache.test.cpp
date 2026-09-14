@@ -22,6 +22,17 @@ int main() {
   assert(byWeight.size() == 1 && byWeight.weight() == 2);
   WeightedLruCache<int, int> disabled(0, 10);
   assert(disabled.acquire(1, 1) == nullptr);
+  WeightedLruCache<int, std::unique_ptr<int>> recycle(2, 10);
+  *recycle.acquire(1, 4) = std::make_unique<int>(11);
+  *recycle.acquire(2, 4) = std::make_unique<int>(22);
+  std::unique_ptr<int> evicted;
+  assert(!*recycle.acquire(3, 4, &evicted));
+  assert(*evicted == 11 && recycle.size() == 2 && recycle.weight() == 8);
+  *recycle.acquire(3, 4) = std::move(evicted);
+  assert(**recycle.acquire(3, 4, &evicted) == 11 && !evicted);
+  assert(recycle.acquire(9, 100, &evicted) == nullptr && !evicted);
+  recycle.acquire(4, 9, &evicted); // Multiple evictions transfer the last value.
+  assert(*evicted == 11 && recycle.size() == 1 && recycle.weight() == 9);
   for (int i = 0; i < 10000; ++i) { cache.acquire(i, i % 12); assert(cache.size() <= 2 && cache.weight() <= 10); }
   std::cout << "Weighted LRU: recency, reweighting, oversized values, count/weight bounds and clear passed\n";
 }
