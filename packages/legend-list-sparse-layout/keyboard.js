@@ -33,19 +33,17 @@ if (typeof __DEV__ !== "undefined" && __DEV__ && !reactNativeKeyboardController.
     "[legend-list] KeyboardAwareLegendList requires a recent react-native-keyboard-controller with KeyboardChatScrollView. Please upgrade react-native-keyboard-controller to at least 1.21.7."
   );
 }
-function useKeyboardChatComposerInset(listRef, composerRef, initialHeight = 0) {
+function useKeyboardChatComposerInset(_listRef, composerRef, initialHeight = 0) {
   const contentInsetEndAdjustment = reactNativeReanimated.useSharedValue(initialHeight);
   const lastHeightRef = React.useRef(void 0);
   const reportHeight = React.useCallback(
     (height) => {
-      var _a;
       if (Number.isFinite(height) && height !== lastHeightRef.current) {
         lastHeightRef.current = height;
         contentInsetEndAdjustment.value = height;
-        (_a = listRef.current) == null ? void 0 : _a.reportContentInset({ bottom: height });
       }
     },
-    [contentInsetEndAdjustment, listRef]
+    [contentInsetEndAdjustment]
   );
   React.useLayoutEffect(() => {
     var _a;
