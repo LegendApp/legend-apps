@@ -73,12 +73,12 @@ function createContext(api, count, extraProps = {}) {
   };
 }
 
-function jump(api, ctx, line, offset = line * 23) {
+function jump(api, ctx, line, offset = line * 23, drawDistanceMode = "visible-first") {
   const previous = ctx.state.scroll;
   ctx.state.scroll = offset;
   ctx.state.scrollForNextCalculateItemsInView = undefined;
   global.__reads = 0;
-  api.calculateItemsInView(ctx, { scrollVelocity: offset < previous ? -1000 : 1000, drawDistanceMode: "visible-first" });
+  api.calculateItemsInView(ctx, { scrollVelocity: offset < previous ? -1000 : 1000, drawDistanceMode });
   const reads = global.__reads;
   assert.equal(ctx.state.startNoBuffer, line);
   for (let i = ctx.state.startBuffered; i <= ctx.state.endBuffered; i++) {
@@ -114,6 +114,40 @@ test("the old tail condition fails the operation bound", () => {
     jump(api, ctx, 250000);
     global.__oldBottom = ctx.state.endBuffered;
     assert.ok(jump(api, ctx, 1000) > 249000);
+  } finally { ctx.state.scheduledWork.dispose(); }
+});
+
+test("rapid reversals keep every visible row assigned through buffer prewarming", () => {
+  const api = loadBundle(), ctx = createContext(api, 273504);
+  try {
+    jump(api, ctx, 100000);
+    const store = ctx.state.layoutStoreRuntime.store;
+    // Mix wrapped and single-visual-line rows around both landing regions.
+    for (const base of [100000, 200000]) {
+      for (let i = base - 100; i < base + 200; i += 7) {
+        const size = 23 * (2 + i % 4);
+        store.setMeasuredSize(i, size);
+        ctx.state.sizesKnown.set(String(i + 1), size);
+        ctx.state.sizes.set(String(i + 1), size);
+      }
+    }
+    ctx.state.totalSize = store.getTotalSize();
+    ctx.values.set("totalSize", store.getTotalSize());
+    for (let repeat = 0; repeat < 50; repeat++) {
+      // Partial-page reversals, then scrollbar-sized jumps. Run both the
+      // visible-first pass and full buffer calculation; no timers or wall-clock
+      // assertions. This tests range assignment, not React/native paint latency.
+      for (const line of [100000, 100025, 100010, 100050, 99980, 200000, 200030, 199990]) {
+        const offset = store.getOffset(line);
+        const expectedEnd = store.findIndexRangeAtOffsets(offset, offset + 799).end;
+        for (const mode of ["visible-first", "full"]) {
+          assert.ok(jump(api, ctx, line, offset, mode) < 300, "Reversals must stay viewport-sized");
+          assert.equal(ctx.state.endNoBuffer, expectedEnd);
+          assert.ok(ctx.state.startBuffered <= ctx.state.startNoBuffer);
+          assert.ok(ctx.state.endBuffered >= ctx.state.endNoBuffer);
+        }
+      }
+    }
   } finally { ctx.state.scheduledWork.dispose(); }
 });
 
