@@ -85,8 +85,7 @@ describe("Code default editor", () => {
 
   it("opens directly in the editor without loading or mounting the old viewer", async () => {
     await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]} />); });
-    expect(JSON.stringify(renderer.toJSON())).toContain("No file open");
-    expect(JSON.stringify(renderer.toJSON())).toContain("Save with");
+    expect(renderer.root.findAllByType("Text" as never).map(node => node.props.children)).toEqual(["Open File"]);
     expect(openButton().props.accessibilityLabel).toBe("Open File");
     expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
     await act(async () => requestCodeViewerFile("/one.ts"));

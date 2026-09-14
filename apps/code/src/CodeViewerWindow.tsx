@@ -45,7 +45,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
   const loadedFileRequestVersionRef = useRef(0);
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
-  const mutedColor = displayTheme.colors.muted;
   const borderColor = displayTheme.colors.border;
 
   const openFile = useCallback(async (path: string) => {
@@ -142,8 +141,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
           />
         ) : (
           <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: foregroundColor }]}>No file open</Text>
-            <Text style={[styles.emptyText, { color: mutedColor }]}>Open any UTF-8 text file to edit it.</Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open File"
@@ -152,9 +149,6 @@ export function CodeViewerWindow({ launchArguments }: CodeViewerWindowProps) {
             >
               <Text style={[styles.openButtonText, { color: foregroundColor }]}>Open File</Text>
             </Pressable>
-            <Text style={[styles.emptyText, { color: mutedColor }]}>
-              Save with ⌘S · Save As with ⇧⌘S
-            </Text>
           </View>
         )}
       </View>
@@ -168,19 +162,8 @@ const styles = StyleSheet.create({
   empty: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
-    gap: 8,
     justifyContent: "center",
     padding: 32,
-  },
-  emptyText: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    lineHeight: 24,
   },
   error: {
     fontSize: 13,
@@ -192,7 +175,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   openButton: {
-    marginVertical: 8,
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
