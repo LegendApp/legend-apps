@@ -380,6 +380,31 @@ bool TreeSitterHighlighter::parseSlice(const TreeSitterInput& input, double mill
     free(changed);
   } else { start = 0; end = input.length; }
   const auto root = ts_tree_root_node(next);
+  // A body-local edit cannot change bindings outside its function. Expanding
+  // to the entire function also covers hoisted vars, parameters, predicates and
+  // captures on ancestors of the edited expression. Do not use this shortcut
+  // for headers, malformed syntax, or edits crossing a function boundary.
+  const auto enclosingFunction = [&](TSNode treeRoot) {
+    auto node = ts_node_descendant_for_byte_range(treeRoot, bytes(start), bytes(end));
+    for (; !ts_node_is_null(node); node = ts_node_parent(node)) {
+      const std::string_view kind = ts_node_type(node);
+      if (kind != "function_expression" && kind != "function_declaration" && kind != "arrow_function"
+          && kind != "generator_function" && kind != "generator_function_declaration" && kind != "method_definition") continue;
+      const auto body = ts_node_child_by_field_name(node, "body", 4);
+      if (!ts_node_is_null(body) && !ts_node_has_error(node)
+          && ts_node_start_byte(body) < bytes(start) && bytes(end) < ts_node_end_byte(body)) return node;
+    }
+    return TSNode{};
+  };
+  const std::string_view language = impl_->language->name;
+  TSNode local{};
+  if (impl_->tree && (language == "javascript" || language == "typescript" || language == "tsx")) {
+    const auto old = enclosingFunction(ts_tree_root_node(impl_->tree));
+    const auto current = enclosingFunction(root);
+    if (!ts_node_is_null(old) && !ts_node_is_null(current)
+        && ts_node_symbol(old) == ts_node_symbol(current)
+        && ts_node_start_byte(old) == ts_node_start_byte(current) && ts_node_end_byte(old) == ts_node_end_byte(current)) local = current;
+  }
   const auto topLevelNode = [&](TSNode root) {
     auto node = ts_node_descendant_for_byte_range(root, bytes(start), bytes(end));
     while (!ts_node_is_null(node)) {
@@ -405,12 +430,12 @@ bool TreeSitterHighlighter::parseSlice(const TreeSitterInput& input, double mill
       || kind == "while_statement" || kind == "do_statement" || kind == "switch_statement" || kind == "try_statement";
   };
   if (start <= end) {
-    auto node = topLevelNode(root);
+    auto node = ts_node_is_null(local) ? topLevelNode(root) : local;
     if (!ts_node_is_null(node)) {
       // Top-level declarations/imports can change builtin shadowing elsewhere
       // in the program. Inspect the edited old tree too: a removed declaration
       // is no longer visible in the new tree.
-      if (changesProgramBindings(node) || (impl_->tree && changesProgramBindings(topLevelNode(ts_tree_root_node(impl_->tree))))) node = root;
+      if (ts_node_is_null(local) && (changesProgramBindings(node) || (impl_->tree && changesProgramBindings(topLevelNode(ts_tree_root_node(impl_->tree)))))) node = root;
       start = std::min(start, ts_node_start_byte(node) / 2); end = std::max(end, ts_node_end_byte(node) / 2);
     }
   }
