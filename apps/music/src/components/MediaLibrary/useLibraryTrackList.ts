@@ -1,3 +1,4 @@
+import { useStableCallback } from "@legend-apps/runtime-utils";
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -473,7 +474,9 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
     const allTracks = useValue(library$.tracks);
     const providerTracks = useValue(providerLibrary$.selectedTracks);
     const providerSearchTracks = useValue(providerSearch$.tracks);
-    const playlists = useValue(localMusicState$.playlists);
+    const selectedPlaylist = useValue(() => selectedView === "playlist" && selectedPlaylistId
+        ? localMusicState$.playlists.get().find((playlist) => playlist.id === selectedPlaylistId) ?? null
+        : null);
     const skipClickRef = useRef(false);
 
     useEffect(() => {
@@ -516,7 +519,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         () =>
             buildTrackItems({
                 tracks: tracksForView,
-                playlists,
+                playlists: selectedPlaylist ? [selectedPlaylist] : [],
                 selectedView,
                 selectedPlaylistId,
                 searchQuery,
@@ -525,7 +528,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
             }),
         [
             tracksForView,
-            playlists,
+            selectedPlaylist,
             playlistSort,
             playlistSortDirection,
             searchQuery,
@@ -545,10 +548,6 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
     }, [trackItems]);
 
     const isSearchActive = searchQuery.trim().length > 0;
-    const selectedPlaylist =
-        selectedView === "playlist" && selectedPlaylistId
-            ? (playlists.find((pl) => pl.id === selectedPlaylistId) ?? null)
-            : null;
     const isPlaylistEditable =
         selectedView === "playlist" &&
         selectedPlaylist !== null &&
@@ -657,7 +656,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
         [],
     );
 
-    const handleTrackContextMenu = useCallback(
+    const handleTrackContextMenu = useStableCallback(
         async (index: number, event: NativeMouseEvent) => {
             const x = event.pageX ?? event.x ?? 0;
             const y = event.pageY ?? event.y ?? 0;
@@ -677,6 +676,7 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                         return;
                     }
 
+                    const playlists = localMusicState$.playlists.peek();
                     const selectablePlaylists = playlists.filter(
                         (playlist) => playlist.source === "cache" && Boolean(playlist.filePath),
                     );
@@ -755,14 +755,6 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                 },
             });
         },
-        [
-            handleTrackAction,
-            localTrackContextMenuItems,
-            playlists,
-            selectedIndices$,
-            streamingTrackContextMenuItems,
-            trackItems,
-        ],
     );
 
     const handleNativeDragStart = useCallback(() => {

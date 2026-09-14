@@ -74,7 +74,6 @@ export function TrackList(_props: TrackListProps) {
     const searchQuery = useValue(libraryUI$.searchQuery);
     const playlistSort = useValue(libraryUI$.playlistSort);
     const playlistSortDirection = useValue(libraryUI$.playlistSortDirection);
-    const playlists = useValue(localMusicState$.playlists);
     const libraryTracks = useValue(localMusicState$.tracks);
     const providerPlaylist = useValue(providerLibrary$.selectedPlaylist);
     const providerPlaylistError = useValue(providerLibrary$.error);
@@ -85,13 +84,9 @@ export function TrackList(_props: TrackListProps) {
         [tracks],
     );
 
-    const selectedPlaylist = useMemo(() => {
-        if (selectedView !== "playlist" || !selectedPlaylistId) {
-            return null;
-        }
-
-        return playlists.find((pl) => pl.id === selectedPlaylistId) ?? null;
-    }, [playlists, selectedPlaylistId, selectedView]);
+    const selectedPlaylist = useValue(() => selectedView === "playlist" && selectedPlaylistId
+        ? localMusicState$.playlists.get().find((playlist) => playlist.id === selectedPlaylistId) ?? null
+        : null);
 
     const headerConfig = useMemo(() => {
         if (selectedView === "playlist" && selectedPlaylist) {
