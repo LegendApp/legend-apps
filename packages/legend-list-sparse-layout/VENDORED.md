@@ -23,6 +23,12 @@ unstable npm package, Git branch, or downloadable artifact.
 - Local fix: invalidate cached container children when the assigned index changes,
   including retained data-source items shifted by an insertion or deletion.
   Otherwise `renderItem` keeps a stale index even though the container moves.
+- Local fix: stop viewport discovery at the new buffered viewport. The legacy
+  `maxIndexRendered` tail bound caused upward scrollbar jumps to visit every
+  skipped row. Layout-store offsets no longer need that sequential update;
+  existing container reconciliation handles mounted, sticky and pinned rows
+  separately. Applied consistently to all six JS/MJS platform bundles.
+  Regression coverage: `node --test packages/legend-list-sparse-layout/tests/scroll-jumps.test.cjs`.
 
 The files in this directory are the publish-ready output produced by running
 `bun run build` in the source checkout. The package version includes the source
