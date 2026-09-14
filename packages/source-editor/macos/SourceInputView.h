@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface LESourceInputView : NSView <NSTextInputClient>
 @property (nonatomic, copy, nullable) void (^onEdit)(NSString *json);
+@property (nonatomic, copy, nullable) void (^onLineHeights)(NSString *json);
+- (void)requestLineLayouts:(NSDictionary *)request;
 @property (nonatomic, copy, nullable) void (^onSelection)(NSUInteger line, NSUInteger offset, NSUInteger length);
 @property (nonatomic, copy, nullable) void (^onSyntaxError)(NSString *error);
 @property (nonatomic, copy, nullable) void (^onSyntaxProgress)(NSUInteger completed, NSUInteger total, BOOL active);
@@ -53,6 +55,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface LESourceRowView : NSView
+@property (nonatomic, copy) NSString *heightKey;
 @property (nonatomic, weak, nullable) LESourceInputView *input;
 @property (nonatomic) NSUInteger lineIndex;
 @property (nonatomic) uint64_t lineId;

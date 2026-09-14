@@ -32,11 +32,23 @@ static NSString *string(const std::u16string &text) {
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
 - (void)selectionDragTick;
+- (void)scheduleLineLayouts;
+- (void)invalidatePreparedLayouts;
+- (void)invalidatePreparedLine:(uint64_t)lineId;
 @end
 
 @implementation LESourceInputView {
   std::shared_ptr<SourceDocument> _document;
   NSHashTable<LESourceRowView *> *_rows;
+  NSCache<NSNumber *, LESourceLineLayout *> *_preparedLayouts;
+  std::unordered_map<uint64_t, CGFloat> _exactLineHeights;
+  std::unordered_set<uint64_t> _heightInvalidatedPending;
+  dispatch_queue_t _heightQueue;
+  NSString *_heightKey;
+  NSDictionary *_heightAttributes;
+  CGFloat _heightWidth, _heightLineHeight;
+  BOOL _heightWrap, _heightBusy, _heightPumpScheduled;
+  NSUInteger _heightEpoch, _heightNext, _heightWarmNext, _heightWarmEnd;
   NSRange _marked;
   NSUndoManager *_history;
   CGFloat _preferredX;
@@ -78,6 +90,8 @@ static NSString *string(const std::u16string &text) {
 - (instancetype)initWithFrame:(NSRect)frame {
   if ((self = [super initWithFrame:frame])) {
     _rows = [NSHashTable weakObjectsHashTable];
+    _preparedLayouts = [NSCache new]; _preparedLayouts.totalCostLimit = 8 * 1024 * 1024;
+    _heightQueue = dispatch_queue_create("app.legend.source-editor.layout", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
     _history = [NSUndoManager new];
     _indentUnit = @"  ";
     _automaticPairs = YES;
@@ -220,6 +234,7 @@ static NSString *string(const std::u16string &text) {
   _layoutAttributes = nil;
   auto retired = std::move(_document);
   _document = std::move(document);
+  [self invalidatePreparedLayouts];
   // Releasing a large previous file must not pause a newly opened file.
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ (void)retired; });
   _anchor = _head = 0;
@@ -232,6 +247,7 @@ static NSString *string(const std::u16string &text) {
   [self resetSyntax];
 }
 - (NSDictionary *)appendDocument:(SourceDocument &&)chunk {
+  if (_document->lineCount()) [self invalidatePreparedLine:_document->line(_document->lineCount() - 1).id];
   auto change = _document->appendLoaded(std::move(chunk));
   const auto start = change.fallback ? change.fallback->startLine : change.startLine;
   if (_treeSyntax) { ++_treeRevision; _treeNextLine = MIN(_treeNextLine, start); _treeNextColumn = 0; _treeDirtyEnd = _document->lineCount(); }
@@ -246,6 +262,8 @@ static NSString *string(const std::u16string &text) {
     [row invalidateText];
   }
   [self scheduleSyntax];
+  _heightNext = MIN(_heightNext, start);
+  [self scheduleLineLayouts];
   if (change.fallback) {
     NSMutableArray *lines = [NSMutableArray array];
     for (const auto &line : change.fallback->lines) [lines addObject:@{@"id":[NSString stringWithFormat:@"%llu", line.id]}];
@@ -299,6 +317,7 @@ static NSString *string(const std::u16string &text) {
   _treeColors = nil; _treeCaptures.clear(); _treeFontStyles.clear();
 }
 - (void)resetSyntax {
+  [self invalidatePreparedLayouts];
   _requestedGrammarNames.clear();
   [self retireSyntax];
   _treeNextLine = 0; _treeBusy = NO;
@@ -360,6 +379,7 @@ static NSString *string(const std::u16string &text) {
         self->_treeFontStyles.push_back(static_cast<int>(style.fontStyle));
       }
       self->_treeColors = colors;
+      [self invalidatePreparedLayouts];
       for (LESourceRowView *row in self->_rows) [row invalidateText];
     });
   });
@@ -500,7 +520,10 @@ static NSString *string(const std::u16string &text) {
           }
           self->_treeKnownEnd = MAX(self->_treeKnownEnd, self->_treeNextLine);
         }
+        for (auto id : changed) [self invalidatePreparedLine:id];
         for (LESourceRowView *row in self->_rows) if (changed.count(row.lineId)) [row invalidateText];
+        self->_heightNext = MIN(self->_heightNext, start);
+        [self scheduleLineLayouts];
       } else if (parse && complete) {
         // An overlapping completion cannot establish validity for a newer
         // revision. Keep its old colors, but conservatively revalidate the tail.
@@ -540,6 +563,16 @@ static NSString *string(const std::u16string &text) {
 
 }
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(LESourceRowView *)row {
+  const BOOL preparedConfiguration = row && [_heightKey isEqualToString:row.heightKey]
+    && row.bounds.size.width - 72 == _heightWidth;
+  if (preparedConfiguration && index < _document->lineCount()) {
+    LESourceLineLayout *prepared = [_preparedLayouts objectForKey:@(_document->line(index).id)];
+    if (prepared) {
+      _layoutAttributes = _heightAttributes; _layoutWidth = _heightWidth;
+      _layoutLineHeight = _heightLineHeight; _layoutWrap = _heightWrap;
+      return prepared;
+    }
+  }
   if (row && row.bounds.size.width > 72) {
     NSFont *font = [NSFont fontWithName:row.fontFamily size:row.fontSize] ?: [NSFont monospacedSystemFontOfSize:row.fontSize weight:NSFontWeightRegular];
     NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
@@ -559,6 +592,120 @@ static NSString *string(const std::u16string &text) {
 - (NSString *)source { return string(_document->text()); }
 - (void)registerRow:(LESourceRowView *)row { [_rows addObject:row]; [self scheduleSyntax]; }
 - (void)requestVisibleSyntax { [self scheduleSyntax]; }
+- (void)invalidatePreparedLine:(uint64_t)lineId {
+  [_preparedLayouts removeObjectForKey:@(lineId)];
+  _exactLineHeights.erase(lineId);
+  if (_heightBusy) _heightInvalidatedPending.insert(lineId);
+}
+- (void)invalidatePreparedLayouts {
+  ++_heightEpoch; _heightNext = 0; _heightWarmNext = 0;
+  auto retiredHeights = std::make_shared<decltype(_exactLineHeights)>(std::move(_exactLineHeights));
+  NSCache *retiredLayouts = _preparedLayouts;
+  _preparedLayouts = [NSCache new]; _preparedLayouts.totalCostLimit = 8 * 1024 * 1024;
+  dispatch_async(_heightQueue, ^{ (void)retiredHeights; (void)retiredLayouts; });
+  if (_heightKey && self.onLineHeights) {
+    NSDictionary *event = @{@"key":_heightKey, @"revision":@(_document ? _document->revision() : 0), @"reset":@YES, @"rows":@[]};
+    NSData *data = [NSJSONSerialization dataWithJSONObject:event options:0 error:nil];
+    self.onLineHeights([[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+  }
+  [self scheduleLineLayouts];
+}
+- (void)requestLineLayouts:(NSDictionary *)request {
+  NSString *key = request[@"key"], *family = request[@"fontFamily"];
+  const CGFloat width = [request[@"width"] doubleValue] - 72;
+  const CGFloat fontSize = [request[@"fontSize"] doubleValue], lineHeight = [request[@"lineHeight"] doubleValue];
+  if (![key isKindOfClass:NSString.class] || ![family isKindOfClass:NSString.class]
+      || !std::isfinite(width) || width <= 0 || !std::isfinite(fontSize) || fontSize <= 0
+      || !std::isfinite(lineHeight) || lineHeight <= 0) return;
+  if (![_heightKey isEqual:key]) {
+    _heightKey = [key copy]; _heightWidth = width; _heightLineHeight = lineHeight; _heightWrap = [request[@"wrap"] boolValue];
+    NSFont *font = [NSFont fontWithName:family size:fontSize] ?: [NSFont monospacedSystemFontOfSize:fontSize weight:NSFontWeightRegular];
+    NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new]; paragraph.tabStops = @[];
+    paragraph.defaultTabInterval = 4 * [@" " sizeWithAttributes:@{NSFontAttributeName:font}].width;
+    unsigned int rgb = 0xeeeeee;
+    NSString *hex = [request[@"foreground"] isKindOfClass:NSString.class] ? [request[@"foreground"] stringByReplacingOccurrencesOfString:@"#" withString:@""] : @"eeeeee";
+    [[NSScanner scannerWithString:hex] scanHexInt:&rgb];
+    _heightAttributes = @{NSFontAttributeName:font, NSParagraphStyleAttributeName:paragraph,
+      NSForegroundColorAttributeName:[NSColor colorWithSRGBRed:((rgb >> 16) & 255) / 255.0 green:((rgb >> 8) & 255) / 255.0 blue:(rgb & 255) / 255.0 alpha:1]};
+    [self invalidatePreparedLayouts];
+  }
+  _heightWarmNext = MIN([request[@"start"] unsignedIntegerValue], _document->lineCount());
+  _heightWarmEnd = MIN(_document->lineCount(), _heightWarmNext + 256);
+  [self scheduleLineLayouts];
+}
+- (void)scheduleLineLayouts {
+  if (!_heightKey || !_heightAttributes || !self.onLineHeights || _heightBusy || _heightPumpScheduled || !_document) return;
+  _heightPumpScheduled = YES;
+  __weak LESourceInputView *weakSelf = self;
+  // Yield between bounded batches; never run CoreText in a list sizing callback.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    LESourceInputView *self = weakSelf;
+    if (!self) return;
+    self->_heightPumpScheduled = NO;
+    if (self->_heightBusy || !self->_heightKey) return;
+    NSMutableArray *snapshots = [NSMutableArray new];
+    NSUInteger scanned = 0, units = 0;
+    while (snapshots.count < 64 && scanned++ < 512 && units < 16384) {
+      const BOOL warm = self->_heightWarmNext < self->_heightWarmEnd;
+      // Unwrapped rows have an exact constant height. Only warm their drawing
+      // layouts near the viewport, not an entire file's glyphs unnecessarily.
+      if (!warm && !self->_heightWrap) { self->_heightNext = self->_document->lineCount(); break; }
+      const NSUInteger index = warm ? self->_heightWarmNext++ : self->_heightNext++;
+      if (index >= self->_document->lineCount()) { self->_heightNext = self->_document->lineCount(); break; }
+      const auto& line = self->_document->line(index);
+      if (self->_exactLineHeights.count(line.id) && (!warm || [self->_preparedLayouts objectForKey:@(line.id)])) continue;
+      NSMutableAttributedString *text = [[NSMutableAttributedString alloc] initWithString:string(line.text) attributes:self->_heightAttributes];
+      [self applySyntaxToText:text line:index font:self->_heightAttributes[NSFontAttributeName]];
+      [snapshots addObject:@{@"id":@(line.id), @"index":@(index), @"text":[text copy], @"warm":@(warm)}];
+      units += text.length;
+    }
+    if (!snapshots.count) {
+      if (self->_heightNext < self->_document->lineCount() || self->_heightWarmNext < self->_heightWarmEnd) [self scheduleLineLayouts];
+      return;
+    }
+    self->_heightBusy = YES; self->_heightInvalidatedPending.clear();
+    const auto epoch = self->_heightEpoch;
+    const auto revision = self->_document->revision();
+    const CGFloat width = self->_heightWidth, lineHeight = self->_heightLineHeight;
+    const BOOL wrap = self->_heightWrap;
+    dispatch_async(self->_heightQueue, ^{
+      @autoreleasepool {
+        NSMutableArray *results = [NSMutableArray new];
+        for (NSDictionary *snapshot in snapshots) {
+          LESourceLineLayout *layout = [[LESourceLineLayout alloc] initWithText:snapshot[@"text"] width:width lineHeight:lineHeight wrap:wrap];
+          [results addObject:@{@"id":snapshot[@"id"], @"index":snapshot[@"index"], @"layout":layout, @"warm":snapshot[@"warm"],
+            @"cost":@([snapshot[@"text"] length] * 64 + 2048)}];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+          LESourceInputView *self = weakSelf;
+          if (!self) return;
+          self->_heightBusy = NO;
+          if (epoch != self->_heightEpoch || revision != self->_document->revision()) {
+            self->_heightNext = MIN(self->_heightNext, [snapshots[0][@"index"] unsignedIntegerValue]);
+            [self scheduleLineLayouts]; return;
+          }
+          NSMutableArray *rows = [NSMutableArray new];
+          for (NSDictionary *result in results) {
+            const auto id = [result[@"id"] unsignedLongLongValue];
+            const auto index = [result[@"index"] unsignedIntegerValue];
+            if (self->_heightInvalidatedPending.count(id)) { self->_heightNext = MIN(self->_heightNext, index); continue; }
+            LESourceLineLayout *layout = result[@"layout"];
+            // Whole-file height preparation must not evict the viewport's
+            // reusable glyph layouts with far-away background rows.
+            if ([result[@"warm"] boolValue]) [self->_preparedLayouts setObject:layout forKey:@(id) cost:[result[@"cost"] unsignedIntegerValue]];
+            self->_exactLineHeights[id] = layout.height;
+            [rows addObject:@[[NSString stringWithFormat:@"%llu", id], @(index), @(layout.height)]];
+          }
+          if (rows.count && self.onLineHeights) {
+            NSDictionary *event = @{@"key":self->_heightKey, @"revision":@(revision), @"rows":rows};
+            self.onLineHeights([[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:event options:0 error:nil] encoding:NSUTF8StringEncoding]);
+          }
+          [self scheduleLineLayouts];
+        });
+      }
+    });
+  });
+}
 - (void)recordStartupDraw {
   if (!_startupDrawn) {
     _startupDrawn = YES;
@@ -812,6 +959,9 @@ static NSString *string(const std::u16string &text) {
   const auto oldEnd = MIN(_document->lineCount(), _document->position(NSMaxRange(range)).line + 2);
   for (size_t i = oldStart ? oldStart - 1 : 0; i < oldEnd; ++i) oldIds.push_back(_document->line(i).id);
   auto change = _document->replace(range.location, range.length, utf16(text));
+  for (auto id : oldIds) [self invalidatePreparedLine:id];
+  for (const auto& line : change.lines) [self invalidatePreparedLine:line.id];
+  _heightNext = MIN(_heightNext, change.startLine);
   [_searchPanel invalidate];
   _editState = _nextEditState++;
   [self publishDocumentState];
@@ -887,6 +1037,7 @@ static NSString *string(const std::u16string &text) {
     self.onEdit([[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding]);
   }
   NSAccessibilityPostNotification(self, NSAccessibilityValueChangedNotification);
+  [self scheduleLineLayouts];
   for (LESourceRowView *row in _rows) { row.needsLayout = YES; row.needsDisplay = YES; }
   [self publishSelection];
 }

@@ -29,6 +29,36 @@
     NSFont *font = text.length ? [text attribute:NSFontAttributeName atIndex:0 effectiveRange:nil] : nil;
     font = font ?: [NSFont monospacedSystemFontOfSize:14 weight:NSFontWeightRegular];
     _ascent = (_lineHeight - (font.ascender - font.descender)) / 2 + font.ascender;
+    // A monospace estimate only chooses a cheap candidate. The actual shaped
+    // advance is still checked before skipping contextual wrap calculation.
+    // Tabs, controls, fallback characters and large lines take the normal path.
+    BOOL candidate = wrap && text.length > 0 && text.length <= 4096
+      && (CTFontGetSymbolicTraits((__bridge CTFontRef)font) & kCTFontMonoSpaceTrait);
+    if (candidate) {
+      UniChar character = '0'; CGGlyph glyph = 0; CGSize advance;
+      candidate = CTFontGetGlyphsForCharacters((__bridge CTFontRef)font, &character, &glyph, 1);
+      if (candidate) {
+        CTFontGetAdvancesForGlyphs((__bridge CTFontRef)font, kCTFontOrientationHorizontal, &glyph, &advance, 1);
+        candidate = advance.width > 0 && text.length * advance.width <= width;
+      }
+      for (NSUInteger i = 0; candidate && i < text.length; ++i) {
+        const unichar ch = [text.string characterAtIndex:i]; candidate = ch >= 32 && ch <= 126;
+      }
+    }
+    if (candidate) {
+      CTTypesetterRef typesetter = CTTypesetterCreateWithAttributedString((__bridge CFAttributedStringRef)text);
+      CTLineRef line = CTTypesetterCreateLine(typesetter, CFRangeMake(0, text.length));
+      CFRelease(typesetter);
+      const double advance = CTLineGetTypographicBounds(line, nil, nil, nil);
+      if (advance <= width) {
+        _lines = @[CFBridgingRelease(line)];
+        _ranges = @[[NSValue valueWithRange:NSMakeRange(0, text.length)]];
+        _chunkStarts = @[@0]; _chunkEnds = @[@(text.length)];
+        _width = advance; _visualLineCount = 1; _height = _lineHeight;
+        return self;
+      }
+      CFRelease(line);
+    }
     NSMutableArray *lines = [NSMutableArray array];
     NSMutableArray *ranges = [NSMutableArray array];
     NSMutableArray *chunkStarts = [NSMutableArray array];

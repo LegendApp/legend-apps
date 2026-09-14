@@ -29,6 +29,56 @@ int main() {
   @autoreleasepool {
     [NSApplication sharedApplication];
     {
+      // Prepare exact heights without mounting a single native row.
+      LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
+      input.undoManager.groupsByEvent = NO;
+      [input loadSource:@"short\nA longer line containing words which wrap at narrow widths\n\t👩🏽‍💻 中文 é\n"];
+      NSMutableDictionary *heights = [NSMutableDictionary new];
+      __block NSString *key = @"narrow";
+      __block NSUInteger revision = 0;
+      input.onLineHeights = ^(NSString *json) {
+        NSDictionary *event = [NSJSONSerialization JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+        if (![event[@"key"] isEqual:key] || [event[@"revision"] unsignedIntegerValue] != revision) return;
+        if ([event[@"reset"] boolValue]) [heights removeAllObjects];
+        for (NSArray *row in event[@"rows"]) heights[row[1]] = row[2];
+      };
+      NSMutableDictionary *request = [@{@"key":key, @"fontFamily":@"Menlo", @"fontSize":@14,
+        @"lineHeight":@23, @"width":@190, @"wrap":@YES, @"foreground":@"#eeeeee", @"start":@0} mutableCopy];
+      [input requestLineLayouts:request];
+      awaitCompletion(^BOOL { return heights.count == 4; });
+      assert([heights[@0] doubleValue] == 23 && [heights[@1] doubleValue] > 23);
+      for (NSUInteger index = 0; index < 4; ++index) {
+        LESourceRowView *row = [[LESourceRowView alloc] initWithFrame:NSMakeRect(0, 0, 190, 23)];
+        row.lineIndex = index; row.lineId = index + 1; row.fontFamily = @"Menlo";
+        row.fontSize = 14; row.lineHeight = 23; row.wrap = YES; row.heightKey = key; row.input = input;
+        [row layout];
+        assert(row.textLayout.height == [heights[@(index)] doubleValue]);
+        LESourceRowView *independent = [[LESourceRowView alloc] initWithFrame:row.frame];
+        independent.lineIndex = index; independent.lineId = index + 1;
+        independent.fontFamily = @"Menlo"; independent.fontSize = 14; independent.lineHeight = 23;
+        independent.wrap = YES; independent.heightKey = @"not-prepared"; independent.input = input;
+        [independent layout];
+        assert(independent.textLayout != row.textLayout);
+        assert(independent.textLayout.height == row.textLayout.height);
+        independent.input = nil;
+        row.input = nil;
+      }
+      // A resize immediately followed by an edit must discard stale worker results.
+      key = @"wide"; request[@"key"] = key; request[@"width"] = @1200;
+      [heights removeAllObjects]; [input requestLineLayouts:request];
+      [input.undoManager beginUndoGrouping];
+      [input insertText:@"prefix " replacementRange:NSMakeRange(0, 0)];
+      [input.undoManager endUndoGrouping];
+      revision = 1;
+      awaitCompletion(^BOOL { return heights.count == 4; });
+      for (NSNumber *height in heights.allValues) assert(height.doubleValue == 23);
+      [heights removeAllObjects]; revision = 2; [input.undoManager undo];
+      awaitCompletion(^BOOL { return heights[@0] != nil; });
+      assert([heights[@0] doubleValue] == 23);
+      input.onLineHeights = nil;
+      std::cout << "Prepared heights: offscreen CoreText layout, drawing agreement, resize, edit and undo passed\n";
+    }
+    {
       LESourceInputView *input = [[LESourceInputView alloc] initWithFrame:NSZeroRect];
       [input loadSource:[@"sample\n" stringByPaddingToLength:700000 withString:@"sample\n" startingAtIndex:0]];
       LESourceSearchPanel *search = [[LESourceSearchPanel alloc] initWithInput:input];
