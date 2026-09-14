@@ -593,6 +593,626 @@
       "inherits": [],
       "refinements": [],
       "bundled": false
+    },
+    {
+      "name": "sql",
+      "aliases": [
+        "postgres",
+        "postgresql",
+        "mysql",
+        "sqlite"
+      ],
+      "scope": "source.sql",
+      "repository": "DerekStride/tree-sitter-sql",
+      "revision": "b7057b7d4ca94bb45403435f12cc01cee821daa8",
+      "directory": ".",
+      "symbol": "tree_sitter_sql",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "sql"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "graphql",
+      "aliases": [
+        "gql"
+      ],
+      "scope": "source.graphql",
+      "repository": "11bit/tree-sitter-graphql",
+      "revision": "951bde9fb3145b5f676204231e35f8b21d21f7b3",
+      "directory": ".",
+      "symbol": "tree_sitter_graphql",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "graphql"
+      ],
+      "extensions": [
+        "graphql",
+        "gql"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "proto",
+      "aliases": [
+        "protobuf"
+      ],
+      "scope": "source.proto",
+      "repository": "treywood/tree-sitter-proto",
+      "revision": "e9f6b43f6844bd2189b50a422d4e2094313f6aa3",
+      "directory": ".",
+      "symbol": "tree_sitter_proto",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "proto"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "prisma",
+      "aliases": [],
+      "scope": "source.prisma",
+      "repository": "victorhqc/tree-sitter-prisma",
+      "revision": "3556b2c1f20ec9ac91e92d32c43d9d2a0ca3cc49",
+      "directory": ".",
+      "symbol": "tree_sitter_prisma",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "prisma"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "hcl",
+      "aliases": [
+        "terraform"
+      ],
+      "scope": "source.hcl",
+      "repository": "tree-sitter-grammars/tree-sitter-hcl",
+      "revision": "64ad62785d442eb4d45df3a1764962dafd5bc98b",
+      "directory": ".",
+      "symbol": "tree_sitter_hcl",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "hcl"
+      ],
+      "extensions": [
+        "hcl",
+        "tf",
+        "tfvars",
+        "tofu"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "make",
+      "aliases": [
+        "makefile"
+      ],
+      "scope": "source.make",
+      "repository": "tree-sitter-grammars/tree-sitter-make",
+      "revision": "70613f3d812cbabbd7f38d104d60a409c4008b43",
+      "directory": ".",
+      "symbol": "tree_sitter_make",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "mk",
+        "mak"
+      ],
+      "filenames": [
+        "makefile",
+        "gnumakefile",
+        "bsdmakefile"
+      ],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "cmake",
+      "aliases": [],
+      "scope": "source.cmake",
+      "repository": "uyha/tree-sitter-cmake",
+      "revision": "ca627bb5828616b6246aafdc3c3222789e728e37",
+      "directory": ".",
+      "symbol": "tree_sitter_cmake",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "cmake"
+      ],
+      "filenames": [
+        "cmakelists.txt"
+      ],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "ini",
+      "aliases": [],
+      "scope": "source.ini",
+      "repository": "justinmk/tree-sitter-ini",
+      "revision": "e4018b5176132b4f3c5d6e61cea383f42288d0f5",
+      "directory": ".",
+      "symbol": "tree_sitter_ini",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "ini",
+        "cfg"
+      ],
+      "filenames": [
+        ".editorconfig",
+        ".gitconfig"
+      ],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "nix",
+      "aliases": [],
+      "scope": "source.nix",
+      "repository": "nix-community/tree-sitter-nix",
+      "revision": "5a64e75fc1ee54f9e14e3a23918e057d43b2de2b",
+      "directory": ".",
+      "symbol": "tree_sitter_nix",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "nix"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "wgsl",
+      "aliases": [],
+      "scope": "source.wgsl",
+      "repository": "gpuweb/tree-sitter-wgsl",
+      "revision": "52e3c620a9c316cc8c1d504dd1908eb8cebe255b",
+      "directory": ".",
+      "symbol": "tree_sitter_wgsl",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "wgsl"
+      ],
+      "extensions": [
+        "wgsl"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "glsl",
+      "aliases": [],
+      "scope": "source.glsl",
+      "repository": "tree-sitter-grammars/tree-sitter-glsl",
+      "revision": "24a6c8ef698e4480fecf8340d771fbcb5de8fbb4",
+      "directory": ".",
+      "symbol": "tree_sitter_glsl",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "glsl",
+        "vert",
+        "frag",
+        "geom",
+        "tesc",
+        "tese",
+        "comp",
+        "vsh",
+        "fsh"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "php",
+      "aliases": [],
+      "scope": "source.php",
+      "repository": "tree-sitter/tree-sitter-php",
+      "revision": "3fda2fb9577166c6399834917f9844f30370beea",
+      "directory": "php",
+      "symbol": "tree_sitter_php",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "php",
+        "phtml"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "dart",
+      "aliases": [],
+      "scope": "source.dart",
+      "repository": "UserNobody14/tree-sitter-dart",
+      "revision": "be07cf7118d3dba06236a3f19541685a68209934",
+      "directory": ".",
+      "symbol": "tree_sitter_dart",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "dart"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "powershell",
+      "aliases": [
+        "pwsh",
+        "ps1"
+      ],
+      "scope": "source.powershell",
+      "repository": "airbus-cert/tree-sitter-powershell",
+      "revision": "e7bd348c49fdfd5c853a146a670965ba516a6239",
+      "directory": ".",
+      "symbol": "tree_sitter_powershell",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "ps1",
+        "psm1",
+        "psd1"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "zig",
+      "aliases": [],
+      "scope": "source.zig",
+      "repository": "tree-sitter-grammars/tree-sitter-zig",
+      "revision": "6479aa13f32f701c383083d8b28360ebd682fb7d",
+      "directory": ".",
+      "symbol": "tree_sitter_zig",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "zig",
+        "zon"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "scala",
+      "aliases": [],
+      "scope": "source.scala",
+      "repository": "tree-sitter/tree-sitter-scala",
+      "revision": "db390f312a54b04b13790e1767bfac32665c17ac",
+      "directory": ".",
+      "symbol": "tree_sitter_scala",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "scala",
+        "sc",
+        "sbt"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "elixir",
+      "aliases": [
+        "ex"
+      ],
+      "scope": "source.elixir",
+      "repository": "elixir-lang/tree-sitter-elixir",
+      "revision": "4b0c7118760af58a2e7081bbc8396e136f820b37",
+      "directory": ".",
+      "symbol": "tree_sitter_elixir",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "ex",
+        "exs"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "erlang",
+      "aliases": [
+        "erl"
+      ],
+      "scope": "source.erlang",
+      "repository": "WhatsApp/tree-sitter-erlang",
+      "revision": "6ba4c762eb3065495e3db85697ffeecdf364ce35",
+      "directory": ".",
+      "symbol": "tree_sitter_erlang",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "erl",
+        "hrl",
+        "escript"
+      ],
+      "filenames": [
+        "rebar.config",
+        "rebar.lock"
+      ],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "r",
+      "aliases": [
+        "rscript"
+      ],
+      "scope": "source.r",
+      "repository": "r-lib/tree-sitter-r",
+      "revision": "58a22794466c0fc15b0d3b40531db751593721e8",
+      "directory": ".",
+      "symbol": "tree_sitter_r",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "r"
+      ],
+      "filenames": [
+        ".rprofile"
+      ],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "julia",
+      "aliases": [
+        "jl"
+      ],
+      "scope": "source.julia",
+      "repository": "tree-sitter/tree-sitter-julia",
+      "revision": "e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3",
+      "directory": ".",
+      "symbol": "tree_sitter_julia",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "jl"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "perl",
+      "aliases": [],
+      "scope": "source.perl",
+      "repository": "tree-sitter-perl/tree-sitter-perl",
+      "revision": "f678e356280566100e7eed21716d6f59abdf96b7",
+      "directory": ".",
+      "symbol": "tree_sitter_perl",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "pl",
+        "pm"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "latex",
+      "aliases": [
+        "tex"
+      ],
+      "scope": "source.latex",
+      "repository": "latex-lsp/tree-sitter-latex",
+      "revision": "fa8df448fc2c0192a8c2f8cfc97de53cb2b4ecb9",
+      "directory": ".",
+      "symbol": "tree_sitter_latex",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "latex"
+      ],
+      "extensions": [
+        "tex",
+        "sty",
+        "cls",
+        "aux"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "vue",
+      "aliases": [],
+      "scope": "source.vue",
+      "repository": "tree-sitter-grammars/tree-sitter-vue",
+      "revision": "ce8011a414fdf8091f4e4071752efc376f4afb08",
+      "directory": ".",
+      "symbol": "tree_sitter_vue",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "vue"
+      ],
+      "extensions": [
+        "vue"
+      ],
+      "filenames": [],
+      "dependencies": [
+        "javascript",
+        "typescript",
+        "css"
+      ],
+      "bundled": false
+    },
+    {
+      "name": "svelte",
+      "aliases": [],
+      "scope": "source.svelte",
+      "repository": "tree-sitter-grammars/tree-sitter-svelte",
+      "revision": "ae5199db47757f785e43a14b332118a5474de1a2",
+      "directory": ".",
+      "symbol": "tree_sitter_svelte",
+      "query": "queries/highlights.scm",
+      "inherits": [
+        "html"
+      ],
+      "refinements": [],
+      "extensions": [
+        "svelte"
+      ],
+      "filenames": [],
+      "dependencies": [
+        "javascript",
+        "typescript",
+        "css"
+      ],
+      "bundled": false
+    },
+    {
+      "name": "astro",
+      "aliases": [],
+      "scope": "source.astro",
+      "repository": "virchau13/tree-sitter-astro",
+      "revision": "213f6e6973d9b456c6e50e86f19f66877e7ef0ee",
+      "directory": ".",
+      "symbol": "tree_sitter_astro",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "astro"
+      ],
+      "filenames": [],
+      "dependencies": [
+        "javascript",
+        "typescript",
+        "css"
+      ],
+      "bundled": false
+    },
+    {
+      "name": "regex",
+      "aliases": [
+        "regexp"
+      ],
+      "scope": "source.regex",
+      "repository": "tree-sitter/tree-sitter-regex",
+      "revision": "b2ac15e27fce703d2f37a79ccd94a5c0cbe9720b",
+      "directory": ".",
+      "symbol": "tree_sitter_regex",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "fish",
+      "aliases": [],
+      "scope": "source.fish",
+      "repository": "ram02z/tree-sitter-fish",
+      "revision": "b7f1d682941e0c62dfcd6bf9ef481638351bab16",
+      "directory": ".",
+      "symbol": "tree_sitter_fish",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "fish"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "diff",
+      "aliases": [
+        "patch"
+      ],
+      "scope": "source.diff",
+      "repository": "the-mikedavis/tree-sitter-diff",
+      "revision": "ada384ac7bfc1307f32de474620120add29998fb",
+      "directory": ".",
+      "symbol": "tree_sitter_diff",
+      "query": "queries/highlights.scm",
+      "inherits": [],
+      "refinements": [],
+      "extensions": [
+        "diff",
+        "patch"
+      ],
+      "filenames": [],
+      "dependencies": [],
+      "bundled": false
+    },
+    {
+      "name": "gitignore",
+      "aliases": [],
+      "scope": "source.gitignore",
+      "repository": "shunsambongi/tree-sitter-gitignore",
+      "revision": "f4685bf11ac466dd278449bcfe5fd014e94aa504",
+      "directory": ".",
+      "symbol": "tree_sitter_gitignore",
+      "query": "",
+      "inherits": [],
+      "refinements": [
+        "gitignore"
+      ],
+      "extensions": [],
+      "filenames": [
+        ".gitignore",
+        ".ignore",
+        ".dockerignore"
+      ],
+      "dependencies": [],
+      "bundled": false
     }
   ],
   "schemaVersion": 1,

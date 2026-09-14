@@ -1,0 +1,147 @@
+{
+  "sql": {
+    "file": "report.sql",
+    "token": "SELECT",
+    "capture": "keyword"
+  },
+  "graphql": {
+    "file": "schema.graphql",
+    "token": "query",
+    "capture": "keyword"
+  },
+  "proto": {
+    "file": "deck.proto",
+    "token": "message",
+    "capture": "keyword"
+  },
+  "prisma": {
+    "file": "schema.prisma",
+    "token": "model",
+    "capture": "keyword"
+  },
+  "hcl": {
+    "file": "main.tf",
+    "token": "resource",
+    "capture": "type"
+  },
+  "make": {
+    "file": "Makefile",
+    "token": "# Build a deck",
+    "capture": "comment"
+  },
+  "cmake": {
+    "file": "CMakeLists.txt",
+    "token": "cmake_minimum_required",
+    "capture": "function"
+  },
+  "ini": {
+    "file": "settings.ini",
+    "token": "; Presentation settings",
+    "capture": "comment"
+  },
+  "nix": {
+    "file": "default.nix",
+    "token": "let",
+    "capture": "keyword"
+  },
+  "wgsl": {
+    "file": "waves.wgsl",
+    "token": "fn",
+    "capture": "keyword"
+  },
+  "glsl": {
+    "file": "waves.frag",
+    "token": "float",
+    "capture": "type"
+  },
+  "php": {
+    "file": "deck.php",
+    "token": "return",
+    "capture": "keyword"
+  },
+  "dart": {
+    "file": "deck.dart",
+    "token": "class",
+    "capture": "keyword"
+  },
+  "powershell": {
+    "file": "build.ps1",
+    "token": "function",
+    "capture": "keyword"
+  },
+  "zig": {
+    "file": "main.zig",
+    "token": "pub",
+    "capture": "keyword"
+  },
+  "scala": {
+    "file": "Deck.scala",
+    "token": "case",
+    "capture": "keyword"
+  },
+  "elixir": {
+    "file": "deck.ex",
+    "token": "defmodule",
+    "capture": "keyword"
+  },
+  "erlang": {
+    "file": "deck.erl",
+    "token": "\"Deck: ~s\"",
+    "capture": "string"
+  },
+  "r": {
+    "file": "report.r",
+    "token": "function",
+    "capture": "keyword"
+  },
+  "julia": {
+    "file": "timing.jl",
+    "token": "function",
+    "capture": "keyword"
+  },
+  "perl": {
+    "file": "build.pl",
+    "token": "return",
+    "capture": "keyword"
+  },
+  "latex": {
+    "file": "slides.tex",
+    "token": "\\documentclass",
+    "capture": "function"
+  },
+  "vue": {
+    "file": "Deck.vue",
+    "token": "h1",
+    "capture": "tag"
+  },
+  "svelte": {
+    "file": "Deck.svelte",
+    "token": "h1",
+    "capture": "tag"
+  },
+  "astro": {
+    "file": "Deck.astro",
+    "token": "h1",
+    "capture": "tag"
+  },
+  "regex": {
+    "file": "pattern.regex",
+    "token": "^",
+    "capture": ""
+  },
+  "fish": {
+    "file": "build.fish",
+    "token": "function",
+    "capture": "keyword"
+  },
+  "diff": {
+    "file": "change.diff",
+    "token": "+Welcome",
+    "capture": ""
+  },
+  "gitignore": {
+    "file": "project.gitignore",
+    "token": "# Build outputs",
+    "capture": "comment"
+  }
+}

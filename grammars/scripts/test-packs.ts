@@ -11,10 +11,12 @@ const selectedArch = archOption < 0 ? undefined : process.argv[archOption + 1];
 if (selectedArch && !["arm64", "x86_64"].includes(selectedArch)) throw Error("Expected --arch arm64 or x86_64");
 const run = (command: string, args: string[]) => execFileSync(command, args, { cwd: root, stdio: "inherit" });
 const binaries = new Map<string, string>();
+const fixtures = JSON.parse(readFileSync(join(root, "grammars/tests/fixtures/expectations.json"), "utf8"));
 function binaryFor(arch: string) {
   if (binaries.has(arch)) return binaries.get(arch)!;
   // Fail clearly if this host cannot execute an architecture. Never publish a
   // pack that only passed a cross-compile without its parser/query being run.
+  run("/usr/bin/arch", [`-${arch}`, "/usr/bin/true"]);
   const build = mkdtempSync(join(tmpdir(), `legend-grammar-pack-test-${arch}-`));
   run("node", ["packages/syntax-parser/scripts/compile-tree-sitter.ts", build, "--runtime-only", "--arch", arch]);
   const objects = readdirSync(build).filter((name) => name.endsWith(".o")).map((name) => join(build, name));
@@ -25,7 +27,8 @@ function binaryFor(arch: string) {
   return binary;
 }
 let checked = 0;
-for (const pack of Object.values(manifest.packs) as any[]) {
+const failures: string[] = [];
+for (const [name, pack] of Object.entries(manifest.packs) as [string, any][]) {
   for (const [platform, artifact] of Object.entries(pack.platforms) as [string, any][]) {
     const path = join(output, artifact.filename);
     const bytes = readFileSync(path);
@@ -33,7 +36,14 @@ for (const pack of Object.values(manifest.packs) as any[]) {
     run("codesign", ["--verify", "--strict", path]);
     const arch = platform.endsWith("arm64") ? "arm64" : "x86_64";
     if (selectedArch && arch !== selectedArch) continue;
-    run(binaryFor(arch), [path]); checked++;
+    const fixture = fixtures[name];
+    const dependencies = (pack.dependencies as string[]).map((name) => join(output, manifest.packs[name].platforms[platform].filename));
+    const binary = binaryFor(arch);
+    try {
+      run(binary, [path, ...(fixture ? [join(root, "grammars/tests/fixtures", fixture.file), fixture.token, fixture.capture, ...dependencies] : [])]); checked++;
+    } catch { failures.push(`${name}/${arch}`); }
   }
 }
 if (!checked) throw Error("No executable packs for this host");
+if (failures.length) throw Error(`Failed grammar packs: ${failures.join(", ")}`);
+console.log(`Verified ${checked} dynamically loaded grammar packs.`);

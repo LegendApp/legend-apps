@@ -1,0 +1,5 @@
+# Build outputs
+/build/
+*.log
+!important.log
+node_modules/**

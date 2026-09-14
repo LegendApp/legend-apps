@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { catalog, queryFor, root, sourceDirectory, validateCatalog } from "./catalog";
+import { catalog, queryFor, root, sourceDirectory, sourcePatchHash, sourcePatches, validateCatalog } from "./catalog";
 
 validateCatalog();
 const args = process.argv.slice(2);
@@ -55,6 +55,8 @@ for (const g of grammars) {
   const vendor = sourceDirectory(g);
   const upstream = JSON.parse(readFileSync(join(vendor, "UPSTREAM.json"), "utf8"));
   if (upstream.revision !== g.revision) throw Error(`Stale vendored source for ${g.name}; vendor the new pins first`);
+  if ((sourcePatches[g.name]?.length || upstream.patchHash) && upstream.patchHash !== sourcePatchHash(g.name))
+    throw Error(`Stale source patches for ${g.name}; run grammars:fetch first`);
   const descriptor = join(output, `${g.name}-descriptor.c`);
   writeFileSync(descriptor, `#include "${join(root, "grammars/PackABI.h")}"
 extern const TSLanguage *${g.symbol}(void);

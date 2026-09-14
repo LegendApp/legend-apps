@@ -1,0 +1,22 @@
+{
+  "wgsl": [
+    {
+      "file": "grammar.js",
+      "from": "$._comment",
+      "to": "$.comment",
+      "count": 1
+    },
+    {
+      "file": "grammar.js",
+      "from": "_comment: $ =>",
+      "to": "comment: $ =>",
+      "count": 1
+    },
+    {
+      "file": "grammar.js",
+      "from": "$._block_comment",
+      "to": "$.block_comment",
+      "count": 2
+    }
+  ]
+}

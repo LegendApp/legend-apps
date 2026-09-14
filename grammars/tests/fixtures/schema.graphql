@@ -1,0 +1,8 @@
+# Presentation catalog
+type Deck {
+  id: ID!
+  title: String!
+}
+query FindDeck($id: ID!) {
+  deck(id: $id) { title }
+}
