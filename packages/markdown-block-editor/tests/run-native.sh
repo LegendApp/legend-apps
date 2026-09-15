@@ -22,3 +22,9 @@ clang++ -std=c++20 -fobjc-arc -framework Foundation \
   "$markdown_editor_dir/tests/MarkdownPasteSelection.test.mm" \
   "$markdown_parser_object" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+clang -fobjc-arc -framework AppKit \
+  -I"$markdown_dependency_dir/ios/utils" \
+  "$markdown_dependency_dir/ios/utils/ENRMCodeBlockLineLayout.m" \
+  "$markdown_editor_dir/tests/MarkdownCodeBlockLayout.test.m" -o "$markdown_test_binary"
+"$markdown_test_binary"

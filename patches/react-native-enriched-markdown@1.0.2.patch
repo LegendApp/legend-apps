@@ -7519,3 +7519,200 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 +  parseResult.selectionOffset = rawToPlainMap[MIN(sourceSelection, rawLength)];
 
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
+diff --git a/ios/views/ENRMCodeBlockContainerView.m b/ios/views/ENRMCodeBlockContainerView.m
+index a668c26e..f9e210ee 100644
+--- a/ios/views/ENRMCodeBlockContainerView.m
++++ b/ios/views/ENRMCodeBlockContainerView.m
+@@ -5,6 +5,7 @@
+ #import "PasteboardUtils.h"
+ #if TARGET_OS_OSX
+ #import "ENRMMenuAction.h"
++#import "ENRMCodeBlockLineLayout.h"
+ #endif
+
+ // Block segment view for fenced code blocks (see SegmentRenderer.m):
+@@ -67,6 +68,7 @@ static CGFloat ENRMCodeBlockHeaderLabelLineHeight(NSFont *headerFont)
+   return attributed;
+ }
+
++#if !TARGET_OS_OSX
+ // Unwrapped code extent: width feeds the horizontal scroll, height the box
+ // measurement. Width-independent since lines never wrap.
+ static CGSize ENRMCodeBlockCodeSize(NSAttributedString *attributedCode)
+@@ -80,6 +82,8 @@ static CGSize ENRMCodeBlockCodeSize(NSAttributedString *attributedCode)
+   return CGSizeMake(ceil(bounds.size.width), ceil(bounds.size.height));
+ }
+
++#endif
++
+ // Used only to pick the scroll indicator style for the code pane, so the
+ // indicator stays visible on dark code block backgrounds without affecting
+ // any other scroll view.
+@@ -114,6 +118,7 @@ @interface ENRMCodeBlockContentView : RCTUIView
+ @property (nonatomic, assign) CGPoint textOrigin;
+ #if TARGET_OS_OSX
+ @property (nonatomic, copy, nullable) NSMenu * (^menuProvider)(void);
++@property (nonatomic, strong) ENRMCodeBlockLineLayout *lineLayout;
+ #endif
+ @end
+
+@@ -134,7 +139,11 @@ - (NSMenu *)menuForEvent:(NSEvent *)event
+ - (void)drawRect:(CGRect)rect
+ {
+   if (self.attributedCode.length > 0) {
++#if TARGET_OS_OSX
++    [self.lineLayout drawInRect:CGRectIntersection(rect, self.visibleRect) atPoint:self.textOrigin];
++#else
+     [self.attributedCode drawAtPoint:self.textOrigin];
++#endif
+   }
+ }
+
+@@ -346,7 +355,12 @@ - (void)rebuildAttributedCode
+   NSAttributedString *highlighted =
+       _pending ? nil : ENRMHighlightedAttributedCode(plainCode, _cachedCode, _cachedLanguage, _config);
+   _attributedCode = highlighted ?: plainCode;
++#if TARGET_OS_OSX
++  _codeContentView.lineLayout = [[ENRMCodeBlockLineLayout alloc] initWithAttributedCode:_attributedCode];
++  _codeSize = _codeContentView.lineLayout.size;
++#else
+   _codeSize = ENRMCodeBlockCodeSize(_attributedCode);
++#endif
+   _codeContentView.attributedCode = _attributedCode;
+ }
+
+@@ -414,7 +428,11 @@ + (CGFloat)measureHeightForCodeBlockNode:(MarkdownASTNode *)node config:(StyleCo
+   CGFloat inset = ENRMCodeBlockContentInset(config);
+   CGFloat headerH = inset + ENRMCodeBlockHeaderLabelLineHeight(ENRMCodeBlockHeaderFont(config));
+   NSAttributedString *code = ENRMCodeBlockPlainAttributedCode(ENRMCodeBlockExtractCode(node), config);
++#if TARGET_OS_OSX
++  return [ENRMCodeBlockLineLayout heightForAttributedCode:code] + inset * 2 + headerH;
++#else
+   return ENRMCodeBlockCodeSize(code).height + inset * 2 + headerH;
++#endif
+ }
+
+ - (void)drawRect:(CGRect)rect
+diff --git a/ios/utils/ENRMCodeBlockLineLayout.h b/ios/utils/ENRMCodeBlockLineLayout.h
+new file mode 100644
+index 00000000..49dad4e1
+--- /dev/null
++++ b/ios/utils/ENRMCodeBlockLineLayout.h
+@@ -0,0 +1,15 @@
++#pragma once
++#import <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++
++// Unwrapped code is laid out one line at a time. AppKit's whole-string drawing
++// path repeatedly shapes the remaining text for every newline in a tall block.
++@interface ENRMCodeBlockLineLayout : NSObject
++@property (nonatomic, readonly) CGSize size;
++- (instancetype)initWithAttributedCode:(NSAttributedString *)code;
+++ (CGFloat)heightForAttributedCode:(NSAttributedString *)code;
++- (NSRange)lineRangeIntersectingRect:(CGRect)rect;
++- (void)drawInRect:(CGRect)rect atPoint:(CGPoint)origin;
++@end
++#endif
+diff --git a/ios/utils/ENRMCodeBlockLineLayout.m b/ios/utils/ENRMCodeBlockLineLayout.m
+new file mode 100644
+index 00000000..f185deba
+--- /dev/null
++++ b/ios/utils/ENRMCodeBlockLineLayout.m
+@@ -0,0 +1,96 @@
++#import "ENRMCodeBlockLineLayout.h"
++#if TARGET_OS_OSX
++
++@implementation ENRMCodeBlockLineLayout {
++  NSArray<NSAttributedString *> *_lines;
++  NSArray<NSNumber *> *_lineOffsets;
++  CGSize _size;
++}
++
++static void enumerateCodeLines(NSString *text, void (^visit)(NSRange range))
++{
++  NSUInteger position = 0;
++  while (position < text.length) {
++    NSUInteger end, contentsEnd;
++    [text getLineStart:NULL end:&end contentsEnd:&contentsEnd forRange:NSMakeRange(position, 0)];
++    visit(NSMakeRange(position, contentsEnd - position));
++    position = end;
++    if (end == text.length && contentsEnd < end) visit(NSMakeRange(end, 0));
++  }
++}
++
++- (instancetype)initWithAttributedCode:(NSAttributedString *)code
++{
++  if ((self = [super init])) {
++    NSMutableArray<NSAttributedString *> *lines = [NSMutableArray new];
++    NSMutableArray<NSNumber *> *offsets = [NSMutableArray new];
++    __block CGFloat width = 0;
++    __block CGFloat height = 0;
++    enumerateCodeLines(code.string, ^(NSRange range) {
++      NSAttributedString *line;
++      if (range.length > 0) {
++        line = [code attributedSubstringFromRange:range];
++      } else {
++        // An empty line still consumes the configured line height.
++        NSDictionary *attributes = [code attributesAtIndex:MIN(range.location, code.length - 1) effectiveRange:NULL];
++        line = [[NSAttributedString alloc] initWithString:@" " attributes:attributes];
++      }
++      CGRect bounds = [line boundingRectWithSize:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)
++                                        options:NSStringDrawingUsesLineFragmentOrigin context:nil];
++      [offsets addObject:@(height)];
++      [lines addObject:line];
++      height += bounds.size.height;
++      if (range.length > 0) width = MAX(width, bounds.size.width);
++    });
++    _lines = lines;
++    _lineOffsets = offsets;
++    _size = CGSizeMake(ceil(width), ceil(height));
++  }
++  return self;
++}
++
++- (CGSize)size { return _size; }
++
+++ (CGFloat)heightForAttributedCode:(NSAttributedString *)code
++{
++  if (code.length == 0) return 0;
++  // Code block styling sets one font and paragraph style for the whole block.
++  // With fixed line height, shadow measurement needs no glyph shaping at all.
++  NSParagraphStyle *style = [code attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:NULL];
++  if (style.minimumLineHeight > 0 && style.maximumLineHeight == style.minimumLineHeight) {
++    __block NSUInteger count = 0;
++    enumerateCodeLines(code.string, ^(__unused NSRange range) { count++; });
++    return ceil(count * style.minimumLineHeight);
++  }
++  return [[self alloc] initWithAttributedCode:code].size.height;
++}
++
++- (NSRange)lineRangeIntersectingRect:(CGRect)rect
++{
++  if (_lines.count == 0 || CGRectGetMaxY(rect) <= 0 || CGRectGetMinY(rect) >= _size.height) {
++    return NSMakeRange(0, 0);
++  }
++  NSUInteger low = 0, high = _lines.count;
++  while (low < high) {
++    NSUInteger middle = low + (high - low) / 2;
++    CGFloat bottom = middle + 1 < _lines.count ? _lineOffsets[middle + 1].doubleValue : _size.height;
++    if (bottom <= CGRectGetMinY(rect)) low = middle + 1; else high = middle;
++  }
++  NSUInteger start = low;
++  while (low < _lines.count && _lineOffsets[low].doubleValue < CGRectGetMaxY(rect)) low++;
++  return NSMakeRange(start, low - start);
++}
++
++- (void)drawInRect:(CGRect)rect atPoint:(CGPoint)origin
++{
++  // Include one line of glyph overhang beyond the dirty rectangle.
++  NSRange range = [self lineRangeIntersectingRect:CGRectOffset(rect, -origin.x, -origin.y)];
++  if (range.length == 0) return;
++  NSUInteger start = range.location > 0 ? range.location - 1 : 0;
++  NSUInteger end = MIN(NSMaxRange(range) + 1, _lines.count);
++  for (NSUInteger index = start; index < end; index++) {
++    [_lines[index] drawAtPoint:CGPointMake(origin.x, origin.y + _lineOffsets[index].doubleValue)];
++  }
++}
++@end
++#endif
