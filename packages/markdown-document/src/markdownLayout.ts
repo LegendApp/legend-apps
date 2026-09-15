@@ -101,6 +101,7 @@ export function editableTextStyleForBlock(
   return [
     markdownDocumentStyles.editorInput,
     textInputStyleFromMarkdownBlockStyle(markdownTextStyle as TextStyle | undefined),
+    block.type === "codeBlock" && { backgroundColor: markdownStyle.codeBlock?.backgroundColor },
   ];
 }
 
