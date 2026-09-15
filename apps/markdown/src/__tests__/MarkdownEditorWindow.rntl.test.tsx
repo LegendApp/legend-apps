@@ -326,6 +326,25 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     jest.useRealTimers();
   });
 
+  it("keeps undo history when saving finishes before React renders the saving state", async () => {
+    jest.useFakeTimers();
+    mockSessionState$.assign({ documentSource: "file", filename: "/tmp/fast-save.md", isDirty: true, saveState: "idle" });
+    const view = await render(<MarkdownEditorWindow />);
+    const watchedFileChange = mockWatchFiles.mock.calls[0]?.[1];
+    await act(async () => {
+      mockSessionState$.saveState.set("saving");
+      mockSessionState$.saveState.set("idle");
+      mockSessionState$.isDirty.set(false);
+    });
+    await act(async () => {
+      watchedFileChange?.({ filePath: "/tmp/fast-save.md", path: "/tmp", type: "change" });
+      jest.advanceTimersByTime(100);
+    });
+    expect(mockReloadDocument).not.toHaveBeenCalled();
+    await view.unmount();
+    jest.useRealTimers();
+  });
+
   it("shares own-save reload suppression across watcher instances for the same file", async () => {
     jest.useFakeTimers();
     mockSessionState$.assign({

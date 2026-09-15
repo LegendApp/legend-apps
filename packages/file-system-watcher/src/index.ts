@@ -4,6 +4,7 @@ import NativeFileSystemWatcher from "./NativeFileSystemWatcher";
 export type DirectoryChangeEvent = {
   path: string;
   filePath: string;
+  contentChanged?: boolean;
   type: "add" | "change" | "delete";
 };
 
@@ -132,7 +133,8 @@ export function watchFiles(filePaths: string[], listener: (event: DirectoryChang
   const directories = uniqueNormalizedPaths(normalizedFilePaths.map(getDirectoryPath));
 
   return watchDirectories(directories, (event) => {
-    if (watchedFilePaths.has(normalizePath(event.filePath))) {
+    // Access-time and other metadata notifications do not change document text.
+    if (event.contentChanged !== false && watchedFilePaths.has(normalizePath(event.filePath))) {
       listener(event);
     }
   });
