@@ -8,6 +8,7 @@
 
 #import <ReactNativeEnrichedMarkdown/EnrichedMarkdown.h>
 #import <ReactNativeEnrichedMarkdown/MarkdownExtractor.h>
+#import <ReactNativeEnrichedMarkdown/ENRMInputParser.h>
 
 #include <RNMarkdownParser/MarkdownDocumentRegistry.hpp>
 
@@ -432,11 +433,14 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
 - (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view;
 - (void)installTextSelection;
+- (void)applyPendingPasteSelection;
 @end
 
 @implementation RNMarkdownEditorHost {
   NSMapTable<NSString *, RNMarkdownBlockActivationView *> *_activationViews;
   NSString *_activeBlockId;
+  NSString *_pasteSelectionBlockId;
+  NSString *_pasteSelectionPrefix;
   NSString *_layoutConfigJson;
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
@@ -521,6 +525,28 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     NSEvent *event = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:point modifierFlags:0 timestamp:0 windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:0];
     [self activateBlockView:view withEvent:event];
   };
+}
+
+- (void)setSelectionAfterMarkdown:(NSString *)blockId markdownPrefix:(NSString *)markdownPrefix
+{
+  _pasteSelectionBlockId = [blockId copy];
+  _pasteSelectionPrefix = [markdownPrefix copy];
+  [self applyPendingPasteSelection];
+}
+
+- (void)applyPendingPasteSelection
+{
+  if (_pasteSelectionBlockId == nil) return;
+  id input = [self activationViewForBlockId:_pasteSelectionBlockId].editorInput;
+  SEL selector = NSSelectorFromString(@"setSelection:end:");
+  if (![input respondsToSelector:selector]) return;
+  ENRMInputParser *parser = [ENRMInputParser new];
+  NSString *markdown = nativeMarkdownForBlockId(_pasteSelectionBlockId);
+  NSInteger selection = [parser parseToPlainTextAndRanges:markdown sourceSelection:_pasteSelectionPrefix.length].selectionOffset;
+  _pasteSelectionBlockId = nil;
+  _pasteSelectionPrefix = nil;
+  void (*send)(id, SEL, NSInteger, NSInteger) = (void (*)(id, SEL, NSInteger, NSInteger))[input methodForSelector:selector];
+  send(input, selector, selection, selection);
 }
 
 - (void)writeSelectionClipboard:(NSString *)markdown {
@@ -877,6 +903,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 - (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view
 {
+  [self applyPendingPasteSelection];
   [_textSelection refresh];
   if (view == nil || _activeBlockId.length == 0 || ![_activeBlockId isEqualToString:view.blockId]) {
     return;
@@ -1024,6 +1051,8 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   [_activationViews removeAllObjects];
   [self stopObservingScrollView];
   _activeBlockId = nil;
+  _pasteSelectionBlockId = nil;
+  _pasteSelectionPrefix = nil;
   _layoutConfigJson = nil;
   _layoutSpacingConfig = MarkdownLayoutSpacingConfig();
 }
@@ -1132,6 +1161,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   [self configureEditorInput];
   _editorInput.hidden = NO;
   callFocus(_editorInput);
+  [[self editorHost] applyPendingPasteSelection];
 
   NSValue *pendingWindowPoint = _pendingActivationWindowPoint;
   NSInteger pendingClickCount = _pendingActivationClickCount;

@@ -40,7 +40,8 @@ export interface NativeProps extends ViewProps {
 
 type ComponentType = HostComponent<NativeProps>;
 interface NativeCommands {
+  setSelectionAfterMarkdown: (viewRef: React.ElementRef<ComponentType>, blockId: string, markdownPrefix: string) => void;
   writeSelectionClipboard: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
 }
-export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["writeSelectionClipboard"] });
+export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["writeSelectionClipboard", "setSelectionAfterMarkdown"] });
 export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as ComponentType;
