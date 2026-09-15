@@ -246,6 +246,23 @@ void testLoadsBaselineBlocks() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testEmptyDocumentsRemainEditable() {
+  for (const std::string source : {"", " \t\n\n"}) {
+    LoadedDocument loaded(source);
+    const auto blocks = blocksFor(loaded.document);
+    expectEqual(blocks.size(), 1, "blank file has one editable block");
+    expectEqual(savedSourceFor(loaded.document), source, "opening preserves blank source");
+    loaded.document->applyTransaction(updateBlock(blocks[0].id, "First words"));
+    expectEqual(savedSourceFor(loaded.document), "First words", "can type into blank file");
+    expectEqual(blocksFor(loaded.document)[0].id, blocks[0].id, "typing retains blank block id");
+  }
+  HybridMarkdownParser parser;
+  const auto created = parser.createMarkdownDocument("", 64)->get();
+  expectEqual(created.initialBlocks.size(), 1, "untitled document exposes editable block");
+  created.document->applyTransaction(splitBlock(created.initialBlocks[0].id, "First", "Second"));
+  expect(blocksFor(created.document)[0].id != blocksFor(created.document)[1].id, "new block ids stay unique");
+}
+
 void testCreatesDocumentFromMarkdownString() {
   HybridMarkdownParser parser;
   const auto result = parser.createMarkdownDocument("# Untitled\n\nDraft paragraph\n", 1000)->get();
@@ -760,6 +777,7 @@ struct TestCase {
 int main() {
   const TestCase tests[] = {
       {"loads baseline blocks", testLoadsBaselineBlocks},
+      {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
       {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
       {"creates document from markdown string", testCreatesDocumentFromMarkdownString},
