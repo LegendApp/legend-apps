@@ -2,7 +2,7 @@ import { nativeMarkdownDocumentAdapter } from "./adapters/nativeMarkdownDocument
 import {
   applyMarkdownTransactionResultToBlockState,
   assertMarkdownDocumentBlockStateInvariants,
-  createMarkdownDocumentBlockState,
+  createMarkdownDocumentBlockStateFromIds,
   mergeHydratedMarkdownBlocksForRevision,
   type MarkdownDocumentBlockState,
 } from "./documentStateModel";
@@ -69,7 +69,7 @@ function assertScenarioState(state: ScenarioState) {
   assert(state.blockState.blockIds.length <= state.snapshot.blockCount, "hydrated state length must not exceed snapshot block count");
 }
 
-function applyTransaction(state: ScenarioState, result: MarkdownTransactionResult): ScenarioState {
+async function applyTransaction(state: ScenarioState, result: MarkdownTransactionResult): Promise<ScenarioState> {
   const nextState = {
     ...state,
     blockState: applyMarkdownTransactionResultToBlockState(state.blockState, result),
@@ -85,6 +85,14 @@ function applyTransaction(state: ScenarioState, result: MarkdownTransactionResul
     },
   };
   assertScenarioState(nextState);
+  const nativeBlockIds = await nativeMarkdownDocumentAdapter.getBlockIds!(
+    state.snapshot.documentId, 0, nextState.snapshot.blockCount,
+  );
+  assert(
+    nativeBlockIds.length === nextState.blockState.blockIds.length &&
+      nativeBlockIds.every((id, index) => id === nextState.blockState.blockIds[index]),
+    "transaction block order must match the native document",
+  );
   return nextState;
 }
 
@@ -113,7 +121,11 @@ async function runFarDownStructuralEdits({
   const source = createLargeMarkdownSource(blockCount, seed);
   const snapshot = await nativeMarkdownDocumentAdapter.loadMarkdown(`e2e-${seed}.md`, source);
   let state: ScenarioState = {
-    blockState: createMarkdownDocumentBlockState(snapshot.initialBlocks),
+    // Transactions use absolute document indices, even when only a few blocks
+    // have hydrated text. Keep the complete ID order independently of hydration.
+    blockState: createMarkdownDocumentBlockStateFromIds(
+      await nativeMarkdownDocumentAdapter.getBlockIds!(snapshot.documentId, 0, snapshot.blockCount),
+    ),
     currentRevision: 0,
     retiredBlockIds: [],
     snapshot,
@@ -137,7 +149,7 @@ async function runFarDownStructuralEdits({
       type: "updateBlockMarkdown",
     });
     assert(updateResult, "native adapter must support markdown transactions");
-    state = applyTransaction(state, updateResult);
+    state = await applyTransaction(state, updateResult);
 
     const idsBeforeStaleMerge = state.blockState.blockIds;
     state = mergeHydration(state, staleAfterTargetBlocks, staleAfterTargetRevision);
@@ -156,7 +168,7 @@ async function runFarDownStructuralEdits({
       type: "replaceBlockRange",
     });
     assert(replaceResult, "native adapter must support range replacement transactions");
-    state = applyTransaction(state, replaceResult);
+    state = await applyTransaction(state, replaceResult);
 
     const savedPath = `/tmp/legend-markdown-e2e-${seed}.md`;
     await nativeMarkdownDocumentAdapter.saveAs(snapshot.documentId, savedPath);

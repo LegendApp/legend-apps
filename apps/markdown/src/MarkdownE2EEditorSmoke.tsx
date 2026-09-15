@@ -133,18 +133,10 @@ export function MarkdownE2EEditorSmoke({
       : undefined
   ), [styleMode, variant]);
   const adapter = useMemo<MarkdownDocumentAdapter>(() => ({
-    applyTransaction: nativeMarkdownDocumentAdapter.applyTransaction,
-    close: nativeMarkdownDocumentAdapter.close,
-    getBlock: nativeMarkdownDocumentAdapter.getBlock,
-    getBlockAtIndexSync: nativeMarkdownDocumentAdapter.getBlockAtIndexSync,
-    getBlockIds: nativeMarkdownDocumentAdapter.getBlockIds,
-    getBlockMetadata: nativeMarkdownDocumentAdapter.getBlockMetadata,
-    getBlocks: nativeMarkdownDocumentAdapter.getBlocks,
+    ...nativeMarkdownDocumentAdapter,
     load(filename) {
       return nativeMarkdownDocumentAdapter.loadMarkdown(filename, smokeMarkdownByVariant[variant]);
     },
-    save: nativeMarkdownDocumentAdapter.save,
-    saveAs: nativeMarkdownDocumentAdapter.saveAs,
   }), [variant]);
   const handleDirtyChange = useCallback((isDirty: boolean) => {
     if (isDirty) {
@@ -269,6 +261,8 @@ export function MarkdownE2EEditorSmoke({
         <MarkdownDocument
           adapter={adapter}
           autoFocusFirstBlock={autoSelectBlocks ||
+            variant === "ui" ||
+            variant === "softWrap" ||
             variant === "codeBlock" ||
             variant === "editNavigation" ||
             variant === "navigation"}
