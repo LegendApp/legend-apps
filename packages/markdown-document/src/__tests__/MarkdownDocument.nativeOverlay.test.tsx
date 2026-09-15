@@ -93,7 +93,7 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
 
   constructor(
     private documentSnapshot: MarkdownDocumentSnapshot,
-    private options: { metadataOnlySyncBlocks?: boolean } = {},
+    private options: { metadataOnlySyncBlocks?: boolean; splitParagraphUpdates?: boolean } = {},
   ) {}
 
   get blockIds() {
@@ -246,12 +246,19 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
       textRevision: this.blocks[index]!.textRevision + 1,
       type: nextHeadingLevel > 0 ? "heading" : "paragraph",
     } satisfies MarkdownBlockSnapshot;
-    this.blocks[index] = nextBlock;
+    const changedBlocks = this.options.splitParagraphUpdates
+      ? transaction.markdown.split("\n\n").map((markdown, offset) => ({
+        ...nextBlock, markdown, index: index + offset,
+        id: offset === 0 ? nextBlock.id : this.nextBlockId(),
+      }))
+      : [nextBlock];
+    this.blocks.splice(index, 1, ...changedBlocks);
+    this.blocks = this.blocks.map((candidate, index) => ({ ...candidate, index }));
 
     return {
-      changedBlocks: [nextBlock],
+      changedBlocks,
       changedRange: {
-        blockIds: [nextBlock.id],
+        blockIds: changedBlocks.map((block) => block.id),
         deleteCount: 1,
         startBlockIndex: index,
       },
@@ -301,6 +308,67 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it("passes complex pasted Markdown to the document without rich-text normalization", async () => {
+    const text = "## 👩🏽‍💻 café 中文 שלום\n\n- [ ] parent\n  - **nested**\n\n| A | B |\n| --- | --- |\n| 0 | 🧪 |\n\n```js\nconst n = 0;\n```\n\n[broken link]( with ~tilde~.";
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "beforeafter")]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "a", height: 25, rowHeight: 25, width: 640, x: 40, y: 80, markdown: "beforeafter",
+    } }));
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onPasteMarkdown({ nativeEvent: {
+      blockId: "a", beforeMarkdown: "before", afterMarkdown: "after", text,
+    } }));
+    await flushPromises();
+    expect(adapter.applyTransactions).toEqual([{ type: "updateBlockMarkdown", blockId: "a", markdown: `before${text}after` }]);
+    expect(adapter.sourceMarkdown).toBe(`before${text}after`);
+    await act(async () => renderer.unmount());
+  });
+
+  it.each(["nativePaste", "changeMarkdown"])("synchronizes multi-block %s through undo, redo, and further typing", async (path) => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Original"), block("tail", 1, "Tail")]), { splitParagraphUpdates: true });
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    const onError = jest.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "a", height: 25, rowHeight: 25, width: 640, x: 40, y: 80, markdown: "Original",
+    } }));
+    await flushPromises();
+    const input = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    await act(async () => {
+      if (path === "nativePaste") {
+        nativeHost(renderer).props.onPasteMarkdown({ nativeEvent: { blockId: "a", beforeMarkdown: "", afterMarkdown: "", text: "One\n\nTwo" } });
+      } else {
+        editorInput(renderer).props.onChangeMarkdown("One\n\nTwo");
+      }
+    });
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("One\n\nTwo\n\nTail");
+    expect(input.setValue).toHaveBeenLastCalledWith("One");
+    await act(async () => commands.current?.undo());
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("Original\n\nTail");
+    expect(input.setValue).toHaveBeenLastCalledWith("Original");
+    await act(async () => commands.current?.redo());
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("One\n\nTwo\n\nTail");
+    await act(async () => commands.current?.undo());
+    await flushPromises();
+    await act(async () => editorInput(renderer).props.onChangeMarkdown("OriginalX"));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("OriginalX\n\nTail");
+    expect(onError).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
   it.each(["delete", "v"])("replaces partial formatted endpoints with %s and undoes the full transaction", async (action) => {
     const original = "Hello **world**\n\nmiddle\n\n*Good* bye";
     const adapter = new NativeOverlayAdapter(snapshot([

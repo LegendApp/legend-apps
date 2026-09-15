@@ -910,6 +910,25 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   [self emitBeginEditingForBlockView:view];
 }
 
+- (BOOL)handleMarkdownPaste:(NSString *)markdown fromInput:(id)input
+{
+  if (input != [self activeEditorInput] || _eventEmitter == nullptr || !markdownContainsLineBreak(markdown)) {
+    return NO;
+  }
+  NSArray<NSString *> *parts = callMarkdownSplitAtSelectedRange(input);
+  if (parts.count != 2) {
+    return NO;
+  }
+  auto eventEmitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  eventEmitter->onPasteMarkdown({
+    .afterMarkdown = stringForNSString(parts[1]),
+    .blockId = stringForNSString(_activeBlockId),
+    .beforeMarkdown = stringForNSString(parts[0]),
+    .text = stringForNSString(markdown),
+  });
+  return YES;
+}
+
 - (void)clearActiveEditor
 {
   [self showActiveBlockContents];

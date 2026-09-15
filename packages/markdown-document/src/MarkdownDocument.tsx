@@ -1,5 +1,6 @@
 import {
   LegendList,
+  type DataSourceOperation,
   type LegendListDataSourceRenderItemProps,
   type LegendListRef,
 } from "@legendapp/list/react-native";
@@ -259,6 +260,8 @@ type NativeEnterPressedEvent = {
   };
 };
 
+type NativePasteMarkdownEvent = { nativeEvent: NativeEnterPressedEvent["nativeEvent"] & { text: string } };
+
 function hasSameBlockPresentation(left: MarkdownBlockMetadata, right: MarkdownBlockMetadata) {
   return left.type === right.type && left.headingLevel === right.headingLevel && left.depth === right.depth;
 }
@@ -291,6 +294,7 @@ type MarkdownNativeEditorHostProps = {
   onBackspaceAtStart: (event: NativeBackspaceAtStartEvent) => void;
   onDeleteAtEnd: (event: NativeDeleteAtEndEvent) => void;
   onEnterPressed: (event: NativeEnterPressedEvent) => void;
+  onPasteMarkdown: (event: NativePasteMarkdownEvent) => void;
   onEditorFrameChange: (event: NativeEditorFrameEvent) => void;
   onLayout: () => void;
   style: StyleProp<ViewStyle>;
@@ -310,6 +314,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   onBackspaceAtStart,
   onDeleteAtEnd,
   onEnterPressed,
+  onPasteMarkdown,
   onEditorFrameChange,
   onLayout,
   style,
@@ -328,6 +333,7 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
       onBackspaceAtStart={onBackspaceAtStart}
       onDeleteAtEnd={onDeleteAtEnd}
       onEnterPressed={onEnterPressed}
+      onPasteMarkdown={onPasteMarkdown}
       onEditorFrameChange={onEditorFrameChange}
       onLayout={onLayout}
       style={style}
@@ -980,12 +986,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockDataSourceRef.current?.validateTransactionResult(result);
     }, []);
 
-    const applyTransactionResult = useCallback((result: MarkdownTransactionResult) => {
+    const applyTransactionResult = useCallback((result: MarkdownTransactionResult, move?: Extract<DataSourceOperation, { type: "move" }>) => {
       const dataSource = blockDataSourceRef.current;
       if (!dataSource) {
         throw new Error("Markdown block data source is not loaded.");
       }
-      dataSource.applyTransactionResult(result);
+      dataSource.applyTransactionResult(result, move);
       currentRevisionRef.current = result.revision;
       bumpTransactionRowRenderRevisions(result);
 
@@ -1112,6 +1118,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
             }
             setActiveBlockId(nextActiveBlock.id);
+            if (!isSingleActiveBlockChange) {
+              activeInputRef.current?.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
+            }
           } else {
             committedMarkdownRef.current = markdown;
           }
@@ -1830,12 +1839,25 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
           validateTransactionResult(result);
 
-          pushUpdateBlockHistoryEntry({
-            type: "updateBlockMarkdown",
-            blockId: activeBlockIdValue,
-            beforeMarkdown,
-            afterMarkdown: markdown,
-          });
+          if (result.changedRange.blockIds.length > 1) {
+            clearTypingHistoryGroup();
+            undoStackRef.current.push({
+              type: "replaceBlockRange",
+              startBlockId: result.changedRange.blockIds[0]!,
+              endBlockId: result.changedRange.blockIds[result.changedRange.blockIds.length - 1]!,
+              replacementMarkdown: beforeMarkdown,
+              inverseMarkdown: markdown,
+            });
+            redoStackRef.current = [];
+            publishCommandState();
+          } else {
+            pushUpdateBlockHistoryEntry({
+              type: "updateBlockMarkdown",
+              blockId: activeBlockIdValue,
+              beforeMarkdown,
+              afterMarkdown: markdown,
+            });
+          }
 
           applyTransactionResult(result);
           let nextActiveBlock: MarkdownBlockSnapshot | undefined = result.changedBlocks[0];
@@ -1874,6 +1896,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       },
       [adapter,
         applyTransactionResult,
+        clearTypingHistoryGroup,
+        publishCommandState,
         documentState$,
         markDirty,
         onErrorRef,
@@ -2047,6 +2071,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [mergeActiveBlockWithAdjacent, reportAsyncError],
     );
 
+    const handleNativePasteMarkdown = useCallback(
+      (event: NativePasteMarkdownEvent) => {
+        const { blockId, beforeMarkdown, afterMarkdown, text } = event.nativeEvent;
+        if (activeEditor$.blockId.peek() !== blockId || !text) return;
+        async function paste() {
+          await commitActiveBlock({ updateReactState: true });
+          if (activeEditor$.blockId.peek() === blockId) {
+            await replaceActiveBlockMarkdown(beforeMarkdown + text + afterMarkdown);
+          }
+        }
+        paste().catch(reportAsyncError);
+      },
+      [activeEditor$, commitActiveBlock, replaceActiveBlockMarkdown, reportAsyncError],
+    );
+
     const handleNativeEnterPressed = useCallback(
       (event: NativeEnterPressedEvent) => {
         const activeBlock = activeBlockSnapshotRef.current;
@@ -2140,7 +2179,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             placement,
           });
           validateTransactionResult(result);
-          applyTransactionResult(result);
+          const count = rangeEndIndex - rangeStartIndex + 1;
+          const insertionIndex = targetIndex + (placement === "after" ? 1 : 0);
+          applyTransactionResult(result, {
+            type: "move",
+            from: rangeStartIndex,
+            to: insertionIndex > rangeStartIndex ? insertionIndex - count : insertionIndex,
+            count,
+          });
           const nextBlockSelection = documentRenderState$.blockSelection.peek();
           blockSelectionGestureRef.current = null;
           setNextBlockSelection(nextBlockSelection);
@@ -2789,6 +2835,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             });
             applyTransactionResult(result);
             if (activeEditor$.blockId.peek() === entry.blockId) {
+              activeBlockSnapshotRef.current = result.changedBlocks.find((block) => block.id === entry.blockId);
               nativeEditingBlockIdRef.current = entry.blockId;
               draftMarkdown$.set(entry.beforeMarkdown);
               committedMarkdownRef.current = entry.beforeMarkdown;
@@ -2857,6 +2904,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           if (entry.type === "moveBlockRange") {
+            const from = Math.min(getBlockIndexById(entry.startBlockId), getBlockIndexById(entry.endBlockId));
+            const count = Math.abs(getBlockIndexById(entry.endBlockId) - getBlockIndexById(entry.startBlockId)) + 1;
+            const insertionIndex = getBlockIndexById(entry.targetBlockId) + (entry.placement === "after" ? 1 : 0);
             const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
               type: "moveBlockRange",
               startBlockId: entry.startBlockId,
@@ -2864,7 +2914,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               targetBlockId: entry.targetBlockId,
               placement: entry.placement,
             });
-            applyTransactionResult(result);
+            applyTransactionResult(result, {
+              type: "move", from, count,
+              to: insertionIndex > from ? insertionIndex - count : insertionIndex,
+            });
             const nextBlockSelection = documentRenderState$.blockSelection.peek();
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(nextBlockSelection);
@@ -2917,6 +2970,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             setActiveActivationMode("programmatic");
             setActiveSelection(0);
             setActiveBlockId(firstChangedBlock.id);
+            activeInputRef.current?.setValue(activeInputMarkdownForBlock(firstChangedBlock, firstChangedBlock.markdown));
+            activeInputRef.current?.setSelection(0, 0);
           }
           markDirty();
           if (!firstChangedBlockId) {
@@ -2947,7 +3002,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return finishHistoryEntry(null);
         }
       },
-      [adapter, applyTransactionResult, documentState$, markDirty, onErrorRef, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
+      [adapter, applyTransactionResult, documentState$, getBlockIndexById, markDirty, onErrorRef, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
 
     const undo = useCallback(() => {
@@ -3450,6 +3505,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onBackspaceAtStart={handleNativeBackspaceAtStart}
           onDeleteAtEnd={handleNativeDeleteAtEnd}
           onEnterPressed={handleNativeEnterPressed}
+          onPasteMarkdown={handleNativePasteMarkdown}
           onEditorFrameChange={handleNativeEditorFrameChange}
           onLayout={measureContainerWindowLayout}
           style={containerStyle}
