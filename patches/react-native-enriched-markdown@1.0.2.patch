@@ -4730,10 +4730,16 @@ index 231d841..a244fa2 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 9a9987e..af7f15d 100644
+index 9a9987e..68da610 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
-@@ -34,7 +34,6 @@
+@@ -1,4 +1,5 @@
+ #import "EnrichedMarkdownTextInput.h"
++#import <objc/message.h>
+ #import "ContextMenuUtils.h"
+ #import "ENRMAutoLinkDetector.h"
+ #import "ENRMBlockEditCoordinator.h"
+@@ -34,7 +35,6 @@
  #if TARGET_OS_OSX
  #import <React/RCTBackedTextInputDelegate.h>
  #endif
@@ -4741,7 +4747,7 @@ index 9a9987e..af7f15d 100644
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -59,6 +58,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -59,6 +59,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -4755,7 +4761,7 @@ index 9a9987e..af7f15d 100644
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  @end
-@@ -97,7 +103,10 @@ @implementation EnrichedMarkdownTextInput {
+@@ -97,7 +104,10 @@ @implementation EnrichedMarkdownTextInput {
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
@@ -4766,7 +4772,7 @@ index 9a9987e..af7f15d 100644
  #endif
  
    NSArray<NSString *> *_contextMenuItemTexts;
-@@ -242,6 +251,9 @@ - (void)setupTextView
+@@ -242,6 +252,9 @@ - (void)setupTextView
  #else
    _textView.selectable = YES;
  
@@ -4776,7 +4782,7 @@ index 9a9987e..af7f15d 100644
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -256,7 +268,8 @@ - (void)setupTextView
+@@ -256,7 +269,8 @@ - (void)setupTextView
    _textView.textContainer.widthTracksTextView = YES;
  
    _scrollView.documentView = _textView;
@@ -4786,7 +4792,7 @@ index 9a9987e..af7f15d 100644
  #endif
  
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -339,7 +352,110 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
+@@ -339,7 +353,110 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
    }
  }
  
@@ -4898,7 +4904,7 @@ index 9a9987e..af7f15d 100644
  
  - (CGSize)measureSize:(CGFloat)maxWidth
  {
-@@ -363,8 +479,10 @@ - (CGSize)measureSize:(CGFloat)maxWidth
+@@ -363,8 +480,10 @@ - (CGSize)measureSize:(CGFloat)maxWidth
      }
    }
  
@@ -4910,7 +4916,7 @@ index 9a9987e..af7f15d 100644
                                   options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
                                   context:nil];
  
-@@ -516,7 +634,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -516,7 +635,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  
      [self resetBaseTypingAttributes];
  
@@ -4919,7 +4925,7 @@ index 9a9987e..af7f15d 100644
        [self applyFormatting];
      }
  
-@@ -533,7 +651,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -533,7 +652,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -4928,7 +4934,7 @@ index 9a9987e..af7f15d 100644
  }
  
  - (void)_performRelayout
-@@ -542,22 +660,36 @@ - (void)_performRelayout
+@@ -542,22 +661,36 @@ - (void)_performRelayout
      return;
    }
  
@@ -4979,7 +4985,7 @@ index 9a9987e..af7f15d 100644
    }
  }
  
-@@ -569,6 +701,9 @@ - (void)didMoveToWindow
+@@ -569,6 +702,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -4989,7 +4995,7 @@ index 9a9987e..af7f15d 100644
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +797,7 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -662,6 +798,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -4997,7 +5003,7 @@ index 9a9987e..af7f15d 100644
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +809,12 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -673,9 +810,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5012,7 +5018,28 @@ index 9a9987e..af7f15d 100644
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -787,12 +926,89 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -743,6 +883,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
+ /// omitting) newlines in the string.
+ - (void)pasteMarkdown:(NSString *)markdown
+ {
++#if TARGET_OS_OSX
++  // A document host can own structural paste without round-tripping Markdown
++  // through the inline editor's formatting and automatic substitution pipeline.
++  SEL pasteSelector = NSSelectorFromString(@"handleMarkdownPaste:fromInput:");
++  for (NSResponder *responder = self.nextResponder; responder != nil; responder = responder.nextResponder) {
++    if ([responder respondsToSelector:pasteSelector]) {
++      BOOL (*send)(id, SEL, NSString *, id) = (BOOL (*)(id, SEL, NSString *, id))objc_msgSend;
++      if (send(responder, pasteSelector, markdown, self)) {
++        return;
++      }
++      break;
++    }
++  }
++#endif
+   NSUInteger lead = 0;
+   while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
+     lead++;
+@@ -787,12 +941,89 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -5104,7 +5131,7 @@ index 9a9987e..af7f15d 100644
  }
  
  - (void)applyFormatting
-@@ -837,6 +1053,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -837,6 +1068,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5114,7 +5141,7 @@ index 9a9987e..af7f15d 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1098,23 @@ - (void)setValue:(NSString *)markdown
+@@ -879,6 +1113,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -5138,7 +5165,7 @@ index 9a9987e..af7f15d 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -889,6 +1125,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -889,6 +1140,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -5260,7 +5287,7 @@ index 9a9987e..af7f15d 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1377,9 +1728,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1377,9 +1743,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5270,7 +5297,7 @@ index 9a9987e..af7f15d 100644
 +  NSUInteger rangeStart = MIN(range.location, fullText.length);
 +  NSUInteger rangeEnd = MIN(NSMaxRange(range), fullText.length);
 +  NSRange clampedRange = NSMakeRange(rangeStart, rangeEnd - rangeStart);
-+  return [_clipboardCoordinator serializeSelectedRange:clampedRange inText:fullText];
++  return [_clipboardCoordinator serializeSelectedRange:clampedRange inText:fullText] ?: @"";
 +}
 +
  - (nullable NSString *)markdownForSelectedRange
@@ -5293,7 +5320,7 @@ index 9a9987e..af7f15d 100644
  }
  
  - (void)copyToClipboard
-@@ -1413,11 +1786,22 @@ - (CGRect)computeCaretRect
+@@ -1413,11 +1801,22 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5321,7 +5348,7 @@ index 9a9987e..af7f15d 100644
    }
  #endif
    return caretRect;
-@@ -1540,6 +1924,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1540,6 +1939,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -5354,7 +5381,7 @@ index 9a9987e..af7f15d 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2044,12 @@ - (void)handleTextChanged
+@@ -1634,7 +2059,12 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -5368,7 +5395,7 @@ index 9a9987e..af7f15d 100644
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2064,9 @@ - (void)handleTextChanged
+@@ -1649,6 +2079,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5378,7 +5405,7 @@ index 9a9987e..af7f15d 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2129,12 @@ - (void)manageSelectionBasedChanges
+@@ -1711,6 +2144,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;

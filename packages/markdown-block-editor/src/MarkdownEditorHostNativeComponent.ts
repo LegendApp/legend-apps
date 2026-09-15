@@ -29,6 +29,12 @@ export interface NativeProps extends ViewProps {
     blockId: string;
     beforeMarkdown: string;
   }>>;
+  onPasteMarkdown?: DirectEventHandler<Readonly<{
+    afterMarkdown: string;
+    blockId: string;
+    beforeMarkdown: string;
+    text: string;
+  }>>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 

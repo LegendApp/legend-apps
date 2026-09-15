@@ -124,6 +124,26 @@ describe("MarkdownBlockDataSource", () => {
     ]);
   });
 
+  it.each([false, true])("preserves rows during an indexed=%s move", (indexed) => {
+    const ids = ["a", "b", "c"];
+    const adapter = (indexed ? {
+      getBlockIdAtIndexSync: (_documentId: string, index: number) => ids[index],
+      getBlockIndexForIdSync: (_documentId: string, id: string) => ids.indexOf(id),
+    } : {}) as MarkdownDocumentAdapter;
+    const dataSource = new MarkdownBlockDataSource(adapter, "d1", snapshot(ids.map((id, index) => block(id, index))));
+    const batches: DataSourceMutationBatch[] = [];
+    dataSource.subscribe((batch) => batches.push(batch));
+    if (indexed) ids.splice(0, 3, "b", "c", "a");
+    dataSource.applyTransactionResult(result(0, 3, [block("b", 0), block("c", 1), block("a", 2)], [], false), {
+      type: "move", from: 0, to: 2, count: 1,
+    });
+    expect([0, 1, 2].map((index) => dataSource.getItem(index))).toEqual(["b", "c", "a"]);
+    expect(batches[0]?.operations).toEqual([
+      { type: "move", from: 0, to: 2, count: 1 },
+      { type: "update", index: 0, count: 3, layout: "invalidate" },
+    ]);
+  });
+
   it("uses explicit native retention metadata for reordered rows", () => {
     const blocks = [block("a", 0), block("b", 1), block("c", 2)];
     const adapter = {} as MarkdownDocumentAdapter;

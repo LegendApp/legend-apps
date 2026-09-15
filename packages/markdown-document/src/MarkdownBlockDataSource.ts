@@ -165,7 +165,7 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
     }
   }
 
-  applyTransactionResult(result: MarkdownTransactionResult) {
+  applyTransactionResult(result: MarkdownTransactionResult, move?: Extract<DataSourceOperation, { type: "move" }>) {
     this.validateTransactionResult(result);
     const { blockIds, deleteCount, startBlockIndex } = result.changedRange;
     const previousLength = this.length;
@@ -175,6 +175,11 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
       this.rebuildFallbackIndex();
     }
     this.length = previousLength - deleteCount + blockIds.length;
+
+    if (move) {
+      this.publish(previousLength, [move, { type: "update", index: startBlockIndex, count: blockIds.length, layout: "invalidate" }]);
+      return;
+    }
 
     // Legacy adapters do not report retention explicitly. Their editing
     // transactions retain at most the first replaced row; multi-row moves do not.
