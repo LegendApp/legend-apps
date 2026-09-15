@@ -6,7 +6,7 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-apps/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
-import { useValue } from "@legendapp/state/react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
@@ -257,8 +257,6 @@ export default MarkdownEditorWindow;
 function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
-  const isDirty = useValue(session.sessionState$.isDirty);
-  const saveState = useValue(session.sessionState$.saveState);
   const hasPendingCleanSaveRef = useRef(false);
   const wasSavingRef = useRef(false);
   const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
@@ -266,7 +264,11 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
     hasPendingCleanSaveRef.current = false;
     wasSavingRef.current = false;
   }, [watchedFilePath]);
-  useEffect(() => {
+  // A native save can finish in one React batch. Observe each state transition
+  // so its file-watcher event cannot reload the document and discard history.
+  useObserveEffect(() => {
+    const saveState = session.sessionState$.saveState.get();
+    const isDirty = session.sessionState$.isDirty.get();
     if (saveState === "saving") {
       wasSavingRef.current = true;
       hasPendingCleanSaveRef.current = false;
@@ -282,7 +284,7 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
       hasPendingCleanSaveRef.current = false;
       suppressCleanSaveReload(watchedFilePath, Date.now());
     }
-  }, [isDirty, saveState, watchedFilePath]);
+  }, [session.sessionState$, watchedFilePath]);
   const shouldReload = useCallback(() => {
     if (session.sessionState$.isDirty.peek()) {
       return false;

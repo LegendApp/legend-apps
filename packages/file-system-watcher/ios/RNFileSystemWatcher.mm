@@ -163,6 +163,9 @@ RCT_EXPORT_MODULE(NativeFileSystemWatcher)
                        @"path": rootPath ?: @"",
                        @"filePath": standardizedPath,
                        @"type": type,
+                       @"contentChanged": @((flags & (kFSEventStreamEventFlagItemCreated |
+                         kFSEventStreamEventFlagItemRemoved | kFSEventStreamEventFlagItemRenamed |
+                         kFSEventStreamEventFlagItemModified)) != 0),
                      }];
 }
 
