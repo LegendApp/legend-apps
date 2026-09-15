@@ -32,7 +32,7 @@ RCT_EXPORT_MODULE(NativeFileDialog)
 - (NSString *)jsonStringFromObject:(id)object
 {
   id value = object ?: [NSNull null];
-  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingFragmentsAllowed error:nil];
   return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"null";
 }
 
