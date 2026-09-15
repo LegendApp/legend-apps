@@ -246,6 +246,25 @@ void testLoadsBaselineBlocks() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testSavePreservesTemporaryFileNeighbors() {
+  LoadedDocument loaded("Document contents");
+  const std::string neighbor = loaded.file.path + ".tmp";
+  { std::ofstream file(neighbor); file << "Unrelated neighbor"; }
+  loaded.document->save();
+  std::ifstream file(neighbor);
+  const std::string contents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  std::remove(neighbor.c_str());
+  expectEqual(contents, "Unrelated neighbor", "save preserves existing temporary-file neighbor");
+
+  TempFile target("Unrelated symlink target");
+  expect(symlink(target.path.c_str(), neighbor.c_str()) == 0, "create neighbor symlink");
+  loaded.document->save();
+  std::ifstream targetFile(target.path);
+  const std::string targetContents((std::istreambuf_iterator<char>(targetFile)), std::istreambuf_iterator<char>());
+  std::remove(neighbor.c_str());
+  expectEqual(targetContents, "Unrelated symlink target", "save does not follow a neighboring symlink");
+}
+
 void testEmptyDocumentsRemainEditable() {
   for (const std::string source : {"", " \t\n\n"}) {
     LoadedDocument loaded(source);
@@ -778,6 +797,7 @@ int main() {
   const TestCase tests[] = {
       {"loads baseline blocks", testLoadsBaselineBlocks},
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
+      {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
       {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
       {"creates document from markdown string", testCreatesDocumentFromMarkdownString},
