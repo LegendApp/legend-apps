@@ -15,7 +15,7 @@ function loadBundle(legacyTail = false) {
   if (legacyTail) code = code.replace(loop, "i < dataLength && (!foundEnd || i <= globalThis.__oldBottom)");
   code = code.replace("function getLayoutOffsetForStore(store, index) {",
     "function getLayoutOffsetForStore(store, index) { globalThis.__reads++;");
-  code += "\nexports.testAPI = { calculateItemsInView, ScheduledWork };";
+  code += "\nexports.testAPI = { calculateItemsInView, ScheduledWork, updateItemSizesBatch, onScroll, ScrollAdjustHandler };";
   const native = {
     Platform: { OS: "macos", select: x => x.macos ?? x.native ?? x.default },
     Animated: { View() {}, Value: class { setValue() {} } }, View() {}, Text() {}, ScrollView() {},
@@ -206,5 +206,47 @@ test("all shipped entrypoints use the same bounded scan", () => {
     const code = readFileSync(resolve(__dirname, "..", name), "utf8");
     assert.ok(code.includes("i < dataLength && !foundEnd"), name);
     assert.ok(!code.includes("maxIndexRendered"), name);
+  }
+});
+
+// A native scrollbar drag emits intermediate offsets while the newly mounted
+// rows are measured. A measurement correction must not mute the next offset.
+test("row measurement corrections do not swallow the next native scrollbar jump", () => {
+  const api = loadBundle();
+  for (const measuredSize of [10, 80]) {
+    for (const destination of [80000, 1000]) {
+      const ctx = createContext(api, 100000);
+      const state = ctx.state;
+      state.didContainersLayout = true;
+      state.didFinishInitialScroll = true;
+      state.scrollProcessingEnabled = true;
+      state.otherAxisSize = 900;
+      state.scrollAdjustHandler = new api.ScrollAdjustHandler(ctx);
+      state.triggerCalculateItemsInView = params => api.calculateItemsInView(ctx, params);
+      try {
+        jump(api, ctx, 50000, 50000 * 23, "full");
+        state.idsInView = [String(50001)];
+        // Measure the preceding buffered row so the visible anchor shifts.
+        const index = state.startNoBuffer - 1;
+        const key = String(index + 1);
+        const previousScroll = state.scroll;
+        state.indexByKey.set(key, index);
+        state.indexByKey.set(String(50001), 50000);
+        api.updateItemSizesBatch(ctx, [{ itemKey: key, size: { height: measuredSize, width: 900 } }]);
+        assert.notEqual(state.scroll, previousScroll, "Exercise a real measurement correction");
+        const offset = state.layoutStoreRuntime.store.getOffset(destination);
+        api.onScroll(ctx, { nativeEvent: {
+          contentOffset: { x: 0, y: offset },
+          contentSize: { width: 900, height: state.totalSize },
+        } });
+        assert.equal(state.lastNativeScroll, offset);
+        assert.equal(state.scroll, offset, "Rendered offset must follow the native drag immediately");
+        assert.equal(state.startNoBuffer, destination);
+        assert.equal(state.ignoreScrollFromMVCP, undefined);
+        for (let i = state.startNoBuffer; i <= state.endNoBuffer; i++) {
+          assert.notEqual(state.containerItemKeys.get(String(i + 1)), undefined);
+        }
+      } finally { state.scheduledWork.dispose(); }
+    }
   }
 });

@@ -6679,7 +6679,7 @@ function applyItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem) {
   let shouldMaintainScrollAtEnd = false;
   let positionRecalculationStartIndex;
   const prevSizeKnown = state.sizesKnown.get(itemKey);
-  const applyMVCPAdjustment = state.props.maintainVisibleContentPosition.size ? prepareMVCP(ctx) : void 0;
+  const applyMVCPAdjustment = state.props.maintainVisibleContentPosition.size ? prepareMVCP(ctx, false) : void 0;
   const diff = updateOneItemSize(ctx, itemKey, sizeObj, resolvedMeasurementItem, false);
   const size = roundSize(horizontal ? sizeObj.width : sizeObj.height);
   if (diff !== 0) {

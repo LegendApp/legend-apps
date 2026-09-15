@@ -512,7 +512,7 @@
     },
     "packages/legend-list-sparse-layout": {
       "name": "@legendapp/list",
-      "version": "3.3.10-sparse-layout.a1fa0789",
+      "version": "3.3.10-sparse-layout.a6f5ba13",
       "dependencies": {
         "use-sync-external-store": "^1.5.0",
       },
@@ -890,7 +890,7 @@
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
   },
   "catalog": {
-    "@legendapp/list": "3.3.10-sparse-layout.a1fa0789",
+    "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.1.4",

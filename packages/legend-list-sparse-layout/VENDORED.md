@@ -7,10 +7,10 @@ unstable npm package, Git branch, or downloadable artifact.
 ## Source
 
 - Repository: `https://github.com/LegendApp/legend-list`
-- Branch at build time: `sparse-layout`
-- Commit: `a1fa07899669c4b2a5413740da36efb40aac95ba`
+- Branch at build time: `codex/markdown-scroll-measurements` (based on `sparse-layout`)
+- Commit: `a6f5ba139cf494a3b14e7438e2ea4435e7697007`
 - Base: Legend List `main` 3.3.10 at `e9f90bcfb4e8cce9111971f31d72d443d5989f0b`
-- Built: 2026-09-14
+- Built: 2026-09-15
 - Architecture: sparse sequence and row layout stores with mutation-aware
   indexed `dataSource` support.
 - Includes measurement invalidation guards, positive-size estimation, incremental
@@ -18,7 +18,9 @@ unstable npm package, Git branch, or downloadable artifact.
   viewport scans.
 - Includes the latest base's scroll/end-follow fixes and batched total-size
   notifications integrated with sparse layout measurements and estimate updates.
-- Source validation: 1,870 tests passed; lint, source/public API type checks,
+- Measurement corrections retain the item-size adjustment source, so native
+  scrollbar drags are not suppressed between row measurements.
+- Source validation: 1,871 tests passed; lint, source/public API type checks,
   and `bun run build` passed.
 
 This snapshot replaces the previous `codex/chat-tail-estimates` build and its
