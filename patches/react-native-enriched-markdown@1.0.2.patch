@@ -7448,3 +7448,74 @@ diff --git a/cpp/highlight/CodeBlockHighlighter.cpp b/cpp/highlight/CodeBlockHig
 +    {"text.uri", HighlightTokenType::Property},
 +    {"text.reference", HighlightTokenType::Property},
      {"keyword", HighlightTokenType::Keyword},
+diff --git a/ios/input/ENRMInputParser.h b/ios/input/ENRMInputParser.h
+--- a/ios/input/ENRMInputParser.h
++++ b/ios/input/ENRMInputParser.h
+@@ -9,6 +9,7 @@
+
+ @interface ENRMParseResult : NSObject
+ @property (nonatomic, strong, readonly) NSString *plainText;
++@property (nonatomic, assign, readonly) NSUInteger selectionOffset;
+ @property (nonatomic, strong, readonly) NSArray<ENRMFormattingRange *> *formattingRanges;
+ @property (nonatomic, strong, readonly) NSArray<ENRMBlockRange *> *blockRanges;
+ @end
+@@ -16,6 +17,7 @@
+ @interface ENRMInputParser : NSObject
+
+ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown;
++- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection;
+
+ @end
+
+diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
+--- a/ios/input/ENRMInputParser.mm
++++ b/ios/input/ENRMInputParser.mm
+@@ -8,6 +8,7 @@
+
+ @interface ENRMParseResult ()
+ @property (nonatomic, strong, readwrite) NSString *plainText;
++@property (nonatomic, assign, readwrite) NSUInteger selectionOffset;
+ @property (nonatomic, strong, readwrite) NSArray<ENRMFormattingRange *> *formattingRanges;
+ @property (nonatomic, strong, readwrite) NSArray<ENRMBlockRange *> *blockRanges;
+ @end
+@@ -98,6 +99,8 @@
+ };
+
+ struct ParseContext {
++  // Keep the UTF-8 backing bytes alive while ranges are mapped after md_parse.
++  NSString *completedMarkdown;
+   const char *buffer;
+   size_t bufferLength;
+   size_t originalLength;
+@@ -333,8 +336,8 @@
+
+ static bool runMd4cParse(NSString *markdown, ParseContext &context)
+ {
+-  NSString *completed = ENRMInputRemendComplete(markdown);
+-  const char *completedUTF8 = [completed UTF8String];
++  context.completedMarkdown = ENRMInputRemendComplete(markdown);
++  const char *completedUTF8 = [context.completedMarkdown UTF8String];
+   size_t completedLength = strlen(completedUTF8);
+   size_t originalLength = [markdown lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+
+@@ -478,6 +481,11 @@
+
+ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+ {
++  return [self parseToPlainTextAndRanges:markdown sourceSelection:0];
++}
++
++- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection
++{
+   ENRMParseResult *parseResult = [[ENRMParseResult alloc] init];
+
+   if (markdown.length == 0) {
+@@ -575,5 +583,8 @@
+     }
+   }
+   rawToPlainMap[rawLength] = plainPosition;
++  // Resolve selections against the full parse: parsing a prefix alone can change
++  // delimiter interpretation when text follows the insertion point.
++  parseResult.selectionOffset = rawToPlainMap[MIN(sourceSelection, rawLength)];
+
+   NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];

@@ -26,6 +26,7 @@ import { MarkdownBlockDataSource } from "./MarkdownBlockDataSource";
 import { MarkdownBlockRow } from "./MarkdownBlockRow";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { contentHorizontalPadding, contentMaxWidth, estimatedItemSize, hydrateChunkSize, usesNativeEditorOverlay } from "./constants";
+import { getPasteCaret } from "./pasteCaret";
 import type {
   ActiveBlockRenderState,
   BlockLayout,
@@ -1819,7 +1820,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const replaceActiveBlockMarkdown = useCallback(
-      async (markdown: string) => {
+      async (markdown: string, insertionPrefix?: string) => {
         const documentState = documentState$.peek();
         const activeBlockIdValue = activeEditor$.blockId.peek();
         if (documentState.status !== "loaded" || !adapter.applyTransaction || !activeBlockIdValue) {
@@ -1859,30 +1860,33 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             });
           }
 
+          const pasteCaret = insertionPrefix === undefined ? undefined : getPasteCaret(
+            result.changedBlocks,
+            activeBlockSnapshotRef.current?.sourceStartByte ?? 0,
+            insertionPrefix,
+          );
           applyTransactionResult(result);
-          let nextActiveBlock: MarkdownBlockSnapshot | undefined = result.changedBlocks[0];
+          let nextActiveBlock: MarkdownBlockSnapshot | undefined = pasteCaret?.block ?? result.changedBlocks[0];
           if (!nextActiveBlock) {
             nextActiveBlock = activeBlockSnapshotRef.current?.id === activeBlockIdValue
               ? activeBlockSnapshotRef.current
               : undefined;
           }
+          markDirty();
           if (nextActiveBlock) {
-            activeBlockSnapshotRef.current = nextActiveBlock;
-            nativeEditingBlockIdRef.current = nextActiveBlock.id;
-            activeEditor$.blockId.set(nextActiveBlock.id);
-            draftMarkdown$.set(nextActiveBlock.markdown);
-            committedMarkdownRef.current = nextActiveBlock.markdown;
-            setDraftMarkdown(nextActiveBlock.markdown);
-            setActiveActivationMode("programmatic");
-            setActiveBlockId(nextActiveBlock.id);
-            setActiveSelection(0);
+            setActiveBlock(nextActiveBlock, 0, pasteCaret ? "nativePointer" : "programmatic");
             const activeInput = activeInputRef.current;
-            if (activeInput) {
+            if (activeInput && nextActiveBlock.id === activeBlockIdValue) {
               activeInput.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
-              activeInput.setSelection(0, 0);
+              if (!pasteCaret) activeInput.setSelection(0, 0);
+            }
+            if (pasteCaret && containerRef.current) {
+              MarkdownEditorHostCommands.setSelectionAfterMarkdown(
+                containerRef.current, nextActiveBlock.id, pasteCaret.markdownPrefix,
+              );
+              await prepareBlockIndexForKeyboardFocus(nextActiveBlock.index, "down");
             }
           }
-          markDirty();
         } catch (error) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
           draftMarkdown$.set(committedMarkdownRef.current);
@@ -1895,6 +1899,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
       },
       [adapter,
+        setActiveBlock,
+        prepareBlockIndexForKeyboardFocus,
         applyTransactionResult,
         clearTypingHistoryGroup,
         publishCommandState,
@@ -1903,7 +1909,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         onErrorRef,
         pushUpdateBlockHistoryEntry,
         updateRenderedBlockMarkdown,
-        validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
+        validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setDraftMarkdown],
     );
 
     const mergeActiveBlockWithAdjacent = useCallback(
@@ -2078,7 +2084,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         async function paste() {
           await commitActiveBlock({ updateReactState: true });
           if (activeEditor$.blockId.peek() === blockId) {
-            await replaceActiveBlockMarkdown(beforeMarkdown + text + afterMarkdown);
+            await replaceActiveBlockMarkdown(beforeMarkdown + text + afterMarkdown, beforeMarkdown + text);
           }
         }
         paste().catch(reportAsyncError);

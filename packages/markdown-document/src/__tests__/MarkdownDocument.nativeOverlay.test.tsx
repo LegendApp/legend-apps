@@ -1,3 +1,4 @@
+import { MarkdownEditorHostCommands } from "@legend-apps/markdown-block-editor";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { Text, View } from "react-native";
@@ -252,6 +253,14 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
         id: offset === 0 ? nextBlock.id : this.nextBlockId(),
       }))
       : [nextBlock];
+    let sourceOffset = nextBlock.sourceStartByte;
+    for (const changed of changedBlocks) {
+      changed.sourceStartByte = sourceOffset;
+      changed.sourceEndByte = sourceOffset + Buffer.byteLength(changed.markdown);
+      changed.contentStartByte = changed.sourceStartByte;
+      changed.contentEndByte = changed.sourceEndByte;
+      sourceOffset = changed.sourceEndByte + 2;
+    }
     this.blocks.splice(index, 1, ...changedBlocks);
     this.blocks = this.blocks.map((candidate, index) => ({ ...candidate, index }));
 
@@ -264,7 +273,7 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
       },
       retiredBlockIds: [],
       revision: this.revision,
-      sourceLength: transaction.markdown.length,
+      sourceLength: sourceOffset,
     };
   }
 
@@ -335,7 +344,7 @@ describe("native document text selection", () => {
     const onError = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />);
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />, { createNodeMock: () => ({}) });
     });
     await flushPromises();
     await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
@@ -352,11 +361,22 @@ describe("native document text selection", () => {
     });
     await flushPromises();
     expect(adapter.sourceMarkdown).toBe("One\n\nTwo\n\nTail");
-    expect(input.setValue).toHaveBeenLastCalledWith("One");
+    if (path === "nativePaste") {
+      expect(nativeHost(renderer).props.activeBlockId).toBe(adapter.blockIds[1]);
+      expect(MarkdownEditorHostCommands.setSelectionAfterMarkdown).toHaveBeenLastCalledWith(
+        expect.anything(), adapter.blockIds[1], "Two",
+      );
+    } else {
+      expect(input.setValue).toHaveBeenLastCalledWith("One");
+    }
     await act(async () => commands.current?.undo());
     await flushPromises();
     expect(adapter.sourceMarkdown).toBe("Original\n\nTail");
-    expect(input.setValue).toHaveBeenLastCalledWith("Original");
+    if (path === "nativePaste") {
+      expect(editorInput(renderer).props.defaultValue).toBe("Original");
+    } else {
+      expect(input.setValue).toHaveBeenLastCalledWith("Original");
+    }
     await act(async () => commands.current?.redo());
     await flushPromises();
     expect(adapter.sourceMarkdown).toBe("One\n\nTwo\n\nTail");
