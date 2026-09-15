@@ -1226,11 +1226,14 @@ MarkdownTransactionResult HybridMarkdownDocument::moveBlockRange(const MarkdownT
       movedMarkdown.end());
 
   std::string nextSource;
+  std::vector<size_t> reorderedSourceStarts;
+  reorderedSourceStarts.reserve(reorderedMarkdown.size());
   for (size_t index = 0; index < reorderedMarkdown.size(); index += 1) {
     if (index > 0) {
       nextSource += lineEnding_;
       nextSource += lineEnding_;
     }
+    reorderedSourceStarts.push_back(nextSource.size());
     nextSource += reorderedMarkdown[index];
   }
   const bool hadTrailingLineEnding =
@@ -1241,6 +1244,18 @@ MarkdownTransactionResult HybridMarkdownDocument::moveBlockRange(const MarkdownT
   }
 
   std::vector<MarkdownBlockRange> newBlocks = parseMarkdownBlocks(nextSource);
+  // Empty editable rows have no Markdown syntax, so the scanner omits them.
+  // Restore those rows at their new offsets before checking the move result.
+  for (size_t index = 0; index < reorderedMarkdown.size(); index += 1) {
+    if (reorderedMarkdown[index].empty()) {
+      auto emptyBlock = reorderedBlocks[index];
+      emptyBlock.markdownStart = reorderedSourceStarts[index];
+      emptyBlock.markdownEnd = emptyBlock.markdownStart;
+      emptyBlock.contentStart = emptyBlock.markdownStart;
+      emptyBlock.contentEnd = emptyBlock.markdownStart;
+      newBlocks.insert(newBlocks.begin() + std::min(index, newBlocks.size()), emptyBlock);
+    }
+  }
   if (newBlocks.size() != reorderedBlocks.size()) {
     throw std::runtime_error("moveBlockRange could not preserve markdown block boundaries.");
   }

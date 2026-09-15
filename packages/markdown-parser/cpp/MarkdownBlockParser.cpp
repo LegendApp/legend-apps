@@ -31,13 +31,6 @@ bool isWhitespace(char value) {
   return value == ' ' || value == '\t' || value == '\n' || value == '\r';
 }
 
-size_t lineStart(const char* bytes, size_t offset) {
-  while (offset > 0 && bytes[offset - 1] != '\n' && bytes[offset - 1] != '\r') {
-    offset -= 1;
-  }
-  return offset;
-}
-
 size_t lineEnd(const char* bytes, size_t length, size_t offset) {
   while (offset < length && !isLineBreak(bytes[offset])) {
     offset += 1;
@@ -103,29 +96,21 @@ size_t headingLevelForLine(const char* bytes, const LineInfo& line) {
   return level;
 }
 
-bool lineStartsHeading(const char* bytes, size_t start, size_t end) {
-  return lineStartsHeading(bytes, lineInfo(bytes, start, end));
-}
-
-bool lineStartsFence(const char* bytes, const LineInfo& line, char fenceChar) {
+size_t lineFenceLength(const char* bytes, const LineInfo& line, char fenceChar) {
   size_t start = line.contentStart;
   const size_t end = line.end;
   size_t fenceCount = 0;
   while (start + fenceCount < end && bytes[start + fenceCount] == fenceChar) {
     fenceCount += 1;
   }
-  return fenceCount >= 3;
-}
-
-bool lineStartsFence(const char* bytes, size_t start, size_t end, char fenceChar) {
-  return lineStartsFence(bytes, lineInfo(bytes, start, end), fenceChar);
+  return fenceCount;
 }
 
 char lineFenceChar(const char* bytes, const LineInfo& line) {
   if (line.first != '`' && line.first != '~') {
     return 0;
   }
-  return lineStartsFence(bytes, line, line.first) ? line.first : 0;
+  return lineFenceLength(bytes, line, line.first) >= 3 ? line.first : 0;
 }
 
 bool lineStartsBlockquote(const LineInfo& line) {
@@ -233,7 +218,7 @@ bool lineInterruptsParagraph(const char* bytes, const LineInfo& line) {
       lineStartsOrderedListAtOne(bytes, line);
 }
 
-size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar);
+size_t fencedCodeBlockEnd(const char* bytes, size_t length, const LineInfo& opening);
 
 MarkdownBlockType scannedStreamingBlockType(const char* bytes, size_t length, const LineInfo& line) {
   switch (line.first) {
@@ -301,7 +286,7 @@ size_t scannedStreamingBlockEnd(
   }
 
   if (type == MarkdownBlockType::CodeBlock) {
-    return fencedCodeBlockEnd(bytes, length, end, lineFenceChar(bytes, line));
+    return fencedCodeBlockEnd(bytes, length, line);
   }
 
   size_t nextStart = nextPhysicalLineStart(bytes, length, end);
@@ -319,44 +304,29 @@ size_t scannedStreamingBlockEnd(
   return end;
 }
 
-size_t blockEndForText(const char* bytes, size_t length, size_t offset) {
-  const size_t start = lineStart(bytes, std::min(offset, length));
-  size_t end = lineEnd(bytes, length, start);
-  if (lineStartsHeading(bytes, start, end)) {
-    return end;
-  }
-
-  while (end < length) {
-    size_t nextStart = end;
-    while (nextStart < length && isLineBreak(bytes[nextStart])) {
-      nextStart += 1;
-    }
-    const size_t nextEnd = lineEnd(bytes, length, nextStart);
-    if (nextStart >= length || lineIsBlank(bytes, nextStart, nextEnd) || lineStartsHeading(bytes, nextStart, nextEnd)) {
-      break;
-    }
-    end = nextEnd;
-  }
-
-  while (end > 0 && isLineBreak(bytes[end - 1])) {
-    end -= 1;
-  }
-  return end;
-}
-
-size_t fencedCodeBlockEnd(const char* bytes, size_t length, size_t offset, char fenceChar) {
-  size_t start = lineEnd(bytes, length, std::min(offset, length));
+size_t fencedCodeBlockEnd(const char* bytes, size_t length, const LineInfo& opening) {
+  const char fenceChar = opening.first;
+  const size_t openingLength = lineFenceLength(bytes, opening, fenceChar);
+  size_t start = opening.end;
   while (start < length) {
     while (start < length && isLineBreak(bytes[start])) {
       start += 1;
     }
     const size_t end = lineEnd(bytes, length, start);
-    if (lineStartsFence(bytes, start, end, fenceChar)) {
+    const auto closing = lineInfo(bytes, start, end);
+    const size_t closingLength = lineFenceLength(bytes, closing, fenceChar);
+    if (closing.contentStart - start <= 3 &&
+        closingLength >= openingLength &&
+        lineIsBlank(bytes, closing.contentStart + closingLength, end)) {
       return end;
     }
     start = end;
   }
-  return blockEndForText(bytes, length, offset);
+  size_t end = length;
+  while (end > 0 && isLineBreak(bytes[end - 1])) {
+    end -= 1;
+  }
+  return end;
 }
 
 } // namespace

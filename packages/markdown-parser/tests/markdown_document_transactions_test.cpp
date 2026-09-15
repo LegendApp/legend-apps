@@ -379,6 +379,45 @@ void testUpdateBlockCanBecomeMultipleParagraphs() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testMoveWithEmptyEditableBlocks() {
+  LoadedDocument loaded("Alpha\n\nBeta\n\nGamma\n");
+  auto blocks = blocksFor(loaded.document);
+  const auto emptyId = blocks[1].id;
+  const auto gammaId = blocks[2].id;
+  loaded.document->applyTransaction(updateBlock(emptyId, ""));
+  for (const auto& placement : {"after", "before"}) {
+    const auto before = blocksFor(loaded.document);
+    const auto result = loaded.document->applyTransaction(moveBlockRange(emptyId, emptyId, gammaId, placement));
+    const auto after = blocksFor(loaded.document);
+    expectEqual(after.size(), 3, "move retains empty row");
+    expectEqual(loaded.document->getRenderBlockById(emptyId).markdown, "", "empty row identity remains editable");
+    expectEqual(after[placement == std::string("after") ? 2 : 1].id, emptyId, "empty row moves to requested position");
+    expectTransactionResultInvariants(before, after, result, savedSourceFor(loaded.document));
+    expectDocumentInvariants(loaded.document);
+  }
+}
+
+void testFenceLengthsAndUnclosedBlocks() {
+  const std::vector<std::string> fencedBlocks = {
+      "````md\n```\nnested example\n```\n````",
+      "~~~~ts\n~~~\nstill code\n~~~~~",
+      "```ts\n```not a closing fence\ncode\n```",
+      "```ts\n    ```\ncode\n```",
+  };
+  for (const auto& fenced : fencedBlocks) {
+    LoadedDocument loaded(fenced + "\n\nTail\n");
+    const auto blocks = blocksFor(loaded.document);
+    expectEqual(blocks.size(), 2, "fence boundaries preserve following paragraph");
+    expectEqual(blocks[0].markdown, fenced, "short or invalid closing fences remain code");
+    expectEqual(blocks[1].markdown, "Tail", "text after valid closing fence");
+    expectDocumentInvariants(loaded.document);
+  }
+  LoadedDocument unclosed("```ts\ncode\n\n# still code\n\nlast line\n");
+  const auto blocks = blocksFor(unclosed.document);
+  expectEqual(blocks.size(), 1, "unclosed fence consumes the remaining document");
+  expectEqual(blocks[0].markdown, "```ts\ncode\n\n# still code\n\nlast line", "unclosed fence content");
+}
+
 void testUpdateBlockUsesParserForCodeBlockBoundaries() {
   LoadedDocument loaded("Intro\n\nTail\n");
   const auto before = blocksFor(loaded.document);
@@ -721,6 +760,8 @@ struct TestCase {
 int main() {
   const TestCase tests[] = {
       {"loads baseline blocks", testLoadsBaselineBlocks},
+      {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
+      {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
       {"creates document from markdown string", testCreatesDocumentFromMarkdownString},
       {"update paragraph preserves id", testUpdateParagraphPreservesId},
       {"update paragraph to heading preserves id and changes type", testUpdateParagraphToHeadingPreservesIdAndTypeChanges},
