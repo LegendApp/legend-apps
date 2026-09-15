@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unistd.h>
 
 namespace margelo::nitro::legendapps::markdownparser {
 
@@ -873,17 +874,23 @@ std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockI
 }
 
 void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const {
-  const std::string temporaryPath = filePath + ".tmp";
-  {
-    std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
-    if (!output) {
-      throw std::runtime_error("Failed to open temporary markdown file for save: " + temporaryPath);
-    }
-    const std::string source = blockSequence_->materializeSource();
-    output.write(source.data(), static_cast<std::streamsize>(source.size()));
-    if (!output) {
-      throw std::runtime_error("Failed to write markdown file: " + temporaryPath);
-    }
+  const std::string source = blockSequence_->materializeSource();
+  std::string temporaryPath = filePath + ".tmp.XXXXXX";
+  const int descriptor = mkstemp(temporaryPath.data());
+  if (descriptor < 0) {
+    throw std::runtime_error("Failed to create temporary markdown file for save: " + filePath);
+  }
+  FILE* output = fdopen(descriptor, "wb");
+  if (!output) {
+    close(descriptor);
+    std::remove(temporaryPath.c_str());
+    throw std::runtime_error("Failed to open temporary markdown file for save: " + filePath);
+  }
+  const bool written = std::fwrite(source.data(), 1, source.size(), output) == source.size();
+  const bool closed = std::fclose(output) == 0;
+  if (!written || !closed) {
+    std::remove(temporaryPath.c_str());
+    throw std::runtime_error("Failed to write markdown file: " + filePath);
   }
 
   if (std::rename(temporaryPath.c_str(), filePath.c_str()) != 0) {
