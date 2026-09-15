@@ -15,6 +15,8 @@
 #include <string>
 #include <unordered_map>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <cerrno>
 
 namespace margelo::nitro::legendapps::markdownparser {
 
@@ -874,11 +876,23 @@ std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockI
 }
 
 void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const {
+  struct stat destinationInfo;
+  const bool destinationExists = stat(filePath.c_str(), &destinationInfo) == 0;
+  if (!destinationExists && errno != ENOENT) {
+    throw std::runtime_error("Failed to read markdown file permissions: " + filePath);
+  }
   const std::string source = blockSequence_->materializeSource();
   std::string temporaryPath = filePath + ".tmp.XXXXXX";
   const int descriptor = mkstemp(temporaryPath.data());
   if (descriptor < 0) {
     throw std::runtime_error("Failed to create temporary markdown file for save: " + filePath);
+  }
+  // Atomic replacement must retain the existing document's access permissions.
+  // New documents retain mkstemp's private mode until explicitly shared.
+  if (destinationExists && fchmod(descriptor, destinationInfo.st_mode & 0777) != 0) {
+    close(descriptor);
+    std::remove(temporaryPath.c_str());
+    throw std::runtime_error("Failed to preserve markdown file permissions: " + filePath);
   }
   FILE* output = fdopen(descriptor, "wb");
   if (!output) {

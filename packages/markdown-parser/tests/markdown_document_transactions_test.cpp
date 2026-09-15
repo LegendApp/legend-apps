@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <unistd.h>
+#include <sys/stat.h>
 
 using namespace margelo::nitro::legendapps::markdownparser;
 
@@ -244,6 +245,23 @@ void testLoadsBaselineBlocks() {
   expectEqual(blocks[1].type, "paragraph", "paragraph type");
   expectEqual(blocks[2].type, "codeBlock", "code block type");
   expectDocumentInvariants(loaded.document);
+}
+
+void testSavePreservesPermissions() {
+  LoadedDocument loaded("Original");
+  for (mode_t mode : {0600, 0640, 0644}) {
+    expect(chmod(loaded.file.path.c_str(), mode) == 0, "set original permissions");
+    loaded.document->save();
+    struct stat info;
+    expect(stat(loaded.file.path.c_str(), &info) == 0, "read saved permissions");
+    expectEqual(info.st_mode & 0777, mode, "save retains destination permissions");
+    TempFile destination;
+    expect(chmod(destination.path.c_str(), mode) == 0, "set save-as permissions");
+    loaded.document->saveAs(destination.path);
+    expect(stat(destination.path.c_str(), &info) == 0, "read save-as permissions");
+    expectEqual(info.st_mode & 0777, mode, "save-as retains destination permissions");
+    loaded.document->saveAs(loaded.file.path);
+  }
 }
 
 void testSavePreservesTemporaryFileNeighbors() {
@@ -798,6 +816,7 @@ int main() {
       {"loads baseline blocks", testLoadsBaselineBlocks},
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
+      {"save preserves permissions", testSavePreservesPermissions},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
       {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
       {"creates document from markdown string", testCreatesDocumentFromMarkdownString},
