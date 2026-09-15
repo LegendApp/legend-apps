@@ -707,6 +707,15 @@ HybridMarkdownDocument::HybridMarkdownDocument(
       timing_(timing),
       documentId_(nextDocumentId()),
       nextBlockNumber_(blocks.size()) {
+  // The parser omits blank source; the editor still needs a stable insertion target.
+  if (blocks.empty()) {
+    MarkdownBlockRange block;
+    block.markdownEnd = source ? source->size() : 0;
+    block.contentEnd = block.markdownEnd;
+    updateBlockSyntax(block, "");
+    blocks.push_back(block);
+    nextBlockNumber_ = blocks.size();
+  }
   for (auto& block : blocks) {
     if (block.id.empty()) {
       block.id = documentId_ + ":b" + std::to_string(block.index);
