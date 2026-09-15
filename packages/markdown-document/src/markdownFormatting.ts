@@ -2,7 +2,22 @@ export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 type LinePrefixKind = "heading" | "blockquote" | "orderedList" | "taskList" | "unorderedList";
 
-const fencedCodeBlockPattern = /^\s*```[^\n]*\n?([\s\S]*?)\n?```\s*$/;
+function fencedCodeBlockContent(markdown: string): string | undefined {
+  const opening = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)(?:\r?\n|$)/.exec(markdown);
+  if (!opening || (opening[1][0] === "`" && opening[2].includes("`"))) {
+    return undefined;
+  }
+  const content = markdown.slice(opening[0].length);
+  for (const closing of content.matchAll(/^ {0,3}(`+|~+)[ \t]*\r?$/gm)) {
+    if (closing[1][0] === opening[1][0] && closing[1].length >= opening[1].length) {
+      if (content.slice(closing.index + closing[0].length).trim()) {
+        return undefined;
+      }
+      return content.slice(0, closing.index).replace(/\r?\n$/, "");
+    }
+  }
+  return content;
+}
 const headingPrefixPattern = /^\s{0,3}#{1,6}\s+/;
 const blockquotePrefixPattern = /^\s{0,3}>\s?/;
 const unorderedListPrefixPattern = /^\s*[-*+]\s+/;
@@ -46,8 +61,7 @@ function stripLinePrefix(line: string, kinds: LinePrefixKind[] = [
 }
 
 function unwrapCodeBlock(markdown: string) {
-  const match = fencedCodeBlockPattern.exec(markdown);
-  return match ? match[1] ?? "" : markdown;
+  return fencedCodeBlockContent(markdown) ?? markdown;
 }
 
 function mapNonEmptyLines(markdown: string, transform: (line: string, nonEmptyIndex: number) => string) {
@@ -161,11 +175,13 @@ export function toggleTaskListMarkdown(markdown: string) {
 }
 
 export function toggleCodeBlockMarkdown(markdown: string) {
-  const match = fencedCodeBlockPattern.exec(markdown);
-  if (match) {
-    return match[1] ?? "";
+  const content = fencedCodeBlockContent(markdown);
+  if (content !== undefined) {
+    return content;
   }
-  return `\`\`\`\n${markdown}\n\`\`\``;
+  const longestRun = [...markdown.matchAll(/`+/g)].reduce((length, run) => Math.max(length, run[0].length), 0);
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `${fence}\n${markdown}\n${fence}`;
 }
 
 export function thematicBreakMarkdown() {
