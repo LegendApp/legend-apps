@@ -114,7 +114,7 @@ describe("blockRowSpacingStyle", () => {
 });
 
 describe("editableTextStyleForBlock", () => {
-  it("keeps code editor text metrics without rendered code block decoration", () => {
+  it("keeps code editor contrast and text metrics without duplicating block spacing", () => {
     const block: MarkdownBlockSnapshot = {
       contentEndByte: 16,
       contentStartByte: 0,
@@ -137,8 +137,7 @@ describe("editableTextStyleForBlock", () => {
       fontSize: codeBlockStyle.fontSize,
       lineHeight: codeBlockStyle.lineHeight,
     }));
-    expect(style.backgroundColor).toBe("transparent");
-    expect(style.backgroundColor).not.toBe(codeBlockStyle.backgroundColor);
+    expect(style.backgroundColor).toBe(codeBlockStyle.backgroundColor);
     expect(style.borderColor).toBeUndefined();
     expect(style.borderRadius).toBeUndefined();
     expect(style.borderWidth).toBeUndefined();
