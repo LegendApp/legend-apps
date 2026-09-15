@@ -542,7 +542,9 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     [self observeScrollViewForBlockView:view];
     [self setBlockView:view contentsHidden:YES];
     [view activateEditorWithEvent:nil];
-    [self emitBeginEditingForBlockView:view];
+    // JS already chose this block. A delayed begin event would look like a new
+    // pointer activation and could undo a more recent navigation command.
+    [self emitEditorFrameChangeForBlockView:view];
   }
 }
 
@@ -944,7 +946,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
       [self setBlockView:view contentsHidden:YES];
       [self observeScrollViewForBlockView:view];
       [view activateEditorWithEvent:nil];
-      [self emitBeginEditingForBlockView:view];
+      [self emitEditorFrameChangeForBlockView:view];
     } else {
       _activeBlockId = [nextActiveBlockId copy];
       [self stopObservingScrollView];
