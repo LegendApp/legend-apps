@@ -6,9 +6,9 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-apps/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
-import { useObserveEffect, useValue } from "@legendapp/state/react";
+import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -56,24 +56,6 @@ type MarkdownEditorWindowProps = {
 
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
-
-const cleanSaveReloadSuppressionMs = 5000;
-const cleanSaveReloadSuppressionsByPath = new Map<string, number>();
-
-function suppressCleanSaveReload(path: string, now: number) {
-  cleanSaveReloadSuppressionsByPath.set(path, now + cleanSaveReloadSuppressionMs);
-}
-
-function shouldSuppressCleanSaveReload(path: string, now: number) {
-  const suppressUntil = cleanSaveReloadSuppressionsByPath.get(path) ?? 0;
-  if (now < suppressUntil) {
-    return true;
-  }
-  if (suppressUntil > 0) {
-    cleanSaveReloadSuppressionsByPath.delete(path);
-  }
-  return false;
-}
 
 function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
   if (scenario === "editor-selection-smoke") {
@@ -257,55 +239,11 @@ export default MarkdownEditorWindow;
 function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
-  const hasPendingCleanSaveRef = useRef(false);
-  const wasSavingRef = useRef(false);
   const watchedFilePath = filename && documentSource !== "untitled" ? filename : null;
-  useEffect(() => {
-    hasPendingCleanSaveRef.current = false;
-    wasSavingRef.current = false;
-  }, [watchedFilePath]);
-  // A native save can finish in one React batch. Observe each state transition
-  // so its file-watcher event cannot reload the document and discard history.
-  useObserveEffect(() => {
-    const saveState = session.sessionState$.saveState.get();
-    const isDirty = session.sessionState$.isDirty.get();
-    if (saveState === "saving") {
-      wasSavingRef.current = true;
-      hasPendingCleanSaveRef.current = false;
-    } else if (saveState === "idle" && wasSavingRef.current) {
-      wasSavingRef.current = false;
-      hasPendingCleanSaveRef.current = true;
-    } else if (saveState === "error") {
-      wasSavingRef.current = false;
-      hasPendingCleanSaveRef.current = false;
-    }
-
-    if (hasPendingCleanSaveRef.current && !isDirty && watchedFilePath) {
-      hasPendingCleanSaveRef.current = false;
-      suppressCleanSaveReload(watchedFilePath, Date.now());
-    }
-  }, [session.sessionState$, watchedFilePath]);
-  const shouldReload = useCallback(() => {
-    if (session.sessionState$.isDirty.peek()) {
-      return false;
-    }
-    if (session.sessionState$.saveState.peek() === "saving") {
-      return false;
-    }
-    if (watchedFilePath && shouldSuppressCleanSaveReload(watchedFilePath, Date.now())) {
-      return false;
-    }
-    return true;
-  }, [session.sessionState$, watchedFilePath]);
-  const reloadDocument = useCallback(() => {
-    session.documentCommandsRef.current?.reload();
-  }, [session.documentCommandsRef]);
-
-  useWatchedDocumentReload({
-    onReload: reloadDocument,
-    path: watchedFilePath,
-    shouldReload,
-  });
+  const checkDocument = useCallback(() => {
+    session.documentCommandsRef.current?.checkForExternalChanges().catch(session.handleError);
+  }, [session.documentCommandsRef, session.handleError]);
+  useWatchedDocumentReload({ onReload: checkDocument, path: watchedFilePath });
 
   return null;
 }
@@ -355,6 +293,7 @@ function MarkdownEditorSessionContent({
 
   return (
     <View style={[styles.root, backgroundStyle]}>
+      <MarkdownConflictBanner color={foregroundColor} session={session} />
       <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={onInsertLink} />
@@ -393,6 +332,33 @@ function MarkdownEditorSessionContent({
           style={styles.bottomToolbar}
         />
       ) : null}
+    </View>
+  );
+}
+
+function MarkdownConflictBanner({ color, session }: { color: string; session: MarkdownDocumentSession }) {
+  const conflict = useValue(session.sessionState$.conflict);
+  const saving = useValue(() => session.sessionState$.saveState.get() === "saving");
+  if (!conflict) return null;
+  return (
+    <View className="gap-2 border-b border-amber-500 px-4 py-3" accessibilityRole="alert">
+      <Text style={{ color }}>
+        {conflict === "missing" ? "This file was removed from disk." : "This file changed on disk."}
+        {" Your local version is preserved. Autosave is paused."}
+      </Text>
+      <View className="flex-row flex-wrap gap-4">
+        {conflict !== "missing" && (
+          <Pressable accessibilityRole="button" disabled={saving} onPress={session.useDiskVersion}>
+            <Text style={{ color }}>Use disk</Text>
+          </Pressable>
+        )}
+        <Pressable accessibilityRole="button" disabled={saving} onPress={session.overwriteWithLocal}>
+          <Text style={{ color }}>Overwrite with local</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={() => session.saveCurrentDocumentAs(true)}>
+          <Text style={{ color }}>Save local separately</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -484,6 +450,7 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
       onError={session.handleError}
       onLoadError={session.handleDocumentLoadError}
       onLoaded={session.handleDocumentLoaded}
+      onConflictChange={session.setConflict}
       onSaveStateChange={session.setSaveState}
       renderSelectionToolbar={renderSelectionToolbar}
       savePolicy={savePolicy}

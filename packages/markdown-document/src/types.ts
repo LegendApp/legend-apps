@@ -83,6 +83,8 @@ export type MarkdownDocumentAdapter = {
   getBlockIds?: (documentId: string, startIndex: number, count: number) => Promise<string[]>;
   getBlockMetadata?: (documentId: string, startIndex: number, count: number) => Promise<MarkdownBlockMetadata[]>;
   getBlocks(documentId: string, startIndex: number, count: number): Promise<MarkdownBlockSnapshot[]>;
+  getFileStatus?(documentId: string): Promise<string>;
+  overwrite?(documentId: string): Promise<void>;
   save(documentId: string): Promise<void>;
   saveAs(documentId: string, filename: string): Promise<void>;
   close(documentId: string): Promise<void>;
@@ -94,6 +96,8 @@ export type MarkdownDocumentAdapter = {
 
 export type MarkdownDocumentCommands = {
   reload(): void;
+  checkForExternalChanges(): Promise<void>;
+  overwrite(): Promise<void>;
   save(): Promise<void>;
   saveAs(filename: string): Promise<void>;
   undo(): void;
@@ -204,6 +208,7 @@ export type MarkdownDocumentProps = {
   onLoadError?: (error: Error) => void;
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onConflictChange?: (status: "changed" | "missing" | null) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;
   onSelectionAnchorChange?: (anchor: MarkdownSelectionAnchor | null) => void;
   selectionAnchor$?: Observable<MarkdownSelectionAnchor | null>;

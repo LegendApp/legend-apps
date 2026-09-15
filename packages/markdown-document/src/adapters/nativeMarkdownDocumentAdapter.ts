@@ -186,6 +186,14 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     return session.nativeDocument.getRenderBlocks(startIndex, count).map(toBlockSnapshot);
   },
 
+  async getFileStatus(documentId: string) {
+    return getSession(documentId).nativeDocument.getFileStatus();
+  },
+
+  async overwrite(documentId: string) {
+    getSession(documentId).nativeDocument.overwrite();
+  },
+
   async save(documentId: string): Promise<void> {
     getSession(documentId).nativeDocument.save();
   },

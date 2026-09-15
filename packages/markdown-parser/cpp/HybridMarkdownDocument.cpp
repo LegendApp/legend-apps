@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <filesystem>
 #include <iterator>
 #include <mutex>
 #include <optional>
@@ -21,6 +22,26 @@
 namespace margelo::nitro::legendapps::markdownparser {
 
 namespace {
+
+// Byte comparisons distinguish our own saves from rapid external edits.
+std::string fileStatus(const std::string& path, const std::string& baseline) {
+  if (path.empty()) return "unchanged";
+  FILE* raw = std::fopen(path.c_str(), "rb");
+  if (!raw) {
+    if (errno == ENOENT) return "missing";
+    throw std::runtime_error("Failed to read markdown file: " + path);
+  }
+  std::unique_ptr<FILE, decltype(&std::fclose)> input(raw, &std::fclose);
+  char buffer[65536];
+  size_t offset = 0;
+  size_t count;
+  while ((count = std::fread(buffer, 1, sizeof(buffer), raw)) != 0) {
+    if (offset + count > baseline.size() || baseline.compare(offset, count, buffer, count) != 0) return "changed";
+    offset += count;
+  }
+  if (std::ferror(raw)) throw std::runtime_error("Failed to read markdown file: " + path);
+  return offset == baseline.size() ? "unchanged" : "changed";
+}
 
 std::string markdownBlockTypeName(MarkdownBlockType type) {
   switch (type) {
@@ -725,6 +746,7 @@ HybridMarkdownDocument::HybridMarkdownDocument(
     }
   }
   std::string sourceText = source ? std::string(source->data(), source->size()) : "";
+  savedSource_ = std::make_shared<const std::string>(sourceText);
   lineEnding_ = detectLineEnding(sourceText);
   blockSequence_ = std::make_unique<MarkdownBlockSequence>(
       std::move(sourceText),
@@ -847,6 +869,19 @@ MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const Markdow
   throw std::runtime_error("Unsupported markdown transaction: " + transaction.type);
 }
 
+std::shared_ptr<Promise<std::string>> HybridMarkdownDocument::getFileStatus() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
+  return Promise<std::string>::async([path = filePath_, baseline = savedSource_]() {
+    return fileStatus(path, *baseline);
+  });
+}
+
+void HybridMarkdownDocument::overwrite() {
+  std::lock_guard<std::mutex> lock(documentMutex_);
+  if (filePath_.empty()) throw std::runtime_error("Cannot save markdown document without a file path.");
+  writeToFilePath(filePath_, false);
+}
+
 void HybridMarkdownDocument::save() {
   std::lock_guard<std::mutex> lock(documentMutex_);
   if (filePath_.empty()) {
@@ -875,13 +910,22 @@ std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockI
   return blockSequence_->markdownForId(blockId);
 }
 
-void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const {
+void HybridMarkdownDocument::writeToFilePath(const std::string& filePath, bool checkBaseline) {
+  const auto requireUnchanged = [&]() {
+    if (checkBaseline && !filePath_.empty() &&
+        std::filesystem::weakly_canonical(filePath) == std::filesystem::weakly_canonical(filePath_)) {
+      const auto status = fileStatus(filePath, *savedSource_);
+      if (status != "unchanged") throw std::runtime_error("MARKDOWN_FILE_CONFLICT: " + status);
+    }
+  };
+  requireUnchanged();
   struct stat destinationInfo;
   const bool destinationExists = stat(filePath.c_str(), &destinationInfo) == 0;
   if (!destinationExists && errno != ENOENT) {
     throw std::runtime_error("Failed to read markdown file permissions: " + filePath);
   }
-  const std::string source = blockSequence_->materializeSource();
+  const auto nextBaseline = std::make_shared<const std::string>(blockSequence_->materializeSource());
+  const auto& source = *nextBaseline;
   std::string temporaryPath = filePath + ".tmp.XXXXXX";
   const int descriptor = mkstemp(temporaryPath.data());
   if (descriptor < 0) {
@@ -907,15 +951,22 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& filePath) const 
     throw std::runtime_error("Failed to write markdown file: " + filePath);
   }
 
+  try {
+    requireUnchanged();
+  } catch (...) {
+    std::remove(temporaryPath.c_str());
+    throw;
+  }
   if (std::rename(temporaryPath.c_str(), filePath.c_str()) != 0) {
     std::remove(temporaryPath.c_str());
     throw std::runtime_error("Failed to replace markdown file: " + filePath);
   }
+  savedSource_ = nextBaseline;
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {
   std::lock_guard<std::mutex> lock(documentMutex_);
-  return blockSequence_->externalMemorySize();
+  return blockSequence_->externalMemorySize() + savedSource_->size();
 }
 
 MarkdownBlockMetadata HybridMarkdownDocument::metadataForBlock(size_t index) const {

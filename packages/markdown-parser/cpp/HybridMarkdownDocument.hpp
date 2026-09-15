@@ -75,6 +75,8 @@ public:
   std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) override;
   MarkdownDocumentTiming getTiming() override;
   MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) override;
+  std::shared_ptr<Promise<std::string>> getFileStatus() override;
+  void overwrite() override;
   void save() override;
   void saveAs(const std::string& filePath) override;
   const std::string& documentId() const noexcept;
@@ -102,7 +104,7 @@ private:
       const std::vector<size_t>& changedBlockIndices,
       std::vector<std::string> retiredBlockIds = {},
       bool retainsFirstChangedBlock = false) const;
-  void writeToFilePath(const std::string& filePath) const;
+  void writeToFilePath(const std::string& filePath, bool checkBaseline = true);
   void resetDocument(std::string source, std::vector<MarkdownBlockRange> blocks);
   std::string nextBlockId();
 
@@ -110,6 +112,7 @@ private:
   // also populate lazy text caches, so they need the same exclusive lock.
   mutable std::mutex documentMutex_;
   std::string filePath_;
+  std::shared_ptr<const std::string> savedSource_;
   std::string lineEnding_;
   std::unique_ptr<MarkdownBlockSequence> blockSequence_;
   MarkdownDocumentTiming timing_;

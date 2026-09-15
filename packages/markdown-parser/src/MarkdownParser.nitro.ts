@@ -80,6 +80,8 @@ export interface MarkdownDocument
   getRenderBlocks(start: number, count: number): MarkdownRenderBlock[];
   getTiming(): MarkdownDocumentTiming;
   applyTransaction(transaction: MarkdownTransaction): MarkdownTransactionResult;
+  getFileStatus(): Promise<string>;
+  overwrite(): void;
   save(): void;
   saveAs(filePath: string): void;
 }
