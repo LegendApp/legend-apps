@@ -1212,7 +1212,11 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
                                                   object:_editorInput];
     _editorInput = nil;
   }
+  // We own the child's visibility while editing. Fabric can recycle that
+  // child independently, so restore it before it leaves this activation view.
+  childComponentView.hidden = NO;
   [super unmountChildComponentView:childComponentView index:index];
+  [self applyContentsHidden];
 }
 
 - (void)dealloc
