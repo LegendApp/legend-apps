@@ -25,6 +25,8 @@ namespace margelo::nitro::legendapps::markdownparser {
       prototype.registerHybridMethod("getRenderBlocks", &HybridMarkdownDocumentSpec::getRenderBlocks);
       prototype.registerHybridMethod("getTiming", &HybridMarkdownDocumentSpec::getTiming);
       prototype.registerHybridMethod("applyTransaction", &HybridMarkdownDocumentSpec::applyTransaction);
+      prototype.registerHybridMethod("getFileStatus", &HybridMarkdownDocumentSpec::getFileStatus);
+      prototype.registerHybridMethod("overwrite", &HybridMarkdownDocumentSpec::overwrite);
       prototype.registerHybridMethod("save", &HybridMarkdownDocumentSpec::save);
       prototype.registerHybridMethod("saveAs", &HybridMarkdownDocumentSpec::saveAs);
     });

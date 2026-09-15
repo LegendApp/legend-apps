@@ -31,6 +31,7 @@ namespace margelo::nitro::legendapps::markdownparser { struct MarkdownTransactio
 #include "MarkdownDocumentTiming.hpp"
 #include "MarkdownTransactionResult.hpp"
 #include "MarkdownTransaction.hpp"
+#include <NitroModules/Promise.hpp>
 
 namespace margelo::nitro::legendapps::markdownparser {
 
@@ -73,6 +74,8 @@ namespace margelo::nitro::legendapps::markdownparser {
       virtual std::vector<MarkdownRenderBlock> getRenderBlocks(double start, double count) = 0;
       virtual MarkdownDocumentTiming getTiming() = 0;
       virtual MarkdownTransactionResult applyTransaction(const MarkdownTransaction& transaction) = 0;
+      virtual std::shared_ptr<Promise<std::string>> getFileStatus() = 0;
+      virtual void overwrite() = 0;
       virtual void save() = 0;
       virtual void saveAs(const std::string& filePath) = 0;
 

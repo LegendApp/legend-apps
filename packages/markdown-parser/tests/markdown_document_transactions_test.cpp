@@ -802,6 +802,57 @@ void testRandomizedTransactionSequence() {
   }
 }
 
+void testExternalFileConflicts() {
+  LoadedDocument loaded("Original");
+  auto document = loaded.document;
+  const auto status = [&]() { return document->getFileStatus()->get(); };
+  const auto writeDisk = [&](const std::string& text) { std::ofstream(loaded.file.path) << text; };
+  const auto readDisk = [&]() {
+    std::ifstream input(loaded.file.path);
+    return std::string(std::istreambuf_iterator<char>(input), {});
+  };
+  const auto expectConflict = [&](bool saveAs) {
+    bool rejected = false;
+    try {
+      if (saveAs) document->saveAs(loaded.file.path); else document->save();
+    } catch (const std::exception& error) {
+      rejected = std::string(error.what()).find("MARKDOWN_FILE_CONFLICT:") != std::string::npos;
+    }
+    expect(rejected, "External changes must reject ordinary saves");
+  };
+  expectEqual(status(), "unchanged", "loaded baseline");
+  chmod(loaded.file.path.c_str(), 0640);
+  expectEqual(status(), "unchanged", "metadata-only changes");
+  document->applyTransaction(updateBlock(document->getBlockKey(0), "Local"));
+  expectEqual(status(), "unchanged", "local edits do not change baseline");
+  writeDisk("External");
+  expectEqual(status(), "changed", "in-place external write");
+  expectConflict(false);
+  expectConflict(true);
+  expectEqual(readDisk(), "External", "failed saves preserve external contents");
+  expectEqual(status(), "changed", "failed save preserves baseline");
+  document->overwrite();
+  expectEqual(readDisk(), "Local", "explicit overwrite");
+  expectEqual(status(), "unchanged", "overwrite advances baseline");
+  document->applyTransaction(updateBlock(document->getBlockKey(0), "Next"));
+  document->save();
+  expectEqual(status(), "unchanged", "own save does not conflict");
+  TempFile replacement("Replacement");
+  std::rename(replacement.path.c_str(), loaded.file.path.c_str());
+  expectEqual(status(), "changed", "atomic external replacement");
+  TempFile copy;
+  document->saveAs(copy.path);
+  expectEqual(readDisk(), "Replacement", "save separately preserves external version");
+  expectEqual(status(), "unchanged", "save separately changes baseline and path");
+  std::remove(copy.path.c_str());
+  expectEqual(status(), "missing", "deleted file");
+  bool rejected = false;
+  try { document->save(); } catch (...) { rejected = true; }
+  expect(rejected, "save must not silently recreate deleted file");
+  document->overwrite();
+  expectEqual(status(), "unchanged", "explicitly recreate deleted file");
+}
+
 using TestFunction = void (*)();
 
 struct TestCase {
@@ -813,6 +864,7 @@ struct TestCase {
 
 int main() {
   const TestCase tests[] = {
+      {"external file conflicts", testExternalFileConflicts},
       {"loads baseline blocks", testLoadsBaselineBlocks},
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},

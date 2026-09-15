@@ -1,3 +1,4 @@
+import { isMarkdownFileConflictError } from "./fileConflict";
 import {
   LegendList,
   type DataSourceOperation,
@@ -454,6 +455,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onError,
       onLoadError,
       onLoaded,
+      onConflictChange,
       onSaveStateChange,
       onSelectionAnchorChange,
       renderCommentBubble,
@@ -513,6 +515,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const isDirtyRef = useRef(false);
     const pendingRenderTransactionRef = useRef<MarkdownTransactionResult | undefined>(undefined);
     const autosavePausedRef = useRef(false);
+    const conflictRef = useRef(false);
+    const saveGenerationRef = useRef(0);
+    const fileCheckRequestRef = useRef(0);
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
     const commandStateRef = useRef<MarkdownDocumentCommandState>({ canRedo: false, canUndo: false });
@@ -552,6 +557,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
     const onCommandStateChangeRef = useLatestRef(onCommandStateChange);
     const onErrorRef = useLatestRef(onError);
+    const onConflictChangeRef = useLatestRef(onConflictChange);
     const onLoadErrorRef = useLatestRef(onLoadError);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
@@ -628,9 +634,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const reportAsyncError = useCallback(
       (error: unknown) => {
         const nextError = error instanceof Error ? error : new Error(String(error));
-        onErrorRef.current?.(nextError);
+        if (!isMarkdownFileConflictError(nextError) || !onConflictChangeRef.current) {
+          onErrorRef.current?.(nextError);
+        }
       },
-      [onErrorRef],
+      [onConflictChangeRef, onErrorRef],
     );
 
     const clearAutosaveTimer = useCallback(() => {
@@ -672,7 +680,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const scheduleAutosave = useCallback(() => {
       clearAutosaveTimer();
-      if (!autosaveEnabled || autosavePausedRef.current) {
+      if (!autosaveEnabled || autosavePausedRef.current || conflictRef.current) {
         return;
       }
 
@@ -2550,6 +2558,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     useEffect(() => {
       loadVersionRef.current += 1;
       const loadVersion = loadVersionRef.current;
+      conflictRef.current = false;
+      onConflictChangeRef.current?.(null);
       let isCanceled = false;
 
       cancelHydration();
@@ -2675,6 +2685,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       return () => {
         isCanceled = true;
+        loadVersionRef.current += 1;
         cancelHydration();
         cancelPendingVerticalNavigationFrame();
         clearAutosaveTimer();
@@ -2689,6 +2700,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       filename,
       reloadVersion,
       onDirtyChangeRef,
+      onConflictChangeRef,
       onErrorRef,
       onLoadErrorRef,
       onLoadedRef,
@@ -2727,8 +2739,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [adapter, loadedDocumentId, reportAsyncError]);
 
     const saveDocument = useCallback(
-      async (saveFilename?: string) => {
-        const documentState = documentState$.peek();
+      async (saveFilename?: string, overwrite = false) => {
+        const loadVersion = loadVersionRef.current;
         while (saveInFlightRef.current) {
           try {
             await saveInFlightRef.current;
@@ -2737,10 +2749,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         }
 
-        if (documentState.status !== "loaded") {
+        const documentState = documentState$.peek();
+        if (documentState.status !== "loaded" || loadVersion !== loadVersionRef.current) {
           return;
         }
         const { documentId } = documentState.snapshot;
+        saveGenerationRef.current += 1;
 
         clearAutosaveTimer();
         autosavePausedRef.current = false;
@@ -2748,15 +2762,23 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         async function performSave() {
           await commitActiveBlock({ updateReactState: false });
-          if (saveFilename) {
+          const savingRevision = currentRevisionRef.current;
+          if (overwrite) {
+            if (!adapter.overwrite) throw new Error("This document does not support overwriting conflicts.");
+            await adapter.overwrite(documentId);
+          } else if (saveFilename) {
             await adapter.saveAs(documentId, saveFilename);
           } else {
             await adapter.save(documentId);
           }
-          savedRevisionRef.current = currentRevisionRef.current;
+          if (loadVersion !== loadVersionRef.current) return;
+          conflictRef.current = false;
+          onConflictChangeRef.current?.(null);
+          savedRevisionRef.current = savingRevision;
           setNextSaveState("idle");
           isDirtyRef.current = currentRevisionRef.current !== savedRevisionRef.current;
           onDirtyChangeRef.current?.(isDirtyRef.current);
+          if (isDirtyRef.current) scheduleAutosave();
         }
 
         const savePromise = performSave();
@@ -2769,9 +2791,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         } catch (error: unknown) {
           const nextError = error instanceof Error ? error : new Error(String(error));
-          autosavePausedRef.current = true;
-          setNextSaveState("error");
-          onErrorRef.current?.(nextError);
+          if (loadVersion === loadVersionRef.current) {
+            clearAutosaveTimer();
+            autosavePausedRef.current = true;
+            setNextSaveState("error");
+            if (isMarkdownFileConflictError(nextError)) {
+              conflictRef.current = true;
+              onConflictChangeRef.current?.(String(nextError).includes("MARKDOWN_FILE_CONFLICT: missing") ? "missing" : "changed");
+              if (!onConflictChangeRef.current) onErrorRef.current?.(nextError);
+            } else {
+              onErrorRef.current?.(nextError);
+            }
+          }
           if (saveInFlightRef.current === savePromise) {
             saveInFlightRef.current = undefined;
           }
@@ -2784,7 +2815,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         commitActiveBlock,
         documentState$,
         onDirtyChangeRef,
+        onConflictChangeRef,
         onErrorRef,
+        scheduleAutosave,
         setNextSaveState,
       ],
     );
@@ -2810,6 +2843,42 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const reload = useCallback(() => {
       setReloadVersion((version) => version + 1);
     }, []);
+
+    const overwrite = useCallback(() => saveDocument(undefined, true), [saveDocument]);
+
+    const checkForExternalChanges = useCallback(async () => {
+      if (!adapter.getFileStatus) return;
+      const request = ++fileCheckRequestRef.current;
+      const loadVersion = loadVersionRef.current;
+      // A comparison started before a save has an obsolete baseline. Retry it
+      // after that save rather than treating our own write as an external edit.
+      for (;;) {
+        try { await saveInFlightRef.current; } catch { /* Inspect failed saves too. */ }
+        if (loadVersion !== loadVersionRef.current) return;
+        const state = documentState$.peek();
+        if (state.status !== "loaded") return;
+        const generation = saveGenerationRef.current;
+        const status = await adapter.getFileStatus(state.snapshot.documentId);
+        if (loadVersion !== loadVersionRef.current || request !== fileCheckRequestRef.current) return;
+        if (generation !== saveGenerationRef.current || saveInFlightRef.current) continue;
+        if (status === "unchanged") {
+          if (conflictRef.current) {
+            conflictRef.current = false;
+            autosavePausedRef.current = false;
+            onConflictChangeRef.current?.(null);
+            setNextSaveState("idle");
+            if (isDirtyRef.current) scheduleAutosave();
+          }
+        } else if (status === "changed" && !isDirtyRef.current) {
+          reload();
+        } else {
+          conflictRef.current = true;
+          clearAutosaveTimer();
+          onConflictChangeRef.current?.(status === "missing" ? "missing" : "changed");
+        }
+        return;
+      }
+    }, [adapter, clearAutosaveTimer, documentState$, onConflictChangeRef, reload, scheduleAutosave, setNextSaveState]);
 
     useEffect(() => {
       saveRef.current = save;
@@ -3093,6 +3162,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         focusPreviousBlock() {
           focusAdjacentBlock("up");
         },
+        checkForExternalChanges,
+        overwrite,
         redo,
         reload,
         save,
@@ -3148,6 +3219,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         focusBoundaryBlock,
         formatCurrentBlockRange,
         moveActiveBlock,
+        checkForExternalChanges,
+        overwrite,
         redo,
         reload,
         runActiveInputCommand,

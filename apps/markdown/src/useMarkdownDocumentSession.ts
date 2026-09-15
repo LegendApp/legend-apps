@@ -1,5 +1,6 @@
 import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
 import {
+  isMarkdownFileConflictError,
   type MarkdownDocumentCommandState,
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
@@ -18,6 +19,7 @@ import { untitledFilename } from "./untitledMarkdownAdapter";
 export type DocumentSource = "file" | "untitled";
 
 export type MarkdownDocumentSessionState = {
+  conflict: "changed" | "missing" | null;
   commandState: MarkdownDocumentCommandState;
   documentSource: DocumentSource;
   filename: string | null;
@@ -34,6 +36,7 @@ type OpenUntitledDocumentOptions = {
 
 export function useMarkdownDocumentSession() {
   const sessionState$ = useObservable<MarkdownDocumentSessionState>({
+    conflict: null,
     commandState: { canRedo: false, canUndo: false },
     documentSource: "untitled",
     filename: null,
@@ -44,12 +47,14 @@ export function useMarkdownDocumentSession() {
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const preserveNextLoadedError = useRef(false);
+  const documentGenerationRef = useRef(0);
 
   const clearDocumentError = useCallback(() => {
     sessionState$.lastError.set(null);
   }, [sessionState$]);
 
   const handleDocumentLoaded = useCallback(() => {
+    documentGenerationRef.current += 1;
     if (preserveNextLoadedError.current) {
       preserveNextLoadedError.current = false;
     } else {
@@ -58,6 +63,7 @@ export function useMarkdownDocumentSession() {
   }, [sessionState$]);
 
   const handleError = useCallback((error: unknown) => {
+    if (isMarkdownFileConflictError(error)) return;
     const message = error instanceof Error ? error.message : String(error);
     sessionState$.lastError.set(message);
   }, [sessionState$]);
@@ -70,6 +76,23 @@ export function useMarkdownDocumentSession() {
     sessionState$.isDirty.set(isDirty);
   }, [sessionState$]);
 
+  const setConflict = useCallback((conflict: "changed" | "missing" | null) => {
+    sessionState$.conflict.set(conflict);
+  }, [sessionState$]);
+
+  const useDiskVersion = useCallback(() => {
+    if (sessionState$.conflict.peek() === "changed") documentCommandsRef.current?.reload();
+  }, [sessionState$]);
+
+  const overwriteWithLocal = useCallback(async () => {
+    try {
+      await documentCommandsRef.current?.overwrite();
+      sessionState$.lastError.set(null);
+    } catch (error) {
+      handleError(error);
+    }
+  }, [handleError, sessionState$]);
+
   const setSaveState = useCallback((saveState: MarkdownSaveState) => {
     sessionState$.saveState.set(saveState);
   }, [sessionState$]);
@@ -81,7 +104,9 @@ export function useMarkdownDocumentSession() {
   }, []);
 
   const openSelectedFile = useCallback((path: string) => {
+    documentGenerationRef.current += 1;
     sessionState$.assign({
+      conflict: null,
       documentSource: "file",
       filename: path,
       isDirty: false,
@@ -92,7 +117,9 @@ export function useMarkdownDocumentSession() {
   }, [markOpenedFile, sessionState$]);
 
   const openUntitledDocument = useCallback((options: OpenUntitledDocumentOptions = {}) => {
+    documentGenerationRef.current += 1;
     sessionState$.assign({
+      conflict: null,
       documentSource: "untitled",
       filename: untitledFilename,
       isDirty: false,
@@ -114,7 +141,9 @@ export function useMarkdownDocumentSession() {
   }, [handleError, openUntitledDocument, sessionState$]);
 
   const completeSaveAs = useCallback((path: string) => {
+    documentGenerationRef.current += 1;
     sessionState$.assign({
+      conflict: null,
       documentSource: "file",
       filename: path,
       isDirty: false,
@@ -124,13 +153,16 @@ export function useMarkdownDocumentSession() {
     markOpenedFile(path);
   }, [markOpenedFile, sessionState$]);
 
-  const saveCurrentDocumentAs = useCallback(async () => {
+  const saveCurrentDocumentAs = useCallback(async (saveSeparately = false) => {
     const state = sessionState$.peek();
     if (!state.filename || !documentCommandsRef.current) {
       return false;
     }
 
-    let defaultName = getFilename(state.filename);
+    const documentGeneration = documentGenerationRef.current;
+    const originalFilename = state.filename;
+    let defaultName = getFilename(originalFilename);
+    if (saveSeparately) defaultName = defaultName.replace(/(\.[^.]+)?$/, " copy$1");
     let directory: string | undefined = getDirectory(state.filename);
     if (state.documentSource === "untitled") {
       defaultName = untitledFilename;
@@ -144,10 +176,13 @@ export function useMarkdownDocumentSession() {
         directory,
       });
 
-      if (!path) {
+      if (!path || sessionState$.filename.peek() !== originalFilename || documentGenerationRef.current !== documentGeneration || !documentCommandsRef.current) {
         return false;
       }
 
+      if (saveSeparately && path === originalFilename) {
+        throw new Error("Choose a different filename to save your local version separately.");
+      }
       await documentCommandsRef.current.saveAs(path);
       completeSaveAs(path);
       return true;
@@ -177,7 +212,7 @@ export function useMarkdownDocumentSession() {
 
   const flushCurrentDocumentBeforeTransition = useCallback(async (reason: "new" | "open" | "quit" = "open") => {
     const state = sessionState$.peek();
-    if (!state.filename || !state.isDirty) {
+    if (!state.filename || (!state.isDirty && !state.conflict)) {
       return true;
     }
 
@@ -205,11 +240,11 @@ export function useMarkdownDocumentSession() {
     reason?: "close" | "quit";
   }) => {
     const state = sessionState$.peek();
-    if (!state.filename || !state.isDirty) {
+    if (!state.filename || (!state.isDirty && !state.conflict)) {
       return true;
     }
 
-    if (state.documentSource !== "untitled" && autosaveEnabled) {
+    if (state.documentSource !== "untitled" && autosaveEnabled && !state.conflict) {
       return saveCurrentDocument();
     }
 
@@ -297,6 +332,9 @@ export function useMarkdownDocumentSession() {
     saveCurrentDocument,
     saveCurrentDocumentAs,
     sessionState$,
+    setConflict,
+    useDiskVersion,
+    overwriteWithLocal,
     setCommandState,
     setIsDirty,
     setSaveState,

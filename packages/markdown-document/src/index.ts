@@ -24,3 +24,5 @@ export type {
   MarkdownTransaction,
   MarkdownTransactionResult,
 } from "./types";
+
+export { isMarkdownFileConflictError } from "./fileConflict";

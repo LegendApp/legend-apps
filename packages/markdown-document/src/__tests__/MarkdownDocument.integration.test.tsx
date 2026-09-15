@@ -260,6 +260,9 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     deferred: Deferred<MarkdownBlockSnapshot[]>;
     startIndex: number;
   }> = [];
+  fileStatus = "unchanged";
+  async getFileStatus() { return this.fileStatus; }
+  async overwrite() { this.fileStatus = "unchanged"; await this.save(); }
   saveCount = 0;
   saveRevisions: number[] = [];
   private blocks: MarkdownBlockSnapshot[] = [];
@@ -849,6 +852,132 @@ describe("MarkdownDocument mounted editing", () => {
   afterEach(() => {
     consoleErrorSpy.mockRestore();
     jest.useRealTimers();
+  });
+
+  it("reloads genuine external changes immediately but preserves history for own saves", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const load = jest.spyOn(adapter, "load");
+    const { commandsRef, renderer } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), "Local");
+    await act(async () => {
+      await commandsRef.current?.save();
+      await commandsRef.current?.checkForExternalChanges();
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Original");
+    await act(async () => { await commandsRef.current?.save(); });
+    adapter.fileStatus = "changed";
+    await act(async () => { await commandsRef.current?.checkForExternalChanges(); });
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves dirty edits and pauses autosave across further typing until explicit overwrite", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const onConflictChange = jest.fn();
+    const load = jest.spyOn(adapter, "load");
+    const { commandsRef, renderer, onDirtyChange } = await renderDocument({
+      adapter, savePolicy: { autosave: true, debounceMs: 300 }, documentProps: { onConflictChange },
+    });
+    await changeText(editorInput(renderer), "Local");
+    adapter.fileStatus = "changed";
+    await act(async () => { await commandsRef.current?.checkForExternalChanges(); });
+    await changeText(editorInput(renderer), "Local again");
+    await runPendingTimers();
+    expect(adapter.saveCount).toBe(0);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(adapter.sourceMarkdown).toBe("Local again");
+    expect(onConflictChange).toHaveBeenLastCalledWith("changed");
+    await act(async () => { await commandsRef.current?.overwrite(); });
+    expect(adapter.saveCount).toBe(1);
+    expect(onConflictChange).toHaveBeenLastCalledWith(null);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    await changeText(editorInput(renderer), "After resolution");
+    await runPendingTimers();
+    expect(adapter.saveCount).toBe(2);
+  });
+
+  it("catches missed watcher conflicts at save time and does not retry on typing", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    adapter.failNextSave = new Error("MARKDOWN_FILE_CONFLICT: changed on disk");
+    const onConflictChange = jest.fn();
+    const { renderer, onError, onDirtyChange } = await renderDocument({
+      adapter, savePolicy: { autosave: true, debounceMs: 300 }, documentProps: { onConflictChange },
+    });
+    await changeText(editorInput(renderer), "Local");
+    await runPendingTimers();
+    expect(onConflictChange).toHaveBeenLastCalledWith("changed");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(onError).not.toHaveBeenCalled();
+    await changeText(editorInput(renderer), "Keep editing");
+    await runPendingTimers();
+    expect(adapter.saveCount).toBe(1);
+  });
+
+  it("retains a clean buffer when the file is deleted and resumes when the original returns", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const onConflictChange = jest.fn();
+    const load = jest.spyOn(adapter, "load");
+    const { commandsRef, renderer } = await renderDocument({
+      adapter, savePolicy: { autosave: true, debounceMs: 300 }, documentProps: { onConflictChange },
+    });
+    adapter.fileStatus = "missing";
+    await act(async () => { await commandsRef.current?.checkForExternalChanges(); });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(onConflictChange).toHaveBeenLastCalledWith("missing");
+    await changeText(editorInput(renderer), "Local");
+    await runPendingTimers();
+    expect(adapter.saveCount).toBe(0);
+    adapter.fileStatus = "unchanged";
+    await act(async () => { await commandsRef.current?.checkForExternalChanges(); });
+    await runPendingTimers();
+    expect(adapter.saveCount).toBe(1);
+    expect(onConflictChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("rechecks comparisons whose baseline was superseded by a save", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const deferred = new Deferred<string>();
+    const status = jest.spyOn(adapter, "getFileStatus").mockImplementationOnce(() => deferred.promise);
+    const load = jest.spyOn(adapter, "load");
+    const { commandsRef } = await renderDocument({ adapter });
+    let check: Promise<void> | undefined;
+    await act(async () => { check = commandsRef.current?.checkForExternalChanges(); });
+    await act(async () => { await commandsRef.current?.save(); });
+    await act(async () => { deferred.resolve("changed"); await check; });
+    expect(status).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves edits made while an external comparison is in flight", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const deferred = new Deferred<string>();
+    jest.spyOn(adapter, "getFileStatus").mockImplementationOnce(() => deferred.promise);
+    const load = jest.spyOn(adapter, "load");
+    const onConflictChange = jest.fn();
+    const { commandsRef, renderer } = await renderDocument({ adapter, documentProps: { onConflictChange } });
+    let check: Promise<void> | undefined;
+    await act(async () => { check = commandsRef.current?.checkForExternalChanges(); });
+    await changeText(editorInput(renderer), "Typed during comparison");
+    await act(async () => { deferred.resolve("changed"); await check; });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(adapter.sourceMarkdown).toBe("Typed during comparison");
+    expect(onConflictChange).toHaveBeenLastCalledWith("changed");
+  });
+
+  it("ignores an external comparison completed after the document reloads", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const deferred = new Deferred<string>();
+    jest.spyOn(adapter, "getFileStatus").mockImplementationOnce(() => deferred.promise);
+    const load = jest.spyOn(adapter, "load");
+    const onConflictChange = jest.fn();
+    const { commandsRef } = await renderDocument({ adapter, documentProps: { onConflictChange } });
+    let check: Promise<void> | undefined;
+    await act(async () => { check = commandsRef.current?.checkForExternalChanges(); });
+    await act(async () => { commandsRef.current?.reload(); });
+    await act(async () => { deferred.resolve("changed"); await check; });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(onConflictChange).toHaveBeenLastCalledWith(null);
   });
 
   it("applies plain text edits immediately while debouncing autosave", async () => {

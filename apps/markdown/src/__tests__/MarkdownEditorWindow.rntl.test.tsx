@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react-native";
+import { act, fireEvent, render } from "@testing-library/react-native";
 import { watchFiles } from "@legend-apps/file-system-watcher";
 import { observable } from "@legendapp/state";
 import React from "react";
@@ -24,7 +24,9 @@ const mockMarkdownDocument = jest.fn((_props: unknown) => {
 });
 const mockInvalidateLayoutMeasurements = jest.fn();
 const mockReloadDocument = jest.fn();
+const mockCheckForExternalChanges = jest.fn(async () => {});
 const mockSessionState$ = observable<MarkdownDocumentSessionState>({
+  conflict: null,
   commandState: { canRedo: false, canUndo: false },
   documentSource: "untitled",
   filename: "test.md",
@@ -38,6 +40,7 @@ const mockSession = {
     current: {
       invalidateLayoutMeasurements: mockInvalidateLayoutMeasurements,
       reload: mockReloadDocument,
+      checkForExternalChanges: mockCheckForExternalChanges,
     },
   },
   flushCurrentDocumentBeforeTransition: jest.fn(async () => true),
@@ -52,6 +55,9 @@ const mockSession = {
   saveCurrentDocument: jest.fn(async () => true),
   saveCurrentDocumentAs: jest.fn(async () => true),
   sessionState$: mockSessionState$,
+  setConflict: jest.fn(),
+  useDiskVersion: jest.fn(),
+  overwriteWithLocal: jest.fn(),
   setCommandState: jest.fn(),
   setIsDirty: jest.fn(),
   setSaveState: jest.fn(),
@@ -185,6 +191,7 @@ jest.mock("../userThemes", () => ({
 
 describe("MarkdownEditorWindow e2e launch routing", () => {
   beforeEach(() => {
+    mockCheckForExternalChanges.mockClear();
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;
     mockMarkdownE2EEditorSmoke.mockClear();
     mockMarkdownE2ERunner.mockClear();
@@ -196,6 +203,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockUseMarkdownAppExit.mockClear();
     mockUseMarkdownWindowCloseRequest.mockClear();
     mockSessionState$.assign({
+      conflict: null,
       commandState: { canRedo: false, canUndo: false },
       documentSource: "untitled",
       filename: "test.md",
@@ -280,110 +288,33 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     await view.unmount();
   });
 
-  it("does not reload the document for the file watcher event caused by saving", async () => {
+  it.each(["idle", "saving", "error"] as const)("checks file contents even while %s or dirty", async (saveState) => {
     jest.useFakeTimers();
-    mockSessionState$.assign({
-      documentSource: "file",
-      filename: "/tmp/test.md",
-      isDirty: true,
-      saveState: "idle",
-    });
-
+    mockSessionState$.assign({ documentSource: "file", filename: "/tmp/test.md", isDirty: true, saveState });
     const view = await render(<MarkdownEditorWindow />);
-    const watchedFileChange = mockWatchFiles.mock.calls[0]?.[1];
-    expect(watchedFileChange).toBeDefined();
-
+    const changed = mockWatchFiles.mock.calls[0]?.[1];
     await act(async () => {
-      mockSessionState$.saveState.set("saving");
-    });
-    await act(async () => {
-      mockSessionState$.saveState.set("idle");
-      mockSessionState$.isDirty.set(false);
-    });
-
-    await act(async () => {
-      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      changed?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
       jest.advanceTimersByTime(100);
     });
-
-    expect(mockReloadDocument).not.toHaveBeenCalled();
-
-    await act(async () => {
-      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
-      jest.advanceTimersByTime(100);
-    });
-
-    expect(mockReloadDocument).not.toHaveBeenCalled();
-
-    await act(async () => {
-      jest.advanceTimersByTime(5000);
-      watchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
-      jest.advanceTimersByTime(100);
-    });
-
-    expect(mockReloadDocument).toHaveBeenCalledTimes(1);
-    await view.unmount();
-    jest.useRealTimers();
-  });
-
-  it("keeps undo history when saving finishes before React renders the saving state", async () => {
-    jest.useFakeTimers();
-    mockSessionState$.assign({ documentSource: "file", filename: "/tmp/fast-save.md", isDirty: true, saveState: "idle" });
-    const view = await render(<MarkdownEditorWindow />);
-    const watchedFileChange = mockWatchFiles.mock.calls[0]?.[1];
-    await act(async () => {
-      mockSessionState$.saveState.set("saving");
-      mockSessionState$.saveState.set("idle");
-      mockSessionState$.isDirty.set(false);
-    });
-    await act(async () => {
-      watchedFileChange?.({ filePath: "/tmp/fast-save.md", path: "/tmp", type: "change" });
-      jest.advanceTimersByTime(100);
-    });
+    expect(mockCheckForExternalChanges).toHaveBeenCalledTimes(1);
     expect(mockReloadDocument).not.toHaveBeenCalled();
     await view.unmount();
     jest.useRealTimers();
   });
 
-  it("shares own-save reload suppression across watcher instances for the same file", async () => {
-    jest.useFakeTimers();
-    mockSessionState$.assign({
-      documentSource: "file",
-      filename: "/tmp/test.md",
-      isDirty: true,
-      saveState: "idle",
-    });
-
-    const savingView = await render(<MarkdownEditorWindow />);
-
-    await act(async () => {
-      mockSessionState$.saveState.set("saving");
-    });
-    await act(async () => {
-      mockSessionState$.saveState.set("idle");
-      mockSessionState$.isDirty.set(false);
-    });
-
-    const laterView = await render(<MarkdownEditorWindow />);
-    const laterWatchedFileChange = mockWatchFiles.mock.calls[1]?.[1];
-    expect(laterWatchedFileChange).toBeDefined();
-
-    await act(async () => {
-      laterWatchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
-      jest.advanceTimersByTime(100);
-    });
-
-    expect(mockReloadDocument).not.toHaveBeenCalled();
-
-    await act(async () => {
-      jest.advanceTimersByTime(5000);
-      laterWatchedFileChange?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
-      jest.advanceTimersByTime(100);
-    });
-
-    expect(mockReloadDocument).toHaveBeenCalledTimes(1);
-    await savingView.unmount();
-    await laterView.unmount();
-    jest.useRealTimers();
+  it("offers all conflict resolutions and hides Use disk for deleted files", async () => {
+    mockSessionState$.conflict.set("changed");
+    const view = await render(<MarkdownEditorWindow />);
+    await fireEvent.press(view.getByText("Use disk"));
+    await fireEvent.press(view.getByText("Overwrite with local"));
+    await fireEvent.press(view.getByText("Save local separately"));
+    expect(mockSession.useDiskVersion).toHaveBeenCalledTimes(1);
+    expect(mockSession.overwriteWithLocal).toHaveBeenCalledTimes(1);
+    expect(mockSession.saveCurrentDocumentAs).toHaveBeenCalledWith(true);
+    await act(async () => { mockSessionState$.conflict.set("missing"); });
+    expect(view.queryByText("Use disk")).toBeNull();
+    expect(view.getByText(/removed from disk/)).toBeTruthy();
+    await view.unmount();
   });
 });
