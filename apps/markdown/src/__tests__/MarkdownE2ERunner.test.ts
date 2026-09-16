@@ -33,6 +33,10 @@ describe("getMarkdownE2ERunFromLaunchArguments", () => {
     });
   });
 
+  it("accepts the native large-document regression launch", () => {
+    expect(getMarkdownE2ERunFromLaunchArguments(["--markdown-e2e=editor-large-document"])?.scenario).toBe("editor-large-document");
+  });
+
   it("accepts editor selection smoke launches", () => {
     expect(getMarkdownE2ERunFromLaunchArguments([
       "--markdown-e2e=editor-selection-smoke",

@@ -60,6 +60,7 @@ function SessionApiHarness({ onSession }: { onSession: (session: MarkdownDocumen
 describe("useMarkdownDocumentSession", () => {
   beforeEach(() => {
     mockOpenFileDialog.mockReset();
+    (saveFileDialog as jest.Mock).mockReset();
     mockConfirmDirtyDocumentTransition.mockReset();
   });
 
@@ -206,6 +207,133 @@ describe("useMarkdownDocumentSession", () => {
     expect(await save).toBe(false);
     expect(saveAs).not.toHaveBeenCalled();
     await view.unmount();
+  });
+
+  async function openSession() {
+    let session!: MarkdownDocumentSession;
+    await render(<SessionApiHarness onSession={(value) => { session = value; }} />);
+    session.openSelectedFile("/tmp/original.md");
+    session.setIsDirty(true);
+    return session;
+  }
+
+  it.each(["new", "open", "close", "quit"] as const)("preserves unsaved work when %s is canceled", async (transition) => {
+    const session = await openSession();
+    const save = jest.fn(async () => {});
+    session.documentCommandsRef.current = { save } as unknown as MarkdownDocumentCommands;
+    mockConfirmDirtyDocumentTransition.mockResolvedValue("cancel");
+    mockOpenFileDialog.mockResolvedValue(["/tmp/next.md"]);
+    if (transition === "new") await session.newMarkdownDocument();
+    else if (transition === "open") await session.openMarkdownDialog();
+    else expect(await session.prepareCurrentDocumentForClose({ autosaveEnabled: false, reason: transition })).toBe(false);
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it.each(["new", "open", "close", "quit"] as const)("blocks %s when saving fails and allows retry", async (transition) => {
+    const session = await openSession();
+    const save = jest.fn().mockRejectedValueOnce(new Error("Disk full")).mockResolvedValue(undefined);
+    session.documentCommandsRef.current = { save } as unknown as MarkdownDocumentCommands;
+    mockConfirmDirtyDocumentTransition.mockResolvedValue("save");
+    mockOpenFileDialog.mockResolvedValue(["/tmp/next.md"]);
+    const run = () => transition === "new" ? session.newMarkdownDocument()
+      : transition === "open" ? session.openMarkdownDialog()
+      : session.prepareCurrentDocumentForClose({ autosaveEnabled: true, reason: transition });
+    await run();
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    expect(session.sessionState$.lastError.peek()).toBe("Disk full");
+    const retryResult = await run();
+    if (transition === "close" || transition === "quit") expect(retryResult).toBe(true);
+    expect(save).toHaveBeenCalledTimes(2);
+    if (transition === "open") expect(session.sessionState$.filename.peek()).toBe("/tmp/next.md");
+    if (transition === "new") expect(session.sessionState$.documentSource.peek()).toBe("untitled");
+  });
+
+  it.each(["changed", "missing"] as const)("never silently autosaves over a %s conflict on close", async (conflict) => {
+    const session = await openSession();
+    session.setConflict(conflict);
+    const save = jest.fn(async () => {});
+    session.documentCommandsRef.current = { save } as unknown as MarkdownDocumentCommands;
+    mockConfirmDirtyDocumentTransition.mockResolvedValue("cancel");
+    expect(await session.prepareCurrentDocumentForClose({ autosaveEnabled: true })).toBe(false);
+    expect(save).not.toHaveBeenCalled();
+    expect(session.sessionState$.conflict.peek()).toBe(conflict);
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+  });
+
+  it("retains the original document after Save As fails, then completes a successful retry", async () => {
+    const session = await openSession();
+    const saveAs = jest.fn().mockRejectedValueOnce(new Error("Permission denied")).mockResolvedValue(undefined);
+    session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
+    (saveFileDialog as jest.Mock).mockResolvedValue("/tmp/copy.md");
+    expect(await session.saveCurrentDocumentAs()).toBe(false);
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    expect(await session.saveCurrentDocumentAs()).toBe(true);
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/copy.md");
+    expect(session.sessionState$.isDirty.peek()).toBe(false);
+    expect(session.sessionState$.lastError.peek()).toBeNull();
+  });
+
+  it("keeps a canceled untitled save open and saves it through Save As on retry", async () => {
+    const session = await openSession();
+    session.openUntitledDocument();
+    session.setIsDirty(true);
+    const save = jest.fn(), saveAs = jest.fn(async () => {});
+    session.documentCommandsRef.current = { save, saveAs } as unknown as MarkdownDocumentCommands;
+    (saveFileDialog as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce("/tmp/new.md");
+    expect(await session.saveCurrentDocument()).toBe(false);
+    expect(session.sessionState$.documentSource.peek()).toBe("untitled");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    expect(await session.saveCurrentDocument()).toBe(true);
+    expect(saveAs).toHaveBeenCalledWith("/tmp/new.md");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("prevents duplicate open dialogs while one is pending and recovers after a dialog error", async () => {
+    const session = await openSession();
+    let rejectDialog!: (error: Error) => void;
+    mockOpenFileDialog.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDialog = reject; }));
+    const pending = session.openMarkdownDialog();
+    await session.openMarkdownDialog();
+    expect(mockOpenFileDialog).toHaveBeenCalledTimes(1);
+    rejectDialog(new Error("Dialog unavailable"));
+    await pending;
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
+    mockOpenFileDialog.mockResolvedValue(["/tmp/retry.md"]);
+    mockConfirmDirtyDocumentTransition.mockResolvedValue("discard");
+    await session.openMarkdownDialog();
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/retry.md");
+  });
+
+  it("keeps conflict state after overwrite failure and uses disk only for an existing file", async () => {
+    const session = await openSession();
+    session.setConflict("changed");
+    const reload = jest.fn(), overwrite = jest.fn().mockRejectedValueOnce(new Error("Read only"));
+    session.documentCommandsRef.current = { reload, overwrite } as unknown as MarkdownDocumentCommands;
+    await session.overwriteWithLocal();
+    expect(session.sessionState$.lastError.peek()).toBe("Read only");
+    expect(session.sessionState$.conflict.peek()).toBe("changed");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    session.useDiskVersion();
+    expect(reload).toHaveBeenCalledTimes(1);
+    session.setConflict("missing");
+    session.useDiskVersion();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an editable untitled fallback after a file fails to load and preserves the error until recovery", async () => {
+    const session = await openSession();
+    session.handleDocumentLoadError(new Error("File disappeared"));
+    expect(session.sessionState$.documentSource.peek()).toBe("untitled");
+    expect(session.sessionState$.lastError.peek()).toBe("File disappeared");
+    session.handleDocumentLoaded();
+    expect(session.sessionState$.lastError.peek()).toBe("File disappeared");
+    session.openSelectedFile("/tmp/recovered.md");
+    session.handleDocumentLoaded();
+    expect(session.sessionState$.lastError.peek()).toBeNull();
   });
 
 });

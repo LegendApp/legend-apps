@@ -10,6 +10,7 @@ const blockCount = process.env.MARKDOWN_E2E_BLOCK_COUNT ?? "2000";
 const session = process.env.AGENT_DEVICE_SESSION ?? "markdown-e2e";
 const artifactsDir = path.join(rootDir, ".artifacts", "markdown-e2e");
 const stepsFileByScenario: Record<string, string> = {
+  "editor-large-document": "markdown-editor-large-document.steps.json",
   "editor-code-block-smoke": "markdown-editor-code-block-smoke.steps.json",
   "editor-edit-navigation-smoke": "markdown-editor-edit-navigation-smoke.steps.json",
   "editor-navigation-smoke": "markdown-editor-navigation-smoke.steps.json",
@@ -20,7 +21,8 @@ const stepsFileByScenario: Record<string, string> = {
   "far-down-structural-edits": "markdown-far-down.steps.json",
   "hydrate-while-editing": "markdown-far-down.steps.json",
 };
-const stepsFileName = stepsFileByScenario[scenario] ?? "markdown-far-down.steps.json";
+const stepsFileName = stepsFileByScenario[scenario];
+if (!stepsFileName) throw new Error(`Unknown Markdown E2E scenario: ${scenario}`);
 const stepsFile = path.join(rootDir, "e2e", "agent-device", stepsFileName);
 const skipBuild = process.env.MARKDOWN_E2E_SKIP_BUILD === "1";
 

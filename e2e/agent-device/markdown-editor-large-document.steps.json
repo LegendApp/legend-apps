@@ -1,0 +1,175 @@
+[
+  {
+    "command": "open",
+    "input": {
+      "app": "so.legend.markdown.macos"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "LARGE DOCUMENT START",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Jump to document end\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "LARGE DOCUMENT END",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "type",
+    "input": {
+      "text": "E2E-EDIT ",
+      "delayMs": 10
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "E2E-EDIT LARGE DOCUMENT END",
+      "timeoutMs": 60000
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"E2E-EDIT LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Undo test edit\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Redo test edit\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"E2E-EDIT LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Jump to document start\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"LARGE DOCUMENT START\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Jump to document end\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"E2E-EDIT LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Jump to document start\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"LARGE DOCUMENT START\""
+    }
+  },
+  {
+    "command": "press",
+    "input": {
+      "target": {
+        "kind": "selector",
+        "selector": "label=\"Jump to document end\""
+      },
+      "settle": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "label=\"E2E-EDIT LARGE DOCUMENT END\""
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/markdown-e2e/editor-large-document.png"
+    }
+  },
+  {
+    "command": "close",
+    "input": {}
+  }
+]
