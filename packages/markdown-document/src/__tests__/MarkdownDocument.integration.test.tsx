@@ -3652,6 +3652,32 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it.each(["up", "down"] as const)("mounts an offscreen boundary before focusing %s", async (direction) => {
+    const { __legendListTestHooks: hooks } = jest.requireMock("@legendapp/list/react-native");
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"),
+      block("d1:b1", 1, "Second"),
+      block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+    await pressRenderedMarkdown(renderer, "Second");
+    hooks.viewport.override = { start: 1, end: 1, elementAtIndex: () => undefined };
+    hooks.scrollToIndex.mockClear();
+    hooks.scrollToIndex.mockImplementationOnce(async () => { hooks.viewport.override = undefined; });
+    try {
+      await (direction === "up" ? focusFirstBlock(commandsRef) : focusLastBlock(commandsRef));
+      expect(hooks.scrollToIndex).toHaveBeenCalledWith({
+        animated: false,
+        index: direction === "up" ? 0 : 2,
+        viewPosition: direction === "up" ? 0 : 1,
+      });
+      expect(editorInput(renderer).props.defaultValue).toBe(direction === "up" ? "First" : "Third");
+    } finally {
+      hooks.viewport.override = undefined;
+      hooks.scrollToIndex.mockReset();
+    }
+  });
+
   it("does not extend block selection when the text selection is not at a boundary", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
