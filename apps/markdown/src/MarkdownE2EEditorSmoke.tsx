@@ -7,12 +7,13 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-apps/markdown-document";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 
 export type MarkdownE2EEditorSmokeStatus = "dirty" | "passed" | "ready" | "selected";
 export type MarkdownE2EEditorSmokeVariant =
+  | "largeDocument"
   | "codeBlock"
   | "editNavigation"
   | "navigation"
@@ -41,6 +42,7 @@ const themeReflowSmokeMarkdown = [
 ].join("\n");
 
 const smokeMarkdownByVariant = {
+  largeDocument: "", // Generated only for the large-document test launch.
   codeBlock: codeBlockSmokeMarkdown,
   editNavigation: editNavigationSmokeMarkdown,
   navigation: navigationSmokeMarkdown,
@@ -51,6 +53,12 @@ const smokeMarkdownByVariant = {
 } satisfies Record<MarkdownE2EEditorSmokeVariant, string>;
 
 const statusTextByVariant = {
+  largeDocument: {
+    dirty: "E2E large document dirty",
+    passed: "E2E large document passed",
+    ready: "E2E large document ready",
+    selected: "E2E large document selected",
+  },
   codeBlock: {
     dirty: "E2E code block smoke dirty",
     passed: "E2E code block smoke passed",
@@ -135,7 +143,18 @@ export function MarkdownE2EEditorSmoke({
   const adapter = useMemo<MarkdownDocumentAdapter>(() => ({
     ...nativeMarkdownDocumentAdapter,
     load(filename) {
-      return nativeMarkdownDocumentAdapter.loadMarkdown(filename, smokeMarkdownByVariant[variant]);
+      const markdown = variant === "largeDocument"
+        ? [
+          "LARGE DOCUMENT START",
+          ...Array.from({ length: 16000 }, (_, index) => {
+            if (index % 20 === 0) return `## Section ${index}`;
+            if (index % 20 === 1) return "```ts\nconst value = 42;\n```";
+            return `Paragraph ${index}: ${"Variable height Markdown text with **bold** and Unicode café 🌍. ".repeat(12 + index % 4)}`;
+          }),
+          "LARGE DOCUMENT END",
+        ].join("\n\n")
+        : smokeMarkdownByVariant[variant];
+      return nativeMarkdownDocumentAdapter.loadMarkdown(filename, markdown);
     },
   }), [variant]);
   const handleDirtyChange = useCallback((isDirty: boolean) => {
@@ -257,6 +276,12 @@ export function MarkdownE2EEditorSmoke({
       <Text style={styles.status}>
         {statusText}
       </Text>
+      {variant === "largeDocument" && <View>
+        <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.focusFirstBlock()}><Text>Jump to document start</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.focusLastBlock()}><Text>Jump to document end</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.undo()}><Text>Undo test edit</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.redo()}><Text>Redo test edit</Text></Pressable>
+      </View>}
       <View style={styles.documentFrame}>
         <MarkdownDocument
           adapter={adapter}
@@ -268,6 +293,7 @@ export function MarkdownE2EEditorSmoke({
             variant === "navigation"}
           commandsRef={commandsRef}
           filename={smokeFilename}
+          savePolicy={variant === "largeDocument" ? { autosave: false } : undefined}
           markdownStyle={markdownStyle}
           onDirtyChange={handleDirtyChange}
           onSelectionAnchorChange={handleSelectionAnchorChange}

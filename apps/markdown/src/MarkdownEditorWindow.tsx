@@ -58,6 +58,7 @@ type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
 function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): MarkdownE2EEditorSmokeVariant | null {
+  if (scenario === "editor-large-document") return "largeDocument";
   if (scenario === "editor-selection-smoke") {
     return "selection";
   }

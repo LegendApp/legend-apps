@@ -13,6 +13,7 @@ type MarkdownE2ERunnerProps = {
 };
 
 export type MarkdownEditorE2EScenarioName =
+  | "editor-large-document"
   | "editor-code-block-smoke"
   | "editor-edit-navigation-smoke"
   | "editor-navigation-smoke"
@@ -29,7 +30,8 @@ export function isMarkdownDocumentE2EScenario(
 }
 
 function isMarkdownE2ELaunchScenario(scenario: string): scenario is MarkdownE2ELaunchScenario {
-  return scenario === "editor-ui-smoke" ||
+  return scenario === "editor-large-document" ||
+    scenario === "editor-ui-smoke" ||
     scenario === "editor-selection-smoke" ||
     scenario === "editor-soft-wrap-selection" ||
     scenario === "editor-code-block-smoke" ||
