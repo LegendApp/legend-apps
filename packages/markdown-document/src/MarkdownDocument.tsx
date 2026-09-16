@@ -2381,6 +2381,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const targetBlockIndex = direction === "up" ? 0 : blockCount - 1;
           const targetBlock = await loadBlockAtIndex(targetBlockId, targetBlockIndex);
           if (targetBlock) {
+            await prepareBlockIndexForKeyboardFocus(targetBlockIndex, direction);
             const targetSelection = Math.min(activeInputSelectionRef.current.start, targetBlock.markdown.length);
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(null);
@@ -2392,7 +2393,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         runFocus().catch(reportAsyncError);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, getBlockCount, getBlockIdAtIndex, loadBlockAtIndex, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
+      [clearTextSelectionAnchor, commitActiveBlock, getBlockCount, getBlockIdAtIndex, loadBlockAtIndex, prepareBlockIndexForKeyboardFocus, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
     );
 
     const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
