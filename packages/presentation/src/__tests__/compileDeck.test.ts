@@ -270,6 +270,16 @@ describe("compileDeck", () => {
     expect(result.code).toContain("__LEGEND_SLIDES_PROPS__");
   });
 
+  test("compiles Markdown shared attributes without a transition setting", async () => {
+    const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/shared.mdx");
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code).toContain("SharedElement");
+    expect(result.code).toContain('id: "title"');
+    expect(result.code).not.toContain("shared = title");
+  });
+
   test("compiles focus frontmatter and a live shared component from a local file", async () => {
     const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/focus.mdx");
     const result = await compileDeck(deckPath);

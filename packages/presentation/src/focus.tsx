@@ -11,6 +11,7 @@ export type FocusSurface = {
   entries: Set<Entry>;
   width: number;
   height: number;
+  scale: number;
 };
 export type FocusMeasurements = { regions: Map<string, FocusRect>; elements: Map<string, FocusRect> };
 export type FocusMotion = {
@@ -24,7 +25,7 @@ const InsideSharedElement = createContext(false);
 
 export function createFocusSurface(): FocusSurface {
   const surface: FocusSurface = {
-    root: null, entries: new Set(), width: 0, height: 0,
+    root: null, entries: new Set(), width: 0, height: 0, scale: 1,
     setRoot(root) { surface.root = root; },
     setLayout({ width, height }) { surface.width = width; surface.height = height; },
   };
@@ -80,9 +81,10 @@ export function focusCameraStyle(motion?: FocusMotion) {
 }
 
 /** Root stays untransformed so measurement never samples the moving camera. */
-export function FocusStage({ children }: { children: ReactNode }) {
+export function FocusStage({ children, scale = 1 }: { children: ReactNode; scale?: number }) {
   const context = useContext(FocusSurfaceContext);
   const surface = context?.surface;
+  useLayoutEffect(() => { if (surface) surface.scale = scale; }, [surface, scale]);
   const setRoot = useCallback((view: View | null) => { surface?.setRoot(view); }, [surface]);
   return (
     <View collapsable={false} ref={setRoot}

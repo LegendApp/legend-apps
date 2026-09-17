@@ -80,6 +80,46 @@ transition: slide
 
 Transitions are `none`, `fade`, `slide`, or a `focus` configuration. The deck default is `none`, and slide frontmatter may override it.
 
+## Shared elements
+
+Append `{shared=title}` to a Markdown heading or paragraph, using the same ID
+on another slide. No component or transition setting is required:
+
+```mdx
+# Our product {shared=title}
+
+This content fades out.
+
+---
+
+## Our product {shared=title}
+
+This new content fades in.
+```
+
+The attribute marks the whole heading or paragraph, including formatted text.
+Quoted IDs also work: `{shared="product-title"}`. IDs may contain letters,
+numbers, underscores, dots, and hyphens. Put the attribute at the end of the
+block; inline spans and list-item attributes are not supported. Code examples
+and escaped attributes remain literal text.
+
+Matching elements move and resize between their layouts; identical layouts stay
+in place. This works forward, backward, and when jumping between slides with
+`none`, `fade`, `slide`, or `focus`. A slide move or focus zoom is cancelled on
+matching elements so they follow their own path. Both live copies crossfade,
+including any changed text or styling. Unmatched content follows the configured
+slide transition; when matching elements opt a `none` transition into animation,
+the rest of the slide fades. The default shared duration is 320 ms; focus uses
+its configured duration, with 320 ms for shared motion when duration is zero.
+Slides without matching elements retain their configured transition.
+
+Use `<SharedElement id="title">…</SharedElement>` for custom component content.
+IDs must be unique within a slide. See the focus section below for nesting,
+measurement, and clipping limitations.
+
+Try `apps/slides/examples/shared.mdx` for Markdown-only shared titles with several
+slide transitions.
+
 ## Focus transitions
 
 Mark a region on an overview slide and give matching live elements the same IDs
@@ -123,8 +163,9 @@ so a region with a different aspect ratio may be cropped.
 
 The configuration belongs to the destination slide. Going back to its immediate
 predecessor reverses that same camera move. Duration is in milliseconds (default
-850); zero cuts immediately. Jumping across slides or a missing/unmeasurable
-focus region uses a fade. A new navigation cancels the current move and starts
+850); zero cuts immediately unless shared elements opt into motion. Jumping across
+slides or a missing/unmeasurable focus region uses a fade, while matching shared
+elements still move between their layouts. A new navigation cancels the current move and starts
 from the new source slide's layout; it does not preserve intermediate velocity.
 Presenter previews always show the final layout.
 
