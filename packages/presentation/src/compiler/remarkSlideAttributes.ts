@@ -29,6 +29,12 @@ function stepNumber(value: string | true, name: string) {
   return number;
 }
 function apply(node: Node, values: AttributeValues) {
+  if (values.class !== undefined) {
+    if (typeof values.class !== "string" || !values.class.trim()) throw new Error("class requires a non-empty quoted class list.");
+    if (node.type !== "heading" && node.type !== "paragraph") throw new Error("class attributes apply to headings and paragraphs.");
+    const data = node.data as { hProperties?: Record<string, unknown> } | undefined;
+    node = { ...node, data: { ...data, hProperties: { ...data?.hProperties, className: values.class } } };
+  }
   if (values.steps !== undefined) {
     if (values.steps !== true || node.type !== "list") throw new Error("Use {steps} on a line before a Markdown list.");
     if (values.step !== undefined || values.until !== undefined) throw new Error("steps cannot be combined with step or until.");

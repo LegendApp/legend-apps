@@ -598,3 +598,15 @@ Attributes compose: `# Title {effect=ripple shared=title step=1}` reveals an
 effected shared title. Effects use their existing default settings and static
 content capture; unsupported captures fall back to ordinary text. Use the
 `Effect` component for custom shaders, parameters, or activation logic.
+
+### Style text
+
+`Text {class="text-center text-blue-400 text-5xl"}` applies Uniwind classes to
+the native text block, after its default and theme styles. Bold and italic spans
+inherit its color. Classes work on headings and paragraphs, including inside
+shared, reveal, focus, and effect wrappers. Draft classes are compiled during
+preview; saving is not required.
+
+```md
+## The engine {shared=title step=1 class="text-center text-blue-400"}
+```

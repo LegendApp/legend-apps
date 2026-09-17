@@ -81,3 +81,11 @@ test("effect attributes select existing presets inside shared and step wrappers"
   await expect(parse("Text {effect=unknown}")).rejects.toThrow("effect must be");
   await expect(parse("Text {effect}")).rejects.toThrow("effect must be");
 });
+
+test("class attributes style the text node inside every animation wrapper", async () => {
+  const tree = await parse('## Title {class="text-center text-blue-400" shared=title step=1 effect=liquid focus=title}');
+  const text = tree.children[0].children[0].children[0].children[0].children[0];
+  expect(text.type).toBe("heading");
+  expect(text.data.hProperties.className).toBe("text-center text-blue-400");
+  for (const attr of ['class', 'class=""']) await expect(parse(`Text {${attr}}`)).rejects.toThrow("class requires");
+});

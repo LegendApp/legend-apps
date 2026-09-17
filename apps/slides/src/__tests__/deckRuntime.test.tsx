@@ -19,6 +19,8 @@ function compiledRenderer() {
     plugins: [[require.resolve("babel-plugin-react-compiler"), { target: "19" }]],
   });
   const nativeLeaves = {
+    uniwind: { useResolveClassNames: (value) => value === "text-center text-blue-400 text-5xl"
+      ? { textAlign: "center", color: "#60a5fa", fontSize: 48 } : {} },
     // Keep tracking in the same ESM instance as slidesStore in this CJS harness.
     "@legendapp/state/react": stateReact,
     "@legend-apps/scaled-view": { ScaledView: "scaled-view" },
@@ -118,6 +120,34 @@ test("fixed previews stay idle while the audience advances slides and steps", as
     }
     expect(renders).toBe(0);
     expect(tree.root.findByType("runtime").props.value).toMatchObject({ slideIndex: 1, stepIndex: 2, isActive: false, isPreview: true });
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test("Markdown classes override defaults and theme without recoloring nested emphasis", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Document({ components: { Deck, Slide, h1: Heading, strong: Strong } }) {
+    return <Deck configJson='{"theme":{"color":"#ff0000","fontFamily":"Menlo"}}'>
+      <Slide metadataJson="{}" notes=""><Heading className="text-center text-blue-400 text-5xl">
+        Title <Strong>bold</Strong>
+      </Heading></Slide>
+    </Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer targetIndex={0} />); });
+    const texts = tree.root.findAllByType("text");
+    const heading = Object.assign({}, ...texts[0].props.style);
+    expect(heading).toMatchObject({ textAlign: "center", color: "#60a5fa", fontSize: 48, fontFamily: "Menlo" });
+    const bold = Object.assign({}, ...texts[1].props.style);
+    expect(bold.fontWeight).toBe("700");
+    expect(bold.color).toBeUndefined();
   } finally {
     if (tree) await act(() => tree.unmount());
     setSlidesState(initial);

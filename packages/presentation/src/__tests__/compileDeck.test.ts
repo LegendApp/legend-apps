@@ -270,6 +270,16 @@ describe("compileDeck", () => {
     expect(result.code).toContain("__LEGEND_SLIDES_PROPS__");
   });
 
+  test("includes classes from Markdown attributes in draft stylesheets", async () => {
+    const deckPath = createDeck({ "deck.mdx": "# Original" });
+    const result = await compileDeck(deckPath, { source: '# Styled {class="text-center text-fuchsia-500" step=1}' });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code).toContain('className: "text-center text-fuchsia-500"');
+    expect(result.uniwindCode).toContain("text-fuchsia-500");
+    expect(fs.readFileSync(deckPath, "utf8")).toBe("# Original");
+  });
+
   test("compiles Markdown shared attributes without a transition setting", async () => {
     const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/shared.mdx");
     const result = await compileDeck(deckPath);
