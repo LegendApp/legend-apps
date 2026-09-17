@@ -1,5 +1,5 @@
 // @ts-nocheck Native layout is supplied explicitly by the test.
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { observable } from "@legendapp/state";
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
@@ -33,6 +33,7 @@ test("a template background persists across prepared slides and fills the viewpo
       </PresentationProvider>)}
     </BackgroundHost>;
   }
+  const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
   try {
     await act(() => { tree = create(content(0)); });
@@ -53,7 +54,9 @@ test("a template background persists across prepared slides and fills the viewpo
     expect(tree.root.findAllByType("override")).toHaveLength(0);
     await act(() => tree.update(content(0)));
     expect(tree.root.findAllByType("aurora")).toHaveLength(1);
+    expect(log.mock.calls.some((args) => args.join(" ").includes("Cannot update a component"))).toBe(false);
   } finally {
     if (tree) await act(() => tree.unmount());
+    log.mockRestore();
   }
 });

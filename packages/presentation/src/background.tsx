@@ -1,8 +1,9 @@
 import { createContext, useContext, useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
 import { PresentationObservableProvider, usePresentation$ } from "./runtime";
+import { useRuntimeProjection } from "./useRuntimeProjection";
 import type { PresentationRuntime } from "./types";
 
 type Entry = { children: ReactNode; runtime$: Observable<PresentationRuntime>; priority: number };
@@ -62,7 +63,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
 }
 function SelectedBackground({ entry, isPreview }: { entry: Entry; isPreview: boolean }) {
   const sourceRuntime$ = entry.runtime$;
-  const runtime$ = useObservable(() => ({ ...sourceRuntime$.get(), isActive: !isPreview, isPreview, isPreparing: false }), [sourceRuntime$, isPreview]);
+  const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), isActive: !isPreview, isPreview, isPreparing: false }), [sourceRuntime$, isPreview]);
   return <PresentationObservableProvider value={runtime$}>{entry.children}</PresentationObservableProvider>;
 }
 

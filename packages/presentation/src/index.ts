@@ -1,3 +1,4 @@
+export { useRuntimeProjection } from "./useRuntimeProjection";
 export { Background, BackgroundHost, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
 export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
