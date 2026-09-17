@@ -1,5 +1,6 @@
 // @ts-nocheck Controlled native clocks and geometry; native drawing is mocked.
 import { expect, spyOn, test } from "bun:test";
+import { observable } from "@legendapp/state";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import { readFileSync } from "node:fs";
@@ -49,9 +50,13 @@ test("freeze clock resumes without counting paused time and resets on slide re-e
     now += ms;
     await act(() => { const pending = [...frames.values()]; frames.clear(); pending.forEach((fn) => fn(now)); });
   };
-  const content = (paused, epoch = 0, preview = false) => <PresentationProvider value={{ isActive: !preview, isPreview: preview, startedAt: epoch }}>
+  const runtime$ = observable({});
+  const content = (paused, epoch = 0, preview = false) => {
+    runtime$.set({ isActive: !preview, isPreview: preview, startedAt: epoch });
+    return <PresentationProvider value={runtime$}>
     <FreezeFrame paused={paused}>{(seconds) => <clock seconds={seconds} />}</FreezeFrame>
   </PresentationProvider>;
+  };
   let tree;
   try {
     await act(() => { tree = create(content(false)); });

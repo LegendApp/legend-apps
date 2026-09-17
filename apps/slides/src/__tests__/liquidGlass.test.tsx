@@ -1,5 +1,6 @@
 // @ts-nocheck Native leaves are replaced; the transition runs with controlled frames.
 import { expect, spyOn, test } from "bun:test";
+import { observable } from "@legendapp/state";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import { readFileSync } from "node:fs";
@@ -49,9 +50,13 @@ test("glass reverses from its current blur and keeps the overlay outside the fil
     now += ms;
     await act(() => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((fn) => fn(now)); });
   };
-  const content = (stepIndex, isPreview = false) => <PresentationProvider value={{ stepIndex, isActive: !isPreview, isPreview }}>
+  const runtime$ = observable({});
+  const content = (stepIndex, isPreview = false) => {
+    runtime$.set({ stepIndex, isActive: !isPreview, isPreview });
+    return <PresentationProvider value={runtime$}>
     <LiquidGlass active={stepIndex >= 1} duration={700} overlay={<overlay /> }><chart /></LiquidGlass>
   </PresentationProvider>;
+  };
   let tree;
   try {
     await act(() => { tree = create(content(0)); });
