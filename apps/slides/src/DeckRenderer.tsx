@@ -1,3 +1,4 @@
+import { useResolveClassNames } from "uniwind";
 import { useObservable, useValue } from "@legendapp/state/react";
 import {
   Background,
@@ -124,17 +125,19 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   );
 }
 
-function MarkdownText({ children, style }: { children?: ReactNode; style?: StyleProp<TextStyle> }) {
+type MarkdownTextProps = { children?: ReactNode; style?: StyleProp<TextStyle>; className?: string; inline?: boolean };
+function MarkdownText({ children, style, className = "", inline = false }: MarkdownTextProps) {
+  const classStyle = useResolveClassNames(className);
   const theme = useValue(slidesState$.config.theme);
   const themeStyle = {
-    ...(theme?.color ? { color: theme.color } : {}),
-    ...(theme?.fontFamily ? { fontFamily: theme.fontFamily } : {}),
+    ...(!inline && theme?.color ? { color: theme.color } : {}),
+    ...(!inline && theme?.fontFamily ? { fontFamily: theme.fontFamily } : {}),
   };
-  return <Text style={[style, themeStyle]}>{children}</Text>;
+  return <Text style={[style, themeStyle, classStyle]}>{children}</Text>;
 }
 
 function MarkdownLink({ children, href }: { children?: ReactNode; href?: string }) {
-  return <MarkdownText style={styles.link}><Text onPress={() => href && void Linking.openURL(href)}>{children}</Text></MarkdownText>;
+  return <MarkdownText inline style={styles.link}><Text onPress={() => href && void Linking.openURL(href)}>{children}</Text></MarkdownText>;
 }
 
 function renderMdxChildren(children: ReactNode) {
@@ -153,7 +156,7 @@ function NativePressable({ children, ...props }: PressableProps) {
 }
 
 function MarkdownCode({ children }: { children?: ReactNode }) {
-  return <MarkdownText style={styles.code}>{children}</MarkdownText>;
+  return <MarkdownText inline style={styles.code}>{children}</MarkdownText>;
 }
 
 function MarkdownPre({ children }: { children?: ReactNode }) {
@@ -184,12 +187,12 @@ const markdownComponents = {
   Pressable: NativePressable,
   TypeGPU,
   Webview,
-  h1: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h1}>{children}</MarkdownText>,
-  h2: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h2}>{children}</MarkdownText>,
-  h3: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.h3}>{children}</MarkdownText>,
-  p: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.paragraph}>{children}</MarkdownText>,
-  strong: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.strong}>{children}</MarkdownText>,
-  em: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.emphasis}>{children}</MarkdownText>,
+  h1: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h1} />,
+  h2: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h2} />,
+  h3: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h3} />,
+  p: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.paragraph} />,
+  strong: ({ children }: { children?: ReactNode }) => <MarkdownText inline style={styles.strong}>{children}</MarkdownText>,
+  em: ({ children }: { children?: ReactNode }) => <MarkdownText inline style={styles.emphasis}>{children}</MarkdownText>,
   code: MarkdownCode,
   pre: MarkdownPre,
   blockquote: ({ children }: { children?: ReactNode }) => <NativeView style={styles.blockquote}>{children}</NativeView>,
