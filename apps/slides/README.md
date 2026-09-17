@@ -569,3 +569,23 @@ Put `{steps}` on its own line before an ordered or unordered list:
 Each top-level item uses the next step in document order. Nested items stay with
 their parent. The directive applies only to the following list and cannot be
 combined with `step` or `until`.
+
+### Mark a focus target
+
+`## Details {focus=details}` marks the heading as a focus region. A following
+slide can zoom toward it using existing frontmatter:
+
+```mdx
+## Details {focus=details shared=title}
+
+---
+transition:
+  type: focus
+  from: details
+---
+
+# Details {shared=title}
+```
+
+The attribute marks that block's bounds, not the entire section below it. Use a
+`FocusRegion` component when a region must enclose several separate blocks.
