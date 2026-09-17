@@ -1,5 +1,5 @@
 export type AttributeValues = Record<string, string | true>;
-const supported = new Set(["shared", "step", "until", "steps", "focus", "effect", "class"]);
+export const blockAttributes = new Set(["shared", "step", "until", "steps", "focus", "effect", "class"]);
 
 export function parseAttributes(source: string): AttributeValues {
   const values: AttributeValues = {};
@@ -8,7 +8,7 @@ export function parseAttributes(source: string): AttributeValues {
     const match = /^([a-z][\w-]*)(?:\s*=\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[\w.-]+))?(?:\s+|$)/.exec(rest);
     if (!match) throw new Error(`Invalid slide attributes: ${source}`);
     const [, key, raw] = match;
-    if (!supported.has(key)) throw new Error(`Unknown slide attribute "${key}".`);
+    if (!blockAttributes.has(key)) throw new Error(`Unknown slide attribute "${key}".`);
     if (key in values) throw new Error(`Duplicate slide attribute "${key}".`);
     values[key] = raw === undefined ? true : raw.startsWith('"') ? JSON.parse(raw)
       : raw.startsWith("'") ? raw.slice(1, -1).replace(/\\(['\\])/g, "$1") : raw;
@@ -35,7 +35,7 @@ function tokenize(effects: Effects, ok: State, nok: State): State {
     if (code === null || code < 0) return nok(code);
     if (!quote && code === 125) {
       const first = /^([a-z][\w-]*)([\s\S]*)$/.exec(source.trim());
-      if (!first || !supported.has(first[1]) ||
+      if (!first || !blockAttributes.has(first[1]) ||
           (first[2].trim() && !/^\s*=(?!=|>)/.test(first[2]) && first[1] !== "steps")) return nok(code);
       effects.consume(code);
       effects.exit("slideAttributes");

@@ -28,3 +28,6 @@ export type {
   TypeGPUSceneInstance,
   TypeGPUSceneSize,
 } from "./typegpu";
+
+export { columnWeights, layoutOverflows } from "./layout";
+export type { LayoutProps, LayoutKind } from "./layout";

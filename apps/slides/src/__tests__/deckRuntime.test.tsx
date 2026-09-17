@@ -28,6 +28,7 @@ function compiledRenderer() {
       View: "view", Text: "text", Image: "image", Pressable: "pressable", Linking: {},
       StyleSheet: { create: (styles) => styles, absoluteFillObject: {} },
     },
+    "./Layout": { Layout: "layout", LayoutStage: "layout-stage" },
     "./CodeBlock": { CodeBlock: "code" },
     "./LiquidGlass": { LiquidGlass: "liquid-glass" },
     "./Effect": { Effect: "effect" },
