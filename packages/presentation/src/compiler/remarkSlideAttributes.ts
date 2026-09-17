@@ -34,6 +34,12 @@ function apply(node: Node, values: AttributeValues) {
     if (values.step !== undefined || values.until !== undefined) throw new Error("steps cannot be combined with step or until.");
     node = wrap("Steps", {}, node);
   }
+  if (values.effect !== undefined) {
+    if (typeof values.effect !== "string" || !["liquid", "ripple", "glitch", "pixelate"].includes(values.effect)) {
+      throw new Error("effect must be liquid, ripple, glitch, or pixelate.");
+    }
+    node = wrap("Effect", { preset: values.effect }, node);
+  }
   if (values.shared !== undefined) node = wrap("SharedElement", { id: identifier(values.shared, "shared") }, node);
   if (values.focus !== undefined) node = wrap("FocusRegion", { id: identifier(values.focus, "focus") }, node);
   if (values.step !== undefined || values.until !== undefined) {
