@@ -1,5 +1,6 @@
 // @ts-nocheck Native leaves are mocked; captions must respond without advancing time.
 import { expect, spyOn, test } from "bun:test";
+import { observable } from "@legendapp/state";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import { PresentationProvider } from "@legend-apps/presentation";
@@ -10,11 +11,13 @@ test("glass acknowledges the trigger immediately and resets on backward navigati
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const log = spyOn(console, "error").mockImplementation(() => {});
   const epoch = performance.now();
-  const render = (stepIndex, isPreview = false) => (
-    <PresentationProvider value={{ isActive: !isPreview, isPreview, stepIndex, stepEpochs: { 1: epoch } }}>
+  const runtime$ = observable({});
+  const render = (stepIndex, isPreview = false) => {
+    runtime$.set({ isActive: !isPreview, isPreview, stepIndex, stepEpochs: { 1: epoch } });
+    return <PresentationProvider value={runtime$}>
       <GlassCaption />
-    </PresentationProvider>
-  );
+    </PresentationProvider>;
+  };
   let renderer;
   try {
     await act(() => { renderer = create(render(0)); });

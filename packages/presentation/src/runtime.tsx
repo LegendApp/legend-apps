@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import type { PresentationRuntime } from "./types";
@@ -19,14 +19,9 @@ const defaultRuntime: PresentationRuntime = {
 
 const PresentationContext = createContext(observable(defaultRuntime));
 
-export function PresentationProvider({ children, value }: { children: ReactNode; value: PresentationRuntime }) {
-  // A snapshot is immutable input, not a second mutable owner synchronized during render.
-  // Live callers provide their canonical observable through PresentationObservableProvider.
-  const runtime$ = useMemo(() => observable(value), [value]);
-  return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
-}
-
-export const PresentationObservableProvider = PresentationContext.Provider;
+// Both names share the caller-owned observable without wrapping or copying it.
+export const PresentationProvider = PresentationContext.Provider;
+export const PresentationObservableProvider = PresentationProvider;
 
 export function usePresentation$() {
   return useContext(PresentationContext);

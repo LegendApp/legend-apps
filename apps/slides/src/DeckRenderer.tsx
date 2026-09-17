@@ -1,5 +1,5 @@
 import { useResolveClassNames } from "uniwind";
-import { observable } from "@legendapp/state";
+import { internal, observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import {
   Background,
@@ -110,6 +110,8 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       direction: isPreview ? undefined : slidesState$.direction.get(),
     };
   }), [isPreview, isPreparing, targetIndex, targetStep]);
+  // Match useObservable lifecycle cleanup when an explicit view target replaces the computed.
+  useEffect(() => () => internal.deactivateNode(internal.getNode(runtime$)), [runtime$]);
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;

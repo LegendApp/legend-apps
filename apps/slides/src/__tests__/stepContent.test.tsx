@@ -1,5 +1,6 @@
 // @ts-nocheck Native views are mocked.
 import { expect, test } from "bun:test";
+import { observable } from "@legendapp/state";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import { transitions } from "./nativeMock";
@@ -8,11 +9,13 @@ const { Step, Steps, resolveSteps, stepStyle } = await import("../steps");
 
 test("step interpolation retains its starting style across unrelated renders and reverse navigation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  const content = (stepIndex, text, isPreview = false) => (
-    <PresentationProvider value={{ stepIndex, isPreview, isActive: true }}>
+  const runtime$ = observable({});
+  const content = (stepIndex, text, isPreview = false) => {
+    runtime$.set({ stepIndex, isPreview, isActive: true });
+    return <PresentationProvider value={runtime$}>
       <Step at={1}>{text}</Step>
-    </PresentationProvider>
-  );
+    </PresentationProvider>;
+  };
   let tree;
   const initialTransitionCount = transitions.length;
   try {

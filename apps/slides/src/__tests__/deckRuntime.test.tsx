@@ -9,7 +9,7 @@ import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
 import { usePresentation } from "@legend-apps/presentation";
-import { getSlidesState, setCurrentSlide, setSlidesState } from "../slidesStore";
+import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 function compiledRenderer() {
   const filename = fileURLToPath(new URL("../DeckRenderer.tsx", import.meta.url));
@@ -214,6 +214,41 @@ test("live navigation and preview changes never notify consumers during Deck ren
     expect(tree.root.findByType("runtime").props.value).toMatchObject({ isPreparing: true, stepIndex: 0 });
     expect(mounts).toBe(1);
     expect(log.mock.calls.some((args) => args.join(" ").includes("Cannot update a component"))).toBe(false);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+
+test("runtime replacements and unmounts release their source subscriptions", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Probe() { return <runtime value={usePresentation()} />; }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}"><Slide metadataJson='{ "steps": 3 }' notes=""><Probe /></Slide></Deck>;
+  }
+  const fields = ["currentSlide", "currentStep", "slideStartedAt", "stepStartedAt", "stepEpochs", "direction"];
+  const listeners = () => fields.map((field) => state.internal.getNode(slidesState$[field]).listenersImmediate?.size ?? 0);
+  const baseline = listeners();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    for (let mount = 0; mount < 3; mount++) {
+      await act(() => { tree = create(<DeckRenderer targetIndex={0} targetStep={0} />); });
+      const mounted = listeners();
+      expect(mounted.some((count, index) => count > baseline[index])).toBe(true);
+      for (const step of [1, 2, 0]) {
+        await act(() => tree.update(<DeckRenderer targetIndex={0} targetStep={step} />));
+        expect(tree.root.findByType("runtime").props.value.stepIndex).toBe(step);
+        expect(listeners()).toEqual(mounted);
+      }
+      await act(() => tree.unmount());
+      tree = undefined;
+      expect(listeners()).toEqual(baseline);
+    }
   } finally {
     if (tree) await act(() => tree.unmount());
     setSlidesState(initial);

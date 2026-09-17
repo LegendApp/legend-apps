@@ -35,11 +35,13 @@ test("captures only a visible, measured stage and recaptures after scale changes
     frames.clear();
     pending.forEach((callback) => callback(timestamp));
   });
-  const content = (scale, runtime = { isPreview: true, isActive: false }, effectProps = {}) => (
-    <PresentationProvider value={runtime}>
+  const runtime$ = observable({});
+  const content = (scale, runtime = { isPreview: true, isActive: false }, effectProps = {}) => {
+    runtime$.set(runtime);
+    return <PresentationProvider value={runtime$}>
       <SlideCaptureContext.Provider value={scale}><Effect {...effectProps}><text>Visible</text></Effect></SlideCaptureContext.Provider>
-    </PresentationProvider>
-  );
+    </PresentationProvider>;
+  };
   const log = spyOn(console, "error").mockImplementation(() => {});
   let renderer;
   const first = { dispose: mock() };
@@ -129,7 +131,11 @@ test("Aurora ticks only its shader and cancels its clock when inactive or unmoun
   const log = spyOn(console, "error").mockImplementation(() => {});
   globalThis.requestAnimationFrame = (callback) => { frames.set(++frameId, callback); return frameId; };
   globalThis.cancelAnimationFrame = (id) => frames.delete(id);
-  const content = (isActive, isPreview = false) => <PresentationProvider value={{ isActive, isPreview }}><AmbientAurora /></PresentationProvider>;
+  const runtime$ = observable({});
+  const content = (isActive, isPreview = false) => {
+    runtime$.set({ isActive, isPreview });
+    return <PresentationProvider value={runtime$}><AmbientAurora /></PresentationProvider>;
+  };
   let tree;
   try {
     await act(() => { tree = create(content(true)); });
