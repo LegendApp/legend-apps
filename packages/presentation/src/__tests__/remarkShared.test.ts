@@ -1,11 +1,11 @@
 // @ts-nocheck Bun test types are not part of the app TypeScript project.
 import { expect, test } from "bun:test";
 import { compile } from "@mdx-js/mdx";
-import { remarkShared } from "../compiler/remarkShared";
+import { remarkSlideAttributes } from "../compiler/remarkSlideAttributes";
 
 async function parse(source: string) {
   let tree: any;
-  await compile(source, { remarkPlugins: [remarkShared, () => (root: unknown) => { tree = root; }] });
+  await compile(source, { remarkPlugins: [remarkSlideAttributes, () => (root: unknown) => { tree = root; }] });
   return tree;
 }
 
