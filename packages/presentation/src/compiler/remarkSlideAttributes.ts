@@ -29,6 +29,11 @@ function stepNumber(value: string | true, name: string) {
   return number;
 }
 function apply(node: Node, values: AttributeValues) {
+  if (values.steps !== undefined) {
+    if (values.steps !== true || node.type !== "list") throw new Error("Use {steps} on a line before a Markdown list.");
+    if (values.step !== undefined || values.until !== undefined) throw new Error("steps cannot be combined with step or until.");
+    node = wrap("Steps", {}, node);
+  }
   if (values.shared !== undefined) node = wrap("SharedElement", { id: identifier(values.shared, "shared") }, node);
   if (values.step !== undefined || values.until !== undefined) {
     const at = values.step === undefined ? 0 : stepNumber(values.step, "step");
@@ -43,7 +48,19 @@ export function remarkSlideAttributes(this: { data(): object }) {
   registerAttributeSyntax(this.data() as Record<string, unknown>);
   return (root: Node) => {
     const visit = (parent: Node) => {
-      parent.children = parent.children?.map((node) => {
+      let consumed = -1;
+      parent.children = parent.children?.flatMap((node, index, siblings) => {
+        if (index === consumed) return [];
+        if (node.type === "slideAttributes") {
+          const values = parseAttributes(node.value ?? "");
+          if (values.steps !== undefined) {
+            const list = siblings[index + 1];
+            if (!list || list.type !== "list") throw new Error("Use {steps} on a line before a Markdown list.");
+            visit(list);
+            consumed = index + 1;
+            return apply(list, values);
+          }
+        }
         if ((node.type === "heading" || node.type === "paragraph") && parent.type !== "listItem") {
           const children = [...(node.children ?? [])];
           while (children.at(-1)?.type === "text" && !children.at(-1)?.value?.trim()) children.pop();

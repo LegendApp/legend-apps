@@ -44,3 +44,17 @@ test("until hides a revealed block or a block visible from the beginning", async
     await expect(parse(`Text {${attr}}`)).rejects.toThrow();
   }
 });
+
+test("a steps directive wraps the following list and preserves nested items", async () => {
+  for (const list of ['- One\n  - Nested\n- Two', '1. One\n   - Nested\n2. Two']) {
+    const tree = await parse(`{steps}\n\n${list}\n\nAfter`);
+    expect(tree.children).toHaveLength(2);
+    expect(tree.children[0].name).toBe("Steps");
+    expect(tree.children[0].children[0].type).toBe("list");
+    expect(tree.children[0].children[0].children).toHaveLength(2);
+    expect(tree.children[1].type).toBe("paragraph");
+  }
+  for (const source of ['{steps}\n\nNot a list', 'Text {steps}', '{steps=2}\n\n- One', '{steps step=1}\n\n- One']) {
+    await expect(parse(source)).rejects.toThrow();
+  }
+});
