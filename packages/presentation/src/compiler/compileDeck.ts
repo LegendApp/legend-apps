@@ -163,7 +163,7 @@ function preprocessNotes(source: string) {
   return output;
 }
 
-function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>, draftSource?: string): Plugin {
+function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftSource?: string): Plugin {
   return {
     name: "legend-slides-mdx",
     setup(buildApi) {
@@ -177,8 +177,8 @@ function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>, draf
             remarkFrontmatter,
             remarkGfm,
             remarkSlideAttributes,
-            [remarkWebviews, { deckPath: entryPath, dependencies: webviewDependencies }],
-            [remarkSlides, { templates }],
+            [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
+            [remarkSlides, { templates, deckPath: args.path, dependencies: extraDependencies }],
           ],
         });
         const templateEntries = [...templates.entries()];
@@ -290,7 +290,7 @@ export async function compileDeck(deckPath: string, options: { source?: string }
   }
 
   try {
-    const webviewDependencies = new Set<string>();
+    const extraDependencies = new Set<string>();
     const result = await build({
       absWorkingDir: path.dirname(absoluteDeckPath),
       bundle: true,
@@ -305,7 +305,7 @@ export async function compileDeck(deckPath: string, options: { source?: string }
       platform: "neutral",
       plugins: [
         localDeckPlugin(absoluteDeckPath),
-        mdxDeckPlugin(absoluteDeckPath, webviewDependencies, options.source),
+        mdxDeckPlugin(absoluteDeckPath, extraDependencies, options.source),
         typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
@@ -337,7 +337,7 @@ export async function compileDeck(deckPath: string, options: { source?: string }
       code,
       dependencies: [...new Set([
         ...dependenciesFrom(result, path.dirname(absoluteDeckPath)),
-        ...webviewDependencies,
+        ...extraDependencies,
       ])].sort(),
       success: true,
       uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath), options.source),

@@ -154,3 +154,31 @@ test("Markdown classes override defaults and theme without recoloring nested emp
     log.mockRestore();
   }
 });
+
+test("background frontmatter inherits, overrides and disables the deck image in previews", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson='{"background":"file:///deck/default.png"}'>
+      <Slide metadataJson="{}" notes="">Default</Slide>
+      <Slide metadataJson='{"background":"file:///deck/other.png"}' notes="">Override</Slide>
+      <Slide metadataJson='{"background":false}' notes="">Off</Slide>
+    </Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer isPreview targetIndex={0} />); });
+    for (const [index, uri] of [[0, "file:///deck/default.png"], [1, "file:///deck/other.png"], [2, false], [0, "file:///deck/default.png"]]) {
+      await act(() => tree.update(<DeckRenderer isPreview targetIndex={index} />));
+      const background = tree.root.find((node) => node.type?.name === "Background");
+      if (uri === false) expect(background.props.children).toBe(false);
+      else expect(background.props.children.props).toMatchObject({ source: { uri }, resizeMode: "cover" });
+    }
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
