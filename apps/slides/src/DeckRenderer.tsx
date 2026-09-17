@@ -1,5 +1,6 @@
 import { useResolveClassNames } from "uniwind";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
 import {
   Background,
   FocusRegion,
@@ -89,24 +90,26 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     }
   }, [configJson, elements.length]);
 
-  const stepCount = getSlideStepCount(slides[selectedIndex]);
-  const runtime$ = useObservable<PresentationRuntime>(() => {
+  const runtime$ = React.useMemo(() => observable<PresentationRuntime>(() => {
+    const count = slidesState$.slides.length;
+    const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
+    const stepCount = getSlideStepCount(slidesState$.slides[slideIndex].get());
     // Fixed previews do not subscribe to live navigation or animation epochs.
-    const currentSlide = isPreview ? selectedIndex : slidesState$.currentSlide.get();
+    const currentSlide = isPreview ? slideIndex : slidesState$.currentSlide.get();
     const currentStep = isPreview ? targetStep ?? 0 : slidesState$.currentStep.get();
     return {
       currentSlide, currentStep, goTo: setCurrentSlide,
-      isActive: !isPreview && selectedIndex === currentSlide,
+      isActive: !isPreview && slideIndex === currentSlide,
       isPreview: Boolean(isPreview), isPreparing,
       next: nextSlide, previous: previousSlide,
-      slideCount: elements.length, slideIndex: selectedIndex, stepCount,
-      stepIndex: Math.max(0, Math.min(targetStep ?? (selectedIndex === currentSlide ? currentStep : 0), stepCount - 1)),
+      slideCount: count, slideIndex, stepCount,
+      stepIndex: Math.max(0, Math.min(targetStep ?? (slideIndex === currentSlide ? currentStep : 0), stepCount - 1)),
       startedAt: isPreview ? undefined : slidesState$.slideStartedAt.get(),
       stepStartedAt: isPreview ? undefined : slidesState$.stepStartedAt.get(),
       stepEpochs: isPreview ? undefined : slidesState$.stepEpochs.get(),
       direction: isPreview ? undefined : slidesState$.direction.get(),
     };
-  }, [isPreview, isPreparing, selectedIndex, targetStep, stepCount, elements.length]);
+  }), [isPreview, isPreparing, targetIndex, targetStep]);
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;
