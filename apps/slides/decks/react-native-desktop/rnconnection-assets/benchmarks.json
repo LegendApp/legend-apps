@@ -1,0 +1,147 @@
+{
+  "chat": [
+    {
+      "name": "AppKit",
+      "ui": "Native",
+      "size": 4.5,
+      "content": 318.9,
+      "memory": 42.4,
+      "jump": 79.1,
+      "switch": 88.3
+    },
+    {
+      "name": "GPUI",
+      "ui": "Canvas + native composer",
+      "size": 10.7,
+      "content": 335.5,
+      "memory": 289.0,
+      "jump": 50.5,
+      "switch": 193.1
+    },
+    {
+      "name": "React Native",
+      "ui": "Native",
+      "size": 42.2,
+      "content": 406.3,
+      "memory": 52.8,
+      "jump": 45.0,
+      "switch": 157.7
+    },
+    {
+      "name": "Tauri",
+      "ui": "Web",
+      "size": 11.6,
+      "content": 544.0,
+      "memory": 363.5,
+      "jump": 70.6,
+      "switch": 218.9
+    },
+    {
+      "name": "SwiftUI",
+      "ui": "Native",
+      "size": 5.0,
+      "content": 668.8,
+      "memory": 82.6,
+      "jump": 68.9,
+      "switch": 554.6
+    },
+    {
+      "name": "Flutter",
+      "ui": "Canvas",
+      "size": 22.1,
+      "content": 1094.0,
+      "memory": 340.7,
+      "jump": 80.2,
+      "switch": 625.9
+    },
+    {
+      "name": "Deno WebView",
+      "ui": "Web",
+      "size": 65.9,
+      "content": 1268.9,
+      "memory": 408.1,
+      "jump": 72.9,
+      "switch": 657.0
+    },
+    {
+      "name": "Electron",
+      "ui": "Web",
+      "size": 285.7,
+      "content": 1277.7,
+      "memory": 477.5,
+      "jump": 70.5,
+      "switch": 679.0
+    },
+    {
+      "name": "Deno CEF",
+      "ui": "Web",
+      "size": 307.9,
+      "content": 1294.4,
+      "memory": 616.9,
+      "jump": 70.5,
+      "switch": 670.1
+    }
+  ],
+  "hello": [
+    {
+      "name": "AppKit",
+      "size": 0.1,
+      "content": 193.4,
+      "memory": 15.5
+    },
+    {
+      "name": "GPUI",
+      "size": 5.3,
+      "content": 226.5,
+      "memory": 56.3
+    },
+    {
+      "name": "Legend Shell (RN)",
+      "size": 9.3,
+      "content": 227.5,
+      "memory": 23.9
+    },
+    {
+      "name": "SwiftUI",
+      "size": 0.1,
+      "content": 227.5,
+      "memory": 18.3
+    },
+    {
+      "name": "React Native",
+      "size": 16.3,
+      "content": 227.6,
+      "memory": 23.3
+    },
+    {
+      "name": "Flutter",
+      "size": 17.0,
+      "content": 259.2,
+      "memory": 55.0
+    },
+    {
+      "name": "Electron",
+      "size": 285.1,
+      "content": 344.5,
+      "memory": 83.4
+    },
+    {
+      "name": "Deno CEF",
+      "size": 307.0,
+      "content": 360.0,
+      "memory": 203.6
+    },
+    {
+      "name": "Deno WebView",
+      "size": 65.0,
+      "content": 394.1,
+      "memory": 83.0
+    },
+    {
+      "name": "Tauri",
+      "size": 10.3,
+      "content": 409.8,
+      "memory": 73.0
+    }
+  ]
+}

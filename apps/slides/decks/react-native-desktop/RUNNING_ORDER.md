@@ -1,5 +1,9 @@
 # Running order
 
+This is the existing deck's running order. The agreed performance-first direction
+for the next revision is in [TALK_PLAN.md](./TALK_PLAN.md); it has not yet been
+applied to the slide sequence or benchmark charts below.
+
 Main talk targets 18 minutes of material, leaving about two minutes for pauses and transitions. The effect gallery and backup slides are optional; they are not included in the 20-minute run.
 
 | Slide | Time | Title |
