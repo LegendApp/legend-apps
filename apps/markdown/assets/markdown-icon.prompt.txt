@@ -1,0 +1,8 @@
+Generated with the built-in image generation tool.
+
+Use case: logo-brand.
+Create one finished square macOS app icon for Legend Markdown, a sibling to the supplied Code app icon (style reference only).
+Subject: the recognizable Markdown mark, a bold uppercase M beside a downward arrow, with no enclosing box. Construct the M from thick sculpted folded ribbons in warm amber and golden orange. The separate downward arrow is warm ivory enamel. Make the M unmistakable, with two upright outer stems and a deep central V. Both symbols have comparable height and form one balanced centered composition.
+Style: exactly match the reference's tactile premium 3D enamel ribbon construction, gently rounded corners, subtle bevels, narrow bright edge highlights, shaded folds and soft contact shadows. Front-facing, no perspective tilt.
+Background: full-bleed subtly textured charcoal surface, gentle top-left lighting and dark vignette matching the reference. The entire mark occupies about 68 percent of canvas width, generous balanced margins.
+Constraints: one icon, no mockup, no label or words, no watermark, no border or outer rounded-square tile. Only the M and downward arrow. Strong simple silhouette legible at small sizes.
