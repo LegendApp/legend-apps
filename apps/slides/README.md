@@ -534,3 +534,15 @@ The existing `<Steps>` Markdown list syntax still reveals each item in order.
 `Effect active={...}` replaces `startOnStep`: inactive effects show their initial
 frame; activation starts the clock, which continues while active and resets when
 deactivated. `LiquidGlass active={...}` owns its smooth reversible frost transition.
+
+## Markdown attributes
+
+Add attributes at the end of a heading or paragraph. Multiple attributes share
+one pair of braces, for example `## Title {shared=title step=1}`. Code fences,
+inline code, and escaped braces stay literal.
+
+### Reveal a block
+
+`Text {step=1}` appears on the first advance. `{step=0}` is visible initially.
+Blocks with the same step appear together; navigation counts are inferred.
+Reveals preserve layout space, and backward navigation restores earlier states.
