@@ -58,3 +58,13 @@ test("a steps directive wraps the following list and preserves nested items", as
     await expect(parse(source)).rejects.toThrow();
   }
 });
+
+test("focus targets compose with shared elements and reveals", async () => {
+  const tree = await parse('## Details {focus=details shared=title step=1}');
+  const region = tree.children[0].children[0];
+  expect(tree.children[0].name).toBe("Step");
+  expect(region.name).toBe("FocusRegion");
+  expect(props(region)).toEqual({ id: "details" });
+  expect(region.children[0].name).toBe("SharedElement");
+  for (const attr of ['focus', 'focus=""', 'focus="two words"']) await expect(parse(`Text {${attr}}`)).rejects.toThrow("identifier");
+});

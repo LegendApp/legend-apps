@@ -1,5 +1,5 @@
 export type AttributeValues = Record<string, string | true>;
-const supported = new Set(["shared", "step", "until", "steps"]);
+const supported = new Set(["shared", "step", "until", "steps", "focus"]);
 
 export function parseAttributes(source: string): AttributeValues {
   const values: AttributeValues = {};
