@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
 
 type Node = {
@@ -11,7 +14,33 @@ type Node = {
 
 type RemarkSlidesOptions = {
   templates?: Map<string, string>;
+  deckPath?: string;
+  dependencies?: Set<string>;
 };
+
+function resolveBackground(config: Record<string, unknown>, label: string, options: RemarkSlidesOptions) {
+  const reference = config.background;
+  if (reference === undefined || reference === false) return;
+  if (typeof reference !== "string" || !reference.trim() || !options.deckPath) {
+    throw new Error(`${label} background must be a deck-relative image path or false.`);
+  }
+  if (path.isAbsolute(reference) || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(reference)) {
+    throw new Error(`${label} background must be relative to the deck file.`);
+  }
+  const root = fs.realpathSync(path.dirname(options.deckPath));
+  const candidate = path.resolve(root, reference);
+  if (!fs.existsSync(candidate)) throw new Error(`Could not find background image "${reference}".`);
+  const resolved = fs.realpathSync(candidate);
+  const relative = path.relative(root, resolved);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Background image "${reference}" escapes the deck directory.`);
+  }
+  if (!fs.statSync(resolved).isFile() || !/\.(png|jpe?g|gif|webp)$/i.test(resolved)) {
+    throw new Error(`Background "${reference}" must be a PNG, JPEG, GIF, or WebP image.`);
+  }
+  options.dependencies?.add(resolved);
+  config.background = pathToFileURL(resolved).href;
+}
 
 function registerTemplate(
   config: Record<string, unknown>,
@@ -95,6 +124,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
       ? parseFrontmatter(firstNode.value, "Deck")
       : {};
     registerTemplate(deckConfig, "Deck", options.templates, false);
+    resolveBackground(deckConfig, "Deck", options);
     const slideSource = firstNode?.type === "yaml" ? contentNodes.slice(1) : contentNodes;
 
     const slides: Array<{ metadata: Record<string, unknown>; nodes: Node[]; notes: string[] }> = [];
@@ -120,6 +150,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         }
         metadata = parseFrontmatter(node.value, `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
+        resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
         continue;
       }
       if ((node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") && node.name === "SlideFrontmatter") {
@@ -129,6 +160,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         const encoded = getEncodedAttribute(node);
         metadata = parseFrontmatter(encoded ? Buffer.from(encoded, "base64").toString("utf8") : "", `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
+        resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
         continue;
       }
       const nextNode = extractNotes(node, notes);

@@ -10,6 +10,7 @@ export type PresentationTheme = {
 };
 
 export type DeckConfig = {
+  background?: string | false;
   aspectRatio?: string;
   height?: number;
   presenter?: {
@@ -24,6 +25,7 @@ export type DeckConfig = {
 };
 
 export type SlideConfig = {
+  background?: string | false;
   steps?: number;
   template?: string | false;
   transition?: SlideTransition;

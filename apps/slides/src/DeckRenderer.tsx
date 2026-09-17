@@ -109,12 +109,16 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;
+  const background = selectedMetadata.background ?? config.background;
   const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
   const Template = resolvedTemplate.component;
   const content = renderMdxChildren(resolved[selectedIndex].content);
   return (
     <PresentationObservableProvider value={runtime$}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
+        {background !== undefined && <Background>
+          {background !== false && <Image source={{ uri: background }} resizeMode="cover" style={StyleSheet.absoluteFill} />}
+        </Background>}
         {resolvedTemplate.reference && !Template
           ? <MissingSlideTemplate reference={resolvedTemplate.reference} />
           : Template

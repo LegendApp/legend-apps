@@ -610,3 +610,35 @@ preview; saving is not required.
 ```md
 ## The engine {shared=title step=1 class="text-center text-blue-400"}
 ```
+
+### Set a full-window image background
+
+Set `background` in deck or slide frontmatter:
+
+```mdx
+---
+background: ./images/default.png
+---
+
+# Default image
+
+---
+background: ./images/detail.jpg
+---
+
+# A different image
+
+---
+background: false
+---
+
+# Base color only
+```
+
+Images fill the window using `cover`, so edges may crop. Paths are relative to
+the deck file and must remain inside its directory, including symlink targets.
+PNG, JPEG, GIF, and WebP paths are accepted; missing files are compilation errors.
+Images are watched for recompilation. Omit `background` on a slide to inherit
+the deck setting; `false` also suppresses a template background. Frontmatter uses
+slide background priority 0, overriding template defaults at priority -1. Avoid
+combining it with another priority-0 `Background` declaration on the same slide.

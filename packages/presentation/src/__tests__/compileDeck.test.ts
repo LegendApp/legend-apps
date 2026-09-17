@@ -280,6 +280,35 @@ describe("compileDeck", () => {
     expect(fs.readFileSync(deckPath, "utf8")).toBe("# Original");
   });
 
+  test("resolves deck and slide background images and watches both files", async () => {
+    const deckPath = createDeck({ "deck.mdx": [
+      "---", "background: ./images/first photo.png", "---", "# First",
+      "---", "background: ./second.jpg", "---", "# Second",
+      "---", "background: false", "---", "# Third",
+    ].join("\n"), "images/first photo.png": "image", "second.jpg": "image" });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code).toContain("first%20photo.png");
+    expect(result.code).toContain('background":false');
+    expect(result.dependencies).toContain(fs.realpathSync(path.join(path.dirname(deckPath), "images/first photo.png")));
+    expect(result.dependencies).toContain(fs.realpathSync(path.join(path.dirname(deckPath), "second.jpg")));
+  });
+
+  test("rejects invalid, missing and escaping background images", async () => {
+    const deckPath = createDeck({ "deck.mdx": "# Test", "not-image.txt": "text" });
+    const outside = path.join(os.tmpdir(), `outside-background-${Date.now()}.png`);
+    fs.writeFileSync(outside, "image");
+    fs.symlinkSync(outside, path.join(path.dirname(deckPath), "escape.png"));
+    try {
+      for (const value of ["true", "123", "''", "./missing.png", "./not-image.txt", "./escape.png", outside, "https://example.com/image.png"]) {
+        const result = await compileDeck(deckPath, { source: `---\nbackground: ${value}\n---\n# Test` });
+        expect(result.success).toBe(false);
+        expect(result.errors.join(" ")).toMatch(/background/i);
+      }
+    } finally { fs.unlinkSync(outside); }
+  });
+
   test("compiles Markdown shared attributes without a transition setting", async () => {
     const deckPath = path.resolve(import.meta.dirname, "../../../../apps/slides/examples/shared.mdx");
     const result = await compileDeck(deckPath);
