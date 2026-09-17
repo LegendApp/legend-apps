@@ -33,7 +33,7 @@ import {
   type TextStyle,
   type ViewProps,
 } from "react-native";
-import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
+import { normalizeStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Layout, LayoutStage } from "./Layout";
 import { Step, Steps, resolveSteps } from "./steps";
@@ -92,7 +92,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const runtime$ = useRuntimeProjection(() => {
     const count = slidesState$.slides.length;
     const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
-    const stepCount = getSlideStepCount(slidesState$.slides[slideIndex].get());
+    const stepCount = normalizeStepCount(slidesState$.slides[slideIndex].metadata.steps.get());
     // Fixed previews do not subscribe to live navigation or animation epochs.
     const currentSlide = isPreview ? slideIndex : slidesState$.currentSlide.get();
     const currentStep = isPreview ? targetStep ?? 0 : slidesState$.currentStep.get();
@@ -135,10 +135,11 @@ function Deck({ children, configJson }: CompiledDeckProps) {
 type MarkdownTextProps = { children?: ReactNode; style?: StyleProp<TextStyle>; className?: string; inline?: boolean };
 function MarkdownText({ children, style, className = "", inline = false }: MarkdownTextProps) {
   const classStyle = useResolveClassNames(className);
-  const theme = useValue(slidesState$.config.theme);
+  const color = useValue(() => inline ? undefined : slidesState$.config.theme.color.get());
+  const fontFamily = useValue(() => inline ? undefined : slidesState$.config.theme.fontFamily.get());
   const themeStyle = {
-    ...(!inline && theme?.color ? { color: theme.color } : {}),
-    ...(!inline && theme?.fontFamily ? { fontFamily: theme.fontFamily } : {}),
+    ...(color ? { color } : {}),
+    ...(!inline && fontFamily ? { fontFamily } : {}),
   };
   return <Text style={[style, themeStyle, classStyle]}>{children}</Text>;
 }
@@ -257,18 +258,21 @@ export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPr
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {
   const hasBackground = useHasBackground();
-  const config = useValue(slidesState$.config);
+  const aspect = useValue(slidesState$.config.aspectRatio);
+  const configuredWidth = useValue(slidesState$.config.width);
+  const configuredHeight = useValue(slidesState$.config.height);
+  const color = useValue(() => hasBackground ? "transparent" : slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const [size, setSize] = React.useState({ width: 0, height: 0 });
-  const aspectParts = config.aspectRatio?.split(/[/:]/).map(Number) ?? [];
+  const aspectParts = aspect?.split(/[/:]/).map(Number) ?? [];
   const aspectRatio = aspectParts.length === 2 && aspectParts.every((value) => Number.isFinite(value) && value > 0)
     ? aspectParts[0] / aspectParts[1]
     : 16 / 9;
-  const width = config.width ?? 1920;
-  const height = config.height ?? width / aspectRatio;
+  const width = configuredWidth ?? 1920;
+  const height = configuredHeight ?? width / aspectRatio;
   const scale = Math.min(size.width / width || 0, size.height / height || 0);
   const renderedWidth = width * scale;
   const renderedHeight = height * scale;
-  const backgroundColor = hasBackground ? "transparent" : config.theme?.backgroundColor ?? "#111827";
+  const backgroundColor = color;
   const handleLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
   return (
     <View onLayout={handleLayout} style={styles.canvas}>

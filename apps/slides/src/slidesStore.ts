@@ -99,7 +99,10 @@ export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesS
 }
 
 export function getSlideStepCount(slide: DeckSlide | undefined) {
-  const steps = slide?.metadata?.steps;
+  return normalizeStepCount(slide?.metadata?.steps);
+}
+
+export function normalizeStepCount(steps: unknown) {
   return typeof steps === "number" && Number.isFinite(steps) ? Math.max(1, Math.floor(steps)) : 1;
 }
 
