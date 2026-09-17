@@ -1,5 +1,5 @@
 export type AttributeValues = Record<string, string | true>;
-const supported = new Set(["shared", "step"]);
+const supported = new Set(["shared", "step", "until"]);
 
 export function parseAttributes(source: string): AttributeValues {
   const values: AttributeValues = {};
@@ -34,7 +34,7 @@ function tokenize(effects: Effects, ok: State, nok: State): State {
   function inside(code: Code): State | undefined {
     if (code === null || code < 0) return nok(code);
     if (!quote && code === 125) {
-      if (!/^(shared|step)\s*(?:=|$)/.test(source.trim())) return nok(code);
+      if (!/^(shared|step|until)\s*(?:=|$)/.test(source.trim())) return nok(code);
       effects.consume(code);
       effects.exit("slideAttributes");
       return ok;

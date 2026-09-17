@@ -35,3 +35,12 @@ test("JavaScript, JSX props and code examples are not parsed as attributes", asy
   expect(tree.children[3].value).toBe("Text {step=1}");
   expect(tree.children[4].children[0].value).toBe("Literal {step=1}");
 });
+
+test("until hides a revealed block or a block visible from the beginning", async () => {
+  const tree = await parse('Text {step=1 until=3}\n\nInitial text {until=2}');
+  expect(props(tree.children[0])).toEqual({ at: 1, until: 3 });
+  expect(props(tree.children[1])).toEqual({ at: 0, until: 2 });
+  for (const attr of ["until=-1", "until=1.5", "until=0", "step=3 until=2", "step=2 until=2"]) {
+    await expect(parse(`Text {${attr}}`)).rejects.toThrow();
+  }
+});
