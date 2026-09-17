@@ -30,7 +30,12 @@ function stepNumber(value: string | true, name: string) {
 }
 function apply(node: Node, values: AttributeValues) {
   if (values.shared !== undefined) node = wrap("SharedElement", { id: identifier(values.shared, "shared") }, node);
-  if (values.step !== undefined) node = wrap("Step", { at: stepNumber(values.step, "step") }, node);
+  if (values.step !== undefined || values.until !== undefined) {
+    const at = values.step === undefined ? 0 : stepNumber(values.step, "step");
+    const until = values.until === undefined ? undefined : stepNumber(values.until, "until");
+    if (until !== undefined && until <= at) throw new Error("until must be greater than step.");
+    node = wrap("Step", { at, ...(until === undefined ? {} : { until }) }, node);
+  }
   return node;
 }
 

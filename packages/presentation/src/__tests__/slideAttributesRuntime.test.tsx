@@ -15,3 +15,14 @@ test("compiled Markdown reveals participate in step discovery and reverse visibi
   expect(result.steps).toBe(4);
   expect([0, 2, 3, 1].map((step) => stepStyle(step, { at: 2 }).opacity)).toEqual([0, 1, 1, 0]);
 });
+
+test("Markdown exits contribute navigation steps and restore on reverse", async () => {
+  const { evaluate } = await import("@mdx-js/mdx");
+  const runtime = await import("react/jsx-runtime");
+  const { remarkSlideAttributes } = await import("../compiler/remarkSlideAttributes");
+  const compiled = await evaluate('Copy {step=1 until=3}', { ...runtime, remarkPlugins: [remarkSlideAttributes] });
+  const result = resolveSteps(compiled.default({ components: { Step } }));
+  expect(result.steps).toBe(4);
+  const props = result.content[0].props;
+  expect([0, 1, 2, 3, 2, 0].map((step) => stepStyle(step, props).opacity)).toEqual([0, 1, 1, 0, 1, 0]);
+});

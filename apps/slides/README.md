@@ -546,3 +546,10 @@ inline code, and escaped braces stay literal.
 `Text {step=1}` appears on the first advance. `{step=0}` is visible initially.
 Blocks with the same step appear together; navigation counts are inferred.
 Reveals preserve layout space, and backward navigation restores earlier states.
+
+### Hide a block
+
+`Text {step=1 until=3}` appears at step 1 and disappears when step 3 begins.
+`Text {until=2}` starts visible and disappears at step 2. `until` must be greater
+than `step`; both are non-negative integers. Backward navigation reveals the
+content again, and the exit step counts toward the slide's navigation states.
