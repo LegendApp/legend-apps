@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "@babel/core";
 import React from "react";
+import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
 import { usePresentation } from "@legend-apps/presentation";
@@ -23,6 +24,7 @@ function compiledRenderer() {
       ? { textAlign: "center", color: "#60a5fa", fontSize: 48 } : {} },
     // Keep tracking in the same ESM instance as slidesStore in this CJS harness.
     "@legendapp/state/react": stateReact,
+    "@legendapp/state": state,
     "@legend-apps/scaled-view": { ScaledView: "scaled-view" },
     "react-native": {
       View: "view", Text: "text", Image: "image", Pressable: "pressable", Linking: {},
@@ -177,6 +179,41 @@ test("background frontmatter inherits, overrides and disables the deck image in 
       if (uri === false) expect(background.props.children).toBe(false);
       else expect(background.props.children.props).toMatchObject({ source: { uri }, resizeMode: "cover" });
     }
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test("live navigation and preview changes never notify consumers during Deck render", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  let mounts = 0;
+  function Probe() {
+    React.useEffect(() => { mounts++; }, []);
+    return <runtime value={usePresentation()} />;
+  }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}">{[0, 1].map((index) =>
+      <Slide key={index} metadataJson='{"steps":3}' notes=""><Probe /></Slide>)}</Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer />); });
+    for (const index of [1, 0, 1]) {
+      await act(() => setCurrentSlide(index));
+      await act(() => setSlidesState({ currentStep: 2 }));
+      expect(tree.root.findByType("runtime").props.value).toMatchObject({ slideIndex: index, stepIndex: 2, stepCount: 3 });
+    }
+    await act(() => tree.update(<DeckRenderer isPreview targetStep={1} />));
+    expect(tree.root.findByType("runtime").props.value.stepIndex).toBe(1);
+    await act(() => tree.update(<DeckRenderer isPreparing targetStep={0} />));
+    expect(tree.root.findByType("runtime").props.value).toMatchObject({ isPreparing: true, stepIndex: 0 });
+    expect(mounts).toBe(1);
+    expect(log.mock.calls.some((args) => args.join(" ").includes("Cannot update a component"))).toBe(false);
   } finally {
     if (tree) await act(() => tree.unmount());
     setSlidesState(initial);
