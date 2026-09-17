@@ -1,9 +1,12 @@
-import { parseAttributes, registerAttributeSyntax, type AttributeValues } from "./slideAttributes";
+import remarkDirective from "remark-directive";
+import { columnWeights, layoutAttributes, layoutKinds, parseLayoutProps, type LayoutKind } from "../layout";
+import { blockAttributes, parseAttributes, registerAttributeSyntax, type AttributeValues } from "./slideAttributes";
 
 type Node = {
   type: string;
   value?: string;
   children?: Node[];
+  position?: { start: { offset?: number }; end: { offset?: number } };
   [key: string]: unknown;
 };
 
@@ -57,13 +60,45 @@ function apply(node: Node, values: AttributeValues) {
   return node;
 }
 
-export function remarkSlideAttributes(this: { data(): object }) {
+export function remarkSlideAttributes(this: { data(): object; use(plugin: typeof remarkDirective): unknown }) {
+  this.use(remarkDirective);
   registerAttributeSyntax(this.data() as Record<string, unknown>);
-  return (root: Node) => {
+  return (root: Node, file: { value: unknown }) => {
     const visit = (parent: Node) => {
       let consumed = -1;
       parent.children = parent.children?.flatMap((node, index, siblings) => {
         if (index === consumed) return [];
+        if (node.type === "containerDirective") {
+          const kind = String(node.name);
+          if (!layoutKinds.has(kind)) throw new Error(`Unknown layout "${kind}". Use group, columns, stack, or grid.`);
+          const source = String(file.value).slice(node.position?.start.offset, node.position?.end.offset);
+          if (!/\n[ \t]*:{3,}[ \t]*$/.test(source)) throw new Error(`Missing closing colon fence for ${kind}.`);
+          const layout: Record<string, string> = {};
+          const blocks: AttributeValues = {};
+          for (const [key, value] of Object.entries((node.attributes ?? {}) as Record<string, string>)) {
+            if (layoutAttributes.has(key)) layout[key] = value;
+            else if (blockAttributes.has(key)) blocks[key] = value || true;
+            else throw new Error(`Unknown layout attribute "${key}".`);
+          }
+          visit(node);
+          const props = parseLayoutProps(kind as LayoutKind, layout);
+          if (kind === "columns" && props.ratio) {
+            columnWeights(props.ratio, (node.children ?? []).filter((child) => child.name !== "PresenterNote").length);
+          }
+          return apply({ type: "mdxJsxFlowElement", name: "Layout",
+            attributes: Object.entries(props).map(([key, value]) => attribute(key, value)), children: node.children }, blocks);
+        }
+        if (node.type === "leafDirective" || node.type === "textDirective") {
+          if (layoutKinds.has(String(node.name))) throw new Error("Layouts use container fences, for example :::group followed by a closing :::.");
+          const literal = { type: "text", value: String(file.value).slice(node.position?.start.offset, node.position?.end.offset) };
+          return node.type === "textDirective" ? literal : { type: "paragraph", children: [literal] };
+        }
+        if (node.type === "thematicBreak" && parent.type === "containerDirective") {
+          throw new Error("Close layout containers before starting another slide with ---.");
+        }
+        if (node.type === "paragraph" && /^:{3,}\s*(group|columns|stack|grid)\s/.test(node.children?.[0]?.value ?? "")) {
+          throw new Error("Place layout attributes directly after the name: :::group{gap=24} (no space before the brace).");
+        }
         if (node.type === "slideAttributes") {
           const values = parseAttributes(node.value ?? "");
           if (values.steps !== undefined) {

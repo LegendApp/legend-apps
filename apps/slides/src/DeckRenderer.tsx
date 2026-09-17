@@ -35,6 +35,7 @@ import {
 } from "react-native";
 import { getSlideStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
+import { Layout, LayoutStage } from "./Layout";
 import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
 import { LiquidGlass } from "./LiquidGlass";
@@ -176,6 +177,7 @@ function MarkdownPre({ children }: { children?: ReactNode }) {
 }
 
 const markdownComponents = {
+  Layout,
   Deck,
   Background,
   FocusRegion,
@@ -247,11 +249,11 @@ export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPr
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
-  const content = <SlideCanvasContent captureEnabled={captureEnabled}>{children}</SlideCanvasContent>;
+  const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
   return hosted ? content : <BackgroundHost slideIndex={selectedIndex} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
 }
 
-function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode; captureEnabled: boolean }) {
+function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {
   const hasBackground = useHasBackground();
   const config = useValue(slidesState$.config);
   const [size, setSize] = React.useState({ width: 0, height: 0 });
@@ -274,7 +276,7 @@ function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode;
         style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
         <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
-          <FocusStage scale={scale}>{children}</FocusStage>
+          <FocusStage scale={scale}><LayoutStage width={width} height={height} warn={warnLayout}>{children}</LayoutStage></FocusStage>
         </SlideCaptureContext.Provider>
       </ScaledView>
     </View>

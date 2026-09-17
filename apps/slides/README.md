@@ -642,3 +642,59 @@ Images are watched for recompilation. Omit `background` on a slide to inherit
 the deck setting; `false` also suppresses a template background. Frontmatter uses
 slide background priority 0, overriding template defaults at priority -1. Avoid
 combining it with another priority-0 `Background` declaration on the same slide.
+
+## Markdown layouts
+
+Use fenced containers to lay out ordinary Markdown without JSX. Keep the opening
+name and attributes together (`:::group{gap=24}`, with no spaces before `{`).
+Use more colons for an outer container than its nested containers:
+
+```md
+::::columns{ratio="2:1" gap=48 align=center}
+
+:::group{padding=32 class="bg-slate-800 rounded-3xl"}
+
+## Main idea
+
+Supporting **Markdown** stays inside the group.
+
+:::
+
+:::stack{gap=24}
+
+### Details
+
+A second column.
+
+:::
+
+::::
+```
+
+| Container | Layout |
+| --- | --- |
+| `group` | Treat several blocks as one vertical unit, including for animation. |
+| `stack` | Arrange blocks vertically with consistent spacing. |
+| `columns` | Put each direct block in a column; equal widths by default, or `ratio="2:1"`. |
+| `grid` | Arrange direct blocks into equal-width cells; `columns=3` sets the count (default 2). |
+
+All containers accept `gap` (default 24), `padding` (default 0), `width`, `height`,
+`align`, `justify`, and `class`. Numbers use logical slide units and scale with
+the slide; width and height also accept percentages. `align` accepts `start`,
+`center`, `end`, or `stretch`; `justify` accepts those first three plus `between`,
+`around`, or `evenly`. Alignment follows the container's layout direction.
+Give a stack a height to distribute extra vertical space with `justify=between`.
+Explicit attributes override class styles; class styles override defaults.
+
+Wrap multiple blocks in a group when they belong in a single column or grid
+cell. Grids preserve equal column widths even in a partially filled last row.
+Containers nest and accept the existing `step`, `until`, `shared`, `focus`, and
+`effect` attributes, for example `:::group{step=1 shared=card}`. Reveals preserve
+layout space by default. Close all containers before a slide separator (`---`).
+Invalid attributes, unmatched fences, and ratios with the wrong number of
+columns produce compilation errors. Editor and next-slide previews warn when
+measured layout containers extend beyond the slide bounds; audience output
+never displays these warnings.
+
+See [layouts.mdx](examples/layouts.mdx) for three complete examples: weighted
+columns, a six-card grid, and nested stacks with a grouped reveal.
