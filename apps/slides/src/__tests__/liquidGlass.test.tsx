@@ -60,7 +60,7 @@ test("glass reverses from its current blur and keeps the overlay outside the fil
   let tree;
   try {
     await act(() => { tree = create(content(0)); });
-    const blur = () => tree.root.findByType("effect").props.blur.peek();
+    const blur = () => tree.root.findByType("effect").props.blur();
     expect(blur()).toBe(0);
     await act(() => tree.update(content(1)));
     const beforeAnimation = renders;
@@ -83,6 +83,7 @@ test("glass reverses from its current blur and keeps the overlay outside the fil
     await act(() => tree.update(content(1, true)));
     expect(blur()).toBe(24);
     expect(frames.size).toBe(0);
+    expect(log.mock.calls.some((args) => args.join(" ").includes("Cannot update a component"))).toBe(false);
   } finally {
     if (tree) await act(() => tree.unmount());
     globalThis.requestAnimationFrame = originalRequest;

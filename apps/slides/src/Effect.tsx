@@ -20,7 +20,7 @@ import { resolveEffectSource, type EffectPreset } from "./effects";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 
 type EffectProps = {
-  blur?: number | Observable<number>;
+  blur?: number | Observable<number> | (() => number);
   children?: ReactNode;
   padding?: number;
   preset?: EffectPreset;
@@ -34,7 +34,7 @@ type EffectProps = {
 };
 
 type EffectCanvasProps = {
-  blur: number | Observable<number>;
+  blur: number | Observable<number> | (() => number);
   effect: SkRuntimeEffect;
   height: number;
   image: SkImage;

@@ -1,5 +1,5 @@
 import { renderNativeChildren, usePresentationValue } from "@legend-apps/presentation";
-import type { Observable } from "@legendapp/state";
+import type { Selector } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
@@ -64,24 +64,24 @@ export function LiquidGlass({ children, overlay, active = false, blur = 24, refr
     frame = requestAnimationFrame(update);
     return () => cancelAnimationFrame(frame);
   }, [target, isActive, isPreview, duration, progress$, setProgress]);
-  const displayedProgress$ = useObservable(() => isPreview || !isActive ? target : progress$.get(), [isPreview, isActive, target]);
-  const blur$ = useObservable(() => Math.max(0, blur) * displayedProgress$.get(), [blur]);
-  const uniforms$ = useObservable(() => ({ progress: displayedProgress$.get(), liquid: variant === "liquid" ? 1 : 0 }), [variant]);
+  const displayedProgress = () => isPreview || !isActive ? target : progress$.get();
+  const resolvedBlur = () => Math.max(0, blur) * displayedProgress();
+  const uniforms = () => ({ progress: displayedProgress(), liquid: variant === "liquid" ? 1 : 0 });
   return (
     <View style={[styles.surface, style]}>
-      <Effect shader={glassShader} blur={blur$}
+      <Effect shader={glassShader} blur={resolvedBlur}
         strength={Math.max(0, refraction)} speed={0}
-        uniforms={() => uniforms$.get()}>
+        uniforms={uniforms}>
         {children}
       </Effect>
-      {overlay !== undefined && <GlassOverlay progress$={displayedProgress$} target={target}>
+      {overlay !== undefined && <GlassOverlay progress={displayedProgress} target={target}>
         {renderNativeChildren(overlay, (text) => <Text>{text}</Text>)}
       </GlassOverlay>}
     </View>
   );
 }
-function GlassOverlay({ children, progress$, target }: { children: ReactNode; progress$: Observable<number>; target: number }) {
-  const opacity = useValue(progress$);
+function GlassOverlay({ children, progress, target }: { children: ReactNode; progress: Selector<number>; target: number }) {
+  const opacity = useValue(progress);
   return <View pointerEvents={target ? "auto" : "none"}
     accessibilityElementsHidden={!target} importantForAccessibility={target ? "auto" : "no-hide-descendants"}
     style={[styles.overlay, { opacity }]}>{children}</View>;
