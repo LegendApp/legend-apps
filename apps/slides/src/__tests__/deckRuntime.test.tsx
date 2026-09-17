@@ -255,3 +255,26 @@ test("runtime replacements and unmounts release their source subscriptions", asy
     log.mockRestore();
   }
 });
+
+
+test("runtime remains reactive after StrictMode effect replay", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Probe() { return <runtime value={usePresentation()} />; }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}"><Slide metadataJson='{ "steps": 3 }' notes=""><Probe /></Slide></Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<React.StrictMode><DeckRenderer targetIndex={0} /></React.StrictMode>); });
+    await act(() => setSlidesState({ currentStep: 2 }));
+    expect(tree.root.findByType("runtime").props.value.stepIndex).toBe(2);
+    expect(log.mock.calls.some((args) => args.join(" ").includes("Cannot update a component"))).toBe(false);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});

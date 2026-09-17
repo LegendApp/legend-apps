@@ -1,7 +1,7 @@
 import { useResolveClassNames } from "uniwind";
-import { internal, observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import {
+  useRuntimeProjection,
   Background,
   FocusRegion,
   SharedElement,
@@ -11,7 +11,6 @@ import {
   useBackgroundHost,
   useHasBackground,
   PresentationObservableProvider,
-  type PresentationRuntime,
   renderNativeChildren,
   type CompiledDeckProps,
   type CompiledSlideProps,
@@ -90,7 +89,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     }
   }, [configJson, elements.length]);
 
-  const runtime$ = React.useMemo(() => observable<PresentationRuntime>(() => {
+  const runtime$ = useRuntimeProjection(() => {
     const count = slidesState$.slides.length;
     const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
     const stepCount = getSlideStepCount(slidesState$.slides[slideIndex].get());
@@ -109,9 +108,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       stepEpochs: isPreview ? undefined : slidesState$.stepEpochs.get(),
       direction: isPreview ? undefined : slidesState$.direction.get(),
     };
-  }), [isPreview, isPreparing, targetIndex, targetStep]);
-  // Match useObservable lifecycle cleanup when an explicit view target replaces the computed.
-  useEffect(() => () => internal.deactivateNode(internal.getNode(runtime$)), [runtime$]);
+  }, [isPreview, isPreparing, targetIndex, targetStep]);
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;
