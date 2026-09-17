@@ -553,3 +553,19 @@ Reveals preserve layout space, and backward navigation restores earlier states.
 `Text {until=2}` starts visible and disappears at step 2. `until` must be greater
 than `step`; both are non-negative integers. Backward navigation reveals the
 content again, and the exit step counts toward the slide's navigation states.
+
+### Reveal a list
+
+Put `{steps}` on its own line before an ordered or unordered list:
+
+```md
+{steps}
+
+- First point
+- Second point
+  - Revealed with its parent
+```
+
+Each top-level item uses the next step in document order. Nested items stay with
+their parent. The directive applies only to the following list and cannot be
+combined with `step` or `until`.

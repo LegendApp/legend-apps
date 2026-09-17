@@ -26,3 +26,14 @@ test("Markdown exits contribute navigation steps and restore on reverse", async 
   const props = result.content[0].props;
   expect([0, 1, 2, 3, 2, 0].map((step) => stepStyle(step, props).opacity)).toEqual([0, 1, 1, 0, 1, 0]);
 });
+
+test("Markdown list reveals count direct items rather than nested bullets", async () => {
+  const { evaluate } = await import("@mdx-js/mdx");
+  const runtime = await import("react/jsx-runtime");
+  const { Steps } = await import("../../../../apps/slides/src/steps");
+  const { remarkSlideAttributes } = await import("../compiler/remarkSlideAttributes");
+  const compiled = await evaluate('{steps}\n\n- One\n  - Nested\n- Two', { ...runtime, remarkPlugins: [remarkSlideAttributes] });
+  const result = resolveSteps(compiled.default({ components: { Steps } }));
+  expect(result.steps).toBe(3);
+  expect(result.content[0].props.children.flat().map((child) => child.props.at)).toEqual([1, 2]);
+});
