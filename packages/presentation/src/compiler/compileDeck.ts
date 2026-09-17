@@ -10,6 +10,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import typegpuPlugin from "unplugin-typegpu/esbuild";
 import { parse as parseYaml } from "yaml";
+import { remarkShared } from "./remarkShared";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
@@ -175,6 +176,7 @@ function mdxDeckPlugin(entryPath: string, webviewDependencies: Set<string>, draf
           remarkPlugins: [
             remarkFrontmatter,
             remarkGfm,
+            remarkShared,
             [remarkWebviews, { deckPath: entryPath, dependencies: webviewDependencies }],
             [remarkSlides, { templates }],
           ],

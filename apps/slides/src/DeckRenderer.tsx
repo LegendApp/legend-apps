@@ -267,7 +267,7 @@ function SlideCanvasContent({ children, captureEnabled }: { children: ReactNode;
         style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
         <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
-          <FocusStage>{children}</FocusStage>
+          <FocusStage scale={scale}>{children}</FocusStage>
         </SlideCaptureContext.Provider>
       </ScaledView>
     </View>

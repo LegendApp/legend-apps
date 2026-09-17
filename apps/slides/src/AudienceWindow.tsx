@@ -35,14 +35,19 @@ function AudienceContent() {
   // Animated.Value here would also hide the still-mounted outgoing slide.
   if (transitionState.index !== currentSlide || transitionState.revision !== revision) {
     const resolved = resolveTransition(transitionState.index, currentSlide, slides, defaultTransition);
-    const cut = resolved.kind === "none" || resolved.duration === 0 || transitionState.revision !== revision;
+    // Markers opt into motion even when the slide itself uses a cut.
+    const hasShared = [...(surfaces.get(transitionState.index)?.entries ?? [])]
+      .some((entry) => entry.kind === "element");
+    const cut = transitionState.revision !== revision ||
+      (!hasShared && (resolved.kind === "none" || resolved.duration === 0));
     setTransitionState({
       index: currentSlide,
       revision,
       outgoing: cut ? null : transitionState.index,
       ...resolved,
       progress: new Animated.Value(cut ? 1 : 0),
-      ready: cut || !resolved.focus,
+      ready: cut || (!resolved.focus && !hasShared),
+      duration: hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
     });
   }
@@ -54,7 +59,7 @@ function AudienceContent() {
   }, []);
 
   useLayoutEffect(() => {
-    if (transitionState.ready || transitionState.outgoing === null || !transitionState.focus) return;
+    if (transitionState.ready || transitionState.outgoing === null) return;
     let cancelled = false;
     const prepare = async () => {
       const from = surfaces.get(transitionState.outgoing!);
@@ -62,25 +67,41 @@ function AudienceContent() {
       const motions = new Map<number, FocusMotion>();
       if (from && to) {
         const [source, destination] = await Promise.all([measureFocusSurface(from), measureFocusSurface(to)]);
-        const overview = transitionState.reverse ? destination : source;
-        const region = overview.regions.get(transitionState.focus!.from);
-        const surface = transitionState.reverse ? to : from;
-        if (region && surface.width > 0 && surface.height > 0) {
-          const camera = focusCamera(region, surface);
-          const sourceMotion = transitionState.reverse ? createFocusMotion(progress) : createFocusMotion(progress, undefined, camera);
-          const destinationMotion = transitionState.reverse ? createFocusMotion(progress, camera) : createFocusMotion(progress);
-          for (const [id, sourceRect] of source.elements) {
-            const destinationRect = destination.elements.get(id);
-            if (!destinationRect) continue;
-            sourceMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: sourceRect });
-            destinationMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: destinationRect });
+        const sourceMotion = createFocusMotion(progress);
+        const destinationMotion = createFocusMotion(progress);
+        if (transitionState.focus) {
+          const overview = transitionState.reverse ? destination : source;
+          const region = overview.regions.get(transitionState.focus.from);
+          const surface = transitionState.reverse ? to : from;
+          if (region && surface.width > 0 && surface.height > 0) {
+            const camera = focusCamera(region, surface);
+            if (transitionState.reverse) destinationMotion.cameraFrom = camera;
+            else sourceMotion.cameraTo = camera;
+            motions.set(transitionState.outgoing!, sourceMotion);
+            motions.set(transitionState.index, destinationMotion);
+          }
+        }
+        for (const [id, sourceRect] of source.elements) {
+          const destinationRect = destination.elements.get(id);
+          if (!destinationRect) continue;
+          sourceMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: sourceRect });
+          destinationMotion.elements.set(id, { from: sourceRect, to: destinationRect, own: destinationRect });
+        }
+        if (sourceMotion.elements.size) {
+          // The slide translation is in window points; shared geometry is in
+          // logical slide points inside ScaledView.
+          if (transitionState.kind === "slide") {
+            sourceMotion.cameraTo = { x: -90 / (from.scale || 1), y: 0, scale: 1 };
+            destinationMotion.cameraFrom = { x: 180 / (to.scale || 1), y: 0, scale: 1 };
           }
           motions.set(transitionState.outgoing!, sourceMotion);
           motions.set(transitionState.index, destinationMotion);
         }
       }
+      if (!cancelled && transitionState.kind === "none" && !motions.size) progress.setValue(1);
       if (!cancelled) setTransitionState((current) => current === transitionState
-        ? { ...current, ready: true, motions } : current);
+        ? { ...current, ready: true, motions,
+          outgoing: current.kind === "none" && !motions.size ? null : current.outgoing } : current);
     };
     // Give newly mounted destinations a native layout pass before measuring.
     let started = false;
@@ -124,10 +145,11 @@ function AudienceContent() {
     };
   }, [transitionState]);
 
-  const enteringStyle = transition === "slide"
+  const slideLayer = transition === "slide" && transitionState.motions.size === 0;
+  const enteringStyle = slideLayer
     ? { opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [180, 0] }) }] }
     : { opacity: progress };
-  const outgoingStyle = transition === "slide"
+  const outgoingStyle = slideLayer
     ? { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }] }
     // With a shared background, fade both content layers. Legacy opaque slides
     // keep the outgoing surface solid to avoid dimming their backgrounds.
@@ -135,7 +157,7 @@ function AudienceContent() {
   // Render from state: ref changes do not invalidate React's cached output.
   // The layout effect establishes the outgoing layer before paint; cuts never
   // have one, even when the previous transition has not cleaned up yet.
-  const outgoingSlide = transition === "none" || previousSlide === currentSlide ? null : previousSlide;
+  const outgoingSlide = previousSlide === currentSlide ? null : previousSlide;
   const layers = outgoingSlide === null
     ? [{ index: currentSlide, style: enteringStyle }]
     : [
