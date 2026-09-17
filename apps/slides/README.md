@@ -589,3 +589,12 @@ transition:
 
 The attribute marks that block's bounds, not the entire section below it. Use a
 `FocusRegion` component when a region must enclose several separate blocks.
+
+### Apply an effect
+
+`# Liquid title {effect=liquid}` applies an existing visual effect preset to the
+block. Available values are `liquid`, `ripple`, `glitch`, and `pixelate`.
+Attributes compose: `# Title {effect=ripple shared=title step=1}` reveals an
+effected shared title. Effects use their existing default settings and static
+content capture; unsupported captures fall back to ordinary text. Use the
+`Effect` component for custom shaders, parameters, or activation logic.

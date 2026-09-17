@@ -68,3 +68,16 @@ test("focus targets compose with shared elements and reveals", async () => {
   expect(region.children[0].name).toBe("SharedElement");
   for (const attr of ['focus', 'focus=""', 'focus="two words"']) await expect(parse(`Text {${attr}}`)).rejects.toThrow("identifier");
 });
+
+test("effect attributes select existing presets inside shared and step wrappers", async () => {
+  const { effectPresets } = await import("../../../../apps/slides/src/effects");
+  for (const preset of Object.keys(effectPresets)) {
+    const tree = await parse(`# Title {effect=${preset} shared=title step=1}`);
+    const effect = tree.children[0].children[0].children[0];
+    expect(effect.name).toBe("Effect");
+    expect(props(effect)).toEqual({ preset });
+    expect(effect.children[0].type).toBe("heading");
+  }
+  await expect(parse("Text {effect=unknown}")).rejects.toThrow("effect must be");
+  await expect(parse("Text {effect}")).rejects.toThrow("effect must be");
+});
