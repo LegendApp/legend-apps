@@ -7716,3 +7716,65 @@ index 00000000..f185deba
 +}
 +@end
 +#endif
+
+diff --git a/cpp/highlight/code_highlight_podspec.rb b/cpp/highlight/code_highlight_podspec.rb
+--- a/cpp/highlight/code_highlight_podspec.rb
++++ b/cpp/highlight/code_highlight_podspec.rb
+@@ -163,5 +163,6 @@
+       'cpp/highlight/vendor/tree-sitter/src/lib.c',
+-      "#{generated_rel}/generated_registry.cpp",
++      config['externalCodeHighlightGrammars'] == true ? 'cpp/highlight/ExternalGrammarRegistry.cpp' : "#{generated_rel}/generated_registry.cpp",
+     ]
+     langs.each do |lang|
++      next if config['externalCodeHighlightGrammars'] == true
+       sources << "cpp/highlight/vendor/grammars/#{lang}/parser.c"
+@@ -175,3 +176,3 @@
+       source_files: sources,
+-      defines: ' ENRICHED_MARKDOWN_CODE_HIGHLIGHT=1',
++      defines: ' ENRICHED_MARKDOWN_CODE_HIGHLIGHT=1' + (config['externalCodeHighlightGrammars'] == true ? ' ENRICHED_MARKDOWN_EXTERNAL_GRAMMARS=1' : ''),
+       header_paths: [
+diff --git a/cpp/highlight/ExternalGrammarRegistry.cpp b/cpp/highlight/ExternalGrammarRegistry.cpp
+new file mode 100644
+--- /dev/null
++++ b/cpp/highlight/ExternalGrammarRegistry.cpp
+@@ -0,0 +1,40 @@
++#ifdef ENRICHED_MARKDOWN_EXTERNAL_GRAMMARS
++#include "HighlightGrammars.hpp"
++#include <cstdlib>
++#include <dlfcn.h>
++#include <mach-o/dyld.h>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++namespace Markdown {
++const GrammarEntry *findGrammar(const char *canonicalId) {
++  using Find = const GrammarEntry *(*)(const char *);
++  static Find find = [] {
++    std::string root;
++    if (const char *configured = std::getenv("BENCHMARK_GRAMMAR_ROOT")) root = configured;
++    else {
++      uint32_t size = 0;
++      _NSGetExecutablePath(nullptr, &size);
++      std::vector<char> path(size);
++      if (_NSGetExecutablePath(path.data(), &size) != 0) throw std::runtime_error("Cannot locate grammar pack");
++      root = path.data();
++      const auto app = root.rfind(".app/");
++      if (app == std::string::npos) throw std::runtime_error("Set BENCHMARK_GRAMMAR_ROOT for command-line highlighting");
++      const auto parent = root.rfind('/', app);
++      root = root.substr(0, parent) + "/grammar-packs/v1";
++    }
++    const auto path = root + "/tree-sitter/grammars.dylib";
++    void *handle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
++    if (!handle) throw std::runtime_error(std::string("Cannot load grammar pack: ") + dlerror());
++    auto function = reinterpret_cast<Find>(dlsym(handle, "benchmark_find_grammar_v1"));
++    if (!function) throw std::runtime_error("Incompatible grammar pack ABI");
++    // GrammarEntry/query pointers and Tree-sitter languages live in this mapping.
++    // Keep the handle open for the process lifetime, like compiled-in grammars.
++    return function;
++  }();
++  return find(canonicalId);
++}
++} // namespace Markdown
++
++#endif
