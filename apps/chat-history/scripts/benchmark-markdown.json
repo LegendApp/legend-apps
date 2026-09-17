@@ -20,5 +20,6 @@
     "typescript",
     "tsx",
     "yaml"
-  ]
+  ],
+  "externalCodeHighlightGrammars": true
 }
