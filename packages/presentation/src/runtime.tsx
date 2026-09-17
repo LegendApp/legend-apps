@@ -37,18 +37,29 @@ export function usePresentation() {
 }
 
 export function useSlideLifecycle() {
-  const { isActive, isPreview, isPreparing, slideIndex, startedAt, stepCount, stepIndex, stepStartedAt } = usePresentation();
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const isPreparing = usePresentationValue("isPreparing");
+  const slideIndex = usePresentationValue("slideIndex");
+  const startedAt = usePresentationValue("startedAt");
+  const stepCount = usePresentationValue("stepCount");
+  const stepIndex = usePresentationValue("stepIndex");
+  const stepStartedAt = usePresentationValue("stepStartedAt");
   return { isActive, isPreview, isPreparing, slideIndex, startedAt, stepCount, stepIndex, stepStartedAt };
 }
 
 /** Step 0 is the initial state; step 1 is the first advance. */
 export function useStep(at: number) {
-  const runtime = usePresentation();
-  const reached = runtime.stepIndex >= at;
-  const epoch = runtime.stepEpochs?.[at];
+  const runtime$ = usePresentation$();
+  const reached = useValue(() => runtime$.stepIndex.get() >= at);
+  const isCurrent = useValue(() => runtime$.stepIndex.get() === at);
+  const epoch = useValue(() => runtime$.stepEpochs[at].get());
+  const isActive = usePresentationValue("isActive");
+  const isPreview = usePresentationValue("isPreview");
+  const direction = usePresentationValue("direction");
   const [clock, setClock] = useState({ epoch, elapsed: 0 });
   useEffect(() => {
-    if (!reached || !runtime.isActive || runtime.isPreview || epoch === undefined) return;
+    if (!reached || !isActive || isPreview || epoch === undefined) return;
     let frame = 0;
     const tick = () => {
       setClock({ epoch, elapsed: Math.max(0, performance.now() - epoch) / 1000 });
@@ -56,8 +67,8 @@ export function useStep(at: number) {
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [epoch, reached, runtime.isActive, runtime.isPreview]);
-  return { reached, isCurrent: runtime.stepIndex === at,
-    elapsed: reached && !runtime.isPreview && clock.epoch === epoch ? clock.elapsed : 0,
-    startedAt: epoch, direction: runtime.direction ?? "forward" };
+  }, [epoch, reached, isActive, isPreview]);
+  return { reached, isCurrent,
+    elapsed: reached && !isPreview && clock.epoch === epoch ? clock.elapsed : 0,
+    startedAt: epoch, direction: direction ?? "forward" };
 }

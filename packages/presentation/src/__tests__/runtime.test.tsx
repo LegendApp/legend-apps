@@ -36,3 +36,31 @@ for (const alias of [false, true]) {
     }
   });
 }
+
+test("lifecycle and step hooks ignore unrelated runtime fields", async () => {
+  const { useSlideLifecycle, useStep } = await import("../runtime");
+  const runtime$ = observable({ isActive: false, isPreview: false, isPreparing: false,
+    currentSlide: 0, slideIndex: 0, stepIndex: 5, stepCount: 8,
+    direction: "forward", stepEpochs: { 2: 100, 5: 200 } });
+  let lifecycleRenders = 0;
+  let stepRenders = 0;
+  function Lifecycle() { lifecycleRenders++; return <lifecycle value={useSlideLifecycle()} />; }
+  function Step() { stepRenders++; return <step value={useStep(2)} />; }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    await act(() => { tree = create(<PresentationProvider value={runtime$}><Lifecycle /><Step /></PresentationProvider>); });
+    lifecycleRenders = stepRenders = 0;
+    await act(() => runtime$.currentSlide.set(1));
+    await act(() => runtime$.stepEpochs[5].set(300));
+    expect([lifecycleRenders, stepRenders]).toEqual([0, 0]);
+    await act(() => runtime$.stepIndex.set(6));
+    expect([lifecycleRenders, stepRenders]).toEqual([1, 0]);
+    await act(() => runtime$.stepIndex.set(2));
+    expect(tree.root.findByType("step").props.value.isCurrent).toBe(true);
+    expect(stepRenders).toBe(1);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    log.mockRestore();
+  }
+});
