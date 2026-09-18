@@ -158,6 +158,10 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         `ARCHS=${getXcodeArch(arch)}`,
         "ONLY_ACTIVE_ARCH=NO",
         "DEPLOYMENT_POSTPROCESSING=YES",
+        // Apply to the app and source-built Pods; prebuilt Hermes is stripped below.
+        "DEAD_CODE_STRIPPING=YES",
+        "LLVM_LTO=YES_THIN",
+        "GCC_OPTIMIZATION_LEVEL=z",
         ...getMacOSDevelopmentSigningArgs(
           process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
         ),

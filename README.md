@@ -207,6 +207,12 @@ bun package chat-history
 bun release chat-history
 ```
 
+macOS release builds enable dead-code stripping, ThinLTO, and size-oriented
+`-Oz` compilation for the app and source-built Pods. Each build targets one
+architecture and strips distribution symbols, including prebuilt Hermes symbols.
+The shared settings also apply to the Chat History benchmark exporter. Debug,
+iOS, and Android build settings are unchanged.
+
 These interactive commands assume macOS and include both Apple Silicon and Intel.
 Packaging shows the configured version/build for confirmation, then always builds
 from source for signed, notarized distribution. Releasing offers verification or
