@@ -9,7 +9,7 @@ function readyState() {
   return {
     deckLocked: false,
     pendingDeck: null,
-    audienceOpen: true,
+    audienceOpen: false,
     blackout: false,
     buildErrors: [],
     buildWarnings: [],
@@ -25,9 +25,10 @@ function readyState() {
 }
 
 describe("deck build policy", () => {
-  test("defers replacement of a locked deck but permits initial loading", () => {
+  test("defers updates only while presenting or opening the audience window", () => {
     expect(shouldDeferDeckUpdate({ ...readyState(), deckLocked: true })).toBe(true);
     expect(shouldDeferDeckUpdate(readyState())).toBe(false);
+    expect(shouldDeferDeckUpdate({ ...readyState(), audienceOpen: true })).toBe(true);
     expect(shouldDeferDeckUpdate({ ...readyState(), component: null, deckLocked: true })).toBe(false);
   });
 

@@ -774,6 +774,8 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
 
 function PresenterStatus() {
   const blackout = useValue(slidesState$.blackout);
+  const audienceOpen = useValue(slidesState$.audienceOpen);
+  const deckLocked = useValue(slidesState$.deckLocked);
   const state = {
     displayMessage: useValue(slidesState$.displayMessage),
     status: useValue(slidesState$.status),
@@ -782,6 +784,9 @@ function PresenterStatus() {
     buildWarnings: useValue(slidesState$.buildWarnings),
     runtimeErrors: useValue(slidesState$.runtimeErrors),
   };
+  useEffect(() => {
+    if (!audienceOpen && !deckLocked && state.pendingDeck) applyPendingDeck();
+  }, [audienceOpen, deckLocked, state.pendingDeck]);
   return (
     <>
       {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
@@ -789,8 +794,7 @@ function PresenterStatus() {
       {state.status === "building" && <Text style={styles.statusMessage}>Compiling changes…</Text>}
       {state.pendingDeck && (
         <View style={styles.updateBanner}>
-          <Text style={styles.statusMessage}>Update ready: {state.pendingDeck.path.split("/").pop()}</Text>
-          <Button label="Apply Update" onPress={applyPendingDeck} />
+          <Text style={styles.statusMessage}>Changes will appear when the presentation ends</Text>
         </View>
       )}
       {(state.buildErrors.length > 0 || state.buildWarnings.length > 0) && (

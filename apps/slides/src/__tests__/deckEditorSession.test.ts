@@ -141,3 +141,42 @@ describe("deck source editing", () => {
     session.dispose();
   });
 });
+
+it("rechecks disk when a change arrives during the initial read", async () => {
+  let finish!: (value: string) => void;
+  let reads = 0;
+  const previews: string[] = [];
+  const session = createDeckEditorSession({
+    read: async () => ++reads === 1 ? new Promise<string>((resolve) => { finish = resolve; }) : "# Latest",
+    write: async () => true,
+    preview: async (_path, source) => { previews.push(source); return true; },
+    invalidate() {}, opened() {},
+  });
+  const opening = session.open("deck.mdx");
+  await session.refresh();
+  finish("# Stale");
+  await opening;
+  expect(session.getSnapshot().source).toBe("# Latest");
+  expect(previews.at(-1)).toBe("# Latest");
+  session.dispose();
+});
+
+it("rechecks disk after a save when its notification arrived during the write", async () => {
+  let finish!: (value: boolean) => void;
+  let disk = "# Original";
+  const session = createDeckEditorSession({
+    read: async () => disk,
+    write: () => new Promise((resolve) => { finish = resolve; }),
+    preview: async () => true, invalidate() {}, opened() {},
+  });
+  await session.open("deck.mdx");
+  session.edit("# Saved", 1);
+  const saving = session.save();
+  disk = "# External after save";
+  await session.refresh();
+  finish(true);
+  await saving;
+  expect(session.getSnapshot().source).toBe(disk);
+  expect(session.getSnapshot().dirty).toBe(false);
+  session.dispose();
+});

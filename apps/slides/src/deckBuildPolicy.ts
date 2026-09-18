@@ -2,8 +2,8 @@ import type { ComponentType } from "react";
 import type { CompileDeckFailure, PresentationTemplates } from "@legend-apps/presentation";
 import type { SlidesState } from "./slidesStore";
 
-export function shouldDeferDeckUpdate(current: Pick<SlidesState, "deckLocked" | "component">) {
-  return current.deckLocked && current.component !== null;
+export function shouldDeferDeckUpdate(current: Pick<SlidesState, "deckLocked" | "audienceOpen" | "component">) {
+  return (current.audienceOpen || current.deckLocked) && current.component !== null;
 }
 
 export function failedDeckUpdate(result: CompileDeckFailure): Partial<SlidesState> {

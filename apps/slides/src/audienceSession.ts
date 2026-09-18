@@ -14,7 +14,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void>) => {
     queue = queue.then(operation).catch((error) => {
-      platform.update({ blackout: true, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
+      platform.update({ deckLocked: active !== null, blackout: true, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
     });
     return queue;
   };
@@ -33,13 +33,13 @@ export function createAudienceSession(platform: AudiencePlatform) {
       return enqueue(async () => {
         await platform.close();
         active = null;
-        platform.update({ audienceOpen: false, blackout: false });
+        platform.update({ audienceOpen: false, deckLocked: false, blackout: false });
         await platform.focusPresenter();
       });
     },
     closed() {
       active = null;
-      platform.update({ audienceOpen: false, blackout: false });
+      platform.update({ audienceOpen: false, deckLocked: false, blackout: false });
     },
     displaysChanged(displays: Display[]) {
       return enqueue(async () => {
@@ -49,7 +49,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
           platform.update({ blackout: true, displayMessage: "Presentation display disconnected. Reconnect it, select a display, then press Present to resume." });
           await platform.close();
           active = null;
-          platform.update({ audienceOpen: false });
+          platform.update({ audienceOpen: false, deckLocked: false });
           await platform.focusPresenter();
         } else if (Object.keys(next.frame).some((key) => next.frame[key as keyof Display["frame"]] !== active?.frame[key as keyof Display["frame"]])) {
           await platform.open(next);

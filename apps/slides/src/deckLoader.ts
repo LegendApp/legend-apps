@@ -1,3 +1,4 @@
+import { createDeckReloadQueue } from "./deckReloadQueue";
 import { compilerCommand } from "./compilerCommand";
 import { writeTextFileIfUnchanged } from "@legend-apps/file-dialog";
 import { transitionDirectoryPath } from "./transitionLibrary";
@@ -32,17 +33,16 @@ import { getSlidesState, setSlidesState } from "./slidesStore";
 let watcher: { remove(): void } | undefined;
 let watchedDirectory: string | undefined;
 let watchedDeckPath: string | undefined;
-let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
+let reloadQueue: ReturnType<typeof createDeckReloadQueue> | undefined;
 let buildSequence = 0;
-let draftReloadHandler: ((path: string) => void) | undefined;
+let draftReloadHandler: ((path: string) => Promise<unknown>) | undefined;
 
-export function setDraftReloadHandler(handler?: (path: string) => void) {
+export function setDraftReloadHandler(handler?: (path: string) => Promise<unknown>) {
   draftReloadHandler = handler;
 }
 
 export function invalidateDeckBuild() {
   buildSequence += 1;
-  if (rebuildTimer) clearTimeout(rebuildTimer);
 }
 
 // react-native-webgpu installs these globals after its constants module has
@@ -111,13 +111,6 @@ function applyUniwindStyles(code: string) {
   }).__reinit((runtime) => createStyles(runtime), ["light", "dark"]);
 }
 
-function scheduleRebuild(path: string) {
-  if (rebuildTimer) {
-    clearTimeout(rebuildTimer);
-  }
-  rebuildTimer = setTimeout(() => draftReloadHandler ? draftReloadHandler(path) : void loadDeck(path, false), 120);
-}
-
 function directoryName(path: string) {
   return path.slice(0, Math.max(1, path.lastIndexOf("/")));
 }
@@ -128,9 +121,15 @@ function watchDeckDirectory(path: string) {
     return;
   }
   watcher?.remove();
+  reloadQueue?.dispose();
   watchedDirectory = directory;
   watchedDeckPath = path;
-  watcher = watchDirectories([directory, transitionDirectoryPath()], () => scheduleRebuild(path));
+  const queue = createDeckReloadQueue(async () => {
+    if (draftReloadHandler) await draftReloadHandler(path);
+    else await loadDeck(path, false);
+  });
+  reloadQueue = queue;
+  watcher = watchDirectories([directory, transitionDirectoryPath()], queue.changed);
 }
 
 function decodeBase64(value: string) {
@@ -209,8 +208,8 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
   }
 
   // Do not evaluate deck code or replace global styles until the presenter
-  // explicitly accepts the build. Check the lock after the asynchronous build.
-  if (draftSource === undefined && shouldDeferDeckUpdate(getSlidesState())) {
+  // finishes presenting. Check the presentation state after the asynchronous build.
+  if (shouldDeferDeckUpdate(getSlidesState())) {
     setSlidesState({ pendingDeck: { path, result, remember }, status: "ready", buildWarnings: result.warnings });
     return;
   }
@@ -219,7 +218,7 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
 
 export function applyPendingDeck() {
   const pending = getSlidesState().pendingDeck;
-  if (pending) {
+  if (pending && !shouldDeferDeckUpdate(getSlidesState())) {
     publishDeck(pending.result, pending.path, pending.remember);
   }
 }

@@ -21,6 +21,7 @@ describe("audience display recovery", () => {
     await session.open(projector);
     await session.displaysChanged([]);
     expect(state().audienceOpen).toBe(false);
+    expect(state().deckLocked).toBe(false);
     expect(state().displayMessage).toContain("disconnected");
     await session.displaysChanged([projector]);
     expect(calls).toEqual([["open", projector], ["close"]]);
@@ -53,13 +54,25 @@ describe("audience display recovery", () => {
     await Promise.all([opening, unplugged]);
     expect(calls.at(-1)).toEqual(["close"]);
     expect(state().audienceOpen).toBe(false);
+    expect(state().deckLocked).toBe(false);
   });
   test("contains native failures and keeps subsequent commands usable", async () => {
     const { session, state } = setup(async () => { throw new Error("native failure"); });
     await session.open(projector);
     expect(state().blackout).toBe(true);
+    expect(state().deckLocked).toBe(false);
     expect(state().displayMessage).toContain("native failure");
     await session.close();
     expect(state().audienceOpen).toBe(false);
+    expect(state().deckLocked).toBe(false);
   });
+});
+
+ test("unlocks updates when the audience window is closed manually", async () => {
+  const { session, state } = setup();
+  await session.open(projector);
+  expect(state().deckLocked).toBe(true);
+  session.closed();
+  expect(state().audienceOpen).toBe(false);
+  expect(state().deckLocked).toBe(false);
 });

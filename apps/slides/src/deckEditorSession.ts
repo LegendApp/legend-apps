@@ -30,6 +30,7 @@ export function createDeckEditorSession(io: EditorIO) {
   const listeners = new Set<() => void>();
   let version = 0;
   let validVersion = -1;
+  let refreshPending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let compiling: { version: number; promise: Promise<boolean> } | undefined;
   const emit = (patch: Partial<DeckEditorSnapshot>) => { state = { ...state, ...patch }; listeners.forEach((fn) => fn()); };
@@ -68,6 +69,7 @@ export function createDeckEditorSession(io: EditorIO) {
     getSnapshot: () => state,
     subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     async open(path: string) {
+      refreshPending = false;
       invalidate();
       const currentVersion = version;
       snapshot = new SourceSnapshot("");
@@ -82,6 +84,11 @@ export function createDeckEditorSession(io: EditorIO) {
         await compile();
       } catch (error) {
         if (currentVersion === version) emit({ status: "empty", error: String(error) });
+      } finally {
+        if (currentVersion === version && refreshPending) {
+          refreshPending = false;
+          await session.refresh();
+        }
       }
     },
     edit(source: string, eventCount: number) {
@@ -124,11 +131,20 @@ export function createDeckEditorSession(io: EditorIO) {
         if (state.documentVersion === documentVersion) emit({ error: String(error) });
         return false;
       } finally {
-        if (state.documentVersion === documentVersion) emit({ saving: false });
+        if (state.documentVersion === documentVersion) {
+          emit({ saving: false });
+          if (refreshPending) {
+            refreshPending = false;
+            await session.refresh();
+          }
+        }
       }
     },
     async refresh() {
       const { path, documentVersion } = state;
+      if (path && (state.status === "loading" || state.saving)) {
+        refreshPending = true;
+      }
       if (!path || state.status === "loading" || state.saving) return;
       try {
         const disk = await io.read(path);
@@ -150,7 +166,7 @@ export function createDeckEditorSession(io: EditorIO) {
         if (state.documentVersion === documentVersion) emit({ error: String(error) });
       }
     },
-    dispose() { clearTimeout(timer); invalidate(); listeners.clear(); },
+    dispose() { refreshPending = false; clearTimeout(timer); invalidate(); listeners.clear(); },
   };
   return session;
 }
