@@ -99,7 +99,7 @@ Flutter · GPUI {class="text-3xl"}
 :::
 ::::
 
-Plus ten Hello World baselines.
+Plus nine Hello World baselines.
 
 <!-- 2:25–2:45. Pause for the slightly ridiculous amount of work. These categories describe app content, not the window border. GPUI's newer build also has a native composer; its measured timing run predates that update. Two workloads: the greeting isolates baseline overhead; Chat History exercises real application work. -->
 
@@ -127,7 +127,7 @@ footer: 'Median ms · 10 measured rounds · small differences near recording cad
 
 <Chart workload="hello" metric="content" />
 
-<!-- 3:00–3:35. Hello World first content: RN 227.6 ms, Legend Shell 227.5, SwiftUI 227.5, GPUI 226.5. These are effectively tied at the recording cadence. AppKit is 193.4. This is an overhead baseline, not a real application responsiveness benchmark. Do not manufacture a win from tenths of a millisecond. -->
+<!-- 3:00–3:35. Hello World first content: RN 227.6 ms, SwiftUI 227.5, GPUI 226.5. These are effectively tied at the recording cadence. AppKit is 193.4. This is an overhead baseline, not a real application responsiveness benchmark. Do not manufacture a win from tenths of a millisecond. -->
 
 ---
 eyebrow: 'Chat History / first content'
@@ -508,7 +508,7 @@ footer: 'Greeting workload · MiB · settled physical footprint'
 
 <Chart workload="hello" metric="memory" />
 
-<!-- Baseline settled memory. Standalone RN 23.3 MiB, Legend Shell 23.9, AppKit 15.5, SwiftUI 18.3. These are not the memory figures for the chat app. -->
+<!-- Baseline settled memory. Standalone RN 23.3 MiB, AppKit 15.5, SwiftUI 18.3. These are not the memory figures for the chat app. -->
 
 ---
 eyebrow: 'Backup'
@@ -517,9 +517,11 @@ footer: 'Greeting workload · newer installed-size snapshot · MiB'
 
 # Hello World / installed size
 
+Historical RN size · symbol-stripped rebuild pending. {class="text-2xl text-amber-300"}
+
 <Chart workload="hello" metric="size" />
 
-<!-- Legend Shell 9.3 MiB versus standalone RN 16.3. Distinct builds, not interchangeable labels. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
+<!-- RN 16.3 MiB is the historical unstripped measurement. Packaging audit found retained executable and Hermes symbols; both baseline and product are ARM64-only. Rebuild before quoting an optimized size. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
 
 ---
 eyebrow: 'Backup / methodology'

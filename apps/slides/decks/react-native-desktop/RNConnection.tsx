@@ -31,7 +31,7 @@ export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?
   return (
     <View style={{ gap: 12, marginTop: 20 }}>
       {rows.map(({ name, value }) => {
-        const highlighted = name === "React Native" || name === "Legend Shell (RN)";
+        const highlighted = name === "React Native";
         return (
           <View key={name} style={{ flexDirection: "row", alignItems: "center", height: 43, gap: 24 }}>
             <Text style={{ width: 280, fontSize: 27, color: highlighted ? "#67e8f9" : "#cbd5e1", fontWeight: highlighted ? "700" : "400" }}>{name}</Text>

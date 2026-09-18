@@ -53,7 +53,7 @@ and GitHub destinations before presenting; the speaker notes mark this dependenc
 Windows status and public SDK availability must be refreshed before the talk.
 
 Benchmark values are copied from the September 17 report into
-`rnconnection-assets/benchmarks.json`. All nine chat implementations and ten
+`rnconnection-assets/benchmarks.json`. All nine chat implementations and nine
 greeting implementations are retained. Size and timing revisions are labeled
 separately. The report snapshot is included beside the data; the old deck and its
 benchmark.ts are not dependencies.
@@ -62,7 +62,12 @@ benchmark.ts are not dependencies.
 
 - Real Legend Slides compiler: 36 slides, zero errors, zero warnings.
 - Repository `bun run typecheck`: passed.
-- All 36 slides have speaker notes; data includes nine chat and ten greeting apps.
+- All 36 slides have speaker notes; data includes nine chat and nine greeting apps.
 - Native inspection attempted with an app-scoped agent-device session. Snapshot
   and screenshot requests timed out; no native visual or navigation verification
   is claimed. Rehearse the actual app before presenting.
+
+September 18: excluded Legend Shell as a duplicate RN host. The original report
+snapshot preserves provenance; presentation data uses nine frameworks. RN Hello
+World size remains historical and explicitly marked pending symbol-stripped
+rebuild. Both existing RN binaries were verified ARM64-only.
