@@ -4,6 +4,7 @@ import {
   createPresenterToolbarItems,
   formatPresenterElapsed,
   presenterDisplayToolbarItemId,
+  presenterEditToolbarItemId,
   presenterElapsedToolbarItemId,
   presenterModeToolbarItemId,
   presenterStartToolbarItemId,
@@ -40,11 +41,13 @@ describe("presenter toolbar", () => {
       presenterModeToolbarItemId,
       presenterDisplayToolbarItemId,
       presenterStartToolbarItemId,
+      presenterEditToolbarItemId,
     ]);
     expect(items.every((item) => item.placement === "trailing")).toBe(true);
     expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
     expect(items[2]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
     expect(items[3]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
+    expect(items[4]).toMatchObject({ enabled: true, systemImageName: "square.and.pencil", tooltip: "Edit Source" });
   });
 
   it("puts active timer controls in the elapsed-time menu", () => {
@@ -67,6 +70,7 @@ describe("presenter toolbar", () => {
     expect(items[1]).toMatchObject({ enabled: false });
     expect(items[2]).toMatchObject({ enabled: false });
     expect(items[3]).toMatchObject({ label: "Stop", value: presenterStopValue });
+    expect(items[4]).toMatchObject({ enabled: false });
   });
 
   it("keeps start disabled until a deck and output target are available", () => {
@@ -83,5 +87,6 @@ describe("presenter toolbar", () => {
     expect(items[0]).toMatchObject({ enabled: false });
     expect(items[2]).toMatchObject({ enabled: false });
     expect(items[3]).toMatchObject({ enabled: false });
+    expect(items[4]).toMatchObject({ enabled: false });
   });
 });

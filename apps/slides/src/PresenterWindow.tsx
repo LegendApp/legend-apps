@@ -49,6 +49,7 @@ import {
   createPresenterToolbarItems,
   formatPresenterElapsed,
   presenterDisplayToolbarItemId,
+  presenterEditToolbarItemId,
   presenterElapsedToolbarItemId,
   presenterModePresentationValue,
   presenterModeRehearsalValue,
@@ -301,6 +302,8 @@ type PresenterToolbarProps = {
   displays: Display[];
   hasDeck: boolean;
   isEditing?: boolean;
+  canEditDeck: boolean;
+  onEditDeck(): void;
   onDisplayChange(displayId: string): void;
   onModeChange(mode: PresenterMode): void;
   onStart(): Promise<void>;
@@ -316,6 +319,8 @@ function PresenterToolbar({
   displays,
   hasDeck,
   isEditing = false,
+  canEditDeck,
+  onEditDeck,
   onDisplayChange,
   onModeChange,
   onStart,
@@ -400,12 +405,12 @@ function PresenterToolbar({
     void setWindowOptions("slides-presenter", {
       windowStyle: {
         toolbarItems: createPresenterToolbarItems({
-          audienceOpen, displays, elapsed: elapsed$.peek(), hasDeck,
+          audienceOpen, canEditDeck, displays, elapsed: elapsed$.peek(), hasDeck,
           rehearsalEnabled, selectedDisplayId, timerRunning: timerRunning$.get(),
         }),
       },
     });
-  }, [audienceOpen, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
+  }, [audienceOpen, canEditDeck, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
 
   useObserveEffect(() => {
     void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed$.get()));
@@ -416,7 +421,9 @@ function PresenterToolbar({
       if (event.identifier !== "slides-presenter") {
         return;
       }
-      if (event.itemId === presenterElapsedToolbarItemId) {
+      if (event.itemId === presenterEditToolbarItemId) {
+        if (!audienceOpen && canEditDeck) onEditDeck();
+      } else if (event.itemId === presenterElapsedToolbarItemId) {
         if (event.value === presenterTimerPauseValue) {
           applyTimerEvent({ type: "pause-requested" });
         } else if (event.value === presenterTimerResumeValue) {
@@ -439,7 +446,7 @@ function PresenterToolbar({
       }
     });
     return () => subscription.remove();
-  }, [applyTimerEvent, displays, onDisplayChange, onModeChange, onStart, onStop]);
+  }, [applyTimerEvent, audienceOpen, canEditDeck, displays, onEditDeck, onDisplayChange, onModeChange, onStart, onStop]);
 
   return null;
 }
@@ -667,12 +674,13 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       <ConnectedPresenterToolbar
         presenter$={presenter$}
         audienceOpen={audienceOpen}
+        canEditDeck={Boolean(deckPath)}
+        onEditDeck={() => setEditingDeck(true)}
         onDisplayChange={selectDisplay}
         onModeChange={selectMode}
         onStart={startAudience}
         onStop={stopAudience}
       />
-      {!audienceOpen && deckPath && <Pressable accessibilityRole="button" onPress={() => setEditingDeck(true)} className="self-end px-4 py-2"><Text className="text-blue-300">Edit Source</Text></Pressable>}
       <PresenterDeckContent
         keyboardJump$={keyboardJump$}
         presenter$={presenter$}

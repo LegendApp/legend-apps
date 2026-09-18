@@ -1,5 +1,6 @@
 import type { Display, WindowToolbarItem } from "@legend-apps/window-manager";
 
+export const presenterEditToolbarItemId = "slides-presenter-edit";
 export const presenterModeToolbarItemId = "slides-presenter-mode";
 export const presenterDisplayToolbarItemId = "slides-presenter-display";
 export const presenterStartToolbarItemId = "slides-presenter-start";
@@ -28,6 +29,7 @@ export function createPresenterToolbarItems({
   displays,
   elapsed,
   hasDeck,
+  canEditDeck = hasDeck,
   rehearsalEnabled,
   selectedDisplayId,
   timerRunning,
@@ -36,6 +38,7 @@ export function createPresenterToolbarItems({
   displays: readonly Pick<Display, "id" | "name">[];
   elapsed: number;
   hasDeck: boolean;
+  canEditDeck?: boolean;
   rehearsalEnabled: boolean;
   selectedDisplayId: string | null;
   timerRunning: boolean;
@@ -112,6 +115,15 @@ export function createPresenterToolbarItems({
       tooltip: audienceOpen ? "Stop" : rehearsalEnabled ? "Start Rehearsal" : "Start Presentation",
       type: "button",
       value: audienceOpen ? presenterStopValue : presenterStartValue,
+    },
+    {
+      enabled: !audienceOpen && canEditDeck,
+      id: presenterEditToolbarItemId,
+      label: "Edit Source",
+      placement: "trailing",
+      systemImageName: "square.and.pencil",
+      tooltip: "Edit Source",
+      type: "button",
     },
   ];
 }
