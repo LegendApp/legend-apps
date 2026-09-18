@@ -1,2 +1,2 @@
 export { AmbientAurora } from "./AmbientAurora";
-export { AnimatedAtmosphere, Fluid, Smoke, Wireframe, type AtmosphereProps, type AtmosphereVariant } from "./AnimatedAtmosphere";
+export { AnimatedAtmosphere, GlassAtmosphere, Fluid, Smoke, Wireframe, type AtmosphereProps, type AtmosphereVariant } from "./AnimatedAtmosphere";
