@@ -13,7 +13,7 @@ presenter:
 ---
 
 import { Chart, Tradeoffs } from "./RNConnection"
-import chatImage from "./rnconnection-assets/chat-history.png"
+import { NineApps } from "./NineApps"
 
 # React Native is the best way to build desktop apps
 
@@ -67,41 +67,41 @@ A useful app should get out of your way. {class="text-cyan-300 text-4xl"}
 <!-- 1:20–2:00. The interesting part of the clips is the action after launch. We are not just making an empty window appear. Bridge from the subjective experience to measurement: these apps felt fast, but how did this choice compare to other ways of building desktop software? -->
 
 ---
-eyebrow: 'Legend Chat History'
-footer: 'Actual app · synthetic screenshot content · benchmark uses separate pinned histories'
+template: ./NineApps.tsx
+transition: none
 ---
 
-# I wanted to know how it compared.
+<NineApps mode="hero" />
 
-<Image source={{ uri: chatImage }} style={{ width: 1600, height: 580 }} resizeMode="contain" />
-
-<!-- 2:00–2:25. Introduce Chat History: browsing local Claude and Codex conversations, long transcripts, Markdown and highlighted code. This is a real screenshot from the report's synthetic visual fixture, not the private benchmark corpus. It demonstrates the interface; the following measurements use pinned local histories. Use the real app clip here if available. -->
+<!-- 2:00–2:15. Real RN app video goes here when supplied: opening, scrolling, switching. Currently a labeled media placeholder, not simulated footage. End on a still that matches the RN grid screenshot. Advance: the RN card becomes the center of the grid and eight windows fan out from behind it. -->
 
 ---
-eyebrow: 'The experiment'
-footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
+template: ./NineApps.tsx
+transition:
+  type: focus
+  from: nine-apps-stage
+  duration: 1100
 ---
 
-# So I built it nine times.
+<NineApps mode="grid" />
 
-::::grid{columns=3 gap=24}
-:::group{padding=24 class="bg-slate-800 rounded-2xl"}
-### Native views {class="text-4xl"}
-React Native · AppKit · SwiftUI {class="text-3xl"}
-:::
-:::group{padding=24 class="bg-slate-800 rounded-2xl"}
-### Web rendering {class="text-4xl"}
-Electron · Tauri · Deno WebView · Deno CEF {class="text-3xl"}
-:::
-:::group{padding=24 class="bg-slate-800 rounded-2xl"}
-### Custom rendering {class="text-4xl"}
-Flutter · GPUI {class="text-3xl"}
-:::
-::::
+<!-- 2:15–2:30. “Then I built it nine times.” Hold long enough to count them. RN stays in the center. Every screenshot should use the same conversation, viewport, and appearance. Assets are pending; the labels name the nine actual implementations. Advance unfolds the grid into a filmstrip. -->
 
-Plus nine Hello World baselines.
+---
+template: ./NineApps.tsx
+steps: 2
+transition:
+  type: focus
+  from: nine-apps-stage
+  duration: 1100
+---
 
-<!-- 2:25–2:45. Pause for the slightly ridiculous amount of work. These categories describe app content, not the window border. GPUI's newer build also has a native composer; its measured timing run predates that update. Two workloads: the greeting isolates baseline overhead; Chat History exercises real application work. -->
+<NineApps mode="filmstrip" />
+
+<!-- 2:30–2:45. RN starts centered. The strip holds each app for 2.8 seconds and glides for 1.1 seconds, looping through all nine. Center cards grow; their neighbors shrink and dim. This is a visual tour, not a timing comparison. Shared slide epochs synchronize playback; previews stay still.
+1: Let the filmstrip run while explaining the comparison. Advance pauses it.
+2: Inspect the centered implementation. Advance again continues to methodology. Media is intentionally pending; do not present these slots as screenshots.
+-->
 
 ---
 eyebrow: 'Ground rules'
