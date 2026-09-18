@@ -67,6 +67,7 @@
     "benchmark:syntax-parser": "bash packages/syntax-parser/scripts/test-tree-sitter.sh --benchmark",
     "benchmark:syntax-parser:edits": "bash packages/syntax-parser/scripts/test-tree-sitter.sh --edit-benchmark",
     "test:music": "jest --config apps/music/jest.config.cjs",
+    "test:slides:transitions": "bun scripts/test-slides-transitions.ts",
     "test:slides": "bun test packages/presentation/src/__tests__ apps/slides/src/__tests__",
     "test:markdown-document": "jest --config packages/markdown-document/jest.config.cjs",
     "test:markdown-e2e": "bun scripts/test-markdown-e2e.ts",

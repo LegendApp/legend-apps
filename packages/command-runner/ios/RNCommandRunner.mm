@@ -315,6 +315,15 @@ RCT_EXPORT_MODULE(NativeCommandRunner)
 - (NSString *)resolveCommandPath:(NSString *)command
 {
   NSString *expandedCommand = [command stringByExpandingTildeInPath];
+  if ([command hasPrefix:@"bundle:"]) {
+    NSString *root = [[[NSBundle mainBundle] resourcePath] stringByResolvingSymlinksInPath];
+    NSString *relative = [command substringFromIndex:7];
+    NSString *candidate = [[[root stringByAppendingPathComponent:relative] stringByStandardizingPath] stringByResolvingSymlinksInPath];
+    if ([candidate hasPrefix:[root stringByAppendingString:@"/"]] && [[NSFileManager defaultManager] isExecutableFileAtPath:candidate]) {
+      return candidate;
+    }
+    return nil;
+  }
   if ([expandedCommand containsString:@"/"]) {
     return [[NSFileManager defaultManager] isExecutableFileAtPath:expandedCommand] ? expandedCommand : nil;
   }

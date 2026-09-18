@@ -1,3 +1,6 @@
+import { compilerCommand } from "./compilerCommand";
+import { writeTextFileIfUnchanged } from "@legend-apps/file-dialog";
+import { transitionDirectoryPath } from "./transitionLibrary";
 import * as Motion from "@legendapp/motion";
 import * as LegendState from "@legendapp/state";
 import * as LegendStateReact from "@legendapp/state/react";
@@ -21,12 +24,11 @@ import * as TypeGPUData from "typegpu/data";
 import * as TypeGPUStd from "typegpu/std";
 import { gunzipSync, strFromU8 } from "fflate";
 import { Uniwind } from "uniwind";
-import type { CompileDeckResult, CompileDeckSuccess, PresentationTemplates } from "@legend-apps/presentation";
+import type { CompileDeckResult, CompileDeckSuccess, PresentationTemplates, PresentationTransitions } from "@legend-apps/presentation";
 import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "./deckBuildPolicy";
 import { getLastDeckPath, rememberDeckPath } from "./slidesPreferences";
 import { getSlidesState, setSlidesState } from "./slidesStore";
 
-const compilerPath = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH;
 let watcher: { remove(): void } | undefined;
 let watchedDirectory: string | undefined;
 let watchedDeckPath: string | undefined;
@@ -90,8 +92,14 @@ function evaluateDeck(code: string) {
     throw new Error("The compiled deck did not export an MDX component.");
   }
   const templates = module.exports.__legendSlidesTemplates;
+  const transitions = (module.exports.__legendSlidesTransitions ?? {}) as PresentationTransitions;
+  for (const [name, definition] of Object.entries(transitions)) {
+    try { Presentation.defineTransition(definition); }
+    catch (error) { throw new Error(`Transition "${name}": ${String(error)}`); }
+  }
   return {
     component: component as React.ComponentType<any>,
+    transitions,
     templates: templates && typeof templates === "object" ? templates as PresentationTemplates : {},
   };
 }
@@ -122,7 +130,7 @@ function watchDeckDirectory(path: string) {
   watcher?.remove();
   watchedDirectory = directory;
   watchedDeckPath = path;
-  watcher = watchDirectories([directory], () => scheduleRebuild(path));
+  watcher = watchDirectories([directory, transitionDirectoryPath()], () => scheduleRebuild(path));
 }
 
 function decodeBase64(value: string) {
@@ -165,23 +173,12 @@ export async function previewDeckSource(path: string, source: string) {
 async function buildDeck(path: string, remember: boolean, sequence: number, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
-  if (!compilerPath) {
-    setSlidesState({ buildErrors: ["The slides compiler path was not included in this build."], status: "error" });
-    return;
-  }
-
-  const availability = await commandRunner.getAvailability(["bun"]);
-  if (sequence !== buildSequence) {
-    return;
-  }
-  if (!availability.bun) {
-    setSlidesState({ buildErrors: ["Bun is required to compile local MDX decks."], status: "error" });
-    return;
-  }
+  const compiler = await compilerCommand();
+  if (sequence !== buildSequence) return;
 
   const commandResult = await commandRunner.runCommand({
-    command: "bun",
-    args: [compilerPath, path, ...(draftSource === undefined ? [] : ["--draft"])],
+    command: compiler.command,
+    args: [...compiler.prefix, path, "--transitions", transitionDirectoryPath(), ...(draftSource === undefined ? [] : ["--draft"])],
     input: draftSource,
     timeoutMs: 60_000,
   });
@@ -229,9 +226,9 @@ export function applyPendingDeck() {
 
 function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean) {
   try {
-    const { component, templates } = evaluateDeck(result.code);
+    const { component, templates, transitions } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
-    setSlidesState(successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings));
+    setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions });
     if (remember) {
       rememberDeckPath(path);
       noteRecentDocument(path);
@@ -242,4 +239,19 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
       status: "error",
     });
   }
+}
+
+export async function copyLibraryTransitionToDeck(name: string) {
+  const deckPath = getSlidesState().deckPath;
+  if (!deckPath) throw new Error("Open a deck first.");
+  const compiler = await compilerCommand();
+  const result = await commandRunner.runCommand({ command: compiler.command,
+    args: [...compiler.prefix, deckPath, "--transitions", transitionDirectoryPath(), "--copy-transition", name], timeoutMs: 60000 });
+  if (result.exitCode !== 0 || result.timedOut) throw new Error(result.stderr || "Transition export failed.");
+  const exported = parseCompilerResult(result.stdout) as unknown as { success: boolean; errors?: string[]; copy: { original: string; updated: string; filename: string } };
+  if (!exported.success) throw new Error(exported.errors?.join("\n") ?? "Transition export failed.");
+  const written = await writeTextFileIfUnchanged(deckPath, exported.copy.original, exported.copy.updated);
+  if (!written) throw new Error(`The deck changed during export. ${exported.copy.filename} was saved, but the deck was not overwritten.`);
+  await loadDeck(deckPath, false);
+  return exported.copy.filename;
 }

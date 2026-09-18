@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -135,6 +136,7 @@ function signApp(appPath: string, entitlementsPath: string, options: PackageOpti
     args.push("--entitlements", entitlementsPath);
   }
 
+  signSlidesCompiler(path.join(appPath, "Contents/Resources/slides-compiler"), identity);
   runCommand("codesign", [...args, appPath]);
 }
 

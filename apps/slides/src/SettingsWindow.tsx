@@ -1,3 +1,4 @@
+import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { SwitchControl } from "@legend-apps/design-system";
 import {
   SettingsPage,
@@ -14,7 +15,7 @@ import {
 } from "./slidesSettings";
 import { slidesSettingsWindowIdentifier } from "./slidesWindows";
 
-type SlidesSettingsPage = "timer";
+type SlidesSettingsPage = "timer" | "transitions";
 
 function TimerSettingsPage() {
   const presentationTimerStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
@@ -58,7 +59,7 @@ const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
   id: "timer",
   render: () => <TimerSettingsPage />,
   title: "Timer",
-}];
+}, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> }];
 
 export function SettingsWindow() {
   return (

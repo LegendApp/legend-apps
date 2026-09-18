@@ -78,7 +78,7 @@ transition: slide
 ## Second slide
 ```
 
-Transitions are `none`, `fade`, `slide`, or a `focus` configuration. The deck default is `none`, and slide frontmatter may override it.
+Transitions are `none`, `fade`, `slide`, `reveal-up`, or a `focus` configuration. The deck default is `none`, and slide frontmatter may override it.
 
 ## Shared elements
 
@@ -105,7 +105,7 @@ and escaped attributes remain literal text.
 
 Matching elements move and resize between their layouts; identical layouts stay
 in place. This works forward, backward, and when jumping between slides with
-`none`, `fade`, `slide`, or `focus`. A slide move or focus zoom is cancelled on
+`none`, `fade`, `slide`, `reveal-up`, or `focus`. A slide move or focus zoom is cancelled on
 matching elements so they follow their own path. Both live copies crossfade,
 including any changed text or styling. Unmatched content follows the configured
 slide transition; when matching elements opt a `none` transition into animation,
@@ -119,6 +119,87 @@ measurement, and clipping limitations.
 
 Try `apps/slides/examples/shared.mdx` for Markdown-only shared titles with several
 slide transitions.
+
+## User transition files
+
+Open **Settings → Transitions → Open Folder**. Slides installs editable `fade.ts`,
+`slide.ts`, and `reveal-up.ts` files in its app-data `slides/transitions` directory.
+Duplicate a file to create a new transition, or edit it in your preferred editor.
+Untouched built-ins receive updates; edited files are never overwritten by upgrades.
+Restore saves your previous version as a copy before installing the current built-in.
+
+Select a file by its name (without `.ts`):
+
+```yaml
+transition: reveal-up
+```
+
+Or supply options and override its duration:
+
+```yaml
+transition:
+  name: reveal-up
+  duration: 800
+  options:
+    distance: 40
+```
+
+Transition files export a definition:
+
+```ts
+import { defineTransition } from "@legend-apps/presentation";
+
+export default defineTransition({
+  duration: 650,
+  easing: "ease-out-cubic",
+  sharedElements: "independent",
+  styles({ progress, direction, width, height, options, hasBackground }) {
+    const distance = typeof options.distance === "number" ? options.distance : 20;
+    return {
+      incoming: { opacity: progress, transform: [{ translateY: (1 - progress) * distance }] },
+      outgoing: { opacity: hasBackground ? 1 - progress : 1 },
+    };
+  },
+});
+```
+
+`progress` is eased from 0 to 1. Dimensions are logical slide points. Easing is
+`linear`, `ease-out-cubic`, or `ease-in-out`; durations range from 0 to 10000 ms.
+Styles are ordinary React Native view styles. The host owns timing, cancellation,
+and cleanup, removing transition styles on completion so content remains visible.
+Keep `styles` pure and fast; it runs during animation. Shared backgrounds remain
+outside the effect. Presenter thumbnails are static.
+
+With `sharedElements: "independent"` (the default), matched elements follow their
+own geometry and slide transforms are suppressed while they move. Use `"slide"`
+to move everything together and disable shared-element movement for that transition.
+Focus transitions retain their existing camera behavior.
+
+Only referenced transitions are compiled. Local helper imports inside the library
+are supported and watched. Other available imports are the same host modules as
+deck components; arbitrary filesystem imports are not enabled. Saving recompiles
+the open deck; a locked deck holds the result until you apply it. Compile errors
+preserve the last working deck. Runtime errors settle to visible content and appear
+in the app's runtime errors.
+
+**Copy into Deck** bundles the selected transition and its helpers into a new file
+next to the saved deck, then updates its named references to `source: ./filename.ts`.
+It does not overwrite concurrent edits to the deck. Use this before sharing a deck
+that depends on your personal library. You can also reference a deck-local file directly:
+
+```yaml
+transition:
+  source: ./transitions/my-reveal.ts
+```
+
+The implementation is in `packages/presentation/src/transitions`, the library manager
+is `apps/slides/src/transitionLibrary.ts`, and compilation uses
+`packages/presentation/src/compiler/transitionLibrary.ts`.
+
+macOS release builds package the compiler, Bun, and compiler dependencies inside the
+app resources. They do not require a source checkout or a separately installed Bun.
+Development builds continue to use the repository compiler and local Bun. Build
+release compiler resources on a Mac matching the release target architecture.
 
 ## Focus transitions
 
@@ -413,10 +494,6 @@ frame receives `time`, `deltaTime`, `timestamp`, `frame`, `isPreview`, and
 view and the audience receive continuous frames with a shared slide clock. Scene instances may return `dispose()` for their
 own non-TypeGPU resources.
 
-## Current packaging constraint
-
-The compiler path is embedded by the repository's build and development commands, so the app currently runs decks from a source checkout with Bun installed. Bundling the compiler into a distributable `.app` is separate release-packaging work.
-
 ## Presentation build (no Metro)
 
 Build a release app on the machine you will present from, after your deck and
@@ -428,12 +505,11 @@ bun run slides build macos
 bun run slides open macos --release -- /absolute/path/to/talk.mdx
 ```
 
-This embeds the application JavaScript and the checkout's compiler path; it
-does not connect to Metro. Keep this checkout and Bun available at the same
-paths until after your talk, and keep all local deck files together. The app
-still invokes Bun to compile decks, so this is a personal presentation build,
-not a standalone app you can copy to another computer. Run the **open** command
-before the talk rather than rebuilding or installing dependencies at the venue.
+This embeds application JavaScript and a portable compiler with its runtime and
+dependencies. It does not connect to Metro or require a checkout on the presenting
+machine. Keep all local deck files together, and copy any personal transitions
+into the deck before moving it to another computer. Run the **open** command before
+the talk rather than rebuilding or installing dependencies at the venue.
 Quit any existing Slides process before opening this build.
 
 Slides uses the same Apple development team as Music for local debug and

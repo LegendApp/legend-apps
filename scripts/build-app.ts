@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { packageSlidesCompiler, signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -137,6 +138,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
 
   if (platform === "macos") {
     const arch = parseMacOSBuildArch(args);
+    if (appId === "slides" && (arch === "arm" ? "arm64" : "x64") !== process.arch) throw new Error("Package the Slides compiler on a Mac matching the target architecture.");
     const generated = writeGeneratedConfig(manifest, platform, "release", arch);
     const appRoot = getMacOSReleaseAppRootDir(appId);
     const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
@@ -176,6 +178,13 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         },
       },
     );
+    if (appId === "slides") {
+      const compilerDirectory = path.join(appPath, "Contents/Resources/slides-compiler");
+      fs.rmSync(compilerDirectory, { recursive: true, force: true });
+      packageSlidesCompiler(compilerDirectory);
+      signSlidesCompiler(compilerDirectory, getExistingCodeSignIdentity(appPath));
+      signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
+    }
     const didNormalizeAssets = normalizeMacOSMetroAssetPaths(appPath);
     if (didNormalizeAssets) {
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
