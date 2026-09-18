@@ -38,11 +38,14 @@ describe("audience display recovery", () => {
     await session.displaysChanged([resized]);
     expect(calls).toEqual([["open", projector], ["open", resized]]);
   });
-  test("leaves rehearsal windows alone", async () => {
-    const { session, calls } = setup();
-    await session.open();
+  test("uses the selected fullscreen display without locking rehearsal updates", async () => {
+    const { session, calls, state } = setup();
+    await session.open(projector, true);
+    expect(calls).toEqual([["open", projector]]);
+    expect(state().audienceOpen).toBe(true);
+    expect(state().deckLocked).toBe(false);
     await session.displaysChanged([]);
-    expect(calls).toEqual([["open", undefined]]);
+    expect(calls.at(-1)).toEqual(["close"]);
   });
   test("processes an unplug received during an unfinished window open", async () => {
     let release;

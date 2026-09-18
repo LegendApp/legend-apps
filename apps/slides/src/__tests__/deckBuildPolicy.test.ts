@@ -28,7 +28,8 @@ describe("deck build policy", () => {
   test("defers updates only while presenting or opening the audience window", () => {
     expect(shouldDeferDeckUpdate({ ...readyState(), deckLocked: true })).toBe(true);
     expect(shouldDeferDeckUpdate(readyState())).toBe(false);
-    expect(shouldDeferDeckUpdate({ ...readyState(), audienceOpen: true })).toBe(true);
+    expect(shouldDeferDeckUpdate({ ...readyState(), audienceOpen: true, deckLocked: true })).toBe(true);
+    expect(shouldDeferDeckUpdate({ ...readyState(), audienceOpen: true, deckLocked: false })).toBe(false);
     expect(shouldDeferDeckUpdate({ ...readyState(), component: null, deckLocked: true })).toBe(false);
   });
 

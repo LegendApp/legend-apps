@@ -1,7 +1,7 @@
 import type { Display } from "@legend-apps/window-manager";
 
 type AudiencePlatform = {
-  open(display?: Display): Promise<void>;
+  open(display: Display): Promise<void>;
   close(): Promise<void>;
   focusPresenter(): Promise<void>;
   update(state: { audienceOpen?: boolean; blackout?: boolean; displayMessage?: string; deckLocked?: boolean }): void;
@@ -10,23 +10,25 @@ type AudiencePlatform = {
 // Serialize opens, closes and display changes so an unplug during an async
 // window open cannot leave an orphaned audience window on the laptop display.
 export function createAudienceSession(platform: AudiencePlatform) {
-  let active: Display | undefined | null = null; // undefined means windowed rehearsal
+  let active: Display | null = null;
+  let rehearsing = false;
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void>) => {
     queue = queue.then(operation).catch((error) => {
-      platform.update({ deckLocked: active !== null, blackout: true, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
+      platform.update({ deckLocked: active !== null && !rehearsing, blackout: true, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
     });
     return queue;
   };
 
   return {
-    open(display?: Display) {
-      platform.update({ deckLocked: true });
+    open(display: Display, rehearsal = false) {
+      platform.update({ deckLocked: !rehearsal });
       return enqueue(async () => {
         await platform.open(display);
         active = display;
+        rehearsing = rehearsal;
         platform.update({ audienceOpen: true, blackout: false, displayMessage: "" });
-        await platform.focusPresenter();
+        if (!rehearsing) await platform.focusPresenter();
       });
     },
     close() {
@@ -54,7 +56,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
         } else if (Object.keys(next.frame).some((key) => next.frame[key as keyof Display["frame"]] !== active?.frame[key as keyof Display["frame"]])) {
           await platform.open(next);
           active = next;
-          await platform.focusPresenter();
+          if (!rehearsing) await platform.focusPresenter();
         }
       });
     },
