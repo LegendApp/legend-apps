@@ -1,5 +1,6 @@
-import { Background, type PresentationTemplateProps } from "@legend-apps/presentation";
-import { Text, View } from "react-native";
+import { Background, usePresentationValue, type PresentationTemplateProps } from "@legend-apps/presentation";
+import { Animated, Easing, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { AmbientAurora } from "./packs/backgrounds";
 import benchmarks from "./rnconnection-assets/benchmarks.json";
 
@@ -9,10 +10,80 @@ export default function Frame({ children }: PresentationTemplateProps) {
       <Background priority={-1}>
         <AmbientAurora intensity={0.65} baseBrightness={0} />
       </Background>
-      <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 80, justifyContent: "center" }}>
+      <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 96, justifyContent: "center" }}>
         {children}
       </View>
     </>
+  );
+}
+
+function Reveal({ children, delay = 0, horizontal = false, style }: {
+  children: ReactNode;
+  delay?: number;
+  horizontal?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const active = usePresentationValue("isActive");
+  const preview = usePresentationValue("isPreview");
+  const startedAt = usePresentationValue("startedAt");
+  const [progress] = useState(() => new Animated.Value(preview ? 1 : 0));
+
+  useEffect(() => {
+    progress.setValue(preview || !active ? 1 : 0);
+    if (active && !preview) {
+      const animation = Animated.timing(progress, {
+        toValue: 1,
+        duration: 650,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        // Match the macOS presentation host's transition driver.
+        useNativeDriver: false,
+        isInteraction: false,
+      });
+      animation.start();
+      return () => animation.stop();
+    }
+  }, [active, preview, startedAt, delay, progress]);
+
+  const offset = progress.interpolate({ inputRange: [0, 1], outputRange: [horizontal ? -24 : 20, 0] });
+  return (
+    <Animated.View style={[style, { opacity: progress, transform: [horizontal ? { translateX: offset } : { translateY: offset }] }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+export function Points({ items }: { items: string[] }) {
+  return (
+    <View style={{ gap: 24, marginTop: 24, alignItems: "center" }}>
+      {items.map((item) => (
+        <View key={item}>
+          <Text style={{ color: "#e5e5e5", fontSize: 40, lineHeight: 56, textAlign: "center" }}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+export function Flow({ labels }: { labels: string[] }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 32, marginTop: 80, paddingHorizontal: 48 }}>
+      {labels.map((label, index) => (
+        <Fragment key={label}>
+          {index > 0 && (
+            <Reveal horizontal delay={200 + (index * 2 - 1) * 220}>
+              <View style={{ width: 112, height: 24, justifyContent: "center" }}>
+                <View style={{ height: 2, backgroundColor: "#67e8f9" }} />
+                <View style={{ position: "absolute", right: 0, width: 14, height: 14, borderTopWidth: 2, borderRightWidth: 2, borderColor: "#67e8f9", transform: [{ rotate: "45deg" }] }} />
+              </View>
+            </Reveal>
+          )}
+          <Reveal delay={200 + index * 440} style={{ flex: 1 }}>
+            <Text style={{ color: "#ffffff", fontSize: 48, lineHeight: 60, fontWeight: "500", textAlign: "center" }}>{label}</Text>
+          </Reveal>
+        </Fragment>
+      ))}
+    </View>
   );
 }
 
@@ -26,7 +97,7 @@ export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?
     .sort((a, b) => a.value - b.value);
   const maximum = Math.max(...rows.map((row) => row.value));
   return (
-    <View style={{ gap: 12, marginTop: 20 }}>
+    <View style={{ gap: 12, marginTop: 32 }}>
       {rows.map(({ name, value }) => {
         const highlighted = name === "React Native";
         return (
@@ -39,7 +110,7 @@ export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?
           </View>
         );
       })}
-      <Text className="mt-2 text-xl text-slate-400">Zero-based linear scale · lower is better</Text>
+      <Text className="mt-6 text-center text-xl text-neutral-400">Zero-based linear scale · lower is better</Text>
     </View>
   );
 }
