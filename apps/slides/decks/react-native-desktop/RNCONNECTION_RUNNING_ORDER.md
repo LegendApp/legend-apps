@@ -69,5 +69,6 @@ benchmark.ts are not dependencies.
 
 September 18: excluded Legend Shell as a duplicate RN host. The original report
 snapshot preserves provenance; presentation data uses nine frameworks. RN Hello
-World size remains historical and explicitly marked pending symbol-stripped
-rebuild. Both existing RN binaries were verified ARM64-only.
+World size is now 7.2 MiB after the September 18 optimized ARM64 rebuild
+(7,499,962 bytes; symbol stripping, dead-code stripping, ThinLTO, and -Oz). Timing/memory retain the original controlled run; the original
+report snapshot is archived evidence. Timing/memory have not been replaced by the later RN-only checks. Both existing RN binaries were verified ARM64-only.

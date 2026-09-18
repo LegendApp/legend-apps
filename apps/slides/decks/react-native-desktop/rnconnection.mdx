@@ -517,11 +517,11 @@ footer: 'Greeting workload · newer installed-size snapshot · MiB'
 
 # Hello World / installed size
 
-Historical RN size · symbol-stripped rebuild pending. {class="text-2xl text-amber-300"}
+RN size: September 18 optimized ARM64 rebuild. {class="text-2xl text-amber-300"}
 
 <Chart workload="hello" metric="size" />
 
-<!-- RN 16.3 MiB is the historical unstripped measurement. Packaging audit found retained executable and Hermes symbols; both baseline and product are ARM64-only. Rebuild before quoting an optimized size. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
+<!-- RN now measures 7.2 MiB (7,499,962 bytes) after a verified ARM64 rebuild with executable/Hermes symbols stripped, dead-code stripping, ThinLTO, and -Oz. The original report snapshot recorded 16.3 MiB; this size correction is from September 18. The original timing/memory measurements predate these compiler settings. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
 
 ---
 eyebrow: 'Backup / methodology'
