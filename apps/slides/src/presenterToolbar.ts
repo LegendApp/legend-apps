@@ -90,7 +90,7 @@ export function createPresenterToolbarItems({
       type: "menuButton",
     },
     {
-      enabled: !audienceOpen && !rehearsalEnabled && displays.length > 0,
+      enabled: !audienceOpen && displays.length > 0,
       id: presenterDisplayToolbarItemId,
       label: selectedDisplay?.name ?? "Display",
       menuItems: displays.map((display) => ({
@@ -104,7 +104,7 @@ export function createPresenterToolbarItems({
       type: "menuButton",
     },
     {
-      enabled: audienceOpen || (hasDeck && (rehearsalEnabled || selectedDisplay !== undefined)),
+      enabled: audienceOpen || (hasDeck && (selectedDisplay !== undefined)),
       id: presenterStartToolbarItemId,
       label: audienceOpen ? "Stop" : rehearsalEnabled ? "Start Rehearsal" : "Start Presentation",
       placement: "trailing",

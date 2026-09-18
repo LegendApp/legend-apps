@@ -3,7 +3,7 @@ import type { CompileDeckFailure, PresentationTemplates } from "@legend-apps/pre
 import type { SlidesState } from "./slidesStore";
 
 export function shouldDeferDeckUpdate(current: Pick<SlidesState, "deckLocked" | "audienceOpen" | "component">) {
-  return (current.audienceOpen || current.deckLocked) && current.component !== null;
+  return current.deckLocked && current.component !== null;
 }
 
 export function failedDeckUpdate(result: CompileDeckFailure): Partial<SlidesState> {

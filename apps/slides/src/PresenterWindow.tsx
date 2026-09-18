@@ -474,17 +474,10 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   const blackout = useValue(slidesState$.blackout);
   const [audience] = useState(() => createAudienceSession({
     async open(display) {
-      const frame = display?.frame;
-      const rehearsalFrame = !display ? (await getDisplays()).find((candidate) => candidate.isMain)?.visibleFrame : undefined;
-      const width = Math.min(1280, rehearsalFrame?.width ?? 1280);
-      const height = Math.min(720, rehearsalFrame?.height ?? 720);
-      await slidesWindows.open("SlidesAudienceWindow", display ? {
-        x: frame?.x, y: frame?.y,
-        windowStyle: { height: frame?.height, width: frame?.width, mask: [WindowStyleMask.Borderless] },
-      } : {
-        x: rehearsalFrame ? rehearsalFrame.x + (rehearsalFrame.width - width) / 2 : undefined,
-        y: rehearsalFrame ? rehearsalFrame.y + (rehearsalFrame.height - height) / 2 : undefined,
-        windowStyle: { height, width },
+      const frame = display.frame;
+      await slidesWindows.open("SlidesAudienceWindow", {
+        x: frame.x, y: frame.y,
+        windowStyle: { height: frame.height, width: frame.width, mask: [WindowStyleMask.Borderless] },
       });
     },
     async close() {
@@ -627,10 +620,13 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   const startAudience = useCallback(async () => {
     const { displays, selectedDisplayId, rehearsalEnabled } = presenter$.peek();
-    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
+    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId)
+      ?? displays.find((display) => display.isMain) ?? displays[0];
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
-    await openAudience(rehearsalEnabled ? undefined : selectedDisplay);
-    setActiveMode(mode);
+    if (selectedDisplay) {
+      await openAudience(selectedDisplay, rehearsalEnabled);
+      setActiveMode(mode);
+    }
   }, [openAudience, setActiveMode, presenter$]);
   const stopAudience = useCallback(async () => {
     await closeAudience();
@@ -775,7 +771,6 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
 
 function PresenterStatus() {
   const blackout = useValue(slidesState$.blackout);
-  const audienceOpen = useValue(slidesState$.audienceOpen);
   const deckLocked = useValue(slidesState$.deckLocked);
   const state = {
     displayMessage: useValue(slidesState$.displayMessage),
@@ -786,8 +781,8 @@ function PresenterStatus() {
     runtimeErrors: useValue(slidesState$.runtimeErrors),
   };
   useEffect(() => {
-    if (!audienceOpen && !deckLocked && state.pendingDeck) applyPendingDeck();
-  }, [audienceOpen, deckLocked, state.pendingDeck]);
+    if (!deckLocked && state.pendingDeck) applyPendingDeck();
+  }, [deckLocked, state.pendingDeck]);
   return (
     <>
       {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
