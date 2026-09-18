@@ -212,6 +212,11 @@ export const nativePackages: NativePackage[] = [
     root: path.join(rootDir, "apps", "slides", "node_modules", "lottie-react-native"),
     platforms: ["macos"],
   },
+  ...["react-native-reanimated", "react-native-worklets"].map((name) => ({
+    name,
+    root: path.join(rootDir, "apps", "slides", "node_modules", name),
+    platforms: ["macos"] as Platform[],
+  })),
   {
     name: "react-native-webgpu",
     root: path.join(rootDir, "apps", "slides", "node_modules", "react-native-webgpu"),

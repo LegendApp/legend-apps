@@ -23,7 +23,14 @@ module.exports = function (api) {
   });
 
   return {
-    plugins: [["babel-plugin-react-compiler", { target: "19" }], inlineLegendPublicPaths, "@babel/plugin-transform-class-static-block"],
+    plugins: [
+      ["babel-plugin-react-compiler", { target: "19" }],
+      inlineLegendPublicPaths,
+      "@babel/plugin-transform-class-static-block",
+      require.resolve("react-native-worklets/plugin", {
+        paths: [require("path").join(__dirname, "../apps/slides")],
+      }),
+    ],
     presets: ["babel-preset-expo"],
   };
 };

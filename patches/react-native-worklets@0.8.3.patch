@@ -1,0 +1,22 @@
+diff --git a/apple/worklets/apple/AnimationFrameQueue.mm b/apple/worklets/apple/AnimationFrameQueue.mm
+index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..08e340e6e7cf9025192ffc3c835395e676862b49 100644
+--- a/apple/worklets/apple/AnimationFrameQueue.mm
++++ b/apple/worklets/apple/AnimationFrameQueue.mm
+@@ -87,7 +87,6 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
+   RCTAssertMainQueue();
+ 
+   auto frameCallbacks = [self pullCallbacks];
+-  [displayLink_ setPaused:TRUE];
+ 
+ #if TARGET_OS_OSX
+   auto targetTimestamp = displayLink.timestamp + displayLink.duration;
+@@ -95,6 +94,9 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
+   auto targetTimestamp = displayLink.targetTimestamp;
+ #endif // TARGET_OS_OSX
+   targetTimestamp = worklets::calculateTimestampWithSlowAnimations(targetTimestamp);
++  // macOS cannot read the CVDisplayLink clock after it is stopped. Capture
++  // the timestamp first, then pause before callbacks can request another frame.
++  [displayLink_ setPaused:TRUE];
+   for (const auto &callback : frameCallbacks) {
+     callback(targetTimestamp);
+   }

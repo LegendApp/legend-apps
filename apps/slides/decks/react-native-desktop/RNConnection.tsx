@@ -9,7 +9,7 @@ export default function Frame({ children }: PresentationTemplateProps) {
   return (
     <>
       <Background priority={-1}>
-        <AmbientAurora intensity={0.65} baseBrightness={0} />
+        <AmbientAurora intensity={3} baseBrightness={0} />
       </Background>
       <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 96, justifyContent: "center" }}>
         {children}
