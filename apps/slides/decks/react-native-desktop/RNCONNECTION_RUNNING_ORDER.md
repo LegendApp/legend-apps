@@ -72,3 +72,10 @@ snapshot preserves provenance; presentation data uses nine frameworks. RN Hello
 World size is now 7.2 MiB after the September 18 optimized ARM64 rebuild
 (7,499,962 bytes; symbol stripping, dead-code stripping, ThinLTO, and -Oz). Timing/memory retain the original controlled run; the original
 report snapshot is archived evidence. Timing/memory have not been replaced by the later RN-only checks. Both existing RN binaries were verified ARM64-only.
+
+Chat History's size chart uses app-bundle bytes only, excluding external grammar
+packs for every framework. All nine current bundles were remeasured; exact bytes
+and build dates are in `rnconnection-assets/chat-installed-sizes.json` (the chart
+uses `appBytes`, not `combinedInstalledBytes`). RN is 17.8 MiB app-only. Separate
+grammars remain recorded for provenance but are not plotted. Performance
+measurements are unchanged.

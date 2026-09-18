@@ -174,15 +174,15 @@ footer: 'Median action-to-visible-result ms · lower is better'
 <!-- 5:35–6:05. AppKit wins at 88.3 ms; RN follows at 157.7. GPUI 193.1, Tauri 218.9, Electron 679.0. Fast startup is useful, but the app also needs to stay responsive as you use it. This chart demonstrates one repeatable navigation workload. -->
 
 ---
-eyebrow: 'Chat History / installed size'
-footer: 'Newer size snapshot · total includes required grammar packs · not download size'
+eyebrow: 'Chat History / app size'
+footer: 'Measured September 18 · app bundles only · external grammars excluded · MiB'
 ---
 
 # Small enough to ship comfortably.
 
 <Chart metric="size" />
 
-<!-- 6:05–6:35. These are the newer installed-size builds, not the revisions used for timings. RN totals 40.3 MiB: 17.8 app plus 22.5 required grammars after the September 18 release compiler optimizations. Never hide the grammar pack to claim a smaller product. Tauri and Flutter are smaller here; AppKit and SwiftUI are smaller still. Electron is 285.7. Size supports the balance argument; RN is not the smallest. -->
+<!-- 6:05–6:35. App-bundle sizes only, as requested; external grammar packs are excluded for every framework. All nine current bundles were remeasured; exact bytes and build dates are in rnconnection-assets/chat-installed-sizes.json (chart uses appBytes). RN is 17.8 MiB after the September 18 release compiler optimizations. Its separate 22.5 MiB grammar pack is not included, so this chart is not total installed footprint. Electron is 285.6 MiB. Tauri and AppKit are smaller; RN's app is smaller than Flutter's 21.6 MiB app. Size supports the balance argument; RN is not the smallest. Logical regular-file bytes, symlinks and system frameworks excluded, not compressed download sizes. Timing and memory retain their original build revisions. -->
 
 ---
 eyebrow: 'Evidence → engineering judgment'

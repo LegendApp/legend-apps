@@ -1,0 +1,142 @@
+{
+  "measuredAt": "2026-09-18T09:56:28.292756+00:00",
+  "source": "/Users/jay/Documents/code/legendapp/chat-history-comparison/.build/chat-history-benchmarks",
+  "measurement": "Logical regular-file bytes; symlinks and system frameworks excluded; full verified external grammar pack included per app",
+  "apps": [
+    {
+      "app": "react-native",
+      "label": "React Native",
+      "appBytes": 18629704,
+      "grammarPackBytes": 23617711,
+      "combinedInstalledBytes": 42247415,
+      "builtAt": "2026-09-18T09:15:33.944Z",
+      "gitCommit": "415972f22e18ae54a2336e19d289a8e69c2cff49",
+      "grammarPack": {
+        "engine": "tree-sitter",
+        "version": "v1",
+        "bytes": 23617711,
+        "manifestSha256": "28890a6c177858e6f35798c57d31f5bc2522c6fc3dc5dcfbe3513bc21f40c076"
+      }
+    },
+    {
+      "app": "electron",
+      "label": "Electron",
+      "appBytes": 299476607,
+      "grammarPackBytes": 82651,
+      "combinedInstalledBytes": 299559258,
+      "builtAt": "2026-09-17T16:46:52.874Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "highlight-js",
+        "version": "v1",
+        "bytes": 82651,
+        "manifestSha256": "9a76d0a3726bcd1028fd981a7c4dfc13742fff28642594a5ceb964ee4279fb54"
+      }
+    },
+    {
+      "app": "tauri",
+      "label": "Tauri",
+      "appBytes": 12100697,
+      "grammarPackBytes": 82651,
+      "combinedInstalledBytes": 12183348,
+      "builtAt": "2026-09-17T16:47:06.736Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "highlight-js",
+        "version": "v1",
+        "bytes": 82651,
+        "manifestSha256": "9a76d0a3726bcd1028fd981a7c4dfc13742fff28642594a5ceb964ee4279fb54"
+      }
+    },
+    {
+      "app": "deno-webview",
+      "label": "Deno WebView",
+      "appBytes": 69026775,
+      "grammarPackBytes": 82651,
+      "combinedInstalledBytes": 69109426,
+      "builtAt": "2026-09-17T16:47:09.876Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "highlight-js",
+        "version": "v1",
+        "bytes": 82651,
+        "manifestSha256": "9a76d0a3726bcd1028fd981a7c4dfc13742fff28642594a5ceb964ee4279fb54"
+      }
+    },
+    {
+      "app": "deno-cef",
+      "label": "Deno CEF",
+      "appBytes": 322733640,
+      "grammarPackBytes": 82651,
+      "combinedInstalledBytes": 322816291,
+      "builtAt": "2026-09-17T16:47:09.876Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "highlight-js",
+        "version": "v1",
+        "bytes": 82651,
+        "manifestSha256": "9a76d0a3726bcd1028fd981a7c4dfc13742fff28642594a5ceb964ee4279fb54"
+      }
+    },
+    {
+      "app": "flutter",
+      "label": "Flutter",
+      "appBytes": 22596822,
+      "grammarPackBytes": 605873,
+      "combinedInstalledBytes": 23202695,
+      "builtAt": "2026-09-17T16:47:31.854Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "dart-highlighting",
+        "version": "v1",
+        "bytes": 605873,
+        "manifestSha256": "465cae3d2ffcb65e85bb79d5bac59e66408bc17e3a21ac486b98ae82ba1d0a6b"
+      }
+    },
+    {
+      "app": "gpui",
+      "label": "GPUI",
+      "appBytes": 10380930,
+      "grammarPackBytes": 890385,
+      "combinedInstalledBytes": 11271315,
+      "builtAt": "2026-09-17T16:51:19.739Z",
+      "gitCommit": "c9ae4566c9131788dca5e3f8f5e40f422040e41b",
+      "grammarPack": {
+        "engine": "syntect",
+        "version": "v1",
+        "bytes": 890385,
+        "manifestSha256": "7a11c89e59d8e034997fb50862608601785d38e938f446d13eb4671e8e4f4287"
+      }
+    },
+    {
+      "app": "swiftui",
+      "label": "SwiftUI",
+      "appBytes": 3891560,
+      "grammarPackBytes": 1379783,
+      "combinedInstalledBytes": 5271343,
+      "builtAt": "2026-09-17T15:25:39.659Z",
+      "gitCommit": "2d12fe530d5a2a4aa0223ea593bcce405a067d8a",
+      "grammarPack": {
+        "engine": "highlighter-swift",
+        "version": "v1",
+        "bytes": 1379783,
+        "manifestSha256": "7dbd092516aff27dff965d737582732677c1684046029eed63f44bc5e31ec690"
+      }
+    },
+    {
+      "app": "appkit",
+      "label": "AppKit",
+      "appBytes": 3366500,
+      "grammarPackBytes": 1379783,
+      "combinedInstalledBytes": 4746283,
+      "builtAt": "2026-09-17T15:25:40.219Z",
+      "gitCommit": "2d12fe530d5a2a4aa0223ea593bcce405a067d8a",
+      "grammarPack": {
+        "engine": "highlighter-swift",
+        "version": "v1",
+        "bytes": 1379783,
+        "manifestSha256": "7dbd092516aff27dff965d737582732677c1684046029eed63f44bc5e31ec690"
+      }
+    }
+  ]
+}
