@@ -2,14 +2,15 @@ import { FlowGlyph } from "./RNConnectionVisuals";
 import { Background, usePresentationValue, type PresentationTemplateProps } from "@legend-apps/presentation";
 import { Animated, Easing, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { AmbientAurora } from "./packs/backgrounds";
+import { AnimatedAtmosphere } from "./packs/backgrounds";
 import benchmarks from "./rnconnection-assets/benchmarks.json";
 
 export default function Frame({ children }: PresentationTemplateProps) {
   return (
     <>
       <Background priority={-1}>
-        <AmbientAurora intensity={3} baseBrightness={0} />
+        {/* Switch variant to "smoke" or "wireframe"; 1 is normal brightness/speed. */}
+        <AnimatedAtmosphere variant="fluid" brightness={1} speed={1} />
       </Background>
       <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 96, justifyContent: "center" }}>
         {children}
@@ -110,7 +111,7 @@ function ChartRow({ name, value, maximum, metric, index }: {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", height: 43, gap: 24 }}>
       <Text style={{ width: 280, fontSize: 27, color: highlighted ? "#67e8f9" : "#cbd5e1", fontWeight: highlighted ? "700" : "400" }}>{name}</Text>
-      <View style={{ flex: 1, height: 28, backgroundColor: "#171717", borderRadius: 5 }}>
+      <View style={{ flex: 1, height: 28 }}>
         <Animated.View style={{ width, minWidth: 2, height: 28, borderRadius: 5, backgroundColor: highlighted ? "#67e8f9" : "#525252" }} />
       </View>
       <Text style={{ width: 180, textAlign: "right", fontSize: 27, color: highlighted ? "#67e8f9" : "#e2e8f0", fontVariant: ["tabular-nums"] }}>{value.toFixed(1)} {units[metric]}</Text>

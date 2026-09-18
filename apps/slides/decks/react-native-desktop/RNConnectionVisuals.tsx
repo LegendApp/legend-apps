@@ -9,7 +9,7 @@ const accent = "#67e8f9";
 
 export function MediaSlot({ label, kind = "video", height = 490 }: { label: string; kind?: "video" | "screenshot"; height?: number }) {
   return (
-    <View accessibilityLabel={`${kind} placeholder: ${label}`} style={{ height, borderWidth: 2, borderStyle: "dashed", borderColor: line, borderRadius: 20, alignItems: "center", justifyContent: "center", gap: 24, backgroundColor: "#080808" }}>
+    <View accessibilityLabel={`${kind} placeholder: ${label}`} style={{ height, borderWidth: 2, borderStyle: "dashed", borderColor: line, borderRadius: 20, alignItems: "center", justifyContent: "center", gap: 24 }}>
       <Text style={{ color: muted, fontSize: 44 }}>{kind === "video" ? "▷" : "▧"}</Text>
       <Text style={{ color: white, fontSize: height < 250 ? 24 : 36, textAlign: "center", paddingHorizontal: 20 }}>{label}</Text>
       <Text style={{ color: muted, fontSize: 20 }}>{kind === "video" ? "VIDEO PLACEHOLDER" : "SCREENSHOT PLACEHOLDER"}</Text>
@@ -85,7 +85,7 @@ export function PlatformDiagram({ scope = false }: { scope?: boolean }) {
         <View style={{ width: 2, height: 35, backgroundColor: line }} />
         <View style={{ height: 210, justifyContent: "center" }}>
           {index === 0 && !scope ? <View style={{ width: 100, height: 195, borderRadius: 20, borderWidth: 2, borderColor: line, padding: 12, gap: 14 }}>
-            <View style={{ width: 30, height: 4, alignSelf: "center", backgroundColor: muted }} /><View style={{ height: 110, backgroundColor: "#171717" }} />
+            <View style={{ width: 30, height: 4, alignSelf: "center", backgroundColor: muted }} /><View style={{ height: 110 }} />
           </View> : <WindowGlyph width={300} height={190} />}
         </View>
         <Text style={{ color: white, fontSize: 36 }}>{label}</Text>
