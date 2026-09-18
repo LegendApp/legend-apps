@@ -14,6 +14,7 @@ presenter:
 
 import { Chart, Flow, Tradeoffs } from "./RNConnection"
 import { AppMontage, BalanceDiagram, CapabilityDiagram, ComparisonWall, MeasurementDiagram, MediaSlot, NativeDataDiagram, PlatformDiagram, RenderingDiagram } from "./RNConnectionVisuals"
+import { HelloSizeJourney } from "./HelloSizeJourney"
 import chatImage from "./rnconnection-assets/chat-history.png"
 import { NineApps } from "./NineApps"
 
@@ -104,14 +105,15 @@ footer: 'Median ms · 10 measured rounds · small differences near recording cad
 
 ---
 eyebrow: 'Hello World / installed size'
+steps: 5
 footer: 'Greeting workload · newer installed-size snapshot · MiB'
 ---
 
 # Hello World · installed size {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Chart workload="hello" metric="size" />
+<HelloSizeJourney />
 
-<!-- RN now measures 7.2 MiB (7,499,962 bytes) after a verified ARM64 rebuild with executable/Hermes symbols stripped, dead-code stripping, ThinLTO, and -Oz. The original report snapshot recorded 16.3 MiB; this size correction is from September 18. The original timing/memory measurements predate these compiler settings. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
+<!-- Advance sequence: full chart → packaging groups → native platform close-up → bundled browser close-up → runtime/engine close-up. The next advance goes directly to the next slide. Reverse navigation retraces the sequence. Focused groups move to the center while the others leave the frame. Bar lengths retain the same 0–320 MiB scale throughout; there is no rescaling or accompanying diagram. Tauri uses system WebKit; Deno WebView bundles Deno but uses system WebKit. Native platform sizes are rounded to 0.1 MiB, so do not imply an exact tie. RN now measures 7.2 MiB (7,499,962 bytes) after a verified ARM64 rebuild with executable/Hermes symbols stripped, dead-code stripping, ThinLTO, and -Oz. The original report snapshot recorded 16.3 MiB; this size correction is from September 18. The original timing/memory measurements predate these compiler settings. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
 
 ---
 eyebrow: 'Chat History / first content'
