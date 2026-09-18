@@ -172,6 +172,7 @@ footer: 'Measured September 18 · app bundles only · external grammars excluded
 
 ---
 eyebrow: 'Evidence → engineering judgment'
+steps: 2
 footer: 'Measured on macOS · current GPUI composer postdates these timing/memory results'
 ---
 
@@ -179,7 +180,7 @@ footer: 'Measured on macOS · current GPUI composer postdates these timing/memor
 
 <BalanceDiagram />
 
-<!-- 6:35–7:25. Walk through the tradeoffs, not every cell. AppKit is an excellent macOS-specific choice. GPUI is fast but uses more memory here and draws custom content; a native composer was added after the measured run. RN gets close to AppKit's memory/startup while offering a cross-platform foundation and native content UI. This is why I judge RN the best combination among the cross-platform approaches I tested. Windows was not benchmarked. -->
+<!-- 6:35–7:25. First show the Venn, then advance to slide it left and bring in the Fail bubble. Reverse returns to the centered Venn. Performance means first content under 600 ms AND switching under 250 ms in this macOS Chat History run. Memory means settled memory under 100 MiB. Native UI means native content views; GPUI’s later native composer does not make its transcript native. AppKit and RN meet all three; SwiftUI meets Memory and Native UI; GPUI and Tauri meet Performance. Fail is a joke about missing these specific thresholds, not a claim that those frameworks cannot build good apps. Flutter, Deno WebView, Electron and Deno CEF miss all three here. Walk through the tradeoffs, not every cell. AppKit is an excellent macOS-specific choice. GPUI is fast but uses more memory here and draws custom content; a native composer was added after the measured run. RN gets close to AppKit's memory/startup while offering a cross-platform foundation and native content UI. This is why I judge RN the best combination among the cross-platform approaches I tested. Windows was not benchmarked. -->
 
 ---
 eyebrow: 'The technical case'

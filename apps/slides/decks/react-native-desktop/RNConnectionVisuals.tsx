@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-import { Animated, Easing, Image, Text, View } from "react-native";
-import { usePresentationValue } from "@legend-apps/presentation";
+import { Image, Text, View } from "react-native";
+export { BalanceDiagram } from "./BalanceDiagram";
 
 const white = "#f5f5f5";
 const muted = "#a3a3a3";
@@ -108,51 +107,6 @@ export function CapabilityDiagram() {
     <View style={{ flexDirection: "row", gap: 80 }}>
       {bottom.map((label) => <View key={label} style={{ width: 300, alignItems: "center", gap: 12 }}><View style={{ width: 2, height: 45, backgroundColor: line }} /><Text style={{ color: white, fontSize: 32 }}>{label}</Text></View>)}
     </View>
-  </View>;
-}
-
-const balanceCircles = [
-  { x: 250, y: 0, stroke: "rgba(103,232,249,0.65)", fill: "rgba(103,232,249,0.065)" },
-  { x: 125, y: 145, stroke: "rgba(147,197,253,0.55)", fill: "rgba(96,165,250,0.075)" },
-  { x: 375, y: 145, stroke: "rgba(196,181,253,0.55)", fill: "rgba(167,139,250,0.075)" },
-];
-
-export function BalanceDiagram() {
-  const active = usePresentationValue("isActive");
-  const preview = usePresentationValue("isPreview");
-  const startedAt = usePresentationValue("startedAt");
-  const [progress] = useState(() => new Animated.Value(preview || !active ? 1 : 0));
-
-  useEffect(() => {
-    progress.setValue(preview || !active ? 1 : 0);
-    if (active && !preview) {
-      const animation = Animated.timing(progress, {
-        toValue: 1,
-        duration: 650,
-        easing: Easing.linear,
-        useNativeDriver: false,
-        isInteraction: false,
-      });
-      animation.start();
-      return () => animation.stop();
-    }
-  }, [active, preview, startedAt, progress]);
-
-  const centerOpacity = progress.interpolate({ inputRange: [0, 0.4, 0.85, 1], outputRange: [0, 0, 1, 1] });
-  return <View accessibilityLabel="React Native at the intersection of speed, low memory, and native UI" style={{ alignSelf: "center", width: 1000, height: 650, marginTop: 24 }}>
-    {balanceCircles.map(({ x, y, stroke, fill }, index) => {
-      const start = index * 0.1;
-      const opacity = progress.interpolate({ inputRange: [start, start + 0.5], outputRange: [0, 1], extrapolate: "clamp" });
-      const scale = progress.interpolate({ inputRange: [start, start + 0.25, start + 0.65], outputRange: [0.92, 0.98, 1], extrapolate: "clamp" });
-      return <Animated.View key={index} style={{ position: "absolute", left: x, top: y, width: 500, height: 500, borderRadius: 250, borderWidth: 1.5, borderColor: stroke, backgroundColor: fill, opacity, transform: [{ scale }] }} />;
-    })}
-    <Text style={{ position: "absolute", top: 100, left: 350, width: 300, textAlign: "center", color: "#cffafe", fontSize: 36, fontWeight: "500", letterSpacing: -0.5 }}>Speed</Text>
-    <Text style={{ position: "absolute", top: 424, left: 150, width: 280, textAlign: "center", color: "#dbeafe", fontSize: 36, fontWeight: "500", letterSpacing: -0.5 }}>Low memory</Text>
-    <Text style={{ position: "absolute", top: 424, left: 570, width: 280, textAlign: "center", color: "#ede9fe", fontSize: 36, fontWeight: "500", letterSpacing: -0.5 }}>Native UI</Text>
-    <Animated.View style={{ position: "absolute", left: 390, top: 305, width: 220, alignItems: "center", opacity: centerOpacity }}>
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: accent, marginBottom: 18 }} />
-      <Text style={{ color: white, fontSize: 38, lineHeight: 44, fontWeight: "600", textAlign: "center", letterSpacing: -1 }}>{"React\nNative"}</Text>
-    </Animated.View>
   </View>;
 }
 
