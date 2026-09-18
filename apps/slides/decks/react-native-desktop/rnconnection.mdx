@@ -12,7 +12,9 @@ presenter:
   showNotes: true
 ---
 
-import { Chart, Flow, Points, Tradeoffs } from "./RNConnection"
+import { Chart, Flow, Tradeoffs } from "./RNConnection"
+import { AppMontage, BalanceDiagram, CapabilityDiagram, ComparisonWall, MeasurementDiagram, MediaSlot, NativeDataDiagram, PlatformDiagram, RenderingDiagram } from "./RNConnectionVisuals"
+import chatImage from "./rnconnection-assets/chat-history.png"
 import { NineApps } from "./NineApps"
 
 # React Native is the best way to build desktop apps {class="text-center font-semibold tracking-tight text-8xl mb-0"}
@@ -26,16 +28,18 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Apps I wanted to exist {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Music", "Code", "Diff"]} />
+<AppMontage />
 
-<!-- 0:25–1:20. Use the existing opening clips here when their paths are supplied: Music open/play/queue, Code open a large source file/scroll, Diff open/navigate changes. About 10–15 seconds per app, at real speed. The current slide is a complete introduction, not simulated app footage. Chat History, Code, and Diff have launched. Music was launched previously; describe the upcoming version as a preview if that is what the footage shows. Do not claim Markdown is released yet. -->
+<!-- 0:25–1:20. Use the existing opening clips here when their paths are supplied: Music open/play/queue, Code open a large source file/scroll, Diff open/navigate changes. About 10–15 seconds per app, at real speed. The three media slots are explicitly labeled video placeholders until these recordings are supplied. Chat History, Code, and Diff have launched. Music was launched previously; describe the upcoming version as a preview if that is what the footage shows. Do not claim Markdown is released yet. -->
 
 ---
 eyebrow: 'The experience'
 footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 ---
 
-# Fast to open · Fast to use {class="text-center font-semibold tracking-tight text-8xl mb-0"}
+# Fast to open · Fast to use {class="text-center font-semibold tracking-tight text-7xl"}
+
+<MediaSlot label="Launch → open a large conversation → scroll" />
 
 <!-- 1:20–2:00. The interesting part of the clips is the action after launch. We are not just making an empty window appear. Bridge from the subjective experience to measurement: these apps felt fast, but how did this choice compare to other ways of building desktop software? -->
 
@@ -83,7 +87,7 @@ footer: 'September 17 report · macOS / Apple M4 · implementation comparison'
 
 # Measure what the user sees {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Same workload", "Release builds", "10 measured rounds"]} />
+<MeasurementDiagram />
 
 <!-- 2:45–3:00. Say this briskly. Apple M4 ARM64, macOS 26.6.1. Times are medians, not best runs. Memory is settled physical footprint from separate unrecorded launches, not RSS or peak. Equivalent content does not mean identical internals or pixels. Current size builds are newer than the controlled timing/memory run. The backup notes preserve the details. -->
 
@@ -96,7 +100,18 @@ footer: 'Median ms · 10 measured rounds · small differences near recording cad
 
 <Chart workload="hello" metric="content" />
 
-<!-- 3:00–3:35. Hello World first content: RN 227.6 ms, SwiftUI 227.5, GPUI 226.5. These are effectively tied at the recording cadence. AppKit is 193.4. This is an overhead baseline, not a real application responsiveness benchmark. Do not manufacture a win from tenths of a millisecond. -->
+<!-- 3:00–3:35. All bar charts use a zero-based linear scale; lower is better. Hello World first content: RN 227.6 ms, SwiftUI 227.5, GPUI 226.5. These are effectively tied at the recording cadence. AppKit is 193.4. This is an overhead baseline, not a real application responsiveness benchmark. Do not manufacture a win from tenths of a millisecond. -->
+
+---
+eyebrow: 'Hello World / installed size'
+footer: 'Greeting workload · newer installed-size snapshot · MiB'
+---
+
+# Hello World · installed size {class="text-center font-semibold tracking-tight text-7xl"}
+
+<Chart workload="hello" metric="size" />
+
+<!-- RN now measures 7.2 MiB (7,499,962 bytes) after a verified ARM64 rebuild with executable/Hermes symbols stripped, dead-code stripping, ThinLTO, and -Oz. The original report snapshot recorded 16.3 MiB; this size correction is from September 18. The original timing/memory measurements predate these compiler settings. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
 
 ---
 eyebrow: 'Chat History / first content'
@@ -160,7 +175,7 @@ footer: 'Measured on macOS · current GPUI composer postdates these timing/memor
 
 # The combination matters {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Speed", "Low memory", "Native UI"]} />
+<BalanceDiagram />
 
 <!-- 6:35–7:25. Walk through the tradeoffs, not every cell. AppKit is an excellent macOS-specific choice. GPUI is fast but uses more memory here and draws custom content; a native composer was added after the measured run. RN gets close to AppKit's memory/startup while offering a cross-platform foundation and native content UI. This is why I judge RN the best combination among the cross-platform approaches I tested. Windows was not benchmarked. -->
 
@@ -191,7 +206,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Keep the big data native {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Flow labels={["Native document", "Visible rows", "React views"]} />
+<NativeDataDiagram />
 
 <!-- 8:50–9:25. This is explicitly a schematic. In the real app the native document and virtualized data source coordinate lazy row access. Native calls still have costs, and synchronous expensive work still blocks its calling thread. Explain the ownership decision, not a promise that any large-file app becomes fast automatically. -->
 
@@ -211,7 +226,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Native behavior {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Keyboard shortcuts", "Drag and drop", "Media keys"]} />
+<MediaSlot label="Diff: drop a file · Music: media keys" />
 
 <!-- 10:00–11:00. Return to a short app clip or demonstrate one interaction per app. A native material is good visual evidence, but real desktop behavior is the larger point. RN View and Text do not magically create every stock AppKit control; native integrations supply the specific controls and services. Avoid implying other frameworks cannot use OS services. -->
 
@@ -220,7 +235,9 @@ eyebrow: 'And then / developer experience'
 footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 ---
 
-# And then you get React {class="text-center font-semibold tracking-tight text-8xl mb-0"}
+# And then you get React {class="text-center font-semibold tracking-tight text-7xl"}
+
+<MediaSlot label="Edit a component → Fast Refresh" />
 
 <!-- 11:00–11:40. This is the pivot. Familiarity is a benefit on top, not an excuse for worse results. If rehearsed, make one small text/style edit and show it updating; otherwise the slide is sufficient. Fast Refresh applies to JS edits; changing native dependencies can require a new binary. -->
 
@@ -231,7 +248,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # React Native everywhere {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Mobile", "Desktop", "Web"]} />
+<PlatformDiagram />
 
 <!-- 11:40–12:25. This is the ideal development experience. Share models, state, data access, and appropriate components; adapt navigation, layout, controls, and services. Web uses web rendering; do not call it AppKit UI in a browser. These macOS apps do not by themselves prove shipping support on all targets. A verified cross-platform example can replace part of the explanation later. -->
 
@@ -242,7 +259,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Bring the ecosystem {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Support desktop", "Test it", "Document it"]} />
+<Flow labels={["Library", "Platform support", "Tests + docs"]} />
 
 <!-- 12:25–13:00. There is a large React Native ecosystem, but desktop compatibility is uneven. Do not imply every RN library works unchanged. The maintainer ask is concrete: check assumptions, add native platform implementations where needed, run tests, and publish an honest support matrix. Return to this invitation at the close. -->
 
@@ -253,7 +270,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # A desktop app needs more {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Windows and menus", "Files and OS services", "Packaging and updates"]} />
+<CapabilityDiagram />
 
 <!-- 13:00–13:40. Transition from the portfolio: after building several apps, I kept needing the same desktop foundations. Rendering a window is only the beginning. These apps are the experience informing the framework; do not claim every app already uses the final public SDK. -->
 
@@ -284,7 +301,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Desktop tools for React {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Windows, menus, shortcuts", "Files, settings, secure storage", "Builds, packaging, updates"]} />
+<MediaSlot label="Menus → file dialog → second window" />
 
 <!-- 15:05–15:50. Use three product-level groups instead of a tour of package names. Describe what is implemented and validated at release time. Current docs distinguish signing/notarization and real update-install acceptance from implemented tooling; do not present the whole shipping path as production-qualified without final validation. -->
 
@@ -295,7 +312,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Early · Useful · Growing {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["macOS first", "Windows verification pending", "Mobile and web via Expo"]} />
+<PlatformDiagram scope />
 
 <!-- 15:50–16:30. Update this slide against the actual launch state before the conference. The inspected README says prototype, macOS Apple Silicon, public npm/hosted runtimes unavailable, and Windows native verification pending. Do not conflate mobile/web delegation with universal support for every desktop API. The GitHub remote is known, public availability has not been verified in this task. -->
 
@@ -315,9 +332,9 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Legend Slides {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Flow labels={["Markdown + React", "Native slides"]} />
+<MediaSlot label="Presenter + audience windows → live source edit" />
 
-<!-- 17:00–17:50. Show the presenter window, source editing, and separate audience output. Keep this to one deliberate demonstration. Explain that this actual deck is MDX with native components; do not promise PowerPoint export or portable standalone compilation. Current release/compiler dependencies should be reflected in the release documentation. -->
+<!-- 17:00–17:50. MEDIA TO CAPTURE: Show the presenter window, source editing, and separate audience output. Keep this to one deliberate demonstration. Explain that this actual deck is MDX with native components; do not promise PowerPoint export. Verify installed-app compiler packaging before demonstrating it. Current release/compiler dependencies should be reflected in the release documentation. -->
 
 ---
 eyebrow: 'Launch announcement'
@@ -326,7 +343,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Legend Slides · 0.0.1 {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Open source", "github.com/LegendApp/legend-apps"]} />
+<MediaSlot kind="screenshot" label="Public release page" />
 
 <!-- 17:50–18:35. PLANNED LAUNCH COPY: once the release is public, say: Today I'm releasing version 0.0.1, and it's open source. Before rehearsal, verify the public repo and release URL. Until then, describe this as the upcoming release, not already available. This source repository link is intentionally distinct from the framework link. Add a QR only after the final release destination is verified. -->
 
@@ -337,7 +354,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Build for desktop {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Try the apps", "Build your own", "Bring your libraries"]} />
+<Flow labels={["Try an app", "Build an app", "Share a library"]} />
 
 <!-- 18:35–19:15. Invite participation at two levels. The framework is early and useful feedback matters. The ecosystem call is an actionable request, not an assertion that desktop support already matches mobile. -->
 
@@ -362,26 +379,13 @@ footer: 'Greeting workload · MiB · settled physical footprint'
 <!-- Baseline settled memory. Standalone RN 23.3 MiB, AppKit 15.5, SwiftUI 18.3. These are not the memory figures for the chat app. -->
 
 ---
-eyebrow: 'Backup'
-footer: 'Greeting workload · newer installed-size snapshot · MiB'
----
-
-# Hello World · installed size {class="text-center font-semibold tracking-tight text-7xl"}
-
-RN size: September 18 optimized ARM64 rebuild. {class="text-2xl text-amber-300"}
-
-<Chart workload="hello" metric="size" />
-
-<!-- RN now measures 7.2 MiB (7,499,962 bytes) after a verified ARM64 rebuild with executable/Hermes symbols stripped, dead-code stripping, ThinLTO, and -Oz. The original report snapshot recorded 16.3 MiB; this size correction is from September 18. The original timing/memory measurements predate these compiler settings. No grammar pack is needed. Installed logical bytes excluding system frameworks, not compressed download sizes. As in the report, sizes are from newer revisions than timings/memory. -->
-
----
 eyebrow: 'Backup / methodology'
 footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 ---
 
 # What we measured {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Two workloads \u00b7 one Mac", "Median visible timings", "Settled memory", "Installed size \u00b7 newer builds"]} />
+<MeasurementDiagram />
 
 <!-- Source is the copied report in rnconnection-assets/benchmark-report.md. Original complete results and p90 values are in the comparison repo benchmarks/final-2026-09-17/RESULTS.md. The latest composer update, including GPUI native overlay, has not had a full controlled rerun. The screenshot is newer visual evidence. Do not combine smoke timings with the full ten-round run. Private pinned histories are not shipped as reproducible public fixtures. -->
 
@@ -392,7 +396,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Native content ≠ native window {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Native: platform views", "Web: HTML / CSS", "Canvas: framework-drawn"]} />
+<RenderingDiagram />
 
 <!-- These are the report's rendering categories, not a quality hierarchy. GPUI's current composer is a native overlay while its transcript remains framework-drawn. RN can also use custom rendering or optional WebViews. Native UI requires deliberate choices, and accessibility/behavior should be tested rather than inferred from framework names. -->
 
@@ -403,7 +407,7 @@ footer: 'RN CONNECTION / REACT NATIVE DESKTOP'
 
 # Legend Markdown {class="text-center font-semibold tracking-tight text-7xl"}
 
-<Points items={["Edit", "Format", "Save"]} />
+<MediaSlot label="Edit a block → format → save" />
 
 <!-- Optional insertion after Native means behavior, too, if the release or preview is ready. Show a short real editing clip. It is a local-first block Markdown editor with native document behavior, undo/redo, formatting tools, and settings. Do not claim it launched unless that has happened. This backup makes the main talk independent of the additional launch. -->
 

@@ -1,3 +1,4 @@
+import { FlowGlyph } from "./RNConnectionVisuals";
 import { Background, usePresentationValue, type PresentationTemplateProps } from "@legend-apps/presentation";
 import { Animated, Easing, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
@@ -17,12 +18,7 @@ export default function Frame({ children }: PresentationTemplateProps) {
   );
 }
 
-function Reveal({ children, delay = 0, horizontal = false, style }: {
-  children: ReactNode;
-  delay?: number;
-  horizontal?: boolean;
-  style?: StyleProp<ViewStyle>;
-}) {
+function useRevealProgress(delay: number, duration: number) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const startedAt = usePresentationValue("startedAt");
@@ -33,7 +29,7 @@ function Reveal({ children, delay = 0, horizontal = false, style }: {
     if (active && !preview) {
       const animation = Animated.timing(progress, {
         toValue: 1,
-        duration: 650,
+        duration,
         delay,
         easing: Easing.out(Easing.cubic),
         // Match the macOS presentation host's transition driver.
@@ -43,11 +39,20 @@ function Reveal({ children, delay = 0, horizontal = false, style }: {
       animation.start();
       return () => animation.stop();
     }
-  }, [active, preview, startedAt, delay, progress]);
+  }, [active, preview, startedAt, delay, duration, progress]);
 
-  const offset = progress.interpolate({ inputRange: [0, 1], outputRange: [horizontal ? -24 : 20, 0] });
+  return progress;
+}
+
+function Reveal({ children, delay = 0, style }: {
+  children: ReactNode;
+  delay?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const progress = useRevealProgress(delay, 650);
+
   return (
-    <Animated.View style={[style, { opacity: progress, transform: [horizontal ? { translateX: offset } : { translateY: offset }] }]}>
+    <Animated.View style={[style, { opacity: progress }]}>
       {children}
     </Animated.View>
   );
@@ -71,7 +76,7 @@ export function Flow({ labels }: { labels: string[] }) {
       {labels.map((label, index) => (
         <Fragment key={label}>
           {index > 0 && (
-            <Reveal horizontal delay={200 + (index * 2 - 1) * 220}>
+            <Reveal delay={200 + (index * 2 - 1) * 220}>
               <View style={{ width: 112, height: 24, justifyContent: "center" }}>
                 <View style={{ height: 2, backgroundColor: "#67e8f9" }} />
                 <View style={{ position: "absolute", right: 0, width: 14, height: 14, borderTopWidth: 2, borderRightWidth: 2, borderColor: "#67e8f9", transform: [{ rotate: "45deg" }] }} />
@@ -79,7 +84,8 @@ export function Flow({ labels }: { labels: string[] }) {
             </Reveal>
           )}
           <Reveal delay={200 + index * 440} style={{ flex: 1 }}>
-            <Text style={{ color: "#ffffff", fontSize: 48, lineHeight: 60, fontWeight: "500", textAlign: "center" }}>{label}</Text>
+            <FlowGlyph label={label} />
+            <Text style={{ color: "#ffffff", fontSize: 38, lineHeight: 48, fontWeight: "500", textAlign: "center" }}>{label}</Text>
           </Reveal>
         </Fragment>
       ))}
@@ -90,6 +96,28 @@ export function Flow({ labels }: { labels: string[] }) {
 type Metric = "content" | "memory" | "size" | "jump" | "switch";
 const units: Record<Metric, string> = { content: "ms", memory: "MiB", size: "MiB", jump: "ms", switch: "ms" };
 
+function ChartRow({ name, value, maximum, metric, index }: {
+  name: string;
+  value: number;
+  maximum: number;
+  metric: Metric;
+  index: number;
+}) {
+  const progress = useRevealProgress(index * 25, 320);
+  const highlighted = name === "React Native";
+  const width = progress.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${value / maximum * 100}%`] });
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", height: 43, gap: 24 }}>
+      <Text style={{ width: 280, fontSize: 27, color: highlighted ? "#67e8f9" : "#cbd5e1", fontWeight: highlighted ? "700" : "400" }}>{name}</Text>
+      <View style={{ flex: 1, height: 28, backgroundColor: "#171717", borderRadius: 5 }}>
+        <Animated.View style={{ width, minWidth: 2, height: 28, borderRadius: 5, backgroundColor: highlighted ? "#67e8f9" : "#525252" }} />
+      </View>
+      <Text style={{ width: 180, textAlign: "right", fontSize: 27, color: highlighted ? "#67e8f9" : "#e2e8f0", fontVariant: ["tabular-nums"] }}>{value.toFixed(1)} {units[metric]}</Text>
+    </View>
+  );
+}
+
 export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?: "chat" | "hello" }) {
   const rows = (workload === "chat" ? benchmarks.chat : benchmarks.hello)
     .map((row) => ({ name: row.name, value: (row as unknown as Record<string, number>)[metric] }))
@@ -98,19 +126,9 @@ export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?
   const maximum = Math.max(...rows.map((row) => row.value));
   return (
     <View style={{ gap: 12, marginTop: 32 }}>
-      {rows.map(({ name, value }) => {
-        const highlighted = name === "React Native";
-        return (
-          <View key={name} style={{ flexDirection: "row", alignItems: "center", height: 43, gap: 24 }}>
-            <Text style={{ width: 280, fontSize: 27, color: highlighted ? "#67e8f9" : "#cbd5e1", fontWeight: highlighted ? "700" : "400" }}>{name}</Text>
-            <View style={{ flex: 1, height: 28, backgroundColor: "#171717", borderRadius: 5 }}>
-              <View style={{ width: `${value / maximum * 100}%`, minWidth: 2, height: 28, borderRadius: 5, backgroundColor: highlighted ? "#67e8f9" : "#525252" }} />
-            </View>
-            <Text style={{ width: 180, textAlign: "right", fontSize: 27, color: highlighted ? "#67e8f9" : "#e2e8f0", fontVariant: ["tabular-nums"] }}>{value.toFixed(1)} {units[metric]}</Text>
-          </View>
-        );
-      })}
-      <Text className="mt-6 text-center text-xl text-neutral-400">Zero-based linear scale · lower is better</Text>
+      {rows.map(({ name, value }, index) => (
+        <ChartRow key={`${metric}-${workload}-${name}`} name={name} value={value} maximum={maximum} metric={metric} index={index} />
+      ))}
     </View>
   );
 }
