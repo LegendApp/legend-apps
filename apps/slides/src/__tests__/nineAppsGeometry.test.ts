@@ -2,8 +2,9 @@
 import { expect, test } from "bun:test";
 import { appCardLayout, appOrder, filmstripPosition, filmstripLeadInMs, filmstripHoldMs, filmstripMoveMs } from "../../decks/react-native-desktop/NineAppsGeometry";
 
-test("RN anchors the hero, grid, and initial filmstrip", () => {
-  for (const mode of ["hero", "grid", "filmstrip"] as const) expect(appCardLayout(0, mode).x).toBe(960);
+test("RN leads the grid from the top-left and centers the hero and filmstrip", () => {
+  for (const mode of ["hero", "filmstrip"] as const) expect(appCardLayout(0, mode).x).toBe(960);
+  expect(appCardLayout(0, "grid")).toMatchObject({ x: 520, y: 285 });
   const grid = appOrder.map((_, i) => appCardLayout(i, "grid"));
   expect(new Set(grid.map(r => `${r.x},${r.y}`)).size).toBe(9);
   for (const card of grid) {
