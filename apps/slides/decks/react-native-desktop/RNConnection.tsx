@@ -9,8 +9,8 @@ export default function Frame({ children }: PresentationTemplateProps) {
   return (
     <>
       <Background priority={-1}>
-        {/* Variants: "glass", "fluid", "smoke", "wireframe"; 1 is normal brightness/speed. */}
-        <AnimatedAtmosphere variant="glass" brightness={0.7} speed={0.6} />
+        {/* Variants: "droplets", "glass", "fluid", "smoke", "wireframe"; 1 is normal brightness/speed. */}
+        <AnimatedAtmosphere variant="droplets" brightness={0.7} speed={0.6} />
       </Background>
       <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 96, justifyContent: "center" }}>
         {children}

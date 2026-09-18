@@ -10,7 +10,7 @@ export type AtmosphereProps = {
   /** Extra motion on slide changes, relative to speed. Set 0 to disable. */
   slideChangeBoost?: number;
 };
-export type AtmosphereVariant = "fluid" | "smoke" | "wireframe" | "glass";
+export type AtmosphereVariant = "fluid" | "smoke" | "wireframe" | "glass" | "droplets";
 
 const common = `
   uniform float2 resolution;
@@ -43,6 +43,60 @@ const common = `
 `;
 
 const sources: Record<AtmosphereVariant, string> = {
+  droplets: `
+    float mergeDistance(float a, float b) {
+      float h = max(0.09 - abs(a - b), 0.0) / 0.09;
+      return min(a, b) - h * h * 0.0225;
+    }
+    float dropletDistance(float2 p, float t) {
+      // Crossing orbits bring different neighbors together instead of leaving
+      // one isolated satellite. Different periods keep the groups changing.
+      float a = length(p - float2(-0.36 + sin(t * 0.85) * 0.21, 0.16 + cos(t * 0.67) * 0.09)) - 0.185;
+      float b = length(p - float2(0.04 + cos(t * 0.92) * 0.23, 0.19 + sin(t * 0.73) * 0.10)) - 0.155;
+      float c = length(p - float2(0.38 + sin(t * 0.79 + 1.4) * 0.19, -0.19 + cos(t * 0.91) * 0.14)) - 0.14;
+      float d = length(p - float2(-0.32 + cos(t * 0.76 + 0.7) * 0.22, -0.22 + sin(t * 0.88) * 0.12)) - 0.13;
+      float e = length(p - float2(0.03 + sin(t * 0.69 + 2.1) * 0.26, -0.12 + cos(t * 0.83) * 0.20)) - 0.105;
+      float f = length(p - float2(0.42 + cos(t * 0.81 + 2.8) * 0.17, 0.21 + sin(t * 0.95) * 0.11)) - 0.115;
+      return mergeDistance(mergeDistance(mergeDistance(a, b), mergeDistance(c, d)), mergeDistance(e, f));
+    }
+    float3 dropletBackdrop(float2 p) {
+      // Sample this same environment at displaced coordinates inside each lens.
+      float light = exp(-dot(p - float2(-0.5, -0.35), p - float2(-0.5, -0.35)) * 3.0);
+      float glow = exp(-dot(p - float2(0.55, 0.30), p - float2(0.55, 0.30)) * 5.0);
+      float2 cell = abs(fract(p / 0.12 + 0.5) - 0.5) * 0.12;
+      float aa = 1.3 / resolution.y;
+      float grid = 1.0 - smoothstep(0.0, aa, min(cell.x, cell.y));
+      return float3(0.006, 0.009, 0.014)
+        + float3(0.036, 0.049, 0.067) * light
+        + float3(0.020, 0.033, 0.045) * glow
+        + float3(0.025, 0.033, 0.044) * grid;
+    }
+    half4 main(float2 position) {
+      float2 p = (position / resolution - 0.5) * float2(resolution.x / resolution.y, 1.0);
+      float t = time * 0.6;
+      float d = dropletDistance(p, t);
+      float epsilon = 0.001;
+      float2 gradient = float2(
+        dropletDistance(p + float2(epsilon, 0), t) - dropletDistance(p - float2(epsilon, 0), t),
+        dropletDistance(p + float2(0, epsilon), t) - dropletDistance(p - float2(0, epsilon), t));
+      float2 normal = gradient / max(length(gradient), 0.00001);
+      float depth = max(-d, 0.0);
+      float inside = 1.0 - smoothstep(-1.0 / resolution.y, 1.0 / resolution.y, d);
+      // Refraction peaks inside the bevel and relaxes into a clear interior.
+      float bend = 0.065 * (1.0 - exp(-depth * 180.0)) * exp(-depth * 22.0);
+      float3 backdrop = dropletBackdrop(p);
+      float3 glass = dropletBackdrop(p - normal * bend);
+      float directional = pow(abs(dot(normal, normalize(float2(-0.6, -0.8)))), 5.0);
+      float rim = exp(-abs(d) * 700.0);
+      float shoulder = exp(-depth * 65.0) * inside;
+      float shadow = exp(-abs(d - 0.008) * 140.0) * (1.0 - inside);
+      float3 color = mix(backdrop, glass * 1.13 + float3(0.004, 0.006, 0.009), inside);
+      color *= 1.0 - shadow * 0.30;
+      color += float3(0.68, 0.77, 0.88) * (rim * (0.035 + directional * 0.20)
+        + shoulder * directional * 0.065);
+      return half4(color * brightness, 1.0);
+    }
+  `,
   glass: `
     half4 main(float2 position) {
       float2 uv = position / resolution;
@@ -160,7 +214,8 @@ export function AnimatedAtmosphere({ variant = "fluid", brightness = 1, speed = 
   // Decks are evaluated at runtime, so props can bypass the TypeScript union.
   const effect = variant === "smoke" ? effects.smoke
     : variant === "wireframe" ? effects.wireframe
-    : variant === "glass" ? effects.glass : effects.fluid;
+    : variant === "glass" ? effects.glass
+    : variant === "droplets" ? effects.droplets : effects.fluid;
   const idleSpeed = 0.16;
   const motionSpeed = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const uniforms = useAnimatedShaderUniforms({
@@ -180,6 +235,7 @@ export function AnimatedAtmosphere({ variant = "fluid", brightness = 1, speed = 
   );
 }
 
+export function Droplets(props: AtmosphereProps) { return <AnimatedAtmosphere {...props} variant="droplets" />; }
 export function GlassAtmosphere(props: AtmosphereProps) { return <AnimatedAtmosphere {...props} variant="glass" />; }
 export function Fluid(props: AtmosphereProps) { return <AnimatedAtmosphere {...props} variant="fluid" />; }
 export function Smoke(props: AtmosphereProps) { return <AnimatedAtmosphere {...props} variant="smoke" />; }
