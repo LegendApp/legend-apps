@@ -11,6 +11,7 @@ const ambientAurora = Skia.RuntimeEffect.Make(`
   uniform float time;
   uniform float phase;
   uniform float intensity;
+  uniform float baseBrightness;
 
   half4 main(float2 position) {
     float2 uv = position / resolution;
@@ -21,7 +22,7 @@ const ambientAurora = Skia.RuntimeEffect.Make(`
     float violet = exp(-length((uv - violetCenter) * float2(1.0, 1.2)) * 4.8);
     float ribbon = smoothstep(0.2, 0.95, sin((uv.x * 1.15 + uv.y * 0.7 + drift) * 4.0) * 0.5 + 0.5);
     ribbon *= 1.0 - smoothstep(0.15, 0.9, abs(uv.y - 0.5));
-    float3 color = float3(0.031, 0.047, 0.078);
+    float3 color = float3(0.031, 0.047, 0.078) * baseBrightness;
     color += float3(0.03, 0.58, 0.68) * cyan * 0.23 * intensity;
     color += float3(0.32, 0.12, 0.62) * violet * 0.2 * intensity;
     color += float3(0.02, 0.18, 0.26) * ribbon * 0.08 * intensity;
@@ -31,7 +32,7 @@ const ambientAurora = Skia.RuntimeEffect.Make(`
   }
 `);
 
-export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
+export function AmbientAurora({ intensity = 1, baseBrightness = 1 }: { intensity?: number; baseBrightness?: number }) {
   const isActive = usePresentationValue("isActive");
   const isPreview = usePresentationValue("isPreview");
   const { width, height } = useBackgroundSize();
@@ -61,16 +62,16 @@ export function AmbientAurora({ intensity = 1 }: { intensity?: number }) {
     <View pointerEvents="none" style={styles.fill}>
       <Canvas style={styles.fill}>
         <Fill>
-          <AuroraShader time$={time$} intensity={intensity} width={width} height={height} />
+          <AuroraShader time$={time$} baseBrightness={baseBrightness} intensity={intensity} width={width} height={height} />
         </Fill>
       </Canvas>
     </View>
   );
 }
 
-function AuroraShader({ time$, intensity, width, height }: { time$: Observable<number>; intensity: number; width: number; height: number }) {
+function AuroraShader({ time$, intensity, baseBrightness, width, height }: { time$: Observable<number>; intensity: number; baseBrightness: number; width: number; height: number }) {
   const time = useValue(time$);
-  return ambientAurora ? <Shader source={ambientAurora} uniforms={{ intensity, phase: 0, resolution: vec(width, height), time }} /> : null;
+  return ambientAurora ? <Shader source={ambientAurora} uniforms={{ intensity, baseBrightness, phase: 0, resolution: vec(width, height), time }} /> : null;
 }
 
 const styles = StyleSheet.create({

@@ -1,21 +1,18 @@
-import type { PresentationTemplateProps } from "@legend-apps/presentation";
+import { Background, type PresentationTemplateProps } from "@legend-apps/presentation";
 import { Text, View } from "react-native";
+import { AmbientAurora } from "./packs/backgrounds";
 import benchmarks from "./rnconnection-assets/benchmarks.json";
 
-export default function Frame({ children, slide }: PresentationTemplateProps) {
+export default function Frame({ children }: PresentationTemplateProps) {
   return (
-    <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 64 }}>
-      <View className="mb-8 flex-row items-center justify-between">
-        <Text className="text-2xl font-semibold uppercase tracking-widest text-cyan-300">
-          {typeof slide.eyebrow === "string" ? slide.eyebrow : "REACT NATIVE / DESKTOP"}
-        </Text>
-        <View className="h-1 w-20 bg-cyan-300" />
+    <>
+      <Background priority={-1}>
+        <AmbientAurora intensity={0.65} baseBrightness={0} />
+      </Background>
+      <View style={{ flex: 1, paddingHorizontal: 112, paddingVertical: 80, justifyContent: "center" }}>
+        {children}
       </View>
-      <View style={{ flex: 1, justifyContent: "center" }}>{children}</View>
-      <Text className="mt-6 border-t border-slate-700 pt-5 text-xl text-slate-400">
-        {typeof slide.footer === "string" ? slide.footer : "RN CONNECTION  /  REACT NATIVE DESKTOP"}
-      </Text>
-    </View>
+    </>
   );
 }
 
@@ -35,8 +32,8 @@ export function Chart({ metric, workload = "chat" }: { metric: Metric; workload?
         return (
           <View key={name} style={{ flexDirection: "row", alignItems: "center", height: 43, gap: 24 }}>
             <Text style={{ width: 280, fontSize: 27, color: highlighted ? "#67e8f9" : "#cbd5e1", fontWeight: highlighted ? "700" : "400" }}>{name}</Text>
-            <View style={{ flex: 1, height: 28, backgroundColor: "#172334", borderRadius: 5 }}>
-              <View style={{ width: `${value / maximum * 100}%`, minWidth: 2, height: 28, borderRadius: 5, backgroundColor: highlighted ? "#67e8f9" : "#52657e" }} />
+            <View style={{ flex: 1, height: 28, backgroundColor: "#171717", borderRadius: 5 }}>
+              <View style={{ width: `${value / maximum * 100}%`, minWidth: 2, height: 28, borderRadius: 5, backgroundColor: highlighted ? "#67e8f9" : "#525252" }} />
             </View>
             <Text style={{ width: 180, textAlign: "right", fontSize: 27, color: highlighted ? "#67e8f9" : "#e2e8f0", fontVariant: ["tabular-nums"] }}>{value.toFixed(1)} {units[metric]}</Text>
           </View>
@@ -54,7 +51,7 @@ export function Tradeoffs() {
         {[["Implementation", 340], ["First content", 250], ["Memory", 220], ["Content UI", 700]].map(([label, width]) => <Text key={label} style={{ width: Number(width), fontSize: 24, color: "#94a3b8" }}>{label}</Text>)}
       </View>
       {benchmarks.chat.map((row) => (
-        <View key={row.name} style={{ flexDirection: "row", padding: 12, borderRadius: 8, backgroundColor: row.name === "React Native" ? "#123746" : "#111d2e" }}>
+        <View key={row.name} style={{ flexDirection: "row", padding: 12, borderRadius: 8, backgroundColor: row.name === "React Native" ? "#102326" : "transparent" }}>
           <Text style={{ width: 340, fontSize: 25, color: "#f8fafc", fontWeight: row.name === "React Native" ? "700" : "400" }}>{row.name}</Text>
           <Text style={{ width: 250, fontSize: 25, color: "#e2e8f0" }}>{row.content.toFixed(1)} ms</Text>
           <Text style={{ width: 220, fontSize: 25, color: "#e2e8f0" }}>{row.memory.toFixed(1)} MiB</Text>
