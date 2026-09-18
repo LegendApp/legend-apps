@@ -21,7 +21,7 @@ export function TransitionSettingsPage() {
   };
   return <SettingsPage>
     <SettingsSection first title="Transitions">
-      <SettingsRow title="Your transition library" description="Edit TypeScript files or add new ones. Changes rebuild open decks; locked presentations wait for approval."
+      <SettingsRow title="Your transition library" description="Edit TypeScript files or add new ones. Changes rebuild open decks; updates wait until the presentation ends."
         control={<Action title="Open Folder" run={() => run(() => Linking.openURL(getTransitionDirectory().uri))} />} />
       {names.map((name) => <SettingsRow key={name} title={name} controlWrapperClassName="max-w-80" control={<View className="flex-row flex-wrap justify-end gap-2">
         <Action title="Edit" run={() => run(() => Linking.openURL(transitionStorage.file(`transitions/${name}.ts`).uri))} />

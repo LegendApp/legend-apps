@@ -88,7 +88,7 @@ export function DeckEditor({ path, onExit }: { path: string; onExit(): void }) {
   useEffect(() => {
     void setWindowOptions("slides-presenter", { windowStyle: { toolbarItems: [] } });
     void session.open(path);
-    setDraftReloadHandler(() => { void session.refresh(); });
+    setDraftReloadHandler(() => session.refresh());
     const removeKeys = addKeyDownListener((event) => {
       if (event.keyCode === KeyCodes.KEY_S && (event.modifiers & KeyCodes.MODIFIER_COMMAND)) { void session.save(); return true; }
       return false;
