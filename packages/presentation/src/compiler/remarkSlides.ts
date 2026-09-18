@@ -1,3 +1,4 @@
+import { transitionReference } from "./transitionLibrary";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -14,6 +15,7 @@ type Node = {
 
 type RemarkSlidesOptions = {
   templates?: Map<string, string>;
+  transitions?: Set<string>;
   deckPath?: string;
   dependencies?: Set<string>;
 };
@@ -125,6 +127,19 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
       : {};
     registerTemplate(deckConfig, "Deck", options.templates, false);
     resolveBackground(deckConfig, "Deck", options);
+    const registerTransition = (config: Record<string, unknown>) => {
+      const value = config.transition;
+      const reference = transitionReference(value);
+      if (value !== undefined && !(value && typeof value === "object" && "type" in value && value.type === "focus")) {
+        if (!reference || (typeof value === "object" && value && "name" in value && "source" in value)) throw new Error("A transition must have one name or source.");
+        if (typeof value === "object" && value) {
+          if ("duration" in value && (typeof value.duration !== "number" || !Number.isFinite(value.duration) || value.duration < 0 || value.duration > 10000)) throw new Error("Transition duration must be between 0 and 10000 ms.");
+          if ("options" in value && (!value.options || typeof value.options !== "object" || Array.isArray(value.options))) throw new Error("Transition options must be an object.");
+        }
+        if (reference !== "none") options.transitions?.add(reference);
+      }
+    };
+    registerTransition(deckConfig);
     const slideSource = firstNode?.type === "yaml" ? contentNodes.slice(1) : contentNodes;
 
     const slides: Array<{ metadata: Record<string, unknown>; nodes: Node[]; notes: string[] }> = [];
@@ -151,6 +166,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         metadata = parseFrontmatter(node.value, `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
+        registerTransition(metadata);
         continue;
       }
       if ((node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") && node.name === "SlideFrontmatter") {
@@ -161,6 +177,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         metadata = parseFrontmatter(encoded ? Buffer.from(encoded, "base64").toString("utf8") : "", `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
+        registerTransition(metadata);
         continue;
       }
       const nextNode = extractNotes(node, notes);

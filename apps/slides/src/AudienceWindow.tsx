@@ -1,9 +1,10 @@
 import { useValue } from "@legendapp/state/react";
 import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
-  type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
+  type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
+import { slideTransitionStyles } from "./slideTransitions";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
@@ -19,6 +20,15 @@ function AudienceContent() {
   const blackout = useValue(slidesState$.blackout);
   const slides = useValue(slidesState$.slides);
   const defaultTransition = useValue(slidesState$.config.transition);
+  const definitions = useValue(slidesState$.transitions);
+  const resolve = (from: number, to: number) => {
+    const resolved = resolveTransition(from, to, slides, defaultTransition);
+    const definition = resolved.focus ? undefined : definitions[resolved.kind];
+    const reference = resolved.reference;
+    const configuredDuration = typeof reference === "object" ? reference.duration : undefined;
+    const duration = configuredDuration ?? definition?.duration ?? resolved.duration;
+    return { ...resolved, definition, duration: Number.isFinite(duration) ? Math.max(0, Math.min(10000, duration)) : 320 };
+  };
   const revision = useValue(slidesState$.revision);
   const slideCount = slides.length;
   const [surfaces] = useState(() => new Map<number, FocusSurface>());
@@ -26,7 +36,7 @@ function AudienceContent() {
     index: currentSlide,
     revision,
     outgoing: null as number | null,
-    ...resolveTransition(currentSlide, currentSlide, slides, defaultTransition),
+    ...resolve(currentSlide, currentSlide),
     progress: new Animated.Value(1),
     ready: true,
     motions: new Map<number, FocusMotion>(),
@@ -34,9 +44,9 @@ function AudienceContent() {
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
   // Animated.Value here would also hide the still-mounted outgoing slide.
   if (transitionState.index !== currentSlide || transitionState.revision !== revision) {
-    const resolved = resolveTransition(transitionState.index, currentSlide, slides, defaultTransition);
+    const resolved = resolve(transitionState.index, currentSlide);
     // Markers opt into motion even when the slide itself uses a cut.
-    const hasShared = [...(surfaces.get(transitionState.index)?.entries ?? [])]
+    const hasShared = resolved.definition?.sharedElements !== "slide" && [...(surfaces.get(transitionState.index)?.entries ?? [])]
       .some((entry) => entry.kind === "element");
     const cut = transitionState.revision !== revision ||
       (!hasShared && (resolved.kind === "none" || resolved.duration === 0));
@@ -90,9 +100,11 @@ function AudienceContent() {
         if (sourceMotion.elements.size) {
           // The slide translation is in window points; shared geometry is in
           // logical slide points inside ScaledView.
-          if (transitionState.kind === "slide") {
+          if (!transitionState.definition && transitionState.kind === "slide") {
             sourceMotion.cameraTo = { x: -90 / (from.scale || 1), y: 0, scale: 1 };
             destinationMotion.cameraFrom = { x: 180 / (to.scale || 1), y: 0, scale: 1 };
+          } else if (!transitionState.definition && transitionState.kind === "reveal-up") {
+            destinationMotion.cameraFrom = { x: 0, y: 20 / (to.scale || 1), scale: 1 };
           }
           motions.set(transitionState.outgoing!, sourceMotion);
           motions.set(transitionState.index, destinationMotion);
@@ -119,7 +131,7 @@ function AudienceContent() {
     if (transitionState.outgoing === null || !transitionState.ready) return;
     const animation = Animated.timing(transitionState.progress, {
       duration: transitionState.duration,
-      easing: Easing.out(Easing.cubic),
+      easing: transitionState.definition?.easing === "linear" ? Easing.linear : transitionState.definition?.easing === "ease-in-out" ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
       toValue: 1,
       useNativeDriver: false,
     });
@@ -145,24 +157,18 @@ function AudienceContent() {
     };
   }, [transitionState]);
 
-  const slideLayer = transition === "slide" && transitionState.motions.size === 0;
-  const enteringStyle = slideLayer
-    ? { opacity: progress, transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [180, 0] }) }] }
-    : { opacity: progress };
-  const outgoingStyle = slideLayer
-    ? { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ translateX: progress.interpolate({ inputRange: [0, 1], outputRange: [0, -90] }) }] }
-    // With a shared background, fade both content layers. Legacy opaque slides
-    // keep the outgoing surface solid to avoid dimming their backgrounds.
-    : { opacity: hasBackground ? progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) : 1 };
+  const { entering: enteringStyle, outgoing: outgoingStyle } = slideTransitionStyles(
+    transitionState.definition ? "none" : transition, progress, hasBackground, transitionState.motions.size > 0,
+  );
   // Render from state: ref changes do not invalidate React's cached output.
   // The layout effect establishes the outgoing layer before paint; cuts never
   // have one, even when the previous transition has not cleaned up yet.
   const outgoingSlide = previousSlide === currentSlide ? null : previousSlide;
   const layers = outgoingSlide === null
-    ? [{ index: currentSlide, style: enteringStyle }]
+    ? [{ index: currentSlide, style: transitionState.definition ? {} : enteringStyle }]
     : [
-        { index: outgoingSlide, style: outgoingStyle },
-        { index: currentSlide, style: enteringStyle },
+        { index: outgoingSlide, style: transitionState.definition ? {} : outgoingStyle },
+        { index: currentSlide, style: transitionState.definition ? {} : enteringStyle },
       ];
   const preparedIndexes = Array.from(
     { length: Math.min(slideCount - 1, currentSlide + 2) - Math.max(0, currentSlide - 2) + 1 },
@@ -182,7 +188,11 @@ function AudienceContent() {
           <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
             <AudienceFocusSurface index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
               <SlideCanvas>
-                <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
+                <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
+                  reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
+                  settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
+                  <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
+                </UserTransitionLayer>
               </SlideCanvas>
             </AudienceFocusSurface>
           </Animated.View>
@@ -191,6 +201,45 @@ function AudienceContent() {
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
     </>
   );
+}
+
+function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled }: {
+  children: ReactNode; definition?: TransitionDefinition; reference: SlideTransition; progress: Animated.Value;
+  incoming: boolean; settled: boolean; reverse: boolean; hasBackground: boolean; shared: boolean;
+}) {
+  const width = useValue(() => slidesState$.config.width.get() ?? 1920);
+  const height = useValue(() => slidesState$.config.height.get() ?? 1080);
+  const [clock, setClock] = useState<{ source: Animated.Value; value: number }>(() => ({ source: progress, value: 0 }));
+  const value = settled ? 1 : clock.source === progress ? clock.value : 0;
+  useLayoutEffect(() => {
+    if (definition) {
+      // addListener follows the host's JS-driven animation; no second clock or timer.
+      const id = progress.addListener(({ value }) => setClock({ source: progress, value }));
+      return () => progress.removeListener(id);
+    }
+  }, [progress, definition]);
+  let style = {};
+  let failure: string | undefined;
+  if (definition && value < 1) {
+    try {
+      const result = definition.styles({ progress: value, direction: reverse ? "backward" : "forward", width, height,
+        options: typeof reference === "object" && "options" in reference ? reference.options ?? {} : {}, hasBackground });
+      style = incoming ? result.incoming : result.outgoing;
+      if (!style || typeof style !== "object" || Array.isArray(style)) throw new Error("styles must return incoming and outgoing style objects");
+      if (shared) style = { ...style, transform: undefined };
+    } catch (error) {
+      failure = `Transition failed: ${error instanceof Error ? error.message : String(error)}`;
+      style = { opacity: incoming ? 1 : 0 };
+    }
+  }
+  useEffect(() => {
+    if (failure) {
+      progress.stopAnimation();
+      progress.setValue(1);
+      setSlidesState((state) => ({ runtimeErrors: state.runtimeErrors.includes(failure) ? state.runtimeErrors : [...state.runtimeErrors, failure] }));
+    }
+  }, [failure, progress]);
+  return <View style={[{ flex: 1 }, style]}>{children}</View>;
 }
 
 function AudienceFocusSurface({ children, index, motion, surfaces }: {

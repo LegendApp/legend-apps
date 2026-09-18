@@ -268,3 +268,35 @@ test("a cut with no matching destination marker settles fully visible without an
     log.mockRestore();
   }
 });
+
+test("user transitions receive progress and options, finish visibly, and recover from runtime errors", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let renderer;
+  const calls = [];
+  try {
+    const definition = { duration: 650, styles(context) {
+      calls.push(context);
+      if (context.options.fail) throw new Error("broken transition");
+      return { incoming: { opacity: context.progress }, outgoing: { opacity: 1 - context.progress } };
+    } };
+    setSlidesState({ currentSlide: 0, config: { transition: { name: "custom", options: { distance: 24 } } },
+      transitions: { custom: definition }, slides: [0, 1, 2].map(() => ({ metadata: {}, notes: "" })) });
+    await act(() => { renderer = create(<AudienceWindow />); });
+    await act(() => setCurrentSlide(1));
+    expect(calls.some((call) => call.progress === 0 && call.options.distance === 24 && call.direction === "forward")).toBe(true);
+    await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
+    expect(renderer.root.findAllByType("layer").filter((layer) => Array.isArray(layer.props.style))).toHaveLength(1);
+    await act(() => { setSlidesState({ config: { transition: { name: "custom", options: { fail: true } } } }); });
+    await act(() => setCurrentSlide(2));
+    expect(getSlidesState().runtimeErrors.some((error) => error.includes("broken transition"))).toBe(true);
+    await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
+    const active = renderer.root.findAllByType("deck").filter((deck) => !deck.props.isPreview);
+    expect(active).toHaveLength(1);
+    expect(active[0].props.targetIndex).toBe(2);
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    transitions.splice(0); setSlidesState(initial); log.mockRestore();
+  }
+});

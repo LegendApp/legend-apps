@@ -9,7 +9,8 @@ export function validFocusRect(rect: FocusRect) {
 }
 
 export function normalizeTransition(value: unknown): SlideTransition | undefined {
-  if (value === "none" || value === "fade" || value === "slide") return value;
+  if (typeof value === "string" && value.trim()) return value;
+  if (value && typeof value === "object" && ("name" in value || "source" in value)) return value as SlideTransition;
   if (!value || typeof value !== "object") return undefined;
   const config = value as Partial<FocusTransition>;
   if (config.type !== "focus" || typeof config.from !== "string" || !config.from.trim()) return undefined;
@@ -25,10 +26,11 @@ export function resolveTransition(from: number, to: number, slides: { metadata: 
   const incoming = normalizeTransition(slides[to]?.metadata.transition ?? fallback) ?? "none";
   const reverse = to === from - 1;
   const edge = reverse ? normalizeTransition(slides[from]?.metadata.transition ?? fallback) : incoming;
-  const focus = Math.abs(to - from) === 1 && typeof edge === "object" ? edge : undefined;
+  const focus = Math.abs(to - from) === 1 && typeof edge === "object" && "type" in edge && edge.type === "focus" ? edge : undefined;
   return {
-    kind: focus ? "focus" as const : typeof incoming === "object" ? "fade" as const : incoming,
-    focus, reverse, duration: focus?.duration ?? 320,
+    kind: focus ? "focus" as const : typeof incoming === "object" ? "type" in incoming ? "fade" as const : incoming.source ?? incoming.name ?? "none" : incoming,
+    reference: incoming,
+    focus, reverse, duration: focus?.duration ?? (incoming === "reveal-up" ? 650 : 320),
   };
 }
 

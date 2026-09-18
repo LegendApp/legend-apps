@@ -1,3 +1,5 @@
+import { builtinTransitionSources } from "../transitions";
+import { resolveTransitionFile } from "./transitionLibrary";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -163,13 +165,14 @@ function preprocessNotes(source: string) {
   return output;
 }
 
-function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftSource?: string): Plugin {
+function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftSource?: string, transitionDirectory?: string): Plugin {
   return {
     name: "legend-slides-mdx",
     setup(buildApi) {
       buildApi.onLoad({ filter: /\.mdx$/ }, async (args) => {
         const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
+        const transitions = new Set<string>();
         const compiled = await compile(preprocessNotes(preprocessSlideFrontmatter(source)), {
           jsx: true,
           jsxImportSource: "react",
@@ -178,7 +181,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
             remarkGfm,
             remarkSlideAttributes,
             [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
-            [remarkSlides, { templates, deckPath: args.path, dependencies: extraDependencies }],
+            [remarkSlides, { templates, transitions, deckPath: args.path, dependencies: extraDependencies }],
           ],
         });
         const templateEntries = [...templates.entries()];
@@ -188,8 +191,13 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
         const templateExport = `export const __legendSlidesTemplates = {${templateEntries.map(([reference], index) =>
           `${JSON.stringify(reference)}: __LegendSlidesTemplate${index}`
         ).join(",")}};`;
+        const refs = [...transitions];
+        // Validate before bundling, including named built-in overrides.
+        refs.forEach((ref) => resolveTransitionFile(ref, path.dirname(entryPath), transitionDirectory));
+        const transitionImports = refs.map((ref, i) => `import __Transition${i} from ${JSON.stringify("legend-transition:" + ref)};`);
+        const transitionExport = `export const __legendSlidesTransitions = {${refs.map((ref, i) => `${JSON.stringify(ref)}: __Transition${i}`).join(",")}};`;
         return {
-          contents: [...templateImports, String(compiled), templateExport].join("\n"),
+          contents: [...templateImports, ...transitionImports, String(compiled), templateExport, transitionExport].join("\n"),
           loader: "jsx" as Loader,
         };
       });
@@ -197,11 +205,22 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
   };
 }
 
-function localDeckPlugin(entryPath: string): Plugin {
+export function localDeckPlugin(entryPath: string, transitionDirectory?: string): Plugin {
   const deckRoot = fs.realpathSync(path.dirname(entryPath));
   return {
     name: "legend-slides-local-deck",
     setup(buildApi) {
+      const transitionRoots = new Map<string, string>();
+      buildApi.onResolve({ filter: /^legend-transition:/ }, (args) => {
+        const reference = args.path.slice("legend-transition:".length);
+        const file = resolveTransitionFile(reference, deckRoot, transitionDirectory);
+        if (file) {
+          transitionRoots.set(file, reference.startsWith("./") ? deckRoot : fs.realpathSync(transitionDirectory!));
+          return { path: file };
+        }
+        return { namespace: "builtin-transition", path: reference };
+      });
+      buildApi.onLoad({ filter: /.*/, namespace: "builtin-transition" }, (args) => ({ contents: builtinTransitionSources[args.path], loader: "ts" }));
       buildApi.onResolve({ filter: /.*/ }, (args) => {
         if (args.kind === "entry-point") {
           return { path: entryPath };
@@ -219,9 +238,11 @@ function localDeckPlugin(entryPath: string): Plugin {
           return { errors: [{ text: `Could not resolve local import "${args.path}".` }] };
         }
         const realPath = fs.realpathSync(resolvedPath);
-        if (!isWithin(deckRoot, realPath)) {
+        const allowedRoot = transitionRoots.get(args.importer) ?? deckRoot;
+        if (!isWithin(allowedRoot, realPath)) {
           return { errors: [{ text: `Local import "${args.path}" escapes the deck directory.` }] };
         }
+        if (transitionRoots.has(args.importer)) transitionRoots.set(realPath, allowedRoot);
         return assetExtensions.has(path.extname(realPath).toLowerCase())
           ? { namespace: "deck-asset", path: realPath }
           : { path: realPath };
@@ -245,7 +266,7 @@ function formatMessages(messages: Message[]) {
 }
 
 function dependenciesFrom(result: BuildResult, workingDirectory: string) {
-  return Object.keys(result.metafile?.inputs ?? {}).map((input) => path.resolve(workingDirectory, input)).sort();
+  return Object.keys(result.metafile?.inputs ?? {}).filter((input) => !input.startsWith("builtin-transition:")).map((input) => path.resolve(workingDirectory, input)).sort();
 }
 
 async function compileUniwind(deckRoot: string, draftSource?: string) {
@@ -280,7 +301,7 @@ async function compileUniwind(deckRoot: string, draftSource?: string) {
   }
 }
 
-export async function compileDeck(deckPath: string, options: { source?: string } = {}): Promise<CompileDeckResult> {
+export async function compileDeck(deckPath: string, options: { source?: string; transitionDirectory?: string } = {}): Promise<CompileDeckResult> {
   const absoluteDeckPath = path.resolve(deckPath);
   if (!absoluteDeckPath.toLowerCase().endsWith(".mdx")) {
     return { success: false, errors: ["Decks must use the .mdx extension."], warnings: [] };
@@ -304,8 +325,8 @@ export async function compileDeck(deckPath: string, options: { source?: string }
       outfile: "deck.js",
       platform: "neutral",
       plugins: [
-        localDeckPlugin(absoluteDeckPath),
-        mdxDeckPlugin(absoluteDeckPath, extraDependencies, options.source),
+        localDeckPlugin(absoluteDeckPath, options.transitionDirectory),
+        mdxDeckPlugin(absoluteDeckPath, extraDependencies, options.source, options.transitionDirectory),
         typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],

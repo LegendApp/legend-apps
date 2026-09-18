@@ -1,6 +1,6 @@
 import { observable, ObservableHint, type OpaqueObject } from "@legendapp/state";
 import type { ComponentType } from "react";
-import type { DeckConfig, PresentationTemplates, SlideConfig } from "@legend-apps/presentation";
+import type { DeckConfig, PresentationTemplates, PresentationTransitions, SlideConfig } from "@legend-apps/presentation";
 import type { CompileDeckSuccess } from "@legend-apps/presentation";
 
 export type DeckSlide = {
@@ -31,6 +31,7 @@ export type SlidesState = {
   slides: DeckSlide[];
   status: "idle" | "building" | "ready" | "error";
   templates: PresentationTemplates;
+  transitions: PresentationTransitions;
 };
 
 // Compiled components and template functions are data, not computed observables.
@@ -61,6 +62,7 @@ export const slidesState$ = observable<SlidesObservableState>({
   slides: [],
   status: "idle",
   templates: ObservableHint.opaque({}),
+  transitions: ObservableHint.opaque({}),
 });
 
 export function getSlidesState() {
@@ -95,6 +97,7 @@ export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesS
     compiled: component === compiled?.component ? compiled : component ? ObservableHint.opaque({ component }) : null,
     pendingDeck: data.pendingDeck ? ObservableHint.opaque(data.pendingDeck) : null,
     templates: ObservableHint.opaque(data.templates),
+    transitions: ObservableHint.opaque(data.transitions),
   });
 }
 

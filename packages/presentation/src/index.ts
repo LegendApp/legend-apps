@@ -32,3 +32,6 @@ export type {
 
 export { columnWeights, layoutOverflows } from "./layout";
 export type { LayoutProps, LayoutKind } from "./layout";
+
+export { defineTransition, builtinTransitionSources } from "./transitions";
+export type { TransitionDefinition, TransitionContext, PresentationTransitions } from "./transitions";
