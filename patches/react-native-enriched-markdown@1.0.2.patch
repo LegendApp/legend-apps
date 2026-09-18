@@ -7452,7 +7452,7 @@ diff --git a/ios/input/ENRMInputParser.h b/ios/input/ENRMInputParser.h
 --- a/ios/input/ENRMInputParser.h
 +++ b/ios/input/ENRMInputParser.h
 @@ -9,6 +9,7 @@
-
+ 
  @interface ENRMParseResult : NSObject
  @property (nonatomic, strong, readonly) NSString *plainText;
 +@property (nonatomic, assign, readonly) NSUInteger selectionOffset;
@@ -7461,17 +7461,17 @@ diff --git a/ios/input/ENRMInputParser.h b/ios/input/ENRMInputParser.h
  @end
 @@ -16,6 +17,7 @@
  @interface ENRMInputParser : NSObject
-
+ 
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown;
 +- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection;
-
+ 
  @end
-
+ 
 diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 --- a/ios/input/ENRMInputParser.mm
 +++ b/ios/input/ENRMInputParser.mm
 @@ -8,6 +8,7 @@
-
+ 
  @interface ENRMParseResult ()
  @property (nonatomic, strong, readwrite) NSString *plainText;
 +@property (nonatomic, assign, readwrite) NSUInteger selectionOffset;
@@ -7480,7 +7480,7 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
  @end
 @@ -98,6 +99,8 @@
  };
-
+ 
  struct ParseContext {
 +  // Keep the UTF-8 backing bytes alive while ranges are mapped after md_parse.
 +  NSString *completedMarkdown;
@@ -7488,7 +7488,7 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
    size_t bufferLength;
    size_t originalLength;
 @@ -333,8 +336,8 @@
-
+ 
  static bool runMd4cParse(NSString *markdown, ParseContext &context)
  {
 -  NSString *completed = ENRMInputRemendComplete(markdown);
@@ -7497,9 +7497,9 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 +  const char *completedUTF8 = [context.completedMarkdown UTF8String];
    size_t completedLength = strlen(completedUTF8);
    size_t originalLength = [markdown lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
-
+ 
 @@ -478,6 +481,11 @@
-
+ 
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
  {
 +  return [self parseToPlainTextAndRanges:markdown sourceSelection:0];
@@ -7508,7 +7508,7 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 +- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection
 +{
    ENRMParseResult *parseResult = [[ENRMParseResult alloc] init];
-
+ 
    if (markdown.length == 0) {
 @@ -575,5 +583,8 @@
      }
@@ -7517,7 +7517,7 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 +  // Resolve selections against the full parse: parsing a prefix alone can change
 +  // delimiter interpretation when text follows the insertion point.
 +  parseResult.selectionOffset = rawToPlainMap[MIN(sourceSelection, rawLength)];
-
+ 
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
 diff --git a/ios/views/ENRMCodeBlockContainerView.m b/ios/views/ENRMCodeBlockContainerView.m
 index a668c26e..f9e210ee 100644
@@ -7529,12 +7529,12 @@ index a668c26e..f9e210ee 100644
  #import "ENRMMenuAction.h"
 +#import "ENRMCodeBlockLineLayout.h"
  #endif
-
+ 
  // Block segment view for fenced code blocks (see SegmentRenderer.m):
 @@ -67,6 +68,7 @@ static CGFloat ENRMCodeBlockHeaderLabelLineHeight(NSFont *headerFont)
    return attributed;
  }
-
+ 
 +#if !TARGET_OS_OSX
  // Unwrapped code extent: width feeds the horizontal scroll, height the box
  // measurement. Width-independent since lines never wrap.
@@ -7542,7 +7542,7 @@ index a668c26e..f9e210ee 100644
 @@ -80,6 +82,8 @@ static CGSize ENRMCodeBlockCodeSize(NSAttributedString *attributedCode)
    return CGSizeMake(ceil(bounds.size.width), ceil(bounds.size.height));
  }
-
+ 
 +#endif
 +
  // Used only to pick the scroll indicator style for the code pane, so the
@@ -7555,7 +7555,7 @@ index a668c26e..f9e210ee 100644
 +@property (nonatomic, strong) ENRMCodeBlockLineLayout *lineLayout;
  #endif
  @end
-
+ 
 @@ -134,7 +139,11 @@ - (NSMenu *)menuForEvent:(NSEvent *)event
  - (void)drawRect:(CGRect)rect
  {
@@ -7567,7 +7567,7 @@ index a668c26e..f9e210ee 100644
 +#endif
    }
  }
-
+ 
 @@ -346,7 +355,12 @@ - (void)rebuildAttributedCode
    NSAttributedString *highlighted =
        _pending ? nil : ENRMHighlightedAttributedCode(plainCode, _cachedCode, _cachedLanguage, _config);
@@ -7580,7 +7580,7 @@ index a668c26e..f9e210ee 100644
 +#endif
    _codeContentView.attributedCode = _attributedCode;
  }
-
+ 
 @@ -414,7 +428,11 @@ + (CGFloat)measureHeightForCodeBlockNode:(MarkdownASTNode *)node config:(StyleCo
    CGFloat inset = ENRMCodeBlockContentInset(config);
    CGFloat headerH = inset + ENRMCodeBlockHeaderLabelLineHeight(ENRMCodeBlockHeaderFont(config));
@@ -7591,10 +7591,10 @@ index a668c26e..f9e210ee 100644
    return ENRMCodeBlockCodeSize(code).height + inset * 2 + headerH;
 +#endif
  }
-
+ 
  - (void)drawRect:(CGRect)rect
 diff --git a/ios/utils/ENRMCodeBlockLineLayout.h b/ios/utils/ENRMCodeBlockLineLayout.h
-new file mode 100644
+new file mode 100755
 index 00000000..49dad4e1
 --- /dev/null
 +++ b/ios/utils/ENRMCodeBlockLineLayout.h
@@ -7615,7 +7615,7 @@ index 00000000..49dad4e1
 +@end
 +#endif
 diff --git a/ios/utils/ENRMCodeBlockLineLayout.m b/ios/utils/ENRMCodeBlockLineLayout.m
-new file mode 100644
+new file mode 100755
 index 00000000..f185deba
 --- /dev/null
 +++ b/ios/utils/ENRMCodeBlockLineLayout.m
@@ -7716,7 +7716,6 @@ index 00000000..f185deba
 +}
 +@end
 +#endif
-
 diff --git a/cpp/highlight/code_highlight_podspec.rb b/cpp/highlight/code_highlight_podspec.rb
 --- a/cpp/highlight/code_highlight_podspec.rb
 +++ b/cpp/highlight/code_highlight_podspec.rb
@@ -7734,7 +7733,7 @@ diff --git a/cpp/highlight/code_highlight_podspec.rb b/cpp/highlight/code_highli
 +      defines: ' ENRICHED_MARKDOWN_CODE_HIGHLIGHT=1' + (config['externalCodeHighlightGrammars'] == true ? ' ENRICHED_MARKDOWN_EXTERNAL_GRAMMARS=1' : ''),
        header_paths: [
 diff --git a/cpp/highlight/ExternalGrammarRegistry.cpp b/cpp/highlight/ExternalGrammarRegistry.cpp
-new file mode 100644
+new file mode 100755
 --- /dev/null
 +++ b/cpp/highlight/ExternalGrammarRegistry.cpp
 @@ -0,0 +1,40 @@
