@@ -74,7 +74,8 @@ export function createPresenterToolbarItems({
     },
     {
       id: presenterAppearanceToolbarItemId,
-      label: "Appearance",
+      label: "",
+      width: 36,
       placement: "trailing",
       systemImageName: "sun.max",
       tooltip: "Appearance",
