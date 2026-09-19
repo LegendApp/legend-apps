@@ -463,10 +463,13 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
   if (LegendCanFocusManagedReopenWindow(keyWindow, self.window)) {
     targetWindow = keyWindow;
+  } else if (LegendCanFocusManagedReopenWindow(self.lastFocusedManagedWindow, self.window)) {
+    // On reactivation AppKit may retain a main window without a key window.
+    // Restore the window the user last focused (for example Slides' audience),
+    // rather than bringing the presenter/main window in front of it.
+    targetWindow = self.lastFocusedManagedWindow;
   } else if (LegendCanFocusManagedReopenWindow(mainWindow, self.window)) {
     targetWindow = mainWindow;
-  } else if (LegendCanFocusManagedReopenWindow(self.lastFocusedManagedWindow, self.window)) {
-    targetWindow = self.lastFocusedManagedWindow;
   } else {
     for (NSWindow *window in NSApp.windows) {
       if (LegendCanFocusManagedReopenWindow(window, self.window)) {
