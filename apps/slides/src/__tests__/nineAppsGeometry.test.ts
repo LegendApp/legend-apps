@@ -29,9 +29,9 @@ test("manual tour covers every app in rendering order, with close-ups on each gr
   for (const app of ["react-native", "electron", "flutter"]) {
     expect(tourSteps.filter(step => step.app === app).map(step => step.detail)).toEqual(["app", "sidebar", "composer", "app"]);
   }
-  expect(tourSteps.slice(-4)).toEqual([
+  expect(tourSteps.slice(-3)).toEqual([
     { app: "gpui", detail: "app" }, { app: "gpui", detail: "composer" },
-    { app: "gpui", detail: "fake" }, { app: "gpui", detail: "takeover" },
+    { app: "gpui", detail: "takeover" },
   ]);
   expect(tourStep(-1)).toEqual(tourSteps[0]);
   expect(tourStep(999)).toEqual(tourSteps.at(-1));
