@@ -6,6 +6,7 @@ import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurfa
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { slideTransitionStyles } from "./slideTransitions";
+import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
@@ -219,24 +220,14 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
 }) {
   const width = useValue(() => slidesState$.config.width.get() ?? 1920);
   const height = useValue(() => slidesState$.config.height.get() ?? 1080);
-  const [clock, setClock] = useState<{ source: Animated.Value; value: number }>(() => ({ source: progress, value: 0 }));
-  const value = settled ? 1 : clock.source === progress ? clock.value : 0;
-  useLayoutEffect(() => {
-    if (definition) {
-      // addListener follows the host's JS-driven animation; no second clock or timer.
-      const id = progress.addListener(({ value }) => setClock({ source: progress, value }));
-      return () => progress.removeListener(id);
-    }
-  }, [progress, definition]);
   let style = {};
   let failure: string | undefined;
-  if (definition && value < 1) {
+  if (definition && !settled) {
     try {
-      const result = definition.styles({ progress: value, direction: reverse ? "backward" : "forward", width, height,
-        options: typeof reference === "object" && "options" in reference ? reference.options ?? {} : {}, hasBackground });
-      style = incoming ? result.incoming : result.outgoing;
-      if (!style || typeof style !== "object" || Array.isArray(style)) throw new Error("styles must return incoming and outgoing style objects");
-      if (shared) style = { ...style, transform: undefined };
+      style = nativeTransitionStyles(definition, progress, {
+        direction: reverse ? "backward" : "forward", width, height,
+        options: typeof reference === "object" && "options" in reference ? reference.options ?? {} : {}, hasBackground,
+      }, incoming, shared);
     } catch (error) {
       failure = `Transition failed: ${error instanceof Error ? error.message : String(error)}`;
       style = { opacity: incoming ? 1 : 0 };
@@ -249,7 +240,7 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
       setSlidesState((state) => ({ runtimeErrors: state.runtimeErrors.includes(failure) ? state.runtimeErrors : [...state.runtimeErrors, failure] }));
     }
   }, [failure, progress]);
-  return <View style={[{ flex: 1 }, style]}>{children}</View>;
+  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
 }
 
 function AudienceFocusSurface({ children, index, motion, surfaces }: {

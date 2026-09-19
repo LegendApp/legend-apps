@@ -20,8 +20,12 @@ mock.module("react-native", () => ({
       stopAnimation() {}
       __getValue() { return this.value; }
       interpolate({ inputRange, outputRange }) {
-        return { __getValue: () => outputRange[0] + (this.value - inputRange[0])
-          / (inputRange[1] - inputRange[0]) * (outputRange[1] - outputRange[0]) };
+        return { __getValue: () => {
+          const next = inputRange.findIndex((value) => value > this.value);
+          const i = next < 0 ? inputRange.length - 2 : Math.max(0, next - 1);
+          return outputRange[i] + (this.value - inputRange[i])
+            / (inputRange[i + 1] - inputRange[i]) * (outputRange[i + 1] - outputRange[i]);
+        } };
       }
     },
     timing: () => ({ start: (done) => transitions.push(done), stop() {} }),
