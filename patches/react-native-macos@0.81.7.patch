@@ -115,3 +115,17 @@ diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/re
    }
 
    shadowTreeRegistry_.visit(
+diff --git a/Libraries/Animated/shouldUseTurboAnimatedModule.js b/Libraries/Animated/shouldUseTurboAnimatedModule.js
+--- a/Libraries/Animated/shouldUseTurboAnimatedModule.js
++++ b/Libraries/Animated/shouldUseTurboAnimatedModule.js
+@@ -15,6 +15,9 @@ function shouldUseTurboAnimatedModule(): boolean {
+   if (ReactNativeFeatureFlags.cxxNativeAnimatedEnabled()) {
+     return false;
+   } else {
+-    return Platform.OS === 'ios' && global.RN$Bridgeless === true;
++    return (
++      (Platform.OS === 'ios' || Platform.OS === 'macos') &&
++      global.RN$Bridgeless === true
++    );
+   }
+ }
