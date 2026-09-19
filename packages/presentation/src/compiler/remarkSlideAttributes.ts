@@ -32,6 +32,13 @@ function stepNumber(value: string | true, name: string) {
   return number;
 }
 function apply(node: Node, values: AttributeValues) {
+  if (values["shared-resize"] !== undefined && values.shared === undefined) throw new Error("shared-resize requires shared.");
+  if (values.reveal !== undefined && values.step === undefined && values.until === undefined) throw new Error("reveal requires step or until.");
+  if (values.duration !== undefined && values.step === undefined && values.until === undefined) throw new Error("duration requires step or until.");
+  if (values["shared-resize"] !== undefined && !["preserve", "stretch"].includes(String(values["shared-resize"]))) throw new Error("shared-resize must be preserve or stretch.");
+  if (values.reveal !== undefined && !["fade", "fade-up", "zoom", "none"].includes(String(values.reveal))) throw new Error("reveal must be fade, fade-up, zoom, or none.");
+  if (values.surface !== undefined && !["translucent", "glow"].includes(String(values.surface))) throw new Error("surface must be translucent or glow.");
+
   if (values.class !== undefined) {
     if (typeof values.class !== "string" || !values.class.trim()) throw new Error("class requires a non-empty quoted class list.");
     if (node.type !== "heading" && node.type !== "paragraph") throw new Error("class attributes apply to headings and paragraphs.");
@@ -49,13 +56,16 @@ function apply(node: Node, values: AttributeValues) {
     }
     node = wrap("Effect", { preset: values.effect }, node);
   }
-  if (values.shared !== undefined) node = wrap("SharedElement", { id: identifier(values.shared, "shared") }, node);
+  if (values.surface !== undefined) node = wrap("SlideSurface", { preset: String(values.surface) }, node);
+  if (values.shared !== undefined) node = wrap("SharedElement", { id: identifier(values.shared, "shared"), ...(values["shared-resize"] === undefined ? {} : { resize: String(values["shared-resize"]) }) }, node);
   if (values.focus !== undefined) node = wrap("FocusRegion", { id: identifier(values.focus, "focus") }, node);
   if (values.step !== undefined || values.until !== undefined) {
     const at = values.step === undefined ? 0 : stepNumber(values.step, "step");
     const until = values.until === undefined ? undefined : stepNumber(values.until, "until");
     if (until !== undefined && until <= at) throw new Error("until must be greater than step.");
-    node = wrap("Step", { at, ...(until === undefined ? {} : { until }) }, node);
+    const duration = values.duration === undefined ? 450 : stepNumber(values.duration, "duration");
+    if (duration > 10000) throw new Error("duration must be between 0 and 10000 milliseconds.");
+    node = wrap("Step", { at, reveal: String(values.reveal ?? "fade"), duration, ...(until === undefined ? {} : { until }) }, node);
   }
   return node;
 }

@@ -37,6 +37,7 @@ import {
 import { normalizeStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Layout, LayoutStage } from "./Layout";
+import { SlideSurface } from "./SlideSurface";
 import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
 import { LiquidGlass } from "./LiquidGlass";
@@ -186,6 +187,7 @@ const markdownComponents = {
   Background,
   FocusRegion,
   SharedElement,
+  SlideSurface,
   Effect,
   LiquidGlass,
   Slide,

@@ -1,5 +1,5 @@
 export type AttributeValues = Record<string, string | true>;
-export const blockAttributes = new Set(["shared", "step", "until", "steps", "focus", "effect", "class"]);
+export const blockAttributes = new Set(["shared", "step", "until", "steps", "focus", "effect", "class", "shared-resize", "reveal", "duration", "surface"]);
 
 export function parseAttributes(source: string): AttributeValues {
   const values: AttributeValues = {};

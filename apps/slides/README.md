@@ -811,3 +811,48 @@ never displays these warnings.
 
 See [layouts.mdx](examples/layouts.mdx) for three complete examples: weighted
 columns, a six-card grid, and nested stacks with a grouped reveal.
+
+## Markdown visual treatments
+
+See `examples/markdown-treatments.mdx` for an import-free deck. The application
+currently requires the `.mdx` extension even when the content is plain Markdown.
+
+```md
+# A title {shared=title shared-resize=preserve}
+
+A deliberate reveal {step=1 reveal=fade-up duration=650}
+
+A short-lived thought {step=1 until=3 reveal=fade duration=500}
+
+A softly outlined surface {surface=translucent}
+```
+
+- `shared-resize=preserve` moves matching elements without stretching their text.
+  `stretch` retains the default shared-size interpolation. Requires `shared`.
+- `reveal=fade|fade-up|zoom|none` sets a step's native/UI-thread reveal. Ordinary
+  Markdown `step`/`until` attributes also use this native fade path. The first
+  state is step 0; `until` is exclusive. Navigation automatically counts steps.
+- `duration=650` sets reveal time in milliseconds (integer 0–10000). Requires
+  `step` or `until`; default 450. `none` changes immediately. Previews show the
+  selected state without animating. Reverse navigation changes the same targets.
+- `surface=translucent|glow` adds a padded, rounded native surface. Translucent uses
+  a light fill and white border; glow adds a cyan native shadow. These are simple
+  visual treatments, not backdrop blur or refractive Liquid Glass.
+
+Treatments compose with existing layout and shared-element attributes:
+
+```md
+:::group{surface=glow step=1 reveal=zoom duration=700 padding=24}
+
+## One idea
+
+A little supporting text
+
+:::
+```
+
+Surfaces add 24 points of padding themselves; layout padding is additional.
+Keep larger explanations in speaker notes. Existing `effect=liquid|ripple|glitch|pixelate`
+syntax remains available, with its existing capture/rendering behavior; this pass
+does not change those effects. Charts, diagrams and carousel authoring remain
+custom components.

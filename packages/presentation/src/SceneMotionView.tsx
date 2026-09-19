@@ -1,5 +1,5 @@
 import { useLayoutEffect, type ReactNode } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { StyleProp, ViewStyle, ViewProps } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
 
@@ -12,7 +12,8 @@ export type ScenePose = {
 };
 
 /** Decks pass poses as data; this host-compiled worklet animates on the UI thread. */
-export function SceneMotionView({ pose, style, children, duration = 650, hidden = false, initialPose }: {
+export function SceneMotionView({ pose, style, children, duration = 650, hidden = false, initialPose, pointerEvents = "none" }: {
+  pointerEvents?: ViewProps["pointerEvents"];
   pose: ScenePose;
   /** Entrance pose, replayed when the slide becomes active. Previews show the target. */
   initialPose?: ScenePose;
@@ -70,5 +71,5 @@ export function SceneMotionView({ pose, style, children, duration = 650, hidden 
       { scaleX: horizontalScale.value }, { scaleY: verticalScale.value },
     ],
   }));
-  return <Animated.View pointerEvents="none" accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} style={[style, animatedStyle]}>{children}</Animated.View>;
+  return <Animated.View pointerEvents={hidden ? "none" : pointerEvents} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} style={[style, animatedStyle]}>{children}</Animated.View>;
 }

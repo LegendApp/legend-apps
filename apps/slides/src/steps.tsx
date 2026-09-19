@@ -1,11 +1,13 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Animated, View, type ViewStyle } from "react-native";
-import { usePresentationValue } from "@legend-apps/presentation";
+import { SceneMotionView, usePresentationValue } from "@legend-apps/presentation";
 
 type Transition = "fade" | "fade-up" | "slide-up" | "none" | { duration?: number };
 type StepProps = {
   children?: ReactNode;
   at?: number;
+  reveal?: "fade" | "fade-up" | "zoom" | "none";
+  duration?: number;
   until?: number;
   initial?: ViewStyle;
   states?: Record<number, ViewStyle>;
@@ -24,7 +26,21 @@ export function stepStyle(step: number, { at = 1, until, initial, states, transi
       ? { transform: [{ translateY: visible ? 0 : 24 }] } : {}) };
 }
 
+function MarkdownReveal({ children, at = 0, until, reveal = "fade", duration = 450 }: StepProps) {
+  const step = usePresentationValue("stepIndex");
+  const visible = step >= at && (until === undefined || step < until);
+  return <SceneMotionView pointerEvents="auto" hidden={!visible} duration={reveal === "none" ? 0 : duration}
+    pose={{ opacity: visible ? 1 : 0, y: reveal === "fade-up" && !visible ? 24 : 0,
+      scaleX: reveal === "zoom" && !visible ? 0.94 : 1, scaleY: reveal === "zoom" && !visible ? 0.94 : 1 }}>
+    {children}
+  </SceneMotionView>;
+}
+
 export function Step(props: StepProps) {
+  return props.reveal !== undefined ? <MarkdownReveal {...props} /> : <LegacyStep {...props} />;
+}
+
+function LegacyStep(props: StepProps) {
   const stepIndex = usePresentationValue("stepIndex");
   const isPreview = usePresentationValue("isPreview");
   const isActive = usePresentationValue("isActive");

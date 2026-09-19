@@ -1,0 +1,48 @@
+---
+title: Markdown visual treatments
+width: 1920
+height: 1080
+theme:
+  backgroundColor: "#09131f"
+  color: "#ffffff"
+---
+
+# A shared title {shared=title shared-resize=preserve class="text-center text-7xl"}
+
+This text appears on the next step {step=1 reveal=fade-up duration=650}
+
+Then this zooms gently into place {step=2 reveal=zoom duration=800}
+
+---
+
+# Same title identity, new words {shared=title shared-resize=preserve class="text-center text-7xl"}
+
+::::columns{gap=48}
+
+:::group{surface=translucent padding=24}
+
+## A translucent surface
+
+A light fill and white border
+
+:::
+
+:::group{surface=glow step=1 reveal=fade-up duration=700 padding=24}
+
+## A restrained glow
+
+Native styling, no capture or blur shader
+
+:::
+
+::::
+
+---
+
+# Deliberate steps {shared=title shared-resize=preserve}
+
+Visible initially, fades out on step two {step=0 until=2 reveal=fade duration=600}
+
+Appears immediately on step one {step=1 reveal=none}
+
+A glowing phrase {surface=glow step=2 reveal=zoom duration=600}
