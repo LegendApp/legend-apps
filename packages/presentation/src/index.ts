@@ -3,7 +3,7 @@ export { Background, BackgroundHost, useBackgroundIntensity, useBackgroundSize, 
 export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
-export { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, createFocusSurface, measureFocusSurface, createFocusMotion } from "./focus";
+export { FocusRegion, SharedElement, useSharedElementTransition, FocusStage, FocusSurfaceContext, createFocusSurface, measureFocusSurface, createFocusMotion } from "./focus";
 export type { FocusMotion, FocusSurface } from "./focus";
 export { normalizeTransition, resolveTransition, focusCamera } from "./focusGeometry";
 export { persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
@@ -39,3 +39,5 @@ export { SceneMotionView, type ScenePose } from "./SceneMotionView";
 export { useAnimatedShaderUniforms } from "./useAnimatedShaderUniforms";
 
 export { FilmstripMotionView } from "./FilmstripMotionView";
+
+export { ScenePositionView } from "./ScenePositionView";

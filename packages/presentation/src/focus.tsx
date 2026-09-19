@@ -21,6 +21,11 @@ export type FocusMotion = {
   elements: Map<string, { from: FocusRect; to: FocusRect; own: FocusRect }>;
 };
 export const FocusSurfaceContext = createContext<{ surface: FocusSurface; motion?: FocusMotion } | null>(null);
+/** Matched content should resize from its previous rectangle, not replay its entrance. */
+export function useSharedElementTransition(id: string) {
+  return useContext(FocusSurfaceContext)?.motion?.elements.has(id) ?? false;
+}
+
 const InsideSharedElement = createContext(false);
 
 export function createFocusSurface(): FocusSurface {
@@ -98,9 +103,13 @@ export function FocusStage({ children, scale = 1 }: { children: ReactNode; scale
   );
 }
 
-type MarkerProps = ViewProps & { id: string };
+type MarkerProps = ViewProps & {
+  id: string;
+  /** Preserve text proportions while moving between differently sized containers. */
+  resize?: "stretch" | "preserve";
+};
 
-function Marker({ id, kind, children, style, ...props }: MarkerProps & { kind: Entry["kind"] }) {
+function Marker({ id, kind, children, style, resize = "stretch", ...props }: MarkerProps & { kind: Entry["kind"] }) {
   const context = useContext(FocusSurfaceContext);
   const nested = useContext(InsideSharedElement);
   const ref = useRef<View>(null);
@@ -127,8 +136,8 @@ function Marker({ id, kind, children, style, ...props }: MarkerProps & { kind: E
       { translateY: Animated.subtract(Animated.divide(Animated.subtract(
         interpolate(progress, pair.from.y + pair.from.height / 2, pair.to.y + pair.to.height / 2),
         interpolate(progress, cameraFrom.y, cameraTo.y)), cameraScale), pair.own.y + pair.own.height / 2) },
-      { scaleX: Animated.divide(interpolate(progress, pair.from.width / pair.own.width, pair.to.width / pair.own.width), cameraScale) },
-      { scaleY: Animated.divide(interpolate(progress, pair.from.height / pair.own.height, pair.to.height / pair.own.height), cameraScale) },
+      { scaleX: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.width / pair.own.width, pair.to.width / pair.own.width), cameraScale) },
+      { scaleY: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.height / pair.own.height, pair.to.height / pair.own.height), cameraScale) },
     ];
   }
   const content = renderNativeChildren(children, (text) => <Text>{text}</Text>);

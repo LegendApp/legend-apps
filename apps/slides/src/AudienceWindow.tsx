@@ -142,7 +142,7 @@ function AudienceContent() {
       duration: transitionState.duration,
       easing: transitionState.definition?.easing === "linear" ? Easing.linear : transitionState.definition?.easing === "ease-in-out" ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: false,
+      useNativeDriver: true,
     });
     let settled = false;
     const finishTransition = () => {
