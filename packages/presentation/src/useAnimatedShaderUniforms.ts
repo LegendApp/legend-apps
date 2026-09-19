@@ -19,6 +19,8 @@ export function useAnimatedShaderUniforms(
 ) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
+  const preparing = usePresentationValue("isPreparing");
+  const hasAnimated = useRef(false);
   const slideIndex = usePresentationValue("slideIndex");
   const previousSlide = useRef(slideIndex);
   const burstElapsed = useSharedValue(slideChangeDuration);
@@ -52,12 +54,14 @@ export function useAnimatedShaderUniforms(
   }, [slideIndex, active, preview, duration, burstElapsed]);
 
   useEffect(() => {
-    if (preview) {
-      time.value = previewTime;
-    }
-    frame.setActive(active && !preview);
+    // Outgoing audience slides become previews too: hold their last frame,
+    // rather than jumping to the fixed thumbnail time during the fade.
+    if (preparing) hasAnimated.current = false;
+    if (preview && !hasAnimated.current) time.value = previewTime;
+    if (active && !preview && !preparing) hasAnimated.current = true;
+    frame.setActive(active && !preview && !preparing);
     return () => frame.setActive(false);
-  }, [active, preview, previewTime, frame, time]);
+  }, [active, preview, preparing, previewTime, frame, time]);
 
   return useDerivedValue(() => ({ ...uniforms, time: time.value }), [uniforms]);
 }
