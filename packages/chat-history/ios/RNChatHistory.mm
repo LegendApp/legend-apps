@@ -34,15 +34,30 @@ static NSString *chatMarkdownForBlockId(NSString *blockId)
 
 @end
 
-// Only the tiny existing selection record is read here; transcript I/O and
-// parsing run on a worker while React Native starts.
+// Only launch arguments and the tiny selection record are read here. Catalog
+// discovery and transcript parsing run on workers while React Native starts.
 static void startChatHistoryLoad(void)
 {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     for (NSString *argument in NSProcessInfo.processInfo.arguments) {
-      // Benchmarks deliberately discover pinned IDs instead of restoring state.
       if ([argument hasPrefix:@"--chat-history-benchmark="]) {
+        NSString *encoded = [argument substringFromIndex:[@"--chat-history-benchmark=" length]];
+        NSData *data = [encoded.stringByRemovingPercentEncoding dataUsingEncoding:NSUTF8StringEncoding];
+        id config = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if ([config isKindOfClass:NSDictionary.class] && [config[@"version"] isEqual:@2]) {
+          id targets = config[@"targets"];
+          id target = [targets isKindOfClass:NSArray.class] && [targets count] == 2 ? targets[0] : nil;
+          NSString *identifier = [target isKindOfClass:NSDictionary.class] ? target[@"id"] : nil;
+          NSString *provider = [target isKindOfClass:NSDictionary.class] ? target[@"provider"] : nil;
+          if ([identifier isKindOfClass:NSString.class] && identifier.length > 0
+              && ([provider isEqual:@"codex"] || [provider isEqual:@"claude"])
+              && [identifier hasPrefix:[provider stringByAppendingString:@":"]]) {
+            // Same full catalog and pinned-ID lookup as JS, after process launch.
+            // No fixture path, persisted document, or skipped discovery work.
+            margelo::nitro::legendapps::chathistory::startChatStartupCatalog(1000000, identifier.UTF8String, true, true);
+          }
+        }
         return;
       }
     }
@@ -61,13 +76,16 @@ static void startChatHistoryLoad(void)
     NSData *data = settingsURL ? [NSData dataWithContentsOfURL:settingsURL] : nil;
     id settings = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
     id selected = [settings isKindOfClass:NSDictionary.class] ? settings[@"selectedChat"] : nil;
+    NSString *selectedId = [settings isKindOfClass:NSDictionary.class] ? settings[@"selectedId"] : nil;
     if (![selected isKindOfClass:NSDictionary.class]) {
+      margelo::nitro::legendapps::chathistory::startChatStartupCatalog(20,
+          [selectedId isKindOfClass:NSString.class] ? selectedId.UTF8String : "");
       return;
     }
     NSString *provider = selected[@"provider"];
     NSString *path = selected[@"path"];
-    NSString *selectedId = settings[@"selectedId"];
     if ([selectedId isKindOfClass:NSString.class] && ![selectedId isEqual:selected[@"id"]]) {
+      margelo::nitro::legendapps::chathistory::startChatStartupCatalog(20, selectedId.UTF8String);
       return;
     }
     if (([provider isEqual:@"codex"] || [provider isEqual:@"claude"])
@@ -76,6 +94,11 @@ static void startChatHistoryLoad(void)
         && [selected[@"title"] isKindOfClass:NSString.class]
         && [selected[@"updatedAt"] isKindOfClass:NSNumber.class]) {
       margelo::nitro::legendapps::chathistory::startChatStartupLoad(provider.UTF8String, path.UTF8String);
+      // A saved selection already starts parsing independently of discovery.
+      margelo::nitro::legendapps::chathistory::startChatStartupCatalog(20, "", false);
+    } else {
+      margelo::nitro::legendapps::chathistory::startChatStartupCatalog(20,
+          [selectedId isKindOfClass:NSString.class] ? selectedId.UTF8String : "");
     }
   });
 }

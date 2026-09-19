@@ -292,6 +292,73 @@ void testCatalogIndexes() {
       "Catalog should skip subagents while filling the requested visible limit");
 }
 
+void testStartupCatalog(const std::filesystem::path& fixtureRoot) {
+  const auto testHome = std::filesystem::temp_directory_path() /
+      ("legend-chat-startup-" + std::to_string(getpid()));
+  const auto sessions = testHome / ".codex/sessions";
+  std::filesystem::create_directories(sessions);
+  const std::string id = "55555555-5555-5555-5555-555555555555";
+  const auto path = sessions / ("rollout-" + id + ".jsonl");
+  std::filesystem::copy_file(fixtureRoot / "codex.jsonl", path,
+      std::filesystem::copy_options::overwrite_existing);
+  std::ofstream(testHome / ".codex/session_index.jsonl")
+      << "{\"id\":\"" << id << "\",\"thread_name\":\"Startup\",\"updated_at\":\"2026-01-01T10:00:00Z\"}\n";
+  const std::string newerId = "66666666-6666-6666-6666-666666666666";
+  const auto newerPath = sessions / ("rollout-" + newerId + ".jsonl");
+  std::filesystem::copy_file(fixtureRoot / "codex.jsonl", newerPath,
+      std::filesystem::copy_options::overwrite_existing);
+  std::filesystem::last_write_time(newerPath,
+      std::filesystem::last_write_time(path) + std::chrono::seconds(60));
+  std::ofstream(testHome / ".codex/session_index.jsonl", std::ios::app)
+      << "{\"id\":\"" << newerId << "\",\"thread_name\":\"Newer\",\"updated_at\":\"2026-01-02T10:00:00Z\"}\n";
+  const auto previousConfig = std::getenv("CHAT_HISTORY_BENCHMARK_CONFIG");
+  const auto previousFixtureHome = std::getenv("CHAT_HISTORY_BENCHMARK_HOME");
+  const std::string savedConfig = previousConfig ? previousConfig : "";
+  const std::string savedFixtureHome = previousFixtureHome ? previousFixtureHome : "";
+  setenv("CHAT_HISTORY_BENCHMARK_CONFIG", "startup-test", 1);
+  setenv("CHAT_HISTORY_BENCHMARK_HOME", testHome.c_str(), 1);
+
+  startChatStartupCatalog(20, "codex:" + id);
+  HybridChatHistory history;
+  auto summaries = history.getRecentChats(20)->get();
+  expect(summaries.size() == 2 && summaries[0].id == "codex:" + newerId,
+      "JS must adopt the actual discovered catalog");
+  expect(takeChatStartupCatalog(20) == nullptr, "Startup discovery is consumed exactly once");
+  auto load = takeChatStartupLoad("codex", path.string());
+  expect(load != nullptr && !load->takeResult().rows.empty(),
+      "Discovery must start the resolved initial document without a React effect");
+
+  startChatStartupCatalog(20, "codex:missing", true, true);
+  (void)history.getRecentChats(20)->get();
+  expect(takeChatStartupLoad("codex", path.string()) == nullptr,
+      "A missing pinned ID must not preload a different conversation");
+
+  startChatStartupCatalog(20, "codex:deleted");
+  (void)history.getRecentChats(20)->get();
+  load = takeChatStartupLoad("codex", newerPath.string());
+  expect(load != nullptr && !load->takeResult().rows.empty(),
+      "A stale normal selection must fall back to the newest discovered chat");
+  startChatStartupCatalog(20, "");
+  (void)history.getRecentChats(20)->get();
+  auto document = history.openChat("codex", newerPath.string())->get();
+  expect(document->getRowCount() > 0, "First launch must adopt the newest discovered chat");
+  document->releaseNativeResources();
+
+  startChatStartupCatalog(20, "", false);
+  (void)history.getRecentChats(20)->get();
+  expect(takeChatStartupLoad("codex", path.string()) == nullptr,
+      "Saved-selection parsing must not be duplicated by catalog preparation");
+  std::filesystem::remove(path);
+  std::filesystem::remove(newerPath);
+  expect(history.getRecentChats(20)->get().empty(), "Later refreshes must scan fresh catalog state");
+
+  if (previousConfig) setenv("CHAT_HISTORY_BENCHMARK_CONFIG", savedConfig.c_str(), 1);
+  else unsetenv("CHAT_HISTORY_BENCHMARK_CONFIG");
+  if (previousFixtureHome) setenv("CHAT_HISTORY_BENCHMARK_HOME", savedFixtureHome.c_str(), 1);
+  else unsetenv("CHAT_HISTORY_BENCHMARK_HOME");
+  std::filesystem::remove_all(testHome);
+}
+
 void testStartupLoad(const std::filesystem::path& fixtureRoot) {
   const std::string path = (fixtureRoot / "codex.jsonl").string();
   // React cancels before its initial open; that must not cancel the host read.
@@ -412,6 +479,7 @@ int main(int argc, char** argv) {
   try {
     const std::filesystem::path fixtureRoot(argv[1]);
     testStartupLoad(fixtureRoot);
+    testStartupCatalog(fixtureRoot);
     testCodex(fixtureRoot);
     testClaude(fixtureRoot);
     testCurrentCodexUserMessages(fixtureRoot);

@@ -1,5 +1,6 @@
 #include "ChatStartupLoad.hpp"
 
+#include <algorithm>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -16,8 +17,54 @@ struct StartupLoad {
 
 std::mutex startupMutex;
 StartupLoad startup;
+size_t startupCatalogLimit = 0;
+std::shared_ptr<ChatStartupCatalog> startupCatalog;
 
 } // namespace
+
+ChatStartupCatalog::ChatStartupCatalog(size_t limit, const std::string& initialId, bool preloadDocument, bool requireInitialId) {
+  std::packaged_task<Result()> task([limit, initialId, preloadDocument, requireInitialId]() {
+    Result result;
+    result.summaries = getRecentChatCatalog(limit);
+    auto selected = initialId.empty()
+        ? result.summaries.begin()
+        : std::find_if(result.summaries.begin(), result.summaries.end(), [&](const ChatSummary& item) {
+            return item.id == initialId;
+          });
+    if (selected == result.summaries.end() && !requireInitialId) selected = result.summaries.begin();
+    if (preloadDocument && selected != result.summaries.end()) {
+      result.provider = selected->provider;
+      result.path = selected->path;
+      result.document = std::make_shared<ChatStartupLoad>(result.provider, result.path);
+    }
+    return result;
+  });
+  result_ = task.get_future();
+  std::thread(std::move(task)).detach();
+}
+
+std::vector<ChatSummary> ChatStartupCatalog::takeResult() {
+  Result result = result_.get();
+  if (result.document) {
+    std::lock_guard<std::mutex> lock(startupMutex);
+    if (startup.load) startup.load->cancel();
+    startup = {std::move(result.provider), std::move(result.path), std::move(result.document)};
+  }
+  return std::move(result.summaries);
+}
+
+void startChatStartupCatalog(size_t limit, const std::string& initialId, bool preloadDocument, bool requireInitialId) {
+  auto catalog = std::make_shared<ChatStartupCatalog>(limit, initialId, preloadDocument, requireInitialId);
+  std::lock_guard<std::mutex> lock(startupMutex);
+  startupCatalogLimit = limit;
+  startupCatalog = std::move(catalog);
+}
+
+std::shared_ptr<ChatStartupCatalog> takeChatStartupCatalog(size_t limit) {
+  std::lock_guard<std::mutex> lock(startupMutex);
+  auto pending = std::exchange(startupCatalog, nullptr);
+  return limit == startupCatalogLimit ? std::move(pending) : nullptr;
+}
 
 ChatStartupLoad::ChatStartupLoad(const std::string& provider, const std::string& path)
     : generation_(std::make_shared<std::atomic<uint64_t>>(1)) {

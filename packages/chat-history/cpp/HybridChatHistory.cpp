@@ -29,8 +29,9 @@ HybridChatHistory::~HybridChatHistory() {
 std::shared_ptr<Promise<std::vector<ChatSummary>>> HybridChatHistory::getRecentChats(double limit) {
   const size_t boundedLimit =
       std::isfinite(limit) && limit > 0 ? static_cast<size_t>(limit) : 0;
-  return Promise<std::vector<ChatSummary>>::async([boundedLimit]() {
-    return getRecentChatCatalog(boundedLimit);
+  auto startupCatalog = takeChatStartupCatalog(boundedLimit);
+  return Promise<std::vector<ChatSummary>>::async([boundedLimit, startupCatalog]() {
+    return startupCatalog ? startupCatalog->takeResult() : getRecentChatCatalog(boundedLimit);
   });
 }
 
