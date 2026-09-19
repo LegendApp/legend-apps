@@ -37,3 +37,5 @@ export { defineTransition, builtinTransitionSources } from "./transitions";
 export type { TransitionDefinition, TransitionContext, PresentationTransitions } from "./transitions";
 export { SceneMotionView, type ScenePose } from "./SceneMotionView";
 export { useAnimatedShaderUniforms } from "./useAnimatedShaderUniforms";
+
+export { FilmstripMotionView } from "./FilmstripMotionView";
