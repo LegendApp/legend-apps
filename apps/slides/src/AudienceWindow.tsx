@@ -219,8 +219,12 @@ function AudienceContent() {
     <>
       {renderedLayers.map((layer) => {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
+        // Promotion changes native stacking before a replacement opacity graph
+        // may be attached. Keep the incoming layer behind the opaque background
+        // during preparation; opacity stays intact for native snapshots.
+        const behindBackground = isPreload || layer.index === currentSlide && !transitionState.ready;
         return (
-          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? [styles.preload, visibleStyle] : [styles.layer, layer.style]}>
+          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={[styles.layer, isPreload ? visibleStyle : layer.style, { zIndex: behindBackground ? -1 : 1 }]}>
             <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
               <SlideCanvas>
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
