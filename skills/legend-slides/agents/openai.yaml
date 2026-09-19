@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legend Slides"
+  short_description: "Author and validate native Markdown slide decks"
+  default_prompt: "Use $legend-slides to create a presentation with native layouts, presenter notes, and appropriate effects."

@@ -2,6 +2,43 @@
 
 Legend Slides presents trusted local `.mdx` decks in a React Native macOS app. The presenter window shows the current slide, optional next-slide preview, speaker notes, build output, and the available displays. The audience window can run as a normal rehearsal window or borderless on a selected display.
 
+## AI authoring and installable skill
+
+The [Legend Slides skill](../../skills/legend-slides/SKILL.md) contains portable
+technical references and a starter deck for agents:
+
+- [Authoring reference](../../skills/legend-slides/references/authoring.md): exact frontmatter, native Markdown support, layouts, steps, notes, shared elements, focus, and images.
+- [Component reference](../../skills/legend-slides/references/components.md): host imports and props, templates, effects, TypeGPU, Webviews, animation lifecycle, and local effect packs.
+- [Validation workflow](../../skills/legend-slides/references/validation.md): compiler checks, native rehearsal, update locking, and packaging limits.
+- [Starter deck](../../skills/legend-slides/assets/starter.mdx): Markdown-only layout and shared-element example.
+
+Install from a local checkout now:
+
+```sh
+npx skills add ./skills/legend-slides
+```
+
+Once this skill is published on the repository's default branch:
+
+```sh
+npx skills add LegendApp/legend-apps --skill legend-slides
+```
+
+Add `--global` for a user-wide installation or `--agent codex` to select Codex.
+These options use the [Skills CLI](https://github.com/vercel-labs/skills).
+Installing the skill does not install Legend Slides, Bun, or native dependencies.
+Ask your agent: “Use $legend-slides to create a five-slide product update.”
+
+From the repository root, validate a deck without starting the app:
+
+```sh
+bun skills/legend-slides/scripts/validate-deck.ts /path/to/deck.mdx .
+```
+
+The helper returns readable JSON and a nonzero exit for compilation failures.
+Native rendering still needs an app check; compilation alone cannot establish
+visual quality or effect playback.
+
 ## Run the sample
 
 From the repository root:
@@ -664,7 +701,7 @@ transition:
 ```
 
 The attribute marks that block's bounds, not the entire section below it. Use a
-`FocusRegion` component when a region must enclose several separate blocks.
+`:::group{focus=details}` container or a `FocusRegion` component for several blocks.
 
 ### Apply an effect
 
