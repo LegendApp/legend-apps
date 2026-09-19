@@ -1,3 +1,4 @@
+import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useResolveClassNames } from "uniwind";
 import { useValue } from "@legendapp/state/react";
 import {
@@ -249,11 +250,12 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
 }
 
 export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean }) {
+  const intensity = useBackgroundIntensitySetting();
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
-  return hosted ? content : <BackgroundHost slideIndex={selectedIndex} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
+  return hosted ? content : <BackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {

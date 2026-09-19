@@ -1,3 +1,4 @@
+#include <math.h>
 #import "RNWindowManager.h"
 
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
@@ -1537,6 +1538,18 @@ willBeInsertedIntoToolbar:(BOOL)flag
   return toolbarItem;
 }
 
+- (void)toolbarMenuSliderChanged:(NSSlider *)sender
+{
+  NSDictionary *metadata = objc_getAssociatedObject(sender, &LegendToolbarControlMetadataKey);
+  NSInteger value = (NSInteger)llround(sender.doubleValue);
+  NSTextField *readout = [sender.superview viewWithTag:731];
+  readout.stringValue = [NSString stringWithFormat:@"%ld%@", (long)value, metadata[@"suffix"] ?: @""];
+  [self sendWindowEventWithName:@"onToolbarItemSelected" body:@{
+    @"identifier": metadata[@"windowIdentifier"], @"itemId": metadata[@"itemId"],
+    @"value": [NSString stringWithFormat:@"%@:%ld", metadata[@"value"], (long)value],
+  }];
+}
+
 - (void)toolbarMenuItemSelected:(NSMenuItem *)sender
 {
   NSDictionary *representedObject = [sender.representedObject isKindOfClass:NSDictionary.class]
@@ -1605,6 +1618,37 @@ willBeInsertedIntoToolbar:(BOOL)flag
       NSString *itemLabel = [itemConfig[@"label"] isKindOfClass:NSString.class] ? itemConfig[@"label"] : @"";
       NSString *itemValue = [itemConfig[@"value"] isKindOfClass:NSString.class] ? itemConfig[@"value"] : @"";
       if (itemLabel.length == 0 || itemValue.length == 0) {
+        continue;
+      }
+      NSDictionary *sliderConfig = [itemConfig[@"slider"] isKindOfClass:NSDictionary.class] ? itemConfig[@"slider"] : nil;
+      if (sliderConfig) {
+        double minimum = [sliderConfig[@"min"] doubleValue];
+        double maximum = [sliderConfig[@"max"] doubleValue];
+        double initial = [sliderConfig[@"value"] doubleValue];
+        if (!isfinite(minimum) || !isfinite(maximum) || !isfinite(initial) || maximum <= minimum) continue;
+        NSString *suffix = [sliderConfig[@"suffix"] isKindOfClass:NSString.class] ? sliderConfig[@"suffix"] : @"";
+        NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 280, 68)];
+        NSTextField *label = [NSTextField labelWithString:itemLabel];
+        label.frame = NSMakeRect(16, 42, 190, 18);
+        [container addSubview:label];
+        NSTextField *readout = [NSTextField labelWithString:@""];
+        readout.tag = 731;
+        readout.alignment = NSTextAlignmentRight;
+        readout.frame = NSMakeRect(210, 42, 54, 18);
+        [container addSubview:readout];
+        NSSlider *slider = [NSSlider sliderWithValue:MAX(minimum, MIN(maximum, initial)) minValue:minimum maxValue:maximum target:self action:@selector(toolbarMenuSliderChanged:)];
+        slider.frame = NSMakeRect(16, 12, 248, 24);
+        slider.continuous = YES;
+        slider.accessibilityLabel = itemLabel;
+        slider.enabled = LegendDictionaryHasKey(itemConfig, @"enabled") ? [itemConfig[@"enabled"] boolValue] : YES;
+        readout.stringValue = [NSString stringWithFormat:@"%.0f%@", slider.doubleValue, suffix];
+        objc_setAssociatedObject(slider, &LegendToolbarControlMetadataKey, @{
+          @"windowIdentifier": identifier, @"itemId": itemId, @"value": itemValue, @"suffix": suffix,
+        }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [container addSubview:slider];
+        NSMenuItem *sliderItem = [NSMenuItem new];
+        sliderItem.view = container;
+        [menu addItem:sliderItem];
         continue;
       }
       NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:itemLabel action:@selector(toolbarMenuItemSelected:) keyEquivalent:@""];

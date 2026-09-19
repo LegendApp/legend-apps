@@ -131,6 +131,8 @@ export type WindowToolbarSegment = {
 export type WindowToolbarItemPlacement = "leading" | "trailing";
 
 export type WindowToolbarMenuItem = {
+  /** macOS menu slider; emits `${value}:${number}` through onToolbarItemSelected. */
+  slider?: { min: number; max: number; value: number; suffix?: string };
   enabled?: boolean;
   label?: string;
   selected?: boolean;

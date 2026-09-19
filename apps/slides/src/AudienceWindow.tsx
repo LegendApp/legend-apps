@@ -1,3 +1,4 @@
+import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
 import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
@@ -9,9 +10,10 @@ import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
 export function AudienceWindow() {
+  const intensity = useBackgroundIntensitySetting();
   const currentSlide = useValue(slidesState$.currentSlide);
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
-  return <BackgroundHost slideIndex={currentSlide} color={color}><AudienceContent /></BackgroundHost>;
+  return <BackgroundHost intensity={intensity} slideIndex={currentSlide} color={color}><AudienceContent /></BackgroundHost>;
 }
 
 function AudienceContent() {

@@ -9,6 +9,7 @@ import type { PresentationRuntime } from "./types";
 type Entry = { children: ReactNode; runtime$: Observable<PresentationRuntime>; priority: number };
 type Registry = (id: string, entry: Entry | undefined) => void;
 const RegistryContext = createContext<Registry | null>(null);
+const IntensityContext = createContext(1);
 const SizeContext = createContext({ width: 1920, height: 1080 });
 const HasBackgroundContext = createContext(false);
 
@@ -24,12 +25,13 @@ export function Background({ children, priority = 0 }: { children?: ReactNode; p
   return null;
 }
 
+export function useBackgroundIntensity() { return useContext(IntensityContext); }
 export function useBackgroundSize() { return useContext(SizeContext); }
 export function useHasBackground() { return useContext(HasBackgroundContext); }
 export function useBackgroundHost() { return useContext(RegistryContext) !== null; }
 
 /** One host per audience window or presenter preview, outside the scaled content. */
-export function BackgroundHost({ children, slideIndex, color, isPreview = false }: { children: ReactNode; slideIndex: number; color: string; isPreview?: boolean }) {
+export function BackgroundHost({ children, slideIndex, color, isPreview = false, intensity = 1 }: { children: ReactNode; slideIndex: number; color: string; isPreview?: boolean; intensity?: number }) {
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [register] = useState<Registry>(() => (id: string, entry: Entry | undefined) => setEntries((current) => {
     if (entry === undefined) {
@@ -52,7 +54,9 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false 
         }}>
           <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
             <SizeContext.Provider value={size}>
+              <IntensityContext.Provider value={intensity}>
               {selected && <SelectedBackground entry={selected} isPreview={isPreview} />}
+            </IntensityContext.Provider>
             </SizeContext.Provider>
           </View>
           {children}

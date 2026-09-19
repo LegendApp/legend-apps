@@ -1,3 +1,4 @@
+export const presenterAppearanceToolbarItemId = "slides-presenter-appearance";
 import type { Display, WindowToolbarItem } from "@legend-apps/window-manager";
 
 export const presenterEditToolbarItemId = "slides-presenter-edit";
@@ -30,6 +31,7 @@ export function createPresenterToolbarItems({
   elapsed,
   hasDeck,
   canEditDeck = hasDeck,
+  backgroundIntensity = 1,
   rehearsalEnabled,
   selectedDisplayId,
   timerRunning,
@@ -39,6 +41,7 @@ export function createPresenterToolbarItems({
   elapsed: number;
   hasDeck: boolean;
   canEditDeck?: boolean;
+  backgroundIntensity?: number;
   rehearsalEnabled: boolean;
   selectedDisplayId: string | null;
   timerRunning: boolean;
@@ -124,6 +127,18 @@ export function createPresenterToolbarItems({
       systemImageName: "square.and.pencil",
       tooltip: "Edit Source",
       type: "button",
+    },
+    {
+      id: presenterAppearanceToolbarItemId,
+      label: "Appearance",
+      placement: "leading",
+      systemImageName: "sun.max",
+      tooltip: "Appearance",
+      type: "menuButton",
+      menuItems: [
+        { label: "Background intensity", value: "background-intensity",
+          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 3 * 100), suffix: "%" } },
+      ],
     },
   ];
 }

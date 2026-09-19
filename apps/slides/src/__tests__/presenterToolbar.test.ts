@@ -1,6 +1,7 @@
 // @ts-nocheck This suite uses Bun's test globals.
 import { describe, expect, it } from "bun:test";
 import {
+  presenterAppearanceToolbarItemId,
   createPresenterToolbarItems,
   formatPresenterElapsed,
   presenterDisplayToolbarItemId,
@@ -42,9 +43,12 @@ describe("presenter toolbar", () => {
       presenterDisplayToolbarItemId,
       presenterStartToolbarItemId,
       presenterEditToolbarItemId,
+      presenterAppearanceToolbarItemId,
     ]);
     expect(items.filter((item) => item.placement === "trailing").at(-1)?.id).toBe(presenterStartToolbarItemId);
     expect(items[4].placement).toBe("leading");
+    expect(items[5]).toMatchObject({ placement: "leading", type: "menuButton" });
+    expect(items[5].menuItems[0]).toMatchObject({ value: "background-intensity", slider: { min: 0, max: 100, value: 33, suffix: "%" } });
     expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
     expect(items[2]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
     expect(items[3]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
@@ -56,11 +60,14 @@ describe("presenter toolbar", () => {
       audienceOpen: true,
       displays,
       elapsed: 2_000,
+      backgroundIntensity: 3,
       hasDeck: true,
       rehearsalEnabled: true,
       selectedDisplayId: "stage",
       timerRunning: true,
     });
+    expect(items[5].enabled).not.toBe(false);
+    expect(items[5].menuItems[0].slider.value).toBe(100);
     const timerItem = items[0];
 
     expect(timerItem).toMatchObject({ enabled: true, label: "0:02", type: "menuButton" });

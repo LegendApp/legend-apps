@@ -48,6 +48,7 @@ import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
 import { createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
 import {
+  presenterAppearanceToolbarItemId,
   createPresenterToolbarItems,
   formatPresenterElapsed,
   presenterDisplayToolbarItemId,
@@ -71,6 +72,8 @@ import {
 } from "./presenterTimer";
 import { persistSlideSpeakerNotes } from "./speakerNotesPersistence";
 import {
+  useBackgroundIntensitySetting,
+  setBackgroundIntensitySetting,
   usePresentationTimerStartsOnSecondSlideSetting,
   useRehearsalTimerPausesWhileEditingSetting,
 } from "./slidesSettings";
@@ -331,6 +334,7 @@ function PresenterToolbar({
   selectedDisplayId,
 }: PresenterToolbarProps) {
   const presentationStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
+  const backgroundIntensity = useBackgroundIntensitySetting();
   const rehearsalPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
@@ -407,12 +411,12 @@ function PresenterToolbar({
     void setWindowOptions("slides-presenter", {
       windowStyle: {
         toolbarItems: createPresenterToolbarItems({
-          audienceOpen, canEditDeck, displays, elapsed: elapsed$.peek(), hasDeck,
+          audienceOpen, backgroundIntensity, canEditDeck, displays, elapsed: elapsed$.peek(), hasDeck,
           rehearsalEnabled, selectedDisplayId, timerRunning: timerRunning$.get(),
         }),
       },
     });
-  }, [audienceOpen, canEditDeck, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
+  }, [audienceOpen, backgroundIntensity, canEditDeck, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
 
   useObserveEffect(() => {
     void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed$.get()));
@@ -423,7 +427,10 @@ function PresenterToolbar({
       if (event.identifier !== "slides-presenter") {
         return;
       }
-      if (event.itemId === presenterEditToolbarItemId) {
+      if (event.itemId === presenterAppearanceToolbarItemId) {
+        const match = /^background-intensity:(\d+)$/.exec(event.value ?? "");
+        if (match && Number(match[1]) <= 100) setBackgroundIntensitySetting(Number(match[1]) / 100 * 3);
+      } else if (event.itemId === presenterEditToolbarItemId) {
         if (!audienceOpen && canEditDeck) onEditDeck();
       } else if (event.itemId === presenterElapsedToolbarItemId) {
         if (event.value === presenterTimerPauseValue) {
