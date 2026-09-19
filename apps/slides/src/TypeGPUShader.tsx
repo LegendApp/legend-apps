@@ -41,6 +41,15 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
 }
 
 
+// Dawn's event pump runs on JS even after frame rendering transfers to the UI
+// runtime. Both threads can submit pending Metal work, so device locking is
+// required. Never retry without it: unsupported adapters must fail safely.
+function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
+  return adapter.requestDevice({
+    requiredFeatures: ["implicit-device-synchronization" as GPUFeatureName],
+  });
+}
+
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
 function startShaderCanvas({ canvas, code, width, height, particles, particleCount, slideIndex, setResources, setError }: {
   canvas: RefObject<CanvasRef | null>; code: string; width: number; height: number;
@@ -58,7 +67,7 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
       try {
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) throw new Error("No WebGPU adapter");
-        device = await adapter.requestDevice();
+        device = await requestShaderDevice(adapter);
         if (cancelled || !canvas.current) { device.destroy(); return; }
         void device.lost.then(info => {
           if (!cancelled && info.reason !== "destroyed") setError("WebGPU device lost: " + info.message);
