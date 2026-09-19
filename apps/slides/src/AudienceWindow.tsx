@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { slideTransitionStyles } from "./slideTransitions";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -17,8 +17,13 @@ export function AudienceWindow() {
 }
 
 function AudienceContent() {
+  const currentStep = useValue(slidesState$.currentStep);
   const hasBackground = useHasBackground();
   const currentSlide = useValue(slidesState$.currentSlide);
+  const lastPresented = useRef({ index: currentSlide, step: currentStep });
+  useLayoutEffect(() => {
+    lastPresented.current = { index: currentSlide, step: currentStep };
+  }, [currentSlide, currentStep]);
   const blackout = useValue(slidesState$.blackout);
   const slides = useValue(slidesState$.slides);
   const defaultTransition = useValue(slidesState$.config.transition);
@@ -38,6 +43,7 @@ function AudienceContent() {
     index: currentSlide,
     revision,
     outgoing: null as number | null,
+    outgoingStep: 0,
     ...resolve(currentSlide, currentSlide),
     progress: new Animated.Value(1),
     ready: true,
@@ -56,6 +62,7 @@ function AudienceContent() {
       index: currentSlide,
       revision,
       outgoing: cut ? null : transitionState.index,
+      outgoingStep: lastPresented.current.index === transitionState.index ? lastPresented.current.step : 0,
       ...resolved,
       progress: new Animated.Value(cut ? 1 : 0),
       ready: cut || (!resolved.focus && !hasShared),
@@ -193,7 +200,8 @@ function AudienceContent() {
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
                   reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
                   settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
-                  <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index} />
+                  <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
+                    targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
                 </UserTransitionLayer>
               </SlideCanvas>
             </AudienceFocusSurface>
