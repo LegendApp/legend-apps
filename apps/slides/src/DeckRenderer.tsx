@@ -249,13 +249,13 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
   );
 }
 
-export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean }) {
+export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
   const intensity = useBackgroundIntensitySetting();
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
-  return hosted ? content : <BackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={isPreview}>{content}</BackgroundHost>;
+  return hosted ? content : <BackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview}>{content}</BackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {
