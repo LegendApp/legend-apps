@@ -12,6 +12,9 @@ export type FocusSurface = {
   width: number;
   height: number;
   scale: number;
+  layoutVersion: number;
+  measurements?: { version: number; entries: Entry[]; result: FocusMeasurements };
+  preparation?: Promise<void>;
 };
 export type FocusMeasurements = { regions: Map<string, FocusRect>; elements: Map<string, FocusRect> };
 export type FocusMotion = {
@@ -30,21 +33,59 @@ const InsideSharedElement = createContext(false);
 
 export function createFocusSurface(): FocusSurface {
   const surface: FocusSurface = {
-    root: null, entries: new Set(), width: 0, height: 0, scale: 1,
-    setRoot(root) { surface.root = root; },
-    setLayout({ width, height }) { surface.width = width; surface.height = height; },
+    root: null, entries: new Set(), width: 0, height: 0, scale: 1, layoutVersion: 0,
+    setRoot(root) { surface.root = root; invalidateFocusSurface(surface); },
+    setLayout({ width, height }) {
+      if (surface.width !== width || surface.height !== height) {
+        surface.width = width; surface.height = height; invalidateFocusSurface(surface);
+      }
+    },
   };
   return surface;
 }
 
+export function invalidateFocusSurface(surface: FocusSurface) {
+  surface.layoutVersion++;
+  surface.measurements = undefined;
+}
+
+/** Layout/setup work only: preloaded slides finish this before navigation. */
+export function prepareFocusSurface(surface: FocusSurface): Promise<void> {
+  if (surface.preparation) return surface.preparation;
+  surface.preparation = Promise.resolve().then(async () => {
+    // Coalesce layout notifications from sibling markers in the same commit.
+    const version = surface.layoutVersion;
+    const entries = [...surface.entries];
+    const result = await readFocusSurface(surface);
+    if (surface.layoutVersion === version && entries.length === surface.entries.size && entries.every(entry => surface.entries.has(entry))) {
+      surface.measurements = { version, entries, result };
+    }
+  }).finally(() => {
+    surface.preparation = undefined;
+    // A step/layout change during native measurement needs a new snapshot.
+    if (!surface.measurements && surface.root && surface.entries.size) void prepareFocusSurface(surface);
+  });
+  return surface.preparation;
+}
+
+export function measureFocusSurface(surface: FocusSurface, include: (entry: Entry) => boolean = () => true): Promise<FocusMeasurements> {
+  const cached = surface.measurements;
+  if (cached && cached.version === surface.layoutVersion && cached.entries.length === surface.entries.size && cached.entries.every(entry => surface.entries.has(entry))) {
+    const selected = cached.entries.filter(include);
+    const select = (kind: Entry["kind"], map: Map<string, FocusRect>) => new Map([...map].filter(([id]) => selected.some(entry => entry.kind === kind && entry.id === id)));
+    return Promise.resolve({ regions: select("region", cached.result.regions), elements: select("element", cached.result.elements) });
+  }
+  return readFocusSurface(surface, include);
+}
+
 /** Layout measurements ignore animated transforms and the physical display scale. */
-export async function measureFocusSurface(surface: FocusSurface): Promise<FocusMeasurements> {
+async function readFocusSurface(surface: FocusSurface, include: (entry: Entry) => boolean = () => true): Promise<FocusMeasurements> {
   const regions = new Map<string, FocusRect>();
   const elements = new Map<string, FocusRect>();
   const duplicates = new Set<string>();
   const root = surface.root;
   if (!root) return { regions, elements };
-  await Promise.all([...surface.entries].map((entry) => new Promise<void>((resolve) => {
+  await Promise.all([...surface.entries].filter(include).map((entry) => new Promise<void>((resolve) => {
     let finished = false;
     const finish = (rect?: FocusRect) => {
       if (finished) return;
@@ -68,6 +109,17 @@ export async function measureFocusSurface(surface: FocusSurface): Promise<FocusM
     }
   })));
   return { regions, elements };
+}
+
+/** Ignore unrelated markers: missing callbacks there must not delay navigation. */
+export function measureFocusPair(from: FocusSurface, to: FocusSurface, focus?: { from: string }, reverse = false) {
+  const sourceIds = new Set([...from.entries].filter(entry => entry.kind === "element").map(entry => entry.id));
+  const destinationIds = new Set([...to.entries].filter(entry => entry.kind === "element").map(entry => entry.id));
+  const shared = (entry: Entry) => entry.kind === "element" && sourceIds.has(entry.id) && destinationIds.has(entry.id);
+  return Promise.all([
+    measureFocusSurface(from, entry => shared(entry) || (!reverse && entry.kind === "region" && entry.id === focus?.from)),
+    measureFocusSurface(to, entry => shared(entry) || (reverse && entry.kind === "region" && entry.id === focus?.from)),
+  ]);
 }
 
 const interpolate = (progress: Animated.Value, from: number, to: number) =>
@@ -95,6 +147,7 @@ export function FocusStage({ children, scale = 1 }: { children: ReactNode; scale
     <View collapsable={false} ref={setRoot}
       onLayout={(event) => {
         surface?.setLayout(event.nativeEvent.layout);
+        if (surface) void prepareFocusSurface(surface);
       }} style={{ flex: 1 }}>
       <Animated.View style={[{ flex: 1, overflow: "visible" }, focusCameraStyle(context?.motion)]}>
         {children}
@@ -109,7 +162,7 @@ type MarkerProps = ViewProps & {
   resize?: "stretch" | "preserve";
 };
 
-function Marker({ id, kind, children, style, resize = "stretch", ...props }: MarkerProps & { kind: Entry["kind"] }) {
+function Marker({ id, kind, children, style, resize = "stretch", onLayout, ...props }: MarkerProps & { kind: Entry["kind"] }) {
   const context = useContext(FocusSurfaceContext);
   const nested = useContext(InsideSharedElement);
   const ref = useRef<View>(null);
@@ -119,8 +172,14 @@ function Marker({ id, kind, children, style, resize = "stretch", ...props }: Mar
     if (!surface || !view || (nested && kind === "element")) return;
     const entry = { id, kind, view };
     surface.entries.add(entry);
-    return () => { surface.entries.delete(entry); };
+    invalidateFocusSurface(surface);
+    void prepareFocusSurface(surface);
+    return () => { surface.entries.delete(entry); invalidateFocusSurface(surface); };
   }, [id, kind, nested, surface]);
+  const measureLayout: ViewProps["onLayout"] = event => {
+    onLayout?.(event);
+    if (surface) { invalidateFocusSurface(surface); void prepareFocusSurface(surface); }
+  };
   const motion = context?.motion;
   const pair = kind === "element" && !nested ? motion?.elements.get(id) : undefined;
   let transform;
@@ -142,10 +201,10 @@ function Marker({ id, kind, children, style, resize = "stretch", ...props }: Mar
   }
   const content = renderNativeChildren(children, (text) => <Text>{text}</Text>);
   return kind === "element" ? (
-    <Animated.View {...props} collapsable={false} ref={ref} style={[style, transform && { transform }]}>
+    <Animated.View {...props} onLayout={measureLayout} collapsable={false} ref={ref} style={[style, transform && { transform }]}>
       <InsideSharedElement.Provider value={true}>{content}</InsideSharedElement.Provider>
     </Animated.View>
-  ) : <View {...props} collapsable={false} ref={ref} style={style}>{content}</View>;
+  ) : <View {...props} onLayout={measureLayout} collapsable={false} ref={ref} style={style}>{content}</View>;
 }
 
 export function FocusRegion(props: MarkerProps) { return <Marker {...props} kind="region" />; }

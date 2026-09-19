@@ -5,7 +5,7 @@ import { act, create } from "react-test-renderer";
 import "./nativeMock";
 import { Animated } from "react-native";
 import { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, createFocusSurface,
-  measureFocusSurface, createFocusMotion } from "../../../../packages/presentation/src/focus";
+  measureFocusSurface, measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion } from "../../../../packages/presentation/src/focus";
 import { focusCamera, normalizeTransition, resolveTransition } from "../../../../packages/presentation/src/focusGeometry";
 
 test("focus configuration follows its edge backward, skips jumps, and respects explicit cuts", () => {
@@ -127,4 +127,84 @@ test("framework labels move without stretching while bars resize from their fixe
   } finally {
     if (tree) await act(() => tree.unmount());
   }
+});
+
+
+test("transition preparation measures only matching elements and its requested camera region", async () => {
+  const from = createFocusSurface(), to = createFocusSurface();
+  from.root = {}; to.root = {};
+  const measured = [];
+  const add = (surface, id, kind = "element", responds = true) => surface.entries.add({ id, kind,
+    view: { measureLayout: (_root, done) => {
+      measured.push(id);
+      if (responds) done(10, 20, 100, 50);
+    } },
+  });
+  for (const surface of [from, to]) add(surface, "title");
+  add(from, "outgoing-only", "element", false);
+  add(to, "incoming-only", "element", false);
+  add(from, "zoom", "region");
+  add(to, "zoom", "region", false);
+  const [source, destination] = await measureFocusPair(from, to, { from: "zoom" });
+  expect(measured.sort()).toEqual(["title", "title", "zoom"]);
+  expect(source.elements.has("title")).toBe(true);
+  expect(destination.elements.has("title")).toBe(true);
+  expect(source.regions.has("zoom")).toBe(true);
+  expect(destination.regions.size).toBe(0);
+  measured.length = 0;
+  await measureFocusPair(to, from, { from: "zoom" }, true);
+  expect(measured.sort()).toEqual(["title", "title", "zoom"]);
+});
+
+test("slides without matching elements never wait for unrelated native callbacks", async () => {
+  const from = createFocusSurface(), to = createFocusSurface();
+  from.root = {}; to.root = {};
+  let calls = 0;
+  from.entries.add({ id: "chart", kind: "element", view: { measureLayout() { calls++; } } });
+  to.entries.add({ id: "title", kind: "element", view: { measureLayout() { calls++; } } });
+  const results = await measureFocusPair(from, to);
+  expect(calls).toBe(0);
+  expect(results.every(result => result.elements.size === 0)).toBe(true);
+});
+
+
+test("prepared shared geometry needs no native measurements at navigation", async () => {
+  const from = createFocusSurface(), to = createFocusSurface();
+  let calls = 0;
+  for (const surface of [from, to]) {
+    surface.root = {};
+    surface.entries.add({ id: "title", kind: "element", view: { measureLayout: (_root, done) => {
+      calls++; done(surface === from ? 10 : 200, 20, 400, 60);
+    } } });
+  }
+  await Promise.all([prepareFocusSurface(from), prepareFocusSurface(to)]);
+  expect(calls).toBe(2);
+  const [source, destination] = await measureFocusPair(from, to);
+  expect(calls).toBe(2);
+  expect(source.elements.get("title").x).toBe(10);
+  expect(destination.elements.get("title").x).toBe(200);
+  invalidateFocusSurface(to);
+  await prepareFocusSurface(to);
+  await measureFocusPair(from, to);
+  expect(calls).toBe(3);
+});
+
+test("layout invalidation discards an in-flight snapshot and prepares the new layout", async () => {
+  const surface = createFocusSurface(); surface.root = {};
+  const callbacks = [];
+  surface.entries.add({ id: "bar", kind: "element", view: { measureLayout: (_root, done) => callbacks.push(done) } });
+  const first = prepareFocusSurface(surface);
+  await Promise.resolve();
+  invalidateFocusSurface(surface);
+  callbacks.shift()(0, 0, 100, 30);
+  await first;
+  expect(surface.measurements).toBeUndefined();
+  await Promise.resolve();
+  const refreshed = surface.preparation;
+  callbacks.shift()(0, 200, 500, 30);
+  await refreshed;
+  const result = await measureFocusSurface(surface);
+  expect(result.elements.get("bar")).toEqual({ x: 0, y: 200, width: 500, height: 30 });
+  surface.setRoot(null);
+  expect(surface.measurements).toBeUndefined();
 });

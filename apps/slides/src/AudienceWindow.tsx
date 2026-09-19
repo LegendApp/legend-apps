@@ -1,7 +1,7 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
 import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
-  measureFocusSurface, createFocusMotion, focusCamera, resolveTransition,
+  measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
@@ -86,7 +86,7 @@ function AudienceContent() {
       const to = surfaces.get(transitionState.index);
       const motions = new Map<number, FocusMotion>();
       if (from && to) {
-        const [source, destination] = await Promise.all([measureFocusSurface(from), measureFocusSurface(to)]);
+        const [source, destination] = await measureFocusPair(from, to, transitionState.focus, transitionState.reverse);
         const sourceMotion = createFocusMotion(progress);
         const destinationMotion = createFocusMotion(progress);
         if (transitionState.focus) {
@@ -125,16 +125,10 @@ function AudienceContent() {
         ? { ...current, ready: true, motions,
           outgoing: current.kind === "none" && !motions.size ? null : current.outgoing } : current);
     };
-    // Give newly mounted destinations a native layout pass before measuring.
-    let started = false;
-    const start = () => {
-      if (started || cancelled) return;
-      started = true;
-      void prepare();
-    };
-    const frame = requestAnimationFrame(start);
-    const fallback = setTimeout(start, 160);
-    return () => { cancelled = true; cancelAnimationFrame(frame); clearTimeout(fallback); };
+    // Child layout effects have registered the preloaded surfaces. Fabric
+    // measurement reads committed layout; another JS frame only delays startup.
+    void prepare();
+    return () => { cancelled = true; };
   }, [transitionState, surfaces, progress]);
 
   useLayoutEffect(() => {
@@ -196,7 +190,7 @@ function AudienceContent() {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
           <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
-            <AudienceFocusSurface index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
+            <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
               <SlideCanvas>
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
                   reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
@@ -243,10 +237,14 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
   return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
 }
 
-function AudienceFocusSurface({ children, index, motion, surfaces }: {
-  children: ReactNode; index: number; motion?: FocusMotion; surfaces: Map<number, FocusSurface>;
+function AudienceFocusSurface({ children, index, motion, surfaces, layoutKey }: {
+  children: ReactNode; index: number; motion?: FocusMotion; surfaces: Map<number, FocusSurface>; layoutKey: string;
 }) {
   const [surface] = useState(createFocusSurface);
+  useLayoutEffect(() => {
+    invalidateFocusSurface(surface);
+    void prepareFocusSurface(surface);
+  }, [surface, layoutKey]);
   useLayoutEffect(() => {
     surfaces.set(index, surface);
     return () => { if (surfaces.get(index) === surface) surfaces.delete(index); };
