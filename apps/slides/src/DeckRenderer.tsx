@@ -42,6 +42,7 @@ import { Step, Steps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
 import { LiquidGlass } from "./LiquidGlass";
 import { Effect } from "./Effect";
+import { TypeGPUShader } from "./TypeGPUShader";
 import { TypeGPU } from "./TypeGPU";
 import { Webview } from "./Webview";
 import { SlideCaptureContext } from "./SlideCaptureContext";
@@ -198,6 +199,7 @@ const markdownComponents = {
   Image,
   Pressable: NativePressable,
   TypeGPU,
+  TypeGPUShader,
   Webview,
   h1: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h1} />,
   h2: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h2} />,

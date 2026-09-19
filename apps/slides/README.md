@@ -856,3 +856,21 @@ Keep larger explanations in speaker notes. Existing `effect=liquid|ripple|glitch
 syntax remains available, with its existing capture/rendering behavior; this pass
 does not change those effects. Charts, diagrams and carousel authoring remain
 custom components.
+
+
+### UI-thread TypeGPU programs
+
+`TypeGPUShader` accepts a TypeGPU-resolved WGSL program and runs compute/render
+passes from a host-compiled Reanimated UI worklet. It does not use the older
+`TypeGPU` component's JavaScript frame callback. See
+`decks/react-native-desktop/TypeGPUAlternates.ts` for the current program contract:
+a 32-byte frame uniform, two ping-pong particle buffers, and the named compute,
+fullscreen and optional instanced-particle entry points.
+
+```mdx
+<TypeGPUShader code={rootsProgram} particles particleCount={2048} />
+```
+
+Use `background` inside `Background` to follow viewport dimensions and intensity.
+This is a low-level scene API; the five RN Connection examples are alternate
+slides for evaluation rather than a replacement for Skia or normal native views.
