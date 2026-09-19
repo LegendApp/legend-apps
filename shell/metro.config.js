@@ -13,9 +13,11 @@ if (!appId) {
 
 const rootDir = path.resolve(__dirname, "..");
 const appSrc = path.join(rootDir, "apps", appId, "src");
+const appBabelConfig = path.join(rootDir, "apps", appId, "babel.config.cjs");
 const babelConfigHash = crypto
   .createHash("sha256")
   .update(fs.readFileSync(path.join(__dirname, "babel.config.js")))
+  .update(fs.existsSync(appBabelConfig) ? fs.readFileSync(appBabelConfig) : "")
   .digest("hex")
   .slice(0, 12);
 

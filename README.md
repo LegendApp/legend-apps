@@ -6,6 +6,26 @@ platform behavior, and responsive handling of large libraries and documents.
 
 ## Apps
 
+### App-specific Babel plugins
+
+The shell owns the shared Babel presets and plugins. An app can add plugins with
+`apps/<app>/babel.config.cjs`, exporting `{ plugins: [...] }` or a function taking
+the Babel `api` and returning that object. Only the app selected by `LEGEND_APP`
+is loaded. App plugins are appended after the shared plugins, in declared order.
+Resolve plugin dependencies from the app config so they belong to that app:
+
+```js
+module.exports = {
+  plugins: [require.resolve("some-babel-plugin")],
+};
+```
+
+For environment-dependent configuration, use `api.cache.using(() => value)` in
+the app's factory. App configs may add plugins only; shared presets remain under
+shell ownership. Restart Metro after changing an app config; its contents are
+included in Metro's cache version. See `apps/slides/babel.config.cjs` for an example.
+Run the configuration checks with `node --test shell/tests/babel-config.test.cjs`.
+
 ### [Legend Diff](apps/diff/README.md)
 
 Legend Diff is a native macOS viewer for reviewing changes across repositories,
