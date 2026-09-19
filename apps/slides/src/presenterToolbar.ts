@@ -120,7 +120,7 @@ export function createPresenterToolbarItems({
       enabled: !audienceOpen && canEditDeck,
       id: presenterEditToolbarItemId,
       label: "Edit Source",
-      placement: "trailing",
+      placement: "leading",
       systemImageName: "square.and.pencil",
       tooltip: "Edit Source",
       type: "button",

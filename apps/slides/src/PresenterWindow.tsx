@@ -33,6 +33,8 @@ import { EditableMarkdown } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import {
+  getRehearsalEnabled,
+  rememberRehearsalEnabled,
   getPresentationDisplayId,
   getPresenterLayout,
   rememberPresentationDisplayId,
@@ -466,7 +468,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     wasEditingDeck.current = editingDeck;
   }, [editingDeck, deckPath]);
   const presenter$ = useObservable<PresenterSession>({
-    displays: [], selectedDisplayId: null, rehearsalEnabled: false,
+    displays: [], selectedDisplayId: null, rehearsalEnabled: getRehearsalEnabled(),
     activeMode: null, notesEditing: false, presenterLayoutResetVersion: 0,
   });
   const setDisplays = presenter$.displays.set;
@@ -648,6 +650,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   const selectMode = useCallback((mode: PresenterMode) => {
     setRehearsalEnabled(mode === "rehearsal");
+    rememberRehearsalEnabled(mode === "rehearsal");
   }, [setRehearsalEnabled]);
 
   const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string) => {

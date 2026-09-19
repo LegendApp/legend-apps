@@ -43,7 +43,8 @@ describe("presenter toolbar", () => {
       presenterStartToolbarItemId,
       presenterEditToolbarItemId,
     ]);
-    expect(items.every((item) => item.placement === "trailing")).toBe(true);
+    expect(items.filter((item) => item.placement === "trailing").at(-1)?.id).toBe(presenterStartToolbarItemId);
+    expect(items[4].placement).toBe("leading");
     expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
     expect(items[2]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
     expect(items[3]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });

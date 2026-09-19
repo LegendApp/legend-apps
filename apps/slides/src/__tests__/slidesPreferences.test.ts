@@ -44,6 +44,8 @@ test("preferences preserve recent.json fields, normalize legacy layout, and flus
   expect(prefs.getLastDeckPath()).toBe("/decks/demo.mdx");
   expect(prefs.getPresentationDisplayId()).toBe("external");
   expect(prefs.getPresenterLayout().notesRatio).toBeLessThan(1);
+  expect(prefs.getRehearsalEnabled()).toBe(false);
+  prefs.rememberRehearsalEnabled(true);
   prefs.rememberDeckPath("/decks/next.mdx");
   prefs.rememberPresentationDisplayId("main");
   prefs.resetPresenterLayout();
@@ -55,6 +57,12 @@ test("preferences preserve recent.json fields, normalize legacy layout, and flus
   expect(writes).toContain("recent.json");
   expect(writes).not.toContain("recent.json.json");
   const restored = createPreferences(storage);
+  expect(restored.getRehearsalEnabled()).toBe(true);
+  restored.rememberRehearsalEnabled(false);
+  await restored.flush();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(createPreferences(storage).getRehearsalEnabled()).toBe(false);
+  expect(createPreferences({ ...storage, read: () => ({ rehearsalEnabled: "invalid" }) }).getRehearsalEnabled()).toBe(false);
   expect(restored.getLastDeckPath()).toBe("/decks/next.mdx");
   expect(restored.getPresenterLayout()).toEqual(defaultPresenterLayout);
   const empty = createPreferences({ ...storage, read: () => undefined });
