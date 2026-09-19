@@ -64,6 +64,27 @@ export function createPresenterToolbarItems({
 
   return [
     {
+      enabled: !audienceOpen && canEditDeck,
+      id: presenterEditToolbarItemId,
+      label: "Edit Source",
+      placement: "trailing",
+      systemImageName: "square.and.pencil",
+      tooltip: "Edit Source",
+      type: "button",
+    },
+    {
+      id: presenterAppearanceToolbarItemId,
+      label: "Appearance",
+      placement: "trailing",
+      systemImageName: "sun.max",
+      tooltip: "Appearance",
+      type: "menuButton",
+      menuItems: [
+        { label: "Background intensity", value: "background-intensity",
+          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 3 * 100), suffix: "%" } },
+      ],
+    },
+    {
       enabled: audienceOpen,
       id: presenterElapsedToolbarItemId,
       label: formatPresenterElapsed(elapsed),
@@ -118,27 +139,6 @@ export function createPresenterToolbarItems({
       tooltip: audienceOpen ? "Stop" : rehearsalEnabled ? "Start Rehearsal" : "Start Presentation",
       type: "button",
       value: audienceOpen ? presenterStopValue : presenterStartValue,
-    },
-    {
-      enabled: !audienceOpen && canEditDeck,
-      id: presenterEditToolbarItemId,
-      label: "Edit Source",
-      placement: "leading",
-      systemImageName: "square.and.pencil",
-      tooltip: "Edit Source",
-      type: "button",
-    },
-    {
-      id: presenterAppearanceToolbarItemId,
-      label: "Appearance",
-      placement: "leading",
-      systemImageName: "sun.max",
-      tooltip: "Appearance",
-      type: "menuButton",
-      menuItems: [
-        { label: "Background intensity", value: "background-intensity",
-          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 3 * 100), suffix: "%" } },
-      ],
     },
   ];
 }
