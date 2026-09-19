@@ -25,3 +25,8 @@ export function slideTransitionStyles(
   }
   return { entering, outgoing };
 }
+
+/** Fabric does not restore native-driven opacity when its style is removed. */
+export function visibleSlideStyle(progress: Animated.Value) {
+  return { opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 1] }) };
+}

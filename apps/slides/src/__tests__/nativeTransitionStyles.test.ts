@@ -1,6 +1,7 @@
 // @ts-nocheck Bun test types are not included in the app TypeScript project.
 import { expect, test } from "bun:test";
 import { Animated } from "react-native";
+import { visibleSlideStyle } from "../slideTransitions";
 import { nativeTransitionStyles } from "../nativeTransitionStyles";
 
 const context = { direction: "forward" as const, width: 1920, height: 1080, options: {}, hasBackground: true };
@@ -40,4 +41,20 @@ test("rejects animated layout rather than falling back to JavaScript frames", ()
   expect(() => nativeTransitionStyles({ styles: ({ progress }) => ({
     incoming: { width: progress * 100 }, outgoing: {},
   }) }, new Animated.Value(0), context, true, false)).toThrow("width cannot animate on the native driver");
+});
+
+
+test("idle slide opacity is explicitly restored through the native graph after fading out", () => {
+  const progress = new Animated.Value(1);
+  const fading = nativeTransitionStyles({ styles: ({ progress }) => ({
+    incoming: { opacity: progress }, outgoing: { opacity: 1 - progress },
+  }) }, progress, context, false, false);
+  expect(valueOf(fading.opacity)).toBe(0);
+  const restored = visibleSlideStyle(progress);
+  expect(valueOf(restored.opacity)).toBe(1);
+  // Preparation and return can share a fresh clock at any point in its range.
+  progress.setValue(0);
+  expect(valueOf(restored.opacity)).toBe(1);
+  progress.setValue(0.5);
+  expect(valueOf(restored.opacity)).toBe(1);
 });

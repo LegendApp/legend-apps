@@ -5,7 +5,7 @@ import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurfa
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
-import { slideTransitionStyles } from "./slideTransitions";
+import { slideTransitionStyles, visibleSlideStyle } from "./slideTransitions";
 import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
@@ -198,11 +198,12 @@ function AudienceContent() {
   // The layout effect establishes the outgoing layer before paint; cuts never
   // have one, even when the previous transition has not cleaned up yet.
   const outgoingSlide = previousSlide === currentSlide ? null : previousSlide;
+  const visibleStyle = visibleSlideStyle(progress);
   const layers = outgoingSlide === null
-    ? [{ index: currentSlide, style: transitionState.definition ? {} : enteringStyle }]
+    ? [{ index: currentSlide, style: transitionState.definition ? visibleStyle : enteringStyle }]
     : [
-        { index: outgoingSlide, style: transitionState.definition ? {} : outgoingStyle },
-        { index: currentSlide, style: transitionState.definition ? {} : enteringStyle },
+        { index: outgoingSlide, style: transitionState.definition ? visibleStyle : outgoingStyle },
+        { index: currentSlide, style: transitionState.definition ? visibleStyle : enteringStyle },
       ];
   const preparedIndexes = Array.from(
     { length: Math.min(slideCount - 1, currentSlide + 2) - Math.max(0, currentSlide - 2) + 1 },
@@ -219,7 +220,7 @@ function AudienceContent() {
       {renderedLayers.map((layer) => {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         return (
-          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? styles.preload : [styles.layer, layer.style]}>
+          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={isPreload ? [styles.preload, visibleStyle] : [styles.layer, layer.style]}>
             <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
               <SlideCanvas>
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
@@ -244,7 +245,7 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
 }) {
   const width = useValue(() => slidesState$.config.width.get() ?? 1920);
   const height = useValue(() => slidesState$.config.height.get() ?? 1080);
-  let style = {};
+  let style: Animated.WithAnimatedObject<import("react-native").ViewStyle> = visibleSlideStyle(progress);
   let failure: string | undefined;
   if (definition && !settled) {
     try {
