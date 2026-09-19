@@ -6,6 +6,7 @@ import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurfa
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { slideTransitionStyles, visibleSlideStyle } from "./slideTransitions";
+import { useNativeTransitionReady } from "./useNativeTransitionReady";
 import { useRetainedTransitionStyle } from "./useRetainedTransitionStyle";
 import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -88,6 +89,7 @@ function AudienceContent() {
   }
   const transition = transitionState.kind;
   const { progress, outgoing: previousSlide } = transitionState;
+  const nativeReady = useNativeTransitionReady(progress, previousSlide !== null);
 
   useEffect(() => {
     setSlidesState({ audienceOpen: true });
@@ -220,10 +222,10 @@ function AudienceContent() {
     <>
       {renderedLayers.map((layer) => {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
-        // Promotion changes native stacking before a replacement opacity graph
-        // may be attached. Keep the incoming layer behind the opaque background
-        // during preparation; opacity stays intact for native snapshots.
-        const behindBackground = isPreload || layer.index === currentSlide && !transitionState.ready;
+        // Measurements being ready does not mean Fabric has applied the graph.
+        // Reveal only after its first native progress event, keeping the live
+        // content measurable behind the background until then.
+        const behindBackground = isPreload || layer.index === currentSlide && (!transitionState.ready || !nativeReady);
         return (
           <AudienceLayer key={layer.index} preparing={isPreload} behindBackground={behindBackground} style={isPreload ? visibleStyle : layer.style}>
             <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
