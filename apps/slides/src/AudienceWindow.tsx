@@ -6,6 +6,7 @@ import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurfa
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import { slideTransitionStyles, visibleSlideStyle } from "./slideTransitions";
+import { useRetainedTransitionStyle } from "./useRetainedTransitionStyle";
 import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
@@ -224,18 +225,18 @@ function AudienceContent() {
         // during preparation; opacity stays intact for native snapshots.
         const behindBackground = isPreload || layer.index === currentSlide && !transitionState.ready;
         return (
-          <Animated.View key={layer.index} accessibilityElementsHidden={isPreload} importantForAccessibility={isPreload ? "no-hide-descendants" : "auto"} pointerEvents={isPreload ? "none" : "auto"} style={[styles.layer, isPreload ? visibleStyle : layer.style, { zIndex: behindBackground ? -1 : 1 }]}>
+          <AudienceLayer key={layer.index} preparing={isPreload} behindBackground={behindBackground} style={isPreload ? visibleStyle : layer.style}>
             <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
               <SlideCanvas>
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
                   reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
-                  settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
+                  preparing={isPreload} settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
                   <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
                     targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
                 </UserTransitionLayer>
               </SlideCanvas>
             </AudienceFocusSurface>
-          </Animated.View>
+          </AudienceLayer>
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
@@ -243,9 +244,18 @@ function AudienceContent() {
   );
 }
 
-function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled }: {
+function AudienceLayer({ children, style, preparing, behindBackground }: {
+  children: ReactNode; style: Animated.WithAnimatedObject<import("react-native").ViewStyle>;
+  preparing: boolean; behindBackground: boolean;
+}) {
+  const retainedStyle = useRetainedTransitionStyle(style, preparing);
+  return <Animated.View accessibilityElementsHidden={preparing} importantForAccessibility={preparing ? "no-hide-descendants" : "auto"}
+    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, retainedStyle, { zIndex: behindBackground ? -1 : 1 }]}>{children}</Animated.View>;
+}
+
+function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled, preparing }: {
   children: ReactNode; definition?: TransitionDefinition; reference: SlideTransition; progress: Animated.Value;
-  incoming: boolean; settled: boolean; reverse: boolean; hasBackground: boolean; shared: boolean;
+  incoming: boolean; settled: boolean; preparing: boolean; reverse: boolean; hasBackground: boolean; shared: boolean;
 }) {
   const width = useValue(() => slidesState$.config.width.get() ?? 1920);
   const height = useValue(() => slidesState$.config.height.get() ?? 1080);
@@ -269,7 +279,8 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
       setSlidesState((state) => ({ runtimeErrors: state.runtimeErrors.includes(failure) ? state.runtimeErrors : [...state.runtimeErrors, failure] }));
     }
   }, [failure, progress]);
-  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>;
+  const retainedStyle = useRetainedTransitionStyle(style, preparing);
+  return <Animated.View style={[{ flex: 1 }, retainedStyle]}>{children}</Animated.View>;
 }
 
 function AudienceFocusSurface({ children, index, motion, surfaces, layoutKey }: {
