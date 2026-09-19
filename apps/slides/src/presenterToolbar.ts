@@ -81,7 +81,7 @@ export function createPresenterToolbarItems({
       type: "menuButton",
       menuItems: [
         { label: "Background intensity", value: "background-intensity",
-          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 3 * 100), suffix: "%" } },
+          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 6 * 100), suffix: "%" } },
       ],
     },
     {

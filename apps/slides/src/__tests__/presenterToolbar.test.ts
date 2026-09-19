@@ -48,7 +48,7 @@ describe("presenter toolbar", () => {
     expect(items.filter((item) => item.placement === "trailing").at(-1)?.id).toBe(presenterStartToolbarItemId);
     expect(items.every((item) => item.placement === "trailing")).toBe(true);
     expect(items[1]).toMatchObject({ placement: "trailing", type: "menuButton" });
-    expect(items[1].menuItems[0]).toMatchObject({ value: "background-intensity", slider: { min: 0, max: 100, value: 33, suffix: "%" } });
+    expect(items[1].menuItems[0]).toMatchObject({ value: "background-intensity", slider: { min: 0, max: 100, value: 17, suffix: "%" } });
     expect(items[2]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
     expect(items[4]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
     expect(items[5]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
@@ -60,7 +60,7 @@ describe("presenter toolbar", () => {
       audienceOpen: true,
       displays,
       elapsed: 2_000,
-      backgroundIntensity: 3,
+      backgroundIntensity: 6,
       hasDeck: true,
       rehearsalEnabled: true,
       selectedDisplayId: "stage",

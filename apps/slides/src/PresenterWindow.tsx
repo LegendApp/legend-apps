@@ -429,7 +429,7 @@ function PresenterToolbar({
       }
       if (event.itemId === presenterAppearanceToolbarItemId) {
         const match = /^background-intensity:(\d+)$/.exec(event.value ?? "");
-        if (match && Number(match[1]) <= 100) setBackgroundIntensitySetting(Number(match[1]) / 100 * 3);
+        if (match && Number(match[1]) <= 100) setBackgroundIntensitySetting(Number(match[1]) / 100 * 6);
       } else if (event.itemId === presenterEditToolbarItemId) {
         if (!audienceOpen && canEditDeck) onEditDeck();
       } else if (event.itemId === presenterElapsedToolbarItemId) {

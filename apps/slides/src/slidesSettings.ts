@@ -11,7 +11,7 @@ const slidesSettings = createObservableSettings({
   fields: {
     backgroundIntensity: {
       defaultValue: 1,
-      normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(3, value)) : 1,
+      normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(6, value)) : 1,
     },
     presentationTimerStartsOnSecondSlide: {
       defaultValue: defaultPresentationTimerStartsOnSecondSlide,
