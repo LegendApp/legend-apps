@@ -1,9 +1,10 @@
-import { useLayoutEffect, type ReactNode } from "react";
+import { useContext, useLayoutEffect, type ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
+import { FocusLayoutOffsetContext } from "./focus";
 
-/** Keep destination layout measurable while the UI thread interpolates its position. */
+/** Move only the transform; expose destination geometry to shared measurement. */
 export function ScenePositionView({ y, children, style, duration = 650 }: {
   y: number;
   children?: ReactNode;
@@ -12,15 +13,17 @@ export function ScenePositionView({ y, children, style, duration = 650 }: {
 }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
+  const ancestorOffset = useContext(FocusLayoutOffsetContext);
   const position = useSharedValue(y);
   useLayoutEffect(() => {
     position.value = active && !preview
       ? withTiming(y, { duration, easing: Easing.inOut(Easing.cubic) }) : y;
     return () => cancelAnimation(position);
   }, [active, preview, y, duration, position]);
-  // Commit the destination layout and its compensation together on the UI
-  // thread. A React-driven top update can otherwise precede the new transform
-  // by a frame, briefly flashing the row at its destination before it moves.
-  const motion = useAnimatedStyle(() => ({ top: y, transform: [{ translateY: position.value - y }] }), [y]);
-  return <Animated.View style={[style, { position: "absolute" }, motion]}>{children}</Animated.View>;
+  // Never relocate native layout during motion. Fabric layout and transform
+  // updates can land separately even when issued by the same animated style.
+  const motion = useAnimatedStyle(() => ({ transform: [{ translateY: position.value }] }));
+  return <Animated.View style={[style, { position: "absolute", top: 0 }, motion]}>
+    <FocusLayoutOffsetContext.Provider value={ancestorOffset + y}>{children}</FocusLayoutOffsetContext.Provider>
+  </Animated.View>;
 }

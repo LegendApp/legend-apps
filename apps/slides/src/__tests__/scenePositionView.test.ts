@@ -12,13 +12,13 @@ const { code } = transformSync(readFileSync(filename, "utf8"), {
   plugins: [require.resolve("react-native-worklets/plugin")],
 });
 
-test("a grouping commit cannot move layout before its compensating transform", () => {
+test("grouping changes only the transform and exposes logical destination geometry", () => {
   const position = { value: 55 };
   let updateStyle;
   let appliedStyle;
   const module = { exports: {} };
   const mocks = {
-    react: { useLayoutEffect() {} },
+    react: { useLayoutEffect() {}, useContext: () => 0 },
     "react-native-reanimated": {
       __esModule: true, default: { View: "view" },
       useSharedValue: () => position,
@@ -28,6 +28,7 @@ test("a grouping commit cannot move layout before its compensating transform", (
         return appliedStyle;
       },
     },
+    "./focus": { FocusLayoutOffsetContext: { Provider: "logical-offset" } },
     "./runtime": { usePresentationValue: key => key === "isActive" },
   };
   new Function("require", "module", "exports", code)(name => mocks[name] ?? require(name), module, module.exports);
@@ -37,13 +38,15 @@ test("a grouping commit cannot move layout before its compensating transform", (
   // React commits while the UI thread still has the previous animated style.
   const committed = Object.assign({}, ...next.props.style);
   expect(committed.top + committed.transform[0].translateY).toBe(55);
-  // When the UI worklet runs, both destination top and compensation change.
+  // Native layout stays fixed; only the transform moves, on the UI thread.
   const firstFrame = updateStyle();
-  expect(firstFrame.top).toBe(400);
-  expect(firstFrame.top + firstFrame.transform[0].translateY).toBe(55);
+  expect(committed.top).toBe(0);
+  expect(firstFrame.top).toBeUndefined();
+  expect(next.props.children.props.value).toBe(400);
+  expect(firstFrame.transform[0].translateY).toBe(55);
   position.value = 200;
   const middle = updateStyle();
-  expect(middle.top + middle.transform[0].translateY).toBe(200);
+  expect(middle.transform[0].translateY).toBe(200);
   position.value = 400;
-  expect(updateStyle().transform[0].translateY).toBe(0);
+  expect(updateStyle().transform[0].translateY).toBe(400);
 });

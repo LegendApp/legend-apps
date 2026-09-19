@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { act, create } from "react-test-renderer";
 import "./nativeMock";
 import { Animated } from "react-native";
-import { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, createFocusSurface,
+import { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, FocusLayoutOffsetContext, createFocusSurface,
   measureFocusSurface, measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion } from "../../../../packages/presentation/src/focus";
 import { focusCamera, normalizeTransition, resolveTransition } from "../../../../packages/presentation/src/focusGeometry";
 
@@ -207,4 +207,27 @@ test("layout invalidation discards an in-flight snapshot and prepares the new la
   expect(result.elements.get("bar")).toEqual({ x: 0, y: 200, width: 500, height: 30 });
   surface.setRoot(null);
   expect(surface.measurements).toBeUndefined();
+});
+
+
+test("transform-positioned rows cache their logical destination and invalidate it on regrouping", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const surface = createFocusSurface();
+  const render = offset => <FocusSurfaceContext.Provider value={{ surface }}>
+    <FocusStage><FocusLayoutOffsetContext.Provider value={offset}>
+      <SharedElement id="row" testID="row"><span /></SharedElement>
+    </FocusLayoutOffsetContext.Provider></FocusStage>
+  </FocusSurfaceContext.Provider>;
+  let tree;
+  try {
+    await act(() => { tree = create(render(55), { createNodeMock: () => ({
+      measureLayout: (_root, done) => done(285, 6, 400, 30),
+    }) }); });
+    await prepareFocusSurface(surface);
+    expect((await measureFocusSurface(surface)).elements.get("row").y).toBe(61);
+    await act(() => tree.update(render(400)));
+    await prepareFocusSurface(surface);
+    expect((await measureFocusSurface(surface)).elements.get("row").y).toBe(406);
+    expect(surface.entries.size).toBe(1);
+  } finally { if (tree) await act(() => tree.unmount()); }
 });

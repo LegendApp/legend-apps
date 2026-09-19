@@ -3,7 +3,7 @@ import { Animated, Text, View, type ViewProps } from "react-native";
 import { renderNativeChildren } from "./nativeChildren";
 import { identityCamera, validFocusRect, type FocusCamera, type FocusRect } from "./focusGeometry";
 
-type Entry = { id: string; kind: "region" | "element"; view: View };
+type Entry = { id: string; kind: "region" | "element"; view: View; offsetY?: number };
 export type FocusSurface = {
   root: View | null;
   setRoot(root: View | null): void;
@@ -30,6 +30,8 @@ export function useSharedElementTransition(id: string) {
 }
 
 const InsideSharedElement = createContext(false);
+/** Layout stays fixed while positioned content moves with UI-thread transforms. */
+export const FocusLayoutOffsetContext = createContext(0);
 
 export function createFocusSurface(): FocusSurface {
   const surface: FocusSurface = {
@@ -103,7 +105,7 @@ async function readFocusSurface(surface: FocusSurface, include: (entry: Entry) =
     // Native measurement callbacks can disappear when a slide unmounts mid-request.
     const timeout = setTimeout(() => finish(), 120);
     try {
-      entry.view.measureLayout(root, (x, y, width, height) => finish({ x, y, width, height }), () => finish());
+      entry.view.measureLayout(root, (x, y, width, height) => finish({ x, y: y + (entry.offsetY ?? 0), width, height }), () => finish());
     } catch {
       finish();
     }
@@ -165,17 +167,18 @@ type MarkerProps = ViewProps & {
 function Marker({ id, kind, children, style, resize = "stretch", onLayout, ...props }: MarkerProps & { kind: Entry["kind"] }) {
   const context = useContext(FocusSurfaceContext);
   const nested = useContext(InsideSharedElement);
+  const offsetY = useContext(FocusLayoutOffsetContext);
   const ref = useRef<View>(null);
   const surface = context?.surface;
   useLayoutEffect(() => {
     const view = ref.current;
     if (!surface || !view || (nested && kind === "element")) return;
-    const entry = { id, kind, view };
+    const entry = { id, kind, view, offsetY };
     surface.entries.add(entry);
     invalidateFocusSurface(surface);
     void prepareFocusSurface(surface);
     return () => { surface.entries.delete(entry); invalidateFocusSurface(surface); };
-  }, [id, kind, nested, surface]);
+  }, [id, kind, nested, surface, offsetY]);
   const measureLayout: ViewProps["onLayout"] = event => {
     onLayout?.(event);
     if (surface) { invalidateFocusSurface(surface); void prepareFocusSurface(surface); }
