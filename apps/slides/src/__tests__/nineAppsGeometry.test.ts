@@ -11,9 +11,12 @@ test("nine-app lineup combines Deno and includes Compose, with RN first", () => 
   expect(new Set(appOrder.map((_, i) => JSON.stringify(appCardLayout(i, "grid")))).size).toBe(9);
 });
 
-test("filmstrip starts at the left margin and never wraps later cards to the left", () => {
+test("filmstrip centers the selected card and never wraps later cards to the left", () => {
   const first = appCardLayout(0, "filmstrip");
-  expect(first.x - first.width / 2).toBe(112);
+  expect(first.x).toBe(960);
+  for (let selected = 0; selected < appOrder.length; selected++) {
+    expect(appCardLayout(selected, "filmstrip", selected).x).toBe(960);
+  }
   for (let i = 1; i < appOrder.length; i++) {
     expect(appCardLayout(i, "filmstrip").x).toBeGreaterThan(first.x);
   }
