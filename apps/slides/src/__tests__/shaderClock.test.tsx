@@ -50,6 +50,15 @@ test("outgoing shaders retain their last frame; fresh previews stay still and re
     await act(() => tree.update(render(false, true, false, 3)));
     expect(uniforms.value).toEqual({ brightness: 3, time: 8 });
     expect(frame.active).toBe(false);
+    await act(() => tree.update(render(true, false, false, 3)));
+    expect(uniforms.value.time).toBe(0);
+    expect(frame.active).toBe(true);
+    frame.tick();
+    expect(uniforms.value.time).toBeCloseTo(0.032);
+    await act(() => tree.update(render(true, false, false, 4)));
+    expect(uniforms.value.time).toBeCloseTo(0.032);
+    await act(() => tree.update(render(false, true, false, 4)));
+    expect(uniforms.value.time).toBeCloseTo(0.032);
   } finally {
     if (tree) await act(() => tree.unmount());
   }

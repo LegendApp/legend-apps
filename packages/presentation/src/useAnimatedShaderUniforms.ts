@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
 
@@ -53,12 +53,17 @@ export function useAnimatedShaderUniforms(
     previousSlide.current = slideIndex;
   }, [slideIndex, active, preview, duration, burstElapsed]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Outgoing audience slides become previews too: hold their last frame,
     // rather than jumping to the fixed thumbnail time during the fade.
     if (preparing) hasAnimated.current = false;
     if (preview && !hasAnimated.current) time.value = previewTime;
-    if (active && !preview && !preparing) hasAnimated.current = true;
+    if (active && !preview && !preparing && !hasAnimated.current) {
+      // A prepared preview holds previewTime, not the start of its entrance.
+      // Reset before activating the UI clock or letting the scene read its epoch.
+      time.value = 0;
+      hasAnimated.current = true;
+    }
     frame.setActive(active && !preview && !preparing);
     return () => frame.setActive(false);
   }, [active, preview, preparing, previewTime, frame, time]);
