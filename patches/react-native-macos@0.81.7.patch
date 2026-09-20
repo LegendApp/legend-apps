@@ -129,3 +129,124 @@ diff --git a/Libraries/Animated/shouldUseTurboAnimatedModule.js b/Libraries/Anim
 +    );
    }
  }
+
+diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTouchHandler.mm
+--- a/React/Fabric/RCTSurfaceTouchHandler.mm
++++ b/React/Fabric/RCTSurfaceTouchHandler.mm
+@@ -249,7 +249,13 @@
+ - (void)_registerTouches:(NSSet<RCTUITouch *> *)touches // [macOS]
+ {
+   for (RCTUITouch *touch in touches) { // [macOS]
+-		auto activeTouch = CreateTouchWithUITouch(touch, _rootComponentView, _viewOriginOffset);
++#if TARGET_OS_OSX
++    // A duplicate down must not consume an ID that emplace cannot retain.
++    if (_activeTouches.find(touch.eventNumber) != _activeTouches.end()) {
++      continue;
++    }
++#endif
++    auto activeTouch = CreateTouchWithUITouch(touch, _rootComponentView, _viewOriginOffset);
+     activeTouch.touch.identifier = _identifierPool.dequeue();
+ #if !TARGET_OS_OSX // [macOS]
+     _activeTouches.emplace(touch, activeTouch);
+@@ -445,6 +451,11 @@
+ {
+   [super mouseDown:event];
+
++  // AppKit text selection can consume mouseUp in a nested tracking loop.
++  // A fresh click starts a new mouse gesture: cancel any abandoned press
++  // before allocating another identifier from the fixed-size pool.
++  [self _cancelActiveTouches];
++
+   {
+     NSSet* touches = [NSSet setWithObject:event];
+     [self _registerTouches:touches]; // [macOS]
+@@ -462,9 +473,14 @@
+ {
+   [super rightMouseDown:event];
+
++  // AppKit text selection can consume mouseUp in a nested tracking loop.
++  // A fresh click starts a new mouse gesture: cancel any abandoned press
++  // before allocating another identifier from the fixed-size pool.
++  [self _cancelActiveTouches];
++
+   {
+     NSSet* touches = [NSSet setWithObject:event];
+-		[self _registerTouches:touches]; // [macOS]
++    [self _registerTouches:touches]; // [macOS]
+     [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchStart];
+
+     if (self.state == NSGestureRecognizerStatePossible) {
+@@ -479,6 +495,11 @@
+ {
+   [super mouseDragged:event];
+
++  // Ignore trailing events for a mouse sequence that was already cancelled.
++  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
++    return;
++  }
++
+   NSSet* touches = [NSSet setWithObject:event];
+   [self _updateTouches:touches]; // [macOS]
+   [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchMove];
+@@ -490,6 +511,11 @@
+ {
+   [super rightMouseDragged:event];
+
++  // Ignore trailing events for a mouse sequence that was already cancelled.
++  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
++    return;
++  }
++
+   NSSet* touches = [NSSet setWithObject:event];
+   [self _updateTouches:touches]; // [macOS]
+   [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchMove];
+@@ -500,6 +526,11 @@
+ - (void)mouseUp:(NSEvent *)event
+ {
+   [super mouseUp:event];
++
++  // Ignore trailing events for a mouse sequence that was already cancelled.
++  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
++    return;
++  }
+
+   NSSet* touches = [NSSet setWithObject:event];
+   [self _updateTouches:touches]; // [macOS]
+@@ -513,6 +544,11 @@
+ {
+   [super rightMouseUp:event];
+
++  // Ignore trailing events for a mouse sequence that was already cancelled.
++  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
++    return;
++  }
++
+   NSSet* touches = [NSSet setWithObject:event];
+   [self _updateTouches:touches]; // [macOS]
+   [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchEnd];
+@@ -526,7 +562,11 @@
+ - (void)reset
+ {
+   [super reset];
+-
++  [self _cancelActiveTouches];
++}
++
++- (void)_cancelActiveTouches
++{
+   if (!_activeTouches.empty()) {
+     std::vector<ActiveTouch> activeTouches;
+     activeTouches.reserve(_activeTouches.size());
+@@ -539,8 +579,10 @@
+
+     // Force-unregistering all the touches.
+     _activeTouches.clear();
+-    _identifierPool.reset();
+-  }
++  }
++  // Reset even if the map is empty: older duplicate registrations could
++  // consume an identifier without inserting a corresponding active touch.
++  _identifierPool.reset();
+ }
+
+ - (BOOL)canPreventGestureRecognizer:(__unused UIGestureRecognizer *)preventedGestureRecognizer
