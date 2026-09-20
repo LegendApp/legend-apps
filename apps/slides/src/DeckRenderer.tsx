@@ -66,10 +66,10 @@ function MissingSlideTemplate({ reference }: { reference: string }): never {
   throw new Error(`Template "${reference}" is not available in the compiled deck.`);
 }
 
-const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; targetIndex?: number; targetStep?: number }>({ isPreview: false });
+const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: boolean; isOutgoing?: boolean; targetIndex?: number; targetStep?: number }>({ isPreview: false });
 
 function Deck({ children, configJson }: CompiledDeckProps) {
-  const { isPreview, isPreparing, targetIndex, targetStep } = useContext(DeckRenderContext);
+  const { isPreview, isPreparing, isOutgoing, targetIndex, targetStep } = useContext(DeckRenderContext);
   const templates = useValue(slidesState$.templates);
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
@@ -103,6 +103,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       currentSlide, currentStep, goTo: setCurrentSlide,
       isActive: !isPreview && slideIndex === currentSlide,
       isPreview: Boolean(isPreview), isPreparing,
+      playbackPhase: isPreparing ? "preparing" : isOutgoing ? "outgoing" : isPreview ? "preview" : slideIndex === currentSlide ? "playing" : "paused",
       next: nextSlide, previous: previousSlide,
       slideCount: count, slideIndex, stepCount,
       stepIndex: Math.max(0, Math.min(targetStep ?? (slideIndex === currentSlide ? currentStep : 0), stepCount - 1)),
@@ -111,7 +112,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       stepEpochs: isPreview ? undefined : slidesState$.stepEpochs.get(),
       direction: isPreview ? undefined : slidesState$.direction.get(),
     };
-  }, [isPreview, isPreparing, targetIndex, targetStep]);
+  }, [isPreview, isPreparing, isOutgoing, targetIndex, targetStep]);
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;
@@ -219,11 +220,13 @@ const markdownComponents = {
 export function DeckRenderer({
   isPreview = false,
   isPreparing = false,
+  isOutgoing = false,
   targetIndex,
   targetStep,
 }: {
   isPreview?: boolean;
   isPreparing?: boolean;
+  isOutgoing?: boolean;
   targetIndex?: number;
   targetStep?: number;
 }) {
@@ -234,7 +237,7 @@ export function DeckRenderer({
     return null;
   }
   return (
-    <DeckRenderContext.Provider value={{ isPreview, isPreparing, targetIndex, targetStep }}>
+    <DeckRenderContext.Provider value={{ isPreview, isPreparing, isOutgoing, targetIndex, targetStep }}>
       <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}:${targetIndex ?? "current"}`}>
         <Component components={markdownComponents} />
       </SlideErrorBoundary>

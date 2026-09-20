@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { observable } from "@legendapp/state";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { observable, type Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import type { PresentationRuntime } from "./types";
+import { PlaybackProvider } from "./playback";
 
 const defaultRuntime: PresentationRuntime = {
   currentSlide: 0,
@@ -20,7 +21,11 @@ const defaultRuntime: PresentationRuntime = {
 const PresentationContext = createContext(observable(defaultRuntime));
 
 // Both names share the caller-owned observable without wrapping or copying it.
-export const PresentationProvider = PresentationContext.Provider;
+export function PresentationProvider({ value, children }: { value: Observable<PresentationRuntime>; children?: ReactNode }) {
+  return <PresentationContext.Provider value={value}>
+    <PlaybackProvider runtime$={value}>{children}</PlaybackProvider>
+  </PresentationContext.Provider>;
+}
 export const PresentationObservableProvider = PresentationProvider;
 
 export function usePresentation$() {

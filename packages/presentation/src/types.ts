@@ -42,6 +42,9 @@ export type PresentationTemplateProps = {
 export type PresentationTemplates = Record<string, ComponentType<PresentationTemplateProps>>;
 
 export type PresentationRuntime = {
+  /** Explicit surface lifecycle; outgoing is distinct from a thumbnail preview. */
+  playbackPhase?: import("./playbackState").PlaybackPhase;
+  playbackScope?: "slide" | "background";
   currentSlide: number;
   currentStep: number;
   goTo(slideIndex: number): void;

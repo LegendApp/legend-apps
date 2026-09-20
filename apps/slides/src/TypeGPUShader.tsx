@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Text, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { useBackgroundIntensity, useBackgroundSize, usePresentationValue } from "@legend-apps/presentation";
+import { useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback } from "@legend-apps/presentation";
 import { reportSlideError } from "./slidesStore";
 
 type Resources = {
@@ -129,20 +129,26 @@ function UIFrames({ resources: r, aspect, brightness, particleCount, previewTime
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
   const step = usePresentationValue("stepIndex");
-  const previousStep = useRef(step);
+  const playback = usePlayback();
   const { alive, disposed } = r;
-  const time = useSharedValue(0);
   const count = useSharedValue(0);
   const rendered = useSharedValue(false);
-  const hasAnimated = useSharedValue(false);
+  const simulationEpoch = useSharedValue({ phase: "", slideKey: "", stepKey: "" });
   const { device, context, clock, groups, compute, render, particles } = r;
-  const draw = (dt: number, staticTime: number, stepValue: number) => {
+  const draw = (dt: number) => {
     "worklet";
     if (!alive.value) return;
+    const state = playback.value;
+    const previous = simulationEpoch.value;
+    if (state.phase !== "outgoing" && state.phase !== "paused" &&
+        (previous.slideKey !== state.slideKey || previous.stepKey !== state.stepKey ||
+         (state.phase === "playing" && previous.phase !== "playing"))) {
+      count.value = 0;
+    }
+    simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
     try {
-      if (staticTime >= 0) time.value = staticTime;
-      else time.value += dt;
-      device.queue.writeBuffer(clock, 0, new Float32Array([time.value, dt, count.value, stepValue, aspect, brightness, 0, 0]));
+      const time = samplePlayback(state, previewTime, "step");
+      device.queue.writeBuffer(clock, 0, new Float32Array([time, dt, count.value, state.stepIndex, aspect, brightness, 0, 0]));
       const encoder = device.createCommandEncoder();
       const source = count.value % 2;
       const simulation = encoder.beginComputePass();
@@ -163,25 +169,21 @@ function UIFrames({ resources: r, aspect, brightness, particleCount, previewTime
     }
   };
   const frame = useFrameCallback(info => {
-    hasAnimated.value = true;
-    draw(Math.min(info.timeSincePreviousFrame ?? 0, 40)/1000, -1, step);
+    if (playback.value.phase !== "playing") return;
+    // Clamp only the simulation integration delta; visual time comes from the
+    // shared wall clock and must not slow down when a frame is delayed.
+    draw(Math.min(info.timeSincePreviousFrame ?? 0, 40)/1000);
   }, false);
   useEffect(() => {
-    if (previousStep.current !== step) {
-      runOnUI(() => { "worklet"; time.value = 0; })();
-      previousStep.current = step;
-    }
     frame.setActive(active && !preview && !preparing);
-    // Outgoing surfaces retain their last frame; fresh previews get one fixed frame.
     runOnUI(() => {
       "worklet";
-      if (preparing) return;
-      if (preview && !hasAnimated.value) {
-        count.value = 0; draw(0, previewTime, step);
-      } else if (!rendered.value && active) draw(0, 0, step);
+      const phase = playback.value.phase;
+      if (phase === "preview") { count.value = 0; draw(0); }
+      else if (phase === "playing" && !rendered.value) draw(0);
     })();
     return () => frame.setActive(false);
-  }, [active, preview, preparing, previewTime, step, frame, rendered, brightness]);
+  }, [active, preview, preparing, previewTime, step, frame, rendered, brightness, playback]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
     runOnUI(destroyGPU)(device, alive, disposed);

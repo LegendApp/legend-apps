@@ -30,32 +30,20 @@ mock.module("@shopify/react-native-skia", () => ({
 }));
 const { ExpoDesktopLayers } = await import("../../decks/react-native-desktop/ExpoDesktopScene");
 
-test("Expo connection restarts from its click timestamp without remounting either Canvas", async () => {
+test("Expo connection delegates timing to the shared controller without remounting either Canvas", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let tree;
   try {
     await act(() => { tree = create(<ExpoDesktopLayers />); });
-    expect(desktopUniforms.connected).toBe(0);
-    // The JS clock may still contain a stale preview value at activation.
-    expect(desktopUniforms.startTime).toBe(0);
+    expect(desktopUniforms).toEqual({ desktop: 1 });
     expect(mounts).toBe(2);
-    time = 19;
-    runtime = { ...runtime, stepIndex: 1 };
-    await act(() => tree.update(<ExpoDesktopLayers />));
-    expect(desktopUniforms).toEqual({ desktop: 1, connected: 1, startTime: 19 });
-    expect(mounts).toBe(2);
-    time = 25;
-    runtime = { ...runtime, stepIndex: 0 };
-    await act(() => tree.update(<ExpoDesktopLayers />));
-    expect(desktopUniforms.connected).toBe(0);
-    time = 30;
-    runtime = { ...runtime, stepIndex: 1 };
-    await act(() => tree.update(<ExpoDesktopLayers />));
-    expect(desktopUniforms.startTime).toBe(30);
-    expect(mounts).toBe(2);
-    runtime = { ...runtime, isActive: false, isPreview: true };
-    await act(() => tree.update(<ExpoDesktopLayers />));
-    expect(desktopUniforms.startTime).toBe(30);
+    for (const stepIndex of [1, 0, 1]) {
+      runtime = { ...runtime, stepIndex };
+      await act(() => tree.update(<ExpoDesktopLayers />));
+      // No JS timestamp snapshots or independently reset connection uniforms.
+      expect(desktopUniforms).toEqual({ desktop: 1 });
+      expect(mounts).toBe(2);
+    }
   } finally {
     if (tree) await act(() => tree.unmount());
   }

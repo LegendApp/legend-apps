@@ -233,7 +233,7 @@ function AudienceContent() {
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
                   reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
                   preparing={isPreload} settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
-                  <DeckRenderer isPreparing={isPreload} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
+                  <DeckRenderer isPreparing={isPreload} isOutgoing={!isPreload && layer.index !== currentSlide} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
                     targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
                 </UserTransitionLayer>
               </SlideCanvas>

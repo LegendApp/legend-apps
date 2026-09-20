@@ -1,72 +1,52 @@
-import { useLayoutEffect, useRef } from "react";
-import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
+import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
+import { samplePlayback, usePlayback } from "./playback";
 
-type ShaderMotion = {
-  /** Constant clock rate, default 1. */
-  speed?: number;
-  /** Additional peak clock rate on a slide change, default 0. */
-  slideChangeBoost?: number;
-  /** Length of the smooth acceleration/deceleration in seconds. */
-  slideChangeDuration?: number;
-};
+type ShaderMotion = { speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
 
-/** Adds a UI-thread `time` uniform in seconds; previews hold a fixed frame. */
+/** All shader uniforms sample the surface controller in one UI-thread evaluation. */
 export function useAnimatedShaderUniforms(
-  uniforms: Record<string, number | number[]>,
-  previewTime = 0,
+  uniforms: Record<string, number | number[]>, previewTime = 0,
   { speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
-  const active = usePresentationValue("isActive");
-  const preview = usePresentationValue("isPreview");
-  const preparing = usePresentationValue("isPreparing");
-  const hasAnimated = useRef(false);
+  const playback = usePlayback();
   const slideIndex = usePresentationValue("slideIndex");
-  const previousSlide = useRef(slideIndex);
-  const burstElapsed = useSharedValue(slideChangeDuration);
-  const clockSpeed = Number.isFinite(speed) ? Math.max(0, speed) : 1;
+  const rate = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
-  const duration = Number.isFinite(slideChangeDuration) ? Math.max(0.001, slideChangeDuration) : 2;
-  const time = useSharedValue(preview ? previewTime : 0);
-  const frame = useFrameCallback((info) => {
-    // Integrate velocity instead of scaling absolute time, so speed changes do not jump.
-    const dt = Math.min(info.timeSincePreviousFrame ?? 0, 64) / 1000;
-    const elapsed = Math.min(duration, burstElapsed.value + dt);
-    // Respond promptly, then spend most of the burst settling back to idle.
+  const duration = Math.max(0.001, Number.isFinite(slideChangeDuration) ? slideChangeDuration : 2);
+  const adjusted = rate !== 1 || boost !== 0;
+  const motion = useSharedValue({ time: 0, raw: 0, burst: duration, slideIndex });
+  // Background speed modulation integrates the shared elapsed clock. It owns
+  // no frame loop, never caps elapsed time, and does not change step timing.
+  useAnimatedReaction(() => ({ clock: playback.value, index: slideIndex }), ({ clock, index }) => {
+    if (!adjusted) return;
+    if (clock.phase === "preparing" || clock.slideTime < motion.value.raw) {
+      motion.value = { time: 0, raw: 0, burst: duration, slideIndex: index };
+    }
+    if (clock.phase !== "playing") return;
+    const old = motion.value;
+    const dt = Math.max(0, clock.slideTime - old.raw);
+    const start = index === old.slideIndex ? old.burst : 0;
+    const end = Math.min(duration, start + dt);
+    // Integral of the attack and decay, so dropped frames don't slow the effect.
     const attack = Math.min(0.12, duration * 0.25);
-    const ramp = Math.min(1, elapsed / attack);
-    const decay = Math.max(0, (elapsed - attack) / (duration - attack));
-    const pulse = elapsed < attack
-      ? ramp * (2 - ramp)
-      : (1 - decay) * (1 - decay);
-    time.value += dt * (clockSpeed + boost * pulse);
-    burstElapsed.value = Math.min(duration, burstElapsed.value + dt);
-  }, false);
-
-  useLayoutEffect(() => {
-    if (previousSlide.current !== slideIndex && active && !preview) {
-      burstElapsed.value = 0;
-    }
-    if (!active || preview) {
-      burstElapsed.value = duration;
-    }
-    previousSlide.current = slideIndex;
-  }, [slideIndex, active, preview, duration, burstElapsed]);
-
-  useLayoutEffect(() => {
-    // Outgoing audience slides become previews too: hold their last frame,
-    // rather than jumping to the fixed thumbnail time during the fade.
-    if (preparing) hasAnimated.current = false;
-    if (preview && !hasAnimated.current) time.value = previewTime;
-    if (active && !preview && !preparing && !hasAnimated.current) {
-      // A prepared preview holds previewTime, not the start of its entrance.
-      // Reset before activating the UI clock or letting the scene read its epoch.
-      time.value = 0;
-      hasAnimated.current = true;
-    }
-    frame.setActive(active && !preview && !preparing);
-    return () => frame.setActive(false);
-  }, [active, preview, preparing, previewTime, frame, time]);
-
-  return useDerivedValue(() => ({ ...uniforms, time: time.value }), [uniforms]);
+    const area = (t: number) => {
+      const a = Math.min(t, attack) / attack;
+      const d = Math.max(0, Math.min(1, (t - attack) / (duration - attack)));
+      return attack * (a * a - a * a * a / 3)
+        + (duration - attack) * (d - d * d + d * d * d / 3);
+    };
+    motion.value = { time: old.time + dt * rate + boost * (area(end) - area(start)),
+      raw: clock.slideTime, burst: end, slideIndex: index };
+  }, [adjusted, rate, boost, duration, slideIndex]);
+  return useDerivedValue(() => {
+    const state = playback.value;
+    const sampled = samplePlayback(state, previewTime);
+    return { ...uniforms,
+      time: adjusted && state.phase !== "preview" && state.phase !== "preparing" ? motion.value.time : sampled,
+      slideTime: sampled,
+      stepTime: samplePlayback(state, previewTime, "step"),
+      stepIndex: state.stepIndex,
+    };
+  }, [uniforms, adjusted, previewTime]);
 }

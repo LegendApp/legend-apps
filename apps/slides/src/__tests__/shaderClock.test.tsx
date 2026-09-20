@@ -1,4 +1,4 @@
-// @ts-nocheck The Reanimated mock exposes its UI-thread clock for lifecycle checks.
+// @ts-nocheck The mock queues UI transactions so JS cannot read a reset synchronously.
 import { expect, mock, test } from "bun:test";
 import { observable } from "@legendapp/state";
 import React, { useMemo, useRef } from "react";
@@ -6,15 +6,27 @@ import { act, create } from "react-test-renderer";
 import "./nativeMock";
 
 const frames = [];
+const transactions = [];
+const reactions = [];
+const reactUI = () => reactions.forEach(reaction => reaction.current());
 mock.module("react-native-reanimated", () => ({
+  __esModule: true,
+  default: { View: "animated-view" },
+  useAnimatedStyle: (read) => ({ get value() { return read(); } }),
+  runOnUI: (callback) => (...args) => transactions.push(() => callback(...args)),
   useSharedValue: (value) => useRef({ value }).current,
   useDerivedValue: (read) => ({ get value() { return read(); } }),
+  useAnimatedReaction: (prepare, react) => {
+    const reaction = useRef(() => {});
+    reaction.current = () => react(prepare());
+    useMemo(() => { reactions.push(reaction); }, []);
+  },
   useFrameCallback: (callback) => {
     const latest = useRef(callback);
     latest.current = callback;
     return useMemo(() => {
       const frame = { active: false, setActive(value) { this.active = value; },
-        tick() { if (this.active) latest.current({ timeSincePreviousFrame: 32 }); } };
+        tick(timestamp) { if (this.active) { latest.current({ timestamp }); reactUI(); } } };
       frames.push(frame);
       return frame;
     }, []);
@@ -23,42 +35,106 @@ mock.module("react-native-reanimated", () => ({
 const { PresentationProvider } = await import("../../../../packages/presentation/src/runtime");
 const { useAnimatedShaderUniforms } = await import("../../../../packages/presentation/src/useAnimatedShaderUniforms");
 
-test("outgoing shaders retain their last frame; fresh previews stay still and reflect intensity", async () => {
+test("shared shader clock resets atomically, advances through slow frames, and freezes outgoing content", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let uniforms;
   function Probe({ brightness }) {
     uniforms = useAnimatedShaderUniforms({ brightness }, 8);
     return null;
   }
-  const render = (isActive, isPreview, isPreparing = false, brightness = 1) =>
-    <PresentationProvider value={observable({ slideIndex: 0, isActive, isPreview, isPreparing })}>
-      <Probe brightness={brightness} />
-    </PresentationProvider>;
+  const render = (phase, stepIndex = 0, brightness = 1) =>
+    <PresentationProvider value={observable({
+      slideIndex: 0, stepIndex, startedAt: 100, stepStartedAt: stepIndex + 100,
+      playbackPhase: phase, isActive: phase === "playing", isPreview: phase === "preview",
+    })}><Probe brightness={brightness} /></PresentationProvider>;
+  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
-    await act(() => { tree = create(render(true, false)); });
-    const frame = frames.at(-1);
-    frame.tick();
-    const lastTime = uniforms.value.time;
-    expect(lastTime).toBeGreaterThan(0);
-    await act(() => tree.update(render(false, true)));
-    expect(frame.active).toBe(false);
-    frame.tick();
-    expect(uniforms.value.time).toBe(lastTime);
-    await act(() => tree.update(render(false, true, true)));
-    expect(uniforms.value.time).toBe(8);
-    await act(() => tree.update(render(false, true, false, 3)));
-    expect(uniforms.value).toEqual({ brightness: 3, time: 8 });
-    expect(frame.active).toBe(false);
-    await act(() => tree.update(render(true, false, false, 3)));
+    await act(() => { tree = create(render("preparing")); });
+    flushUI();
     expect(uniforms.value.time).toBe(0);
-    expect(frame.active).toBe(true);
-    frame.tick();
-    expect(uniforms.value.time).toBeCloseTo(0.032);
-    await act(() => tree.update(render(true, false, false, 4)));
-    expect(uniforms.value.time).toBeCloseTo(0.032);
-    await act(() => tree.update(render(false, true, false, 4)));
-    expect(uniforms.value.time).toBeCloseTo(0.032);
+    await act(() => tree.update(render("preview")));
+    flushUI();
+    expect(uniforms.value.time).toBe(8);
+    await act(() => tree.update(render("playing")));
+    // UI still owns the old snapshot until it applies the whole transaction.
+    expect(uniforms.value.time).toBe(8);
+    flushUI();
+    expect(uniforms.value.time).toBe(0);
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    frame.tick(6000);
+    expect(uniforms.value.time).toBe(5);
+    expect(uniforms.value.stepTime).toBe(5);
+    await act(() => tree.update(render("playing", 1)));
+    flushUI();
+    expect(uniforms.value.stepIndex).toBe(1);
+    expect(uniforms.value.stepTime).toBe(0);
+    expect(uniforms.value.time).toBe(5);
+    frame.tick(6100);
+    frame.tick(7100);
+    expect(uniforms.value.stepTime).toBe(1);
+    const lastTime = uniforms.value.time;
+    await act(() => tree.update(render("outgoing", 0)));
+    flushUI();
+    expect(frame.active).toBe(false);
+    frame.tick(20000);
+    expect(uniforms.value.time).toBe(lastTime);
+    expect(uniforms.value.stepIndex).toBe(1);
+    await act(() => tree.update(render("preview", 0, 3)));
+    flushUI();
+    expect(uniforms.value.time).toBe(8);
+    expect(uniforms.value.brightness).toBe(3);
+    await act(() => tree.update(render("playing", 0, 3)));
+    flushUI();
+    expect(uniforms.value.time).toBe(0);
+    frame.tick(30000);
+    frame.tick(31000);
+    await act(() => tree.update(render("playing", 0, 4)));
+    flushUI();
+    expect(uniforms.value.time).toBe(1);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
+});
+
+
+test("native motion and delayed particles sample the same preview, step, and outgoing timeline", async () => {
+  const { PlaybackKeyframeView } = await import("../../../../packages/presentation/src/PlaybackKeyframeView");
+  const { SceneMotionView } = await import("../../../../packages/presentation/src/SceneMotionView");
+  const keyframes = [{ time: 0, x: 0, y: 0, opacity: 0 },
+    { time: 1000, x: 10, y: 100, opacity: 1 }, { time: 2000, x: 20, y: 200, opacity: 0 }];
+  const render = (phase, stepIndex = 0) => <PresentationProvider value={observable({
+    playbackPhase: phase, slideIndex: 0, stepIndex,
+  })}>
+    <PlaybackKeyframeView keyframes={keyframes} delay={3000} repeatDuration={6000} previewTime={4} />
+    <SceneMotionView initialPose={{ x: 0 }} pose={{ x: 100 }} duration={1000} />
+  </PresentationProvider>;
+  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
+  let tree;
+  try {
+    await act(() => { tree = create(render("preview")); });
+    flushUI();
+    const styles = () => tree.root.findAllByType("animated-view").map(view => view.props.style[1].value);
+    expect(styles()[0].opacity).toBe(1);
+    expect(styles()[1].transform[0].translateX).toBe(100);
+    await act(() => tree.update(render("playing")));
+    flushUI();
+    expect(styles()[0].opacity).toBe(0);
+    expect(styles()[1].transform[0].translateX).toBe(0);
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    frame.tick(1500);
+    expect(styles()[1].transform[0].translateX).toBe(50);
+    frame.tick(5000);
+    expect(styles()[0].opacity).toBe(1);
+    await act(() => tree.update(render("outgoing")));
+    flushUI();
+    frame.tick(9000);
+    expect(styles()[0].opacity).toBe(1);
+    await act(() => tree.update(render("playing", 1)));
+    flushUI();
+    expect(styles()[0].opacity).toBe(0);
   } finally {
     if (tree) await act(() => tree.unmount());
   }

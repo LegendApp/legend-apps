@@ -14,6 +14,8 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
   const effects = [], calls = [], uniforms = [], errors = [];
+  const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
+    slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0 } };
   let callback, enabled = false;
   const frame = { setActive: value => { enabled = value; } };
   const pass = kind => ({
@@ -34,7 +36,8 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
     "react-native-webgpu": {},
     "@legend-apps/presentation": { usePresentationValue: field => ({
       isActive: active, isPreview: preview, isPreparing: preparing, stepIndex: 1,
-    })[field] },
+    })[field], usePlayback: () => playback,
+      samplePlayback: (state, previewTime) => state.phase === "preview" ? previewTime : state.stepTime },
     "react-native-reanimated": {
       useSharedValue: value => ({ value }),
       useFrameCallback: fn => { callback = fn; return frame; },
@@ -50,7 +53,9 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
     aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error) });
   const cleanup = effects.map(effect => effect());
   return { calls, uniforms, errors, enabled: () => enabled,
-    tick: () => callback({ timeSincePreviousFrame: 16 }),
+    playback,
+    tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
+      callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
 }
 
@@ -137,4 +142,19 @@ test("UI renderer requires Dawn synchronization and never retries an unsafe devi
     throw new Error("Unsupported synchronization");
   } })).rejects.toThrow("Unsupported synchronization");
   expect(attempts).toBe(1);
+});
+
+
+test("GPU particles reinitialize on preview promotion and step changes", () => {
+  const f = frames({ preview: true });
+  f.playback.value = { ...f.playback.value, phase: "playing", stepTime: 0 };
+  f.tick();
+  expect(f.uniforms.at(-1)[2]).toBe(0);
+  f.tick();
+  expect(f.uniforms.at(-1)[2]).toBe(1);
+  f.playback.value = { ...f.playback.value, stepKey: "next", stepIndex: 2, stepTime: 0 };
+  f.tick();
+  expect(f.uniforms.at(-1)[2]).toBe(0);
+  expect(f.uniforms.at(-1)[3]).toBe(2);
+  f.stop();
 });

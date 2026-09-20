@@ -41,3 +41,7 @@ export { useAnimatedShaderUniforms } from "./useAnimatedShaderUniforms";
 export { FilmstripMotionView } from "./FilmstripMotionView";
 
 export { ScenePositionView } from "./ScenePositionView";
+
+export { usePlayback, samplePlayback } from "./playback";
+export type { PlaybackPhase, PlaybackState } from "./playbackState";
+export { PlaybackKeyframeView, type PlaybackKeyframe } from "./PlaybackKeyframeView";
