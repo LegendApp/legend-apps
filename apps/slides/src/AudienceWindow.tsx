@@ -1,6 +1,6 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
-import { BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
+import { NavigationTransitionContext, BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -233,8 +233,10 @@ function AudienceContent() {
                 <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
                   reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
                   preparing={isPreload} settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
-                  <DeckRenderer isPreparing={isPreload} isOutgoing={!isPreload && layer.index !== currentSlide} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
-                    targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
+                  <NavigationTransitionContext.Provider value={{ progress, outgoing: !isPreload && layer.index !== currentSlide }}>
+                    <DeckRenderer isPreparing={isPreload} isOutgoing={!isPreload && layer.index !== currentSlide} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
+                      targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
+                  </NavigationTransitionContext.Provider>
                 </UserTransitionLayer>
               </SlideCanvas>
             </AudienceFocusSurface>

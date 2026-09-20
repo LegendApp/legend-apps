@@ -40,9 +40,10 @@ export function usePlayback() {
 }
 
 /** Preview sampling never mutates the running clock. */
-export function samplePlayback(state: PlaybackState, previewTime: number, clock: "slide" | "step" = "slide") {
+export function samplePlayback(state: PlaybackState, previewTime: number, clock: "slide" | "step" | number = "slide") {
   "worklet";
   if (state.phase === "preview") return previewTime;
   if (state.phase === "preparing") return 0;
+  if (typeof clock === "number") return state.stepIndex < clock ? 0 : Math.max(0, state.slideTime - (state.stepOrigins[clock] ?? 0));
   return clock === "step" ? state.stepTime : state.slideTime;
 }

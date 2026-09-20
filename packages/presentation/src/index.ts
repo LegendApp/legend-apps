@@ -45,3 +45,7 @@ export { ScenePositionView } from "./ScenePositionView";
 export { usePlayback, samplePlayback } from "./playback";
 export type { PlaybackPhase, PlaybackState } from "./playbackState";
 export { PlaybackKeyframeView, type PlaybackKeyframe } from "./PlaybackKeyframeView";
+
+export { usePlaybackTween } from "./usePlaybackTween";
+export { NavigationTransitionContext, NavigationExitView } from "./navigation";
+export { useSharedElementEntrance } from "./useSharedElementEntrance";

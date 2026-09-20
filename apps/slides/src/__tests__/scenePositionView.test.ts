@@ -12,41 +12,19 @@ const { code } = transformSync(readFileSync(filename, "utf8"), {
   plugins: [require.resolve("react-native-worklets/plugin")],
 });
 
-test("grouping changes only the transform and exposes logical destination geometry", () => {
-  const position = { value: 55 };
-  let updateStyle;
-  let appliedStyle;
+test("grouping keeps layout fixed and sends the logical destination to shared playback and measurement", () => {
   const module = { exports: {} };
   const mocks = {
-    react: { useLayoutEffect() {}, useContext: () => 0 },
-    "react-native-reanimated": {
-      __esModule: true, default: { View: "view" },
-      useSharedValue: () => position,
-      useAnimatedStyle: callback => {
-        updateStyle = callback;
-        appliedStyle ??= callback();
-        return appliedStyle;
-      },
-    },
+    react: { useContext: () => 20 },
+    "./SceneMotionView": { SceneMotionView: "scene-motion" },
     "./focus": { FocusLayoutOffsetContext: { Provider: "logical-offset" } },
-    "./runtime": { usePresentationValue: key => key === "isActive" },
   };
   new Function("require", "module", "exports", code)(name => mocks[name] ?? require(name), module, module.exports);
-  const render = y => module.exports.ScenePositionView({ y, children: null });
-  render(55);
-  const next = render(400);
-  // React commits while the UI thread still has the previous animated style.
-  const committed = Object.assign({}, ...next.props.style);
-  expect(committed.top + committed.transform[0].translateY).toBe(55);
-  // Native layout stays fixed; only the transform moves, on the UI thread.
-  const firstFrame = updateStyle();
-  expect(committed.top).toBe(0);
-  expect(firstFrame.top).toBeUndefined();
-  expect(next.props.children.props.value).toBe(400);
-  expect(firstFrame.transform[0].translateY).toBe(55);
-  position.value = 200;
-  const middle = updateStyle();
-  expect(middle.transform[0].translateY).toBe(200);
-  position.value = 400;
-  expect(updateStyle().transform[0].translateY).toBe(400);
+  for (const y of [55, 400, 100]) {
+    const rendered = module.exports.ScenePositionView({ y, children: null });
+    expect(rendered.type).toBe("scene-motion");
+    expect(Object.assign({}, ...rendered.props.style).top).toBe(0);
+    expect(rendered.props.pose).toEqual({ y });
+    expect(rendered.props.children.props.value).toBe(y + 20);
+  }
 });

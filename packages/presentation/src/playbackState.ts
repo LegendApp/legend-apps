@@ -12,11 +12,12 @@ export interface PlaybackState extends PlaybackInput {
   stepTime: number;
   lastTimestamp: number | null;
   stepPending: boolean;
+  stepOrigins: Record<number, number>;
 }
 
 export function createPlaybackState(input: PlaybackInput): PlaybackState {
   "worklet";
-  return { ...input, slideTime: 0, stepTime: 0, lastTimestamp: null, stepPending: false };
+  return { ...input, slideTime: 0, stepTime: 0, lastTimestamp: null, stepPending: false, stepOrigins: { [input.stepIndex]: 0 } };
 }
 
 export function transitionPlayback(state: PlaybackState, input: PlaybackInput): PlaybackState {
@@ -40,6 +41,9 @@ export function transitionPlayback(state: PlaybackState, input: PlaybackInput): 
     (enteringPlayback && state.phase !== "paused");
   return {
     ...input,
+    stepOrigins: restart ? { [input.stepIndex]: 0 } : stepChanged
+      ? { ...Object.fromEntries(Object.entries(state.stepOrigins).filter(([step]) => Number(step) < input.stepIndex)),
+          [input.stepIndex]: state.slideTime } : state.stepOrigins,
     slideTime: restart ? 0 : state.slideTime,
     stepTime: restart || stepChanged ? 0 : state.stepTime,
     lastTimestamp: restart || enteringPlayback || input.phase !== "playing" ? null : state.lastTimestamp,
@@ -58,6 +62,7 @@ export function advancePlayback(state: PlaybackState, timestamp: number): Playba
   return {
     ...state,
     slideTime: state.slideTime + elapsed,
+    stepOrigins: state.stepPending ? { ...state.stepOrigins, [state.stepIndex]: state.slideTime + elapsed } : state.stepOrigins,
     stepTime: state.stepPending ? 0 : state.stepTime + elapsed,
     lastTimestamp: timestamp,
     stepPending: false,

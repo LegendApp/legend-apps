@@ -139,3 +139,96 @@ test("native motion and delayed particles sample the same preview, step, and out
     if (tree) await act(() => tree.unmount());
   }
 });
+
+test("carousel retargets from its displayed position and freezes for navigation-owned exit", async () => {
+  const { FilmstripMotionView } = await import("../../../../packages/presentation/src/FilmstripMotionView");
+  const render = (phase, position) => <PresentationProvider value={observable({
+    playbackPhase: phase, slideIndex: 0, stepIndex: position,
+  })}><FilmstripMotionView index={0} count={9} enabled position={position}>card</FilmstripMotionView></PresentationProvider>;
+  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
+  let tree;
+  try {
+    await act(() => { tree = create(render("playing", 0)); });
+    flushUI();
+    const frame = frames.at(-1);
+    const x = () => tree.root.findByType("animated-view").props.style[1].value.transform[0].translateX;
+    frame.tick(1000);
+    await act(() => tree.update(render("playing", 1)));
+    flushUI();
+    frame.tick(1100);
+    frame.tick(1350);
+    expect(x()).toBe(-450);
+    await act(() => tree.update(render("playing", 2)));
+    flushUI();
+    expect(x()).toBe(-450);
+    frame.tick(1400);
+    frame.tick(1650);
+    expect(x()).toBe(-1125);
+    await act(() => tree.update(render("outgoing", 0)));
+    flushUI();
+    frame.tick(9000);
+    expect(x()).toBe(-1125);
+    await act(() => tree.update(render("preview", 0)));
+    flushUI();
+    expect(x()).toBeCloseTo(0);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
+});
+
+
+test("carousel exit reads the host transition directly without a second animation", async () => {
+  const { NavigationExitView, NavigationTransitionContext } = await import("../../../../packages/presentation/src/navigation");
+  const { Animated } = await import("react-native");
+  const progress = new Animated.Value(0);
+  let tree;
+  try {
+    await act(() => { tree = create(<NavigationTransitionContext.Provider value={{ progress, outgoing: true }}>
+      <NavigationExitView>card</NavigationExitView>
+    </NavigationTransitionContext.Provider>); });
+    const style = tree.root.findByType("layer").props.style[1];
+    expect(style.opacity.__getValue()).toBe(1);
+    progress.setValue(0.5);
+    expect(style.opacity.__getValue()).toBe(0.5);
+    expect(style.transform[0].scale.__getValue()).toBeCloseTo(0.94);
+    progress.setValue(1);
+    expect(style.opacity.__getValue()).toBe(0);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
+});
+
+test("step-anchored shader time starts on the trigger and continues through the next step", async () => {
+  let uniforms;
+  function Probe() { uniforms = useAnimatedShaderUniforms({}, 6, { clock: 1 }); return null; }
+  const render = stepIndex => <PresentationProvider value={observable({
+    playbackPhase: "playing", slideIndex: 0, stepIndex,
+  })}><Probe /></PresentationProvider>;
+  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
+  let tree;
+  try {
+    await act(() => { tree = create(render(0)); });
+    flushUI();
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    frame.tick(9000);
+    expect(uniforms.value.time).toBe(0);
+    expect(uniforms.value.slideTime).toBe(8);
+    await act(() => tree.update(render(1)));
+    flushUI();
+    frame.tick(9500);
+    expect(uniforms.value.time).toBe(0);
+    frame.tick(11500);
+    expect(uniforms.value.time).toBe(2);
+    await act(() => tree.update(render(2)));
+    flushUI();
+    frame.tick(12000);
+    expect(uniforms.value.time).toBe(2.5);
+    expect(uniforms.value.stepTime).toBe(0);
+    await act(() => tree.update(render(1)));
+    flushUI();
+    expect(uniforms.value.time).toBe(0);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
+});

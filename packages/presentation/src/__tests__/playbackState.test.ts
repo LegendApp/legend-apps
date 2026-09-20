@@ -96,3 +96,19 @@ test("unrelated rerenders preserve identity and timing, but changing slides rese
   assert.equal(otherSlide.stepTime, 0);
   assert.equal(otherSlide.lastTimestamp, null);
 });
+
+test("a triggered effect keeps its origin through later steps and resets on back/replay", () => {
+  let state = elapsedState();
+  state = transitionPlayback(state, { ...playing, stepKey: "strike", stepIndex: 1 });
+  state = advancePlayback(state, 3500);
+  const strike = state.stepOrigins[1];
+  state = advancePlayback(state, 5000);
+  state = transitionPlayback(state, { ...playing, stepKey: "zoom", stepIndex: 2 });
+  state = advancePlayback(state, 5500);
+  assert.equal(state.stepOrigins[1], strike);
+  assert.equal(state.slideTime - state.stepOrigins[1], 2);
+  state = transitionPlayback(state, { ...playing, stepKey: "strike-again", stepIndex: 1 });
+  state = advancePlayback(state, 6000);
+  assert.equal(state.slideTime - state.stepOrigins[1], 0);
+  assert.equal(state.stepOrigins[2], undefined);
+});
