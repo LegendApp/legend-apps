@@ -1,5 +1,5 @@
 import { splitSpeakerNoteSteps, speakerNoteOpacity } from "./speakerNoteSteps";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
@@ -7,7 +7,7 @@ import {
   type MarkdownStyle,
   type MarkdownTextInputStyle,
 } from "react-native-enriched-markdown";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
 
@@ -32,11 +32,18 @@ const viewerMarkdownStyle: MarkdownStyle = {
   strong: { color: "#fafafa" },
 };
 
-const editorMarkdownStyle: MarkdownTextInputStyle = {
-  em: { color: "#e4e4e7" },
-  link: { color: "#93c5fd", underline: true },
-  strong: { color: "#fafafa" },
-};
+const editorMarkdownStyle: MarkdownTextInputStyle = viewerMarkdownStyle;
+
+type NotesDismiss = { current: (() => void) | null };
+const NotesDismissContext = createContext<NotesDismiss | null>(null);
+
+/** Observe outside clicks without taking the responder from buttons or previews. */
+export function NotesEditingBoundary({ children, ...props }: ViewProps) {
+  const dismiss = useRef<(() => void) | null>(null);
+  return <NotesDismissContext.Provider value={dismiss}>
+    <View {...props} onTouchStart={() => dismiss.current?.()}>{children}</View>
+  </NotesDismissContext.Provider>;
+}
 
 type EditableMarkdownProps = {
   editable: boolean;
@@ -48,6 +55,7 @@ type EditableMarkdownProps = {
 };
 
 export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder }: EditableMarkdownProps) {
+  const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveQueueRef = useRef(Promise.resolve());
@@ -113,6 +121,16 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
       .finally(flushDraft);
   }, [flushDraft]);
 
+  useEffect(() => {
+    if (!editing || !dismiss) return;
+    const blur = () => {
+      inputRef.current?.blur();
+      finishEditing();
+    };
+    dismiss.current = blur;
+    return () => { if (dismiss.current === blur) dismiss.current = null; };
+  }, [dismiss, editing, finishEditing]);
+
   const startEditing = useCallback(() => {
     if (!editable || editingRef.current) {
       return;
@@ -153,6 +171,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
 
   if (editing) {
     return (
+      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.focusedShell]}>
       <EnrichedMarkdownTextInput
         ref={inputRef}
         autoFocus
@@ -174,6 +193,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
         selectionColor="#3b82f680"
         style={styles.editor}
       />
+      </View>
     );
   }
 
@@ -183,6 +203,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
       accessibilityRole={editable ? "button" : undefined}
       disabled={!editable}
       onPress={startEditing}
+      onTouchStart={(event) => event.stopPropagation()}
       style={styles.viewerShell}
     >
       {markdown.trim() ? (
@@ -217,5 +238,6 @@ const styles = StyleSheet.create({
   },
   placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 25 },
   viewer: { width: "100%" },
-  viewerShell: { flex: 1, minHeight: 44, width: "100%" },
+  viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
+  focusedShell: { borderColor: "#3b82f6" },
 });

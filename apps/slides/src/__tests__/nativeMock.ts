@@ -5,7 +5,7 @@ export const transitions = [];
 const numeric = (value) => typeof value === "number" ? value : value.__getValue();
 
 mock.module("react-native", () => ({
-  View: "view", Text: "text", PixelRatio: { get: () => 2 },
+  View: "view", Text: "text", Pressable: "pressable", PixelRatio: { get: () => 2 },
   StyleSheet: { create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
   Easing: { linear: (value) => value, inOut: (easing) => easing, cubic: (value) => value, out: (easing) => easing },
   Animated: {

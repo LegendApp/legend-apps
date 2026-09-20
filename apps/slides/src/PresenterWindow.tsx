@@ -29,7 +29,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { EditableMarkdown } from "./EditableMarkdown";
+import { EditableMarkdown, NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
 import {
@@ -679,7 +679,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
   }, []);
 
   return (
-    <View style={styles.root}>
+    <NotesEditingBoundary style={styles.root}>
       {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={() => setEditingDeck(false)} /> : <>
       <ConnectedPresenterToolbar
         presenter$={presenter$}
@@ -698,7 +698,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         onSaveNotes={saveSpeakerNotes}
       />
       </>}
-    </View>
+    </NotesEditingBoundary>
   );
 }
 
