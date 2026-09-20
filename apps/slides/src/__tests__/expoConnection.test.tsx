@@ -36,6 +36,8 @@ test("Expo connection restarts from its click timestamp without remounting eithe
   try {
     await act(() => { tree = create(<ExpoDesktopLayers />); });
     expect(desktopUniforms.connected).toBe(0);
+    // The JS clock may still contain a stale preview value at activation.
+    expect(desktopUniforms.startTime).toBe(0);
     expect(mounts).toBe(2);
     time = 19;
     runtime = { ...runtime, stepIndex: 1 };
