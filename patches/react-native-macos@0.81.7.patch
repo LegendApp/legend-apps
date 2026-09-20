@@ -1,5 +1,5 @@
 diff --git a/ReactCommon/react/runtime/hermes/HermesInstance.cpp b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
-index 485912d..121a80c 100644
+index d09f3a7e..d675577b 100644
 --- a/ReactCommon/react/runtime/hermes/HermesInstance.cpp
 +++ b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
 @@ -110,7 +110,9 @@ class HermesJSRuntime : public JSRuntime {
@@ -13,38 +13,43 @@ index 485912d..121a80c 100644
  
   private:
 diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
+index a14a8641..fa483a15 100644
 --- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
 +++ b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
-@@ -309,5 +309,4 @@
+@@ -308,7 +308,6 @@ - (void)setContentInset:(UIEdgeInsets)contentInset
+ 
    _contentInset = contentInset;
    _scrollView.contentInset = contentInset;
 -  _scrollView.scrollIndicatorInsets = contentInset;
  }
  #endif // macOS]
+ 
 diff --git a/ReactCommon/react/renderer/core/ShadowNodeFamily.h b/ReactCommon/react/renderer/core/ShadowNodeFamily.h
+index 83856089..bc06ce0f 100644
 --- a/ReactCommon/react/renderer/core/ShadowNodeFamily.h
 +++ b/ReactCommon/react/renderer/core/ShadowNodeFamily.h
 @@ -8,6 +8,7 @@
  #pragma once
-
+ 
  #include <memory>
 +#include <mutex>
  #include <shared_mutex>
-
+ 
  #include <react/renderer/core/EventEmitter.h>
-@@ -115,6 +116,8 @@
+@@ -115,6 +116,8 @@ class ShadowNodeFamily final : public jsi::NativeState {
     * not used. It is used to backport setNativeProps API from the old
     * architecture and will be removed in the future.
     */
 +  // setNativeProps on JS and animation commits on UI can access this concurrently.
 +  mutable std::mutex nativePropsMutex_;
    mutable std::unique_ptr<folly::dynamic> nativeProps_DEPRECATED;
-
+ 
    /**
 diff --git a/ReactCommon/react/renderer/core/ShadowNode.cpp b/ReactCommon/react/renderer/core/ShadowNode.cpp
+index a3af28d8..747e9f75 100644
 --- a/ReactCommon/react/renderer/core/ShadowNode.cpp
 +++ b/ReactCommon/react/renderer/core/ShadowNode.cpp
-@@ -140,13 +140,21 @@
+@@ -140,13 +140,21 @@ std::shared_ptr<ShadowNode> ShadowNode::clone(
      const ShadowNodeFragment& fragment) const {
    const auto& family = *family_;
    const auto& componentDescriptor = family.componentDescriptor_;
@@ -69,17 +74,18 @@ diff --git a/ReactCommon/react/renderer/core/ShadowNode.cpp b/ReactCommon/react/
            *this,
            {.props = props,
 diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/react/renderer/uimanager/UIManager.cpp
+index edee8ac3..5cc1c0a6 100644
 --- a/ReactCommon/react/renderer/uimanager/UIManager.cpp
 +++ b/ReactCommon/react/renderer/uimanager/UIManager.cpp
-@@ -118,6 +118,7 @@
+@@ -118,6 +118,7 @@ std::shared_ptr<ShadowNode> UIManager::cloneNode(
    auto props = ShadowNodeFragment::propsPlaceholder();
-
+ 
    if (!rawProps.isEmpty()) {
 +    std::lock_guard<std::mutex> lock(family.nativePropsMutex_);
      if (family.nativeProps_DEPRECATED != nullptr) {
        // 1. update the nativeProps_DEPRECATED props.
        //
-@@ -426,19 +427,22 @@
+@@ -426,19 +427,22 @@ void UIManager::setNativeProps_DEPRECATED(
      const std::shared_ptr<const ShadowNode>& shadowNode,
      RawProps rawProps) const {
    auto& family = shadowNode->getFamily();
@@ -113,12 +119,13 @@ diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/re
 +          std::make_unique<folly::dynamic>((folly::dynamic)rawProps);
 +    }
    }
-
+ 
    shadowTreeRegistry_.visit(
 diff --git a/Libraries/Animated/shouldUseTurboAnimatedModule.js b/Libraries/Animated/shouldUseTurboAnimatedModule.js
+index 2758cc73..4903c056 100644
 --- a/Libraries/Animated/shouldUseTurboAnimatedModule.js
 +++ b/Libraries/Animated/shouldUseTurboAnimatedModule.js
-@@ -15,6 +15,9 @@ function shouldUseTurboAnimatedModule(): boolean {
+@@ -15,7 +15,10 @@ function shouldUseTurboAnimatedModule(): boolean {
    if (ReactNativeFeatureFlags.cxxNativeAnimatedEnabled()) {
      return false;
    } else {
@@ -129,11 +136,12 @@ diff --git a/Libraries/Animated/shouldUseTurboAnimatedModule.js b/Libraries/Anim
 +    );
    }
  }
-
+ 
 diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTouchHandler.mm
+index 2d836435..79d3685a 100644
 --- a/React/Fabric/RCTSurfaceTouchHandler.mm
 +++ b/React/Fabric/RCTSurfaceTouchHandler.mm
-@@ -249,7 +249,13 @@
+@@ -249,7 +249,13 @@ - (void)detachFromView:(RCTPlatformView *)view // [macOS]
  - (void)_registerTouches:(NSSet<RCTUITouch *> *)touches // [macOS]
  {
    for (RCTUITouch *touch in touches) { // [macOS]
@@ -148,10 +156,10 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
      activeTouch.touch.identifier = _identifierPool.dequeue();
  #if !TARGET_OS_OSX // [macOS]
      _activeTouches.emplace(touch, activeTouch);
-@@ -445,6 +451,11 @@
+@@ -445,6 +451,11 @@ - (void)mouseDown:(NSEvent *)event
  {
    [super mouseDown:event];
-
+ 
 +  // AppKit text selection can consume mouseUp in a nested tracking loop.
 +  // A fresh click starts a new mouse gesture: cancel any abandoned press
 +  // before allocating another identifier from the fixed-size pool.
@@ -160,10 +168,10 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
    {
      NSSet* touches = [NSSet setWithObject:event];
      [self _registerTouches:touches]; // [macOS]
-@@ -462,9 +473,14 @@
+@@ -462,9 +473,14 @@ - (void)rightMouseDown:(NSEvent *)event
  {
    [super rightMouseDown:event];
-
+ 
 +  // AppKit text selection can consume mouseUp in a nested tracking loop.
 +  // A fresh click starts a new mouse gesture: cancel any abandoned press
 +  // before allocating another identifier from the fixed-size pool.
@@ -174,12 +182,12 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
 -		[self _registerTouches:touches]; // [macOS]
 +    [self _registerTouches:touches]; // [macOS]
      [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchStart];
-
+ 
      if (self.state == NSGestureRecognizerStatePossible) {
-@@ -479,6 +495,11 @@
+@@ -479,6 +495,11 @@ - (void)mouseDragged:(NSEvent *)event
  {
    [super mouseDragged:event];
-
+ 
 +  // Ignore trailing events for a mouse sequence that was already cancelled.
 +  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
 +    return;
@@ -188,10 +196,10 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
    NSSet* touches = [NSSet setWithObject:event];
    [self _updateTouches:touches]; // [macOS]
    [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchMove];
-@@ -490,6 +511,11 @@
+@@ -490,6 +511,11 @@ - (void)rightMouseDragged:(NSEvent *)event
  {
    [super rightMouseDragged:event];
-
+ 
 +  // Ignore trailing events for a mouse sequence that was already cancelled.
 +  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
 +    return;
@@ -200,22 +208,10 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
    NSSet* touches = [NSSet setWithObject:event];
    [self _updateTouches:touches]; // [macOS]
    [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchMove];
-@@ -500,6 +526,11 @@
- - (void)mouseUp:(NSEvent *)event
+@@ -501,6 +527,11 @@ - (void)mouseUp:(NSEvent *)event
  {
    [super mouseUp:event];
-+
-+  // Ignore trailing events for a mouse sequence that was already cancelled.
-+  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
-+    return;
-+  }
-
-   NSSet* touches = [NSSet setWithObject:event];
-   [self _updateTouches:touches]; // [macOS]
-@@ -513,6 +544,11 @@
- {
-   [super rightMouseUp:event];
-
+ 
 +  // Ignore trailing events for a mouse sequence that was already cancelled.
 +  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
 +    return;
@@ -224,29 +220,39 @@ diff --git a/React/Fabric/RCTSurfaceTouchHandler.mm b/React/Fabric/RCTSurfaceTou
    NSSet* touches = [NSSet setWithObject:event];
    [self _updateTouches:touches]; // [macOS]
    [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchEnd];
-@@ -526,7 +562,11 @@
+@@ -513,6 +544,11 @@ - (void)rightMouseUp:(NSEvent *)event
+ {
+   [super rightMouseUp:event];
+ 
++  // Ignore trailing events for a mouse sequence that was already cancelled.
++  if (_activeTouches.find(event.eventNumber) == _activeTouches.end()) {
++    return;
++  }
++
+   NSSet* touches = [NSSet setWithObject:event];
+   [self _updateTouches:touches]; // [macOS]
+   [self _dispatchActiveTouches:[self _activeTouchesFromTouches:touches] eventType:RCTTouchEventTypeTouchEnd];
+@@ -526,7 +562,11 @@ - (void)rightMouseUp:(NSEvent *)event
  - (void)reset
  {
    [super reset];
--
 +  [self _cancelActiveTouches];
 +}
-+
+ 
 +- (void)_cancelActiveTouches
 +{
    if (!_activeTouches.empty()) {
      std::vector<ActiveTouch> activeTouches;
      activeTouches.reserve(_activeTouches.size());
-@@ -539,8 +579,10 @@
-
+@@ -539,8 +579,10 @@ - (void)reset
+ 
      // Force-unregistering all the touches.
      _activeTouches.clear();
 -    _identifierPool.reset();
--  }
-+  }
+   }
 +  // Reset even if the map is empty: older duplicate registrations could
 +  // consume an identifier without inserting a corresponding active touch.
 +  _identifierPool.reset();
  }
-
+ 
  - (BOOL)canPreventGestureRecognizer:(__unused UIGestureRecognizer *)preventedGestureRecognizer
