@@ -478,12 +478,17 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
     displays: [], selectedDisplayId: null, rehearsalEnabled: getRehearsalEnabled(),
     activeMode: null, notesEditing: false, presenterLayoutResetVersion: 0,
   });
-  const setDisplays = presenter$.displays.set;
-  const setSelectedDisplayId = presenter$.selectedDisplayId.set;
-  const setRehearsalEnabled = presenter$.rehearsalEnabled.set;
-  const setActiveMode = presenter$.activeMode.set;
-  const setNotesEditing = presenter$.notesEditing.set;
-  const setPresenterLayoutResetVersion = presenter$.presenterLayoutResetVersion.set;
+  // Observable method reads return new wrappers. Capture them once for this
+  // session so window subscriptions and toolbar effects do not restart on renders.
+  const [{ setDisplays, setSelectedDisplayId, setRehearsalEnabled, setActiveMode,
+    setNotesEditing, setPresenterLayoutResetVersion }] = useState(() => ({
+    setDisplays: presenter$.displays.set,
+    setSelectedDisplayId: presenter$.selectedDisplayId.set,
+    setRehearsalEnabled: presenter$.rehearsalEnabled.set,
+    setActiveMode: presenter$.activeMode.set,
+    setNotesEditing: presenter$.notesEditing.set,
+    setPresenterLayoutResetVersion: presenter$.presenterLayoutResetVersion.set,
+  }));
   const keyboardJump$ = useObservable("");
   const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const audienceOpen = useValue(slidesState$.audienceOpen);
@@ -555,17 +560,20 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
         setSlidesState({ deckLocked: false });
       }
     });
-    const launchedPath = launchDeckPath(launchArguments);
-    const initialPath = launchedPath ?? getLastDeckPath();
-    if (initialPath) {
-      void loadDeck(initialPath, Boolean(launchedPath));
-    }
     return () => {
       displaysSubscription.remove();
       recentSubscription.remove();
       closedSubscription.remove();
     };
-  }, [audience, launchArguments, refreshDisplays, setActiveMode]);
+  }, [audience, refreshDisplays, setActiveMode]);
+
+  // Loading a deck belongs to launch/open actions, never window subscription
+  // setup. Depend on the path value, not the identity of native argument arrays.
+  const launchedPath = launchDeckPath(launchArguments);
+  useEffect(() => {
+    const initialPath = launchedPath ?? getLastDeckPath();
+    if (initialPath) void loadDeck(initialPath, Boolean(launchedPath));
+  }, [launchedPath]);
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
