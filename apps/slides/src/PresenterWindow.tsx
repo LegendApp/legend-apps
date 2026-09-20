@@ -31,7 +31,7 @@ import {
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { EditableMarkdown, NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
-import { applyPendingDeck, getLastDeckPath, loadDeck } from "./deckLoader";
+import { applyPendingDeck, loadDeck } from "./deckLoader";
 import {
   getRehearsalEnabled,
   rememberRehearsalEnabled,
@@ -78,7 +78,6 @@ import {
   useRehearsalTimerPausesWhileEditingSetting,
 } from "./slidesSettings";
 
-type PresenterWindowProps = { launchArguments?: string[] };
 
 const nextKeyCodes = new Set<number>([KeyCodes.KEY_RIGHT, KeyCodes.KEY_DOWN, KeyCodes.KEY_PAGE_DOWN, KeyCodes.KEY_SPACE]);
 const previousKeyCodes = new Set<number>([KeyCodes.KEY_LEFT, KeyCodes.KEY_UP, KeyCodes.KEY_PAGE_UP]);
@@ -460,20 +459,16 @@ function PresenterToolbar({
   return null;
 }
 
-function launchDeckPath(launchArguments?: string[]) {
-  return launchArguments?.find((argument) => argument.toLowerCase().endsWith(".mdx"));
-}
-
-export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
+export function PresenterWindow() {
   const [editingDeck, setEditingDeck] = useState(false);
   const editingDeckRef = useRef(false);
   editingDeckRef.current = editingDeck;
   const deckPath = useValue(slidesState$.deckPath);
-  const wasEditingDeck = useRef(false);
-  useEffect(() => {
-    if (wasEditingDeck.current && !editingDeck && deckPath) void loadDeck(deckPath, false);
-    wasEditingDeck.current = editingDeck;
-  }, [editingDeck, deckPath]);
+  const finishEditing = () => {
+    setEditingDeck(false);
+    editingDeckRef.current = false;
+    if (deckPath) void loadDeck(deckPath, false);
+  };
   const presenter$ = useObservable<PresenterSession>({
     displays: [], selectedDisplayId: null, rehearsalEnabled: getRehearsalEnabled(),
     activeMode: null, notesEditing: false, presenterLayoutResetVersion: 0,
@@ -566,14 +561,6 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
       closedSubscription.remove();
     };
   }, [audience, refreshDisplays, setActiveMode]);
-
-  // Loading a deck belongs to launch/open actions, never window subscription
-  // setup. Depend on the path value, not the identity of native argument arrays.
-  const launchedPath = launchDeckPath(launchArguments);
-  useEffect(() => {
-    const initialPath = launchedPath ?? getLastDeckPath();
-    if (initialPath) void loadDeck(initialPath, Boolean(launchedPath));
-  }, [launchedPath]);
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
@@ -688,7 +675,7 @@ export function PresenterWindow({ launchArguments }: PresenterWindowProps) {
 
   return (
     <NotesEditingBoundary style={styles.root}>
-      {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={() => setEditingDeck(false)} /> : <>
+      {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={finishEditing} /> : <>
       <ConnectedPresenterToolbar
         presenter$={presenter$}
         audienceOpen={audienceOpen}
@@ -797,7 +784,6 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
 
 function PresenterStatus() {
   const blackout = useValue(slidesState$.blackout);
-  const deckLocked = useValue(slidesState$.deckLocked);
   const state = {
     displayMessage: useValue(slidesState$.displayMessage),
     status: useValue(slidesState$.status),
@@ -806,9 +792,9 @@ function PresenterStatus() {
     buildWarnings: useValue(slidesState$.buildWarnings),
     runtimeErrors: useValue(slidesState$.runtimeErrors),
   };
-  useEffect(() => {
-    if (!deckLocked && state.pendingDeck) applyPendingDeck();
-  }, [deckLocked, state.pendingDeck]);
+  useObserveEffect(() => {
+    if (!slidesState$.deckLocked.get() && slidesState$.pendingDeck.get()) applyPendingDeck();
+  });
   return (
     <>
       {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
