@@ -3,6 +3,8 @@ import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-
 import { usePresentationValue } from "./runtime";
 
 type ShaderMotion = {
+  /** Restart an effect without remounting its Canvas or native surface. */
+  restartKey?: string | number;
   /** Constant clock rate, default 1. */
   speed?: number;
   /** Additional peak clock rate on a slide change, default 0. */
@@ -15,7 +17,7 @@ type ShaderMotion = {
 export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>,
   previewTime = 0,
-  { speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
+  { speed = 1, slideChangeBoost = 0, slideChangeDuration = 2, restartKey }: ShaderMotion = {},
 ) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
@@ -28,6 +30,13 @@ export function useAnimatedShaderUniforms(
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
   const duration = Number.isFinite(slideChangeDuration) ? Math.max(0.001, slideChangeDuration) : 2;
   const time = useSharedValue(preview ? previewTime : 0);
+  const previousRestartKey = useRef(restartKey);
+  useLayoutEffect(() => {
+    if (previousRestartKey.current !== restartKey) {
+      time.value = preview ? previewTime : 0;
+      previousRestartKey.current = restartKey;
+    }
+  }, [restartKey, preview, previewTime, time]);
   const frame = useFrameCallback((info) => {
     // Integrate velocity instead of scaling absolute time, so speed changes do not jump.
     const dt = Math.min(info.timeSincePreviousFrame ?? 0, 64) / 1000;
