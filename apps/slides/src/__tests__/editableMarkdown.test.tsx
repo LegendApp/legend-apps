@@ -7,12 +7,12 @@ const blur = mock(() => {});
 mock.module("react-native-enriched-markdown", () => ({
   EnrichedMarkdownText: "markdown",
   EnrichedMarkdownTextInput: ({ ref, ...props }) => {
-    useImperativeHandle(ref, () => ({ blur, getMarkdown: async () => "changed notes" }));
+    useImperativeHandle(ref, () => ({ blur, getMarkdown: () => new Promise(() => {}) }));
     return <editor {...props} />;
   },
 }));
 const { EditableMarkdown, NotesEditingBoundary } = await import("../EditableMarkdown");
-test("outside clicks finish notes editing, flush changes, and preserve markdown typography", async () => {
+test("outside clicks save immediately without waiting on an unmounted native editor", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const editing = mock(() => {}), save = mock(async () => {});
   let tree;
@@ -23,6 +23,7 @@ test("outside clicks finish notes editing, flush changes, and preserve markdown 
     const editor = tree.root.findByType("editor");
     expect(editor.props.markdownStyle).toBe(viewerStyle);
     expect(editor.parent.parent.props.style[1].borderColor).toBe("#3b82f6");
+    await act(() => editor.props.onChangeMarkdown("changed notes"));
     const stopPropagation = mock(() => {});
     await act(() => editor.parent.parent.props.onTouchStart({ stopPropagation }));
     expect(stopPropagation).toHaveBeenCalledTimes(1);

@@ -105,20 +105,13 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     if (!editingRef.current) {
       return;
     }
+    // onChangeMarkdown already owns the latest draft. Do not wait for a
+    // native getMarkdown response while unmounting that same native view:
+    // the response can be lost, leaving the final edit unsaved.
+    flushDraft();
     editingRef.current = false;
     setEditorInitialValue(null);
     onEditingChangeRef.current?.(false);
-    const input = inputRef.current;
-    if (!input) {
-      flushDraft();
-      return;
-    }
-    void input.getMarkdown()
-      .then((value) => {
-        draftMarkdownRef.current = value;
-      })
-      .catch(() => {})
-      .finally(flushDraft);
   }, [flushDraft]);
 
   useEffect(() => {
