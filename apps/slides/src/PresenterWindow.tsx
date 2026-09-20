@@ -125,11 +125,11 @@ function SlideCounter({ index }: { index: number }) {
   );
 }
 
-function Preview({ index, current = false, stepIndex, weight = 1 }: { index: number; current?: boolean; stepIndex?: number; weight?: number }) {
+function Preview({ index, current = false, animate = false, stepIndex, weight = 1 }: { index: number; current?: boolean; animate?: boolean; stepIndex?: number; weight?: number }) {
   return (
     <View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
-        <SlideCanvas targetIndex={index} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
+        <SlideCanvas targetIndex={index} isPreview={!animate} backgroundIsPreview><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex} /></SlideCanvas>
         {current && <SlideCounter index={index} />}
       </View>
     </View>
@@ -234,6 +234,7 @@ function PresenterWorkspace({
   showNext,
   showNotes,
 }: PresenterWorkspaceProps) {
+  const audienceOpen = useValue(slidesState$.audienceOpen);
   const layout$ = useObservable(() => getPresenterLayout());
   const layout = useValue(layout$);
   const workspaceSizeRef = useRef({ height: 0, width: 0 });
@@ -262,7 +263,7 @@ function PresenterWorkspace({
   return (
     <View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={currentIndex} current stepIndex={currentStep} weight={showNext ? layout.currentPreviewRatio : 1} />
+        <Preview index={currentIndex} current animate={!audienceOpen} stepIndex={currentStep} weight={showNext ? layout.currentPreviewRatio : 1} />
         {showNext && (
           <>
             <ResizeHandle
