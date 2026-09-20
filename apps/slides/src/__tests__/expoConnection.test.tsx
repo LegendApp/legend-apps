@@ -20,8 +20,13 @@ mock.module("@shopify/react-native-skia", () => ({
   // Intentionally do not render children in the native React tree. Hooks
   // placed beneath Canvas would never receive the presentation context.
   Canvas: () => { useEffect(() => { mounts++; }, []); return null; },
-  Fill: "fill", Shader: "shader", Path: "path",
-  Skia: { RuntimeEffect: { Make: () => ({}) } },
+  Fill: "fill", Shader: "shader", Path: "path", ImageShader: "image-shader",
+  matchFont: () => ({ measureText: () => ({ x: 0, y: -50, width: 440, height: 64 }), dispose() {} }),
+  Skia: {
+    RuntimeEffect: { Make: () => ({}) }, Color: (color) => color,
+    Paint: () => ({ setAntiAlias() {}, setColor() {}, dispose() {} }),
+    Surface: { Make: () => ({ getCanvas: () => ({ clear() {}, drawText() {} }), makeImageSnapshot: () => ({}), dispose() {} }) },
+  },
 }));
 const { ExpoDesktopLayers } = await import("../../decks/react-native-desktop/ExpoDesktopScene");
 
