@@ -106,10 +106,19 @@ export function Steps({ children }: StepsProps) {
 
 // Resolve in document order before rendering, independent of mount order or window.
 export function resolveSteps(children: ReactNode, listTypes: unknown[] = ["ul", "ol"]) {
+  return walkSteps(children, listTypes, true);
+}
+
+/** Discover navigation states without allocating a replacement React tree. */
+export function countSteps(children: ReactNode, listTypes: unknown[] = ["ul", "ol"]) {
+  return walkSteps(children, listTypes, false).steps;
+}
+
+function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   let cursor = 0;
   let maximum = 0;
   function visit(nodes: ReactNode): ReactNode {
-    return Children.map(nodes, (node) => {
+    const visitor = (node: ReactNode): ReactNode => {
       if (!isValidElement<StepProps & { count?: number }>(node)) return node;
       if (node.type === Steps) {
         if (typeof node.props.children === "function") {
@@ -127,6 +136,13 @@ export function resolveSteps(children: ReactNode, listTypes: unknown[] = ["ul", 
           if (isValidElement<{ children?: ReactNode }>(child) && listTypes.includes(child.type)) return Children.toArray(child.props.children);
           return [child];
         }).filter((child) => typeof child !== "string" || child.trim());
+        if (!render) {
+          for (const child of items) {
+            maximum = Math.max(maximum, ++cursor);
+            visit(child);
+          }
+          return node;
+        }
         return cloneElement(node, {}, items.map((child, index) => visit(
           <Step key={index} transition={node.props.transition}>{child}</Step>,
         )));
@@ -136,10 +152,14 @@ export function resolveSteps(children: ReactNode, listTypes: unknown[] = ["ul", 
         const at = props.at ?? (props.states ? 0 : cursor + 1);
         cursor = Math.max(cursor, at, ...Object.keys(props.states ?? {}).map(Number), props.until ?? 0);
         maximum = Math.max(maximum, cursor);
-        props = { ...props, at };
+        if (render) props = { ...props, at };
       }
-      return cloneElement(node, props, visit(props.children));
-    });
+      const content = visit(props.children);
+      return render ? cloneElement(node, props, content) : node;
+    };
+    if (render) return Children.map(nodes, visitor);
+    Children.forEach(nodes, visitor);
+    return nodes;
   }
   const content = visit(children);
   return { content, steps: maximum + 1 };

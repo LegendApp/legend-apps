@@ -38,7 +38,7 @@ import { normalizeStepCount, getSlidesState, nextSlide, previousSlide, reportSli
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Layout, LayoutStage } from "./Layout";
 import { SlideSurface } from "./SlideSurface";
-import { Step, Steps, resolveSteps } from "./steps";
+import { Step, Steps, countSteps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
 import { LiquidGlass } from "./LiquidGlass";
 import { Effect } from "./Effect";
@@ -74,11 +74,10 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
   const parsedConfig = parseObject<DeckConfig>(configJson, {});
   const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
-  const resolved = elements.map((element) => resolveSteps(element.props.children, [markdownComponents.ul, markdownComponents.ol]));
-  const slides = elements.map((element, index) => ({
+  const slides = elements.map((element) => ({
     metadata: (() => {
       const parsed = parseObject<SlideConfig>(element.props.metadataJson, {});
-      return { ...parsed, steps: Math.max(resolved[index].steps, typeof parsed.steps === "number" ? parsed.steps : 1), transition: normalizeTransition(parsed.transition) };
+      return { ...parsed, steps: Math.max(countSteps(element.props.children, [markdownComponents.ul, markdownComponents.ol]), typeof parsed.steps === "number" ? parsed.steps : 1), transition: normalizeTransition(parsed.transition) };
     })(),
     notes: element.props.notes,
   }));
@@ -119,7 +118,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const background = selectedMetadata.background ?? config.background;
   const resolvedTemplate = resolveSlideTemplate(templates, config, selectedMetadata);
   const Template = resolvedTemplate.component;
-  const content = renderMdxChildren(resolved[selectedIndex].content);
+  const content = renderMdxChildren(resolveSteps(selected.props.children, [markdownComponents.ul, markdownComponents.ol]).content);
   return (
     <PresentationObservableProvider value={runtime$}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
