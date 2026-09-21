@@ -1,6 +1,6 @@
 import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
-import { samplePlayback, useRenderPlayback } from "./playback";
+import { samplePlayback, usePlayback } from "./playback";
 
 type ShaderMotion = { clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
 
@@ -9,7 +9,7 @@ export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>, previewTime = 0,
   { clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
-  const playback = useRenderPlayback();
+  const playback = usePlayback();
   const slideIndex = usePresentationValue("slideIndex");
   const rate = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;

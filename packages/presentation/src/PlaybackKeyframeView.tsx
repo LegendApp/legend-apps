@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { samplePlayback, useRenderPlayback } from "./playback";
+import { samplePlayback, usePlayback } from "./playback";
 
 export type PlaybackKeyframe = { time: number; x: number; y: number; opacity: number };
 
@@ -9,7 +9,7 @@ export type PlaybackKeyframe = { time: number; x: number; y: number; opacity: nu
 export function PlaybackKeyframeView({ children, keyframes, delay = 0, repeatDuration, previewTime = 4,
   clock = "step", style }: { children?: ReactNode; keyframes: PlaybackKeyframe[]; delay?: number;
   repeatDuration?: number; previewTime?: number; clock?: "slide" | "step"; style?: StyleProp<ViewStyle> }) {
-  const playback = useRenderPlayback();
+  const playback = usePlayback();
   const animatedStyle = useAnimatedStyle(() => {
     const elapsed = samplePlayback(playback.value, previewTime, clock) * 1000 - delay;
     const time = elapsed < 0 ? 0 : repeatDuration ? elapsed % repeatDuration : elapsed;
