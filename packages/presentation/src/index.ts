@@ -49,3 +49,5 @@ export { PlaybackKeyframeView, type PlaybackKeyframe } from "./PlaybackKeyframeV
 export { usePlaybackTween } from "./usePlaybackTween";
 export { NavigationTransitionContext, NavigationExitView } from "./navigation";
 export { useSharedElementEntrance } from "./useSharedElementEntrance";
+export { liquidGlassShader } from "./liquidGlassShader";
+export { useLiquidGlassPlayback } from "./useLiquidGlassPlayback";

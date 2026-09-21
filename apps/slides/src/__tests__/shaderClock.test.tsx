@@ -232,3 +232,38 @@ test("step-anchored shader time starts on the trigger and continues through the 
     if (tree) await act(() => tree.unmount());
   }
 });
+
+test("glass blur and refraction form and clear on one playback tween", async () => {
+  const { useLiquidGlassPlayback } = await import("../../../../packages/presentation/src/useLiquidGlassPlayback");
+  let glass;
+  function Probe({ active }) { glass = useLiquidGlassPlayback({ active, width: 1696, height: 680 }); return null; }
+  const render = (step, phase = "playing") => <PresentationProvider value={observable({
+    playbackPhase: phase, slideIndex: 0, stepIndex: step,
+  })}><Probe active={step >= 4} /></PresentationProvider>;
+  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
+  let tree;
+  try {
+    await act(() => { tree = create(render(3)); });
+    flushUI();
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    await act(() => tree.update(render(4)));
+    flushUI();
+    frame.tick(1100);
+    frame.tick(1450);
+    expect(glass.uniforms.value.progress).toBeCloseTo(0.5);
+    expect(glass.blur.value).toBeCloseTo(12);
+    frame.tick(1800);
+    expect(glass.blur.value).toBe(24);
+    await act(() => tree.update(render(3)));
+    flushUI();
+    frame.tick(1900);
+    frame.tick(2250);
+    expect(glass.blur.value).toBeCloseTo(12);
+    await act(() => tree.update(render(4, "preview")));
+    flushUI();
+    expect(glass.blur.value).toBe(24);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
+});
