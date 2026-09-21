@@ -18,8 +18,11 @@ export function useAnimatedShaderUniforms(
   const motion = useSharedValue({ time: 0, raw: 0, burst: duration, slideIndex });
   // Background speed modulation integrates the shared elapsed clock. It owns
   // no frame loop, never caps elapsed time, and does not change step timing.
-  useAnimatedReaction(() => ({ clock: playback.value, index: slideIndex }), ({ clock, index }) => {
-    if (!adjusted) return;
+  // Do not subscribe this optional integrator to every frame for normal-speed
+  // shaders. Their uniform derivation below is the only clock consumer needed.
+  useAnimatedReaction(() => adjusted ? { clock: playback.value, index: slideIndex } : null, (sample) => {
+    if (!sample) return;
+    const { clock, index } = sample;
     if (clock.phase === "preparing" || clock.slideTime < motion.value.raw) {
       motion.value = { time: 0, raw: 0, burst: duration, slideIndex: index };
     }
