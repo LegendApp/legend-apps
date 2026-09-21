@@ -15,6 +15,7 @@ export type FocusSurface = {
   layoutVersion: number;
   measurements?: { version: number; entries: Entry[]; result: FocusMeasurements };
   preparation?: Promise<void>;
+  pendingMeasurements?: Map<Entry, Promise<FocusRect | undefined>>;
 };
 export type FocusMeasurements = { regions: Map<string, FocusRect>; elements: Map<string, FocusRect> };
 export type FocusMotion = {
@@ -49,6 +50,7 @@ export function createFocusSurface(): FocusSurface {
 export function invalidateFocusSurface(surface: FocusSurface) {
   surface.layoutVersion++;
   surface.measurements = undefined;
+  surface.pendingMeasurements = undefined;
 }
 
 /** Layout/setup work only: preloaded slides finish this before navigation. */
@@ -87,20 +89,32 @@ async function readFocusSurface(surface: FocusSurface, include: (entry: Entry) =
   const duplicates = new Set<string>();
   const root = surface.root;
   if (!root) return { regions, elements };
-  await Promise.all([...surface.entries].filter(include).map((entry) => new Promise<void>((resolve) => {
+  await Promise.all([...surface.entries].filter(include).map(async (entry) => {
+    const rect = await readFocusEntry(surface, root, entry);
+    if (rect && validFocusRect(rect)) {
+      const map = entry.kind === "region" ? regions : elements;
+      const key = `${entry.kind}:${entry.id}`;
+      if (map.has(entry.id)) duplicates.add(key);
+      if (!duplicates.has(key)) map.set(entry.id, rect);
+      else map.delete(entry.id);
+    }
+  }));
+  return { regions, elements };
+}
+
+/** Share only the requested entry: an unrelated preparation timeout must not hold up navigation. */
+function readFocusEntry(surface: FocusSurface, root: View, entry: Entry): Promise<FocusRect | undefined> {
+  const pending = surface.pendingMeasurements ??= new Map();
+  const existing = pending.get(entry);
+  if (existing) return existing;
+  const version = surface.layoutVersion;
+  const measurement = new Promise<FocusRect | undefined>((resolve) => {
     let finished = false;
     const finish = (rect?: FocusRect) => {
       if (finished) return;
       finished = true;
       clearTimeout(timeout);
-      if (rect && validFocusRect(rect)) {
-        const map = entry.kind === "region" ? regions : elements;
-        const key = `${entry.kind}:${entry.id}`;
-        if (map.has(entry.id)) duplicates.add(key);
-        if (!duplicates.has(key)) map.set(entry.id, rect);
-        else map.delete(entry.id);
-      }
-      resolve();
+      resolve(surface.layoutVersion === version && surface.root === root && surface.entries.has(entry) ? rect : undefined);
     };
     // Native measurement callbacks can disappear when a slide unmounts mid-request.
     const timeout = setTimeout(() => finish(), 120);
@@ -109,8 +123,12 @@ async function readFocusSurface(surface: FocusSurface, include: (entry: Entry) =
     } catch {
       finish();
     }
-  })));
-  return { regions, elements };
+  });
+  // Retain successful per-entry results while unrelated preparation entries
+  // are still outstanding. Invalidation drops the whole version's map.
+  void measurement.then(rect => { if (!rect || !validFocusRect(rect)) pending.delete(entry); });
+  pending.set(entry, measurement);
+  return measurement;
 }
 
 /** Ignore unrelated markers: missing callbacks there must not delay navigation. */
