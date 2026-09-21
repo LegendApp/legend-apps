@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { advancePlayback, createPlaybackState, transitionPlayback, playbackMatchesRender, type PlaybackInput } from "../playbackState.ts";
+import { advancePlayback, createPlaybackState, transitionPlayback, type PlaybackInput } from "../playbackState.ts";
 
 const playing: PlaybackInput = { phase: "playing", slideKey: "slide-a", stepKey: "step-0", stepIndex: 0 };
 const elapsedState = () => advancePlayback(advancePlayback(createPlaybackState(playing), 1000), 3000);
@@ -113,18 +113,21 @@ test("a triggered effect keeps its origin through later steps and resets on back
   assert.equal(state.stepOrigins[2], undefined);
 });
 
-test("new reveals reject stale time until the matching step reset arrives", () => {
+test("rendering a new step immediately projects its initial pose without hiding or mutating the clock", () => {
   const old = advancePlayback(advancePlayback(createPlaybackState(playing), 1000), 21000);
   const next = { ...playing, stepKey: "step-1", stepIndex: 1 };
-  assert.equal(playbackMatchesRender(old, next.slideKey, next.stepKey, next.phase), false);
-  assert.equal(playbackMatchesRender(old, next.slideKey, next.stepKey, next.phase, false), true, "ongoing slide-clock content must not blink on a step change");
-  const ready = transitionPlayback(old, next);
-  assert.equal(playbackMatchesRender(ready, next.slideKey, next.stepKey, next.phase), true);
-  assert.equal(ready.stepTime, 0, "emoji and foundation reveal delays must start at zero");
-  assert.equal(playbackMatchesRender(ready, "other-slide", next.stepKey, next.phase), false);
-  assert.equal(playbackMatchesRender(ready, next.slideKey, "replay-step-1", next.phase), false);
-  assert.equal(playbackMatchesRender(ready, "cleared", "cleared", "outgoing"), true);
-  assert.equal(playbackMatchesRender(ready, "cleared", "cleared", "paused"), true);
-  const preview = transitionPlayback(ready, { ...next, phase: "preview" });
-  assert.equal(playbackMatchesRender(preview, next.slideKey, next.stepKey, "playing"), false);
+  const projected = transitionPlayback(old, next);
+  assert.equal(projected.phase, "playing");
+  assert.equal(projected.stepTime, 0);
+  assert.equal(projected.slideTime, old.slideTime, "slide animations continue uninterrupted");
+  assert.equal(old.stepTime, 20, "projection does not mutate the authoritative clock");
+  assert.equal(projected.stepOrigins[1], old.slideTime);
+  const published = transitionPlayback(old, next);
+  assert.deepEqual(projected, published, "render and provider apply exactly the same transition");
+  assert.equal(transitionPlayback(published, next), published);
+  const otherSlide = transitionPlayback(old, { ...next, slideKey: "other" });
+  assert.equal(otherSlide.slideTime, 0);
+  assert.equal(otherSlide.stepTime, 0);
+  const outgoing = transitionPlayback(old, { ...next, phase: "outgoing" });
+  assert.equal(outgoing.stepTime, old.stepTime);
 });

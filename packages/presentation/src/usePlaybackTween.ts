@@ -1,5 +1,5 @@
 import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
-import { usePlayback } from "./playback";
+import { useRenderPlayback } from "./playback";
 
 export type PlaybackEasing = "cubic" | "smoothstep";
 type Values = Record<string, number>;
@@ -19,7 +19,7 @@ function interpolate(from: Values, to: Values, elapsed: number, duration: number
 
 /** Interrupted targets continue from the displayed pose on the shared step clock. */
 export function usePlaybackTween<T extends Values>(target: T, duration = 650, initial?: T, easing: PlaybackEasing = "cubic") {
-  const playback = usePlayback();
+  const playback = useRenderPlayback();
   const entrance = initial !== undefined;
   const from = initial ?? target;
   const motion = useSharedValue({ from, to: target, start: 0, slideKey: "", stepKey: "", played: false, last: from });
