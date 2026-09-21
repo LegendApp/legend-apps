@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { transformSync } from "esbuild";
 import React from "react";
+import { createSnapshotCaptureQueue } from "../snapshotCaptureQueue.ts";
 
 const require = createRequire(new URL("../../../../apps/slides/package.json", import.meta.url));
 const { act, create } = require("react-test-renderer");
@@ -19,6 +20,7 @@ test("carousel blur captures once per layout, preserves live fallback, and cance
   globalThis.cancelAnimationFrame = id => frames.delete(id);
   const mocks = {
     react: React,
+    "./snapshotCaptureQueue": { snapshotCaptureQueue: createSnapshotCaptureQueue() },
     "react-native": { View: "view", StyleSheet: { create: x => x, absoluteFill: {} } },
     "react-native-reanimated": {
       __esModule: true, default: { View: "animated" },

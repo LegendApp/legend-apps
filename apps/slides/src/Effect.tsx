@@ -13,7 +13,7 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, usePresentationValue } from "@legend-apps/presentation";
+import { renderNativeChildren, usePresentationValue, snapshotCaptureQueue } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
@@ -174,26 +174,24 @@ export function Effect({
     }
     let cancelled = false;
     let captured: SkImage | undefined;
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        void makeImageFromView(sourceRef).then((snapshot) => {
-          if (!snapshot) {
-            return;
-          }
-          if (cancelled) {
-            snapshot.dispose();
-            return;
-          }
-          captured = snapshot;
-          setSnapshot({ image: snapshot, scale: captureScale, width: size.width, height: size.height });
-        }).catch(() => {
-          // Unsupported capture paths fall back to the unfiltered children.
-        });
+    const cancelCapture = snapshotCaptureQueue.enqueue(async () => {
+      await makeImageFromView(sourceRef).then((snapshot) => {
+        if (!snapshot) {
+          return;
+        }
+        if (cancelled) {
+          snapshot.dispose();
+          return;
+        }
+        captured = snapshot;
+        setSnapshot({ image: snapshot, scale: captureScale, width: size.width, height: size.height });
+      }).catch(() => {
+        // Unsupported capture paths fall back to the unfiltered children.
       });
     });
     return () => {
       cancelled = true;
-      cancelAnimationFrame(frame);
+      cancelCapture();
       captured?.dispose();
     };
   }, [captureScale, runtimeEffect, shouldRender, size.height, size.width]);

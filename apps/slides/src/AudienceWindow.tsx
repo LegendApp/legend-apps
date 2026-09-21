@@ -1,6 +1,6 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
-import { NavigationTransitionContext, BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
+import { SnapshotCaptureBoundary, NavigationTransitionContext, BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -56,6 +56,7 @@ function AudienceContent() {
   const [surfaces] = useState(() => new Map<number, FocusSurface>());
   const [transitionState, setTransitionState] = useState(() => ({
     index: currentSlide,
+    preparationIndex: currentSlide,
     revision,
     outgoing: null as number | null,
     outgoingStep: 0,
@@ -76,6 +77,7 @@ function AudienceContent() {
       (!hasShared && (resolved.kind === "none" || resolved.duration === 0));
     setTransitionState({
       index: currentSlide,
+      preparationIndex: cut ? currentSlide : transitionState.preparationIndex,
       revision,
       outgoing: cut ? null : transitionState.index,
       outgoingStep: lastPresented.current.index === transitionState.index ? lastPresented.current.step : 0,
@@ -141,6 +143,7 @@ function AudienceContent() {
       if (!cancelled && transitionState.kind === "none" && !motions.size) progress.setValue(1);
       if (!cancelled) setTransitionState((current) => current === transitionState
         ? { ...current, ready: true, motions,
+          preparationIndex: current.kind === "none" && !motions.size ? current.index : current.preparationIndex,
           outgoing: current.kind === "none" && !motions.size ? null : current.outgoing } : current);
     };
     // Child layout effects have registered the preloaded surfaces. Fabric
@@ -177,7 +180,7 @@ function AudienceContent() {
       }
       transitionState.progress.setValue(1);
       setTransitionState((current) => current === transitionState
-        ? { ...current, outgoing: null, motions: new Map() } : current);
+        ? { ...current, outgoing: null, preparationIndex: current.index, motions: new Map() } : current);
     };
     animation.start(({ finished }) => {
       if (finished) finishTransition("native-completion");
@@ -208,9 +211,12 @@ function AudienceContent() {
         { index: outgoingSlide, style: transitionState.definition ? visibleStyle : outgoingStyle },
         { index: currentSlide, style: transitionState.definition ? visibleStyle : enteringStyle },
       ];
+  // Keep existing neighbors mounted during motion. Replenish the farthest
+  // slots only after settling, so their layouts/shaders/captures do not compete.
+  const preparationIndex = Math.min(Math.max(0, slideCount - 1), transitionState.preparationIndex);
   const preparedIndexes = Array.from(
-    { length: Math.min(slideCount - 1, currentSlide + 2) - Math.max(0, currentSlide - 2) + 1 },
-    (_, offset) => Math.max(0, currentSlide - 2) + offset,
+    { length: Math.min(slideCount - 1, preparationIndex + 2) - Math.max(0, preparationIndex - 2) + 1 },
+    (_, offset) => Math.max(0, preparationIndex - 2) + offset,
   );
   const renderedLayers = [
     ...preparedIndexes.filter((index) => !layers.some((layer) => layer.index === index))
@@ -219,7 +225,7 @@ function AudienceContent() {
   ];
 
   return (
-    <>
+    <SnapshotCaptureBoundary suspended={previousSlide !== null}>
       {renderedLayers.map((layer) => {
         const isPreload = !layers.some((visibleLayer) => visibleLayer.index === layer.index);
         // Measurements being ready does not mean Fabric has applied the graph.
@@ -244,7 +250,7 @@ function AudienceContent() {
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
-    </>
+    </SnapshotCaptureBoundary>
   );
 }
 

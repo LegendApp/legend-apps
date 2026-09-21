@@ -51,3 +51,6 @@ export { NavigationTransitionContext, NavigationExitView } from "./navigation";
 export { useSharedElementEntrance } from "./useSharedElementEntrance";
 export { liquidGlassShader } from "./liquidGlassShader";
 export { useLiquidGlassPlayback } from "./useLiquidGlassPlayback";
+
+export { SnapshotCaptureBoundary } from "./SnapshotCaptureBoundary";
+export { snapshotCaptureQueue } from "./snapshotCaptureQueue";

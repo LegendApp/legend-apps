@@ -1,3 +1,4 @@
+import { snapshotCaptureQueue } from "./snapshotCaptureQueue";
 import { Blur, Canvas, Group, Image as SkiaImage, Paint, makeImageFromView, type SkImage } from "@shopify/react-native-skia";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
@@ -15,20 +16,17 @@ export function CarouselBlurView({ children, progress, index, enabled }: {
     if (!enabled || !size.width || !size.height) return;
     let cancelled = false;
     let captured: SkImage | undefined;
-    // Let the native source and nested canvases finish mounting before capture.
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        void makeImageFromView(source).then(snapshot => {
-          if (!snapshot) return;
-          if (cancelled) { snapshot.dispose(); return; }
-          captured = snapshot;
-          setImage(snapshot);
-        }).catch(() => { /* Keep live content if native capture is unavailable. */ });
-      });
+    const cancelCapture = snapshotCaptureQueue.enqueue(async () => {
+      await makeImageFromView(source).then(snapshot => {
+        if (!snapshot) return;
+        if (cancelled) { snapshot.dispose(); return; }
+        captured = snapshot;
+        setImage(snapshot);
+      }).catch(() => { /* Keep live content if native capture is unavailable. */ });
     });
     return () => {
       cancelled = true;
-      cancelAnimationFrame(frame);
+      cancelCapture();
       captured?.dispose();
     };
   }, [enabled, size.width, size.height]);
