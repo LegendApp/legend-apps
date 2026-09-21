@@ -68,3 +68,11 @@ export function advancePlayback(state: PlaybackState, timestamp: number): Playba
     stepPending: false,
   };
 }
+
+/** New React content must not sample the previous navigation's UI-thread clock. */
+export function playbackMatchesRender(state: PlaybackState, slideKey: string, stepKey: string, phase: PlaybackPhase, checkStep = true) {
+  "worklet";
+  // Outgoing/paused projections intentionally retain their last live identity.
+  if (phase === "outgoing" || phase === "paused") return true;
+  return state.phase === phase && state.slideKey === slideKey && (!checkStep || state.stepKey === stepKey);
+}

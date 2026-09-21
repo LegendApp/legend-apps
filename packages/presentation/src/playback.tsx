@@ -1,9 +1,11 @@
-import { createContext, useContext, useLayoutEffect, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, type ReactNode } from "react";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { PresentationRuntime } from "./types";
 import { advancePlayback, createPlaybackState, transitionPlayback, type PlaybackPhase, type PlaybackState } from "./playbackState";
+
+const PlaybackIdentityContext = createContext<{ phase: PlaybackPhase; slideKey: string; stepKey: string } | null>(null);
 
 const PlaybackContext = createContext<SharedValue<PlaybackState> | null>(null);
 
@@ -30,7 +32,10 @@ export function PlaybackProvider({ runtime$, children }: { runtime$: Observable<
     frame.setActive(phase === "playing");
     return () => frame.setActive(false);
   }, [phase, slideKey, stepKey, stepIndex, frame, state]);
-  return <PlaybackContext.Provider value={state}>{children}</PlaybackContext.Provider>;
+  const identity = useMemo(() => ({ phase, slideKey, stepKey }), [phase, slideKey, stepKey]);
+  return <PlaybackIdentityContext.Provider value={identity}>
+    <PlaybackContext.Provider value={state}>{children}</PlaybackContext.Provider>
+  </PlaybackIdentityContext.Provider>;
 }
 
 export function usePlayback() {
@@ -46,4 +51,10 @@ export function samplePlayback(state: PlaybackState, previewTime: number, clock:
   if (state.phase === "preparing") return 0;
   if (typeof clock === "number") return state.stepIndex < clock ? 0 : Math.max(0, state.slideTime - (state.stepOrigins[clock] ?? 0));
   return clock === "step" ? state.stepTime : state.slideTime;
+}
+
+export function usePlaybackIdentity() {
+  const identity = useContext(PlaybackIdentityContext);
+  if (!identity) throw new Error("Animation must be inside a presentation surface.");
+  return identity;
 }

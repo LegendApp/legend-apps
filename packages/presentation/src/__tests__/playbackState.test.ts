@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { advancePlayback, createPlaybackState, transitionPlayback, type PlaybackInput } from "../playbackState.ts";
+import { advancePlayback, createPlaybackState, transitionPlayback, playbackMatchesRender, type PlaybackInput } from "../playbackState.ts";
 
 const playing: PlaybackInput = { phase: "playing", slideKey: "slide-a", stepKey: "step-0", stepIndex: 0 };
 const elapsedState = () => advancePlayback(advancePlayback(createPlaybackState(playing), 1000), 3000);
@@ -111,4 +111,20 @@ test("a triggered effect keeps its origin through later steps and resets on back
   state = advancePlayback(state, 6000);
   assert.equal(state.slideTime - state.stepOrigins[1], 0);
   assert.equal(state.stepOrigins[2], undefined);
+});
+
+test("new reveals reject stale time until the matching step reset arrives", () => {
+  const old = advancePlayback(advancePlayback(createPlaybackState(playing), 1000), 21000);
+  const next = { ...playing, stepKey: "step-1", stepIndex: 1 };
+  assert.equal(playbackMatchesRender(old, next.slideKey, next.stepKey, next.phase), false);
+  assert.equal(playbackMatchesRender(old, next.slideKey, next.stepKey, next.phase, false), true, "ongoing slide-clock content must not blink on a step change");
+  const ready = transitionPlayback(old, next);
+  assert.equal(playbackMatchesRender(ready, next.slideKey, next.stepKey, next.phase), true);
+  assert.equal(ready.stepTime, 0, "emoji and foundation reveal delays must start at zero");
+  assert.equal(playbackMatchesRender(ready, "other-slide", next.stepKey, next.phase), false);
+  assert.equal(playbackMatchesRender(ready, next.slideKey, "replay-step-1", next.phase), false);
+  assert.equal(playbackMatchesRender(ready, "cleared", "cleared", "outgoing"), true);
+  assert.equal(playbackMatchesRender(ready, "cleared", "cleared", "paused"), true);
+  const preview = transitionPlayback(ready, { ...next, phase: "preview" });
+  assert.equal(playbackMatchesRender(preview, next.slideKey, next.stepKey, "playing"), false);
 });
