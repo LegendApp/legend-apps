@@ -22,7 +22,7 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
   const playback = usePlayback();
   const entrance = initial !== undefined;
   const from = initial ?? target;
-  const motion = useSharedValue({ from, to: target, start: 0, slideKey: "", stepKey: "", played: false, last: from });
+  const motion = useSharedValue({ from, to: target, start: 0, slideKey: "", stepKey: "", played: false, settled: false, last: from });
   useAnimatedReaction(() => ({ clock: playback.value, target, from, entrance }), ({ clock, target: to, from, entrance }) => {
     const old = motion.value;
     if (clock.phase === "outgoing" || clock.phase === "paused") return;
@@ -34,10 +34,15 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
     if (first || old.stepKey !== clock.stepKey || !equal(old.to, to)) {
       const start = first || old.stepKey !== clock.stepKey ? 0 : clock.stepTime;
       const origin = first ? entrance ? from : to : old.last;
-      motion.value = { from: origin, to, start, slideKey: clock.slideKey, stepKey: clock.stepKey, played: true, last: origin };
+      motion.value = { from: origin, to, start, slideKey: clock.slideKey, stepKey: clock.stepKey, played: true, settled: equal(origin, to), last: origin };
     }
     const next = motion.value;
-    motion.value = { ...next, last: interpolate(next.from, next.to, clock.stepTime - next.start, duration, easing) as T };
+    // A settled pose must not keep invalidating every downstream native style
+    // and Skia uniform while the slide's ambient clock continues to tick.
+    if (next.settled) return;
+    const elapsed = clock.stepTime - next.start;
+    motion.value = { ...next, settled: elapsed * 1000 >= duration,
+      last: interpolate(next.from, next.to, elapsed, duration, easing) as T };
   }, [target, from, entrance, duration, easing]);
   return useDerivedValue(() => playback.value.phase === "preview" ? target
     : playback.value.phase === "preparing" ? from : motion.value.last, [target, from]);
