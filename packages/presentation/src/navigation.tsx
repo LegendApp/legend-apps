@@ -1,3 +1,4 @@
+import { navigationExitStyle } from "./navigationExitStyle";
 import { createContext, useContext, type ReactNode } from "react";
 import { Animated, type StyleProp, type ViewStyle } from "react-native";
 
@@ -9,8 +10,5 @@ export function NavigationExitView({ children, enabled = true, scale = 0.88, sty
 }) {
   const transition = useContext(NavigationTransitionContext);
   const progress = enabled && transition?.outgoing ? transition.progress : undefined;
-  return <Animated.View style={[style, progress && {
-    opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-    transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, scale] }) }],
-  }]}>{children}</Animated.View>;
+  return <Animated.View style={[style, progress && navigationExitStyle(progress, scale)]}>{children}</Animated.View>;
 }

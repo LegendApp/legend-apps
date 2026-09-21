@@ -1,3 +1,4 @@
+import { focusCameraStyle, sharedElementTransform } from "./focusMotionStyles";
 import { createContext, useCallback, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Animated, Text, View, type ViewProps } from "react-native";
 import { renderNativeChildren } from "./nativeChildren";
@@ -142,20 +143,7 @@ export function measureFocusPair(from: FocusSurface, to: FocusSurface, focus?: {
   ]);
 }
 
-const interpolate = (progress: Animated.Value, from: number, to: number) =>
-  progress.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
-
-export function focusCameraStyle(motion?: FocusMotion) {
-  if (!motion) return undefined;
-  return {
-    transformOrigin: "0px 0px" as const,
-    transform: [
-      { translateX: interpolate(motion.progress, motion.cameraFrom.x, motion.cameraTo.x) },
-      { translateY: interpolate(motion.progress, motion.cameraFrom.y, motion.cameraTo.y) },
-      { scale: interpolate(motion.progress, motion.cameraFrom.scale, motion.cameraTo.scale) },
-    ],
-  };
-}
+export { focusCameraStyle } from "./focusMotionStyles";
 
 /** Root stays untransformed so measurement never samples the moving camera. */
 export function FocusStage({ children, scale = 1 }: { children: ReactNode; scale?: number }) {
@@ -203,23 +191,7 @@ function Marker({ id, kind, children, style, resize = "stretch", onLayout, ...pr
   };
   const motion = context?.motion;
   const pair = kind === "element" && !nested ? motion?.elements.get(id) : undefined;
-  let transform;
-  if (pair && motion) {
-    const { progress, cameraFrom, cameraTo } = motion;
-    const cameraScale = interpolate(progress, cameraFrom.scale, cameraTo.scale);
-    // Both live copies follow the same screen rectangle. Undo the enclosing
-    // camera on the overview copy so it doesn't receive the zoom twice.
-    transform = [
-      { translateX: Animated.subtract(Animated.divide(Animated.subtract(
-        interpolate(progress, pair.from.x + pair.from.width / 2, pair.to.x + pair.to.width / 2),
-        interpolate(progress, cameraFrom.x, cameraTo.x)), cameraScale), pair.own.x + pair.own.width / 2) },
-      { translateY: Animated.subtract(Animated.divide(Animated.subtract(
-        interpolate(progress, pair.from.y + pair.from.height / 2, pair.to.y + pair.to.height / 2),
-        interpolate(progress, cameraFrom.y, cameraTo.y)), cameraScale), pair.own.y + pair.own.height / 2) },
-      { scaleX: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.width / pair.own.width, pair.to.width / pair.own.width), cameraScale) },
-      { scaleY: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.height / pair.own.height, pair.to.height / pair.own.height), cameraScale) },
-    ];
-  }
+  const transform = pair && motion ? sharedElementTransform(motion, pair, resize) : undefined;
   const content = renderNativeChildren(children, (text) => <Text>{text}</Text>);
   return kind === "element" ? (
     <Animated.View {...props} onLayout={measureLayout} collapsable={false} ref={ref} style={[style, transform && { transform }]}>

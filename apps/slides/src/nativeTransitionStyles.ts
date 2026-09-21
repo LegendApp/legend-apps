@@ -1,6 +1,20 @@
 import type { TransitionDefinition, TransitionContext } from "@legend-apps/presentation";
 import { Animated, type ViewStyle } from "react-native";
 
+type Context = Omit<TransitionContext, "progress">;
+type NativeStyle = Animated.WithAnimatedObject<ViewStyle>;
+type Compilation = { definition: TransitionDefinition; context: Context;
+  samples: ReturnType<TransitionDefinition["styles"]>[]; styles: Map<string, NativeStyle> };
+// Native Animated nodes are resources owned by one transition progress value.
+// Preserve them across readiness/layout rerenders instead of rebuilding a graph
+// just after its first native frame. Weak ownership releases completed graphs.
+const compilations = new WeakMap<Animated.Value, Compilation[]>();
+function sameContext(a: Context, b: Context) {
+  return a.direction === b.direction && a.width === b.width && a.height === b.height
+    && a.hasBackground === b.hasBackground && Object.keys(a.options).length === Object.keys(b.options).length
+    && Object.keys(a.options).every(key => a.options[key] === b.options[key]);
+}
+
 /** Compile the numeric authoring callback once; native Animated owns every frame. */
 export function nativeTransitionStyles(
   definition: TransitionDefinition,
@@ -10,8 +24,18 @@ export function nativeTransitionStyles(
   shared: boolean,
 ): Animated.WithAnimatedObject<ViewStyle> {
   const inputRange = Array.from({ length: 61 }, (_, i) => i / 60);
-  const samples = inputRange.map((value) => {
-    const result = definition.styles({ ...context, progress: value });
+  let entries = compilations.get(progress);
+  if (!entries) { entries = []; compilations.set(progress, entries); }
+  let compiled = entries.find(entry => entry.definition === definition && sameContext(entry.context, context));
+  if (!compiled) {
+    compiled = { definition, context: { ...context, options: { ...context.options } },
+      samples: inputRange.map(value => definition.styles({ ...context, progress: value })), styles: new Map() };
+    entries.push(compiled);
+  }
+  const cacheKey = `${incoming}:${shared}`;
+  const cached = compiled.styles.get(cacheKey);
+  if (cached) return cached;
+  const samples = compiled.samples.map(result => {
     const style = incoming ? result.incoming : result.outgoing;
     if (!style || typeof style !== "object" || Array.isArray(style)) {
       throw new Error("styles must return incoming and outgoing style objects");
@@ -48,5 +72,7 @@ export function nativeTransitionStyles(
       output[key] = interpolate(samples.map((style) => (style as Record<string, unknown>)[key]), key, key === "opacity");
     }
   }
-  return output as Animated.WithAnimatedObject<ViewStyle>;
+  const style = output as NativeStyle;
+  compiled.styles.set(cacheKey, style);
+  return style;
 }
