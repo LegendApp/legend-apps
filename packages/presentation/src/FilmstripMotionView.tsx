@@ -11,12 +11,14 @@ export function FilmstripMotionView({ index, count, enabled, position = 0, child
   const selected = Math.max(0, Math.min(count - 1, position));
   const progress = usePlaybackTween({ position: selected }, 500);
   const motionStyle = useAnimatedStyle(() => {
-    if (!enabled) return { transform: [{ translateX: 0 }, { scale: 1 }], opacity: 1 };
+    if (!enabled) return { transform: [{ translateX: 0 }, { scale: 1 }], opacity: 1, filter: [{ blur: 0 }] };
     const distance = Math.abs(index - progress.value.position);
+    const focus = Math.min(1, distance);
+    const blur = 10 * focus * focus * (3 - 2 * focus);
     const scale = 1 - 0.38 * Math.min(1, distance) - 0.1 * Math.min(1, Math.max(0, distance - 1));
     const initialScale = index === 0 ? 1 : index === 1 ? 0.62 : 0.52;
     const opacity = distance < 1 ? 1 - distance * 0.3 : Math.max(0.25, 0.7 - (distance - 1) * 0.2);
-    return { zIndex: Math.round(1000 - distance * 100),
+    return { zIndex: Math.round(1000 - distance * 100), filter: [{ blur }],
       transform: [{ translateX: -progress.value.position * 900 }, { scale: scale / initialScale }], opacity };
   });
   return <Animated.View style={[style, motionStyle]}>
