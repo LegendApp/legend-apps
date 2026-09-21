@@ -250,19 +250,23 @@ test("glass blur and refraction form and clear on one playback tween", async () 
     await act(() => tree.update(render(4)));
     flushUI();
     frame.tick(1100);
+    frame.tick(1275);
+    expect(glass.uniforms.value.progress).toBeCloseTo(0.15625);
+    expect(glass.uniforms.value.resolution).toEqual([3392, 1360]);
+    expect(glass.uniforms.value.strength).toBe(16);
     frame.tick(1450);
     expect(glass.uniforms.value.progress).toBeCloseTo(0.5);
-    expect(glass.blur.value).toBeCloseTo(12);
+    expect(glass.blur.value).toBeCloseTo(24);
     frame.tick(1800);
-    expect(glass.blur.value).toBe(24);
+    expect(glass.blur.value).toBe(48);
     await act(() => tree.update(render(3)));
     flushUI();
     frame.tick(1900);
     frame.tick(2250);
-    expect(glass.blur.value).toBeCloseTo(12);
+    expect(glass.blur.value).toBeCloseTo(24);
     await act(() => tree.update(render(4, "preview")));
     flushUI();
-    expect(glass.blur.value).toBe(24);
+    expect(glass.blur.value).toBe(48);
   } finally {
     if (tree) await act(() => tree.unmount());
   }

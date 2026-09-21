@@ -1,3 +1,4 @@
+import { PixelRatio } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
 import { usePlaybackTween } from "./usePlaybackTween";
 
@@ -5,12 +6,14 @@ import { usePlaybackTween } from "./usePlaybackTween";
 export function useLiquidGlassPlayback({ active, width, height, blur = 24, refraction = 8, duration = 700 }: {
   active: boolean; width: number; height: number; blur?: number; refraction?: number; duration?: number;
 }) {
-  const tween = usePlaybackTween({ progress: active ? 1 : 0 }, duration);
+  const pixelRatio = PixelRatio.get();
+  const tween = usePlaybackTween({ progress: active ? 1 : 0 }, duration, undefined, "smoothstep");
   return {
-    blur: useDerivedValue(() => Math.max(0, blur) * tween.value.progress, [blur]),
+    pixelRatio,
+    blur: useDerivedValue(() => Math.max(0, blur) * pixelRatio * tween.value.progress, [blur, pixelRatio]),
     uniforms: useDerivedValue(() => ({
-      resolution: [width, height], strength: Math.max(0, refraction),
+      resolution: [width * pixelRatio, height * pixelRatio], strength: Math.max(0, refraction) * pixelRatio,
       progress: tween.value.progress, time: 0, liquid: 0,
-    }), [width, height, refraction]),
+    }), [width, height, refraction, pixelRatio]),
   };
 }
