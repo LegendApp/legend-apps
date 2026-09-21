@@ -7,6 +7,7 @@
     "@babel/core": "^7.29.0",
     "@babel/plugin-transform-block-scoping": "^7.28.6",
     "@legendapp/state": "catalog:",
+    "@shopify/react-native-skia": "^2.11.1",
     "@mdx-js/mdx": "^3.1.1",
     "esbuild": "^0.25.9",
     "react": "catalog:",
