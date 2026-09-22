@@ -1,13 +1,14 @@
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
-import { SwitchControl } from "@legend-apps/design-system";
+import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import {
-  SettingsPage,
   SettingsRow,
   SettingsSection,
-  SettingsWindow as SharedSettingsWindow,
-  type SettingsWindowPage,
+  VirtualizedSettingsWindow as SharedSettingsWindow,
+  type VirtualizedSettingsWindowPage,
 } from "@legend-apps/settings-window";
 import {
+  usePresentationNotesWidthSetting,
+  setPresentationNotesWidthSetting,
   setPresentationTimerStartsOnSecondSlideSetting,
   setRehearsalTimerPausesWhileEditingSetting,
   usePresentationTimerStartsOnSecondSlideSetting,
@@ -15,14 +16,14 @@ import {
 } from "./slidesSettings";
 import { slidesSettingsWindowIdentifier } from "./slidesWindows";
 
-type SlidesSettingsPage = "timer" | "transitions";
+type SlidesSettingsPage = "appearance" | "timer" | "transitions";
 
 function TimerSettingsPage() {
   const presentationTimerStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
   const rehearsalTimerPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
 
   return (
-    <SettingsPage>
+    <>
       <SettingsSection first title="Presentation">
         <SettingsRow
           align="center"
@@ -51,15 +52,26 @@ function TimerSettingsPage() {
           title="Pause Timer While Editing Notes"
         />
       </SettingsSection>
-    </SettingsPage>
+    </>
   );
 }
 
-const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
+function AppearanceSettingsContent() {
+  const width = usePresentationNotesWidthSetting();
+  return <SettingsSection first title={null}>
+    <SettingsRow title="Presentation Notes Width" description="Maximum width of the centered notes column."
+      control={<SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
+        options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />} />
+  </SettingsSection>;
+}
+
+const pages: VirtualizedSettingsWindowPage<SlidesSettingsPage>[] = [{
+  id: "appearance", title: "Appearance", renderContent: () => <AppearanceSettingsContent />,
+}, {
   id: "timer",
-  render: () => <TimerSettingsPage />,
+  renderContent: () => <TimerSettingsPage />,
   title: "Timer",
-}, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> }];
+}, { id: "transitions", title: "Transitions", renderContent: () => <TransitionSettingsPage /> }];
 
 export function SettingsWindow() {
   return (

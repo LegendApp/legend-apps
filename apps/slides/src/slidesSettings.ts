@@ -9,6 +9,10 @@ function normalizeBoolean(value: unknown, defaultValue: boolean) {
 
 const slidesSettings = createObservableSettings({
   fields: {
+    presentationNotesWidth: {
+      defaultValue: 800,
+      normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(400, Math.min(2400, value)) : 800,
+    },
     backgroundIntensity: {
       defaultValue: 1,
       normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(6, value)) : 1,
@@ -56,3 +60,7 @@ export function useRehearsalTimerPausesWhileEditingSetting() {
 const backgroundIntensitySetting = slidesSettings.field("backgroundIntensity");
 export const useBackgroundIntensitySetting = backgroundIntensitySetting.use;
 export const setBackgroundIntensitySetting = backgroundIntensitySetting.set;
+
+const presentationNotesWidthSetting = slidesSettings.field("presentationNotesWidth");
+export const usePresentationNotesWidthSetting = presentationNotesWidthSetting.use;
+export const setPresentationNotesWidthSetting = presentationNotesWidthSetting.set;

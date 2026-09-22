@@ -1,5 +1,5 @@
 import { builtinTransitionSources } from "@legend-apps/presentation";
-import { SettingsPage, SettingsRow, SettingsSection } from "@legend-apps/settings-window";
+import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
@@ -19,7 +19,7 @@ export function TransitionSettingsPage() {
   const run = (action: () => string | void | Promise<string | void>) => {
     void Promise.resolve().then(action).then((result) => { setNames(listTransitions()); setMessage(result ?? "Done"); }).catch((error) => setMessage(String(error)));
   };
-  return <SettingsPage>
+  return <>
     <SettingsSection first title="Transitions">
       <SettingsRow title="Your transition library" description="Edit TypeScript files or add new ones. Changes rebuild open decks; updates wait until the presentation ends."
         control={<Action title="Open Folder" run={() => run(() => Linking.openURL(getTransitionDirectory().uri))} />} />
@@ -32,5 +32,5 @@ export function TransitionSettingsPage() {
       <Text className="text-neutral-400">Copy into Deck bundles helper files and updates references in the saved deck. Duplicate any transition to start a new one.</Text>
       {message ? <Text accessibilityLiveRegion="polite" className="mt-3 text-white">{message}</Text> : null}
     </SettingsSection>
-  </SettingsPage>;
+  </>;
 }
