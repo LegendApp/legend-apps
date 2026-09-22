@@ -14,9 +14,9 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
       cursor.value={key,time:0};
     }
     if(clock.phase!=="playing" || clock.stepIndex!==1) return;
-    const elapsed=Math.max(0,clock.stepTime-cursor.value.time);
+    const elapsed=Math.max(0,clock.stepTime*2-cursor.value.time);
     if(elapsed>0) simulation.value=advanceTitleBubbles(simulation.value,elapsed,uniforms.time as number,uniforms.bestRect as number[],targets);
-    cursor.value={key,time:clock.stepTime};
+    cursor.value={key,time:clock.stepTime*2};
   },[targets]);
   return useDerivedValue(()=>{
     const state=simulation.value;

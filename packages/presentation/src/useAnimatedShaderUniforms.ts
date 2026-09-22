@@ -1,3 +1,4 @@
+import { useBackgroundBrightnessScale } from "./background";
 import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
 import { samplePlayback, usePlayback } from "./playback";
@@ -10,6 +11,7 @@ export function useAnimatedShaderUniforms(
   { clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
   const playback = usePlayback();
+  const brightnessScale=useBackgroundBrightnessScale();
   const slideIndex = usePresentationValue("slideIndex");
   const rate = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
@@ -48,10 +50,11 @@ export function useAnimatedShaderUniforms(
     const extraClocks: Record<string, number> = {};
     for (const name of Object.keys(clocks ?? {})) extraClocks[name] = samplePlayback(state, previewTime, clocks![name]);
     return { ...uniforms, ...extraClocks,
+      brightness: typeof uniforms.brightness === "number" ? uniforms.brightness*(brightnessScale?.value ?? 1) : 0,
       time: adjusted && state.phase !== "preview" && state.phase !== "preparing" ? motion.value.time : sampled,
       slideTime: samplePlayback(state, previewTime),
       stepTime: samplePlayback(state, previewTime, "step"),
       stepIndex: state.stepIndex,
     };
-  }, [uniforms, clocks, adjusted, previewTime, clock]);
+  }, [uniforms, clocks, adjusted, previewTime, clock, brightnessScale]);
 }
