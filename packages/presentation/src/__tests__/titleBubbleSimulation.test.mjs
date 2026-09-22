@@ -41,3 +41,11 @@ test("bubbles below a glyph are absorbed at its lower contour",()=>{
  expect(state.drops[0].phase).toBe(2);
  expect(state.drops[0].hitY).toBe(510);
 });
+
+test("growth stays within slide margins even with excess volume and momentum",()=>{
+ const initial=createTitleBubbles();initial.volume=10000;initial.scale=3.49;initial.velocity=100;
+ const state=advanceTitleBubbles(initial,1/60,0,rect,targets);
+ expect(state.scale).toBeLessThanOrEqual(3.5);
+ expect(state.scale*rect[2]*1.065).toBeLessThanOrEqual(1536);
+ expect(state.scale*rect[3]*1.065).toBeLessThanOrEqual(756);
+});

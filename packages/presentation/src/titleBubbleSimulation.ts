@@ -19,6 +19,8 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
   const state={...previous,drops};
   const count=Math.max(1,Math.ceil(elapsed*120)),dt=elapsed/count;
   const cx=rect[0]+rect[2]/2,cy=rect[1]+rect[3]/2;
+  // Keep a generous margin, including the final 6.5% pre-collapse swell.
+  const maxScale=Math.max(1,Math.min(3.5,1536/(Math.max(1,rect[2])*1.065),756/(Math.max(1,rect[3])*1.065)));
   for(let tick=0;tick<count;tick++) {
     state.time+=dt;
     for(let i=0;i<18;i++) {
@@ -56,16 +58,17 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
         d.vx+=(dx*2.4*ramp-d.vx*1.8)*dt;d.vy+=(dy*2.4*ramp-d.vy*1.8)*dt;
         d.x+=d.vx*dt;d.y+=d.vy*dt;
         if(Math.hypot(tx-d.x,ty-d.y)<d.radius+5) {
-          d.whiten=1;state.volume+=.045*(d.radius*d.radius)/(19*19);d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
+          d.whiten=1;state.volume=Math.min(maxScale*maxScale-1,state.volume+.045*(d.radius*d.radius)/(19*19));d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
         }
       } else {
         d.radius=Math.max(0,d.radius-dt*80);
         if(d.age>.9){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
       }
     }
-    const targetScale=Math.sqrt(1+state.volume);
+    const targetScale=Math.min(maxScale,Math.sqrt(1+state.volume));
     state.velocity+=((targetScale-state.scale)*32-state.velocity*9)*dt;
     state.scale+=state.velocity*dt;
+    if(state.scale>=maxScale){state.scale=maxScale;state.velocity=Math.min(0,state.velocity);}
   }
   return state;
 }
