@@ -32,5 +32,5 @@ export function splitSpeakerNoteSteps(markdown: string): SpeakerNoteSection[] {
 }
 
 export function speakerNoteOpacity(section: SpeakerNoteSection, currentStep: number) {
-  return section.step === undefined || section.step === currentStep ? 1 : 0.75;
+  return section.step === undefined || section.step === currentStep ? 1 : 0.55;
 }

@@ -8,7 +8,7 @@ test("numbered notes follow one-based steps in both navigation directions", () =
   expect(sections[1].markdown).toBe("1: Start calmly.\nContinue here.");
   for (const step of [0, 1, 2, 1, 0]) {
     expect(sections.map((section) => speakerNoteOpacity(section, step)))
-      .toEqual([1, ...[0, 1, 2].map((index) => index === step ? 1 : 0.75)]);
+      .toEqual([1, ...[0, 1, 2].map((index) => index === step ? 1 : 0.55)]);
   }
 });
 
@@ -22,5 +22,5 @@ test("plain notes remain fully visible and repeated step labels are supported", 
   expect(splitSpeakerNoteSteps("")).toEqual([]);
   expect(splitSpeakerNoteSteps("Plain notes.")).toEqual([{ markdown: "Plain notes.", step: undefined }]);
   const sections = splitSpeakerNoteSteps("1: First.\r\n\r\n1: Another thought.\r\n\r\n3: Later.");
-  expect(sections.map((section) => speakerNoteOpacity(section, 0))).toEqual([1, 1, 0.75]);
+  expect(sections.map((section) => speakerNoteOpacity(section, 0))).toEqual([1, 1, 0.55]);
 });

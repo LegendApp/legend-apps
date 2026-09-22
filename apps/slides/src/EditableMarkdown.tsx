@@ -201,12 +201,13 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     >
       {markdown.trim() ? (
         splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} style={{ opacity: speakerNoteOpacity(section, currentStep) }}>
+          <View key={index} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? 18 : 0 }]}>
+            {section.step !== undefined && <Text style={styles.stepNumber}>{section.step + 1}.</Text>}
             <EnrichedMarkdownText
               allowTrailingMargin={false}
               containerStyle={styles.viewer}
               flavor="github"
-              markdown={section.markdown}
+              markdown={section.step === undefined ? section.markdown : section.markdown.replace(/^\d+[.:)]\s+/, "")}
               markdownStyle={viewerMarkdownStyle}
               selectable={!editable}
             />
@@ -230,6 +231,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 25 },
+  noteSection: { paddingLeft: 34 },
+  stepNumber: { position: "absolute", left: 0, top: 0, width: 26, textAlign: "right", color: "#a1a1aa", fontSize: 17, lineHeight: 25, fontVariant: ["tabular-nums"] },
   viewer: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
