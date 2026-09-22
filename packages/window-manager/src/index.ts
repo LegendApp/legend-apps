@@ -103,6 +103,7 @@ export type WindowStyleOptions = {
   titlebarMaterial?: "none" | "glass" | "titlebar" | "headerView" | "hudWindow" | "sidebar" | "windowBackground";
   titlebarMaterialBlendingMode?: "behindWindow" | "withinWindow";
   titlebarMaterialState?: "active" | "inactive" | "followsWindowActiveState";
+  /** Hex RGBA color, or "system" for AppKit window backing with a clear content root. */
   backgroundColor?: string;
   hasToolbar?: boolean;
   titlebarControls?: WindowTitlebarControl[];

@@ -52,7 +52,7 @@ import {
 import { batch, computed, ObservableHint, type OpaqueObject, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent, type NativeSyntheticEvent } from "react-native";
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
@@ -1681,7 +1681,7 @@ const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
       style={[
         styles.sidebar,
         {
-          backgroundColor,
+          backgroundColor: Platform.OS === "macos" ? "transparent" : backgroundColor,
           height: splitPaneMetrics.sidebarHeight || undefined,
           minHeight: splitPaneMetrics.sidebarHeight || undefined,
           width: splitPaneMetrics.sidebarWidth || undefined,
@@ -5098,7 +5098,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         }}
         handleSplitViewResize={handleSplitViewResize}
         sidebar={(
-          <View style={[styles.sidebar, { backgroundColor: diffPalette.sidebarBackground }]}>
+          <View style={[styles.sidebar, { backgroundColor: Platform.OS === "macos" ? "transparent" : diffPalette.sidebarBackground }]}>
             <View style={styles.sidebarList} />
           </View>
         )}

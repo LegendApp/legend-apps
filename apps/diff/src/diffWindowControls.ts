@@ -157,7 +157,7 @@ export function createDiffViewerWindowStyle({
 
   const windowStyle = createUnifiedToolbarWindowStyle({
     appearance: appearance ?? syntaxTheme.appearance,
-    backgroundColor: diffPalette.background,
+    backgroundColor: "system",
     frame: {
       width: 1180,
       height: 780,

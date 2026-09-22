@@ -247,6 +247,10 @@ static NSColor *LegendColorFromHexString(NSString *value)
     return nil;
   }
 
+  if ([value isEqualToString:@"system"]) {
+    return NSColor.windowBackgroundColor;
+  }
+
   NSString *hex = [value hasPrefix:@"#"] ? [value substringFromIndex:1] : value;
   if (hex.length != 6 && hex.length != 8) {
     return nil;
@@ -439,7 +443,8 @@ static void LegendApplyWindowBackgroundColor(NSWindow *window, NSString *value)
 
   NSView *contentView = window.contentView;
   if (contentView) {
-    LegendApplyBackgroundColorToView(contentView, backgroundColor);
+    // System window backing must remain behind AppKit-managed sidebar materials.
+    LegendApplyBackgroundColorToView(contentView, [value isEqualToString:@"system"] ? NSColor.clearColor : backgroundColor);
   }
 
   NSView *frameView = contentView.superview;

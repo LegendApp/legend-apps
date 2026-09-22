@@ -23,7 +23,7 @@ import {
   type LegendListRenderItemProps,
 } from "@legendapp/list/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Uniwind } from "uniwind";
 import { createChatSessionState, type ChatSession } from "./chatSession";
 import { ChatComposer } from "./ChatComposer";
@@ -223,7 +223,7 @@ function ChatSidebar({ session$, onSelect }: {
   ), [onSelect, session$]);
 
   return (
-    <View className="flex-1 bg-surface-muted">
+    <View className={Platform.OS === "macos" ? "flex-1" : "flex-1 bg-surface-muted"}>
       <LegendList
         contentContainerStyle={styles.sidebarContent}
         contentInset={chatSidebarContentInset}
@@ -547,7 +547,7 @@ export function ChatHistoryWindow({ launchArguments }: ChatHistoryWindowProps) {
       title: selectedTitle ?? "Legend Chat History",
       windowStyle: {
         appearance: "system",
-        backgroundColor: displayTheme.colors.windowBackground,
+        backgroundColor: "system",
         contentLayoutMode: "fullSize",
         titlebarSeparatorStyle: "shadow",
       },

@@ -239,8 +239,8 @@ static char RNSidebarSplitViewStartupKey;
     _content = [NSView new];
     _sidebar.wantsLayer = YES;
     _content.wantsLayer = YES;
-    _sidebar.layer.backgroundColor =
-      RNSidebarSplitViewColorFromHexString(configuration[@"sidebarBackgroundColor"]).CGColor;
+    // AppKit supplies the sidebar material; an opaque fill hides its backdrop.
+    _sidebar.layer.backgroundColor = NSColor.clearColor.CGColor;
     _content.layer.backgroundColor = background.CGColor;
     _sidebar.layer.zPosition = 10;
     NSViewController *sidebarController = [NSViewController new];
@@ -1130,6 +1130,12 @@ extern "C" BOOL LegendAttachSidebarSplitViewStartupRoot(NSWindow *window, NSView
     return NO;
   }
   view.installReactRoot = installRoot;
+  // The split panes own their backgrounds. Do not carry the host's temporary
+  // solid startup fill underneath AppKit's floating sidebar after the swap.
+  if ([rootView respondsToSelector:@selector(setBackgroundColor:)]) {
+    [(RCTUIView *)rootView setBackgroundColor:NSColor.clearColor];
+  }
+  rootView.layer.backgroundColor = NSColor.clearColor.CGColor;
   rootView.frame = window.contentView.bounds;
   [window.contentView addSubview:rootView positioned:NSWindowBelow relativeTo:view];
   return YES;
