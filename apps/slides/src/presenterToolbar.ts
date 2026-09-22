@@ -64,28 +64,6 @@ export function createPresenterToolbarItems({
 
   return [
     {
-      enabled: !audienceOpen && canEditDeck,
-      id: presenterEditToolbarItemId,
-      label: "Edit Source",
-      placement: "trailing",
-      systemImageName: "square.and.pencil",
-      tooltip: "Edit Source",
-      type: "button",
-    },
-    {
-      id: presenterAppearanceToolbarItemId,
-      label: "",
-      width: 36,
-      placement: "trailing",
-      systemImageName: "sun.max",
-      tooltip: "Appearance",
-      type: "menuButton",
-      menuItems: [
-        { label: "Background intensity", value: "background-intensity",
-          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 6 * 100), suffix: "%" } },
-      ],
-    },
-    {
       enabled: audienceOpen,
       id: presenterElapsedToolbarItemId,
       label: formatPresenterElapsed(elapsed),
@@ -108,13 +86,36 @@ export function createPresenterToolbarItems({
       width: 76,
     },
     {
+      enabled: !audienceOpen && canEditDeck,
+      id: presenterEditToolbarItemId,
+      label: "Edit Source",
+      placement: "trailing",
+      systemImageName: "square.and.pencil",
+      tooltip: "Edit Source",
+      type: "button",
+    },
+    {
+      id: presenterAppearanceToolbarItemId,
+      label: "",
+      width: 36,
+      placement: "trailing",
+      systemImageName: "sun.max",
+      tooltip: "Appearance",
+      type: "menuButton",
+      menuItems: [
+        { label: "Background intensity", value: "background-intensity",
+          slider: { min: 0, max: 100, value: Math.round(backgroundIntensity / 6 * 100), suffix: "%" } },
+      ],
+    },
+    {
       enabled: !audienceOpen,
       id: presenterModeToolbarItemId,
-      label: rehearsalEnabled ? "Rehearsal" : "Presentation",
+      label: "",
+      width: 36,
       menuItems: modeMenuItems,
       placement: "trailing",
       systemImageName: rehearsalEnabled ? "figure.run" : "play.rectangle",
-      tooltip: "Presentation mode",
+      tooltip: rehearsalEnabled ? "Rehearsal mode" : "Presentation mode",
       type: "menuButton",
     },
     {
