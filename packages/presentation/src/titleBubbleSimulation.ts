@@ -11,12 +11,12 @@ function releaseNoise(seed: number) {
   const value=Math.sin(seed*127.1+19.7)*43758.5453;
   return value-Math.floor(value);
 }
-export type TitleDrop = { x: number; y: number; vx: number; vy: number; age: number; radius: number; phase: number; hitX: number; hitY: number; initialDistance: number; whiten: number };
+export type TitleDrop = { x: number; y: number; vx: number; vy: number; age: number; radius: number; phase: number; hitX: number; hitY: number; initialDistance: number; whiten: number; cycle: number };
 export type TitleBubbles = { time: number; volume: number; scale: number; velocity: number; exitMass?: number; exitCenter?: number[]; drops: TitleDrop[] };
 export function createTitleBubbles(): TitleBubbles {
   "worklet";
   const drops: TitleDrop[]=[];
-  for(let i=0;i<18;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.5625,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
+  for(let i=0;i<18;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.5625,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0,cycle:0});
   return {time:0,volume:0,scale:1,velocity:0,drops};
 }
 export function titleParent(i: number,t: number) {
@@ -43,8 +43,11 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
       if(d.age<0) continue;
       if(d.phase===0) {
         const parent=titleParent(i%6,(backgroundTime-(elapsed-tick*dt)*.288)*.6);
-        const ox=(parent[0]-960),oy=(parent[1]-540),len=Math.max(1,Math.hypot(ox,oy));
-        const nx=ox/len,ny=oy/len;
+        // Pick a stable point for this bud, then choose a new one next cycle.
+        // Favor the exposed hemisphere to avoid budding inside a neighbor.
+        const outward=Math.atan2(parent[1]-540,parent[0]-960);
+        const angle=outward+(releaseNoise(i*13+d.cycle*79+101)-.5)*2.8;
+        const nx=Math.cos(angle),ny=Math.sin(angle);
         d.radius=(19+Math.min(23,state.time*.7))*Math.min(1,d.age/.65);
         const reach=parent[2]+Math.min(1,d.age/1.4)*55;
         d.x=parent[0]+nx*reach;d.y=parent[1]+ny*reach;
@@ -75,7 +78,7 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
         }
       } else {
         d.radius=Math.max(0,d.radius-dt*80);
-        if(d.age>.675){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
+        if(d.age>.675){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;d.cycle++;}
       }
     }
     const targetScale=Math.min(maxScale,Math.sqrt(1+state.volume));
@@ -113,7 +116,7 @@ export function advanceTitleRelease(previous: TitleBubbles, elapsed: number, rec
       d.radius=(18+(i%4)*3)*grow;
       d.x=d.hitX+nx*grow*38;d.y=d.hitY+ny*grow*38;
       if(d.age>=.4) {
-        d.phase=4;d.age=0;const speed=380+releaseNoise(i+47)*260;d.vx=nx*speed;d.vy=ny*speed;
+        d.phase=4;d.age=0;const speed=570+releaseNoise(i+47)*390;d.vx=nx*speed;d.vy=ny*speed;
         state.volume=Math.max(0,state.volume-(state.exitMass ?? 1)/72);
       }
     } else if(d.phase===4) {
