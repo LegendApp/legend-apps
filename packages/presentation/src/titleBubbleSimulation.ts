@@ -2,7 +2,9 @@ export type TitleDrop = { x: number; y: number; vx: number; vy: number; age: num
 export type TitleBubbles = { time: number; volume: number; scale: number; velocity: number; drops: TitleDrop[] };
 export function createTitleBubbles(): TitleBubbles {
   "worklet";
-  return {time:0,volume:0,scale:1,velocity:0,drops:Array.from({length:6},(_,i)=>({x:0,y:0,vx:0,vy:0,age:-i*0.48,radius:0,phase:0,hitX:0,hitY:0}))};
+  const drops: TitleDrop[]=[];
+  for(let i=0;i<6;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.48,radius:0,phase:0,hitX:0,hitY:0});
+  return {time:0,volume:0,scale:1,velocity:0,drops};
 }
 export function titleParent(i: number,t: number) {
   "worklet";
@@ -12,7 +14,9 @@ export function titleParent(i: number,t: number) {
 /** Fixed substeps keep attraction stable across dropped frames. Only collisions add volume. */
 export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, backgroundTime: number, rect: number[], targets: number[][]): TitleBubbles {
   "worklet";
-  const state={...previous,drops:previous.drops.map(d=>({...d}))};
+  const drops: TitleDrop[]=[];
+  for(let i=0;i<previous.drops.length;i++) drops.push({...previous.drops[i]});
+  const state={...previous,drops};
   const count=Math.max(1,Math.ceil(elapsed*120)),dt=elapsed/count;
   const cx=rect[0]+rect[2]/2,cy=rect[1]+rect[3]/2;
   for(let tick=0;tick<count;tick++) {

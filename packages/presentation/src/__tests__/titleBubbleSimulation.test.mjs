@@ -14,3 +14,22 @@ test("detached bubbles stay foreground until absorption",()=>{
  expect(state.drops[0].phase).toBe(1);
  expect(state.drops[0].radius).toBeGreaterThan(0);
 });
+
+test("app compiler keeps simulation array traversal inside worklets", async()=>{
+ const {createRequire}=await import("node:module");
+ const {fileURLToPath}=await import("node:url");
+ const require=createRequire(new URL("../../../../shell/package.json",import.meta.url));
+ const babel=require("@babel/core");
+ const previous=process.env.LEGEND_APP;
+ process.env.LEGEND_APP="slides";
+ try {
+  for(const file of ["useTitleBubbleSimulation.ts","titleBubbleSimulation.ts"]) {
+   const output=babel.transformFileSync(fileURLToPath(new URL("../"+file,import.meta.url)),{
+    configFile:fileURLToPath(new URL("../../../../shell/babel.config.js",import.meta.url)),
+    cwd:fileURLToPath(new URL("../../../../shell/",import.meta.url)),
+   }).code;
+   expect(output).toContain("__workletHash");
+   expect(output).not.toMatch(/flatMap|Array\.from|\.map\(/);
+  }
+ } finally { if(previous===undefined)delete process.env.LEGEND_APP;else process.env.LEGEND_APP=previous; }
+});

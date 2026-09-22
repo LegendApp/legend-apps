@@ -18,9 +18,16 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
     if(elapsed>0) simulation.value=advanceTitleBubbles(simulation.value,elapsed,uniforms.time as number,uniforms.bestRect as number[],targets);
     cursor.value={key,time:clock.stepTime};
   },[targets]);
-  return useDerivedValue(()=>({ ...visual.value, resolution: [1920,1080], brightness:base.value.brightness, titleFeed:1, backgroundTime:base.value.time,
-    absorbedScale:simulation.value.scale,
-    drops:simulation.value.drops.flatMap(d=>[d.x,d.y,d.radius,d.phase]),
-    impacts:simulation.value.drops.flatMap(d=>[d.hitX,d.hitY,d.phase===2?Math.max(0,1-d.age/.9):0]),
-  }));
+  return useDerivedValue(()=>{
+    const state=simulation.value;
+    const drops: number[]=[];
+    const impacts: number[]=[];
+    for(let i=0;i<state.drops.length;i++) {
+      const d=state.drops[i];
+      drops.push(d.x,d.y,d.radius,d.phase);
+      impacts.push(d.hitX,d.hitY,d.phase===2?Math.max(0,1-d.age/.9):0);
+    }
+    return { ...visual.value, resolution: [1920,1080], brightness:base.value.brightness,
+      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts };
+  });
 }
