@@ -375,8 +375,10 @@ export function SettingsSidebar<PageId extends string = string>({
               {...settingsSidebarPressablePlatformProps}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
+              collapsable={false}
+              style={styles.sidebarRow}
               className={cn(
-                "h-7 justify-center rounded-md px-2",
+                "justify-center rounded-md px-2",
                 isSelected ? "bg-primary/15" : "hover:bg-background-secondary/60 active:bg-background-secondary",
               )}
               key={page.id}
@@ -566,6 +568,13 @@ const styles = StyleSheet.create({
   },
   groupedRow: {
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  // Selection adds a background to an otherwise flattenable row. Keep its native
+  // bounds stable and clip painting when Fabric updates selection during scroll.
+  sidebarRow: {
+    height: 28,
+    flexShrink: 0,
+    overflow: "hidden",
   },
   sidebarContent: {
     paddingHorizontal: 8,
