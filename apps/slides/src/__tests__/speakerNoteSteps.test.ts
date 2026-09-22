@@ -1,6 +1,6 @@
 // @ts-nocheck This suite uses Bun test globals.
 import { expect, test } from "bun:test";
-import { speakerNoteOpacity, splitSpeakerNoteSteps } from "../speakerNoteSteps";
+import { speakerNoteOpacity, splitSpeakerNoteSteps, speakerNotesEditorMarkdown } from "../speakerNoteSteps";
 
 test("numbered notes follow one-based steps in both navigation directions", () => {
   const sections = splitSpeakerNoteSteps("General reminder.\n\n1: Start calmly.\nContinue here.\n\n2. Turn up the glass.\n\n3) Land the joke.");
@@ -23,4 +23,16 @@ test("plain notes remain fully visible and repeated step labels are supported", 
   expect(splitSpeakerNoteSteps("Plain notes.")).toEqual([{ markdown: "Plain notes.", step: undefined }]);
   const sections = splitSpeakerNoteSteps("1: First.\r\n\r\n1: Another thought.\r\n\r\n3: Later.");
   expect(sections.map((section) => speakerNoteOpacity(section, 0))).toEqual([1, 1, 0.55]);
+});
+
+
+test("editor preserves literal step numbers without treating them as ordered lists", () => {
+  const notes = "2. Second\r\n\r\n5) Fifth\n\n8: Eighth\n\n```text\n3. Code\n```\n\nThere are 42 items.";
+  const editing = speakerNotesEditorMarkdown(notes);
+  expect(editing).toContain("2\\. Second");
+  expect(editing).toContain("5\\) Fifth");
+  expect(editing).toContain("3. Code");
+  expect(speakerNotesEditorMarkdown(editing, true)).toBe(notes);
+  // The native serializer can emit literal punctuation without escaping it.
+  expect(speakerNotesEditorMarkdown(notes, true)).toBe(notes);
 });

@@ -1,4 +1,4 @@
-import { splitSpeakerNoteSteps, speakerNoteOpacity } from "./speakerNoteSteps";
+import { splitSpeakerNoteSteps, speakerNoteOpacity, speakerNotesEditorMarkdown } from "./speakerNoteSteps";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   EnrichedMarkdownText,
@@ -139,7 +139,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     draftMarkdownRef.current = markdown.trim();
     savedMarkdownRef.current = markdown.trim();
     editingRef.current = true;
-    setEditorInitialValue(draftMarkdownRef.current);
+    setEditorInitialValue(speakerNotesEditorMarkdown(draftMarkdownRef.current));
     onEditingChangeRef.current?.(true);
   }, [editable, markdown]);
 
@@ -182,7 +182,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
         multiline
         onBlur={finishEditing}
         onChangeMarkdown={(value) => {
-          draftMarkdownRef.current = value;
+          draftMarkdownRef.current = speakerNotesEditorMarkdown(value, true);
           if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
           }
