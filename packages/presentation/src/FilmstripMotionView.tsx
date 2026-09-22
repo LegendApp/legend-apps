@@ -6,8 +6,8 @@ import { CarouselBlurView } from "./CarouselBlurView";
 import { NavigationExitView } from "./navigation";
 
 /** Carousel placement uses slide playback; exit uses the host's navigation progress. */
-export function FilmstripMotionView({ index, count, enabled, position = 0, children, overlay, style }: {
-  index: number; count: number; enabled: boolean; position?: number; children: ReactNode; overlay?: ReactNode; style?: StyleProp<ViewStyle>;
+export function FilmstripMotionView({ index, count, enabled, position = 0, children, style }: {
+  index: number; count: number; enabled: boolean; position?: number; children: ReactNode; style?: StyleProp<ViewStyle>;
 }) {
   const selected = Math.max(0, Math.min(count - 1, position));
   const progress = usePlaybackTween({ position: selected }, 500);
@@ -23,7 +23,6 @@ export function FilmstripMotionView({ index, count, enabled, position = 0, child
   return <Animated.View style={[style, motionStyle]}>
     <NavigationExitView enabled={enabled} style={{ flex: 1 }}>
       <CarouselBlurView progress={progress} index={index} enabled={enabled}>{children}</CarouselBlurView>
-      {overlay}
     </NavigationExitView>
   </Animated.View>;
 }
