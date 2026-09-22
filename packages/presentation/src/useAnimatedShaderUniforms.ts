@@ -1,14 +1,14 @@
-import { useBackgroundBrightnessScale } from "./background";
+import { useBackgroundBrightnessScale, useBackgroundMotion } from "./background";
 import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
 import { samplePlayback, usePlayback } from "./playback";
 
-type ShaderMotion = { clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
+type ShaderMotion = { persistentBackground?: boolean; clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
 export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>, previewTime = 0,
-  { clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
+  { persistentBackground = false, clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
   const playback = usePlayback();
   const brightnessScale=useBackgroundBrightnessScale();
@@ -17,7 +17,10 @@ export function useAnimatedShaderUniforms(
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
   const duration = Math.max(0.001, Number.isFinite(slideChangeDuration) ? slideChangeDuration : 2);
   const adjusted = rate !== 1 || boost !== 0;
-  const motion = useSharedValue({ time: 0, raw: 0, burst: duration, slideIndex });
+  const sharedMotion=useBackgroundMotion();
+  const localMotion=useSharedValue({time:0,raw:0,burst:duration,slideIndex,owner:""});
+  const persistent=persistentBackground && sharedMotion!==null;
+  const motion=persistent ? sharedMotion! : localMotion;
   // Background speed modulation integrates the shared elapsed clock. It owns
   // no frame loop, never caps elapsed time, and does not change step timing.
   // Do not subscribe this optional integrator to every frame for normal-speed
@@ -25,12 +28,12 @@ export function useAnimatedShaderUniforms(
   useAnimatedReaction(() => adjusted ? { clock: playback.value, index: slideIndex } : null, (sample) => {
     if (!sample) return;
     const { clock, index } = sample;
-    if (clock.phase === "preparing" || clock.slideTime < motion.value.raw) {
-      motion.value = { time: 0, raw: 0, burst: duration, slideIndex: index };
+    if (!persistent && (clock.phase === "preparing" || clock.slideTime < motion.value.raw)) {
+      motion.value = { time: 0, raw: 0, burst: duration, slideIndex: index, owner:clock.slideKey };
     }
     if (clock.phase !== "playing") return;
     const old = motion.value;
-    const dt = Math.max(0, clock.slideTime - old.raw);
+    const dt = persistent && old.owner!==clock.slideKey ? 0 : Math.max(0, clock.slideTime - old.raw);
     const start = index === old.slideIndex ? old.burst : 0;
     const end = Math.min(duration, start + dt);
     // Integral of the attack and decay, so dropped frames don't slow the effect.
@@ -42,8 +45,8 @@ export function useAnimatedShaderUniforms(
         + (duration - attack) * (d - d * d + d * d * d / 3);
     };
     motion.value = { time: old.time + dt * rate + boost * (area(end) - area(start)),
-      raw: clock.slideTime, burst: end, slideIndex: index };
-  }, [adjusted, rate, boost, duration, slideIndex]);
+      raw: clock.slideTime, burst: end, slideIndex: index, owner:clock.slideKey };
+  }, [adjusted, rate, boost, duration, slideIndex, persistent, motion]);
   return useDerivedValue(() => {
     const state = playback.value;
     const sampled = samplePlayback(state, previewTime, clock);
