@@ -32,6 +32,12 @@ const viewerMarkdownStyle: MarkdownStyle = {
   strong: { color: "#fafafa" },
 };
 
+const largeViewerMarkdownStyle: MarkdownStyle = {
+  ...viewerMarkdownStyle,
+  paragraph: { ...viewerMarkdownStyle.paragraph, fontSize: 22, lineHeight: 33, marginBottom: 8 },
+  list: { ...viewerMarkdownStyle.list, fontSize: 22, lineHeight: 33 },
+};
+
 const editorMarkdownStyle: MarkdownTextInputStyle = viewerMarkdownStyle;
 
 type NotesDismiss = { current: (() => void) | null };
@@ -48,13 +54,15 @@ export function NotesEditingBoundary({ children, ...props }: ViewProps) {
 type EditableMarkdownProps = {
   editable: boolean;
   currentStep?: number;
+  onSectionLayout?(step: number, y: number): void;
+  large?: boolean;
   markdown: string;
   onEditingChange?(editing: boolean): void;
   onSave(markdown: string): Promise<void>;
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder }: EditableMarkdownProps) {
+export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, large = false }: EditableMarkdownProps) {
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -201,14 +209,14 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     >
       {markdown.trim() ? (
         splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? 18 : 0 }]}>
-            {section.step !== undefined && <Text style={styles.stepNumber}>{section.step + 1}.</Text>}
+          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? 18 : 0 }]}>
+            {section.step !== undefined && <Text style={[styles.stepNumber, large && { fontSize: 22, lineHeight: 33 }]}>{section.step + 1}.</Text>}
             <EnrichedMarkdownText
               allowTrailingMargin={false}
               containerStyle={styles.viewer}
               flavor="github"
               markdown={section.step === undefined ? section.markdown : section.markdown.replace(/^\d+[.:)]\s+/, "")}
-              markdownStyle={viewerMarkdownStyle}
+              markdownStyle={large ? largeViewerMarkdownStyle : viewerMarkdownStyle}
               selectable={!editable}
             />
           </View>

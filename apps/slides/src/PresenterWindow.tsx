@@ -1,3 +1,6 @@
+import { assignDisplayRole, displayKey } from "./displayRoles";
+import { displayRolesSetting, displayRolesConfiguredSetting } from "./slidesSettings";
+import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legend-apps/file-dialog";
@@ -338,6 +341,7 @@ function PresenterToolbar({
 }: PresenterToolbarProps) {
   const presentationStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
   const backgroundIntensity = useBackgroundIntensitySetting();
+  const displayRoles = displayRolesSetting.use();
   const rehearsalPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
@@ -415,14 +419,16 @@ function PresenterToolbar({
       windowStyle: {
         toolbarItems: createPresenterToolbarItems({
           audienceOpen, backgroundIntensity, canEditDeck, displays, elapsed: elapsed$.peek(), hasDeck,
-          rehearsalEnabled, selectedDisplayId, timerRunning: timerRunning$.get(),
+          displayRoles, rehearsalEnabled, selectedDisplayId, timerRunning: timerRunning$.get(),
         }),
       },
     });
-  }, [audienceOpen, backgroundIntensity, canEditDeck, displays, hasDeck, rehearsalEnabled, selectedDisplayId]);
+  }, [audienceOpen, backgroundIntensity, canEditDeck, displays, hasDeck, rehearsalEnabled, selectedDisplayId, displayRoles]);
 
   useObserveEffect(() => {
-    void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed$.get()));
+    const elapsed = elapsed$.get();
+    notesOutput$.elapsed.set(elapsed);
+    void setWindowToolbarItemText("slides-presenter", presenterElapsedToolbarItemId, formatPresenterElapsed(elapsed));
   });
 
   useEffect(() => {
@@ -447,8 +453,11 @@ function PresenterToolbar({
         if (event.value === presenterModePresentationValue || event.value === presenterModeRehearsalValue) {
           onModeChange(event.value);
         }
-      } else if (event.itemId === presenterDisplayToolbarItemId && displays.some((display) => display.id === event.value)) {
-        onDisplayChange(event.value);
+      } else if (event.itemId === presenterDisplayToolbarItemId) {
+        if (event.value === "identify-displays") void identifyDisplays(displays);
+        else if (event.value === "preview-notes") void previewNotesOutput();
+        else if (event.value?.startsWith("role:")) onDisplayChange(event.value);
+        else if (displays.some(display => display.id === event.value)) onDisplayChange(event.value!);
       } else if (event.itemId === presenterStartToolbarItemId) {
         if (event.value === presenterStartValue) {
           void onStart();
@@ -512,14 +521,25 @@ export function PresenterWindow() {
     const nextDisplays = await getDisplays();
     setDisplays(nextDisplays);
     await audience.displaysChanged(nextDisplays);
-    setSelectedDisplayId((current) => {
-      if (nextDisplays.some((display) => display.id === current)) {
-        return current;
-      }
+    const roles = displayRolesSetting.get();
+    if (!displayRolesConfiguredSetting.get() && !roles.audience && !roles.notes) {
       const remembered = getPresentationDisplayId();
-      if (nextDisplays.some((display) => display.id === remembered)) return remembered ?? null;
-      return nextDisplays.find((display) => !display.isMain)?.id ?? nextDisplays[0]?.id ?? null;
-    });
+      const display = nextDisplays.find(d => d.id === remembered) ?? nextDisplays.find(d => !d.isMain) ?? nextDisplays[0];
+      if (display) {
+        displayRolesSetting.set({ audience: displayKey(display), notes: null });
+        displayRolesConfiguredSetting.set(true);
+      }
+    }
+    const saved = displayRolesSetting.get();
+    const upgradeKey = (key: string | null) => {
+      const display = nextDisplays.find(d => d.id === key);
+      return display ? displayKey(display) : key;
+    };
+    const upgraded = { audience: upgradeKey(saved.audience), notes: upgradeKey(saved.notes) };
+    if (upgraded.audience !== saved.audience || upgraded.notes !== saved.notes) displayRolesSetting.set(upgraded);
+    const selected = nextDisplays.find(d => displayKey(d) === upgraded.audience || d.id === upgraded.audience);
+    setSelectedDisplayId(selected?.id ?? null);
+    await syncNotesOutput(nextDisplays, slidesState$.audienceOpen.peek());
   }, [audience, setDisplays, setSelectedDisplayId]);
 
   const openDeck = useCallback(async () => {
@@ -553,6 +573,7 @@ export function PresenterWindow() {
       if (!editingDeckRef.current) void loadDeck(path);
     });
     const closedSubscription = addWindowClosedListener((event) => {
+      if (event.identifier === "slides-notes") notesOutputClosed();
       if (event.identifier === "slides-audience") {
         audience.closed();
         setActiveMode(null);
@@ -635,10 +656,10 @@ export function PresenterWindow() {
 
   const startAudience = useCallback(async () => {
     const { displays, selectedDisplayId, rehearsalEnabled } = presenter$.peek();
-    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId)
-      ?? displays.find((display) => display.isMain) ?? displays[0];
+    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     if (selectedDisplay) {
+      notesOutput$.preview.set(false);
       await openAudience(selectedDisplay, rehearsalEnabled);
       setActiveMode(mode);
     }
@@ -649,10 +670,28 @@ export function PresenterWindow() {
     setSlidesState({ deckLocked: false });
   }, [closeAudience, setActiveMode]);
 
-  const selectDisplay = useCallback((displayId: string) => {
-    setSelectedDisplayId(displayId);
-    rememberPresentationDisplayId(displayId);
-  }, [setSelectedDisplayId]);
+  const selectDisplay = useCallback((value: string) => {
+    const match = /^role:(audience|notes|unused):(.+)$/.exec(value);
+    const display = presenter$.displays.peek().find(d => d.id === (match?.[2] ?? value));
+    if (!display) return;
+    const roles = assignDisplayRole(displayRolesSetting.get(), displayKey(display), (match?.[1] ?? "audience") as "audience" | "notes" | "unused");
+    displayRolesSetting.set(roles);
+    displayRolesConfiguredSetting.set(true);
+    const selected = presenter$.displays.peek().find(d => displayKey(d) === roles.audience);
+    setSelectedDisplayId(selected?.id ?? null);
+    if (selected) rememberPresentationDisplayId(selected.id);
+    void (async () => {
+      if (slidesState$.audienceOpen.peek()) {
+        // Close the old notes output before changing roles, avoiding overlap.
+        await syncNotesOutput([], false);
+        if (selected) await openAudience(selected, presenter$.rehearsalEnabled.peek());
+        else await closeAudience();
+      }
+      await syncNotesOutput(presenter$.displays.peek(), slidesState$.audienceOpen.peek());
+    })();
+  }, [presenter$, setSelectedDisplayId, openAudience, closeAudience]);
+
+  useEffect(() => { void syncNotesOutput(presenter$.displays.peek(), audienceOpen); }, [audienceOpen, presenter$]);
 
   const selectMode = useCallback((mode: PresenterMode) => {
     setRehearsalEnabled(mode === "rehearsal");

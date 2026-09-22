@@ -1,3 +1,4 @@
+import { displayKey } from "./displayRoles";
 import type { Display } from "@legend-apps/window-manager";
 
 type AudiencePlatform = {
@@ -46,7 +47,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
     displaysChanged(displays: Display[]) {
       return enqueue(async () => {
         if (!active) return;
-        const next = displays.find((display) => display.id === active?.id);
+        const next = displays.find((display) => active && displayKey(display) === displayKey(active));
         if (!next) {
           platform.update({ blackout: true, displayMessage: "Presentation display disconnected. Reconnect it, select a display, then press Present to resume." });
           await platform.close();

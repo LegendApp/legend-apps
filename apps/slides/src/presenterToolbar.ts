@@ -1,3 +1,4 @@
+import { displayKey, type DisplayRoles } from "./displayRoles";
 export const presenterAppearanceToolbarItemId = "slides-presenter-appearance";
 import type { Display, WindowToolbarItem } from "@legend-apps/window-manager";
 
@@ -27,6 +28,7 @@ export function formatPresenterElapsed(milliseconds: number) {
 
 export function createPresenterToolbarItems({
   audienceOpen,
+  displayRoles,
   displays,
   elapsed,
   hasDeck,
@@ -37,7 +39,8 @@ export function createPresenterToolbarItems({
   timerRunning,
 }: {
   audienceOpen: boolean;
-  displays: readonly Pick<Display, "id" | "name">[];
+  displayRoles?: DisplayRoles;
+  displays: readonly Pick<Display, "id" | "name" | "persistentId">[];
   elapsed: number;
   hasDeck: boolean;
   canEditDeck?: boolean;
@@ -119,14 +122,27 @@ export function createPresenterToolbarItems({
       type: "menuButton",
     },
     {
-      enabled: !audienceOpen && displays.length > 0,
+      enabled: true,
       id: presenterDisplayToolbarItemId,
-      label: selectedDisplay?.name ?? "Display",
-      menuItems: displays.map((display) => ({
-        label: display.name,
-        selected: display.id === selectedDisplayId,
-        value: display.id,
-      })),
+      label: "",
+      width: 36,
+      menuItems: [
+        ...displays.flatMap((display, index) => {
+          const key = displayKey(display);
+          const roles = displayRoles ?? { audience: selectedDisplayId, notes: null };
+          const role = roles.audience === key || roles.audience === display.id ? "audience" : roles.notes === key || roles.notes === display.id ? "notes" : "unused";
+          return [
+            { label: `${index + 1}. ${display.name} — ${role === "unused" ? "Unused" : role === "audience" ? "Audience" : "Notes"}`, enabled: false },
+            ...(["audience", "notes", "unused"] as const).map(value => ({
+              label: value === "audience" ? "Use for Audience" : value === "notes" ? "Use for Notes" : "Unused",
+              selected: role === value, value: `role:${value}:${display.id}`,
+            })),
+            { separator: true },
+          ];
+        }),
+        { label: "Identify Displays", value: "identify-displays" },
+        { label: "Preview Notes Screen", value: "preview-notes" },
+      ],
       placement: "trailing",
       systemImageName: "display",
       tooltip: selectedDisplay ? `Present on ${selectedDisplay.name}` : "Choose a presentation display",

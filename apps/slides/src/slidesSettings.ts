@@ -9,6 +9,9 @@ function normalizeBoolean(value: unknown, defaultValue: boolean) {
 
 const slidesSettings = createObservableSettings({
   fields: {
+    displayRolesConfigured: { defaultValue: false as boolean },
+    displayRoles: { defaultValue: { audience: null, notes: null } as import("./displayRoles").DisplayRoles },
+    notesPreviewRatio: { defaultValue: 0.34, normalize: (v: unknown) => typeof v === "number" && Number.isFinite(v) ? Math.max(0.2, Math.min(0.65, v)) : 0.34 },
     presentationNotesWidth: {
       defaultValue: 800,
       normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(400, Math.min(2400, value)) : 800,
@@ -64,3 +67,8 @@ export const setBackgroundIntensitySetting = backgroundIntensitySetting.set;
 const presentationNotesWidthSetting = slidesSettings.field("presentationNotesWidth");
 export const usePresentationNotesWidthSetting = presentationNotesWidthSetting.use;
 export const setPresentationNotesWidthSetting = presentationNotesWidthSetting.set;
+
+export const displayRolesSetting = slidesSettings.field("displayRoles");
+export const notesPreviewRatioSetting = slidesSettings.field("notesPreviewRatio");
+
+export const displayRolesConfiguredSetting = slidesSettings.field("displayRolesConfigured");

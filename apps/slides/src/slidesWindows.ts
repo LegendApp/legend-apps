@@ -50,6 +50,16 @@ const windows = {
       },
     },
   },
+  SlidesNotesWindow: {
+    identifier: "slides-notes",
+    loadComponent: () => import("./NotesWindow").then(module => module.NotesWindow),
+    options: { title: "Legend Slides — Notes", windowStyle: { appearance: "dark", width: 1000, height: 900, minWidth: 600, minHeight: 500 } },
+  },
+  SlidesIdentifyWindow: {
+    identifier: "slides-identify",
+    loadComponent: () => import("./NotesWindow").then(module => module.IdentifyWindow),
+    options: { title: "Identify Display", windowStyle: { appearance: "dark", width: 300, height: 220 } },
+  },
   SlidesSettingsWindow: {
     identifier: slidesSettingsWindowIdentifier,
     loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),

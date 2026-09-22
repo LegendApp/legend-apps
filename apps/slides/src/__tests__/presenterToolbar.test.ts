@@ -51,7 +51,7 @@ describe("presenter toolbar", () => {
     expect(items[2].menuItems[0]).toMatchObject({ value: "background-intensity", slider: { min: 0, max: 100, value: 17, suffix: "%" } });
     expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
     expect(items[3]).toMatchObject({ label: "", width: 36, systemImageName: "play.rectangle" });
-    expect(items[4]).toMatchObject({ enabled: true, label: "Stage Display", type: "menuButton" });
+    expect(items[4]).toMatchObject({ enabled: true, label: "", type: "menuButton" });
     expect(items[5]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
     expect(items[1]).toMatchObject({ enabled: true, systemImageName: "square.and.pencil", tooltip: "Edit Source" });
   });
@@ -77,7 +77,7 @@ describe("presenter toolbar", () => {
       { value: presenterTimerRestartValue },
     ]);
     expect(items[3]).toMatchObject({ enabled: false });
-    expect(items[4]).toMatchObject({ enabled: false });
+    expect(items[4]).toMatchObject({ enabled: true });
     expect(items[5]).toMatchObject({ label: "Stop", value: presenterStopValue });
     expect(items[1]).toMatchObject({ enabled: false });
   });
@@ -94,7 +94,7 @@ describe("presenter toolbar", () => {
     });
 
     expect(items[0]).toMatchObject({ enabled: false });
-    expect(items[4]).toMatchObject({ enabled: false });
+    expect(items[4]).toMatchObject({ enabled: true });
     expect(items[5]).toMatchObject({ enabled: false });
     expect(items[1]).toMatchObject({ enabled: false });
   });
