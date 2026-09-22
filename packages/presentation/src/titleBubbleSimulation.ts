@@ -80,27 +80,27 @@ export function beginTitleRelease(previous: TitleBubbles, rect: number[]): Title
   const amount=Math.min(1,Math.max(0,(previous.scale-1)/1.5));
   const cx=rect[0]+rect[2]/2,cy=rect[1]+rect[3]/2;
   state.exitCenter=[cx+(960-cx)*amount,cy+(540-cy)*amount];
-  for(let i=0;i<18;i++) state.drops.push({...previous.drops[i],phase:3,age:-i*.12,radius:0,whiten:1});
+  for(let i=0;i<72;i++) state.drops.push({...previous.drops[i%previous.drops.length],phase:3,age:-i*.06,radius:0,whiten:1});
   return state;
 }
 export function advanceTitleRelease(previous: TitleBubbles, elapsed: number, rect: number[], targets: number[][]): TitleBubbles {
   "worklet";
-  const drops:TitleDrop[]=[];for(let i=0;i<18;i++) drops.push({...previous.drops[i]});
+  const drops:TitleDrop[]=[];for(let i=0;i<72;i++) drops.push({...previous.drops[i]});
   const state={...previous,drops,time:previous.time+elapsed};
   const center=state.exitCenter ?? [960,540],cx=rect[0]+rect[2]/2,cy=rect[1]+rect[3]/2;
-  for(let i=0;i<18;i++) {
+  for(let i=0;i<72;i++) {
     const d=drops[i];d.age+=elapsed;if(d.age<0)continue;
     if(d.phase===3) {
       const target=targets[i%Math.max(1,targets.length)] ?? [cx,rect[1]];
       const ox=(target[0]-cx)/rect[2],oy=(target[1]-cy)/rect[3];
       const length=Math.max(.001,Math.hypot(ox,oy)),nx=ox/length,ny=oy/length;
       d.hitX=center[0]+(target[0]-cx)*state.scale;d.hitY=center[1]+(target[1]-cy)*state.scale;
-      const grow=Math.min(1,d.age/.7);
+      const grow=Math.min(1,d.age/.4);
       d.radius=(18+(i%4)*3)*grow;
       d.x=d.hitX+nx*grow*38;d.y=d.hitY+ny*grow*38;
-      if(d.age>=.7) {
-        d.phase=4;d.age=0;d.vx=nx*430;d.vy=ny*430;
-        state.volume=Math.max(0,state.volume-(state.exitMass ?? 1)/18);
+      if(d.age>=.4) {
+        d.phase=4;d.age=0;d.vx=nx*520;d.vy=ny*520;
+        state.volume=Math.max(0,state.volume-(state.exitMass ?? 1)/72);
       }
     } else if(d.phase===4) {
       d.x+=d.vx*elapsed;d.y+=d.vy*elapsed;

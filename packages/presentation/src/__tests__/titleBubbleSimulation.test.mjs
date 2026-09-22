@@ -57,8 +57,18 @@ test("release removes mass only when a bud detaches",()=>{
  state=advanceTitleRelease(state,.3,rect,targets);
  expect(state.volume).toBe(9);
  expect(state.drops[0].phase).toBe(3);
- for(let i=0;i<360;i++) state=advanceTitleRelease(state,1/60,rect,targets);
+ for(let i=0;i<600;i++) state=advanceTitleRelease(state,1/60,rect,targets);
  expect(state.volume).toBeLessThan(.0001);
  expect(state.scale).toBeLessThan(.01);
  expect(state.drops.every(d=>d.phase===5)).toBe(true);
+});
+
+
+test("release emits more bubbles while retaining mass through the old exit duration",()=>{
+ const initial=createTitleBubbles();initial.scale=3;
+ let state=beginTitleRelease(initial,rect);
+ expect(state.drops.length).toBe(72);
+ for(let i=0;i<150;i++)state=advanceTitleRelease(state,1/60,rect,targets);
+ expect(state.volume).toBeGreaterThan(4);
+ expect(state.drops.filter(d=>d.phase>=4).length).toBeGreaterThan(18);
 });

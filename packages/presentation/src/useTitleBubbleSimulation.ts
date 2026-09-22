@@ -30,10 +30,12 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
       const d=state.drops[i];
       drops.push(d.x,d.y,d.radius,d.phase);
       whiten.push(d.whiten);
-      necks.push(d.hitX,d.hitY,d.phase===3?Math.max(0,1-d.age/.7):0,d.phase===5?Math.min(1,d.age/.45):0);
+      necks.push(d.hitX,d.hitY,d.phase===3?Math.max(0,1-d.age/.4):0,d.phase===5?Math.min(1,d.age/.45):0);
       impacts.push(d.hitX,d.hitY,d.phase===2?Math.max(0,1-d.age/.9):0);
     }
+    while(drops.length<288)drops.push(0);
+    while(necks.length<288)necks.push(0);
     return { ...visual.value, resolution: [1920,1080], brightness:base.value.brightness,
-      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts, whiten, necks, exitCenter:state.exitCenter ?? [960,540] };
+      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts:impacts.slice(0,54), whiten:whiten.slice(0,18), necks, exitCenter:state.exitCenter ?? [960,540] };
   });
 }
