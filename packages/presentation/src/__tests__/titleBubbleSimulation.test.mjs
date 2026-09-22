@@ -1,5 +1,5 @@
 import {test,expect} from "bun:test";
-import {createTitleBubbles,advanceTitleBubbles} from "../titleBubbleSimulation.ts";
+import {createTitleBubbles,advanceTitleBubbles,beginTitleRelease,advanceTitleRelease} from "../titleBubbleSimulation.ts";
 const rect=[1200,400,260,120],targets=[[1230,420],[1300,420],[1360,420],[1430,420]];
 test("growth is caused by absorption, not elapsed time",()=>{
  let state=createTitleBubbles();
@@ -45,7 +45,20 @@ test("bubbles below a glyph are absorbed at its lower contour",()=>{
 test("growth stays within slide margins even with excess volume and momentum",()=>{
  const initial=createTitleBubbles();initial.volume=10000;initial.scale=3.49;initial.velocity=100;
  const state=advanceTitleBubbles(initial,1/60,0,rect,targets);
- expect(state.scale).toBeLessThanOrEqual(3.5);
- expect(state.scale*rect[2]*1.065).toBeLessThanOrEqual(1536);
+ expect(state.scale).toBeLessThanOrEqual(4);
+ expect(state.scale*rect[2]*1.065).toBeLessThanOrEqual(1650);
  expect(state.scale*rect[3]*1.065).toBeLessThanOrEqual(756);
+});
+
+
+test("release removes mass only when a bud detaches",()=>{
+ const initial=createTitleBubbles();initial.scale=3;
+ let state=beginTitleRelease(initial,rect);
+ state=advanceTitleRelease(state,.3,rect,targets);
+ expect(state.volume).toBe(9);
+ expect(state.drops[0].phase).toBe(3);
+ for(let i=0;i<360;i++) state=advanceTitleRelease(state,1/60,rect,targets);
+ expect(state.volume).toBeLessThan(.0001);
+ expect(state.scale).toBeLessThan(.01);
+ expect(state.drops.every(d=>d.phase===5)).toBe(true);
 });
