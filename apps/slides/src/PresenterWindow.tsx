@@ -842,7 +842,11 @@ function PresenterStatus() {
     <>
       {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
       {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
-      {state.status === "building" && <Text style={styles.statusMessage}>Compiling changes…</Text>}
+      {state.status === "building" && (
+        <View pointerEvents="none" style={styles.compilingOverlay}>
+          <Text style={styles.statusMessage}>Compiling changes…</Text>
+        </View>
+      )}
       {state.pendingDeck && (
         <View style={styles.updateBanner}>
           <Text style={styles.statusMessage}>Changes will appear when the presentation ends</Text>
@@ -881,6 +885,7 @@ const styles = StyleSheet.create({
   blackoutWarning: { backgroundColor: "#3f3006", borderRadius: 8, color: "#fde68a", marginTop: 12, padding: 10, textAlign: "center" },
   button: { backgroundColor: "#30323a", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
   buttonText: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
+  compilingOverlay: { position: "absolute", bottom: 14, right: 14, zIndex: 1, backgroundColor: "#272c3b", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
   disabled: { opacity: 0.4 },
   empty: { alignItems: "center", flex: 1, gap: 14, justifyContent: "center" },
   emptyBody: { color: "#a1a1aa", fontSize: 14 },
