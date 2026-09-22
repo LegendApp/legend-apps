@@ -384,6 +384,8 @@ static char RNSidebarSplitViewStartupKey;
   NSString *_sidebarTitlebarOverlayColorValue;
   CGFloat _sidebarTitlebarOverlayOpacity;
   NSView *_sidebarTitlebarMaterialView;
+  NSSplitViewItemAccessoryViewController *_sidebarScrollEdgeAccessory API_AVAILABLE(macos(26.0));
+  NSLayoutConstraint *_sidebarScrollEdgeHeight;
 #else
   UIView *_sidebarContainer;
   UIView *_contentContainer;
@@ -520,6 +522,16 @@ static char RNSidebarSplitViewStartupKey;
 {
   [_sidebarTitlebarMaterialView removeFromSuperview];
   _sidebarTitlebarMaterialView = nil;
+  if (@available(macOS 26.1, *)) {
+    if (_sidebarScrollEdgeAccessory) {
+      NSUInteger index = [_sidebarItem.topAlignedAccessoryViewControllers indexOfObject:_sidebarScrollEdgeAccessory];
+      if (index != NSNotFound) {
+        [_sidebarItem removeTopAlignedAccessoryViewControllerAtIndex:index];
+      }
+      _sidebarScrollEdgeAccessory = nil;
+      _sidebarScrollEdgeHeight = nil;
+    }
+  }
 }
 
 - (void)layoutSidebarTitlebarMaterialWithHeight:(CGFloat)titlebarHeight
@@ -528,6 +540,27 @@ static char RNSidebarSplitViewStartupKey;
                                                                toView:_sidebarContainer];
   if (titlebarHeight <= 0 || NSWidth(splitFrameInSidebar) <= 0) {
     [self removeSidebarTitlebarMaterial];
+    return;
+  }
+
+  if (@available(macOS 26.1, *)) {
+    // AppKit already accounts for the window titlebar above the accessory.
+    // Only register any additional header height, not a second full titlebar.
+    CGFloat nativeTitlebarHeight = MAX(0, NSHeight(self.window.frame) - NSHeight(self.window.contentLayoutRect));
+    CGFloat accessoryHeight = MAX(0, titlebarHeight - nativeTitlebarHeight);
+    if (!_sidebarScrollEdgeAccessory) {
+      _sidebarScrollEdgeAccessory = [NSSplitViewItemAccessoryViewController new];
+      _sidebarScrollEdgeAccessory.automaticallyAppliesContentInsets = NO;
+      _sidebarScrollEdgeAccessory.preferredScrollEdgeEffectStyle = NSScrollEdgeEffectStyle.softStyle;
+      // Register the existing header region with NSScrollView's native edge
+      // effect. React retains ownership of its existing content inset.
+      NSView *accessoryView = [RNSidebarSplitViewTitlebarMaterialContainerView new];
+      _sidebarScrollEdgeAccessory.view = accessoryView;
+      _sidebarScrollEdgeHeight = [accessoryView.heightAnchor constraintEqualToConstant:accessoryHeight];
+      _sidebarScrollEdgeHeight.active = YES;
+      [_sidebarItem addTopAlignedAccessoryViewController:_sidebarScrollEdgeAccessory];
+    }
+    _sidebarScrollEdgeHeight.constant = accessoryHeight;
     return;
   }
 
