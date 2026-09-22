@@ -36,8 +36,18 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
         if(d.age>=1.4){d.phase=1;d.age=0;d.vx=nx*95;d.vy=ny*95;}
       } else if(d.phase===1) {
         // Targets come from actual ink pixels, not the center of the word's box.
-        const target=targets[i%Math.max(1,targets.length)] ?? [cx,cy];
         const centering=Math.min(1,Math.max(0,(state.scale-1)/1.5));
+        // Select the closest surface in the word's current transformed pose.
+        // Below the word this naturally selects a lower glyph contour.
+        let target=targets[0] ?? [cx,cy];
+        let nearest=Infinity;
+        for(let j=0;j<targets.length;j++) {
+          const candidate=targets[j];
+          const x=cx+(960-cx)*centering+(candidate[0]-cx)*state.scale;
+          const y=cy+(540-cy)*centering+(candidate[1]-cy)*state.scale;
+          const distance=(x-d.x)*(x-d.x)+(y-d.y)*(y-d.y);
+          if(distance<nearest){nearest=distance;target=candidate;}
+        }
         const tx=cx+(960-cx)*centering+(target[0]-cx)*state.scale,ty=cy+(540-cy)*centering+(target[1]-cy)*state.scale;
         const dx=tx-d.x,dy=ty-d.y;
         const distance=Math.hypot(dx,dy);

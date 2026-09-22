@@ -33,3 +33,11 @@ test("app compiler keeps simulation array traversal inside worklets", async()=>{
   }
  } finally { if(previous===undefined)delete process.env.LEGEND_APP;else process.env.LEGEND_APP=previous; }
 });
+
+test("bubbles below a glyph are absorbed at its lower contour",()=>{
+ const initial=createTitleBubbles();
+ initial.drops[0]={...initial.drops[0],phase:1,age:0,x:1330,y:525,radius:19};
+ const state=advanceTitleBubbles(initial,1/120,0,rect,[[1330,410],[1330,510]]);
+ expect(state.drops[0].phase).toBe(2);
+ expect(state.drops[0].hitY).toBe(510);
+});
