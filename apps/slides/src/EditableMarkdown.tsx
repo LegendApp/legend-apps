@@ -172,7 +172,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
 
   if (editing) {
     return (
-      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.focusedShell]}>
+      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.editorShell, styles.focusedShell]}>
       <EnrichedMarkdownTextInput
         ref={inputRef}
         autoFocus
@@ -243,5 +243,6 @@ const styles = StyleSheet.create({
   stepNumber: { position: "absolute", left: -34, top: 0, width: 26, textAlign: "right", color: "#a1a1aa", fontSize: 17, lineHeight: 25, fontVariant: ["tabular-nums"] },
   viewer: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8, paddingLeft: 42 },
+  editorShell: { paddingLeft: 8 },
   focusedShell: { borderColor: "#3b82f6" },
 });

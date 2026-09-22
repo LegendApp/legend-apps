@@ -35,6 +35,9 @@ export function speakerNoteOpacity(section: SpeakerNoteSection, currentStep: num
   return section.step === undefined || section.step === currentStep ? 1 : 0.55;
 }
 
+const editorStepMarkerBoundary = "\u2060";
+const editorStepMarkerBoundaryRegex = new RegExp(`^(\\d+)([.)])${editorStepMarkerBoundary}(?=\\s)`);
+
 /** Keep step labels as editable text rather than native ordered-list decorations. */
 export function speakerNotesEditorMarkdown(markdown: string, restore = false): string {
   let fence: { marker: string; length: number } | undefined;
@@ -48,7 +51,7 @@ export function speakerNotesEditorMarkdown(markdown: string, restore = false): s
     }
     if (fence) return line;
     return restore
-      ? line.replace(/^(\d+)\\([.)])(?=\s)/, "$1$2")
-      : line.replace(/^(\d+)([.)])(?=\s)/, "$1\\$2");
+      ? line.replace(editorStepMarkerBoundaryRegex, "$1$2").replace(/^(\d+)\\([.)])(?=\s)/, "$1$2")
+      : line.replace(/^(\d+)([.)])(?=\s)/, `$1$2${editorStepMarkerBoundary}`);
   }).join("");
 }

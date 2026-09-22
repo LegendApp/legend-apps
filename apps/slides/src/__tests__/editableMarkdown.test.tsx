@@ -22,7 +22,8 @@ test("outside clicks save immediately without waiting on an unmounted native edi
     await act(() => tree.root.findByType("pressable").props.onPress());
     const editor = tree.root.findByType("editor");
     expect(editor.props.markdownStyle).toBe(viewerStyle);
-    expect(editor.parent.parent.props.style[1].borderColor).toBe("#3b82f6");
+    expect(editor.parent.parent.props.style[2].borderColor).toBe("#3b82f6");
+    expect(editor.parent.parent.props.style[1].paddingLeft).toBe(8);
     await act(() => editor.props.onChangeMarkdown("changed notes"));
     const stopPropagation = mock(() => {});
     await act(() => editor.parent.parent.props.onTouchStart({ stopPropagation }));

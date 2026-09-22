@@ -29,10 +29,13 @@ test("plain notes remain fully visible and repeated step labels are supported", 
 test("editor preserves literal step numbers without treating them as ordered lists", () => {
   const notes = "2. Second\r\n\r\n5) Fifth\n\n8: Eighth\n\n```text\n3. Code\n```\n\nThere are 42 items.";
   const editing = speakerNotesEditorMarkdown(notes);
-  expect(editing).toContain("2\\. Second");
-  expect(editing).toContain("5\\) Fifth");
+  expect(editing).not.toContain("\\.");
+  expect(editing).not.toContain("\\)");
+  expect(editing).toContain("2.\u2060 Second");
+  expect(editing).toContain("5)\u2060 Fifth");
   expect(editing).toContain("3. Code");
   expect(speakerNotesEditorMarkdown(editing, true)).toBe(notes);
+  expect(speakerNotesEditorMarkdown("2\\. Second", true)).toBe("2. Second");
   // The native serializer can emit literal punctuation without escaping it.
   expect(speakerNotesEditorMarkdown(notes, true)).toBe(notes);
 });
