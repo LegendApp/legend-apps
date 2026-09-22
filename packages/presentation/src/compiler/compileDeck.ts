@@ -55,7 +55,7 @@ const sourceExtensions = [
   ".js",
   ".json",
 ];
-const assetExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]);
+const assetExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".html"]);
 
 function isWithin(root: string, candidate: string) {
   const relative = path.relative(root, candidate);
