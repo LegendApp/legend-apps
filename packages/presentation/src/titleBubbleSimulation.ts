@@ -3,7 +3,7 @@ export type TitleBubbles = { time: number; volume: number; scale: number; veloci
 export function createTitleBubbles(): TitleBubbles {
   "worklet";
   const drops: TitleDrop[]=[];
-  for(let i=0;i<6;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.48,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
+  for(let i=0;i<18;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.75,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
   return {time:0,volume:0,scale:1,velocity:0,drops};
 }
 export function titleParent(i: number,t: number) {
@@ -21,32 +21,35 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
   const cx=rect[0]+rect[2]/2,cy=rect[1]+rect[3]/2;
   for(let tick=0;tick<count;tick++) {
     state.time+=dt;
-    for(let i=0;i<6;i++) {
-      const d=state.drops[i];d.age+=dt;
+    for(let i=0;i<18;i++) {
+      const d=state.drops[i];
+      const ramp=1+Math.min(2,state.time/15);
+      d.age+=dt*(d.phase===0?ramp:1);
       if(d.age<0) continue;
       if(d.phase===0) {
-        const parent=titleParent(i,(backgroundTime-(elapsed-tick*dt)*.288)*.6);
+        const parent=titleParent(i%6,(backgroundTime-(elapsed-tick*dt)*.288)*.6);
         const ox=(parent[0]-960),oy=(parent[1]-540),len=Math.max(1,Math.hypot(ox,oy));
         const nx=ox/len,ny=oy/len;
-        d.radius=19*Math.min(1,d.age/.65);
+        d.radius=(19+Math.min(23,state.time*.7))*Math.min(1,d.age/.65);
         const reach=parent[2]+Math.min(1,d.age/1.4)*55;
         d.x=parent[0]+nx*reach;d.y=parent[1]+ny*reach;
         if(d.age>=1.4){d.phase=1;d.age=0;d.vx=nx*95;d.vy=ny*95;}
       } else if(d.phase===1) {
         // Targets come from actual ink pixels, not the center of the word's box.
         const target=targets[i%Math.max(1,targets.length)] ?? [cx,cy];
-        const tx=cx+(target[0]-cx)*state.scale,ty=cy+(target[1]-cy)*state.scale;
+        const centering=Math.min(1,Math.max(0,(state.scale-1)/1.5));
+        const tx=cx+(960-cx)*centering+(target[0]-cx)*state.scale,ty=cy+(540-cy)*centering+(target[1]-cy)*state.scale;
         const dx=tx-d.x,dy=ty-d.y;
         const distance=Math.hypot(dx,dy);
         if(d.initialDistance===0) d.initialDistance=Math.max(1,distance);
         d.whiten=Math.max(d.whiten,Math.min(1,1-distance/d.initialDistance));
-        d.vx+=(dx*2.4-d.vx*1.8)*dt;d.vy+=(dy*2.4-d.vy*1.8)*dt;
+        d.vx+=(dx*2.4*ramp-d.vx*1.8)*dt;d.vy+=(dy*2.4*ramp-d.vy*1.8)*dt;
         d.x+=d.vx*dt;d.y+=d.vy*dt;
         if(Math.hypot(tx-d.x,ty-d.y)<d.radius+5) {
-          d.whiten=1;state.volume+=.025;d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
+          d.whiten=1;state.volume+=.045*(d.radius*d.radius)/(19*19);d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
         }
       } else {
-        d.radius=19*Math.max(0,1-d.age/.55);
+        d.radius=Math.max(0,d.radius-dt*80);
         if(d.age>.9){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
       }
     }
