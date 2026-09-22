@@ -1,6 +1,6 @@
 import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import { usePlayback } from "./playback";
-import { advanceTitleBubbles, createTitleBubbles, beginTitleRelease, advanceTitleRelease } from "./titleBubbleSimulation";
+import { advanceTitleBubbles, createTitleBubbles, beginTitleRelease, advanceTitleRelease, titleCenterProgress } from "./titleBubbleSimulation";
 
 /** Title-specific simulation; all motion runs on the host UI thread. */
 export function useTitleBubbleSimulation(base: { readonly value: Record<string, number | number[]> }, targets: number[][], visual: { readonly value: Record<string, number | number[]> }) {
@@ -36,6 +36,6 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
     while(drops.length<288)drops.push(0);
     while(necks.length<288)necks.push(0);
     return { ...visual.value, resolution: [1920,1080], brightness:base.value.brightness,
-      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts:impacts.slice(0,54), whiten:whiten.slice(0,18), necks, exitCenter:state.exitCenter ?? [960,540] };
+      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, centerProgress:titleCenterProgress(state.scale,base.value.bestRect as number[]), drops, impacts:impacts.slice(0,54), whiten:whiten.slice(0,18), necks, exitCenter:state.exitCenter ?? [960,540] };
   });
 }

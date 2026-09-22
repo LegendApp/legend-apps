@@ -1,5 +1,5 @@
 import {test,expect} from "bun:test";
-import {createTitleBubbles,advanceTitleBubbles,beginTitleRelease,advanceTitleRelease} from "../titleBubbleSimulation.ts";
+import {createTitleBubbles,advanceTitleBubbles,beginTitleRelease,advanceTitleRelease,titleCenterProgress,titleMaxScale} from "../titleBubbleSimulation.ts";
 const rect=[1200,400,260,120],targets=[[1230,420],[1300,420],[1360,420],[1430,420]];
 test("growth is caused by absorption, not elapsed time",()=>{
  let state=createTitleBubbles();
@@ -71,4 +71,10 @@ test("release emits more bubbles while retaining mass through the old exit durat
  for(let i=0;i<150;i++)state=advanceTitleRelease(state,1/60,rect,targets);
  expect(state.volume).toBeGreaterThan(4);
  expect(state.drops.filter(d=>d.phase>=4).length).toBeGreaterThan(18);
+});
+
+test("title reaches center only at its size cap",()=>{
+ expect(titleCenterProgress(1,rect)).toBe(0);
+ expect(titleCenterProgress(2.5,rect)).toBeCloseTo(.5);
+ expect(titleCenterProgress(titleMaxScale(rect),rect)).toBe(1);
 });
