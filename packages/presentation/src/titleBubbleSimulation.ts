@@ -3,7 +3,7 @@ export type TitleBubbles = { time: number; volume: number; scale: number; veloci
 export function createTitleBubbles(): TitleBubbles {
   "worklet";
   const drops: TitleDrop[]=[];
-  for(let i=0;i<18;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.75,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
+  for(let i=0;i<18;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.5625,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
   return {time:0,volume:0,scale:1,velocity:0,drops};
 }
 export function titleParent(i: number,t: number) {
@@ -26,7 +26,7 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
     for(let i=0;i<18;i++) {
       const d=state.drops[i];
       const ramp=1+Math.min(2,state.time/15);
-      d.age+=dt*(d.phase===0?ramp:1);
+      d.age+=dt*(d.phase===0?ramp*4/3:1);
       if(d.age<0) continue;
       if(d.phase===0) {
         const parent=titleParent(i%6,(backgroundTime-(elapsed-tick*dt)*.288)*.6);
@@ -62,7 +62,7 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
         }
       } else {
         d.radius=Math.max(0,d.radius-dt*80);
-        if(d.age>.9){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
+        if(d.age>.675){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
       }
     }
     const targetScale=Math.min(maxScale,Math.sqrt(1+state.volume));
