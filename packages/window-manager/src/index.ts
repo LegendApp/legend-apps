@@ -239,6 +239,8 @@ export type WindowFrame = {
 };
 
 export type Display = {
+  /** Stable hardware identity for restoring roles after reconnect/restart. */
+  persistentId?: string;
   frame: WindowFrame;
   id: string;
   isMain: boolean;

@@ -20,6 +20,7 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
 #import <CoreImage/CoreImage.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #endif
@@ -1869,7 +1870,11 @@ willBeInsertedIntoToolbar:(BOOL)flag
     if (@available(macOS 10.15, *)) {
       name = screen.localizedName ?: name;
     }
+    CFUUIDRef uuid = screenNumber ? CGDisplayCreateUUIDFromDisplayID(screenNumber.unsignedIntValue) : nullptr;
+    NSString *persistentId = uuid ? CFBridgingRelease(CFUUIDCreateString(kCFAllocatorDefault, uuid)) : screenNumber.stringValue;
+    if (uuid) CFRelease(uuid);
     [displays addObject:@{
+      @"persistentId": persistentId ?: @"",
       @"id": screenNumber.stringValue ?: @"",
       @"name": name,
       @"isMain": @(screen == mainScreen),
