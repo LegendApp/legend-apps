@@ -54,3 +54,4 @@ export { useLiquidGlassPlayback } from "./useLiquidGlassPlayback";
 
 export { SnapshotCaptureBoundary } from "./SnapshotCaptureBoundary";
 export { snapshotCaptureQueue } from "./snapshotCaptureQueue";
+export { useAdvanceAfterStep } from "./useAdvanceAfterStep";

@@ -2,12 +2,12 @@ import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-nati
 import { usePresentationValue } from "./runtime";
 import { samplePlayback, usePlayback } from "./playback";
 
-type ShaderMotion = { clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
+type ShaderMotion = { clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
 export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>, previewTime = 0,
-  { clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
+  { clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
   const playback = usePlayback();
   const slideIndex = usePresentationValue("slideIndex");
@@ -45,11 +45,13 @@ export function useAnimatedShaderUniforms(
   return useDerivedValue(() => {
     const state = playback.value;
     const sampled = samplePlayback(state, previewTime, clock);
-    return { ...uniforms,
+    const extraClocks: Record<string, number> = {};
+    for (const name of Object.keys(clocks ?? {})) extraClocks[name] = samplePlayback(state, previewTime, clocks![name]);
+    return { ...uniforms, ...extraClocks,
       time: adjusted && state.phase !== "preview" && state.phase !== "preparing" ? motion.value.time : sampled,
       slideTime: samplePlayback(state, previewTime),
       stepTime: samplePlayback(state, previewTime, "step"),
       stepIndex: state.stepIndex,
     };
-  }, [uniforms, adjusted, previewTime, clock]);
+  }, [uniforms, clocks, adjusted, previewTime, clock]);
 }
