@@ -49,7 +49,7 @@ export function createPresenterToolbarItems({
   selectedDisplayId: string | null;
   timerRunning: boolean;
 }): WindowToolbarItem[] {
-  const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
+  const selectedDisplay = displays.length === 1 ? displays[0] : displays.find((display) => display.id === selectedDisplayId);
   const modeMenuItems = [
     {
       label: "Presentation",
@@ -126,7 +126,10 @@ export function createPresenterToolbarItems({
       id: presenterDisplayToolbarItemId,
       label: "",
       width: 36,
-      menuItems: [
+      menuItems: displays.length <= 1 ? [
+        { label: audienceOpen ? "Close Audience Window" : "Open Audience Window", value: audienceOpen ? "close-audience" : "open-audience", enabled: audienceOpen || (hasDeck && displays.length === 1) },
+        { label: "Preview Notes Screen", value: "preview-notes", enabled: hasDeck },
+      ] : [
         ...displays.flatMap((display, index) => {
           const key = displayKey(display);
           const roles = displayRoles ?? { audience: selectedDisplayId, notes: null };
@@ -145,7 +148,7 @@ export function createPresenterToolbarItems({
       ],
       placement: "trailing",
       systemImageName: "display",
-      tooltip: selectedDisplay ? `Present on ${selectedDisplay.name}` : "Choose a presentation display",
+      tooltip: displays.length <= 1 ? "Presentation windows" : "Assign display roles",
       type: "menuButton",
     },
     {

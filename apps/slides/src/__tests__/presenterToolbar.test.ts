@@ -99,3 +99,15 @@ describe("presenter toolbar", () => {
     expect(items[1]).toMatchObject({ enabled: false });
   });
 });
+
+
+it("offers window actions instead of display roles on a single screen", () => {
+  const options = { displays: displays.slice(0, 1), elapsed: 0, hasDeck: true, rehearsalEnabled: false, selectedDisplayId: null, timerRunning: false };
+  const menu = (audienceOpen: boolean) => createPresenterToolbarItems({ ...options, audienceOpen }).find(item => item.id === presenterDisplayToolbarItemId).menuItems;
+  expect(menu(false).map(item => item.label)).toEqual(["Open Audience Window", "Preview Notes Screen"]);
+  expect(menu(false)[0].enabled).toBe(true);
+  expect(menu(true)[0].value).toBe("close-audience");
+  const multiple = createPresenterToolbarItems({ ...options, displays, audienceOpen: false }).find(item => item.id === presenterDisplayToolbarItemId).menuItems;
+  expect(multiple.some(item => item.label.includes("Built-in Display"))).toBe(true);
+  expect(multiple.some(item => item.value === "identify-displays")).toBe(true);
+});

@@ -454,7 +454,9 @@ function PresenterToolbar({
           onModeChange(event.value);
         }
       } else if (event.itemId === presenterDisplayToolbarItemId) {
-        if (event.value === "identify-displays") void identifyDisplays(displays);
+        if (event.value === "open-audience") void onStart();
+        else if (event.value === "close-audience") void onStop();
+        else if (event.value === "identify-displays") void identifyDisplays(displays);
         else if (event.value === "preview-notes") void previewNotesOutput();
         else if (event.value?.startsWith("role:")) onDisplayChange(event.value);
         else if (displays.some(display => display.id === event.value)) onDisplayChange(event.value!);
@@ -656,7 +658,7 @@ export function PresenterWindow() {
 
   const startAudience = useCallback(async () => {
     const { displays, selectedDisplayId, rehearsalEnabled } = presenter$.peek();
-    const selectedDisplay = displays.find((display) => display.id === selectedDisplayId);
+    const selectedDisplay = displays.length === 1 ? displays[0] : displays.find((display) => display.id === selectedDisplayId);
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     if (selectedDisplay) {
       notesOutput$.preview.set(false);
