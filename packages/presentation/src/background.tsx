@@ -46,23 +46,23 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
   const selected = useValue(() => Object.values(entries).filter((entry) => entry.runtime$.slideIndex.get() === slideIndex)
     .sort((a, b) => b.priority - a.priority)[0]);
   return (
-    <RegistryContext.Provider value={register}>
-      <HasBackgroundContext.Provider value={Boolean(selected)}>
-        <View style={[styles.host, { backgroundColor: color }]} onLayout={(event) => {
-          const { width, height } = event.nativeEvent.layout;
-          setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
-        }}>
-          <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
-            <SizeContext.Provider value={size}>
-              <IntensityContext.Provider value={intensity}>
-              {selected && <SelectedBackground entry={selected} isPreview={isPreview} />}
-            </IntensityContext.Provider>
-            </SizeContext.Provider>
+    <IntensityContext.Provider value={intensity}>
+      <RegistryContext.Provider value={register}>
+        <HasBackgroundContext.Provider value={Boolean(selected)}>
+          <View style={[styles.host, { backgroundColor: color }]} onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
+          }}>
+            <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
+              <SizeContext.Provider value={size}>
+                {selected && <SelectedBackground entry={selected} isPreview={isPreview} />}
+              </SizeContext.Provider>
+            </View>
+            {children}
           </View>
-          {children}
-        </View>
-      </HasBackgroundContext.Provider>
-    </RegistryContext.Provider>
+        </HasBackgroundContext.Provider>
+      </RegistryContext.Provider>
+    </IntensityContext.Provider>
   );
 }
 function SelectedBackground({ entry, isPreview }: { entry: Entry; isPreview: boolean }) {
