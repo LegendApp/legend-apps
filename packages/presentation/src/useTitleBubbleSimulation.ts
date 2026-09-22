@@ -15,7 +15,7 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
       cursor.value={key,time:0};
     }
     if(clock.phase!=="playing" || (clock.stepIndex!==1 && clock.stepIndex!==2)) return;
-    const time=clock.stepTime*(clock.stepIndex===1?1.5:1);
+    const time=clock.stepTime*(clock.stepIndex===1?1.5:2);
     const elapsed=Math.max(0,time-cursor.value.time);
     if(elapsed>0) simulation.value=clock.stepIndex===2 ? advanceTitleRelease(simulation.value,elapsed,uniforms.bestRect as number[],targets) : advanceTitleBubbles(simulation.value,elapsed,uniforms.time as number,uniforms.bestRect as number[],targets);
     cursor.value={key,time};
