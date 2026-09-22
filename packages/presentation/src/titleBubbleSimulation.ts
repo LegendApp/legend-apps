@@ -1,9 +1,9 @@
-export type TitleDrop = { x: number; y: number; vx: number; vy: number; age: number; radius: number; phase: number; hitX: number; hitY: number };
+export type TitleDrop = { x: number; y: number; vx: number; vy: number; age: number; radius: number; phase: number; hitX: number; hitY: number; initialDistance: number; whiten: number };
 export type TitleBubbles = { time: number; volume: number; scale: number; velocity: number; drops: TitleDrop[] };
 export function createTitleBubbles(): TitleBubbles {
   "worklet";
   const drops: TitleDrop[]=[];
-  for(let i=0;i<6;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.48,radius:0,phase:0,hitX:0,hitY:0});
+  for(let i=0;i<6;i++) drops.push({x:0,y:0,vx:0,vy:0,age:-i*0.48,radius:0,phase:0,hitX:0,hitY:0,initialDistance:0,whiten:0});
   return {time:0,volume:0,scale:1,velocity:0,drops};
 }
 export function titleParent(i: number,t: number) {
@@ -37,14 +37,17 @@ export function advanceTitleBubbles(previous: TitleBubbles, elapsed: number, bac
         const target=targets[i%Math.max(1,targets.length)] ?? [cx,cy];
         const tx=cx+(target[0]-cx)*state.scale,ty=cy+(target[1]-cy)*state.scale;
         const dx=tx-d.x,dy=ty-d.y;
+        const distance=Math.hypot(dx,dy);
+        if(d.initialDistance===0) d.initialDistance=Math.max(1,distance);
+        d.whiten=Math.max(d.whiten,Math.min(1,1-distance/d.initialDistance));
         d.vx+=(dx*2.4-d.vx*1.8)*dt;d.vy+=(dy*2.4-d.vy*1.8)*dt;
         d.x+=d.vx*dt;d.y+=d.vy*dt;
         if(Math.hypot(tx-d.x,ty-d.y)<d.radius+5) {
-          state.volume+=.025;d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
+          d.whiten=1;state.volume+=.025;d.phase=2;d.age=0;d.hitX=target[0];d.hitY=target[1];d.x=tx;d.y=ty;
         }
       } else {
         d.radius=19*Math.max(0,1-d.age/.55);
-        if(d.age>.9){d.phase=0;d.age=0;d.radius=0;}
+        if(d.age>.9){d.phase=0;d.age=0;d.radius=0;d.initialDistance=0;d.whiten=0;}
       }
     }
     const targetScale=Math.sqrt(1+state.volume);

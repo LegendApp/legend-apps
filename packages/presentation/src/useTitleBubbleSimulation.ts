@@ -22,12 +22,14 @@ export function useTitleBubbleSimulation(base: { readonly value: Record<string, 
     const state=simulation.value;
     const drops: number[]=[];
     const impacts: number[]=[];
+    const whiten: number[]=[];
     for(let i=0;i<state.drops.length;i++) {
       const d=state.drops[i];
       drops.push(d.x,d.y,d.radius,d.phase);
+      whiten.push(d.whiten);
       impacts.push(d.hitX,d.hitY,d.phase===2?Math.max(0,1-d.age/.9):0);
     }
     return { ...visual.value, resolution: [1920,1080], brightness:base.value.brightness,
-      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts };
+      titleFeed:1, backgroundTime:base.value.time, absorbedScale:state.scale, drops, impacts, whiten };
   });
 }
