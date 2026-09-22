@@ -4,7 +4,7 @@ import { ScrollView, Text, View } from "react-native";
 import { SlideCanvas, DeckRenderer } from "./DeckRenderer";
 import { slidesState$ } from "./slidesStore";
 import { EditableMarkdown } from "./EditableMarkdown";
-import { notesPreviewRatioSetting, usePresentationNotesWidthSetting } from "./slidesSettings";
+import { notesPreviewRatioSetting, useNotesPreviewRatioSetting, usePresentationNotesWidthSetting } from "./slidesSettings";
 import { notesOutput$ } from "./notesOutput";
 import { formatPresenterElapsed } from "./presenterToolbar";
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
@@ -21,7 +21,7 @@ export function NotesWindow() {
   const blackout = useValue(slidesState$.blackout);
   const notes = useValue(() => slidesState$.slides[index]?.notes.get() ?? "");
   const width = usePresentationNotesWidthSetting();
-  const ratio = notesPreviewRatioSetting.use();
+  const ratio = useNotesPreviewRatioSetting();
   const [height, setHeight] = useState(800);
   const scroll = useRef<ScrollView>(null);
   const positions = useRef(new Map<string, number>());

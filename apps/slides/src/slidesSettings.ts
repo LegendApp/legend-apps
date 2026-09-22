@@ -72,3 +72,6 @@ export const displayRolesSetting = slidesSettings.field("displayRoles");
 export const notesPreviewRatioSetting = slidesSettings.field("notesPreviewRatio");
 
 export const displayRolesConfiguredSetting = slidesSettings.field("displayRolesConfigured");
+
+export const useDisplayRolesSetting = displayRolesSetting.use;
+export const useNotesPreviewRatioSetting = notesPreviewRatioSetting.use;

@@ -1,5 +1,5 @@
 import { assignDisplayRole, displayKey } from "./displayRoles";
-import { displayRolesSetting, displayRolesConfiguredSetting } from "./slidesSettings";
+import { displayRolesSetting, displayRolesConfiguredSetting, useDisplayRolesSetting } from "./slidesSettings";
 import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
@@ -341,7 +341,7 @@ function PresenterToolbar({
 }: PresenterToolbarProps) {
   const presentationStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
   const backgroundIntensity = useBackgroundIntensitySetting();
-  const displayRoles = displayRolesSetting.use();
+  const displayRoles = useDisplayRolesSetting();
   const rehearsalPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
   const elapsedBeforeRun = useRef(0);
   const startedAt = useRef(0);
