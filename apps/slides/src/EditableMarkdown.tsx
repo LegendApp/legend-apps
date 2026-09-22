@@ -239,9 +239,9 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 25 },
-  noteSection: { paddingLeft: 34 },
-  stepNumber: { position: "absolute", left: 0, top: 0, width: 26, textAlign: "right", color: "#a1a1aa", fontSize: 17, lineHeight: 25, fontVariant: ["tabular-nums"] },
+  noteSection: { width: "100%" },
+  stepNumber: { position: "absolute", left: -34, top: 0, width: 26, textAlign: "right", color: "#a1a1aa", fontSize: 17, lineHeight: 25, fontVariant: ["tabular-nums"] },
   viewer: { width: "100%" },
-  viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
+  viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8, paddingLeft: 42 },
   focusedShell: { borderColor: "#3b82f6" },
 });
