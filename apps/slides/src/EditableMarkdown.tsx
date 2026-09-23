@@ -25,8 +25,8 @@ const viewerMarkdownStyle: MarkdownStyle = {
   h2: { color: "#d1d5db", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
   h3: { color: "#d1d5db", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
   link: { color: "#93c5fd", underline: true },
-  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 27, markerColor: "#a1a1aa" },
-  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 27, marginBottom: 5 },
+  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 0, markerColor: "#a1a1aa" },
+  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 0, marginBottom: 5 },
   strong: { color: "#d1d5db" },
 };
 
@@ -69,7 +69,10 @@ type EditableMarkdownProps = {
 
 export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
-  const textStyle = { fontSize, lineHeight: fontSize * 27 / 17 };
+  // Zero means native font metrics in the Markdown formatter. A fixed paragraph
+  // height was only taking effect after typing, expanding the initial layout.
+  const textStyle = { fontSize };
+  const sectionGap = fontSize * 27 / 17;
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -216,7 +219,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     >
       {markdown.trim() ? (
         splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? textStyle.lineHeight : 0 }]}>
+          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? sectionGap : 0 }]}>
             <View pointerEvents={editable ? "none" : "auto"}>
               <EnrichedMarkdownTextInput
                 key={`${fontSize}:${section.markdown}`}
@@ -242,7 +245,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     color: "#d1d5db",
     fontSize: 17,
-    lineHeight: 27,
     minHeight: 120,
     padding: 0,
     width: "100%",
