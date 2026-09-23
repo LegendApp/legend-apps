@@ -328,7 +328,10 @@ function VirtualizedSettingsListPageRow<PageId extends string>({
   item,
 }: LegendListRenderItemProps<VirtualizedSettingsWindowPage<PageId>>) {
   return (
-    <View className="flex-col gap-5" style={index > 0 ? styles.virtualizedSettingsListPageAfterFirst : undefined}>
+    <View
+      className="flex-col gap-5"
+      style={[styles.virtualizedSettingsListPage, index > 0 && styles.virtualizedSettingsListPageAfterFirst]}
+    >
       <View className="flex-col gap-2">
         <Text className="text-xl font-semibold text-text-primary leading-tight">{item.title}</Text>
       </View>
@@ -556,10 +559,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   virtualizedSettingsListContent: {
-    alignSelf: "center",
     flexDirection: "column",
-    maxWidth: 896,
     paddingBottom: 28,
+  },
+  // Keep horizontal sizing inside the item, so the virtualized scroll content
+  // cannot add its padding to the measured page width and clip the controls.
+  virtualizedSettingsListPage: {
+    alignSelf: "center",
+    maxWidth: 896,
     paddingHorizontal: 32,
     width: "100%",
   },
