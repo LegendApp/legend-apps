@@ -6,6 +6,11 @@ import { createHash } from "node:crypto";
 import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
 
+/** Types and source maps are not loaded by the shipped transpile-only compiler. */
+export function isCompilerRuntimeFile(file: string) {
+  return !/\.map$|\.d\.[cm]?ts$/.test(file);
+}
+
 /** Preserve runtime package resolution (including native/dynamic compiler deps). */
 export function packageSlidesCompiler(destination: string, bunExecutable = process.execPath) {
   fs.mkdirSync(destination, { recursive: true });
@@ -24,7 +29,7 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
     if (known) return known;
     const target = path.join(destination, "node_modules", ".compiler", `${name.replaceAll("/", "-")}-${createHash("sha256").update(source).digest("hex").slice(0, 12)}`);
     copied.set(source, target);
-    fs.cpSync(source, target, { recursive: true, dereference: true, filter: (file) => file === source || !path.relative(source, file).split(path.sep).includes("node_modules") });
+    fs.cpSync(source, target, { recursive: true, dereference: true, filter: (file) => file === source || (!path.relative(source, file).split(path.sep).includes("node_modules") && isCompilerRuntimeFile(file)) });
     const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
     for (const dependency of new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})])) {
       try { link(install(dependency, source), path.join(target, "node_modules", dependency)); }
