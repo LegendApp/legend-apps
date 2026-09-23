@@ -76,6 +76,7 @@ import {
 } from "./presenterTimer";
 import { persistSlideSpeakerNotes } from "./speakerNotesPersistence";
 import {
+  usePresentationNotesFontSizeSetting,
   usePresentationNotesWidthSetting,
   useBackgroundIntensitySetting,
   setBackgroundIntensitySetting,
@@ -160,10 +161,11 @@ function SpeakerNotes({
 }) {
   const currentStep = useValue(slidesState$.currentStep);
   const notesWidth = usePresentationNotesWidthSetting();
+  const notesFontSize = usePresentationNotesFontSizeSetting();
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
       <ScrollableNotes key={`${deckPath}:${slideIndex}`} notesWidth={notesWidth}
-        editable={editable} currentStep={currentStep}
+        editable={editable} fontSize={notesFontSize} currentStep={currentStep}
         markdown={notes ?? ""} onEditingChange={onEditingChange} onSave={onSave}
         placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."} />
     </View>

@@ -7,6 +7,8 @@ import {
   type VirtualizedSettingsWindowPage,
 } from "@legend-apps/settings-window";
 import {
+  usePresentationNotesFontSizeSetting,
+  setPresentationNotesFontSizeSetting,
   usePresentationNotesWidthSetting,
   setPresentationNotesWidthSetting,
   setPresentationTimerStartsOnSecondSlideSetting,
@@ -58,10 +60,14 @@ function TimerSettingsPage() {
 
 function AppearanceSettingsContent() {
   const width = usePresentationNotesWidthSetting();
+  const fontSize = usePresentationNotesFontSizeSetting();
   return <SettingsSection first title={null}>
     <SettingsRow title="Presentation Notes Width" description="Maximum width of the centered notes column."
       control={<SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
         options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />} />
+    <SettingsRow title="Presentation Notes Font Size" description="Text size in the notes viewer and editor."
+      control={<SelectControl accessibilityLabel="Presentation notes font size" value={fontSize} onChange={setPresentationNotesFontSizeSetting}
+        options={[12, 14, 16, 17, 18, 20, 22, 24, 28, 32, 36, 40].map(value => ({ value, label: `${value} pt` }))} />} />
   </SettingsSection>;
 }
 

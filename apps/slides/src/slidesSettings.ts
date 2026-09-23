@@ -12,6 +12,10 @@ const slidesSettings = createObservableSettings({
     displayRolesConfigured: { defaultValue: false as boolean },
     displayRoles: { defaultValue: { audience: null, notes: null } as import("./displayRoles").DisplayRoles },
     notesPreviewRatio: { defaultValue: 0.34, normalize: (v: unknown) => typeof v === "number" && Number.isFinite(v) ? Math.max(0.2, Math.min(0.65, v)) : 0.34 },
+    presentationNotesFontSize: {
+      defaultValue: 17,
+      normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(12, Math.min(40, value)) : 17,
+    },
     presentationNotesWidth: {
       defaultValue: 800,
       normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(400, Math.min(2400, value)) : 800,
@@ -75,3 +79,7 @@ export const displayRolesConfiguredSetting = slidesSettings.field("displayRolesC
 
 export const useDisplayRolesSetting = displayRolesSetting.use;
 export const useNotesPreviewRatioSetting = notesPreviewRatioSetting.use;
+
+const presentationNotesFontSizeSetting = slidesSettings.field("presentationNotesFontSize");
+export const usePresentationNotesFontSizeSetting = presentationNotesFontSizeSetting.use;
+export const setPresentationNotesFontSizeSetting = presentationNotesFontSizeSetting.set;

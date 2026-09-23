@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { SlideCanvas, DeckRenderer } from "./DeckRenderer";
 import { slidesState$ } from "./slidesStore";
 import { ScrollableNotes } from "./ScrollableNotes";
-import { notesPreviewRatioSetting, useNotesPreviewRatioSetting, usePresentationNotesWidthSetting } from "./slidesSettings";
+import { notesPreviewRatioSetting, useNotesPreviewRatioSetting, usePresentationNotesWidthSetting, usePresentationNotesFontSizeSetting } from "./slidesSettings";
 import { notesOutput$ } from "./notesOutput";
 import { formatPresenterElapsed } from "./presenterToolbar";
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
@@ -21,6 +21,7 @@ export function NotesWindow() {
   const blackout = useValue(slidesState$.blackout);
   const notes = useValue(() => slidesState$.slides[index]?.notes.get() ?? "");
   const width = usePresentationNotesWidthSetting();
+  const fontSize = usePresentationNotesFontSizeSetting();
   const ratio = useNotesPreviewRatioSetting();
   const [height, setHeight] = useState(800);
   const [responder] = useState(() => createPresenterResizeResponder({ direction: "vertical", onResize: () => {}, onResizeEnd: () => {} }));
@@ -36,7 +37,7 @@ export function NotesWindow() {
     <View accessibilityLabel="Resize notes preview" {...responder.panHandlers} style={{ height: 18, alignItems: "center", justifyContent: "center" }}>
       <View style={{ height: 3, width: 60, backgroundColor: "#52525b", borderRadius: 2 }} />
     </View>
-    <ScrollableNotes key={index} notesWidth={width} editable={false}
+    <ScrollableNotes key={index} notesWidth={width} fontSize={fontSize} editable={false}
       markdown={notes} currentStep={step} onSave={noSave} placeholder="No notes for this slide." />
   </View>;
 }
