@@ -4915,7 +4915,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
                                   options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
                                   context:nil];
  
-@@ -504,8 +623,14 @@
+@@ -504,19 +623,35 @@
      writingDirectionChanged = YES;
    }
  
@@ -4932,7 +4932,20 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
        NSString *markdown = [NSString stringWithUTF8String:newViewProps.defaultValue.c_str()];
        [self importMarkdown:markdown];
      }
-@@ -516,7 +641,7 @@
+   }
+ 
++  // Generic text props may change independently of defaultValue (including
++  // Fabric's follow-up prop updates after mounting). Restore Markdown metrics
++  // before formatting, just as handleTextChanged does after a keystroke.
++  if (!importDefaultValue) {
++    NSString *markdown = [self serializeText:ENRMGetPlainText(_textView)
++                                      ranges:_formattingStore.allRanges
++                                 blockRanges:_blockStore.allRanges];
++    styleChanged |= [self applyBlockStyleForMarkdown:[self blockStyleMarkdownForMarkdown:markdown]];
++  }
++
+   if (styleChanged) {
+     _placeholderLabel.font = _formatterStyle.baseFont;
  
      [self resetBaseTypingAttributes];
  
@@ -4941,7 +4954,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
        [self applyFormatting];
      }
  
-@@ -525,7 +650,6 @@
+@@ -525,7 +660,6 @@
      [self applyFormatting];
    }
  
@@ -4949,7 +4962,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  #pragma mark - Relayout
-@@ -533,7 +657,7 @@
+@@ -533,7 +667,7 @@
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -4958,7 +4971,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)_performRelayout
-@@ -542,22 +666,36 @@
+@@ -542,22 +676,36 @@
      return;
    }
  
@@ -5011,7 +5024,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  }
  
-@@ -569,6 +707,9 @@
+@@ -569,6 +717,9 @@
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5021,7 +5034,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +803,7 @@
+@@ -662,6 +813,7 @@
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5029,7 +5042,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +815,12 @@
+@@ -673,9 +825,12 @@
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5044,7 +5057,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -743,6 +888,20 @@
+@@ -743,6 +898,20 @@
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5065,7 +5078,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +946,89 @@
+@@ -787,12 +956,89 @@
  
  #pragma mark - Formatting
  
@@ -5157,7 +5170,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)applyFormatting
-@@ -837,6 +1073,9 @@
+@@ -837,6 +1083,9 @@
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5167,7 +5180,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1118,23 @@
+@@ -879,6 +1128,23 @@
    [self requestHeightUpdate];
  }
  
@@ -5191,7 +5204,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -887,6 +1143,121 @@
+@@ -887,6 +1153,121 @@
    _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
    [_inputEventEmitter emitOnChangeSelection];
    [_inputEventEmitter emitOnChangeState];
@@ -5313,7 +5326,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)toggleBold
-@@ -1377,9 +1748,31 @@
+@@ -1377,9 +1758,31 @@
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5346,7 +5359,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)copyToClipboard
-@@ -1413,11 +1806,22 @@
+@@ -1413,11 +1816,22 @@
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5374,7 +5387,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  #endif
    return caretRect;
-@@ -1540,6 +1944,32 @@
+@@ -1540,6 +1954,32 @@
    return YES;
  }
  
@@ -5407,7 +5420,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2064,12 @@
+@@ -1634,7 +2074,12 @@
    }
  #endif
  
@@ -5421,7 +5434,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2084,9 @@
+@@ -1649,6 +2094,9 @@
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5431,7 +5444,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2149,12 @@
+@@ -1711,6 +2159,12 @@
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
