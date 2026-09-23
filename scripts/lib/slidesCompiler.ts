@@ -4,6 +4,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { rootDir } from "./apps";
+import { collectSlidesHostClasses } from "./slidesHostClasses";
 
 /** Preserve runtime package resolution (including native/dynamic compiler deps). */
 export function packageSlidesCompiler(destination: string, bunExecutable = process.execPath) {
@@ -41,7 +42,9 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
   fs.mkdirSync(path.join(destination, "scripts"), { recursive: true });
   fs.copyFileSync(path.join(rootDir, "scripts/compile-slides.ts"), path.join(destination, "scripts/compile-slides.ts"));
   fs.mkdirSync(path.join(destination, "shell/src"), { recursive: true });
-  fs.copyFileSync(path.join(rootDir, "shell/src/global.css"), path.join(destination, "shell/src/global.css"));
+  fs.writeFileSync(path.join(destination, "shell/src/host-classes.txt"), collectSlidesHostClasses(rootDir));
+  fs.writeFileSync(path.join(destination, "shell/src/global.css"),
+    fs.readFileSync(path.join(rootDir, "shell/src/global.css"), "utf8") + '\n@source "./host-classes.txt";\n');
   const compilerDependencies = ["@babel/core", "@babel/plugin-transform-block-scoping", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
   for (const name of compilerDependencies) link(install(name, path.join(rootDir, "packages/presentation")), path.join(destination, "node_modules", name));
   for (const name of ["uniwind", "tailwindcss"]) link(install(name, path.join(rootDir, "shell")), path.join(destination, "shell/node_modules", name));

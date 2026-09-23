@@ -117,10 +117,11 @@ function SlideCounter({ index }: { index: number }) {
   const stepCount = useValue(() => getSlideStepCount(slidesState$.slides[index].get()));
   if (total === 0) return null;
   return (
-    <View pointerEvents="none" style={styles.slideCounter}>
+    <View pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
       <Text
         accessibilityLabel={`Slide ${index + 1} of ${total}, step ${step + 1} of ${stepCount}`}
-        style={styles.slideCounterText}
+        className="text-xs font-semibold text-zinc-200"
+        style={{ fontVariant: ["tabular-nums"] }}
       >
         {index + 1} / {total} · Step {step + 1} / {stepCount}
       </Text>
@@ -883,11 +884,6 @@ function EmptyPresenter() {
 }
 
 const styles = StyleSheet.create({
-  // Keep the preview overlay anchored independently of generated utility styles.
-  slideCounter: { position: "absolute", right: 12, top: 12, borderRadius: 6,
-    backgroundColor: "rgba(24,24,27,0.9)", paddingHorizontal: 12, paddingVertical: 4 },
-  slideCounterText: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: "#e4e4e7",
-    fontVariant: ["tabular-nums"] },
   blackoutWarning: { backgroundColor: "#3f3006", borderRadius: 8, color: "#fde68a", marginTop: 12, padding: 10, textAlign: "center" },
   button: { backgroundColor: "#30323a", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
   buttonText: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
