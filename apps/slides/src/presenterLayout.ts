@@ -5,11 +5,11 @@ export type PresenterLayout = {
 
 export const defaultPresenterLayout: PresenterLayout = {
   currentPreviewRatio: 2 / 3,
-  notesRatio: 0.26,
+  notesRatio: 0.60,
 };
 
 const currentPreviewRange = { maximum: 0.8, minimum: 0.35 };
-const notesRange = { maximum: 0.55, minimum: 0.15 };
+const notesRange = { maximum: 0.8, minimum: 0.15 };
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -28,7 +28,7 @@ export function normalizePresenterLayout(value: unknown): PresenterLayout {
       currentPreviewRange.maximum,
     ),
     notesRatio: clamp(
-      finiteNumber(layout.notesRatio, defaultPresenterLayout.notesRatio),
+      finiteNumber(layout.notesRatio === 0.26 ? defaultPresenterLayout.notesRatio : layout.notesRatio, defaultPresenterLayout.notesRatio),
       notesRange.minimum,
       notesRange.maximum,
     ),

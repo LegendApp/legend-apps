@@ -10,6 +10,11 @@ describe("presenter layout", () => {
     expect(normalizePresenterLayout({ currentPreviewRatio: Number.NaN, notesRatio: "large" })).toEqual(defaultPresenterLayout);
   });
 
+  it("upgrades the old default without replacing custom pane sizes", () => {
+    expect(normalizePresenterLayout({ currentPreviewRatio: 2 / 3, notesRatio: 0.26 }).notesRatio).toBe(0.6);
+    expect(normalizePresenterLayout({ notesRatio: 0.45 }).notesRatio).toBe(0.45);
+  });
+
   it("clamps persisted ratios to usable pane sizes", () => {
     expect(normalizePresenterLayout({ currentPreviewRatio: 1, notesRatio: 0 })).toEqual({
       currentPreviewRatio: 0.8,
@@ -17,7 +22,7 @@ describe("presenter layout", () => {
     });
     expect(normalizePresenterLayout({ currentPreviewRatio: 0, notesRatio: 1 })).toEqual({
       currentPreviewRatio: 0.35,
-      notesRatio: 0.55,
+      notesRatio: 0.8,
     });
   });
 
@@ -26,7 +31,7 @@ describe("presenter layout", () => {
   });
 
   it("resizes notes in the opposite direction of the vertical divider", () => {
-    expect(resizePresenterLayout(defaultPresenterLayout, "notes", 50, 500).notesRatio).toBeCloseTo(0.16, 3);
+    expect(resizePresenterLayout(defaultPresenterLayout, "notes", 50, 500).notesRatio).toBeCloseTo(0.50, 3);
   });
 
   it("ignores resize events before the workspace is measured", () => {
