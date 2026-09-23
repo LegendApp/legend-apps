@@ -17,13 +17,23 @@ test("outside clicks save immediately without waiting on an unmounted native edi
   const editing = mock(() => {}), save = mock(async () => {});
   let tree;
   try {
-    await act(() => { tree = create(<NotesEditingBoundary testID="boundary"><EditableMarkdown editable markdown="notes" placeholder="Notes" onEditingChange={editing} onSave={save} /></NotesEditingBoundary>); });
-    const viewerStyle = tree.root.findByType("markdown").props.markdownStyle;
+    await act(() => { tree = create(<NotesEditingBoundary testID="boundary"><EditableMarkdown editable fontSize={24} markdown={"First paragraph wraps when needed.\n\nSecond paragraph."} placeholder="Notes" onEditingChange={editing} onSave={save} /></NotesEditingBoundary>); });
+    expect(tree.root.findByType("editor").props.editable).toBe(false);
+    const viewerValue = tree.root.findByType("editor").props.defaultValue;
+    const viewerTextStyle = tree.root.findByType("editor").props.style;
+    const viewerStyle = tree.root.findByType("editor").props.markdownStyle;
+    const viewerShell = tree.root.findByType("pressable").props.style;
+    expect(viewerStyle.paragraph.fontSize).toBe(24);
     await act(() => tree.root.findByType("pressable").props.onPress());
     const editor = tree.root.findByType("editor");
     expect(editor.props.markdownStyle).toBe(viewerStyle);
-    expect(editor.parent.parent.props.style[2].borderColor).toBe("#3b82f6");
-    expect(editor.parent.parent.props.style[1].paddingLeft).toBe(8);
+    expect(editor.props.defaultValue).toBe(viewerValue);
+    expect(editor.parent.parent.props.style[1].borderColor).toBe("#3b82f6");
+    expect(editor.parent.parent.props.style[0]).toBe(viewerShell);
+    expect(editor.props.style.padding).toBe(viewerTextStyle.padding);
+    expect(editor.props.style.width).toBe(viewerTextStyle.width);
+    expect(editor.props.style.fontSize).toBe(24);
+    expect(editor.props.style.lineHeight).toBe(viewerStyle.paragraph.lineHeight);
     await act(() => editor.props.onChangeMarkdown("changed notes"));
     const stopPropagation = mock(() => {});
     await act(() => editor.parent.parent.props.onTouchStart({ stopPropagation }));
@@ -33,6 +43,6 @@ test("outside clicks save immediately without waiting on an unmounted native edi
     expect(blur).toHaveBeenCalledTimes(1);
     expect(editing.mock.calls.map(x => x[0])).toEqual([true, false]);
     expect(save).toHaveBeenCalledWith("changed notes");
-    expect(tree.root.findAllByType("editor")).toHaveLength(0);
+    expect(tree.root.findByType("editor").props.editable).toBe(false);
   } finally { if (tree) await act(() => tree.unmount()); }
 });

@@ -1,11 +1,9 @@
 import { splitSpeakerNoteSteps, speakerNoteOpacity, speakerNotesEditorMarkdown } from "./speakerNoteSteps";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
   type MarkdownStyle,
-  type MarkdownTextInputStyle,
 } from "react-native-enriched-markdown";
 import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
@@ -32,13 +30,19 @@ const viewerMarkdownStyle: MarkdownStyle = {
   strong: { color: "#fafafa" },
 };
 
-const largeViewerMarkdownStyle: MarkdownStyle = {
-  ...viewerMarkdownStyle,
-  paragraph: { ...viewerMarkdownStyle.paragraph, fontSize: 22, lineHeight: 33, marginBottom: 8 },
-  list: { ...viewerMarkdownStyle.list, fontSize: 22, lineHeight: 33 },
-};
-
-const editorMarkdownStyle: MarkdownTextInputStyle = viewerMarkdownStyle;
+function createNotesMarkdownStyle(fontSize: number): MarkdownStyle {
+  const scale = fontSize / 17;
+  const style = { ...viewerMarkdownStyle };
+  for (const key of ["paragraph", "list", "h1", "h2", "h3", "code", "codeBlock"] as const) {
+    const base = viewerMarkdownStyle[key]!;
+    style[key] = {
+      ...base,
+      fontSize: base.fontSize! * scale,
+      ...("lineHeight" in base ? { lineHeight: base.lineHeight! * scale } : {}),
+    };
+  }
+  return style;
+}
 
 type NotesDismiss = { current: (() => void) | null };
 const NotesDismissContext = createContext<NotesDismiss | null>(null);
@@ -55,14 +59,16 @@ type EditableMarkdownProps = {
   editable: boolean;
   currentStep?: number;
   onSectionLayout?(step: number, y: number): void;
-  large?: boolean;
+  fontSize?: number;
   markdown: string;
   onEditingChange?(editing: boolean): void;
   onSave(markdown: string): Promise<void>;
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, large = false }: EditableMarkdownProps) {
+export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
+  const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
+  const textStyle = { fontSize, lineHeight: fontSize * 25 / 17 };
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -172,13 +178,13 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
 
   if (editing) {
     return (
-      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.editorShell, styles.focusedShell]}>
+      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.focusedShell]}>
       <EnrichedMarkdownTextInput
         ref={inputRef}
         autoFocus
         cursorColor="#93c5fd"
         defaultValue={editorInitialValue}
-        markdownStyle={editorMarkdownStyle}
+        markdownStyle={markdownStyle}
         multiline
         onBlur={finishEditing}
         onChangeMarkdown={(value) => {
@@ -192,7 +198,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
         placeholderTextColor="#71717a"
         scrollEnabled={false}
         selectionColor="#3b82f680"
-        style={styles.editor}
+        style={{ ...styles.editor, ...textStyle }}
       />
       </View>
     );
@@ -209,20 +215,22 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     >
       {markdown.trim() ? (
         splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? 18 : 0 }]}>
-            {section.step !== undefined && <Text style={[styles.stepNumber, large && { fontSize: 22, lineHeight: 33 }]}>{section.step + 1}.</Text>}
-            <EnrichedMarkdownText
-              allowTrailingMargin={false}
-              containerStyle={styles.viewer}
-              flavor="github"
-              markdown={section.step === undefined ? section.markdown : section.markdown.replace(/^\d+[.:)]\s+/, "")}
-              markdownStyle={large ? largeViewerMarkdownStyle : viewerMarkdownStyle}
-              selectable={!editable}
-            />
+          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? textStyle.lineHeight : 0 }]}>
+            <View pointerEvents={editable ? "none" : "auto"}>
+              <EnrichedMarkdownTextInput
+                key={section.markdown}
+                editable={false}
+                defaultValue={speakerNotesEditorMarkdown(section.markdown)}
+                markdownStyle={markdownStyle}
+                multiline
+                scrollEnabled={false}
+                style={{ ...styles.editor, ...textStyle, minHeight: 0 }}
+              />
+            </View>
           </View>
         ))
       ) : (
-        <Text style={styles.placeholder}>{placeholder}</Text>
+        <Text style={[styles.placeholder, textStyle]}>{placeholder}</Text>
       )}
     </Pressable>
   );
@@ -240,9 +248,6 @@ const styles = StyleSheet.create({
   },
   placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 25 },
   noteSection: { width: "100%" },
-  stepNumber: { position: "absolute", left: -34, top: 0, width: 26, textAlign: "right", color: "#a1a1aa", fontSize: 17, lineHeight: 25, fontVariant: ["tabular-nums"] },
-  viewer: { width: "100%" },
-  viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8, paddingLeft: 42 },
-  editorShell: { paddingLeft: 8 },
+  viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
 });
