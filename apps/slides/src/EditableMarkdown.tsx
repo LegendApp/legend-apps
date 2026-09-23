@@ -8,6 +8,7 @@ import {
 import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
+const notesLineHeightRatio = 1.3;
 
 const viewerMarkdownStyle: MarkdownStyle = {
   code: { backgroundColor: "#27272a", color: "#d1d5db", fontFamily: "Menlo", fontSize: 15 },
@@ -25,8 +26,8 @@ const viewerMarkdownStyle: MarkdownStyle = {
   h2: { color: "#d1d5db", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
   h3: { color: "#d1d5db", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
   link: { color: "#93c5fd", underline: true },
-  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 17 * 1.5, markerColor: "#a1a1aa" },
-  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 17 * 1.5, marginBottom: 5 },
+  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 17 * notesLineHeightRatio, markerColor: "#a1a1aa" },
+  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 17 * notesLineHeightRatio, marginBottom: 5 },
   strong: { color: "#d1d5db" },
 };
 
@@ -38,7 +39,7 @@ function createNotesMarkdownStyle(fontSize: number): MarkdownStyle {
     style[key] = {
       ...base,
       fontSize: base.fontSize! * scale,
-      ...("lineHeight" in base ? { lineHeight: base.lineHeight! * scale } : {}),
+      lineHeight: base.fontSize! * scale * notesLineHeightRatio,
     };
   }
   return style;
@@ -70,7 +71,7 @@ type EditableMarkdownProps = {
 export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
-  const textStyle = { fontSize, lineHeight: fontSize * 1.5 };
+  const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
   const sectionGap = fontSize * 27 / 17;
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
-  placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 27 },
+  placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 17 * notesLineHeightRatio },
   noteSection: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
