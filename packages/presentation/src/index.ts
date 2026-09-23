@@ -58,3 +58,6 @@ export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
 export { useTitleBubbleSimulation } from "./useTitleBubbleSimulation";
 
 export { CarouselBlurView } from "./CarouselBlurView";
+
+export { useNativeVideo } from "./useNativeVideo";
+export { NativeVideoView } from "./NativeVideoView";
