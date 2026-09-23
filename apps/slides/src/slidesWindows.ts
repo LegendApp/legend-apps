@@ -12,7 +12,7 @@ const windows = {
       title: "Legend Slides",
       windowStyle: {
         appearance: "dark",
-        backgroundColor: "#111114",
+        backgroundColor: "#171819",
         height: 820,
         hasToolbar: true,
         minHeight: 600,

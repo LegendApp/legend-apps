@@ -10,24 +10,24 @@ import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native"
 export const editableMarkdownSaveDebounceMs = 1000;
 
 const viewerMarkdownStyle: MarkdownStyle = {
-  code: { backgroundColor: "#27272a", color: "#e4e4e7", fontFamily: "Menlo", fontSize: 15 },
+  code: { backgroundColor: "#27272a", color: "#d1d5db", fontFamily: "Menlo", fontSize: 15 },
   codeBlock: {
     backgroundColor: "#111114",
     borderRadius: 6,
-    color: "#e4e4e7",
+    color: "#d1d5db",
     fontFamily: "Menlo",
     fontSize: 14,
     lineHeight: 21,
     padding: 10,
   },
-  em: { color: "#e4e4e7" },
-  h1: { color: "#fafafa", fontSize: 22, fontWeight: "700", lineHeight: 28, marginBottom: 6 },
-  h2: { color: "#fafafa", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
-  h3: { color: "#f4f4f5", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
+  em: { color: "#d1d5db" },
+  h1: { color: "#d1d5db", fontSize: 22, fontWeight: "700", lineHeight: 28, marginBottom: 6 },
+  h2: { color: "#d1d5db", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
+  h3: { color: "#d1d5db", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
   link: { color: "#93c5fd", underline: true },
-  list: { color: "#e4e4e7", fontSize: 17, gapWidth: 8, lineHeight: 27, markerColor: "#a1a1aa" },
-  paragraph: { color: "#e4e4e7", fontSize: 17, lineHeight: 27, marginBottom: 5 },
-  strong: { color: "#fafafa" },
+  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 27, markerColor: "#a1a1aa" },
+  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 27, marginBottom: 5 },
+  strong: { color: "#d1d5db" },
 };
 
 function createNotesMarkdownStyle(fontSize: number): MarkdownStyle {
@@ -240,7 +240,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
 const styles = StyleSheet.create({
   editor: {
     backgroundColor: "transparent",
-    color: "#e4e4e7",
+    color: "#d1d5db",
     fontSize: 17,
     lineHeight: 27,
     minHeight: 120,

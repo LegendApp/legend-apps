@@ -903,7 +903,7 @@ const styles = StyleSheet.create({
   previews: { flexDirection: "row", minHeight: 0 },
   previewSection: { minWidth: 0 },
   resizeHandle: { alignItems: "center", justifyContent: "center" },
-  root: { backgroundColor: "#18181b", flex: 1 },
+  root: { backgroundColor: "#171819", flex: 1 },
   statusMessage: { color: "#a1a1aa", fontSize: 12 },
   updateBanner: { alignItems: "center", backgroundColor: "#272c3b", borderRadius: 8, flexDirection: "row", justifyContent: "space-between", marginTop: 12, padding: 10 },
   verticalResizeHandle: { height: 14, width: "100%" },
