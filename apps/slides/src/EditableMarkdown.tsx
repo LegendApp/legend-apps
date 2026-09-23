@@ -219,7 +219,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
           <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? textStyle.lineHeight : 0 }]}>
             <View pointerEvents={editable ? "none" : "auto"}>
               <EnrichedMarkdownTextInput
-                key={section.markdown}
+                key={`${fontSize}:${section.markdown}`}
                 editable={false}
                 defaultValue={speakerNotesEditorMarkdown(section.markdown)}
                 markdownStyle={markdownStyle}

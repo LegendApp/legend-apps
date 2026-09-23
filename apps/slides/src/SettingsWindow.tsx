@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { TextInput } from "react-native";
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import {
@@ -58,6 +60,19 @@ function TimerSettingsPage() {
   );
 }
 
+function NotesFontSizeInput({ value }: { value: number }) {
+  const [draft, setDraft] = useState(String(value));
+  const commit = () => {
+    const parsed = Number(draft.trim());
+    const next = draft.trim() && Number.isFinite(parsed) ? Math.max(12, Math.min(40, Math.round(parsed))) : value;
+    setDraft(String(next));
+    setPresentationNotesFontSizeSetting(next);
+  };
+  return <TextInput accessibilityLabel="Presentation notes font size" inputMode="numeric"
+    value={draft} onChangeText={setDraft} onEndEditing={commit} onSubmitEditing={commit}
+    selectTextOnFocus className="h-8 w-24 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-foreground" />;
+}
+
 function AppearanceSettingsContent() {
   const width = usePresentationNotesWidthSetting();
   const fontSize = usePresentationNotesFontSizeSetting();
@@ -65,9 +80,8 @@ function AppearanceSettingsContent() {
     <SettingsRow title="Presentation Notes Width" description="Maximum width of the centered notes column."
       control={<SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
         options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />} />
-    <SettingsRow title="Presentation Notes Font Size" description="Text size in the notes viewer and editor."
-      control={<SelectControl accessibilityLabel="Presentation notes font size" value={fontSize} onChange={setPresentationNotesFontSizeSetting}
-        options={[12, 14, 16, 17, 18, 20, 22, 24, 28, 32, 36, 40].map(value => ({ value, label: `${value} pt` }))} />} />
+    <SettingsRow title="Presentation Notes Font Size" description="Text size in the notes viewer and editor (12–40 pt)."
+      control={<NotesFontSizeInput key={fontSize} value={fontSize} />} />
   </SettingsSection>;
 }
 
