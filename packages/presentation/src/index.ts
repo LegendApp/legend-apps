@@ -56,3 +56,5 @@ export { SnapshotCaptureBoundary } from "./SnapshotCaptureBoundary";
 export { snapshotCaptureQueue } from "./snapshotCaptureQueue";
 export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
 export { useTitleBubbleSimulation } from "./useTitleBubbleSimulation";
+
+export { CarouselBlurView } from "./CarouselBlurView";

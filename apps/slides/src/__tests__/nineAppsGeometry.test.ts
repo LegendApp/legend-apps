@@ -51,3 +51,16 @@ test("detail cameras share the composer framing through the glass finale", () =>
   expect(detailCamera("fake")).toEqual(detailCamera("composer"));
   expect(detailCamera("takeover")).toEqual(detailCamera("composer"));
 });
+
+test("recorded composers land at the center of the zoomed stage", () => {
+  const width = 1560;
+  const videoHeight = width * 9 / 16;
+  const videoTop = 555 - width * 0.625 / 2 + width * 0.0625;
+  for (const app of ["electron", "flutter", "gpui"]) {
+    const camera = detailCamera("composer", app);
+    const cx = 180 + (698 + 1684 / 2) / 2560 * width;
+    const cy = videoTop + (1208 + 120 / 2) / 1440 * videoHeight;
+    expect(960 + (cx - 960) * camera.scaleX + camera.x).toBeCloseTo(960);
+    expect(540 + (cy - 540) * camera.scaleY + camera.y).toBeCloseTo(540);
+  }
+});
