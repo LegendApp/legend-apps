@@ -2290,6 +2290,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     LegendPrepareWindowForDisplay(window, backgroundColor);
     window.delegate = self;
 
+    window.identifier = identifier;
     self.windows[identifier] = window;
     self.rootViews[identifier] = rootView;
     self.moduleNames[identifier] = moduleName ?: @"";

@@ -155,7 +155,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 
   NSString *eventName = event.type == NSEventTypeKeyDown ? @"onKeyDown" : @"onKeyUp";
-  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode modifiers:event.modifierFlags];
+  BOOL handled = [self emitKeyboardEvent:eventName keyCode:event.keyCode modifiers:event.modifierFlags window:event.window];
   return handled ? nil : event;
 }
 
@@ -173,7 +173,7 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
     return event;
   }
   NSString *eventName = keyState == NX_KEYDOWN ? @"onKeyDown" : @"onKeyUp";
-  BOOL handled = [self emitKeyboardEvent:eventName keyCode:mappedKeyCode.integerValue modifiers:0];
+  BOOL handled = [self emitKeyboardEvent:eventName keyCode:mappedKeyCode.integerValue modifiers:0 window:event.window];
   return handled ? nil : event;
 }
 
@@ -193,13 +193,14 @@ RCT_EXPORT_MODULE(NativeKeyboardManager)
   }
 }
 
-- (BOOL)emitKeyboardEvent:(NSString *)eventName keyCode:(NSInteger)keyCode modifiers:(NSUInteger)modifiers
+- (BOOL)emitKeyboardEvent:(NSString *)eventName keyCode:(NSInteger)keyCode modifiers:(NSUInteger)modifiers window:(NSWindow *)window
 {
   NSString *eventId = NSUUID.UUID.UUIDString;
   [self sendEventWithName:eventName body:@{
     @"keyCode": @(keyCode),
     @"modifiers": @(modifiers),
     @"eventId": eventId,
+    @"windowIdentifier": window.identifier ?: @"",
   }];
 
   [NSThread sleepForTimeInterval:0.01];

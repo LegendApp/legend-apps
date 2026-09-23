@@ -3,6 +3,7 @@ import NativeKeyboardManager from "./NativeKeyboardManager";
 
 export type KeyboardEvent = Readonly<{
   eventId?: string;
+  windowIdentifier?: string;
   keyCode: number;
   modifiers: number;
 }>;
@@ -185,11 +186,16 @@ async function stopMonitoringIfIdle() {
   return NativeKeyboardManager.stopMonitoringKeyboard();
 }
 
-export function addKeyDownListener(listener: KeyboardEventListener) {
-  keyDownListeners.add(listener);
+export type KeyboardListenerOptions = { windowIdentifiers: readonly string[] };
+
+export function addKeyDownListener(listener: KeyboardEventListener, options?: KeyboardListenerOptions) {
+  const scopedListener: KeyboardEventListener = options
+    ? event => event.windowIdentifier && options.windowIdentifiers.includes(event.windowIdentifier) ? listener(event) : false
+    : listener;
+  keyDownListeners.add(scopedListener);
   void startMonitoring();
   return () => {
-    keyDownListeners.delete(listener);
+    keyDownListeners.delete(scopedListener);
     void stopMonitoringIfIdle();
   };
 }

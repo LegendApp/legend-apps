@@ -633,7 +633,7 @@ export function PresenterWindow() {
         return true;
       }
       return false;
-    });
+    }, { windowIdentifiers: ["slides-presenter", "slides-audience", "slides-notes"] });
     return () => {
       removeKeys();
       if (keyboardJumpTimeout.current) {

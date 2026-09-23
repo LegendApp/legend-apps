@@ -92,7 +92,7 @@ export function DeckEditor({ path, onExit }: { path: string; onExit(): void }) {
     const removeKeys = addKeyDownListener((event) => {
       if (event.keyCode === KeyCodes.KEY_S && (event.modifiers & KeyCodes.MODIFIER_COMMAND)) { void session.save(); return true; }
       return false;
-    });
+    }, { windowIdentifiers: ["slides-presenter"] });
     return () => { removeKeys(); setDraftReloadHandler(); session.dispose(); };
   }, [path, session]);
   return <View className="flex-1 bg-zinc-900">
