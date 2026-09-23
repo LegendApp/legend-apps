@@ -4469,6 +4469,14 @@ index 851d990..8930fee 100644
    [textStorage removeAttribute:NSUnderlineStyleAttributeName range:scopeRange];
    [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:scopeRange];
    [textStorage removeAttribute:NSBackgroundColorAttributeName range:scopeRange];
+@@ -213,5 +221,6 @@
+     [textStorage removeAttribute:ENRMBlockTypeAttributeName range:range];
+     [textStorage removeAttribute:ENRMBlockLevelAttributeName range:range];
+     [textStorage removeAttribute:ENRMBlockOrdinalAttributeName range:range];
+-    [textStorage removeAttribute:NSParagraphStyleAttributeName range:range];
++    // The inline pass has already restored the base paragraph metrics. Keep
++    // those metrics when removing the previous block's bookkeeping.
+   }
 diff --git a/ios/input/ENRMInputFormatterStyle.h b/ios/input/ENRMInputFormatterStyle.h
 index c09a3cb..e100911 100644
 --- a/ios/input/ENRMInputFormatterStyle.h
@@ -4738,7 +4746,15 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #import "ContextMenuUtils.h"
  #import "ENRMAutoLinkDetector.h"
  #import "ENRMBlockEditCoordinator.h"
-@@ -34,7 +35,6 @@
+@@ -17,6 +18,7 @@
+ #import "ENRMInputListMarkerDrawer.h"
+ #import "ENRMInputParser.h"
+ #import "ENRMInputTextView.h"
++#import "../utils/ENRMInputMeasurement.h"
+ #import "ENRMInputTypingAttributesController.h"
+ #import "ENRMLinkCoordinator.h"
+ #import "ENRMLinkRegexConfig.h"
+@@ -34,7 +36,6 @@
  #if TARGET_OS_OSX
  #import <React/RCTBackedTextInputDelegate.h>
  #endif
@@ -4746,7 +4762,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -59,6 +59,13 @@
+@@ -59,6 +60,13 @@
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -4760,18 +4776,23 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  @end
-@@ -97,7 +104,10 @@
+@@ -97,9 +105,13 @@
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
 +  NSView *_scrollContainerView;
    NSScrollView *_scrollView;
+-#endif
+-
 +  NSString *_blockStyleMarkdownOverride;
 +  NSInteger _hangingPrefixLength;
- #endif
- 
++#endif
++
++  BOOL _usesParagraphBaselineOffset;
    NSArray<NSString *> *_contextMenuItemTexts;
-@@ -242,6 +252,9 @@
+   NSArray<NSString *> *_contextMenuItemIcons;
+   ENRMAutoLinkDetector *_autoLinkDetector;
+@@ -242,6 +254,9 @@
  #else
    _textView.selectable = YES;
  
@@ -4781,7 +4802,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -256,7 +269,8 @@
+@@ -256,7 +271,8 @@
    _textView.textContainer.widthTracksTextView = YES;
  
    _scrollView.documentView = _textView;
@@ -4791,40 +4812,27 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #endif
  
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -339,7 +353,110 @@
+@@ -339,7 +355,97 @@
    }
  }
  
 -#pragma mark - Measurement
 +#if TARGET_OS_OSX
-+- (void)applyHangingPrefixParagraphStyle
++- (void)applyParagraphBaselineOffset
 +{
-+  NSUInteger textLength = _textView.textStorage.length;
-+  if (textLength == 0) {
++  // Heading delimiters are already removed by the input parser. Keep visible
++  // text intact, and use the renderer's baseline centering for paragraphs.
++  if (!_usesParagraphBaselineOffset || _textView.textStorage.length == 0) {
 +    return;
 +  }
-+
-+  NSRange range = NSMakeRange(0, textLength);
-+  [_textView.textStorage beginEditing];
-+  NSParagraphStyle *existingStyle = [_textView.textStorage attribute:NSParagraphStyleAttributeName
-+                                                             atIndex:0
-+                                                      effectiveRange:NULL];
-+  NSMutableParagraphStyle *paragraphStyle = existingStyle != nil
-+    ? [existingStyle mutableCopy]
-+    : [[NSMutableParagraphStyle alloc] init];
-+  paragraphStyle.firstLineHeadIndent = 0;
-+  paragraphStyle.headIndent = 0;
-+  [_textView.textStorage addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:range];
-+  if (_hangingPrefixLength > 0) {
-+    NSUInteger prefixLength = MIN((NSUInteger)_hangingPrefixLength, textLength);
-+    [_textView.textStorage addAttribute:NSForegroundColorAttributeName
-+                                  value:NSColor.clearColor
-+                                  range:NSMakeRange(0, prefixLength)];
-+    [_textView.textStorage addAttribute:NSFontAttributeName
-+                                  value:[NSFont systemFontOfSize:0.1]
-+                                  range:NSMakeRange(0, prefixLength)];
-+  }
-+  [_textView.textStorage endEditing];
++  [_textView.textStorage enumerateAttribute:ENRMBlockTypeAttributeName
++                                  inRange:NSMakeRange(0, _textView.textStorage.length)
++                                  options:0
++                               usingBlock:^(NSNumber *type, NSRange range, BOOL *stop) {
++    if (type == nil || type.integerValue == ENRMInputBlockTypeParagraph) {
++      applyBaselineOffset(self->_textView.textStorage, range);
++    }
++  }];
 +}
 +
 +- (void)applyTextViewLayout
@@ -4886,7 +4894,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  }
 +
 +  _hangingPrefixLength = clampedPrefixLength;
-+  [self applyHangingPrefixParagraphStyle];
++  [self applyParagraphBaselineOffset];
 +  [self requestHeightUpdate];
 +}
 +
@@ -4903,10 +4911,13 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
  - (CGSize)measureSize:(CGFloat)maxWidth
  {
-@@ -363,8 +480,10 @@
+@@ -363,12 +469,18 @@
      }
    }
  
++#if TARGET_OS_OSX
++  return CGSizeMake(maxWidth, ENRMInputTextHeight(measuredText, maxWidth));
++#else
 +  CGFloat measurementWidth = maxWidth;
 +
    CGRect boundingBox =
@@ -4915,7 +4926,12 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
                                   options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
                                   context:nil];
  
-@@ -504,19 +623,35 @@
+   return CGSizeMake(maxWidth, ceil(boundingBox.size.height));
++#endif
+ }
+ 
+ #pragma mark - Props
+@@ -504,19 +616,35 @@
      writingDirectionChanged = YES;
    }
  
@@ -4954,7 +4970,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
        [self applyFormatting];
      }
  
-@@ -525,7 +660,6 @@
+@@ -525,7 +653,6 @@
      [self applyFormatting];
    }
  
@@ -4962,7 +4978,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  #pragma mark - Relayout
-@@ -533,7 +667,7 @@
+@@ -533,7 +660,7 @@
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -4971,7 +4987,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)_performRelayout
-@@ -542,22 +676,36 @@
+@@ -542,22 +669,36 @@
      return;
    }
  
@@ -5024,7 +5040,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  }
  
-@@ -569,6 +717,9 @@
+@@ -569,6 +710,9 @@
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5034,7 +5050,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +813,7 @@
+@@ -662,6 +806,7 @@
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5042,7 +5058,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +825,12 @@
+@@ -673,9 +818,12 @@
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5057,7 +5073,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -743,6 +898,20 @@
+@@ -743,6 +891,20 @@
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5078,7 +5094,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +956,89 @@
+@@ -787,12 +949,92 @@
  
  #pragma mark - Formatting
  
@@ -5124,8 +5140,10 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
 +  NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 +  BOOL changed = NO;
++  _usesParagraphBaselineOffset = YES;
 +
 +  if ([trimmedMarkdown hasPrefix:@"```"] || [trimmedMarkdown hasPrefix:@"~~~"]) {
++    _usesParagraphBaselineOffset = NO;
 +    changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.codeBlock);
 +  } else {
 +    NSRegularExpression *headingRegex = [NSRegularExpression regularExpressionWithPattern:@"^#{1,6}\\s"
@@ -5135,6 +5153,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +                                                                  options:0
 +                                                                    range:NSMakeRange(0, trimmedMarkdown.length)];
 +    if (headingMatch != nil) {
++      _usesParagraphBaselineOffset = NO;
 +      NSUInteger headingLevel = headingMatch.range.length - 1;
 +      switch (headingLevel) {
 +        case 1:
@@ -5170,17 +5189,25 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)applyFormatting
-@@ -837,6 +1083,9 @@
+@@ -829,6 +1071,7 @@
+   [_editSession enterPhase:ENRMEditPhaseFormatting];
+ 
+   NSRange savedSelection = _textView.selectedRange;
++  [_textView.textStorage removeAttribute:NSBaselineOffsetAttributeName range:scope];
+ 
+   [_formatter applyFormattingRanges:_formattingStore.allRanges
+                          toTextView:_textView
+@@ -837,6 +1080,9 @@
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
 +#if TARGET_OS_OSX
-+  [self applyHangingPrefixParagraphStyle];
++  [self applyParagraphBaselineOffset];
 +#endif
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1128,23 @@
+@@ -879,6 +1125,23 @@
    [self requestHeightUpdate];
  }
  
@@ -5204,7 +5231,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -887,6 +1153,121 @@
+@@ -887,6 +1150,121 @@
    _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
    [_inputEventEmitter emitOnChangeSelection];
    [_inputEventEmitter emitOnChangeState];
@@ -5326,7 +5353,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)toggleBold
-@@ -1377,9 +1758,31 @@
+@@ -1377,9 +1755,31 @@
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5359,7 +5386,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)copyToClipboard
-@@ -1413,11 +1816,22 @@
+@@ -1413,11 +1813,22 @@
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5387,7 +5414,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  #endif
    return caretRect;
-@@ -1540,6 +1954,32 @@
+@@ -1540,6 +1951,32 @@
    return YES;
  }
  
@@ -5420,7 +5447,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2074,12 @@
+@@ -1634,7 +2071,12 @@
    }
  #endif
  
@@ -5434,7 +5461,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2094,9 @@
+@@ -1649,6 +2091,9 @@
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5444,7 +5471,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2159,12 @@
+@@ -1711,6 +2156,12 @@
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -7815,6 +7842,31 @@ new file mode 100755
 +}
 +} // namespace Markdown
 +
++#endif
+diff --git a/ios/utils/ENRMInputMeasurement.h b/ios/utils/ENRMInputMeasurement.h
+new file mode 100644
+--- /dev/null
++++ b/ios/utils/ENRMInputMeasurement.h
+@@ -0,0 +1,20 @@
++#pragma once
++
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++
++// NSString drawing subtracts baseline offsets from wrapped line heights.
++// Measure with the same TextKit layout and zero padding as the editing view.
++static inline CGFloat ENRMInputTextHeight(NSAttributedString *text, CGFloat width)
++{
++  NSTextStorage *storage = [[NSTextStorage alloc] initWithAttributedString:text];
++  NSLayoutManager *layout = [[NSLayoutManager alloc] init];
++  NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(MAX(0, width), CGFLOAT_MAX)];
++  container.lineFragmentPadding = 0;
++  [layout addTextContainer:container];
++  [storage addLayoutManager:layout];
++  [layout ensureLayoutForTextContainer:container];
++  return ceil(NSMaxY([layout usedRectForTextContainer:container]));
++}
 +#endif
 diff --git a/ios/input/ENRMInputTypingAttributesController.mm b/ios/input/ENRMInputTypingAttributesController.mm
 --- a/ios/input/ENRMInputTypingAttributesController.mm

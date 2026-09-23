@@ -28,3 +28,8 @@ clang -fobjc-arc -framework AppKit \
   "$markdown_dependency_dir/ios/utils/ENRMCodeBlockLineLayout.m" \
   "$markdown_editor_dir/tests/MarkdownCodeBlockLayout.test.m" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+clang -fobjc-arc -framework AppKit \
+  -I"$markdown_dependency_dir/ios/utils" \
+  "$markdown_editor_dir/tests/MarkdownInputLayout.test.m" -o "$markdown_test_binary"
+"$markdown_test_binary"
