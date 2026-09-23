@@ -18,7 +18,7 @@ function interpolate(from: Values, to: Values, elapsed: number, duration: number
 }
 
 /** Interrupted targets continue from the displayed pose on the shared step clock. */
-export function usePlaybackTween<T extends Values>(target: T, duration = 650, initial?: T, easing: PlaybackEasing = "cubic") {
+export function usePlaybackTween<T extends Values>(target: T, duration = 650, initial?: T, easing: PlaybackEasing = "cubic", delay = 0) {
   const playback = usePlayback();
   const entrance = initial !== undefined;
   const from = initial ?? target;
@@ -40,10 +40,10 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
     // A settled pose must not keep invalidating every downstream native style
     // and Skia uniform while the slide's ambient clock continues to tick.
     if (next.settled) return;
-    const elapsed = clock.stepTime - next.start;
+    const elapsed = clock.stepTime - next.start - delay / 1000;
     motion.value = { ...next, settled: elapsed * 1000 >= duration,
       last: interpolate(next.from, next.to, elapsed, duration, easing) as T };
-  }, [target, from, entrance, duration, easing]);
+  }, [target, from, entrance, duration, easing, delay]);
   return useDerivedValue(() => playback.value.phase === "preview" ? target
     : playback.value.phase === "preparing" ? from : motion.value.last, [target, from]);
 }

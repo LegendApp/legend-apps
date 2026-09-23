@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { transformSync } from "esbuild";
 
-function harness(source, initial) {
+function harness(source, initial, delay = 0) {
   const clock = { value: { phase: "playing", slideKey: "slide", stepKey: "step-0", stepTime: 0 } };
   let run, shared, writes = 0;
   const mocks = {
@@ -18,8 +18,8 @@ function harness(source, initial) {
   const code = transformSync(source, { loader: "ts", format: "cjs" }).code;
   Function("require", "module", "exports", code)(name => mocks[name], module, module.exports);
   let target = { x: 100 };
-  let output = module.exports.usePlaybackTween(target, 500, initial);
-  return { retarget(x) { target = { x }; output = module.exports.usePlaybackTween(target, 500, initial); }, get output() { return output; }, clock, tick(time) { clock.value.stepTime = time; run(); }, get writes() { return writes; } };
+  let output = module.exports.usePlaybackTween(target, 500, initial, "cubic", delay);
+  return { retarget(x) { target = { x }; output = module.exports.usePlaybackTween(target, 500, initial, "cubic", delay); }, get output() { return output; }, clock, tick(time) { clock.value.stepTime = time; run(); }, get writes() { return writes; } };
 }
 const source = readFileSync(new URL("../usePlaybackTween.ts", import.meta.url), "utf8");
 test("settled poses stop publishing through an idle slide", () => {
@@ -62,4 +62,23 @@ test("interrupted motion continues from its displayed pose and outgoing freezes"
   h.tick(4);
   assert.equal(h.output.value.x, 125);
   assert.equal(h.writes, count);
+});
+
+test("delayed crossfades hold the old text and use the step clock in both directions", () => {
+  const h = harness(source, undefined, 320);
+  h.tick(0);
+  h.retarget(0);
+  h.clock.value.stepKey = "step-1";
+  h.tick(0); h.tick(0.3);
+  assert.equal(h.output.value.x, 100);
+  h.tick(0.57);
+  assert.ok(Math.abs(h.output.value.x - 50) < 0.001);
+  h.tick(0.83);
+  assert.equal(h.output.value.x, 0);
+  h.retarget(100);
+  h.clock.value.stepKey = "step-0";
+  h.tick(0); h.tick(0.3);
+  assert.equal(h.output.value.x, 0);
+  h.tick(0.83);
+  assert.equal(h.output.value.x, 100);
 });
