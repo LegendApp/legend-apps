@@ -14,11 +14,14 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/appkit-split-view",
       "@legend-apps/command-runner",
+      "@legend-apps/context-menu",
       "@legend-apps/file-dialog",
       "@legend-apps/file-system-watcher",
       "@legend-apps/keyboard-manager",
       "@legend-apps/native-menu",
+      "@legend-apps/native-select",
       "@legend-apps/recent-documents",
       "@legend-apps/scaled-view",
       "@legend-apps/storage",
