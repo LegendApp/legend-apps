@@ -7777,3 +7777,37 @@ new file mode 100755
 +} // namespace Markdown
 +
 +#endif
+diff --git a/ios/input/ENRMInputTypingAttributesController.mm b/ios/input/ENRMInputTypingAttributesController.mm
+--- a/ios/input/ENRMInputTypingAttributesController.mm
++++ b/ios/input/ENRMInputTypingAttributesController.mm
+@@ -119,6 +119,13 @@
+     paragraph.firstLineHeadIndent = indent;
+     paragraph.headIndent = indent;
+     paragraph.paragraphSpacingBefore = _formatterStyle.listItemSpacing;
++    paragraph.minimumLineHeight = _formatterStyle.baseLineHeight;
++    paragraph.maximumLineHeight = _formatterStyle.baseLineHeight;
++    attrs[NSParagraphStyleAttributeName] = paragraph;
++  } else if (_formatterStyle.baseLineHeight > 0) {
++    NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
++    paragraph.minimumLineHeight = _formatterStyle.baseLineHeight;
++    paragraph.maximumLineHeight = _formatterStyle.baseLineHeight;
+     attrs[NSParagraphStyleAttributeName] = paragraph;
+   } else {
+     [attrs removeObjectForKey:NSParagraphStyleAttributeName];
+@@ -163,7 +170,15 @@
+     return;
+   }
+   NSMutableDictionary *attrs = [_textView.typingAttributes mutableCopy];
+-  [attrs removeObjectForKey:NSParagraphStyleAttributeName];
++  // Leaving a list clears its indentation, not the configured line height.
++  if (_formatterStyle.baseLineHeight > 0) {
++    NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
++    paragraph.minimumLineHeight = _formatterStyle.baseLineHeight;
++    paragraph.maximumLineHeight = _formatterStyle.baseLineHeight;
++    attrs[NSParagraphStyleAttributeName] = paragraph;
++  } else {
++    [attrs removeObjectForKey:NSParagraphStyleAttributeName];
++  }
+   _textView.typingAttributes = attrs;
+ }
+ 
