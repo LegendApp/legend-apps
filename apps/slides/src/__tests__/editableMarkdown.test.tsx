@@ -36,9 +36,9 @@ test("outside clicks save immediately without waiting on an unmounted native edi
     expect(editor.props.style.padding).toBe(viewerTextStyle.padding);
     expect(editor.props.style.width).toBe(viewerTextStyle.width);
     expect(editor.props.style.fontSize).toBe(24);
-    expect(editor.props.style.lineHeight).toBeCloseTo(24 * 1.3);
-    expect(viewerStyle.paragraph.lineHeight).toBeCloseTo(24 * 1.3);
-    expect(editor.props.markdownStyle.paragraph.lineHeight).toBeCloseTo(24 * 1.3);
+    expect(editor.props.style.lineHeight).toBeCloseTo(24 * 1.5);
+    expect(viewerStyle.paragraph.lineHeight).toBeCloseTo(24 * 1.5);
+    expect(editor.props.markdownStyle.paragraph.lineHeight).toBeCloseTo(24 * 1.5);
     await act(() => editor.props.onChangeMarkdown("changed notes"));
     const stopPropagation = mock(() => {});
     await act(() => editor.parent.parent.props.onTouchStart({ stopPropagation }));

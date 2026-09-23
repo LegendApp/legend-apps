@@ -25,8 +25,8 @@ const viewerMarkdownStyle: MarkdownStyle = {
   h2: { color: "#d1d5db", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
   h3: { color: "#d1d5db", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
   link: { color: "#93c5fd", underline: true },
-  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 17 * 1.3, markerColor: "#a1a1aa" },
-  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 17 * 1.3, marginBottom: 5 },
+  list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 17 * 1.5, markerColor: "#a1a1aa" },
+  paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 17 * 1.5, marginBottom: 5 },
   strong: { color: "#d1d5db" },
 };
 
@@ -70,7 +70,7 @@ type EditableMarkdownProps = {
 export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
-  const textStyle = { fontSize, lineHeight: fontSize * 1.3 };
+  const textStyle = { fontSize, lineHeight: fontSize * 1.5 };
   const sectionGap = fontSize * 27 / 17;
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
