@@ -25,8 +25,8 @@ const viewerMarkdownStyle: MarkdownStyle = {
   h2: { color: "#fafafa", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
   h3: { color: "#f4f4f5", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
   link: { color: "#93c5fd", underline: true },
-  list: { color: "#e4e4e7", fontSize: 17, gapWidth: 8, lineHeight: 25, markerColor: "#a1a1aa" },
-  paragraph: { color: "#e4e4e7", fontSize: 17, lineHeight: 25, marginBottom: 5 },
+  list: { color: "#e4e4e7", fontSize: 17, gapWidth: 8, lineHeight: 27, markerColor: "#a1a1aa" },
+  paragraph: { color: "#e4e4e7", fontSize: 17, lineHeight: 27, marginBottom: 5 },
   strong: { color: "#fafafa" },
 };
 
@@ -69,7 +69,7 @@ type EditableMarkdownProps = {
 
 export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
-  const textStyle = { fontSize, lineHeight: fontSize * 25 / 17 };
+  const textStyle = { fontSize, lineHeight: fontSize * 27 / 17 };
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -242,12 +242,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     color: "#e4e4e7",
     fontSize: 17,
-    lineHeight: 25,
+    lineHeight: 27,
     minHeight: 120,
     padding: 0,
     width: "100%",
   },
-  placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 25 },
+  placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 27 },
   noteSection: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
