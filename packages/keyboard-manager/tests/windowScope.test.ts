@@ -1,3 +1,4 @@
+// @ts-ignore Bun provides the test module at runtime.
 import { expect, mock, test } from "bun:test";
 const handlers = new Map<string, (event: unknown) => void>();
 const native = { startMonitoringKeyboard: async () => true, stopMonitoringKeyboard: async () => true, respondToKeyEvent: mock(() => {}) };
