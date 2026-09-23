@@ -39,9 +39,9 @@ test("manual tour covers every app in rendering order, with close-ups on each gr
   expect(tourStep(-1)).toEqual(tourSteps[0]);
   expect(tourStep(999)).toEqual(tourSteps.at(-1));
   const deck = readFileSync(new URL("../../decks/react-native-desktop/rnconnection.mdx", import.meta.url), "utf8");
-  expect(deck).toContain(`template: ./NineApps.tsx\nsteps: ${tourSteps.length}\n`);
-  expect(deck.indexOf('<Chart workload="hello" metric="memory"')).toBeLessThan(deck.indexOf('<NineApps mode="hero"'));
-  expect(deck.indexOf('<NineApps mode="filmstrip"')).toBeLessThan(deck.indexOf('<Chart metric="content"'));
+  expect(deck).toContain(`template: ./NineApps.tsx\nsteps: ${tourSteps.length + 2}\n`);
+  expect(deck.indexOf('<Chart workload="hello" metric="memory"')).toBeLessThan(deck.indexOf('<NineApps />'));
+  expect(deck.indexOf('<NineApps />')).toBeLessThan(deck.indexOf('<Chart metric="content"'));
 });
 
 test("detail cameras share the composer framing through the glass finale", () => {
