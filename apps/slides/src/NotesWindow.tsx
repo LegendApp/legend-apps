@@ -1,9 +1,9 @@
 import { useValue } from "@legendapp/state/react";
-import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Text, View } from "react-native";
 import { SlideCanvas, DeckRenderer } from "./DeckRenderer";
 import { slidesState$ } from "./slidesStore";
-import { EditableMarkdown } from "./EditableMarkdown";
+import { ScrollableNotes } from "./ScrollableNotes";
 import { notesPreviewRatioSetting, useNotesPreviewRatioSetting, usePresentationNotesWidthSetting } from "./slidesSettings";
 import { notesOutput$ } from "./notesOutput";
 import { formatPresenterElapsed } from "./presenterToolbar";
@@ -23,11 +23,6 @@ export function NotesWindow() {
   const width = usePresentationNotesWidthSetting();
   const ratio = useNotesPreviewRatioSetting();
   const [height, setHeight] = useState(800);
-  const scroll = useRef<ScrollView>(null);
-  const positions = useRef(new Map<string, number>());
-  const follow = () => { const y = positions.current.get(`${index}:${step}`); if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 24), animated: false }); };
-  // One scroll on navigation; manual scrolling is untouched until the next step.
-  useEffect(follow, [index, step]);
   const [responder] = useState(() => createPresenterResizeResponder({ direction: "vertical", onResize: () => {}, onResizeEnd: () => {} }));
   useEffect(() => { responder.updateCallbacks({ direction: "vertical", onResize: delta => notesPreviewRatioSetting.set(notesPreviewRatioSetting.get() + delta / height), onResizeEnd: () => {} }); }, [height, responder]);
   return <View style={{ flex: 1, backgroundColor: "#111114" }} onLayout={event => setHeight(event.nativeEvent.layout.height)}>
@@ -41,12 +36,8 @@ export function NotesWindow() {
     <View accessibilityLabel="Resize notes preview" {...responder.panHandlers} style={{ height: 18, alignItems: "center", justifyContent: "center" }}>
       <View style={{ height: 3, width: 60, backgroundColor: "#52525b", borderRadius: 2 }} />
     </View>
-    <ScrollView ref={scroll} key={index} style={{ flex: 1 }} contentContainerStyle={{ padding: 20 }}>
-      <View style={{ width: "100%", maxWidth: width, alignSelf: "center" }}>
-        <EditableMarkdown large editable={false} markdown={notes} currentStep={step} onSave={noSave} placeholder="No notes for this slide."
-          onSectionLayout={(sectionStep, y) => { positions.current.set(`${index}:${sectionStep}`, y); if (sectionStep === step) follow(); }} />
-      </View>
-    </ScrollView>
+    <ScrollableNotes key={index} notesWidth={width} editable={false}
+      markdown={notes} currentStep={step} onSave={noSave} placeholder="No notes for this slide." />
   </View>;
 }
 export function IdentifyWindow({ number, name }: { number?: number; name?: string }) {

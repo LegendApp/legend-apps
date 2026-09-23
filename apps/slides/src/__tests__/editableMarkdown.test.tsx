@@ -17,7 +17,7 @@ test("outside clicks save immediately without waiting on an unmounted native edi
   const editing = mock(() => {}), save = mock(async () => {});
   let tree;
   try {
-    await act(() => { tree = create(<NotesEditingBoundary testID="boundary"><EditableMarkdown editable fontSize={24} markdown={"First paragraph wraps when needed.\n\nSecond paragraph."} placeholder="Notes" onEditingChange={editing} onSave={save} /></NotesEditingBoundary>); });
+    await act(() => { tree = create(<NotesEditingBoundary testID="boundary"><EditableMarkdown editable editorHeight={300} fontSize={24} markdown={"First paragraph wraps when needed.\n\nSecond paragraph."} placeholder="Notes" onEditingChange={editing} onSave={save} /></NotesEditingBoundary>); });
     expect(tree.root.findByType("editor").props.editable).toBe(false);
     const viewerValue = tree.root.findByType("editor").props.defaultValue;
     const viewerTextStyle = tree.root.findByType("editor").props.style;
@@ -27,6 +27,9 @@ test("outside clicks save immediately without waiting on an unmounted native edi
     await act(() => tree.root.findByType("pressable").props.onPress());
     const editor = tree.root.findByType("editor");
     expect(editor.props.markdownStyle).toBe(viewerStyle);
+    expect(editor.props.scrollEnabled).toBe(true);
+    expect(editor.props.style.height).toBe(300);
+    expect(editor.props.style.minHeight).toBe(0);
     expect(editor.props.defaultValue).toBe(viewerValue);
     expect(editor.parent.parent.props.style[1].borderColor).toBe("#3b82f6");
     expect(editor.parent.parent.props.style[0]).toBe(viewerShell);

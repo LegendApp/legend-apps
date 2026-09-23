@@ -32,7 +32,8 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { EditableMarkdown, NotesEditingBoundary } from "./EditableMarkdown";
+import { ScrollableNotes } from "./ScrollableNotes";
+import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, loadDeck } from "./deckLoader";
 import {
@@ -161,18 +162,10 @@ function SpeakerNotes({
   const notesWidth = usePresentationNotesWidthSetting();
   return (
     <View style={[styles.notesSection, { flex: weight }]}>
-      <ScrollView key={`${deckPath}:${slideIndex}`} contentContainerStyle={styles.notesContent} style={styles.notes}>
-        <View style={{ width: "100%", maxWidth: notesWidth, alignSelf: "center" }}>
-        <EditableMarkdown
-          editable={editable}
-          currentStep={currentStep}
-          markdown={notes ?? ""}
-          onEditingChange={onEditingChange}
-          onSave={onSave}
-          placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."}
-        />
-        </View>
-      </ScrollView>
+      <ScrollableNotes key={`${deckPath}:${slideIndex}`} notesWidth={notesWidth}
+        editable={editable} currentStep={currentStep}
+        markdown={notes ?? ""} onEditingChange={onEditingChange} onSave={onSave}
+        placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."} />
     </View>
   );
 }

@@ -58,7 +58,8 @@ export function NotesEditingBoundary({ children, ...props }: ViewProps) {
 type EditableMarkdownProps = {
   editable: boolean;
   currentStep?: number;
-  onSectionLayout?(step: number, y: number): void;
+  onSectionLayout?(step: number, y: number, height: number): void;
+  editorHeight?: number;
   fontSize?: number;
   markdown: string;
   onEditingChange?(editing: boolean): void;
@@ -66,7 +67,7 @@ type EditableMarkdownProps = {
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
+export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   const textStyle = { fontSize, lineHeight: fontSize * 25 / 17 };
   const dismiss = useContext(NotesDismissContext);
@@ -196,9 +197,9 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
         }}
         placeholder={placeholder}
         placeholderTextColor="#71717a"
-        scrollEnabled={false}
+        scrollEnabled={editorHeight !== undefined}
         selectionColor="#3b82f680"
-        style={{ ...styles.editor, ...textStyle }}
+        style={{ ...styles.editor, ...textStyle, ...(editorHeight !== undefined ? { height: editorHeight, minHeight: 0 } : {}) }}
       />
       </View>
     );
@@ -215,7 +216,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     >
       {markdown.trim() ? (
         splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? textStyle.lineHeight : 0 }]}>
+          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? textStyle.lineHeight : 0 }]}>
             <View pointerEvents={editable ? "none" : "auto"}>
               <EnrichedMarkdownTextInput
                 key={section.markdown}
