@@ -774,7 +774,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
   onNotesEditingChange: (editing: boolean) => void;
   onSaveNotes: (path: string, index: number, notes: string) => Promise<void>;
 }) {
-  const notesEditable = useValue(() => !slidesState$.audienceOpen.get() || presenter$.activeMode.get() === "rehearsal");
+  const notesEditable = useValue(presenter$.rehearsalEnabled);
   const resetVersion = useValue(presenter$.presenterLayoutResetVersion);
   const hasDeck = useValue(() => Boolean(slidesState$.compiled.get()));
   const currentSlide = useValue(slidesState$.currentSlide);
