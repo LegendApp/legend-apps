@@ -8,7 +8,7 @@ import {
 import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
-const notesLineHeightRatio = 1.3;
+const notesLineHeightRatio = 1.4;
 
 const viewerMarkdownStyle: MarkdownStyle = {
   code: { backgroundColor: "#27272a", color: "#d1d5db", fontFamily: "Menlo", fontSize: 15 },
