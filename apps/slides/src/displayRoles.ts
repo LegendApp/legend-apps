@@ -18,8 +18,8 @@ export function displaySetupKey(displays: Display[]) {
 export function rememberDisplayRoles(history: DisplayRoleHistory, displays: Display[], roles: DisplayRoles): DisplayRoleHistory {
   if (!displays.length) return history;
   const key = displaySetupKey(displays);
-  // Keep the most recent 20 setups, including single-screen rehearsal.
-  const entries = Object.entries(history).filter(([saved]) => saved !== key).slice(-19);
+  // Keep the most recent 5 setups, including single-screen rehearsal.
+  const entries = Object.entries(history).filter(([saved]) => saved !== key).slice(-4);
   return Object.fromEntries([...entries, [key, roles]]);
 }
 export function resolveDisplayRoles(displays: Display[], previous: Display[], current: DisplayRoles, history: DisplayRoleHistory): DisplayRoles {
