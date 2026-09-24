@@ -503,7 +503,9 @@ export function PresenterWindow() {
       const frame = display.frame;
       await slidesWindows.open("SlidesAudienceWindow", {
         x: frame.x, y: frame.y,
-        windowStyle: { height: frame.height, width: frame.width, mask: [WindowStyleMask.Borderless] },
+        windowStyle: { height: frame.height, width: frame.width, fullscreen: true,
+          titleVisibility: "hidden", titlebarAppearsTransparent: true,
+          mask: [WindowStyleMask.Titled, WindowStyleMask.Closable, WindowStyleMask.Resizable] },
       });
     },
     async close() {

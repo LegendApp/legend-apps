@@ -30,6 +30,7 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 @end
 
 #if TARGET_OS_OSX
+static char LegendManagedFullscreenPresentationKey;
 static NSString * const LegendApplicationReopenRequestedNotification = @"LegendApplicationReopenRequestedNotification";
 static NSString * const LegendMainWindowCloseRequestedNotification = @"LegendMainWindowCloseRequestedNotification";
 extern "C" void LegendPrepareSidebarSplitViewStartup(NSWindow *, NSDictionary *) __attribute__((weak_import));
@@ -2029,6 +2030,12 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
     }
 
+    if (existingWindow && [windowStyle[@"fullscreen"] boolValue] &&
+        (existingWindow.styleMask & NSWindowStyleMaskFullScreen)) {
+      [existingWindow makeKeyAndOrderFront:nil];
+      resolve([self successJson]);
+      return;
+    }
     if (existingWindow) {
       RCTUIView *existingRootView = self.rootViews[identifier];
       NSRect frame = existingWindow.frame;
@@ -2142,7 +2149,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
         [existingWindow makeKeyAndOrderFront:nil];
       }
       [self recordWindowOptions:options identifier:identifier moduleName:moduleName];
-      resolve([self successJson]);
+      [self finishOpeningWindow:existingWindow options:windowStyle resolve:resolve reject:reject];
       return;
     }
 
@@ -2301,12 +2308,60 @@ willBeInsertedIntoToolbar:(BOOL)flag
       [self.closeRequestIdentifiers removeObject:identifier];
     }
 
-    resolve([self successJson]);
+    [self finishOpeningWindow:window options:windowStyle resolve:resolve reject:reject];
   });
 #else
   resolve([self failureJson:@"WindowManager is only available on macOS"]);
 #endif
 }
+
+#if TARGET_OS_OSX
+// Opening resolves only after AppKit enters its fullscreen Space, so callers
+// can safely focus a presenter on another display afterwards.
+- (void)finishOpeningWindow:(NSWindow *)window options:(NSDictionary *)windowStyle
+                   resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+  if (![windowStyle[@"fullscreen"] boolValue] || (window.styleMask & NSWindowStyleMaskFullScreen)) {
+    resolve([self successJson]);
+    return;
+  }
+  objc_setAssociatedObject(window, &LegendManagedFullscreenPresentationKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  window.collectionBehavior = (window.collectionBehavior & ~NSWindowCollectionBehaviorFullScreenAuxiliary)
+    | NSWindowCollectionBehaviorFullScreenPrimary;
+  __block id entered = nil;
+  __block id closed = nil;
+  __block BOOL finished = NO;
+  void (^finish)(BOOL) = ^(BOOL success) {
+    if (finished) return;
+    finished = YES;
+    [NSNotificationCenter.defaultCenter removeObserver:entered];
+    [NSNotificationCenter.defaultCenter removeObserver:closed];
+    entered = nil;
+    closed = nil;
+    if (success) resolve([self successJson]);
+    else {
+      [window close];
+      reject(@"fullscreen_failed", @"Fullscreen did not complete. Check the selected display and try again.", nil);
+    }
+  };
+  entered = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowDidEnterFullScreenNotification
+    object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { finish(YES); }];
+  closed = [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification
+    object:window queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { finish(NO); }];
+  [window makeKeyAndOrderFront:nil];
+  [window toggleFullScreen:nil];
+  // Bound failures where AppKit never sends the completion notification.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(NO); });
+}
+
+- (NSApplicationPresentationOptions)window:(NSWindow *)window
+    willUseFullScreenPresentationOptions:(NSApplicationPresentationOptions)options
+{
+  if (![objc_getAssociatedObject(window, &LegendManagedFullscreenPresentationKey) boolValue]) return options;
+  return options | NSApplicationPresentationAutoHideMenuBar | NSApplicationPresentationAutoHideDock
+    | NSApplicationPresentationAutoHideToolbar;
+}
+#endif
 
 - (void)setWindowTitle:(NSString *)identifier
                  title:(NSString *)title

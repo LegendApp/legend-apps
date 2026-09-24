@@ -87,6 +87,8 @@ export type StartupSplitViewOptions = {
 };
 
 export type WindowStyleOptions = {
+  /** Enter native macOS fullscreen when opening; resolves after the transition. */
+  fullscreen?: boolean;
   /** Null clears the startup shell for screens without a split view. */
   startupSplitView?: StartupSplitViewOptions | null;
   appearance?: "system" | "light" | "dark";

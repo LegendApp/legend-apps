@@ -79,3 +79,20 @@ describe("audience display recovery", () => {
   expect(state().audienceOpen).toBe(false);
   expect(state().deckLocked).toBe(false);
 });
+
+ test("waits for native fullscreen completion before focusing presenter", async () => {
+  let finishFullscreen;
+  const calls = [];
+  const session = createAudienceSession({
+    open: () => new Promise(resolve => { finishFullscreen = resolve; }),
+    close: async () => {},
+    focusPresenter: async () => { calls.push("presenter"); },
+    update: update => { if (update.audienceOpen) calls.push("audience-ready"); },
+  });
+  const opening = session.open(projector);
+  await Promise.resolve();
+  expect(calls).toEqual([]);
+  finishFullscreen();
+  await opening;
+  expect(calls).toEqual(["audience-ready", "presenter"]);
+});
