@@ -1,5 +1,5 @@
-import { assignDisplayRole, displayKey } from "./displayRoles";
-import { displayRolesSetting, displayRolesConfiguredSetting, useDisplayRolesSetting } from "./slidesSettings";
+import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
+import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistorySetting, useDisplayRolesSetting } from "./slidesSettings";
 import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
@@ -518,25 +518,17 @@ export function PresenterWindow() {
 
   const refreshDisplays = useCallback(async () => {
     const nextDisplays = await getDisplays();
+    const previousDisplays = presenter$.displays.peek();
     setDisplays(nextDisplays);
     await audience.displaysChanged(nextDisplays);
-    const roles = displayRolesSetting.get();
-    if (!displayRolesConfiguredSetting.get() && !roles.audience && !roles.notes) {
-      const remembered = getPresentationDisplayId();
-      const display = nextDisplays.find(d => d.id === remembered) ?? nextDisplays.find(d => !d.isMain) ?? nextDisplays[0];
-      if (display) {
-        displayRolesSetting.set({ audience: displayKey(display), notes: null });
-        displayRolesConfiguredSetting.set(true);
-      }
-    }
-    const saved = displayRolesSetting.get();
-    const upgradeKey = (key: string | null) => {
-      const display = nextDisplays.find(d => d.id === key);
-      return display ? displayKey(display) : key;
-    };
-    const upgraded = { audience: upgradeKey(saved.audience), notes: upgradeKey(saved.notes) };
-    if (upgraded.audience !== saved.audience || upgraded.notes !== saved.notes) displayRolesSetting.set(upgraded);
-    const selected = nextDisplays.find(d => displayKey(d) === upgraded.audience || d.id === upgraded.audience);
+    const current = displayRolesSetting.get();
+    let history = rememberDisplayRoles(displayRoleHistorySetting.get(), previousDisplays, current);
+    const roles = resolveDisplayRoles(nextDisplays, previousDisplays, current, history);
+    history = rememberDisplayRoles(history, nextDisplays, roles);
+    displayRoleHistorySetting.set(history);
+    displayRolesSetting.set(roles);
+    displayRolesConfiguredSetting.set(true);
+    const selected = nextDisplays.find(d => displayKey(d) === roles.audience);
     setSelectedDisplayId(selected?.id ?? null);
     await syncNotesOutput(nextDisplays, slidesState$.audienceOpen.peek());
   }, [audience, setDisplays, setSelectedDisplayId]);
@@ -675,6 +667,7 @@ export function PresenterWindow() {
     if (!display) return;
     const roles = assignDisplayRole(displayRolesSetting.get(), displayKey(display), (match?.[1] ?? "audience") as "audience" | "notes" | "unused");
     displayRolesSetting.set(roles);
+    displayRoleHistorySetting.set(rememberDisplayRoles(displayRoleHistorySetting.get(), presenter$.displays.peek(), roles));
     displayRolesConfiguredSetting.set(true);
     const selected = presenter$.displays.peek().find(d => displayKey(d) === roles.audience);
     setSelectedDisplayId(selected?.id ?? null);
