@@ -15,3 +15,18 @@ index 88ece5c3114f8979f258ccbf16e74c86f1409461..969a0ff8f495f216d811701bb7c9448a
 +#import "RNWGUIKit.h"
  #import <React/RCTViewComponentView.h>
 -#import <UIKit/UIKit.h>
+diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
+--- a/cpp/rnwgpu/SurfaceRegistry.h
++++ b/cpp/rnwgpu/SurfaceRegistry.h
+@@ -525,7 +525,9 @@ class SurfaceRegistry {
+ public:
+   static SurfaceRegistry &getInstance() {
+-    static SurfaceRegistry instance;
+-    return instance;
++    // WebGPUModule's global manager may tear down after static destruction has
++    // begun, so keep this registry alive for the process lifetime.
++    static SurfaceRegistry *instance = new SurfaceRegistry();
++    return *instance;
+   }
+
+   SurfaceRegistry(const SurfaceRegistry &) = delete;
