@@ -61,3 +61,38 @@
 +    sk_sp<SkPicture> picture = getPicture();
 @@ -78,0 +85 @@ private:
 +  mutable std::mutex _pictureMutex;
+--- a/apple/RNSkAppleVideo.h
++++ b/apple/RNSkAppleVideo.h
+@@ -3,0 +4,2 @@
++#include <memory>
++#include <mutex>
+@@ -22,0 +25,5 @@
++  struct DisplayLinkState : std::enable_shared_from_this<DisplayLinkState> {
++    std::mutex mutex;
++    RNSkAppleVideo *video = nullptr;
++  };
++  std::shared_ptr<DisplayLinkState> _displayLinkState;
+--- a/apple/RNSkAppleVideo.mm
++++ b/apple/RNSkAppleVideo.mm
+@@ -34,0 +35,2 @@
++  _displayLinkState = std::make_shared<DisplayLinkState>();
++  _displayLinkState->video = this;
+@@ -54,0 +57,4 @@
++  {
++    std::lock_guard<std::mutex> lock(_displayLinkState->mutex);
++    _displayLinkState->video = nullptr;
++  }
+@@ -124 +130,2 @@
+-  CVDisplayLinkSetOutputCallback(_displayLink, &displayLinkCallback, this);
++  CVDisplayLinkSetOutputCallback(_displayLink, &displayLinkCallback,
++                                 _displayLinkState.get());
+@@ -175 +182,2 @@
+-  RNSkAppleVideo *video = static_cast<RNSkAppleVideo *>(context);
++  auto *state = static_cast<DisplayLinkState *>(context);
++  auto retainedState = state->shared_from_this();
+@@ -178 +186,4 @@
+-    video->onDisplayLink();
++    std::lock_guard<std::mutex> lock(retainedState->mutex);
++    if (retainedState->video) {
++      retainedState->video->onDisplayLink();
++    }

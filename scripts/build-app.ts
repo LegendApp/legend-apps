@@ -164,6 +164,12 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
         "DEAD_CODE_STRIPPING=YES",
         "LLVM_LTO=YES_THIN",
         "GCC_OPTIMIZATION_LEVEL=z",
+        ...(appId === "slides"
+          ? [
+              "DEBUG_INFORMATION_FORMAT=dwarf-with-dsym",
+              "DWARF_DSYM_FILE_SHOULD_ACCOMPANY_PRODUCT=YES",
+            ]
+          : []),
         ...getMacOSDevelopmentSigningArgs(
           process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
         ),
