@@ -120,6 +120,18 @@ describe("compileDeck", () => {
     expect(valid.success).toBe(true);
   });
 
+  test("resolves Markdown images and retains ordered list starts", async () => {
+    const result = await compileDeck(createDeck({
+      "deck.mdx": "# Markdown\n\n![Direct](./picture.png)\n\n![Reference][picture]\n\n[picture]: ./picture.png\n\n3. Third\n4. Fourth\n\n| A | B |\n| - | - |\n| ~~old~~ | new |\n\n- [x] Done",
+      "picture.png": "image fixture",
+    }));
+    expect(result.success).toBe(true);
+    expect(result.dependencies.some(file => file.endsWith("picture.png"))).toBe(true);
+    expect(result.code).toContain("file://");
+    expect(result.code).toContain('marker: "3."');
+    expect(result.code).toContain('marker: "4."');
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,

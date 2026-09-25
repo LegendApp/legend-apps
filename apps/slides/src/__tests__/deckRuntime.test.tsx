@@ -281,3 +281,31 @@ test("runtime remains reactive after StrictMode effect replay", async () => {
     log.mockRestore();
   }
 });
+
+test("Markdown images, tables, task lists and strike render native views", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Document({ components: c }) {
+    return <c.Deck configJson="{}"><c.Slide metadataJson="{}" notes="">
+      <c.h4>Heading</c.h4>
+      <c.p>Before<c.img src="file:///picture.png" alt="Picture" />After</c.p>
+      <c.table><c.thead><c.tr><c.th>Title</c.th></c.tr></c.thead><c.tbody><c.tr><c.td><c.del>Old</c.del></c.td></c.tr></c.tbody></c.table>
+      <c.ol start={3}><c.li marker="3.">Third<c.ul><c.li><c.input checked />Done</c.li></c.ul></c.li></c.ol>
+    </c.Slide></c.Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let renderer;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, slides: [], config: {} });
+    await act(() => { renderer = create(<DeckRenderer targetIndex={0} />); });
+    expect(renderer.root.findAll(node => ["img", "table", "thead", "tbody", "tr", "th", "td", "del", "input", "h4"].includes(node.type))).toHaveLength(0);
+    const image = renderer.root.findByType("image");
+    expect(image.props.source.uri).toBe("file:///picture.png");
+    expect(image.props.accessibilityLabel).toBe("Picture");
+    await act(() => image.props.onLoad({ nativeEvent: { source: { width: 400, height: 300 } } }));
+    expect(renderer.root.findByType("image").props.style.aspectRatio).toBe(4 / 3);
+    expect(renderer.root.findAll(node => node.type === "text" && node.props.children === "3.")).toHaveLength(1);
+    expect(renderer.root.findAll(node => node.type === "text" && node.props.accessibilityRole === "checkbox")).toHaveLength(1);
+    expect(log.mock.calls.some(args => args.join(" ").includes("Slide unavailable"))).toBe(false);
+  } finally { if (renderer) await act(() => renderer.unmount()); setSlidesState(initial); log.mockRestore(); }
+});

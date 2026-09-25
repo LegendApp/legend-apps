@@ -13,6 +13,7 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import typegpuPlugin from "unplugin-typegpu/esbuild";
 import { remarkSlideAttributes } from "./remarkSlideAttributes";
+import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
@@ -107,6 +108,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
           remarkPlugins: [
             remarkFrontmatter,
             remarkGfm,
+            [remarkNativeMarkdown, { deckPath: args.path, dependencies: extraDependencies }],
             remarkSlideAttributes,
             [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
             [remarkSlides, { templates, transitions, deckPath: args.path, dependencies: extraDependencies }],

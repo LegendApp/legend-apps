@@ -149,7 +149,53 @@ function MarkdownText({ children, style, className = "", inline = false }: Markd
 }
 
 function MarkdownLink({ children, href }: { children?: ReactNode; href?: string }) {
+  if (containsImage(children)) return <Pressable onPress={() => href && void Linking.openURL(href)}>{children}</Pressable>;
   return <MarkdownText inline style={styles.link}><Text onPress={() => href && void Linking.openURL(href)}>{children}</Text></MarkdownText>;
+}
+
+function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const [loaded, setLoaded] = React.useState({ src, ratio: 16 / 9 });
+  return <Image source={{ uri: src }} accessibilityLabel={alt} resizeMode="contain"
+    style={{ width: "100%", aspectRatio: loaded.src === src ? loaded.ratio : 16 / 9, marginVertical: 16 }}
+    onLoad={event => {
+      const { width, height } = event.nativeEvent.source;
+      if (width > 0 && height > 0) setLoaded({ src, ratio: width / height });
+    }} />;
+}
+
+function containsImage(node: ReactNode): boolean {
+  return Children.toArray(node).some(child => isValidElement<{ children?: ReactNode }>(child)
+    && (child.type === MarkdownImage || containsImage(child.props.children)));
+}
+
+function MarkdownParagraph(props: MarkdownTextProps) {
+  if (!containsImage(props.children)) return <MarkdownText {...props} style={styles.paragraph} />;
+  // Native images need a block layout, rather than percentage sizes inside Text.
+  const blocks: ReactNode[] = [];
+  let inline: ReactNode[] = [];
+  const flush = () => {
+    if (inline.length) blocks.push(<MarkdownText key={blocks.length} className={props.className} style={styles.paragraph}>{inline}</MarkdownText>);
+    inline = [];
+  };
+  Children.forEach(props.children, child => {
+    if (containsImage(child)) { flush(); blocks.push(<React.Fragment key={blocks.length}>{child}</React.Fragment>); }
+    else inline.push(child);
+  });
+  flush();
+  return <View>{blocks}</View>;
+}
+
+function MarkdownListItem({ children, marker = "•" }: { children?: ReactNode; marker?: string }) {
+  return <View style={{ flexDirection: "row", gap: 16 }}>
+    <MarkdownText style={styles.listItem}>{marker}</MarkdownText>
+    <NativeView style={{ flex: 1 }}>{renderNativeChildren(children, text => <MarkdownText style={styles.listItem}>{text}</MarkdownText>)}</NativeView>
+  </View>;
+}
+
+function MarkdownCell({ children, align, heading = false }: { children?: ReactNode; align?: "left" | "center" | "right"; heading?: boolean }) {
+  return <View style={{ flex: 1, padding: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: "#64748b" }}>
+    <MarkdownText style={[styles.paragraph, { marginBottom: 0, textAlign: align }, heading && styles.strong]}>{children}</MarkdownText>
+  </View>;
 }
 
 function renderMdxChildren(children: ReactNode) {
@@ -205,7 +251,20 @@ const markdownComponents = {
   h1: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h1} />,
   h2: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h2} />,
   h3: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h3} />,
-  p: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.paragraph} />,
+  h4: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h3} />,
+  h5: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h3} />,
+  h6: (props: MarkdownTextProps) => <MarkdownText {...props} style={styles.h3} />,
+  p: MarkdownParagraph,
+  img: MarkdownImage,
+  del: ({ children }: { children?: ReactNode }) => <MarkdownText inline style={{ textDecorationLine: "line-through" }}>{children}</MarkdownText>,
+  table: NativeView,
+  thead: NativeView,
+  tbody: NativeView,
+  tr: ({ children }: { children?: ReactNode }) => <NativeView style={{ flexDirection: "row" }}>{children}</NativeView>,
+  td: MarkdownCell,
+  th: (props: ComponentProps<typeof MarkdownCell>) => <MarkdownCell {...props} heading />,
+  input: ({ checked }: { checked?: boolean }) => <Text accessibilityRole="checkbox" accessibilityState={{ checked, disabled: true }}>{checked ? "☑" : "☐"} </Text>,
+  hr: () => <View style={{ height: 2, backgroundColor: "#64748b", marginVertical: 20 }} />,
   strong: ({ children }: { children?: ReactNode }) => <MarkdownText inline style={styles.strong}>{children}</MarkdownText>,
   em: ({ children }: { children?: ReactNode }) => <MarkdownText inline style={styles.emphasis}>{children}</MarkdownText>,
   code: MarkdownCode,
@@ -213,7 +272,7 @@ const markdownComponents = {
   blockquote: ({ children }: { children?: ReactNode }) => <NativeView style={styles.blockquote}>{children}</NativeView>,
   ul: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,
   ol: ({ children }: { children?: ReactNode }) => <NativeView style={styles.list}>{children}</NativeView>,
-  li: ({ children }: { children?: ReactNode }) => <MarkdownText style={styles.listItem}>• {children}</MarkdownText>,
+  li: MarkdownListItem,
   a: MarkdownLink,
 };
 
