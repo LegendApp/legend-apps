@@ -67,12 +67,19 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
     // Once transferred, the UI renderer owns teardown after its last frame.
     let transferred = false;
     let release: (() => void) | undefined;
+    let validationScope = false;
     async function setup() {
       try {
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) throw new Error("No WebGPU adapter");
         device = await requestShaderDevice(adapter);
         if (cancelled || !canvas.current) { device.destroy(); return; }
+        device.addEventListener("uncapturederror", event => {
+          event.preventDefault();
+          if (!cancelled) { setError(event.error.message); reportError(event.error); }
+        });
+        device.pushErrorScope("validation");
+        validationScope = true;
         void device.lost.then(info => {
           if (!cancelled && info.reason !== "destroyed") setError("WebGPU device lost: " + info.message);
         });
@@ -86,7 +93,7 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
         const diagnostics = await module.getCompilationInfo();
         const errors = diagnostics.messages.filter(message => message.type === "error");
         if (errors.length) throw new Error(errors.map(message => message.message).join("\n"));
-        if (cancelled) { device.destroy(); return; }
+        if (cancelled) throw new Error("GPU setup cancelled");
         const layout = device.createBindGroupLayout({ entries: [
           { binding: 0, visibility: 7, buffer: { type: "uniform" } },
           { binding: 1, visibility: 7, buffer: { type: "read-only-storage" } },
@@ -109,10 +116,10 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
             color: { srcFactor: "one", dstFactor: "one", operation: "add" },
             alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" },
           } }] } }) : undefined;
-        device.addEventListener("uncapturederror", event => {
-          event.preventDefault();
-          if (!cancelled) { setError(event.error.message); reportError(event.error); }
-        });
+        validationScope = false;
+        const validationError = await device.popErrorScope();
+        if (validationError) throw new Error(validationError.message);
+        if (cancelled) { device.destroy(); return; }
         const alive = makeMutable(true);
         const disposed = makeMutable(false);
         const ownedDevice = device;
@@ -120,6 +127,10 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
         transferred = true;
         setResources({ alive, disposed, device, context, clock, states, groups, compute, render, particles: particlePipeline });
       } catch (caught) {
+        if (validationScope) {
+          validationScope = false;
+          await device?.popErrorScope().catch(() => {});
+        }
         device?.destroy();
         if (!cancelled) { setError(String(caught)); reportError(caught); }
       }
