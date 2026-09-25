@@ -366,12 +366,18 @@ export async function persistSlideSpeakerNotesWithFileAccess(
   notes: string,
   fileAccess: SpeakerNotesFileAccess,
   expectedTarget?: string,
+  expectedNotes?: string,
 ) {
   let expectedSlideSource: string | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const source = await fileAccess.read(path);
     if (expectedTarget !== undefined && getSpeakerNotesTargets(source)[slideIndex] !== expectedTarget) {
       throw new Error("The target slide changed since these notes were opened. Your draft has been kept; review the deck before saving.");
+    }
+    // Compare against the editing baseline, not the first read made by autosave.
+    if (expectedNotes !== undefined && updateSlideSpeakerNotes(source, slideIndex, expectedNotes) !== source
+      && updateSlideSpeakerNotes(source, slideIndex, notes) !== source) {
+      throw new Error("Speaker notes changed on disk since editing began. Your draft has been kept for recovery.");
     }
     const currentSlideSource = slideSource(source, slideIndex);
     if (expectedSlideSource === undefined) {

@@ -68,7 +68,7 @@ type EditableMarkdownProps = {
   backgroundColor?: string;
   markdown: string;
   onEditingChange?(editing: boolean): void;
-  onSave(markdown: string): Promise<void>;
+  onSave(markdown: string, expectedNotes: string): Promise<void>;
   placeholder: string;
 };
 
@@ -99,8 +99,9 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   }, [onSave]);
 
   useEffect(() => {
-    if (draftKey && drafts) drafts.bind(draftKey, async text => {
-      await onSaveRef.current(text);
+    if (draftKey && drafts) drafts.bind(draftKey, async (text, base) => {
+      if (base === undefined) throw new Error("This recovered draft needs review before saving.");
+      await onSaveRef.current(text, base);
       savedMarkdownRef.current = text;
     });
   }, [draftKey, drafts]);
@@ -109,7 +110,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     const normalized = nextMarkdown.trim();
     if (draftKey && drafts) {
       // Recovery owns pending writes after this component unmounts.
-      if (normalized !== savedMarkdownRef.current) drafts.update(draftKey, normalized);
+      if (normalized !== savedMarkdownRef.current) drafts.update(draftKey, normalized, savedMarkdownRef.current);
       void drafts.flush(draftKey);
       return;
     }
@@ -122,7 +123,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
         if (normalized === savedMarkdownRef.current) {
           return;
         }
-        await onSaveRef.current(normalized);
+        await onSaveRef.current(normalized, savedMarkdownRef.current);
         savedMarkdownRef.current = normalized;
       });
     saveQueueRef.current = save;
@@ -216,7 +217,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
           onChange={value => {
             setDocument(value);
             draftMarkdownRef.current = value;
-            if (draftKey && drafts) drafts.update(draftKey, value);
+            if (draftKey && drafts) drafts.update(draftKey, value, savedMarkdownRef.current);
             if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
           }} />

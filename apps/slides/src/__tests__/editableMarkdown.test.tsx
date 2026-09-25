@@ -42,7 +42,7 @@ test("focus preserves native text, layout and selection; outside clicks flush th
     await act(async () => { tree.root.findAllByType("view").find(x => x.props.testID === "boundary").props.onTouchStart(); });
     expect(blur).toHaveBeenCalled();
     expect(editing.mock.calls.map(x => x[0])).toEqual([true, false]);
-    expect(save).toHaveBeenCalledWith("changed notes");
+    expect(save).toHaveBeenCalledWith("changed notes", "First paragraph wraps when needed.\n\nSecond paragraph.");
     expect(tree.root.findByType("editor").props.nativeId).toBe(before.nativeId);
   } finally { if (tree) await act(() => tree.unmount()); }
 });
@@ -63,7 +63,7 @@ test("one native document supports edits spanning step boundaries without remoun
     // This event models replacing a selection that spans both step sections.
     await act(async () => editor.props.onChangeMarkdown("Merged selection"));
     await act(async () => tree.root.findByType("editor").props.onBlur());
-    expect(save).toHaveBeenLastCalledWith("Merged selection");
+    expect(save).toHaveBeenLastCalledWith("Merged selection", "1. First\n\n\n2. Second");
     expect(tree.root.findByType("editor").props.nativeId).toBe(id);
   } finally { if (tree) await act(() => tree.unmount()); }
 });

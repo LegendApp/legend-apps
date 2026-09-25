@@ -158,7 +158,7 @@ function SpeakerNotes({
   editable: boolean;
   notes?: string;
   onEditingChange(editing: boolean): void;
-  onSave(notes: string, target: string): Promise<void>;
+  onSave(notes: string, target: string, expectedNotes: string): Promise<void>;
   slideIndex: number;
   weight: number;
 }) {
@@ -173,7 +173,7 @@ function SpeakerNotes({
       <ScrollableNotes key={`${deckPath}:${slideIndex}`} notesWidth={notesWidth}
         editable={editable} fontSize={notesFontSize} currentStep={currentStep}
         draftKey={draftKey} drafts={speakerNotesDrafts}
-        markdown={notes ?? ""} onEditingChange={onEditingChange} onSave={value => onSave(value, draftKey.slice(draftPrefix.length))}
+        markdown={notes ?? ""} onEditingChange={onEditingChange} onSave={(value, expectedNotes) => onSave(value, draftKey.slice(draftPrefix.length), expectedNotes)}
         placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."} />
     </View>
   );
@@ -223,7 +223,7 @@ type PresenterWorkspaceProps = {
   notesEditable: boolean;
   notes?: string;
   onNotesEditingChange(editing: boolean): void;
-  onSaveNotes(deckPath: string, slideIndex: number, notes: string, target: string): Promise<void>;
+  onSaveNotes(deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string): Promise<void>;
   resetVersion: number;
   showNext: boolean;
   showNotes: boolean;
@@ -298,7 +298,7 @@ function PresenterWorkspace({
             editable={notesEditable}
             notes={notes}
             onEditingChange={onNotesEditingChange}
-            onSave={(nextNotes, target) => onSaveNotes(deckPath, currentIndex, nextNotes, target)}
+            onSave={(nextNotes, target, expectedNotes) => onSaveNotes(deckPath, currentIndex, nextNotes, target, expectedNotes)}
             slideIndex={currentIndex}
             weight={layout.notesRatio}
           />
@@ -708,9 +708,9 @@ export function PresenterWindow() {
     rememberRehearsalEnabled(mode === "rehearsal");
   }, [setRehearsalEnabled]);
 
-  const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string, target: string) => {
+  const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string) => {
     try {
-      await persistSlideSpeakerNotes(deckPath, slideIndex, notes, target);
+      await persistSlideSpeakerNotes(deckPath, slideIndex, notes, target, expectedNotes);
       setSlidesState((current) => current.deckPath === deckPath
         ? {
             displayMessage: "",
@@ -783,7 +783,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
   keyboardJump$: Observable<string>;
   presenter$: Observable<PresenterSession>;
   onNotesEditingChange: (editing: boolean) => void;
-  onSaveNotes: (path: string, index: number, notes: string, target: string) => Promise<void>;
+  onSaveNotes: (path: string, index: number, notes: string, target: string, expectedNotes: string) => Promise<void>;
 }) {
   const notesEditable = useValue(presenter$.rehearsalEnabled);
   const resetVersion = useValue(presenter$.presenterLayoutResetVersion);

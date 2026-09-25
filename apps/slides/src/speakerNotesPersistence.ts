@@ -11,6 +11,7 @@ export async function persistSlideSpeakerNotes(
   slideIndex: number,
   notes: string,
   expectedTarget: string,
+  expectedNotes: string,
 ) {
-  return persistSlideSpeakerNotesWithFileAccess(path, slideIndex, notes, nativeFileAccess, expectedTarget);
+  return persistSlideSpeakerNotesWithFileAccess(path, slideIndex, notes, nativeFileAccess, expectedTarget, expectedNotes);
 }

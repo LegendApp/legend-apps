@@ -1,7 +1,10 @@
-type Save = (markdown: string) => Promise<void>;
+export type NotesDraft = { text: string; base?: string };
+type Save = (markdown: string, base: string | undefined) => Promise<void>;
 /** Drafts outlive a slide's view; failed writes remain available for recovery. */
-export function createNotesDrafts(persistence?: { read(): Record<string, string>; write(drafts: Record<string, string>): void }) {
-  const drafts = new Map(Object.entries(persistence?.read() ?? {}));
+export function createNotesDrafts(persistence?: { read(): Record<string, NotesDraft | string>; write(drafts: Record<string, NotesDraft>): void }) {
+  // Legacy drafts have no baseline; retain them for recovery, never assume the current disk notes.
+  const drafts = new Map<string, NotesDraft>(Object.entries(persistence?.read() ?? {}).map(([key, value]) =>
+    [key, typeof value === "string" ? { text: value } : value]));
   const saves = new Map<string, Save>();
   const pending = new Map<string, Promise<boolean>>();
   const persist = () => persistence?.write(Object.fromEntries(drafts));
@@ -12,9 +15,12 @@ export function createNotesDrafts(persistence?: { read(): Record<string, string>
       while (drafts.has(key)) {
         const save = saves.get(key);
         if (!save) return false;
-        const text = drafts.get(key)!;
-        try { await save(text); } catch { return false; }
-        if (drafts.get(key) === text) { drafts.delete(key); persist(); }
+        const draft = drafts.get(key)!;
+        try { await save(draft.text, draft.base); } catch { return false; }
+        const latest = drafts.get(key);
+        if (latest === draft) drafts.delete(key);
+        else if (latest) drafts.set(key, { ...latest, base: draft.text });
+        persist();
       }
       return true;
     }).finally(() => pending.delete(key));
@@ -23,9 +29,12 @@ export function createNotesDrafts(persistence?: { read(): Record<string, string>
   };
   return {
     key: (prefix: string, target: string) => [...drafts.keys()].find(key => key.startsWith(prefix)) ?? prefix + target,
-    get: (key: string, fallback: string) => drafts.get(key) ?? fallback,
+    get: (key: string, fallback: string) => drafts.get(key)?.text ?? fallback,
     bind(key: string, save: Save) { saves.set(key, save); },
-    update(key: string, text: string) { drafts.set(key, text); persist(); },
+    update(key: string, text: string, base?: string) {
+      drafts.set(key, { text, base: drafts.has(key) ? drafts.get(key)!.base : base });
+      persist();
+    },
     flush,
     async flushAll() { return (await Promise.all([...drafts.keys()].map(flush))).every(Boolean); },
   };

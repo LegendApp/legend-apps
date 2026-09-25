@@ -31,3 +31,20 @@ test("failed saves survive view removal and restart, then retry", async () => {
   expect(await restored.flushAll()).toBe(true);
   expect(disk).toEqual({});
 });
+
+
+test("recovery preserves the editing baseline and advances it between queued writes", async () => {
+  let disk = {};
+  const persistence = { read: () => disk, write: value => { disk = value; } };
+  const drafts = createNotesDrafts(persistence);
+  drafts.update("slide", "first", "original");
+  const restored = createNotesDrafts(persistence);
+  const bases = [];
+  restored.bind("slide", async (text, base) => {
+    bases.push(base);
+    if (text === "first") restored.update("slide", "second", "stale prop");
+  });
+  expect(await restored.flushAll()).toBe(true);
+  expect(bases).toEqual(["original", "first"]);
+  expect(disk).toEqual({});
+});

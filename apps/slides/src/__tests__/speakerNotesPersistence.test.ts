@@ -124,3 +124,21 @@ it("keeps a stable target across successive note saves", async () => {
   await persistSlideSpeakerNotesWithFileAccess("deck", 0, "second", io, target);
   expect(source).toContain("<!-- second -->");
 });
+
+
+it("protects external notes changed before autosave starts", async () => {
+  const { getSpeakerNotesTargets } = await import("../../../../packages/presentation/src/speakerNotesSource");
+  const original = "# Slide\n\n<!-- original -->\n";
+  let disk = "# Slide\n\n<!-- external -->\n";
+  let writes = 0;
+  const access = { read: async () => disk, writeIfUnchanged: async (_path, _expected, next) => {
+    writes++; disk = next; return true;
+  } };
+  await expect(persistSlideSpeakerNotesWithFileAccess("deck", 0, "local", access,
+    getSpeakerNotesTargets(original)[0], "original")).rejects.toThrow("changed on disk");
+  expect(writes).toBe(0);
+  expect(disk).toContain("external");
+  // A previously completed write is safe to acknowledge after recovery.
+  expect(await persistSlideSpeakerNotesWithFileAccess("deck", 0, "external", access,
+    getSpeakerNotesTargets(original)[0], "original")).toBe(false);
+});
