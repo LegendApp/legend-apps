@@ -1,11 +1,11 @@
 import { splitSpeakerNoteSteps, speakerNoteOpacity, speakerNotesEditorMarkdown } from "./speakerNoteSteps";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
   type MarkdownStyle,
 } from "react-native-enriched-markdown";
-import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
+import { StyleSheet, View, type ViewProps } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
 const notesLineHeightRatio = 1.4;
@@ -60,7 +60,6 @@ type EditableMarkdownProps = {
   editable: boolean;
   currentStep?: number;
   onSectionLayout?(step: number, y: number, height: number): void;
-  editorHeight?: number;
   fontSize?: number;
   markdown: string;
   onEditingChange?(editing: boolean): void;
@@ -68,7 +67,7 @@ type EditableMarkdownProps = {
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, editorHeight, fontSize = 17 }: EditableMarkdownProps) {
+export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
@@ -82,8 +81,10 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
   const editingRef = useRef(false);
   const onEditingChangeRef = useRef(onEditingChange);
   const onSaveRef = useRef(onSave);
-  const [editorInitialValue, setEditorInitialValue] = useState<string | null>(null);
-  const editing = editorInitialValue !== null;
+  const [editing, setEditing] = useState(false);
+  const [sections, setSections] = useState(() => noteSections(markdown));
+  const sectionsRef = useRef(sections);
+  const propMarkdownRef = useRef(markdown);
 
   useEffect(() => {
     onEditingChangeRef.current = onEditingChange;
@@ -128,7 +129,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     // the response can be lost, leaving the final edit unsaved.
     flushDraft();
     editingRef.current = false;
-    setEditorInitialValue(null);
+    setEditing(false);
     onEditingChangeRef.current?.(false);
   }, [flushDraft]);
 
@@ -146,20 +147,21 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     if (!editable || editingRef.current) {
       return;
     }
-    draftMarkdownRef.current = markdown.trim();
-    savedMarkdownRef.current = markdown.trim();
     editingRef.current = true;
-    setEditorInitialValue(speakerNotesEditorMarkdown(draftMarkdownRef.current));
+    setEditing(true);
     onEditingChangeRef.current?.(true);
-  }, [editable, markdown]);
+  }, [editable]);
 
   useEffect(() => {
-    if (!editingRef.current) {
-      const normalized = markdown.trim();
-      draftMarkdownRef.current = normalized;
-      savedMarkdownRef.current = normalized;
-    }
-  }, [markdown]);
+    if (propMarkdownRef.current === markdown) return;
+    // Save acknowledgements must not replace a newer local edit or its selection.
+    if (editingRef.current || draftMarkdownRef.current !== savedMarkdownRef.current) return;
+    propMarkdownRef.current = markdown;
+    const normalized = markdown.trim();
+    draftMarkdownRef.current = savedMarkdownRef.current = normalized;
+    sectionsRef.current = noteSections(markdown);
+    setSections(sectionsRef.current);
+  }, [markdown, editing]);
 
   useEffect(() => {
     if (!editable && editingRef.current) {
@@ -180,64 +182,70 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     }
   }, [enqueueSave]);
 
-  if (editing) {
-    return (
-      <View onTouchStart={(event) => event.stopPropagation()} style={[styles.viewerShell, styles.focusedShell]}>
-      <EnrichedMarkdownTextInput
-        ref={inputRef}
-        autoFocus
-        cursorColor="#93c5fd"
-        defaultValue={editorInitialValue}
-        markdownStyle={markdownStyle}
-        multiline
-        onBlur={finishEditing}
-        onChangeMarkdown={(value) => {
-          draftMarkdownRef.current = speakerNotesEditorMarkdown(value, true);
-          if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-          }
-          saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
-        }}
-        placeholder={placeholder}
-        placeholderTextColor="#71717a"
-        scrollEnabled={editorHeight !== undefined}
-        selectionColor="#3b82f680"
-        style={{ ...styles.editor, ...textStyle, ...(editorHeight !== undefined ? { height: editorHeight, minHeight: 0 } : {}) }}
-      />
-      </View>
-    );
-  }
-
   return (
-    <Pressable
-      accessibilityLabel={editable ? "Edit speaker notes" : "Speaker notes"}
-      accessibilityRole={editable ? "button" : undefined}
-      disabled={!editable}
-      onPress={startEditing}
-      onTouchStart={(event) => event.stopPropagation()}
-      style={styles.viewerShell}
-    >
-      {markdown.trim() ? (
-        splitSpeakerNoteSteps(markdown).map((section, index) => (
-          <View key={index} onLayout={event => { if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height); }} style={[styles.noteSection, { opacity: speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? sectionGap : 0 }]}>
-            <View pointerEvents={editable ? "none" : "auto"}>
-              <EnrichedMarkdownTextInput
-                key={`${fontSize}:${section.markdown}`}
-                editable={false}
-                defaultValue={speakerNotesEditorMarkdown(section.markdown)}
-                markdownStyle={markdownStyle}
-                multiline
-                scrollEnabled={false}
-                style={{ ...styles.editor, ...textStyle, minHeight: 0 }}
-              />
-            </View>
-          </View>
-        ))
-      ) : (
-        <Text style={[styles.placeholder, textStyle]}>{placeholder}</Text>
-      )}
-    </Pressable>
+    <View accessibilityLabel={editable ? "Edit speaker notes" : "Speaker notes"}
+      onTouchStart={event => event.stopPropagation()}
+      style={[styles.viewerShell, editing && styles.focusedShell]}>
+      {sections.map((section, index) => (
+        <View key={index} onLayout={event => {
+          if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height);
+        }} style={[styles.noteSection, { opacity: editing ? 1 : speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? sectionGap : 0 }]}>
+          <NotesText markdown={section.markdown} editable={editable} markdownStyle={markdownStyle}
+            placeholder={sections.length === 1 ? placeholder : ""} textStyle={textStyle}
+            onFocus={input => { inputRef.current = input; startEditing(); }}
+            onBlur={finishEditing}
+            onChange={value => {
+              sectionsRef.current = sectionsRef.current.map((item, i) => i === index ? { ...item, markdown: value } : item);
+              setSections(sectionsRef.current);
+              draftMarkdownRef.current = sectionsRef.current.map(item => item.separator + item.markdown).join("");
+              if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+              saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
+            }} />
+        </View>
+      ))}
+    </View>
   );
+}
+
+function noteSections(markdown: string) {
+  const source = markdown.trim().replace(/\r\n/g, "\n");
+  let end = 0;
+  const sections = splitSpeakerNoteSteps(source).map(section => {
+    const start = source.indexOf(section.markdown, end);
+    const separator = source.slice(end, start);
+    end = start + section.markdown.length;
+    return { ...section, separator };
+  });
+  return sections.length ? sections : [{ markdown: "", step: undefined, separator: "" }];
+}
+
+/** Keep the native text view and layout alive across focus; AppKit owns click-to-caret hit testing. */
+function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, onFocus, onBlur, onChange }: {
+  markdown: string; editable: boolean; markdownStyle: MarkdownStyle; placeholder: string;
+  textStyle: { fontSize: number; lineHeight: number };
+  onFocus(input: EnrichedMarkdownTextInputInstance | null): void;
+  onBlur(): void; onChange(markdown: string): void;
+}) {
+  const input = useRef<EnrichedMarkdownTextInputInstance | null>(null);
+  const value = speakerNotesEditorMarkdown(markdown);
+  const lastValue = useRef(value);
+  useLayoutEffect(() => {
+    if (lastValue.current !== value) {
+      lastValue.current = value;
+      input.current?.setValue(value);
+    }
+  }, [value]);
+  return <EnrichedMarkdownTextInput ref={input} defaultValue={value} editable={editable}
+    markdownStyle={markdownStyle} multiline scrollEnabled={false}
+    cursorColor="#93c5fd" selectionColor="#3b82f680"
+    placeholder={placeholder} placeholderTextColor="#71717a"
+    onFocus={() => onFocus(input.current)} onBlur={onBlur}
+    onChangeMarkdown={next => {
+      const markdown = speakerNotesEditorMarkdown(next, true);
+      lastValue.current = speakerNotesEditorMarkdown(markdown);
+      onChange(markdown);
+    }}
+    style={{ ...styles.editor, ...textStyle, minHeight: 0 }} />;
 }
 
 const styles = StyleSheet.create({
@@ -249,7 +257,6 @@ const styles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
-  placeholder: { color: "#71717a", fontSize: 17, fontStyle: "italic", lineHeight: 17 * notesLineHeightRatio },
   noteSection: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
