@@ -36,6 +36,8 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
       persist();
     },
     flush,
+    entries: () => [...drafts.entries()],
+    persist,
     async flushAll() { return (await Promise.all([...drafts.keys()].map(flush))).every(Boolean); },
   };
 }

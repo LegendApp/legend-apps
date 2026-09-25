@@ -1,3 +1,5 @@
+import { saveFileDialog, writeTextFile } from "@legend-apps/file-dialog";
+import { prepareNotesExit } from "./notesRecovery";
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { Alert } from "react-native";
 import { installSlidesExitHandler, registerSlidesExitPreparation } from "./slidesExit";
@@ -14,9 +16,23 @@ export function App({ launchArguments }: SlidesAppProps) {
   const handledLaunch = useRef<string | null>(null);
   useEffect(() => {
     const unregisterNotes = registerSlidesExitPreparation(async () => {
-      if (await speakerNotesDrafts.flushAll()) return true;
-      Alert.alert("Speaker notes not saved", "Your draft has been kept. Reopen the affected slide to review it and retry saving before quitting.");
-      return false;
+      try {
+        return await prepareNotesExit(speakerNotesDrafts, affected => new Promise(resolve => {
+          Alert.alert("Speaker notes need recovery", `These notes could not be saved to their decks:\n\n${affected.join("\n")}\n\nYou can continue with drafts saved locally, or export a copy to recover them in another deck.`, [
+            { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+            { text: "Keep Drafts and Continue", onPress: () => resolve("keep") },
+            { text: "Export Drafts…", onPress: () => resolve("export") },
+          ]);
+        }), async contents => {
+          const path = await saveFileDialog({ defaultName: "Speaker Notes Recovery.md", allowedFileTypes: ["md"] });
+          if (!path) return false;
+          await writeTextFile(path, contents);
+          return true;
+        });
+      } catch (error) {
+        Alert.alert("Could not preserve speaker notes", String(error));
+        return false;
+      }
     });
     const exitSubscription = installSlidesExitHandler();
     const openPresenter = () => slidesWindows.open("SlidesPresenterWindow");
