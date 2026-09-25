@@ -132,6 +132,14 @@ describe("compileDeck", () => {
     expect(result.code).toContain('marker: "4."');
   });
 
+  test("comment-like literals remain valid deck content", async () => {
+    for (const source of ['# Slide\n\n`<!-- literal -->`', '# Slide\n\n{"<!-- literal -->"}', '---\ntitle: "<!-- literal -->"\n---\n# Slide', 'export const label = "<!-- literal -->"\n\n# Slide']) {
+      const result = await compileDeck(createDeck({ "deck.mdx": `${source}\n\n<!-- actual -->` }));
+      expect(result.success).toBe(true);
+      expect(result.code).toContain("<!-- literal -->");
+    }
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,

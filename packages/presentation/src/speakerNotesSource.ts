@@ -39,8 +39,14 @@ function splitSourceLines(source: string) {
 function scanSource(lines: readonly SourceLine[], source: string) {
   const fenced = new Set<number>();
   const comments: CommentRange[] = [];
+  const literals: SlideRange[] = [];
   let fence: string | undefined;
-  let commentEnd = 0;
+  let skipUntil = 0;
+  let depth = 0;
+  let quote = "";
+  let blockComment = false;
+  let moduleCode = false;
+  let tag = false;
   lines.forEach((line, index) => {
     if (fence) {
       fenced.add(index);
@@ -48,31 +54,68 @@ function scanSource(lines: readonly SourceLine[], source: string) {
       if (closing && closing[1][0] === fence[0] && closing[1].length >= fence.length) fence = undefined;
       return;
     }
-    if (line.start >= commentEnd) {
+    if (line.start >= skipUntil && depth === 0 && !quote && !moduleCode) {
       const opening = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(line.content);
       if (opening && !(opening[1][0] === "`" && opening[2].includes("`"))) {
-        fence = opening[1];
-        fenced.add(index);
-        return;
+        fence = opening[1]; fenced.add(index); return;
+      }
+      if (/^[ \t]{0,3}---[ \t]*$/.test(line.content)) {
+        const end = lines.slice(index + 1).find(next => /^[ \t]{0,3}---[ \t]*$/.test(next.content));
+        if (end && isYamlObject(source.slice(line.end, end.start))) {
+          literals.push({ start: line.end, end: end.start });
+          skipUntil = end.start;
+          return;
+        }
+      }
+      moduleCode = /^(?:import|export)\s/.test(line.content);
+    }
+    const wasModule = moduleCode;
+    for (let at = Math.max(line.start, skipUntil); at < line.end; at++) {
+      const ch = source[at], next = source[at + 1];
+      if (blockComment) { if (ch === "*" && next === "/") { blockComment = false; at++; } continue; }
+      if (quote) { if (ch === "\\") at++; else if (ch === quote) quote = ""; continue; }
+      if (depth > 0 || moduleCode || tag) {
+        if (ch === "/" && next === "/") break;
+        if (ch === "/" && next === "*") { blockComment = true; at++; continue; }
+        if (ch === '"' || ch === "'" || ch === "`") { quote = ch; continue; }
+      }
+      if (ch === "\\") { at++; continue; }
+      if (ch === "<" && /^<\/?[A-Za-z]/.test(source.slice(at, at + 3))) tag = true;
+      if (ch === ">") tag = false;
+      if (ch === "{") { depth++; continue; }
+      if (ch === "}" && depth > 0) { depth--; continue; }
+      if (depth > 0 || moduleCode) continue;
+      if (ch === "`") {
+        let length = 1;
+        while (source[at + length] === "`") length++;
+        const marker = "`".repeat(length);
+        let end = source.indexOf(marker, at + length);
+        while (end >= 0 && (source[end - 1] === "`" || source[end + length] === "`")) end = source.indexOf(marker, end + length);
+        if (end >= 0) {
+          skipUntil = end + length;
+          literals.push({ start: at, end: skipUntil });
+          at = skipUntil - 1;
+        } else at += length - 1;
+      } else if (source.startsWith("<!--", at)) {
+        const contentEnd = source.indexOf("-->", at + 4);
+        if (contentEnd >= 0) {
+          skipUntil = contentEnd + 3;
+          comments.push({ start: at, contentStart: at + 4, contentEnd, end: skipUntil });
+          at = skipUntil - 1;
+        }
       }
     }
-    let start = source.indexOf("<!--", Math.max(line.start, commentEnd));
-    while (start >= 0 && start < line.end) {
-      const contentEnd = source.indexOf("-->", start + 4);
-      if (contentEnd < 0) break;
-      commentEnd = contentEnd + 3;
-      comments.push({ start, contentStart: start + 4, contentEnd, end: commentEnd });
-      start = source.indexOf("<!--", commentEnd);
-    }
+    if (wasModule) literals.push({ start: line.start, end: line.end });
+    if (!depth && !quote && !blockComment) moduleCode = false;
   });
-  return { fenced, comments };
+  return { fenced, comments, literals };
 }
 
 function jsxDepths(
   source: string,
   lines: readonly SourceLine[],
   fenced: ReadonlySet<number>,
-  comments: readonly CommentRange[],
+  comments: readonly Pick<CommentRange, "start" | "end">[],
 ) {
   const masked = source.split("");
   const mask = (start: number, end: number) => {
@@ -184,10 +227,11 @@ function isYamlObject(source: string) {
 
 function sourceStructure(source: string) {
   const lines = splitSourceLines(source);
-  const { fenced, comments } = scanSource(lines, source);
-  const depths = jsxDepths(source, lines, fenced, comments);
+  const { fenced, comments, literals } = scanSource(lines, source);
+  const protectedRanges = [...comments, ...literals].sort((a, b) => a.start - b.start);
+  const depths = jsxDepths(source, lines, fenced, protectedRanges);
   const expressions = expressionDepths(lines.map(line => ({ ...line, content: line.content.split("").map((character, index) =>
-    comments.some(comment => comment.start <= line.start + index && comment.end > line.start + index) ? " " : character).join("") })), fenced);
+    protectedRanges.some(comment => comment.start <= line.start + index && comment.end > line.start + index) ? " " : character).join("") })), fenced);
   const delimiters = lines
     .map((line, index) => ({ index, line }))
     .filter(({ index, line }) =>

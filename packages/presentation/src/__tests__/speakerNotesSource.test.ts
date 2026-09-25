@@ -199,3 +199,12 @@ test("replaces an entire note containing fences without changing slide identity"
   const source = "# Slide\n\n<!--\n```js\n{ example: true }\n```\n---\ntransition: fade\n---\n-->\n\n---\n\n# Next";
   expect(updateSlideSpeakerNotes(source, 0, "Replacement")).toBe("# Slide\n\n<!-- Replacement -->\n\n---\n\n# Next");
 });
+
+test("note edits preserve inline code, expressions, module strings and YAML literals", () => {
+  for (const literal of ['`<!-- literal -->`', '{"<!-- literal -->"}', '{/* <!-- literal --> */}', 'export const label = "<!-- literal -->"']) {
+    const source = `${literal}\n\n# Slide\n\n<!-- actual -->`;
+    expect(updateSlideSpeakerNotes(source, 0, "changed")).toBe(`${literal}\n\n# Slide\n\n<!-- changed -->`);
+  }
+  const yaml = '---\ntitle: "<!-- literal -->"\n---\n# Slide\n<!-- actual -->';
+  expect(updateSlideSpeakerNotes(yaml, 0, "changed")).toBe(yaml.replace("<!-- actual -->", "<!-- changed -->"));
+});
