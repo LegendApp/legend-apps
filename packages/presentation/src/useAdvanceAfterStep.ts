@@ -11,6 +11,10 @@ export function useAdvanceAfterStep(step: number, seconds: number) {
   const slide = usePresentationValue("slideIndex");
   const advance = (key: string) => {
     const runtime = runtime$.peek();
+    const slideKey = runtime.playbackScope === "background" ? "background" : `${runtime.slideIndex}:${runtime.startedAt ?? 0}`;
+    const stepKey = `${runtime.stepIndex}:${runtime.stepStartedAt ?? 0}`;
+    // A queued completion can arrive after navigating away and back to the same indexes.
+    if (key !== `${slideKey}:${stepKey}`) return;
     if (runtime.playbackPhase === "playing" && runtime.currentSlide === slide && runtime.currentStep === step && !completed.has(key)) {
       completed.add(key);
       if (completed.size > 64) completed.delete(completed.values().next().value!);
