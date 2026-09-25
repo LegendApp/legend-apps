@@ -1,3 +1,4 @@
+import type { NotesDrafts } from "./notesDrafts";
 import { splitSpeakerNoteSteps, speakerNoteOpacity, speakerNotesEditorMarkdown } from "./speakerNoteSteps";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -58,6 +59,8 @@ export function NotesEditingBoundary({ children, ...props }: ViewProps) {
 
 type EditableMarkdownProps = {
   editable: boolean;
+  draftKey?: string;
+  drafts?: NotesDrafts;
   currentStep?: number;
   onSectionLayout?(step: number, y: number, height: number): void;
   fontSize?: number;
@@ -67,7 +70,7 @@ type EditableMarkdownProps = {
   placeholder: string;
 };
 
-export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
+export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
@@ -77,12 +80,12 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveQueueRef = useRef(Promise.resolve());
   const savedMarkdownRef = useRef(markdown.trim());
-  const draftMarkdownRef = useRef(markdown.trim());
+  const draftMarkdownRef = useRef(draftKey && drafts ? drafts.get(draftKey, markdown.trim()) : markdown.trim());
   const editingRef = useRef(false);
   const onEditingChangeRef = useRef(onEditingChange);
   const onSaveRef = useRef(onSave);
   const [editing, setEditing] = useState(false);
-  const [sections, setSections] = useState(() => noteSections(markdown));
+  const [sections, setSections] = useState(() => noteSections(draftMarkdownRef.current));
   const sectionsRef = useRef(sections);
   const propMarkdownRef = useRef(markdown);
 
@@ -94,8 +97,21 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
     onSaveRef.current = onSave;
   }, [onSave]);
 
+  useEffect(() => {
+    if (draftKey && drafts) drafts.bind(draftKey, async text => {
+      await onSaveRef.current(text);
+      savedMarkdownRef.current = text;
+    });
+  }, [draftKey, drafts]);
+
   const enqueueSave = useCallback((nextMarkdown: string) => {
     const normalized = nextMarkdown.trim();
+    if (draftKey && drafts) {
+      // Recovery owns pending writes after this component unmounts.
+      if (normalized !== savedMarkdownRef.current) drafts.update(draftKey, normalized);
+      void drafts.flush(draftKey);
+      return;
+    }
     if (normalized === savedMarkdownRef.current) {
       return;
     }
@@ -110,7 +126,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
       });
     saveQueueRef.current = save;
     void save.catch(() => {});
-  }, []);
+  }, [draftKey, drafts]);
 
   const flushDraft = useCallback(() => {
     if (saveTimeoutRef.current) {
@@ -198,6 +214,7 @@ export function EditableMarkdown({ editable, currentStep = 0, markdown, onEditin
               sectionsRef.current = sectionsRef.current.map((item, i) => i === index ? { ...item, markdown: value } : item);
               setSections(sectionsRef.current);
               draftMarkdownRef.current = sectionsRef.current.map(item => item.separator + item.markdown).join("");
+              if (draftKey && drafts) drafts.update(draftKey, draftMarkdownRef.current);
               if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
               saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
             }} />

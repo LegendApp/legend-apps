@@ -1,4 +1,6 @@
-import { installSlidesExitHandler } from "./slidesExit";
+import { speakerNotesDrafts } from "./speakerNotesDrafts";
+import { Alert } from "react-native";
+import { installSlidesExitHandler, registerSlidesExitPreparation } from "./slidesExit";
 import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
 import { useEffect, useRef } from "react";
 import { slidesWindows } from "./slidesWindows";
@@ -11,6 +13,11 @@ export function App({ launchArguments }: SlidesAppProps) {
   const launchedPath = launchArguments?.find((argument) => argument.toLowerCase().endsWith(".mdx"));
   const handledLaunch = useRef<string | null>(null);
   useEffect(() => {
+    const unregisterNotes = registerSlidesExitPreparation(async () => {
+      if (await speakerNotesDrafts.flushAll()) return true;
+      Alert.alert("Speaker notes not saved", "Your draft has been kept. Reopen the affected slide to review it and retry saving before quitting.");
+      return false;
+    });
     const exitSubscription = installSlidesExitHandler();
     const openPresenter = () => slidesWindows.open("SlidesPresenterWindow");
     void openPresenter();
@@ -26,7 +33,7 @@ export function App({ launchArguments }: SlidesAppProps) {
       }
     }
     const subscription = addApplicationReopenRequestedListener(() => void openPresenter());
-    return () => { subscription.remove(); exitSubscription.remove(); };
+    return () => { subscription.remove(); exitSubscription.remove(); unregisterNotes(); };
   }, [launchedPath]);
   return null;
 }

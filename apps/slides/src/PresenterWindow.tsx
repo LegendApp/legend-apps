@@ -1,3 +1,4 @@
+import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { prepareSlidesExit } from "./slidesExit";
 import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
 import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistorySetting, useDisplayRolesSetting } from "./slidesSettings";
@@ -168,6 +169,7 @@ function SpeakerNotes({
     <View style={[styles.notesSection, { flex: weight }]}>
       <ScrollableNotes key={`${deckPath}:${slideIndex}`} notesWidth={notesWidth}
         editable={editable} fontSize={notesFontSize} currentStep={currentStep}
+        draftKey={JSON.stringify([deckPath, slideIndex])} drafts={speakerNotesDrafts}
         markdown={notes ?? ""} onEditingChange={onEditingChange} onSave={onSave}
         placeholder={editable ? "Click to add speaker notes." : "No notes for this slide."} />
     </View>

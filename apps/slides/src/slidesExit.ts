@@ -10,15 +10,18 @@ export async function prepareDraftExit(
   return choice === "discard" || choice === "save" && await session.save() && !session.getSnapshot().dirty;
 }
 
-let prepare: (() => Promise<boolean>) | undefined;
+const preparations = new Set<() => Promise<boolean>>();
 let pending: Promise<boolean> | undefined;
 export function registerSlidesExitPreparation(handler: () => Promise<boolean>) {
-  prepare = handler;
-  return () => { if (prepare === handler) prepare = undefined; };
+  preparations.add(handler);
+  return () => { preparations.delete(handler); };
 }
 export function prepareSlidesExit() {
   if (!pending) {
-    pending = Promise.resolve().then(() => prepare?.() ?? true).catch(() => false)
+    pending = Promise.resolve().then(async () => {
+      for (const prepare of preparations) if (!await prepare()) return false;
+      return true;
+    }).catch(() => false)
       .finally(() => { pending = undefined; });
   }
   return pending;
