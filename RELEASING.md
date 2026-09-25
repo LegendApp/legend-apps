@@ -22,8 +22,10 @@ non-interactive commands below remain available.
 
 Before packaging a new version, update `apps/<app>/package.json`. The macOS build
 number is derived automatically from that version. The wizard shows both values
-and asks once before starting. It always builds Apple Silicon and Intel from
-current source for distribution.
+and asks once before starting. Choose Apple Silicon, Intel, or both. Slides compiler packaging requires a matching
+architecture, so its package wizard offers the current architecture only. To release
+both Slides architectures, prepare each on its matching machine, collect both
+archives and feeds, then select both in the release wizard.
 
 Distribution packaging prepares the app changelog using the existing changelog
 generator, then builds, signs, notarizes, and generates update feeds. Missing

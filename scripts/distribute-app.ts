@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { distributionArchitectures } from "./lib/distributionArchitectures";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { appIds, assertSupportedPlatform, loadAppManifest, loadAppPackageMetadata, rootDir } from "./lib/apps";
@@ -24,8 +25,9 @@ async function main() {
     console.log(`Usage: bun ${action} [app]
 
 Interactive macOS ${action === "package" ? "packaging" : "GitHub release"} wizard. Omit the app to choose it.
-Package: build Apple Silicon and Intel from source, sign, notarize, and generate update feeds.
-Release: publish/verify both architectures, with optional release notes. Publishing asks for
+Package: choose architectures, build from source, sign, notarize, and generate update feeds.
+Slides packaging supports only the current Bun process architecture.
+Release: choose architectures to publish/verify, with optional release notes. Publishing asks for
 confirmation after all release checks pass, then commits and pushes release metadata automatically.
 
 For automation and advanced flags, use the existing non-interactive commands:
@@ -54,12 +56,15 @@ For automation and advanced flags, use the existing non-interactive commands:
     assertSupportedPlatform(manifest, "macos");
     if (!manifest.release?.macos) throw new Error(`${manifest.id} must define macOS release metadata first.`);
     const appId = manifest.id;
+    const architectures = distributionArchitectures(appId, action, process.arch);
+    const arch = await prompts.select("Release architectures", architectures);
+    const selectedArchitectures = arch === "all" ? ["arm", "x86"] as const : [arch as "arm" | "x86"];
     const appPackage = loadAppPackageMetadata(appId);
     console.log(`\n${manifest.displayName} — macOS — version ${appPackage.version}, build ${getMacOSReleaseBuild(appPackage)}`);
 
     if (action === "package") {
       console.log(`Version: apps/${appId}/package.json; build number is derived automatically from this version.`);
-      console.log("Build Apple Silicon and Intel from source, sign, notarize, and generate Sparkle update feeds.");
+      console.log(`Build ${arch === "all" ? "Apple Silicon and Intel" : arch === "arm" ? "Apple Silicon" : "Intel"} from source, sign, notarize, and generate Sparkle update feeds.`);
       console.log(`Output: ${path.relative(rootDir, getMacOSReleaseDistDir(manifest))}`);
       if (!await prompts.confirm("Start packaging?", true)) {
         console.log(`Cancelled. To change the version, update apps/${appId}/package.json, then rerun bun package ${appId}.`);
@@ -67,12 +72,12 @@ For automation and advanced flags, use the existing non-interactive commands:
       }
       prompts.close();
       runScript("prep-app-changelog.ts", [appId]);
-      runScript("package-macos-app.ts", [appId, "all"]);
+      runScript("package-macos-app.ts", [appId, arch]);
       console.log("\nReview the prepared release changes:");
       console.log(`  apps/${appId}/package.json (version and derived build number)`);
       console.log(`  apps/${appId}/CHANGELOG.md`);
       console.log("  bun.lock");
-      for (const cpu of ["arm", "x86"] as const) {
+      for (const cpu of selectedArchitectures) {
         console.log(`  ${path.relative(rootDir, getMacOSSparkleAppcastPath(manifest, cpu))}`);
       }
       console.log(`Then run: bun release ${appId}. Publishing will commit and push these files.`);
@@ -82,7 +87,7 @@ For automation and advanced flags, use the existing non-interactive commands:
         { value: "verify", label: "Verify release readiness without publishing" },
       ] as const);
       const notesFile = await prompts.ask("Release notes file (Enter to use the app changelog)");
-      const args = [appId, "all", mode === "verify" ? "--verify-only" : "--confirm"];
+      const args = [appId, arch, mode === "verify" ? "--verify-only" : "--confirm"];
       if (notesFile) args.push("--notes-file", notesFile);
       prompts.close();
       console.log("\nChecking packaged archives and release metadata. Prepare packages with bun package " + appId + ".");
