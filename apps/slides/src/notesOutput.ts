@@ -27,6 +27,15 @@ export function syncNotesOutput(displays: Display[], presenting: boolean) {
   });
   return queue;
 }
+/** Drain in-flight preview/output opens before closing the presenter. */
+export function closeNotesOutput() {
+  queue = queue.catch(() => {}).then(async () => {
+    const result = await closeWindow("slides-notes");
+    if (!result.success && result.message !== "No window to close") throw new Error(result.message ?? "Could not close the notes window.");
+    notesOutputClosed();
+  });
+  return queue;
+}
 export function previewNotesOutput() {
   queue = queue.catch(() => {}).then(async () => {
     replacing = true;

@@ -1,5 +1,5 @@
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
-import { prepareSlidesExit } from "./slidesExit";
+import { closePresenterSession } from "./presenterClose";
 import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
 import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistorySetting, useDisplayRolesSetting } from "./slidesSettings";
 import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
@@ -477,17 +477,7 @@ function PresenterToolbar({
 }
 
 export function PresenterWindow() {
-  useEffect(() => {
-    let closing = false;
-    const subscription = addWindowCloseRequestedListener(event => {
-      if (event.identifier !== "slides-presenter" || closing) return;
-      closing = true;
-      void prepareSlidesExit().then(allowed => allowed ? closeWindow("slides-presenter") : undefined)
-        .catch(error => Alert.alert("Could not close window", String(error)))
-        .finally(() => { closing = false; });
-    });
-    return () => subscription.remove();
-  }, []);
+  const closingPresenter = useRef(false);
   const [editingDeck, setEditingDeck] = useState(false);
   const editingDeckRef = useRef(false);
   editingDeckRef.current = editingDeck;
@@ -528,14 +518,26 @@ export function PresenterWindow() {
     },
     async close() {
       const result = await closeWindow("slides-audience");
-      if (!result.success) throw new Error(result.message ?? "Could not close the audience window.");
+      if (!result.success && result.message !== "No window to close") throw new Error(result.message ?? "Could not close the audience window.");
     },
     async focusPresenter() { await showWindow("slides-presenter"); },
     update: setSlidesState,
   }));
 
+  useEffect(() => {
+    const subscription = addWindowCloseRequestedListener(event => {
+      if (event.identifier !== "slides-presenter" || closingPresenter.current) return;
+      closingPresenter.current = true;
+      void closePresenterSession(audience.close)
+        .catch(error => Alert.alert("Could not close window", String(error)))
+        .finally(() => { closingPresenter.current = false; });
+    });
+    return () => subscription.remove();
+  }, [audience]);
+
   const refreshDisplays = useCallback(async () => {
     const nextDisplays = await getDisplays();
+    if (closingPresenter.current) return;
     const previousDisplays = presenter$.displays.peek();
     setDisplays(nextDisplays);
     await audience.displaysChanged(nextDisplays);
@@ -664,6 +666,7 @@ export function PresenterWindow() {
   }, [audienceOpen]);
 
   const startAudience = useCallback(async () => {
+    if (closingPresenter.current) return;
     const { displays, selectedDisplayId, rehearsalEnabled } = presenter$.peek();
     const selectedDisplay = displays.length === 1 ? displays[0] : displays.find((display) => display.id === selectedDisplayId);
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
@@ -680,6 +683,7 @@ export function PresenterWindow() {
   }, [closeAudience, setActiveMode]);
 
   const selectDisplay = useCallback((value: string) => {
+    if (closingPresenter.current) return;
     const match = /^role:(audience|notes|unused):(.+)$/.exec(value);
     const display = presenter$.displays.peek().find(d => d.id === (match?.[2] ?? value));
     if (!display) return;
@@ -694,6 +698,7 @@ export function PresenterWindow() {
       if (slidesState$.audienceOpen.peek()) {
         // Close the old notes output before changing roles, avoiding overlap.
         await syncNotesOutput([], false);
+        if (closingPresenter.current) return;
         if (selected) await openAudience(selected, presenter$.rehearsalEnabled.peek());
         else await closeAudience();
       }
