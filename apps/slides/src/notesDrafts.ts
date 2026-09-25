@@ -38,7 +38,14 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
     flush,
     entries: () => [...drafts.entries()],
     persist,
-    async flushAll() { return (await Promise.all([...drafts.keys()].map(flush))).every(Boolean); },
+    async flushAll() {
+      // A user can edit another slide while an earlier write is pending.
+      // Re-snapshot after each batch, and report failure rather than retrying forever.
+      while (drafts.size > 0) {
+        if (!(await Promise.all([...drafts.keys()].map(flush))).every(Boolean)) return false;
+      }
+      return true;
+    },
   };
 }
 export type NotesDrafts = ReturnType<typeof createNotesDrafts>;

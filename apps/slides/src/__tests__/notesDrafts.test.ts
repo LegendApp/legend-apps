@@ -48,3 +48,36 @@ test("recovery preserves the editing baseline and advances it between queued wri
   expect(bases).toEqual(["original", "first"]);
   expect(disk).toEqual({});
 });
+
+
+test("exit also drains a newly edited slide added while another write is pending", async () => {
+  const drafts = createNotesDrafts();
+  const completions = [];
+  const writes = [];
+  for (const key of ["first", "second"]) drafts.bind(key, text => {
+    writes.push([key, text]);
+    return new Promise(resolve => completions.push(resolve));
+  });
+  drafts.update("first", "first notes", "");
+  let finished = false;
+  const exiting = drafts.flushAll().then(result => { finished = true; return result; });
+  await Promise.resolve();
+  drafts.update("second", "second notes", "");
+  completions.shift()();
+  // Let the next batch start without resolving its disk write.
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  expect(writes).toEqual([["first", "first notes"], ["second", "second notes"]]);
+  expect(finished).toBe(false);
+  completions.shift()();
+  expect(await exiting).toBe(true);
+  expect(drafts.entries()).toEqual([]);
+});
+
+test("a new slide with a failed save rejects exit and keeps its draft", async () => {
+  const drafts = createNotesDrafts();
+  drafts.bind("first", async () => { drafts.update("second", "unsaved", ""); });
+  drafts.bind("second", async () => { throw new Error("read only"); });
+  drafts.update("first", "notes", "");
+  expect(await drafts.flushAll()).toBe(false);
+  expect(drafts.get("second", "")).toBe("unsaved");
+});
