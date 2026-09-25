@@ -89,8 +89,11 @@ function validateConfig(config: Record<string, unknown>, label: string, deck = f
   if (config.aspectRatio !== undefined) {
     const parts = typeof config.aspectRatio === "string" ? config.aspectRatio.split(/[/:]/).map(Number) : [];
     if (parts.length !== 2 || !parts.every(value => Number.isFinite(value) && value > 0)
-      || !Number.isFinite(parts[0] / parts[1])) throw new Error('Deck aspectRatio must be a ratio such as "16:9".');
+      || !Number.isFinite(parts[0] / parts[1]) || parts[0] / parts[1] <= 0) throw new Error('Deck aspectRatio must be a ratio such as "16:9".');
   }
+  const parts = typeof config.aspectRatio === "string" ? config.aspectRatio.split(/[/:]/).map(Number) : [16, 9];
+  const height = config.height ?? Number(config.width ?? 1920) / (parts[0] / parts[1]);
+  if (typeof height !== "number" || !Number.isFinite(height) || height <= 0) throw new Error("Deck dimensions must produce a positive finite canvas.");
   for (const [field, members, type] of [
     ["theme", ["backgroundColor", "color", "fontFamily"], "string"],
     ["presenter", ["showNext", "showNotes"], "boolean"],
@@ -161,10 +164,16 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
     const registerTransition = (config: Record<string, unknown>) => {
       const value = config.transition;
       const reference = transitionReference(value);
+      if (value && typeof value === "object") {
+        if ("duration" in value && (typeof value.duration !== "number" || !Number.isFinite(value.duration) || value.duration < 0 || value.duration > 10000)) throw new Error("Transition duration must be between 0 and 10000 ms.");
+        if ("type" in value && value.type === "focus") {
+          if (!("from" in value) || typeof value.from !== "string" || !value.from.trim()) throw new Error("Focus transition from must name a focus region.");
+          if ("name" in value || "source" in value) throw new Error("Focus transitions cannot also specify a name or source.");
+        }
+      }
       if (value !== undefined && !(value && typeof value === "object" && "type" in value && value.type === "focus")) {
         if (!reference || (typeof value === "object" && value && "name" in value && "source" in value)) throw new Error("A transition must have one name or source.");
         if (typeof value === "object" && value) {
-          if ("duration" in value && (typeof value.duration !== "number" || !Number.isFinite(value.duration) || value.duration < 0 || value.duration > 10000)) throw new Error("Transition duration must be between 0 and 10000 ms.");
           if ("options" in value && (!value.options || typeof value.options !== "object" || Array.isArray(value.options))) throw new Error("Transition options must be an object.");
         }
         if (reference !== "none") options.transitions?.add(reference);

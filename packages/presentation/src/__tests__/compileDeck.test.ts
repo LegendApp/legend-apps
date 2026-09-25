@@ -140,6 +140,13 @@ describe("compileDeck", () => {
     }
   });
 
+  test("validates focus metadata and derived canvas dimensions", async () => {
+    for (const config of ["transition: {type: focus, from: 5}", "transition: {type: focus, from: region, duration: bad}", "transition: {type: focus, from: region, duration: -1}", "aspectRatio: '1e-300:1e300'", "width: 1e300\naspectRatio: '1:1e300'"]) {
+      expect((await compileDeck(createDeck({ "deck.mdx": `---\n${config}\n---\n# Slide` }))).success).toBe(false);
+    }
+    expect((await compileDeck(createDeck({ "deck.mdx": "---\ntransition: {type: focus, from: region, duration: 0}\n---\n# Slide" }))).success).toBe(true);
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,
