@@ -75,6 +75,36 @@ function parseFrontmatter(value: string | undefined, label: string) {
   return parsed as Record<string, unknown>;
 }
 
+function validateConfig(config: Record<string, unknown>, label: string, deck = false) {
+  if (config.steps !== undefined && (typeof config.steps !== "number" || !Number.isInteger(config.steps) || config.steps < 1)) {
+    throw new Error(`${label} steps must be a positive integer.`);
+  }
+  if (!deck) return;
+  for (const field of ["width", "height"]) {
+    const value = config[field];
+    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value <= 0)) {
+      throw new Error(`Deck ${field} must be a positive finite number.`);
+    }
+  }
+  if (config.aspectRatio !== undefined) {
+    const parts = typeof config.aspectRatio === "string" ? config.aspectRatio.split(/[/:]/).map(Number) : [];
+    if (parts.length !== 2 || !parts.every(value => Number.isFinite(value) && value > 0)
+      || !Number.isFinite(parts[0] / parts[1])) throw new Error('Deck aspectRatio must be a ratio such as "16:9".');
+  }
+  for (const [field, members, type] of [
+    ["theme", ["backgroundColor", "color", "fontFamily"], "string"],
+    ["presenter", ["showNext", "showNotes"], "boolean"],
+  ] as const) {
+    const value = config[field];
+    if (value === undefined) continue;
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Deck ${field} must be an object.`);
+    for (const member of members) {
+      const setting = (value as Record<string, unknown>)[member];
+      if (setting !== undefined && typeof setting !== type) throw new Error(`Deck ${field}.${member} must be a ${type}.`);
+    }
+  }
+}
+
 function extractNotes(node: Node, notes: string[]): Node | undefined {
   if ((node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") && node.name === "PresenterNote") {
     const encoded = node.attributes?.find((attribute) => attribute.name === "encoded")?.value;
@@ -125,6 +155,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
     const deckConfig = firstNode?.type === "yaml"
       ? parseFrontmatter(firstNode.value, "Deck")
       : {};
+    validateConfig(deckConfig, "Deck", true);
     registerTemplate(deckConfig, "Deck", options.templates, false);
     resolveBackground(deckConfig, "Deck", options);
     const registerTransition = (config: Record<string, unknown>) => {
@@ -164,6 +195,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
           pushSlide();
         }
         metadata = parseFrontmatter(node.value, `Slide ${slides.length + 1}`);
+        validateConfig(metadata, `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
         registerTransition(metadata);
@@ -175,6 +207,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         }
         const encoded = getEncodedAttribute(node);
         metadata = parseFrontmatter(encoded ? Buffer.from(encoded, "base64").toString("utf8") : "", `Slide ${slides.length + 1}`);
+        validateConfig(metadata, `Slide ${slides.length + 1}`);
         registerTemplate(metadata, `Slide ${slides.length + 1}`, options.templates, true);
         resolveBackground(metadata, `Slide ${slides.length + 1}`, options);
         registerTransition(metadata);

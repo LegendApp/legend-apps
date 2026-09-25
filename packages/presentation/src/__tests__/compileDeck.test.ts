@@ -110,6 +110,16 @@ describe("compileDeck", () => {
     expect((await compileDeck(upper)).success).toBe(true);
   });
 
+  test("rejects malformed canvas and UI configuration before publishing a deck", async () => {
+    for (const config of ["aspectRatio: 1.777", "aspectRatio: '16:0'", "width: 0", "height: -4", "width: .inf", "theme: null", "theme: {color: 42}", "presenter: {showNotes: yes}"]) {
+      const result = await compileDeck(createDeck({ "deck.mdx": `---\n${config}\n---\n# Slide` }));
+      expect(result.success).toBe(false);
+      expect(result.errors.join(" ")).toContain("Deck");
+    }
+    const valid = await compileDeck(createDeck({ "deck.mdx": "---\nwidth: 1920\nheight: 1080\naspectRatio: '16:9'\ntheme: {color: white}\npresenter: {showNotes: false}\n---\n# Slide" }));
+    expect(valid.success).toBe(true);
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,
