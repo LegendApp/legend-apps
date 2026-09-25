@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDocument } from "yaml";
 import { build } from "esbuild";
+import { getDeckSourceStructure } from "../speakerNotesSource";
 import { localDeckPlugin } from "./compileDeck";
 import { transitionReference } from "./transitionLibrary";
 
@@ -20,14 +21,11 @@ export async function copyTransitionToDeck(deck: string, name: string, library: 
   let suffix = 2;
   while (fs.existsSync(path.join(directory, filename))) filename = `transition-${name}-${suffix++}.ts`;
   let replacements = 0;
-  // Try every adjacent delimiter pair: a plain slide separator must not swallow
-  // the opening delimiter of the following slide's frontmatter.
-  const delimiters = [...original.matchAll(/^---[ \t]*\r?$/gm)];
+  // Use the same metadata ranges as compilation and editing; examples are not metadata.
+  const ranges = getDeckSourceStructure(original).frontmatter;
   let updated = original;
-  for (let index = delimiters.length - 2; index >= 0; index--) {
-    const start = delimiters[index].index!;
-    const end = delimiters[index + 1].index!;
-    const yaml = original.slice(start + delimiters[index][0].length, end);
+  for (const { start, end } of [...ranges].reverse()) {
+    const yaml = original.slice(start, end);
     const doc = parseDocument(yaml);
     if (!doc.errors.length) {
       const config = doc.toJS();
@@ -36,7 +34,7 @@ export async function copyTransitionToDeck(deck: string, name: string, library: 
         const { name: _name, ...settings } = typeof value === "object" ? value : {};
         doc.set("transition", doc.createNode({ ...settings, source: `./${filename}` }));
         replacements++;
-        updated = updated.slice(0, start) + `---\n${String(doc)}---` + updated.slice(end + delimiters[index + 1][0].length);
+        updated = updated.slice(0, start) + String(doc) + updated.slice(end);
       }
     }
   }
