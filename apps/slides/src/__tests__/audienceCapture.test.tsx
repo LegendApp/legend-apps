@@ -3,9 +3,10 @@ import { expect, mock, spyOn, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
 
+import { BackgroundHost } from "@legend-apps/presentation";
 import { transitions } from "./nativeMock";
 mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
-mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas" }));
+mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
 const { AudienceWindow } = await import("../AudienceWindow");
 const { getSlidesState, setCurrentSlide, setSlidesState } = await import("../slidesStore");
 

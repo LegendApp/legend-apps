@@ -1,5 +1,5 @@
 import { useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
-import { createContext, useContext, useId, useLayoutEffect, useState, type ReactNode } from "react";
+import { Fragment, createContext, useContext, useId, useLayoutEffect, useState, type ReactNode, type ComponentType } from "react";
 import { StyleSheet, View } from "react-native";
 import { useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
@@ -37,7 +37,7 @@ export function useHasBackground() { return useContext(HasBackgroundContext); }
 export function useBackgroundHost() { return useContext(RegistryContext) !== null; }
 
 /** One host per audience window or presenter preview, outside the scaled content. */
-export function BackgroundHost({ children, slideIndex, color, isPreview = false, intensity = 1 }: { children: ReactNode; slideIndex: number; color: string; isPreview?: boolean; intensity?: number }) {
+export function BackgroundHost({ children, slideIndex, color, isPreview = false, intensity = 1, boundary = Fragment }: { boundary?: ComponentType<{ children?: ReactNode }>; children: ReactNode; slideIndex: number; color: string; isPreview?: boolean; intensity?: number }) {
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [register] = useState<Registry>(() => (id: string, entry: Entry | undefined) => setEntries((current) => {
     if (entry === undefined) {
@@ -71,7 +71,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
           }}>
             <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
               <SizeContext.Provider value={size}>
-                {selected && <SelectedBackground entry={selected} isPreview={isPreview} />}
+                {selected && <SelectedBackground entry={selected} isPreview={isPreview} Boundary={boundary} />}
               </SizeContext.Provider>
             </View>
             {children}
@@ -83,10 +83,10 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     </MotionContext.Provider>
   );
 }
-function SelectedBackground({ entry, isPreview }: { entry: Entry; isPreview: boolean }) {
+function SelectedBackground({ entry, isPreview, Boundary }: { entry: Entry; isPreview: boolean; Boundary: ComponentType<{ children?: ReactNode }> }) {
   const sourceRuntime$ = entry.runtime$;
   const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), isActive: !isPreview, isPreview, isPreparing: false, playbackPhase: isPreview ? "preview" : "playing", playbackScope: "background" }), [sourceRuntime$, isPreview]);
-  return <PresentationObservableProvider value={runtime$}>{entry.children}</PresentationObservableProvider>;
+  return <PresentationObservableProvider value={runtime$}><Boundary>{entry.children}</Boundary></PresentationObservableProvider>;
 }
 
 const styles = StyleSheet.create({

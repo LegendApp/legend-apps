@@ -60,3 +60,35 @@ test("a template background persists across prepared slides and fills the viewpo
     log.mockRestore();
   }
 });
+
+test("background failures stay contained and recover on navigation without remounting healthy backgrounds", async () => {
+  const { ContentErrorBoundary } = await import("../ContentErrorBoundary");
+  const errors = [];
+  function Boundary({ children }) {
+    const { slideIndex } = usePresentation();
+    return <ContentErrorBoundary resetKey={String(slideIndex)} fallback={<fallback />} onError={error => errors.push(error.message)}>{children}</ContentErrorBoundary>;
+  }
+  function Broken() { throw new Error("bad background"); }
+  const values = [0, 1].map(i => observable(runtime(i)));
+  function Deck({ index }) {
+    return <BackgroundHost slideIndex={index} color="black" boundary={Boundary}>
+      <controls />
+      {[0, 1].map(i => <PresentationProvider key={i} value={values[i]}>
+        <Background>{i === 0 ? <Broken /> : <healthy />}</Background>
+        <slide index={i} />
+      </PresentationProvider>)}
+    </BackgroundHost>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    await act(() => { tree = create(<Deck index={0} />); });
+    expect(tree.root.findAllByType("controls")).toHaveLength(1);
+    expect(tree.root.findAllByType("slide")).toHaveLength(2);
+    expect(tree.root.findAllByType("fallback")).toHaveLength(1);
+    expect(errors).toEqual(["bad background"]);
+    await act(() => tree.update(<Deck index={1} />));
+    expect(tree.root.findAllByType("healthy")).toHaveLength(1);
+    expect(tree.root.findAllByType("fallback")).toHaveLength(0);
+  } finally { if (tree) await act(() => tree.unmount()); log.mockRestore(); }
+});

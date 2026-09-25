@@ -3,6 +3,7 @@ import { useResolveClassNames } from "uniwind";
 import { useValue } from "@legendapp/state/react";
 import {
   useRuntimeProjection,
+  usePresentationValue,
   Background,
   FocusRegion,
   SharedElement,
@@ -20,7 +21,7 @@ import {
   type SlideConfig,
 } from "@legend-apps/presentation";
 import { ScaledView } from "@legend-apps/scaled-view";
-import React, { Children, createContext, isValidElement, useContext, useEffect, type ReactElement, type ReactNode } from "react";
+import React, { Children, createContext, isValidElement, useContext, useEffect, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import {
   Image,
   Linking,
@@ -255,13 +256,27 @@ function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNod
   );
 }
 
+function BackgroundErrorBoundary({ children }: { children?: ReactNode }) {
+  const index = usePresentationValue("slideIndex");
+  const isPreview = usePresentationValue("isPreview");
+  const revision = useValue(slidesState$.revision);
+  const retry = useValue(slidesState$.retryRevision);
+  return <ContentErrorBoundary resetKey={`${revision}:${retry}:${index}`}
+    fallback={<View className="flex-1 items-center justify-center"><Text style={styles.paragraph}>Background unavailable</Text></View>}
+    onError={error => reportSlideError(error, index, isPreview)}>{children}</ContentErrorBoundary>;
+}
+
+export function SlideBackgroundHost(props: ComponentProps<typeof BackgroundHost>) {
+  return <BackgroundHost {...props} boundary={BackgroundErrorBoundary} />;
+}
+
 export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
   const intensity = useBackgroundIntensitySetting();
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
-  return hosted ? content : <BackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview}>{content}</BackgroundHost>;
+  return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview}>{content}</SlideBackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {

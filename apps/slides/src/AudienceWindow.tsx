@@ -1,6 +1,6 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
-import { SnapshotCaptureBoundary, NavigationTransitionContext, BackgroundHost, useHasBackground, FocusSurfaceContext, createFocusSurface,
+import { SnapshotCaptureBoundary, NavigationTransitionContext, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -9,14 +9,14 @@ import { slideTransitionStyles, visibleSlideStyle } from "./slideTransitions";
 import { useNativeTransitionReady } from "./useNativeTransitionReady";
 import { useRetainedTransitionStyle } from "./useRetainedTransitionStyle";
 import { nativeTransitionStyles } from "./nativeTransitionStyles";
-import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
+import { DeckRenderer, SlideCanvas, SlideBackgroundHost } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
 export function AudienceWindow() {
   const intensity = useBackgroundIntensitySetting();
   const currentSlide = useValue(slidesState$.currentSlide);
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
-  return <BackgroundHost intensity={intensity} slideIndex={currentSlide} color={color}><AudienceContent /></BackgroundHost>;
+  return <SlideBackgroundHost intensity={intensity} slideIndex={currentSlide} color={color}><AudienceContent /></SlideBackgroundHost>;
 }
 
 function AudienceContent() {
