@@ -9,8 +9,14 @@ let nextId = 0;
 mock.module("react-native-enriched-markdown", () => ({
   EnrichedMarkdownTextInput: ({ ref, ...props }) => {
     const id = useRef(++nextId).current;
-    useImperativeHandle(ref, () => ({ blur, setValue, getParagraphLayouts: async () => [{ text: "1.\u2060 First", y: 0, height: 30 }, { text: "2.\u2060 Second", y: 70, height: 30 }], getMarkdown: () => new Promise(() => {}) }));
-    return <editor {...props} nativeId={id} />;
+    const nativeText = useRef(props.defaultValue);
+    useImperativeHandle(ref, () => ({ blur, setValue: value => { nativeText.current = value; setValue(value); },
+      getParagraphLayouts: async () => nativeText.current.split(/\n+/).map((text, i) => ({ text, y: i * 70, height: 30 })),
+      getMarkdown: () => new Promise(() => {}) }));
+    return <editor {...props} nativeId={id} onChangeMarkdown={value => {
+      nativeText.current = value;
+      props.onChangeMarkdown(value);
+    }} />;
   },
 }));
 const { EditableMarkdown, NotesEditingBoundary } = await import("../EditableMarkdown");
@@ -80,6 +86,27 @@ test("read-only notes cannot focus for editing; external updates synchronize wit
     expect(editing).not.toHaveBeenCalled();
     await act(() => tree.update(content("Updated externally")));
     expect(setValue).toHaveBeenLastCalledWith("Updated externally");
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+
+test("newly entered step labels acquire layout markers on blur without replacing text during editing", async () => {
+  const sectionLayout = mock();
+  let tree;
+  try {
+    await act(() => { tree = create(<EditableMarkdown editable markdown="" placeholder="Notes" onSave={async () => {}}
+      onSectionLayout={sectionLayout} />); });
+    const id = tree.root.findByType("editor").props.nativeId;
+    await act(async () => tree.root.findByType("editor").props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
+    await act(() => tree.root.findByType("editor").props.onFocus());
+    const writes = setValue.mock.calls.length;
+    await act(async () => tree.root.findByType("editor").props.onChangeMarkdown("1: First\n\n2: Newly pasted"));
+    expect(setValue.mock.calls.length).toBe(writes);
+    expect(sectionLayout).not.toHaveBeenCalled();
+    await act(async () => tree.root.findByType("editor").props.onBlur());
+    expect(setValue).toHaveBeenLastCalledWith("1:\u2060 First\n\n2:\u2060 Newly pasted");
+    expect(sectionLayout).toHaveBeenCalledWith(1, 70, 30);
     expect(tree.root.findByType("editor").props.nativeId).toBe(id);
   } finally { if (tree) await act(() => tree.unmount()); }
 });

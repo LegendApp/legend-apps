@@ -244,12 +244,16 @@ function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, 
   layoutCallback.current = onLayout;
   const value = speakerNotesEditorMarkdown(markdown);
   const lastValue = useRef(value);
+  const focused = useRef(false);
+  const [finishedEdit, setFinishedEdit] = useState(0);
   useLayoutEffect(() => {
-    if (lastValue.current !== value) {
+    // Add markers for newly typed/pasted labels only after editing finishes.
+    // Replacing native text during typing would disturb selection and undo.
+    if (!focused.current && lastValue.current !== value) {
       lastValue.current = value;
       input.current?.setValue(value);
     }
-  }, [value]);
+  }, [value, finishedEdit]);
   useEffect(() => {
     if (width <= 0) return;
     let cancelled = false;
@@ -257,16 +261,21 @@ function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, 
       if (!cancelled) layoutCallback.current(paragraphs);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [value, width, textStyle.fontSize]);
+  }, [value, width, textStyle.fontSize, finishedEdit]);
   return <EnrichedMarkdownTextInput ref={input}
     onLayout={event => setWidth(event.nativeEvent.layout.width)} defaultValue={value} editable={editable}
     markdownStyle={markdownStyle} multiline scrollEnabled={false}
     cursorColor="#93c5fd" selectionColor="#3b82f680"
     placeholder={placeholder} placeholderTextColor="#71717a"
-    onFocus={() => onFocus(input.current)} onBlur={onBlur}
+    onFocus={() => { focused.current = editable; onFocus(input.current); }}
+    onBlur={() => {
+      focused.current = false;
+      setFinishedEdit(version => version + 1);
+      onBlur();
+    }}
     onChangeMarkdown={next => {
       const markdown = speakerNotesEditorMarkdown(next, true);
-      lastValue.current = speakerNotesEditorMarkdown(markdown);
+      lastValue.current = next;
       onChange(markdown);
     }}
     style={{ ...styles.editor, ...textStyle, minHeight: 0 }} />;
