@@ -12,18 +12,6 @@ import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
-// Temporary regression trace. Observation only; never drives animation frames.
-type TransitionTrace = { from: number; to: number; startedAt: number; renderMs: number; preparedMs?: number; animationStartMs?: number; progressObservedMs?: number; endMs?: number; endedBy?: string };
-const transitionTraces: TransitionTrace[] = [];
-(globalThis as typeof globalThis & { slidesTransitionTrace: TransitionTrace[] }).slidesTransitionTrace = transitionTraces;
-function beginTransitionTrace(from: number, to: number): TransitionTrace {
-  const startedAt = slidesState$.slideStartedAt.peek();
-  const trace = { from: from + 1, to: to + 1, startedAt, renderMs: Math.round(performance.now() - startedAt) };
-  transitionTraces.push(trace);
-  if (transitionTraces.length > 20) transitionTraces.shift();
-  return trace;
-}
-
 export function AudienceWindow() {
   const intensity = useBackgroundIntensitySetting();
   const currentSlide = useValue(slidesState$.currentSlide);
@@ -63,7 +51,6 @@ function AudienceContent() {
     ...resolve(currentSlide, currentSlide),
     progress: new Animated.Value(1),
     ready: true,
-    trace: undefined as TransitionTrace | undefined,
     motions: new Map<number, FocusMotion>(),
   }));
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
@@ -84,7 +71,6 @@ function AudienceContent() {
       ...resolved,
       progress: new Animated.Value(cut ? 1 : 0),
       ready: cut || (!resolved.focus && !hasShared),
-      trace: beginTransitionTrace(transitionState.index, currentSlide),
       duration: hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
     });
@@ -139,7 +125,6 @@ function AudienceContent() {
           motions.set(transitionState.index, destinationMotion);
         }
       }
-      if (!cancelled && transitionState.trace) transitionState.trace.preparedMs = Math.round(performance.now() - transitionState.trace.startedAt);
       if (!cancelled && transitionState.kind === "none" && !motions.size) progress.setValue(1);
       if (!cancelled) setTransitionState((current) => current === transitionState
         ? { ...current, ready: true, motions,
@@ -154,14 +139,6 @@ function AudienceContent() {
 
   useLayoutEffect(() => {
     if (transitionState.outgoing === null || !transitionState.ready) return;
-    const trace = transitionState.trace;
-    if (trace) trace.animationStartMs = Math.round(performance.now() - trace.startedAt);
-    const listener = transitionState.progress.addListener(({ value }) => {
-      if (value > 0 && trace && trace.progressObservedMs === undefined) {
-        trace.progressObservedMs = Math.round(performance.now() - trace.startedAt);
-        transitionState.progress.removeListener(listener);
-      }
-    });
     const animation = Animated.timing(transitionState.progress, {
       duration: transitionState.duration,
       easing: transitionState.definition?.easing === "linear" ? Easing.linear : transitionState.definition?.easing === "ease-in-out" ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
@@ -169,29 +146,22 @@ function AudienceContent() {
       useNativeDriver: true,
     });
     let settled = false;
-    const finishTransition = (endedBy: string) => {
+    const finishTransition = () => {
       if (settled) return;
       settled = true;
-      transitionState.progress.removeListener(listener);
-      if (trace) {
-        trace.endMs = Math.round(performance.now() - trace.startedAt);
-        trace.endedBy = endedBy;
-        console.info("Slides transition", JSON.stringify(trace));
-      }
       transitionState.progress.setValue(1);
       setTransitionState((current) => current === transitionState
         ? { ...current, outgoing: null, preparationIndex: current.index, motions: new Map() } : current);
     };
     animation.start(({ finished }) => {
-      if (finished) finishTransition("native-completion");
+      if (finished) finishTransition();
     });
     const watchdog = setTimeout(() => {
       animation.stop();
-      finishTransition("watchdog");
+      finishTransition();
     }, transitionState.duration + 200);
     return () => {
       settled = true;
-      transitionState.progress.removeListener(listener);
       clearTimeout(watchdog);
       animation.stop();
     };
