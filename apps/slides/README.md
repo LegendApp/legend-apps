@@ -78,9 +78,11 @@ on the right. The MDX grammar highlights Markdown, YAML frontmatter and embedded
 code. Moving the caret selects the corresponding slide; edits compile after a
 350 ms pause, retaining the last successful preview on compilation errors.
 
-Use **Save** or **⌘S** to write the draft. Saving refuses to overwrite changes
-made externally. **Done Editing** offers save, discard or cancel for dirty drafts.
-Save before closing the window or quitting: drafts are currently memory-only.
+Changes autosave after a short pause in typing; **⌘S** saves immediately. The
+top-right editing toggle stays selected while editing. Click it again to return
+to the presenter. Leaving the editor, closing the window, or quitting first
+finishes pending saves. Writes refuse to overwrite external changes; if a save
+fails, the draft stays open unless you explicitly discard it.
 Presentation controls and navigation shortcuts are inactive in editing mode.
 
 ## Deck format

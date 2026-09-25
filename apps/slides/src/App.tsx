@@ -1,3 +1,4 @@
+import { installSlidesExitHandler } from "./slidesExit";
 import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
 import { useEffect, useRef } from "react";
 import { slidesWindows } from "./slidesWindows";
@@ -10,6 +11,7 @@ export function App({ launchArguments }: SlidesAppProps) {
   const launchedPath = launchArguments?.find((argument) => argument.toLowerCase().endsWith(".mdx"));
   const handledLaunch = useRef<string | null>(null);
   useEffect(() => {
+    const exitSubscription = installSlidesExitHandler();
     const openPresenter = () => slidesWindows.open("SlidesPresenterWindow");
     void openPresenter();
     // Deck opening is part of launch, not a reaction to presenter renders.
@@ -24,7 +26,7 @@ export function App({ launchArguments }: SlidesAppProps) {
       }
     }
     const subscription = addApplicationReopenRequestedListener(() => void openPresenter());
-    return () => subscription.remove();
+    return () => { subscription.remove(); exitSubscription.remove(); };
   }, [launchedPath]);
   return null;
 }

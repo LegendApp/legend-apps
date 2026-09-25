@@ -4,6 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@legend-apps/app-exit": "0.0.0",
     "@legend-apps/command-runner": "0.0.0",
     "@legend-apps/design-system": "0.0.0",
     "@legend-apps/file-dialog": "0.0.0",

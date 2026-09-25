@@ -14,6 +14,7 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/app-exit",
       "@legend-apps/appkit-split-view",
       "@legend-apps/command-runner",
       "@legend-apps/context-menu",

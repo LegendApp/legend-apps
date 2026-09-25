@@ -1,3 +1,4 @@
+import { prepareSlidesExit } from "./slidesExit";
 import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
 import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistorySetting, useDisplayRolesSetting } from "./slidesSettings";
 import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
@@ -9,6 +10,7 @@ import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
 import {
   addDisplaysChangedListener,
   addWindowClosedListener,
+  addWindowCloseRequestedListener,
   addWindowToolbarItemSelectedListener,
   closeWindow,
   getDisplays,
@@ -470,6 +472,17 @@ function PresenterToolbar({
 }
 
 export function PresenterWindow() {
+  useEffect(() => {
+    let closing = false;
+    const subscription = addWindowCloseRequestedListener(event => {
+      if (event.identifier !== "slides-presenter" || closing) return;
+      closing = true;
+      void prepareSlidesExit().then(allowed => allowed ? closeWindow("slides-presenter") : undefined)
+        .catch(error => Alert.alert("Could not close window", String(error)))
+        .finally(() => { closing = false; });
+    });
+    return () => subscription.remove();
+  }, []);
   const [editingDeck, setEditingDeck] = useState(false);
   const editingDeckRef = useRef(false);
   editingDeckRef.current = editingDeck;
@@ -534,7 +547,7 @@ export function PresenterWindow() {
   }, [audience, setDisplays, setSelectedDisplayId]);
 
   const openDeck = useCallback(async () => {
-    if (editingDeckRef.current) { Alert.alert("Finish editing first", "Save your changes and choose Done Editing before opening another deck."); return; }
+    if (editingDeckRef.current) { Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically."); return; }
     const paths = await openFileDialog({
       allowedFileTypes: ["mdx"],
       allowsMultipleSelection: false,

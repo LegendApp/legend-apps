@@ -1,10 +1,13 @@
+import { createDeckEditorAutosave } from "./deckEditorAutosave";
+import { presenterEditToolbarItemId } from "./presenterToolbar";
+import { prepareDraftExit, prepareSlidesExit, registerSlidesExitPreparation } from "./slidesExit";
 import { readTextFile, writeTextFileIfUnchanged } from "@legend-apps/file-dialog";
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
-import { setWindowOptions } from "@legend-apps/window-manager";
+import { addWindowToolbarItemSelectedListener, setWindowOptions } from "@legend-apps/window-manager";
 import { useValue } from "@legendapp/state/react";
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Alert, Text, View } from "react-native";
 import { createDeckEditorSession, type DeckEditorSession, type DeckEditorSnapshot } from "./deckEditorSession";
 import { invalidateDeckBuild, previewDeckSource, setDraftReloadHandler } from "./deckLoader";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -35,31 +38,6 @@ function SourcePane({ session }: { session: DeckEditorSession }) {
     }} />;
 }
 
-function EditorToolbar({ session, onExit }: { session: DeckEditorSession; onExit(): void }) {
-  const dirty = useEditorSession(session, (state) => state.dirty);
-  const saving = useEditorSession(session, (state) => state.saving);
-  const index = useEditorSession(session, selectedSlide);
-  const leave = () => {
-    if (dirty) {
-      Alert.alert("Save deck changes?", "Your draft has not been saved to disk.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Discard Changes", style: "destructive", onPress: onExit },
-        { text: "Save and Close Editor", onPress: () => { void session.save().then((saved) => {
-          const latest = session.getSnapshot();
-          if (saved && !latest.dirty) onExit();
-        }); } },
-      ]);
-    } else onExit();
-  };
-  return <View className="flex-row items-center gap-4 border-b border-zinc-700 px-4 py-2">
-      <Pressable accessibilityRole="button" onPress={leave}><Text className="text-blue-300">Done Editing</Text></Pressable>
-      <Pressable accessibilityRole="button" disabled={!dirty || saving} onPress={() => void session.save()}>
-        <Text className="text-blue-300">{saving ? "Saving…" : "Save ⌘S"}</Text>
-      </Pressable>
-      <Text className="text-zinc-400">{dirty ? "Unsaved changes — save before closing the window" : "Saved"} · Slide {index + 1}</Text>
-    </View>;
-}
-
 function EditorPreview({ session }: { session: DeckEditorSession }) {
   const index = useEditorSession(session, selectedSlide);
   const hasPreview = useValue(() => slidesState$.compiled.get() !== null);
@@ -83,20 +61,44 @@ export function DeckEditor({ path, onExit }: { path: string; onExit(): void }) {
     read: readTextFile, write: writeTextFileIfUnchanged,
     preview: previewDeckSource, invalidate: invalidateDeckBuild, opened() {},
   }));
+  const exitRef = useRef(onExit);
+  exitRef.current = onExit;
   const documentVersion = useEditorSession(session, (state) => state.documentVersion);
   const loading = useEditorSession(session, (state) => state.status === "loading" || state.status === "empty");
   useEffect(() => {
-    void setWindowOptions("slides-presenter", { windowStyle: { toolbarItems: [] } });
+    const autosave = createDeckEditorAutosave(session);
+    void setWindowOptions("slides-presenter", { windowStyle: { toolbarItems: [{
+      id: presenterEditToolbarItemId, type: "segmented", placement: "trailing", selectedValue: "editing",
+      segments: [{ label: "Finish Editing", systemImageName: "square.and.pencil", value: "editing" }],
+    }] } });
+    const toolbar = addWindowToolbarItemSelectedListener(event => {
+      if (event.identifier === "slides-presenter" && event.itemId === presenterEditToolbarItemId) {
+        void prepareSlidesExit().then(allowed => { if (allowed) exitRef.current(); });
+      }
+    });
     void session.open(path);
     setDraftReloadHandler(() => session.refresh());
+    const unregisterExit = registerSlidesExitPreparation(async () => {
+      if (await autosave.flush()) return true;
+      return prepareDraftExit(session, () =>
+        new Promise<"cancel" | "discard" | "save">((resolve) => {
+          Alert.alert("Save deck changes?", "Your draft has not been saved to disk.", [
+            { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+            { text: "Discard Changes", style: "destructive", onPress: () => resolve("discard") },
+            { text: "Save", onPress: () => resolve("save") },
+          ]);
+        }),
+      );
+    });
     const removeKeys = addKeyDownListener((event) => {
-      if (event.keyCode === KeyCodes.KEY_S && (event.modifiers & KeyCodes.MODIFIER_COMMAND)) { void session.save(); return true; }
+      if (event.keyCode === KeyCodes.KEY_S && (event.modifiers & KeyCodes.MODIFIER_COMMAND)) { void autosave.flush(); return true; }
       return false;
     }, { windowIdentifiers: ["slides-presenter"] });
-    return () => { removeKeys(); setDraftReloadHandler(); session.dispose(); };
+    return () => {
+      unregisterExit(); toolbar.remove(); removeKeys(); autosave.dispose(); setDraftReloadHandler(); session.dispose();
+    };
   }, [path, session]);
   return <View className="flex-1 bg-zinc-900">
-    <EditorToolbar session={session} onExit={onExit} />
     <View className="flex-1 flex-row">
       <View className="flex-1 border-r border-zinc-700">
         {!loading ? <SourcePane key={documentVersion} session={session} />

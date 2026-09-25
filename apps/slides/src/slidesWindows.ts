@@ -10,6 +10,7 @@ const windows = {
     loadComponent: () => import("./PresenterWindow").then((module) => module.PresenterWindow),
     options: {
       title: "Legend Slides",
+      interceptClose: true,
       windowStyle: {
         appearance: "dark",
         backgroundColor: "#171819",
