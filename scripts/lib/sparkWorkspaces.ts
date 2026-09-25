@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { createHash } from "node:crypto";
 import path from "node:path";
 import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
@@ -22,7 +21,7 @@ function write(file: string, value: string | object) {
 export function sparkConfig(manifest: AppManifest) {
   const active = getActiveNativePackages(manifest, "macos");
   const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name);
-  // The compatibility host uses legacy app modules. Keep unused Spark features
+  // Keep unused Spark features
   // out of custom development builds too, rather than waiting for release pruning.
   const frameworkPackages = path.join(sparkCheckout, "packages");
   for (const entry of fs.readdirSync(frameworkPackages)) {
@@ -30,7 +29,7 @@ export function sparkConfig(manifest: AppManifest) {
     const file = path.join(dir, "package.json");
     if (!fs.existsSync(file)) continue;
     const pkg = json(file);
-    if (pkg.name !== "@legendapp/spark-desktop-app" && (pkg.codegenConfig || pkg.spark?.nativeModules || fs.readdirSync(dir).some(name => name.endsWith(".podspec")))) excluded.push(pkg.name);
+    if (pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links") && (pkg.codegenConfig || pkg.spark?.nativeModules || fs.readdirSync(dir).some(name => name.endsWith(".podspec")))) excluded.push(pkg.name);
   }
   excluded.push("@react-native-runtimes/core", "@op-engineering/op-sqlite");
   if (!manifest.nativeModules.macos.includes("react-native-webview")) excluded.push("react-native-webview");
@@ -39,10 +38,37 @@ export function sparkConfig(manifest: AppManifest) {
     projectId: manifest.bundleIds.macos,
     version: loadAppPackageMetadata(manifest.id).version,
     platforms: ["macos"],
+    window: {
+      width: manifest.id === "music" ? 360 : manifest.id === "diff" ? 1180 : 1280,
+      height: manifest.id === "music" ? 640 : manifest.id === "diff" ? 780 : 720,
+      ...(manifest.id === "music" ? { minWidth: 200, minHeight: 300, titleBarStyle: "hidden", appearance: "dark", transparent: true } : {}),
+      ...(["chat-history", "diff"].includes(manifest.id) ? { minWidth: 640, minHeight: 460 } : {}),
+    },
     macos: {
       bundleIdentifier: manifest.bundleIds.macos,
       buildNumber: getMacOSReleaseBuild(loadAppPackageMetadata(manifest.id)),
+      lifecycle: {
+        ...(manifest.id === "music" ? { appearance: "dark" } : {}),
+        plugins: [
+          ...(manifest.nativeModules.macos.includes("@legend-apps/window-manager") ? ["RNWindowManagerStartup"] : []),
+          ...(manifest.nativeModules.macos.includes("@legend-apps/recent-documents") ? ["RNRecentDocumentsStartup"] : []),
+        ],
+        mainWindow: {
+          hidden: manifest.hostWindow?.macos?.hidden ?? false,
+          autosaveName: manifest.id === "music" ? "MainWindow" : `RCTAppDelegateMainWindow.${manifest.id}`,
+          ...(manifest.hostWindow?.macos?.startupBackgroundColors ? { backgroundColors: manifest.hostWindow.macos.startupBackgroundColors } : {}),
+          ...(["music", "chat-history"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
+          ...(manifest.id === "music" ? { glass: true } : {}),
+          ...(manifest.id === "diff" ? { closeBehavior: "request", reopenBehavior: "visibleWindows" } : {}),
+          ...(["chat-history", "diff"].includes(manifest.id) ? { toolbarStyle: "unified", titlebarSeparatorStyle: "shadow" } : {}),
+        },
+      },
       infoPlist: {
+        ...(manifest.id === "chat-history" ? { LegendInitialSplitView: Object.fromEntries(["dark", "light"].map(appearance => [appearance, {
+          sidebarWidth: 260, sidebarMinWidth: 220, contentMinWidth: 420, contentTitlebarHeight: 52, appearance,
+          backgroundColor: appearance === "dark" ? "#191A1B" : "#f5f6f8",
+          sidebarBackgroundColor: appearance === "dark" ? "#2d2e30" : "#f3f4f6",
+        }])) } : {}),
         ...(manifest.documentTypes?.macos ? { CFBundleDocumentTypes: manifest.documentTypes.macos.map(type => ({
           CFBundleTypeName: type.name, CFBundleTypeRole: type.role ?? "Editor",
           LSHandlerRank: type.handlerRank ?? "Owner",
@@ -113,13 +139,8 @@ export function prepareSparkWorkspace(manifest: AppManifest) {
     dependencies, overrides,
   });
   const config = sparkConfig(manifest);
-  {
-    const host = legacyHostExtension();
-    write(path.join(project, "HostExtension.mm"), host.source);
-    write(path.join(project, "HostExtension.h"), host.header);
-    Object.assign(config.macos.infoPlist, { LegendHostSourceHash: createHash("sha256").update(host.source).update(host.header).digest("hex") });
-    Object.assign(config.expo, { plugins: [["@legendapp/spark/host-extension", { source: "HostExtension.mm", header: "HostExtension.h" }]] });
-  }
+  // Remove source generated by the retired delegate-subclass adapter.
+  for (const file of ["HostExtension.mm", "HostExtension.h"]) fs.rmSync(path.join(project, file), { force: true });
   write(path.join(project, "desktop.config.json"), config);
   write(path.join(project, "index.ts"), `import { AppRegistry } from "react-native";\nimport ShellApp from ${JSON.stringify(path.join(shellDir, "src/ShellApp"))};\nAppRegistry.registerComponent("main", () => ShellApp);\n`);
   write(path.join(project, "babel.config.js"), `process.env.LEGEND_APP = ${JSON.stringify(manifest.id)};\nmodule.exports = require(${JSON.stringify(path.join(shellDir, "babel.config.js"))});\n`);
@@ -130,9 +151,11 @@ const { withUniwindConfig } = require("uniwind/metro");
 const config = makeMetroConfig(__dirname);
 config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
+config.server.unstable_serverRoot = ${JSON.stringify(rootDir)};
 config.resolver.useWatchman = false;
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, name, platform) => {
+  if (name === "@legend-apps/host-links") return context.resolveRequest({ ...context, originModulePath: path.join(__dirname, "index.ts") }, "@legendapp/spark/links", platform);
   if (/^(react|react-native|react-native-nitro-modules|uniwind)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
   return resolveRequest ? resolveRequest(context, name, platform) : context.resolveRequest(context, name, platform);
 };
@@ -141,16 +164,4 @@ module.exports = withDesktop(withUniwindConfig(config, { cssEntryFile: ${JSON.st
   write(path.join(project, "react-native.config.js"), `// Generated by spark; extend with configuration plugins.
 module.exports = require("@legendapp/spark/universal").nativeConfig(__dirname);\n`);
   return project;
-}
-
-/** Temporary native subclass while shared host behavior moves into Spark APIs. */
-export function legacyHostExtension() {
-  const native = path.join(shellDir, "macos/legendapp-shell-macos");
-  let source = fs.readFileSync(path.join(native, "AppDelegate.mm"), "utf8");
-  const start = source.indexOf("- (NSURL *)sourceURLForBridge:");
-  const end = source.indexOf("/// This method controls", start);
-  if (start < 0 || end < 0) throw new Error("Legacy host bundle methods changed; review Spark host composition.");
-  // Spark must own bundle URLs so generated projects load their own Metro entry.
-  source = source.slice(0, start) + source.slice(end);
-  return { source, header: fs.readFileSync(path.join(native, "AppDelegate.h"), "utf8") };
 }

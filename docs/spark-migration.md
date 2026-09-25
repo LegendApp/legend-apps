@@ -1,97 +1,113 @@
 # Spark host migration
 
-The shared adapter is `scripts/lib/sparkWorkspaces.ts`; app identity and native
-module ownership remain in `apps/*/app.manifest.ts`. Generated macOS consumers
-live in `shell/.legend/spark/<app>`. The local SDK defaults to the sibling
-`../legend-framework` checkout, overridable with `LEGEND_SPARK_ROOT`.
+The opt-in `bun run spark <app> ...` commands use the sibling `../legend-framework`
+checkout (or `LEGEND_SPARK_ROOT`) and generate consumers under
+`shell/.legend/spark/<app>`. Existing default commands and release workflows remain.
 
-## Development workflow
-
-Pack Spark after changing its source:
+After changing Spark's native SDK, run `npm run pack:local` there, then:
 
 ```sh
-cd ../legend-framework
-npm run build:cli
-npm run pack:local
+bun run spark code install
+bun run spark code build
+bun run spark code start
 ```
 
-From this repository:
+`build` makes a debug app. `analyze` checks the production JavaScript/native graph
+without a native release build. `install` uses Bun's hoisted linker. The wrapper
+runs Spark's source CLI; repack and reinstall after native SDK changes.
 
-```sh
-bun run spark hello-world install
-bun run spark hello-world build
-bun run spark hello-world analyze
-bun run spark hello-world start
-```
+## Lifecycle ownership
 
-`build` is a debug build. `analyze` bundles production JavaScript and checks the
-native selection without producing a release binary. `start` uses the existing
-app-specific Metro port. Install after repacking Spark or changing dependencies.
-Generated native projects, node_modules, build outputs and lockfiles are disposable
-local artifacts, not source to commit. Installing uses Bun's hoisted linker because
-its isolated linker fails when multiple local workspace edges resolve Legend List.
+All generated consumers use Spark's ordinary AppDelegate. No legacy AppDelegate
+is copied, rewritten, or subclassed. App-specific native window choices are in
+`sparkConfig`: hidden hosts, close/reopen policy, geometry, startup background,
+glass, toolbar style, and existing frame-autosave names.
 
-## Compatibility boundary
+Spark owns native quit, reopen, and file/URL dispatch. Packages retain their public
+APIs while integrating with that dispatcher:
 
-Spark owns native generation, CocoaPods, React bootstrap, Metro compatibility,
-and build selection. A native subclass temporarily preserves the existing shell's
-window presentation, restoration, sidebar startup, close/reopen handling, and
-quit guards. Its bundle URL methods are omitted so Spark supplies the correct
-entry URL. Its source hash participates in configuration to invalidate native
-builds when the compatibility implementation changes.
+- `app-exit` registers a native Spark quit handler only while JS listeners exist.
+  Spark's own optional JS guard participates in the same approval decision. No
+  listeners means no guard. Invalidation cancels a pending quit safely.
+- `window-manager` observes Spark reopen/close events and uses an explicitly
+  configured startup plugin for early restoration and sidebar root attachment.
+  Its existing persisted window records remain owned by that package.
+- `recent-documents` uses Spark's queued file events and routes Open Recent into
+  the same pipeline. It installs no competing Apple-event handler under Spark.
+- `host-links` uses React Native in the existing shell and Spark's links API in a
+  Spark consumer. Diff uses it for incoming URLs; outgoing RN links are unchanged.
 
-This is an incremental adoption seam. It does not yet replace those legacy
-behaviors with portable Spark APIs. App-owned lifecycle overrides continue to use
-the existing packages rather than Spark's corresponding JS event/guard contracts.
-File-open behavior, native restoration, overlays, and release/update identity need
-runtime acceptance before the larger applications switch their default commands.
+Only selected packages opt into startup hooks. Hello World has no native startup
+plugins. Native hooks cannot replace Spark's quit/reopen/file dispatch. Generic
+API documentation lives in Spark's `docs/host-migration.md`.
 
-All manifests can use this opt-in entry point. Native runtime acceptance starts
-with Hello World and Code before switching the default commands for larger apps.
-The wrapper runs the sibling checkout’s CLI; native SDK changes require repacking
-and reinstalling the generated consumer.
-The existing `bun run <app> ...` paths, mobile workflows, and release scripts remain
-unchanged while acceptance is in progress.
+Default shell builds retain their existing native implementation and do not link
+Spark. Packages use the Spark native dependency only when built by Spark. Shared
+shell launch-argument normalization removes the internal Metro address before
+passing arguments to app components.
 
-## Environment
+## Validation scope
 
-React 19.1.4, React Native 0.81.6, React Native macOS 0.81.7, Node 24.19.0,
-and Bun 1.3.14. Spark selects its pinned Expo Desktop SDK; the generated consumers
-are isolated from the existing shell's installed dependency graph. Metro forces
-React, React Native, Nitro, and Uniwind imports through the consumer to avoid duplicate
-renderers when source files reside in the parent workspace.
+Run `bun run test:spark` to validate every app manifest against the sibling Spark
+checkout, including native lifecycle policy and module selection.
 
-## Validation checkpoint
+Native lifecycle tests cover opt-in quit, multiple handlers, refusal, duplicate
+and stale replies, removal, and timeout. Configuration tests cover all manifests
+and reject invalid native policy. Full native acceptance remains necessary for
+individual apps before switching their default commands.
 
-- Hello World: debug native build and production bundle analysis passed; the native
-  window renders “Hello, world!” through Spark with the existing shared styles.
-- Code: dependency install, production bundle/native selection analysis, and
-  debug native build passed. File Open displays a real TypeScript source file
-  with native syntax highlighting using the matching development signing team.
-  CocoaPods now resolves React Native macOS independently and uses a relative
-  package path, supporting Bun’s physical dependency layout.
-- Identity: Spark restores canonical configured plist values after Expo Desktop
-  template renaming and preserves the original generated app.json transport.
-- Eleven manifest/host/launch-argument tests and the apps TypeScript check pass.
-  Spark’s 280 tests pass, including metadata, development signing, and concurrent
-  source CLI rebuild regressions.
-- Code and Hello World ran concurrently in compatible Spark development sessions.
-- Default app commands have not switched to Spark; migration is incomplete.
-  Other apps, Intel runtime testing, release packaging, and before/after performance
-  measurements remain outside this validation checkpoint.
+The lifecycle migration passed Spark's 291 tests, both repository typechecks,
+11 adapter/launch tests, Code's 22 tests, and Diff's 168 tests. Code and Hello World
+debug builds and runtime fingerprint checks passed. Live Code acceptance covered
+cold and warm file delivery, editing, canceling Quit, saving on close and Quit,
+two close/reopen cycles, and Open Recent. The final build quit without the earlier
+React bridge shutdown warning. Hello World rendered, reopened, and quit without
+a guard. Code restores window geometry but opens a blank document on ordinary
+relaunch; restoring document contents is not part of its existing startup policy.
+Code and Diff production bundle/native graph analysis also passed.
 
-Ignored generated consumers currently occupy approximately 4.9 GB for Hello World
-and 6.0 GB for Code (including dependencies and native build artifacts).
+Music's debug build and manifest verification passed. Its main player and media
+library loaded; Close hid the main window, reopening restored it in the same
+process, and Quit exited normally. Playback/background continuity still needs
+verification. A list-height warning appeared while its library initialized.
 
-## Local development signing
+Diff's native build is blocked by the shell-only `LegendLibGit2` Podfile
+registration. Move that dependency into a package-owned native integration before
+testing Diff's live URL/close/reopen behavior. Do not copy the shell Podfile's
+post-install header cleanup into Spark's standard host.
+Intel, mobile, release packaging and before/after performance measurements are
+separate validation work.
 
-Code’s downloadable grammars require the app and grammar libraries to be signed
-by the same team. Spark now supports an opt-in `macOSDevelopmentIdentity` in the
-generated consumer’s `.spark/settings.json`. Set it to the matching installed
-certificate name or fingerprint, then run `bun run spark code build`. The setting
-is local and is preserved by both preparation and Spark’s development session.
-Unsigned apps retain Spark’s default ad-hoc signing. Release signing is separate.
+Code's downloaded grammars require matching development signing. Configure
+`macOSDevelopmentIdentity` in its generated `.spark/settings.json`, then rebuild.
+Generated dependency and native build trees are ignored, disposable local artifacts.
+This validation left approximately 7 GiB of SDK archives and 10 GiB of native
+DerivedData across Code, Hello World, and Music. Keep or remove those deliberately;
+they are not source changes.
 
-The shared shell strips the internal `-RCT_jsLocation` option and its value before
-passing launch arguments to apps, so Code cannot mistake the Metro address for a
-file. Other arguments and secondary-window document paths are retained.
+## Acceptance before changing default commands
+
+Use a temporary document and the generated Spark binary, with one automation
+owner at a time. Recheck the runtime fingerprint after native changes.
+
+- Code: open a file through macOS, edit it, cancel native Quit, then save on
+  window close. Reopen twice after closing all document windows, exercise Open
+  Recent, and quit/relaunch with a document open to check restoration.
+- Hello World: close/reopen and quit without registering any guard.
+- Diff: deliver its URL scheme while running and at launch, close the main
+  window, and reopen without revealing an empty host.
+- Music: close hides the window, reopen restores it, and playback/background
+  behavior matches the existing shell.
+
+The shared source tree must be Metro's server root. Spark maps its fixed host
+entry URLs into that root, so lazy imports from shared packages remain reachable.
+Do not disable lazy imports or copy shared app sources into generated consumers.
+
+Runtime acceptance caught two integration failures that the static graph checks
+could not detect: workspace lazy imports escaped Metro's server root, and the
+window manager removed its native lifecycle observers during JS subscription
+churn. Spark now preserves a configured workspace server root, and the window
+manager keeps native observers until module destruction. The standard host also
+uses the configured app name in its application and Help menus.
+Diff additionally exposed the desktop backend's broken handling of URL scheme
+arrays. Spark now materializes its native URL associations before backend mods.

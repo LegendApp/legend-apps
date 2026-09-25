@@ -4,6 +4,9 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+#import <RNDesktopApp/SparkDesktop.h>
+#endif
 
 @interface RNRecentDocumentController : NSDocumentController
 @end
@@ -43,10 +46,21 @@
     return;
   }
 
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  SparkOpenURLs(@[url]);
+#else
   [[NSNotificationCenter defaultCenter] postNotificationName:RNRecentDocumentOpenNotification
                                                       object:self
                                                     userInfo:@{RNRecentDocumentURLKey : url}];
+#endif
 }
 
 @end
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+@interface RNRecentDocumentsStartup : NSObject <SparkStartupPlugin>
+@end
+@implementation RNRecentDocumentsStartup
+- (void)prepareApplication { (void)[[RNRecentDocumentController alloc] init]; }
+@end
+#endif
 #endif

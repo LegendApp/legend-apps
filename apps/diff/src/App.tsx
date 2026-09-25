@@ -6,7 +6,8 @@ import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/nat
 import { addWindowFocusedListener, showMainWindow } from "@legend-apps/window-manager";
 import { WindowProvider } from "@legend-apps/windows";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, LogBox } from "react-native";
+import { LogBox } from "react-native";
+import * as Linking from "@legend-apps/host-links";
 import { diffMenuOwnerId, diffPrimaryWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";

@@ -7,6 +7,9 @@
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+#import <RNDesktopApp/SparkDesktop.h>
+#endif
 #import <Carbon/Carbon.h>
 #endif
 
@@ -15,9 +18,11 @@ static NSString *const RNRecentDocumentOpenEvent = @"RecentDocumentOpen";
 @implementation RNRecentDocuments {
   BOOL _hasListeners;
   NSMutableArray<NSURL *> *_pendingOpenDocumentURLs;
+  NSMutableSet<NSString *> *_deliveredSparkEvents;
 }
 
 RCT_EXPORT_MODULE(NativeRecentDocuments)
+- (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -28,15 +33,20 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 {
   if (self = [super init]) {
     _pendingOpenDocumentURLs = [NSMutableArray new];
+    _deliveredSparkEvents = [NSMutableSet new];
 #if TARGET_OS_OSX
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleOpenDocumentNotification:)
                                                  name:RNRecentDocumentOpenNotification
                                                object:nil];
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(sparkDesktopEvent:) name:SparkDesktopEvent object:nil];
+#else
     [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
                                                       andSelector:@selector(handleOpenDocumentsEvent:withReplyEvent:)
                                                     forEventClass:kCoreEventClass
                                                        andEventID:kAEOpenDocuments];
+#endif
 #endif
   }
   return self;
@@ -48,8 +58,12 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
   [[NSNotificationCenter defaultCenter] removeObserver:self
                                                   name:RNRecentDocumentOpenNotification
                                                 object:nil];
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  [NSNotificationCenter.defaultCenter removeObserver:self name:SparkDesktopEvent object:nil];
+#else
   [[NSAppleEventManager sharedAppleEventManager] removeEventHandlerForEventClass:kCoreEventClass
                                                                       andEventID:kAEOpenDocuments];
+#endif
 #endif
 }
 
@@ -63,6 +77,9 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
   _hasListeners = YES;
 
 #if TARGET_OS_OSX
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  for (NSDictionary *event in SparkPendingURLs()) [self deliverSparkEvent:event];
+#endif
   NSArray<NSURL *> *pendingURLs = [_pendingOpenDocumentURLs copy];
   [_pendingOpenDocumentURLs removeAllObjects];
 
@@ -121,6 +138,20 @@ RCT_EXPORT_MODULE(NativeRecentDocuments)
 
   [self sendEventWithName:RNRecentDocumentOpenEvent body:@{@"path": url.path}];
 }
+
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+- (void)deliverSparkEvent:(NSDictionary *)event {
+  if (![event[@"type"] isEqual:@"openFile"] || [_deliveredSparkEvents containsObject:event[@"id"]]) return;
+  [_deliveredSparkEvents addObject:event[@"id"]];
+  if (_deliveredSparkEvents.count > 200) {
+    NSSet *queued = [NSSet setWithArray:[SparkPendingURLs() valueForKey:@"id"]];
+    [_deliveredSparkEvents intersectSet:queued];
+    [_deliveredSparkEvents addObject:event[@"id"]];
+  }
+  [self emitOpenDocumentURL:[NSURL URLWithString:event[@"url"]]];
+}
+- (void)sparkDesktopEvent:(NSNotification *)notification { [self deliverSparkEvent:notification.userInfo]; }
+#endif
 
 - (void)handleOpenDocumentNotification:(NSNotification *)notification
 {

@@ -170,7 +170,7 @@ export function useDocumentAppController({
 
   usePrimaryWindowLifecycle({
     onInitialOpen: () => onInitialOpen(launchArguments, controller),
-    onReopenRequested: onReopenRequested ? () => onReopenRequested(controller) : undefined,
+    onReopenRequested: () => onReopenRequested ? onReopenRequested(controller) : onInitialOpen(undefined, controller),
     onWindowClosed: windowIdentifier ? () => controller.setDocumentWindowOpen(false) : undefined,
     reportError,
     windowIdentifier,

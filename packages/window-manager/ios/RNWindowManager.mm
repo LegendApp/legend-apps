@@ -12,13 +12,16 @@
 #include <cmath>
 #include <cxxreact/ReactMarker.h>
 
-#if TARGET_OS_OSX
+#if TARGET_OS_OSX && !__has_include(<RNDesktopApp/SparkDesktop.h>)
 extern double LegendMainWindowFirstVisibleTimeMs;
 extern double LegendMainWindowReactRootAttachedTimeMs;
 #endif
 
 #if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+#import <RNDesktopApp/SparkDesktop.h>
+#endif
 #import <CoreImage/CoreImage.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <objc/runtime.h>
@@ -805,6 +808,9 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _windowOptions = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
 #if TARGET_OS_OSX
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(sparkDesktopEvent:) name:SparkDesktopEvent object:nil];
+#endif
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(applicationReopenRequested:)
                                                name:LegendApplicationReopenRequestedNotification
@@ -816,6 +822,14 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     [NSNotificationCenter.defaultCenter addObserver:self
                                            selector:@selector(applicationWillTerminate:)
                                                name:NSApplicationWillTerminateNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(windowDidBecomeKey:)
+                                               name:NSWindowDidBecomeKeyNotification
+                                             object:nil];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(screensChanged:)
+                                               name:NSApplicationDidChangeScreenParametersNotification
                                              object:nil];
 #endif
   }
@@ -845,24 +859,16 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   self.hasListeners = YES;
 #if TARGET_OS_OSX
   [self setupMainWindowObservers];
-  [NSNotificationCenter.defaultCenter addObserver:self
-                                         selector:@selector(windowDidBecomeKey:)
-                                             name:NSWindowDidBecomeKeyNotification
-                                           object:nil];
-  [NSNotificationCenter.defaultCenter addObserver:self
-                                         selector:@selector(screensChanged:)
-                                             name:NSApplicationDidChangeScreenParametersNotification
-                                           object:nil];
 #endif
 }
 
 - (void)stopObserving
 {
   self.hasListeners = NO;
-#if TARGET_OS_OSX
-  [NSNotificationCenter.defaultCenter removeObserver:self];
-  self.mainWindowObserversInstalled = NO;
-#endif
+  // Native observers belong to this module, not a JS subscription. React may
+  // briefly remove every listener while effects update or a document closes.
+  // Keep lifecycle/restoration tracking alive until dealloc; event emission is
+  // already gated by hasListeners.
 }
 
 - (dispatch_queue_t)methodQueue
@@ -1828,12 +1834,16 @@ willBeInsertedIntoToolbar:(BOOL)flag
   timing[@"clockOffsetMs"] = @(
     NSDate.date.timeIntervalSince1970 * 1000 - CACurrentMediaTime() * 1000
   );
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+  [timing addEntriesFromDictionary:SparkStartupTiming()];
+#else
   if (LegendMainWindowFirstVisibleTimeMs > 0) {
     timing[@"mainWindowFirstVisibleTime"] = @(LegendMainWindowFirstVisibleTimeMs);
   }
   if (LegendMainWindowReactRootAttachedTimeMs > 0) {
     timing[@"mainWindowReactRootAttachedTime"] = @(LegendMainWindowReactRootAttachedTimeMs);
   }
+#endif
 #endif
 
   double startTime = startupLogger.getAppStartupStartTime();
@@ -2912,6 +2922,21 @@ willBeInsertedIntoToolbar:(BOOL)flag
   }
   [self sendEventWithName:eventName body:body];
 }
+
+#if __has_include(<RNDesktopApp/SparkDesktop.h>)
+- (void)sparkDesktopEvent:(NSNotification *)notification
+{
+  NSDictionary *event = notification.userInfo;
+  if ([event[@"type"] isEqual:@"reopen"]) {
+    // A visible host can have been hidden while other managed windows remained.
+    BOOL mainHidden = [SparkLifecycleConfiguration()[@"mainWindow"][@"hidden"] boolValue] || [SparkLifecycleConfiguration()[@"mainWindow"][@"reopenBehavior"] isEqual:@"visibleWindows"];
+    NSNumber *visible = mainHidden ? event[@"hasVisibleWindows"] : event[@"mainWindowWasVisible"];
+    [self sendWindowEventWithName:@"onApplicationReopenRequested" body:@{@"hasVisibleWindows": visible ?: @NO}];
+  } else if ([event[@"type"] isEqual:@"closeRequested"] && [event[@"windowId"] isEqual:@"main"]) {
+    [self mainWindowCloseRequested:notification];
+  }
+}
+#endif
 
 - (void)applicationReopenRequested:(NSNotification *)notification
 {

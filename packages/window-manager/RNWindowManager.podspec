@@ -13,6 +13,7 @@ Pod::Spec.new do |s|
   s.platforms = { :ios => "15.0", :osx => "14.0" }
   s.source_files = "ios/**/*.{h,m,mm}"
   s.osx.frameworks = "AppKit", "CoreImage", "QuartzCore"
+  s.dependency "RNDesktopApp" if ENV["SPARK_DESKTOP_AUTOLINK"] == "macos"
   s.dependency "React-Core"
   s.dependency "React-cxxreact"
   s.dependency "ReactCodegen"

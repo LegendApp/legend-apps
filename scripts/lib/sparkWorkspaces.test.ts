@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
-import { sparkConfig, legacyHostExtension } from "./sparkWorkspaces";
+import { sparkCheckout, sparkConfig } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
+
+const require = createRequire(import.meta.url);
+const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
+const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
 
 for (const appId of appIds) {
   test(`Spark preserves ${appId} identity and explicit native graph`, async () => {
     const manifest = await loadAppManifest(appId);
     const config = sparkConfig(manifest);
+    const nativeIdentity = identity(toExpo(config).expo);
+    assert.deepEqual(nativeIdentity.SparkLifecycleConfiguration, config.macos.lifecycle);
+    assert.equal(nativeIdentity.SparkProjectIdentifier, manifest.bundleIds.macos);
     assert.equal(config.projectId, manifest.bundleIds.macos);
     assert.equal(config.macos.bundleIdentifier, manifest.bundleIds.macos);
     assert.equal(config.version, loadAppPackageMetadata(appId).version);
@@ -24,11 +33,17 @@ for (const appId of appIds) {
     }
   });
 }
-test("native compatibility extension preserves lifecycle but delegates bundle loading to Spark", () => {
-  const { source, header } = legacyHostExtension();
-  assert.match(source, /LegendPrecreateRestorableWindows/);
-  assert.match(source, /applicationShouldTerminate:/);
-  assert.match(source, /applicationShouldHandleReopen:/);
-  assert.doesNotMatch(source, /- \(NSURL \*\)bundleURL/);
-  assert.match(header, /AppDelegate : RCTAppDelegate/);
+test("Spark uses native policy without replacing its application delegate", async () => {
+  const code = sparkConfig(await loadAppManifest("code"));
+  assert.equal(code.macos.lifecycle.mainWindow.hidden, true);
+  assert.deepEqual(code.macos.lifecycle.plugins, ["RNWindowManagerStartup", "RNRecentDocumentsStartup"]);
+  assert.equal("plugins" in code.expo, false);
+  const hello = sparkConfig(await loadAppManifest("hello-world"));
+  assert.deepEqual(hello.macos.lifecycle.plugins, []);
+  assert.equal(hello.macos.lifecycle.mainWindow.hidden, false);
+  const music = sparkConfig(await loadAppManifest("music"));
+  assert.equal(music.macos.lifecycle.mainWindow.closeBehavior, "hide");
+  const diff = sparkConfig(await loadAppManifest("diff"));
+  assert.equal(diff.macos.lifecycle.mainWindow.closeBehavior, "request");
+  assert.equal(diff.expo.autolinking.exclude.includes("@legendapp/spark-desktop-links"), false);
 });

@@ -86,6 +86,7 @@
         "@legend-apps/file-dialog": "0.0.0",
         "@legend-apps/file-system-watcher": "0.0.0",
         "@legend-apps/glass-effect-view": "0.0.0",
+        "@legend-apps/host-links": "workspace:*",
         "@legend-apps/hotkeys": "workspace:*",
         "@legend-apps/keyboard-manager": "0.0.0",
         "@legend-apps/native-menu": "0.0.0",
@@ -479,6 +480,13 @@
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
+      },
+    },
+    "packages/host-links": {
+      "name": "@legend-apps/host-links",
+      "version": "0.0.1",
+      "peerDependencies": {
+        "react-native": "*",
       },
     },
     "packages/hotkeys": {
@@ -1318,6 +1326,8 @@
     "@legend-apps/glass-effect-view": ["@legend-apps/glass-effect-view@workspace:packages/glass-effect-view"],
 
     "@legend-apps/global-hotkey": ["@legend-apps/global-hotkey@workspace:packages/global-hotkey"],
+
+    "@legend-apps/host-links": ["@legend-apps/host-links@workspace:packages/host-links"],
 
     "@legend-apps/hotkeys": ["@legend-apps/hotkeys@workspace:packages/hotkeys"],
 
