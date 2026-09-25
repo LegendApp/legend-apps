@@ -102,3 +102,25 @@ describe("persistSlideSpeakerNotes", () => {
     expect(source).not.toContain("<!-- notes -->");
   });
 });
+
+it("rejects a reordered target before the first write, not only on retries", async () => {
+  const { getSpeakerNotesTargets } = await import("../../../../packages/presentation/src/speakerNotesSource");
+  const original = "# A\n\n<!-- old -->\n\n---\n\n# B";
+  const target = getSpeakerNotesTargets(original)[0];
+  let writes = 0;
+  const io = { read: async () => "# B\n\n---\n\n# A", writeIfUnchanged: async () => { writes++; return true; } };
+  await expect(persistSlideSpeakerNotesWithFileAccess("deck", 0, "for A", io, target)).rejects.toThrow("target slide changed");
+  expect(writes).toBe(0);
+});
+
+it("keeps a stable target across successive note saves", async () => {
+  const { getSpeakerNotesTargets } = await import("../../../../packages/presentation/src/speakerNotesSource");
+  let source = "# A\n\n---\n\n# B";
+  const target = getSpeakerNotesTargets(source)[0];
+  const io = { read: async () => source, writeIfUnchanged: async (_path, expected, next) => {
+    expect(expected).toBe(source); source = next; return true;
+  } };
+  await persistSlideSpeakerNotesWithFileAccess("deck", 0, "first", io, target);
+  await persistSlideSpeakerNotesWithFileAccess("deck", 0, "second", io, target);
+  expect(source).toContain("<!-- second -->");
+});

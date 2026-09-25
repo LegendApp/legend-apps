@@ -231,7 +231,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
   try {
     const { component, templates, transitions } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
-    setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions });
+    setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets });
     if (remember) {
       rememberDeckPath(path);
       noteRecentDocument(path);

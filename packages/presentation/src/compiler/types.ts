@@ -1,4 +1,5 @@
 export type CompileDeckSuccess = {
+  noteTargets?: string[];
   sourceSlideEnds?: number[];
   code: string;
   dependencies: string[];

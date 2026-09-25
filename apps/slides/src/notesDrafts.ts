@@ -22,6 +22,7 @@ export function createNotesDrafts(persistence?: { read(): Record<string, string>
     return work;
   };
   return {
+    key: (prefix: string, target: string) => [...drafts.keys()].find(key => key.startsWith(prefix)) ?? prefix + target,
     get: (key: string, fallback: string) => drafts.get(key) ?? fallback,
     bind(key: string, save: Save) { saves.set(key, save); },
     update(key: string, text: string) { drafts.set(key, text); persist(); },

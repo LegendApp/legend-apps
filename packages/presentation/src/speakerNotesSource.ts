@@ -345,15 +345,34 @@ export function updateSlideSpeakerNotes(source: string, slideIndex: number, next
   return `${before}${leading}${noteComment(notes)}${trailing}${after}`;
 }
 
+/** Identity excludes notes so successive saves remain bound to the same slide. */
+export function getSpeakerNotesTargets(source: string): string[] {
+  const { slides, comments } = sourceStructure(source);
+  return slides.map(slide => {
+    let cursor = slide.start;
+    let content = "";
+    for (const comment of comments) {
+      if (comment.start < slide.start || comment.end > slide.end) continue;
+      content += source.slice(cursor, comment.start);
+      cursor = comment.end;
+    }
+    return (content + source.slice(cursor, slide.end)).trim();
+  });
+}
+
 export async function persistSlideSpeakerNotesWithFileAccess(
   path: string,
   slideIndex: number,
   notes: string,
   fileAccess: SpeakerNotesFileAccess,
+  expectedTarget?: string,
 ) {
   let expectedSlideSource: string | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const source = await fileAccess.read(path);
+    if (expectedTarget !== undefined && getSpeakerNotesTargets(source)[slideIndex] !== expectedTarget) {
+      throw new Error("The target slide changed since these notes were opened. Your draft has been kept; review the deck before saving.");
+    }
     const currentSlideSource = slideSource(source, slideIndex);
     if (expectedSlideSource === undefined) {
       expectedSlideSource = currentSlideSource;

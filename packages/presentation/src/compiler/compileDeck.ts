@@ -1,3 +1,4 @@
+import { getSpeakerNotesTargets } from "../speakerNotesSource";
 import { builtinTransitionSources } from "../transitions";
 import { resolveTransitionFile } from "./transitionLibrary";
 import fs from "node:fs";
@@ -314,6 +315,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
   }
 
   try {
+    const source = options.source ?? fs.readFileSync(absoluteDeckPath, "utf8");
     const extraDependencies = new Set<string>();
     const result = await build({
       absWorkingDir: path.dirname(absoluteDeckPath),
@@ -329,7 +331,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       platform: "neutral",
       plugins: [
         localDeckPlugin(absoluteDeckPath, options.transitionDirectory),
-        mdxDeckPlugin(absoluteDeckPath, extraDependencies, options.source, options.transitionDirectory),
+        mdxDeckPlugin(absoluteDeckPath, extraDependencies, source, options.transitionDirectory),
         typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
@@ -362,6 +364,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     }
     return {
       code,
+      noteTargets: getSpeakerNotesTargets(source),
       dependencies: [...new Set([
         ...dependenciesFrom(result, path.dirname(absoluteDeckPath)),
         ...extraDependencies,

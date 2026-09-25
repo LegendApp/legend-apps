@@ -6,7 +6,7 @@ export { renderNativeChildren } from "./nativeChildren";
 export { FocusRegion, SharedElement, useSharedElementTransition, FocusStage, FocusSurfaceContext, createFocusSurface, prepareFocusSurface, invalidateFocusSurface, measureFocusSurface, measureFocusPair, createFocusMotion } from "./focus";
 export type { FocusMotion, FocusSurface } from "./focus";
 export { normalizeTransition, resolveTransition, focusCamera } from "./focusGeometry";
-export { persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
+export { getSpeakerNotesTargets, persistSlideSpeakerNotesWithFileAccess, updateSlideSpeakerNotes } from "./speakerNotesSource";
 export { getDeckSourceStructure, slideAtSourceOffset } from "./speakerNotesSource";
 export type { SpeakerNotesFileAccess } from "./speakerNotesSource";
 export type {
