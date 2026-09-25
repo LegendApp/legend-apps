@@ -17,6 +17,7 @@
     "react-native-enriched-markdown"
   ],
   "scripts": {
+    "spark": "bun scripts/spark-app.ts",
     "grammars:update": "bun grammars/scripts/update.ts",
     "grammars:fetch": "bun grammars/scripts/fetch.ts",
     "grammars:test": "bun test grammars/tests && bun grammars/scripts/test-packs.ts",
