@@ -7,7 +7,7 @@ import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legend-apps/file-dialog";
 import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
-import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
+import { registerDocumentOpenGuard } from "./documentOpen";
 import {
   addDisplaysChangedListener,
   addWindowClosedListener,
@@ -580,9 +580,7 @@ export function PresenterWindow() {
   useEffect(() => {
     void refreshDisplays();
     const displaysSubscription = addDisplaysChangedListener(() => void refreshDisplays());
-    const recentSubscription = addRecentDocumentOpenListener(({ path }) => {
-      if (!editingDeckRef.current) void loadDeck(path);
-    });
+    const unregisterDocumentGuard = registerDocumentOpenGuard(() => !editingDeckRef.current);
     const closedSubscription = addWindowClosedListener((event) => {
       if (event.identifier === "slides-notes") notesOutputClosed();
       if (event.identifier === "slides-audience") {
@@ -593,7 +591,7 @@ export function PresenterWindow() {
     });
     return () => {
       displaysSubscription.remove();
-      recentSubscription.remove();
+      unregisterDocumentGuard();
       closedSubscription.remove();
     };
   }, [audience, refreshDisplays, setActiveMode]);

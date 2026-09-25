@@ -1,3 +1,5 @@
+import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
+import { openRequestedDocument } from "./documentOpen";
 import { saveFileDialog, writeTextFile } from "@legend-apps/file-dialog";
 import { prepareNotesExit } from "./notesRecovery";
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
@@ -36,7 +38,8 @@ export function App({ launchArguments }: SlidesAppProps) {
     });
     const exitSubscription = installSlidesExitHandler();
     const openPresenter = () => slidesWindows.open("SlidesPresenterWindow");
-    void openPresenter();
+    const reportOpenError = (error: unknown) => Alert.alert("Could not open presenter", String(error));
+    void openPresenter().catch(reportOpenError);
     // Deck opening is part of launch, not a reaction to presenter renders.
     // Deduplicate setup-cleanup-setup and leave Dock reopen focused on windows.
     const launchKey = launchedPath ?? "";
@@ -48,8 +51,11 @@ export function App({ launchArguments }: SlidesAppProps) {
         void loadDeck(initialPath, Boolean(launchedPath));
       }
     }
-    const subscription = addApplicationReopenRequestedListener(() => void openPresenter());
-    return () => { subscription.remove(); exitSubscription.remove(); unregisterNotes(); };
+    const documents = addRecentDocumentOpenListener(({ path }) => {
+      void openRequestedDocument(path, openPresenter, loadDeck, () => Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically.")).catch(reportOpenError);
+    });
+    const subscription = addApplicationReopenRequestedListener(() => void openPresenter().catch(reportOpenError));
+    return () => { documents.remove(); subscription.remove(); exitSubscription.remove(); unregisterNotes(); };
   }, [launchedPath]);
   return null;
 }
