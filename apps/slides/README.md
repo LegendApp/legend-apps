@@ -431,7 +431,7 @@ static frame unless live.
 
 Decks may use Markdown, JSX, expressions, hooks, event handlers, and arbitrary JavaScript. They may import local `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, and image files inside the deck directory. macOS and native filename variants are preferred before generic files.
 
-The legacy `<TypeGPU scene={...} />` callback renderer is retired. The older `react-native-desktop/talk.mdx` and `effects.mdx` examples still contain legacy scenes and need migration. It reports a migration error; use `TypeGPUShader` for GPU animation on the shared playback clock.
+The legacy `<TypeGPU scene={...} />` callback renderer is retired. Use `TypeGPUShader` with a WGSL program for GPU animation on the shared playback clock. The showcase, talk, and effects decks use this host-owned renderer; old callback sources under `examples/vendor` are reference material only.
 
 The host provides these package imports:
 

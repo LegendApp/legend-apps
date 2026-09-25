@@ -17,7 +17,7 @@ import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
 import { SkiaNebula } from "./components/SkiaNebula"
 import { TypeGPUBoids } from "./components/TypeGPUBoids"
-import { cloudScene } from "./vendor/typegpu-clouds/scene"
+import { cloudProgram } from "./components/CloudProgram"
 
 export const capabilities = [
   ["Markdown", "Headings, lists, links, and code"],
@@ -105,14 +105,13 @@ The effect captures normal slide content once, then animates it entirely on the 
 
 Ray-marched density, self-shadowing, and cinematic light—rendered through React Native WebGPU.
 
-<TypeGPU
-  scene={cloudScene}
+<TypeGPUShader
+  code={cloudProgram}
   width={1120}
   height={560}
-  style={{ borderRadius: 28 }}
 />
 
-<!-- The shader utilities are verbatim upstream files; TypeGPU owns the React Native canvas and slide lifecycle. -->
+<!-- The procedural WGSL shader uses the host renderer and shared playback clock. The older upstream callback example remains in vendor as reference source. -->
 
 ---
 
