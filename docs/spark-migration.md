@@ -71,10 +71,15 @@ library loaded; Close hid the main window, reopening restored it in the same
 process, and Quit exited normally. Playback/background continuity still needs
 verification. A list-height warning appeared while its library initialized.
 
-Diff's native build is blocked by the shell-only `LegendLibGit2` Podfile
-registration. Move that dependency into a package-owned native integration before
-testing Diff's live URL/close/reopen behavior. Do not copy the shell Podfile's
-post-install header cleanup into Spark's standard host.
+Diff's `LegendLibGit2` podspec belongs to `packages/diff-parser`, alongside a
+macOS config plugin that registers its pinned native dependency. The Spark
+workspace enables that plugin only when the manifest selects `diff-parser`;
+the old shell references the same podspec. Spark does not need the old shell's
+post-install header cleanup. Diff's arm64 Spark debug build, production bundle/native
+graph analysis, manifest verification,
+adapter tests, and repository typecheck passed; its libgit2 archive includes both
+arm64 and x86_64 slices. Diff's live URL/close/reopen acceptance remains
+separate from native build verification.
 Intel, mobile, release packaging and before/after performance measurements are
 separate validation work.
 
@@ -111,3 +116,5 @@ manager keeps native observers until module destruction. The standard host also
 uses the configured app name in its application and Help menus.
 Diff additionally exposed the desktop backend's broken handling of URL scheme
 arrays. Spark now materializes its native URL associations before backend mods.
+The analyzer passes an absolute entry path so production exports also resolve
+correctly when Metro uses the containing workspace as its server root.

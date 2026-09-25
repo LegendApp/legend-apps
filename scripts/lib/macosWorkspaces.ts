@@ -437,7 +437,7 @@ function getNativeGraphHash(workspaceDir: string, configPath: string) {
   addFile(hash, path.join(workspaceDir, "..", "package.json"));
 
   if (config.activeNativePackages?.some((pkg) => pkg.root === "packages/diff-parser")) {
-    addFile(hash, path.join(rootDir, "packages/libgit2/LegendLibGit2.podspec"));
+    addFile(hash, path.join(rootDir, "packages/diff-parser/ios/third-party-podspecs/LegendLibGit2.podspec"));
   }
 
   for (const pkg of config.activeNativePackages ?? []) {

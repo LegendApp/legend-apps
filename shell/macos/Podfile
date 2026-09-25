@@ -23,7 +23,7 @@ prepare_react_native_project!
 target 'legendapp-shell-macos' do
   platform :osx, '14.0'
   use_expo_modules! if uses_expo_modules
-  pod 'LegendLibGit2', :podspec => repo_root.join("packages/libgit2/LegendLibGit2.podspec").to_s if uses_diff_parser
+  pod 'LegendLibGit2', :podspec => repo_root.join("packages/diff-parser/ios/third-party-podspecs/LegendLibGit2.podspec").to_s if uses_diff_parser
 
   config_command = [
     'npx',

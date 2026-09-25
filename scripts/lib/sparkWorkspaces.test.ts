@@ -46,4 +46,6 @@ test("Spark uses native policy without replacing its application delegate", asyn
   const diff = sparkConfig(await loadAppManifest("diff"));
   assert.equal(diff.macos.lifecycle.mainWindow.closeBehavior, "request");
   assert.equal(diff.expo.autolinking.exclude.includes("@legendapp/spark-desktop-links"), false);
+  assert.deepEqual(diff.expo.plugins, [path.resolve("packages/diff-parser/app.plugin.cjs")]);
+  assert.equal("plugins" in hello.expo, false);
 });

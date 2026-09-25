@@ -92,6 +92,9 @@ export function sparkConfig(manifest: AppManifest) {
     include: active.map(pkg => pkg.name),
     expo: {
       slug: manifest.id,
+      ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? {
+        plugins: [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")],
+      } : {}),
       autolinking: { exclude: excluded },
     },
   };
