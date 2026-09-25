@@ -174,7 +174,8 @@ export async function previewDeckSource(path: string, source: string) {
 }
 
 async function buildDeck(path: string, remember: boolean, sequence: number, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
-  watchDeckDirectory(path);
+  // Keep the last good deck watched until a replacement is actually published.
+  if (!getSlidesState().component) watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
   const compiler = await compilerCommand();
   if (sequence !== buildSequence) return;
@@ -231,6 +232,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
   try {
     const { component, templates, transitions } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
+    watchDeckDirectory(path);
     setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets });
     if (remember) {
       rememberDeckPath(path);
