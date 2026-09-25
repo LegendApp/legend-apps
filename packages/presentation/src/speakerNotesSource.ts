@@ -35,55 +35,37 @@ function splitSourceLines(source: string) {
   return lines;
 }
 
-function fencedLines(lines: readonly SourceLine[]) {
-  const result = new Set<number>();
-  let fence: "`" | "~" | undefined;
+/** Scan comments and fences together: fences inside notes are literal note text. */
+function scanSource(lines: readonly SourceLine[], source: string) {
+  const fenced = new Set<number>();
+  const comments: CommentRange[] = [];
+  let fence: string | undefined;
+  let commentEnd = 0;
   lines.forEach((line, index) => {
-    const match = /^\s*(`{3,}|~{3,})/.exec(line.content);
-    if (match) {
-      const marker = match[1][0] as "`" | "~";
-      result.add(index);
-      fence = fence === marker ? undefined : fence ?? marker;
-    } else if (fence) {
-      result.add(index);
-    }
-  });
-  return result;
-}
-
-function commentRanges(source: string, lines: readonly SourceLine[], fenced: ReadonlySet<number>) {
-  const ranges: CommentRange[] = [];
-  let segmentStart: number | undefined;
-
-  const scanSegment = (start: number, end: number) => {
-    const segment = source.slice(start, end);
-    const pattern = /<!--([\s\S]*?)-->/g;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(segment))) {
-      const commentStart = start + match.index;
-      ranges.push({
-        contentEnd: commentStart + match[0].length - 3,
-        contentStart: commentStart + 4,
-        end: commentStart + match[0].length,
-        start: commentStart,
-      });
-    }
-  };
-
-  lines.forEach((line, index) => {
-    if (!fenced.has(index)) {
-      segmentStart ??= line.start;
+    if (fence) {
+      fenced.add(index);
+      const closing = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/.exec(line.content);
+      if (closing && closing[1][0] === fence[0] && closing[1].length >= fence.length) fence = undefined;
       return;
     }
-    if (segmentStart !== undefined) {
-      scanSegment(segmentStart, line.start);
-      segmentStart = undefined;
+    if (line.start >= commentEnd) {
+      const opening = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(line.content);
+      if (opening && !(opening[1][0] === "`" && opening[2].includes("`"))) {
+        fence = opening[1];
+        fenced.add(index);
+        return;
+      }
+    }
+    let start = source.indexOf("<!--", Math.max(line.start, commentEnd));
+    while (start >= 0 && start < line.end) {
+      const contentEnd = source.indexOf("-->", start + 4);
+      if (contentEnd < 0) break;
+      commentEnd = contentEnd + 3;
+      comments.push({ start, contentStart: start + 4, contentEnd, end: commentEnd });
+      start = source.indexOf("<!--", commentEnd);
     }
   });
-  if (segmentStart !== undefined) {
-    scanSegment(segmentStart, source.length);
-  }
-  return ranges;
+  return { fenced, comments };
 }
 
 function jsxDepths(
@@ -202,10 +184,10 @@ function isYamlObject(source: string) {
 
 function sourceStructure(source: string) {
   const lines = splitSourceLines(source);
-  const fenced = fencedLines(lines);
-  const comments = commentRanges(source, lines, fenced);
+  const { fenced, comments } = scanSource(lines, source);
   const depths = jsxDepths(source, lines, fenced, comments);
-  const expressions = expressionDepths(lines, fenced);
+  const expressions = expressionDepths(lines.map(line => ({ ...line, content: line.content.split("").map((character, index) =>
+    comments.some(comment => comment.start <= line.start + index && comment.end > line.start + index) ? " " : character).join("") })), fenced);
   const delimiters = lines
     .map((line, index) => ({ index, line }))
     .filter(({ index, line }) =>
@@ -261,13 +243,13 @@ function sourceStructure(source: string) {
 
   return { comments, slides, frontmatter: [
     ...(documentFrontmatter ? [documentFrontmatter] : []), ...slideFrontmatter,
-  ].map(([start, end]) => ({ start: start.line.end, end: end.line.start })) };
+  ].map(([start, end]) => ({ start: start.line.end, end: end.line.start, fullStart: start.line.start, fullEnd: end.line.end, document: start === documentFrontmatter?.[0] })) };
 }
 
 /** UTF-16 ranges match NSTextView selection offsets, including emoji. */
 export function getDeckSourceStructure(source: string) {
-  const { slides, frontmatter } = sourceStructure(source);
-  return { frontmatter, slides: slides.map((slide, index) => ({
+  const { slides, frontmatter, comments } = sourceStructure(source);
+  return { frontmatter, comments, slides: slides.map((slide, index) => ({
     start: index === 0 ? 0 : slides[index - 1].end,
     contentStart: slide.start,
     end: index === slides.length - 1 ? source.length : slide.end,

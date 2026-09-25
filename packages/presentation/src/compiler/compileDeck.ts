@@ -1,4 +1,4 @@
-import { getSpeakerNotesTargets } from "../speakerNotesSource";
+import { getDeckSourceStructure, getSpeakerNotesTargets } from "../speakerNotesSource";
 import { builtinTransitionSources } from "../transitions";
 import { resolveTransitionFile } from "./transitionLibrary";
 import fs from "node:fs";
@@ -12,7 +12,6 @@ import { build, type BuildResult, type Loader, type Message, type Plugin } from 
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import typegpuPlugin from "unplugin-typegpu/esbuild";
-import { parse as parseYaml } from "yaml";
 import { remarkSlideAttributes } from "./remarkSlideAttributes";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
@@ -82,91 +81,16 @@ function resolveLocalFile(importPath: string) {
   return undefined;
 }
 
-function preprocessSlideFrontmatter(source: string) {
-  const lines = source.match(/.*(?:\r?\n|$)/g) ?? [];
-  const delimiters: number[] = [];
-  let fence: "`" | "~" | undefined;
-
-  lines.forEach((line, index) => {
-    const fenceMatch = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1][0] as "`" | "~";
-      fence = fence === marker ? undefined : fence ?? marker;
-      return;
-    }
-    if (!fence && /^---\s*(?:\r?\n)?$/.test(line)) {
-      delimiters.push(index);
-    }
-  });
-
-  const firstContentLine = lines.findIndex((line) => line.trim().length > 0);
-  const documentFrontmatterEnd = delimiters[0] === firstContentLine ? delimiters[1] : undefined;
-  const replacements = new Map<number, { end: number; value: string }>();
-
-  for (let delimiterIndex = documentFrontmatterEnd === undefined ? 0 : 2; delimiterIndex < delimiters.length - 1; delimiterIndex += 1) {
-    const start = delimiters[delimiterIndex];
-    const end = delimiters[delimiterIndex + 1];
-    const yamlSource = lines.slice(start + 1, end).join("");
-    try {
-      const parsed = parseYaml(yamlSource);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        const encoded = Buffer.from(yamlSource, "utf8").toString("base64");
-        replacements.set(start, { end, value: `<SlideFrontmatter encoded="${encoded}" />\n` });
-        delimiterIndex += 1;
-      }
-    } catch {
-      // A normal thematic break can be followed by arbitrary Markdown.
-    }
-  }
-
-  let output = "";
-  for (let index = 0; index < lines.length; index += 1) {
-    const replacement = replacements.get(index);
-    if (replacement) {
-      output += replacement.value;
-      index = replacement.end;
-    } else {
-      output += lines[index];
-    }
-  }
-  return output;
-}
-
-function preprocessNotes(source: string) {
-  const lines = source.match(/.*(?:\r?\n|$)/g) ?? [];
-  let fence: "`" | "~" | undefined;
-  let markdown = "";
-  let output = "";
-
-  const flushMarkdown = () => {
-    output += markdown.replace(/<!--([\s\S]*?)-->/g, (_match, note: string) => {
-      const encoded = Buffer.from(note.trim(), "utf8").toString("base64");
-      return `<PresenterNote encoded="${encoded}" />`;
-    });
-    markdown = "";
-  };
-
-  for (const line of lines) {
-    const match = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (match) {
-      const marker = match[1][0] as "`" | "~";
-      if (!fence) {
-        flushMarkdown();
-        fence = marker;
-      } else if (fence === marker) {
-        output += line;
-        fence = undefined;
-        continue;
-      }
-    }
-    if (fence) {
-      output += line;
-    } else {
-      markdown += line;
-    }
-  }
-  flushMarkdown();
-  return output;
+function preprocessDeck(source: string) {
+  const { comments, frontmatter } = getDeckSourceStructure(source);
+  const replacements = [
+    ...comments.map(comment => ({ start: comment.start, end: comment.end,
+      value: `<PresenterNote encoded="${Buffer.from(source.slice(comment.contentStart, comment.contentEnd).trim()).toString("base64")}" />` })),
+    ...frontmatter.filter(range => !range.document).map(range => ({ start: range.fullStart, end: range.fullEnd,
+      value: `<SlideFrontmatter encoded="${Buffer.from(source.slice(range.start, range.end)).toString("base64")}" />\n` })),
+  ].sort((a, b) => b.start - a.start);
+  for (const { start, end, value } of replacements) source = source.slice(0, start) + value + source.slice(end);
+  return source;
 }
 
 function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftSource?: string, transitionDirectory?: string): Plugin {
@@ -177,7 +101,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
         const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
         const transitions = new Set<string>();
-        const compiled = await compile(preprocessNotes(preprocessSlideFrontmatter(source)), {
+        const compiled = await compile(preprocessDeck(source), {
           jsx: true,
           jsxImportSource: "react",
           remarkPlugins: [

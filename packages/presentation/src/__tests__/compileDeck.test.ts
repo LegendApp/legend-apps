@@ -84,6 +84,25 @@ describe("compileDeck", () => {
     expect((children?.[2] as React.ReactElement).props.children).toBe("0");
   });
 
+  test("preserves fenced code and YAML inside speaker notes", async () => {
+    const note = "Notes:\n\n```js\nconst x = 1;\n```\n\n---\ntransition: fade\n---";
+    const source = `# Slide\n<!--\n${note}\n-->`;
+    const result = await compileDeck(createDeck({ "deck.mdx": source }));
+    expect(result.success).toBe(true);
+    expect(result.code).toContain(JSON.stringify(note));
+    expect(result.noteTargets).toEqual(["# Slide"]);
+    expect(getDeckSourceStructure(source).slides).toHaveLength(1);
+  });
+
+  test("keeps shorter fences and comments inside a longer fenced sample", async () => {
+    const sample = "````md\n```js\n<!-- example -->\n---\ntransition: fade\n---\n```\n````";
+    const source = `# Slide\n\n${sample}\n\n<!-- actual notes -->`;
+    const result = await compileDeck(createDeck({ "deck.mdx": source }));
+    expect(result.success).toBe(true);
+    expect(result.noteTargets).toEqual([`# Slide\n\n${sample}`]);
+    expect(getDeckSourceStructure(source).frontmatter).toHaveLength(0);
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,

@@ -194,3 +194,8 @@ describe("updateSlideSpeakerNotes", () => {
     }
   });
 });
+
+test("replaces an entire note containing fences without changing slide identity", () => {
+  const source = "# Slide\n\n<!--\n```js\n{ example: true }\n```\n---\ntransition: fade\n---\n-->\n\n---\n\n# Next";
+  expect(updateSlideSpeakerNotes(source, 0, "Replacement")).toBe("# Slide\n\n<!-- Replacement -->\n\n---\n\n# Next");
+});
