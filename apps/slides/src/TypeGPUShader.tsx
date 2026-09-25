@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Text, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
@@ -31,8 +31,12 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const [resources, setResources] = useState<Resources>();
   const [error, setError] = useState<string>();
   const slideIndex = usePresentationValue("slideIndex");
+  const isPreview = usePresentationValue("isPreview");
+  const errorContext = useRef({ slideIndex, isPreview });
+  useLayoutEffect(() => { errorContext.current = { slideIndex, isPreview }; }, [slideIndex, isPreview]);
   useEffect(() => startShaderCanvas({ canvas, code, width, height, particles, particleCount,
-    slideIndex, setResources, setError }), [code, width, height, particles, particleCount, slideIndex]);
+    reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
+    setResources, setError }), [code, width, height, particles, particleCount]);
   return <View style={{ width, height, overflow: "hidden", borderRadius: background ? 0 : 20 }}>
     <Canvas ref={canvas} style={{ width, height }} transparent />
     {resources && !error && <UIFrames key={code} resources={resources} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} />}
@@ -51,9 +55,9 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ canvas, code, width, height, particles, particleCount, slideIndex, setResources, setError }: {
+function startShaderCanvas({ canvas, code, width, height, particles, particleCount, reportError, setResources, setError }: {
   canvas: RefObject<CanvasRef | null>; code: string; width: number; height: number;
-  particles: boolean; particleCount: number; slideIndex: number;
+  particles: boolean; particleCount: number; reportError(error: unknown): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
 }) {
     setResources(undefined);
@@ -107,7 +111,7 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
           } }] } }) : undefined;
         device.addEventListener("uncapturederror", event => {
           event.preventDefault();
-          if (!cancelled) { setError(event.error.message); reportSlideError(event.error, slideIndex, false); }
+          if (!cancelled) { setError(event.error.message); reportError(event.error); }
         });
         const alive = makeMutable(true);
         const disposed = makeMutable(false);
@@ -117,7 +121,7 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
         setResources({ alive, disposed, device, context, clock, states, groups, compute, render, particles: particlePipeline });
       } catch (caught) {
         device?.destroy();
-        if (!cancelled) { setError(String(caught)); reportSlideError(caught, slideIndex, false); }
+        if (!cancelled) { setError(String(caught)); reportError(caught); }
       }
     }
     void setup();
