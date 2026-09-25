@@ -4,6 +4,7 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 
 import { transitions } from "./nativeMock";
+mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
 mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas" }));
 const { AudienceWindow } = await import("../AudienceWindow");
 const { getSlidesState, setCurrentSlide, setSlidesState } = await import("../slidesStore");
@@ -24,7 +25,7 @@ test("crossfade keeps identical backgrounds fully opaque throughout forward and 
     for (const index of [1, 2, 1, 0]) {
       await act(() => setCurrentSlide(index));
       const visible = renderer.root.findAllByType("layer")
-        .filter((layer) => Array.isArray(layer.props.style));
+        .filter((layer) => layer.props.accessibilityElementsHidden === false);
       expect(visible).toHaveLength(2);
       const outgoing = visible[0].props.style[1].opacity;
       const incoming = visible[1].props.style[1].opacity;
@@ -124,12 +125,6 @@ test("starting another transition never resets the opacity already attached to t
 test("focus prepares live geometry before moving and reverses the destination slide's camera", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState();
-  const oldRequest = globalThis.requestAnimationFrame;
-  const oldCancel = globalThis.cancelAnimationFrame;
-  const frames = new Map();
-  let frameId = 0;
-  globalThis.requestAnimationFrame = (fn) => { frames.set(++frameId, fn); return frameId; };
-  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
   const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
   const layers = () => tree.root.findAll((node) => node.type?.name === "AudienceFocusSurface");
@@ -148,8 +143,7 @@ test("focus prepares live geometry before moving and reverses the destination sl
     }
     for (const index of [1, 0]) {
       await act(() => setCurrentSlide(index));
-      expect(transitions).toHaveLength(0);
-      await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
+      expect(transitions).toHaveLength(1); // Native measurements resolve during act.
       const overview = layers().find((layer) => layer.props.index === 0).props.motion;
       const detail = layers().find((layer) => layer.props.index === 1).props.motion;
       expect(overview.cameraFrom.scale).toBe(index === 1 ? 1 : 4);
@@ -163,38 +157,26 @@ test("focus prepares live geometry before moving and reverses the destination sl
     // Missing target falls back to a normal fade, with no moving shared layer.
     layers()[0].props.surfaces.get(0).entries.clear();
     await act(() => setCurrentSlide(1));
-    await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
     expect(layers().every((layer) => layer.props.motion === undefined)).toBe(true);
     expect(transitions).toHaveLength(1);
     // Reverse again before that animation completes; its callback must be stale.
     const stale = transitions.splice(0)[0];
     await act(() => setCurrentSlide(0));
     await act(() => stale({ finished: true }));
-    expect(transitions).toHaveLength(0);
-    await act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
     expect(transitions).toHaveLength(1);
   } finally {
     if (tree) await act(() => tree.unmount());
     transitions.splice(0);
     setSlidesState(initial);
-    globalThis.requestAnimationFrame = oldRequest;
-    globalThis.cancelAnimationFrame = oldCancel;
     log.mockRestore();
   }
 });
 
 test("shared markers animate with every slide transition, backward and across jumps", async () => {
   const initial = getSlidesState();
-  const oldRequest = globalThis.requestAnimationFrame;
-  const oldCancel = globalThis.cancelAnimationFrame;
-  const frames = new Map();
-  let frameId = 0;
-  globalThis.requestAnimationFrame = (fn) => { frames.set(++frameId, fn); return frameId; };
-  globalThis.cancelAnimationFrame = (id) => frames.delete(id);
   const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
   const layers = () => tree.root.findAll((node) => node.type?.name === "AudienceFocusSurface");
-  const flush = () => act(async () => { for (const frame of frames.values()) frame(); frames.clear(); });
   try {
     for (const transition of [undefined, "none", "fade", "slide", { type: "focus", from: "missing" }]) {
       setSlidesState({ currentSlide: 0, config: { transition }, slides: Array.from({ length: 3 }, () => ({ metadata: {}, notes: "" })) });
@@ -208,8 +190,7 @@ test("shared markers animate with every slide transition, backward and across ju
       for (const index of [1, 0, 2]) {
         const previous = getSlidesState().currentSlide;
         await act(() => setCurrentSlide(index));
-        expect(transitions).toHaveLength(0);
-        await flush();
+        expect(transitions).toHaveLength(1);
         const from = layers().find((layer) => layer.props.index === previous).props.motion;
         const to = layers().find((layer) => layer.props.index === index).props.motion;
         expect(from.elements.get("title").from.x).toBe(200 + previous * 100);
@@ -232,19 +213,12 @@ test("shared markers animate with every slide transition, backward and across ju
     if (tree) await act(() => tree.unmount());
     transitions.splice(0);
     setSlidesState(initial);
-    globalThis.requestAnimationFrame = oldRequest;
-    globalThis.cancelAnimationFrame = oldCancel;
     log.mockRestore();
   }
 });
 
 test("a cut with no matching destination marker settles fully visible without animation", async () => {
   const initial = getSlidesState();
-  const oldRequest = globalThis.requestAnimationFrame;
-  const oldCancel = globalThis.cancelAnimationFrame;
-  let frame;
-  globalThis.requestAnimationFrame = (fn) => { frame = fn; return 1; };
-  globalThis.cancelAnimationFrame = () => {};
   const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
   try {
@@ -254,17 +228,14 @@ test("a cut with no matching destination marker settles fully visible without an
     surface.root = {};
     surface.entries.add({ id: "unmatched", kind: "element", view: { measureLayout: (_root, done) => done(0, 0, 100, 50) } });
     await act(() => setCurrentSlide(1));
-    await act(async () => frame());
     expect(transitions).toHaveLength(0);
-    const visible = tree.root.findAllByType("layer").filter((layer) => Array.isArray(layer.props.style));
+    const visible = tree.root.findAllByType("layer").filter((layer) => layer.props.accessibilityElementsHidden === false);
     expect(visible).toHaveLength(1);
     expect(visible[0].props.style[1].opacity.__getValue()).toBe(1);
   } finally {
     if (tree) await act(() => tree.unmount());
     transitions.splice(0);
     setSlidesState(initial);
-    globalThis.requestAnimationFrame = oldRequest;
-    globalThis.cancelAnimationFrame = oldCancel;
     log.mockRestore();
   }
 });
@@ -287,7 +258,7 @@ test("user transitions receive progress and options, finish visibly, and recover
     await act(() => setCurrentSlide(1));
     expect(calls.some((call) => call.progress === 0 && call.options.distance === 24 && call.direction === "forward")).toBe(true);
     await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-    expect(renderer.root.findAllByType("layer").filter((layer) => Array.isArray(layer.props.style))).toHaveLength(1);
+    expect(renderer.root.findAllByType("layer").filter((layer) => layer.props.accessibilityElementsHidden === false)).toHaveLength(1);
     await act(() => { setSlidesState({ config: { transition: { name: "custom", options: { fail: true } } } }); });
     await act(() => setCurrentSlide(2));
     expect(getSlidesState().runtimeErrors.some((error) => error.includes("broken transition"))).toBe(true);

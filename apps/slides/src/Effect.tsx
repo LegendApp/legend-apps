@@ -1,5 +1,6 @@
-import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { useDerivedValue, type SharedValue } from "react-native-reanimated";
+import { isObservable, type Observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
 import {
   Blur,
   Canvas,
@@ -13,14 +14,21 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, usePresentationValue, snapshotCaptureQueue } from "@legend-apps/presentation";
+import { renderNativeChildren, useAnimatedShaderUniforms, usePresentationValue, snapshotCaptureQueue } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 
+type Uniforms = Record<string, Uniform>;
+type EffectBlur = number | Observable<number> | (() => number) | SharedValue<number>;
+type EffectUniforms = Uniforms | (() => Uniforms) | Readonly<Pick<SharedValue<Uniforms>, "value">>;
+function isShared(value: unknown): value is SharedValue<any> {
+  return !!value && typeof value === "object" && !isObservable(value) && "_isReanimatedSharedValue" in value;
+}
+
 type EffectProps = {
-  blur?: number | Observable<number> | (() => number);
+  blur?: EffectBlur;
   children?: ReactNode;
   padding?: number;
   preset?: EffectPreset;
@@ -30,107 +38,51 @@ type EffectProps = {
   active?: boolean;
   strength?: number;
   style?: StyleProp<ViewStyle>;
-  uniforms?: Record<string, Uniform> | (() => Record<string, Uniform>);
+  uniforms?: EffectUniforms;
 };
 
 type EffectCanvasProps = {
-  blur: number | Observable<number> | (() => number);
+  blur: EffectBlur;
   effect: SkRuntimeEffect;
   height: number;
   image: SkImage;
-  isActive: boolean;
   animationEnabled: boolean;
-  isPreview: boolean;
   previewTime: number;
   speed: number;
-  startedAt?: number;
+  clock: "slide" | number;
   strength: number;
-  uniforms?: Record<string, Uniform> | (() => Record<string, Uniform>);
+  uniforms?: EffectUniforms;
   width: number;
 };
 
-function EffectCanvas({
-  blur,
-  animationEnabled,
-  effect,
-  height,
-  image,
-  isActive,
-  isPreview,
-  previewTime,
-  speed,
-  startedAt,
-  strength,
-  uniforms,
-  width,
-}: EffectCanvasProps) {
-  const clock$ = useObservable({ epoch: startedAt, time: isPreview ? previewTime : 0 });
-  const setClock = clock$.set;
-  const pixelRatio = PixelRatio.get();
-
-  useEffect(() => {
-    if (isPreview) {
-      return;
-    }
-    if (!isActive) {
-      return;
-    }
-    if (!animationEnabled || speed === 0) {
-      return;
-    }
-    let frame = 0;
-    const epoch = startedAt ?? performance.now();
-    const update = (timestamp: number) => {
-      setClock({ epoch: startedAt, time: Math.max(0, timestamp - epoch) / 1000 * speed });
-      frame = requestAnimationFrame(update);
-    };
-    setClock({ epoch: startedAt, time: Math.max(0, performance.now() - epoch) / 1000 * speed });
-    frame = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(frame);
-  }, [animationEnabled, isActive, isPreview, previewTime, speed, startedAt, setClock]);
-
-
-  return (
-    <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Group transform={[{ scale: 1 / pixelRatio }]}>
-        <Group
-          layer={(
-            <Paint>
-              <AnimatedRuntimeShader clock$={clock$} effect={effect} uniforms={uniforms}
-                width={width} height={height} pixelRatio={pixelRatio} strength={strength}
-                isPreview={isPreview} previewTime={previewTime} animationEnabled={animationEnabled} startedAt={startedAt} blur={blur} />
-            </Paint>
-          )}
-          transform={[{ scale: pixelRatio }]}
-        >
-          <SkiaImage fit="fill" height={height} image={image} width={width} x={0} y={0} />
-        </Group>
-      </Group>
-    </Canvas>
-  );
+function EffectShader({ blur, animationEnabled, effect, height, speed, strength, uniforms, width,
+  time, pixelRatio }: EffectCanvasProps & { time: Readonly<Pick<SharedValue<{ time: number }>, "value">>; pixelRatio: number }) {
+  // JS-owned subscriptions stay at the shader leaf; animation values stay on the UI runtime.
+  const resolvedBlur = useValue(() => isShared(blur) ? 0 : typeof blur === "function" ? blur() : typeof blur === "number" ? blur : blur.get());
+  const resolvedUniforms = useValue(() => isShared(uniforms) ? {} : typeof uniforms === "function" ? uniforms() : uniforms ?? {});
+  const sharedUniforms = isShared(uniforms) ? uniforms : undefined;
+  const sharedBlur = isShared(blur) ? blur : undefined;
+  const shaderUniforms = useDerivedValue(() => ({
+    ...(sharedUniforms ? sharedUniforms.value : resolvedUniforms),
+    resolution: [width * pixelRatio, height * pixelRatio], strength: strength * pixelRatio,
+    time: animationEnabled ? time.value.time * speed : 0,
+  }));
+  const shaderBlur = useDerivedValue(() => Math.max(0, sharedBlur ? sharedBlur.value : resolvedBlur) * pixelRatio);
+  return <RuntimeShader source={effect} uniforms={shaderUniforms}><Blur blur={shaderBlur} mode="clamp" /></RuntimeShader>;
 }
 
-function AnimatedRuntimeShader({ clock$, effect, uniforms, width, height, pixelRatio, strength, isPreview, previewTime, animationEnabled, startedAt, blur }: Pick<EffectCanvasProps,
-  "effect" | "uniforms" | "width" | "height" | "strength" | "isPreview" | "previewTime" | "animationEnabled" | "startedAt" | "blur"
-> & { clock$: Observable<{ epoch: number | undefined; time: number }>; pixelRatio: number }) {
-  const time = useValue(() => isPreview
-    ? animationEnabled ? previewTime : 0
-    : animationEnabled && clock$.epoch.get() === startedAt
-      ? clock$.time.get()
-      : 0);
-
-  const resolvedBlur = useValue(blur);
-  const resolvedUniforms = useValue(() => typeof uniforms === "function" ? uniforms() : uniforms);
-  const shaderUniforms = {
-    ...resolvedUniforms,
-    resolution: [width * pixelRatio, height * pixelRatio],
-    strength: strength * pixelRatio,
-    time,
-  };
-
-  return <RuntimeShader source={effect} uniforms={shaderUniforms}>
-    {resolvedBlur > 0 ? <Blur blur={resolvedBlur * pixelRatio} mode="clamp" /> : null}
-  </RuntimeShader>;
+function EffectCanvas(props: EffectCanvasProps) {
+  const { height, image, previewTime, clock, width } = props;
+  // Read presentation context outside Skia's renderer.
+  const time = useAnimatedShaderUniforms({}, previewTime, { clock });
+  const pixelRatio = PixelRatio.get();
+  return <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <Group transform={[{ scale: 1 / pixelRatio }]}>
+      <Group layer={<Paint><EffectShader {...props} time={time} pixelRatio={pixelRatio} /></Paint>} transform={[{ scale: pixelRatio }]}>
+        <SkiaImage fit="fill" height={height} image={image} width={width} x={0} y={0} />
+      </Group>
+    </Group>
+  </Canvas>;
 }
 
 export function Effect({
@@ -150,7 +102,7 @@ export function Effect({
   const isPreview = usePresentationValue("isPreview");
   const isPreparing = usePresentationValue("isPreparing");
   const startedAt = usePresentationValue("startedAt");
-  const stepStartedAt = usePresentationValue("stepStartedAt");
+  const stepIndex = usePresentationValue("stepIndex");
   const captureScale = useContext(SlideCaptureContext);
   const sourceRef = useRef<View>(null);
   const [snapshot, setSnapshot] = useState<{ image: SkImage; scale: number; width: number; height: number }>();
@@ -159,11 +111,11 @@ export function Effect({
   const runtimeEffect = useMemo(() => source ? Skia.RuntimeEffect.Make(source) ?? undefined : undefined, [source]);
   const shouldRender = isActive || isPreview;
   const animationEnabled = active;
-  const [playback, setPlayback] = useState({ active, slideEpoch: startedAt, epoch: startedAt });
+  const [playback, setPlayback] = useState({ active, slideEpoch: startedAt, clock: "slide" as "slide" | number });
   if (playback.active !== active || playback.slideEpoch !== startedAt) {
-    setPlayback({ active, slideEpoch: startedAt, epoch: active ? stepStartedAt ?? startedAt : undefined });
+    setPlayback({ active, slideEpoch: startedAt, clock: active ? stepIndex : "slide" });
   }
-  const animationStartedAt = playback.epoch;
+  const animationClock = playback.clock;
   const image = snapshot?.scale === captureScale && snapshot.width === size.width && snapshot.height === size.height
     ? snapshot.image : undefined;
 
@@ -218,11 +170,9 @@ export function Effect({
           effect={runtimeEffect}
           height={size.height}
           image={image}
-          isActive={isActive}
-          isPreview={isPreview}
           previewTime={isPreparing ? 0 : previewTime}
           speed={speed}
-          startedAt={animationStartedAt}
+          clock={animationClock}
           strength={strength}
           uniforms={uniforms}
           width={size.width}

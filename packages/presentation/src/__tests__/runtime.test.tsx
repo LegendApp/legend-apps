@@ -1,4 +1,5 @@
 // @ts-nocheck Host leaves are replaced by render-count probes.
+import "../../../../apps/slides/src/__tests__/nativeMock";
 import { expect, spyOn, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";

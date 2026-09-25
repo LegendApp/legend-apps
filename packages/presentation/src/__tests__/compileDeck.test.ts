@@ -31,6 +31,36 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("serializes deck-local worklets and their imported helper closures", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": 'export { makePose } from "./motion"\n\n# Worklets',
+      "math.ts": 'export function offset(value: number) { "worklet"; return value * 2; }',
+      "motion.ts": `import { offset } from "./math";
+        import { useDerivedValue } from "react-native-reanimated";
+        export function makePose(position) {
+          return useDerivedValue(() => { "worklet"; return { x: offset(position.value) }; });
+        }`,
+    });
+    const result = await compileDeck(deckPath);
+    expect(result).toMatchObject({ success: true });
+    if (!result.success) return;
+    let callback;
+    const module = { exports: {} };
+    Function("require", "module", "exports", result.code)(name => {
+      if (name === "react-native-reanimated") return { useDerivedValue: fn => { callback = fn; } };
+      return {};
+    }, module, module.exports);
+    module.exports.makePose({ value: 21 });
+    expect(callback.__workletHash).toBeNumber();
+    // Recreate the function solely from serialized code and closure, as on the UI runtime.
+    function restore(fn) {
+      const closure = Object.fromEntries(Object.entries(fn.__closure).map(([key, value]) =>
+        [key, typeof value === "function" ? restore(value) : value]));
+      return Function(`return (${fn.__initData.code});`)().bind({ __closure: closure });
+    }
+    expect(restore(callback)()).toEqual({ x: 42 });
+  });
+
   test("returns draft slide offsets from the compiler process without writing the draft", async () => {
     const deckPath = createDeck({ "deck.mdx": "# On disk" });
     const source = "---\ntitle: Draft\n---\n# First\n\n```ts\nconst divider = '---';\n```\n\n---\n\n# Second";

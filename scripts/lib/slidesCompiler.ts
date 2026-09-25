@@ -43,15 +43,27 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
     fs.mkdirSync(path.dirname(at), { recursive: true });
     if (!fs.existsSync(at)) fs.symlinkSync(path.relative(path.dirname(at), target), at);
   }
-  fs.cpSync(path.join(rootDir, "packages/presentation/src"), path.join(destination, "packages/presentation/src"), { recursive: true });
+  // Ship only the compiler's source closure; presentation UI and tests stay out.
+  for (const entry of ["compiler", "transitions", "layout.ts", "speakerNotesSource.ts"]) {
+    fs.cpSync(path.join(rootDir, "packages/presentation/src", entry), path.join(destination, "packages/presentation/src", entry), {
+      recursive: true,
+      filter: file => !file.split(path.sep).includes("__tests__") && !/\.test\.[cm]?[jt]sx?$/.test(file),
+    });
+  }
   fs.mkdirSync(path.join(destination, "scripts"), { recursive: true });
   fs.copyFileSync(path.join(rootDir, "scripts/compile-slides.ts"), path.join(destination, "scripts/compile-slides.ts"));
   fs.mkdirSync(path.join(destination, "shell/src"), { recursive: true });
   fs.writeFileSync(path.join(destination, "shell/src/host-classes.txt"), collectSlidesHostClasses(rootDir));
   fs.writeFileSync(path.join(destination, "shell/src/global.css"),
     fs.readFileSync(path.join(rootDir, "shell/src/global.css"), "utf8") + '\n@source "./host-classes.txt";\n');
-  const compilerDependencies = ["@babel/core", "@babel/plugin-transform-block-scoping", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
+  const compilerDependencies = ["@babel/core", "@babel/plugin-transform-block-scoping", "react-native-worklets", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
   for (const name of compilerDependencies) link(install(name, path.join(rootDir, "packages/presentation")), path.join(destination, "node_modules", name));
+  // The worklets plugin imports Babel internals supplied by the host Babel install.
+  // Its package manifest does not declare these as runtime dependencies.
+  const babelRoot = path.dirname(createRequire(path.join(rootDir, "packages/presentation/package.json")).resolve("@babel/core/package.json"));
+  for (const name of ["@babel/generator", "@babel/traverse", "@babel/types"]) {
+    link(install(name, babelRoot), path.join(destination, "node_modules", name));
+  }
   for (const name of ["uniwind", "tailwindcss"]) link(install(name, path.join(rootDir, "shell")), path.join(destination, "shell/node_modules", name));
   fs.copyFileSync(bunExecutable, path.join(destination, "bun"));
   fs.chmodSync(path.join(destination, "bun"), 0o755);

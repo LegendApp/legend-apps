@@ -1,4 +1,5 @@
 // @ts-nocheck Bun tests run with native host mocks when needed.
+import "../../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import { compile, evaluate } from "@mdx-js/mdx";
 import * as runtime from "react/jsx-runtime";

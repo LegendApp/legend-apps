@@ -1,10 +1,12 @@
 // @ts-nocheck Shared mock: Bun caches mocked modules across test files.
 import { mock } from "bun:test";
+import { useRef } from "react";
 
 export const transitions = [];
 const numeric = (value) => typeof value === "number" ? value : value.__getValue();
 
 mock.module("react-native", () => ({
+  Platform: { OS: "macos" },
   View: "view", Text: "text", Pressable: "pressable", PixelRatio: { get: () => 2 },
   StyleSheet: { create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
   Easing: { linear: (value) => value, inOut: (easing) => easing, cubic: (value) => value, out: (easing) => easing },
@@ -30,4 +32,28 @@ mock.module("react-native", () => ({
     },
     timing: () => ({ start: (done) => transitions.push(done), stop() {} }),
   },
+}));
+
+// PresentationProvider owns a Reanimated clock even in tests of non-animated
+// consumers. Keep native runtimes out of Bun; clock tests supply their own driver.
+mock.module("react-native-reanimated", () => ({
+  __esModule: true,
+  createWorkletRuntime: () => ({}),
+  runOnRuntime: (_runtime, fn) => fn,
+  default: { View: "animated-view" },
+  useSharedValue: value => useRef({ value }).current,
+  useDerivedValue: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
+  useAnimatedStyle: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
+  useAnimatedReaction: () => {},
+  useFrameCallback: () => ({ setActive() {} }),
+  runOnUI: fn => fn,
+  runOnJS: fn => fn,
+  withTiming: value => value,
+}));
+mock.module("@shopify/react-native-skia", () => ({
+  Canvas: "canvas", Image: "image", useImage: () => null,
+  Blur: "blur", Group: "group", Paint: "paint", Fill: "fill", Shader: "shader", RuntimeShader: "shader",
+  Skia: { RuntimeEffect: { Make: () => ({}) } },
+  makeImageFromView: async () => null,
+  useVideo: () => ({ currentFrame: { value: null } }),
 }));

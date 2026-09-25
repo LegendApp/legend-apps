@@ -152,8 +152,11 @@ test("transition preparation measures only matching elements and its requested c
   expect(source.regions.has("zoom")).toBe(true);
   expect(destination.regions.size).toBe(0);
   measured.length = 0;
-  await measureFocusPair(to, from, { from: "zoom" }, true);
-  expect(measured.sort()).toEqual(["title", "title", "zoom"]);
+  const [reverseSource, reverseDestination] = await measureFocusPair(to, from, { from: "zoom" }, true);
+  expect(measured).toEqual([]); // Reverse navigation reuses unchanged geometry.
+  expect(reverseSource.elements.get("title")).toEqual(destination.elements.get("title"));
+  expect(reverseDestination.regions.get("zoom")).toEqual(source.regions.get("zoom"));
+  expect(reverseSource.regions.size).toBe(0);
 });
 
 test("slides without matching elements never wait for unrelated native callbacks", async () => {

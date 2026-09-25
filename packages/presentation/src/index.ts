@@ -38,8 +38,6 @@ export type { TransitionDefinition, TransitionContext, PresentationTransitions }
 export { SceneMotionView, type ScenePose } from "./SceneMotionView";
 export { useAnimatedShaderUniforms, useBackgroundInteractionUniforms } from "./useAnimatedShaderUniforms";
 
-export { FilmstripMotionView } from "./FilmstripMotionView";
-
 export { ScenePositionView } from "./ScenePositionView";
 
 export { usePlayback, samplePlayback } from "./playback";
@@ -55,9 +53,6 @@ export { useLiquidGlassPlayback } from "./useLiquidGlassPlayback";
 export { SnapshotCaptureBoundary } from "./SnapshotCaptureBoundary";
 export { snapshotCaptureQueue } from "./snapshotCaptureQueue";
 export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
-export { useTitleBubbleSimulation } from "./useTitleBubbleSimulation";
-
-export { CarouselBlurView } from "./CarouselBlurView";
 
 export { useNativeVideo } from "./useNativeVideo";
 export { NativeVideoView } from "./NativeVideoView";

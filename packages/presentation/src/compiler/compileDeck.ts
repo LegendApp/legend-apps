@@ -17,12 +17,15 @@ import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 
+const workletsPlugin = createRequire(import.meta.url).resolve("react-native-worklets/plugin");
 const blockScopingPlugin = createRequire(import.meta.url).resolve("@babel/plugin-transform-block-scoping");
 const hostModules = new Set([
   "react",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "react-native",
+  "react-native-reanimated",
+  "react-native-worklets",
   "@legendapp/state",
   "@legendapp/state/react",
   "@legendapp/state/sync",
@@ -340,6 +343,9 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     if (!output) {
       return { success: false, errors: ["The compiler did not produce a deck bundle."], warnings: [] };
     }
+    // Explicit deck-local "worklet" directives are compiled after bundling so local
+    // helper closures are self-contained. Hook imports have been renamed by esbuild,
+    // so deck callbacks must carry the directive rather than rely on auto-detection.
     // Hermes shares captured loop bindings without Babel's block-scope transform.
     // Run it after bundling so esbuild's generated export getters are lowered too.
     const code = transformSync(output.text, {
@@ -347,7 +353,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       compact: false,
       configFile: false,
       filename: "deck.js",
-      plugins: [blockScopingPlugin],
+      plugins: [[workletsPlugin, { disableSourceMaps: true }], blockScopingPlugin],
       sourceMaps: "inline",
       sourceType: "script",
     })?.code;

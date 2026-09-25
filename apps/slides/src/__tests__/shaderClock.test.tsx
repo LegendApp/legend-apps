@@ -1,37 +1,11 @@
 // @ts-nocheck The mock queues UI transactions so JS cannot read a reset synchronously.
-import { expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import { observable } from "@legendapp/state";
-import React, { useMemo, useRef } from "react";
+import React from "react";
 import { act, create } from "react-test-renderer";
 import "./nativeMock";
 
-const frames = [];
-const transactions = [];
-const reactions = [];
-const reactUI = () => reactions.forEach(reaction => reaction.current());
-mock.module("react-native-reanimated", () => ({
-  __esModule: true,
-  default: { View: "animated-view" },
-  useAnimatedStyle: (read) => ({ get value() { return read(); } }),
-  runOnUI: (callback) => (...args) => transactions.push(() => callback(...args)),
-  useSharedValue: (value) => useRef({ value }).current,
-  useDerivedValue: (read) => ({ get value() { return read(); } }),
-  useAnimatedReaction: (prepare, react) => {
-    const reaction = useRef(() => {});
-    reaction.current = () => react(prepare());
-    useMemo(() => { reactions.push(reaction); }, []);
-  },
-  useFrameCallback: (callback) => {
-    const latest = useRef(callback);
-    latest.current = callback;
-    return useMemo(() => {
-      const frame = { active: false, setActive(value) { this.active = value; },
-        tick(timestamp) { if (this.active) { latest.current({ timestamp }); reactUI(); } } };
-      frames.push(frame);
-      return frame;
-    }, []);
-  },
-}));
+import { frames, flushUI } from "./uiClockMock";
 const { PresentationProvider } = await import("../../../../packages/presentation/src/runtime");
 const { useAnimatedShaderUniforms } = await import("../../../../packages/presentation/src/useAnimatedShaderUniforms");
 
@@ -47,7 +21,6 @@ test("shared shader clock resets atomically, advances through slow frames, and f
       slideIndex: 0, stepIndex, startedAt: 100, stepStartedAt: stepIndex + 100,
       playbackPhase: phase, isActive: phase === "playing", isPreview: phase === "preview",
     })}><Probe brightness={brightness} /></PresentationProvider>;
-  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
     await act(() => { tree = create(render("preparing")); });
@@ -57,8 +30,8 @@ test("shared shader clock resets atomically, advances through slow frames, and f
     flushUI();
     expect(uniforms.value.time).toBe(8);
     await act(() => tree.update(render("playing")));
-    // UI still owns the old snapshot until it applies the whole transaction.
-    expect(uniforms.value.time).toBe(8);
+    // The public clock projects the new navigation before the queued UI reset.
+    expect(uniforms.value.time).toBe(0);
     flushUI();
     expect(uniforms.value.time).toBe(0);
     const frame = frames.at(-1);
@@ -110,7 +83,6 @@ test("native motion and delayed particles sample the same preview, step, and out
     <PlaybackKeyframeView keyframes={keyframes} delay={3000} repeatDuration={6000} previewTime={4} />
     <SceneMotionView initialPose={{ x: 0 }} pose={{ x: 100 }} duration={1000} />
   </PresentationProvider>;
-  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
     await act(() => { tree = create(render("preview")); });
@@ -141,11 +113,10 @@ test("native motion and delayed particles sample the same preview, step, and out
 });
 
 test("carousel retargets from its displayed position and freezes for navigation-owned exit", async () => {
-  const { FilmstripMotionView } = await import("../../../../packages/presentation/src/FilmstripMotionView");
+  const { FilmstripMotionView } = await import("../../decks/react-native-desktop/FilmstripMotionView");
   const render = (phase, position) => <PresentationProvider value={observable({
     playbackPhase: phase, slideIndex: 0, stepIndex: position,
   })}><FilmstripMotionView index={0} count={9} enabled position={position}>card</FilmstripMotionView></PresentationProvider>;
-  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
     await act(() => { tree = create(render("playing", 0)); });
@@ -204,7 +175,6 @@ test("step-anchored shader time starts on the trigger and continues through the 
   const render = stepIndex => <PresentationProvider value={observable({
     playbackPhase: "playing", slideIndex: 0, stepIndex,
   })}><Probe /></PresentationProvider>;
-  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
     await act(() => { tree = create(render(0)); });
@@ -240,7 +210,6 @@ test("glass blur and refraction form and clear on one playback tween", async () 
   const render = (step, phase = "playing") => <PresentationProvider value={observable({
     playbackPhase: phase, slideIndex: 0, stepIndex: step,
   })}><Probe active={step >= 4} /></PresentationProvider>;
-  const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
   let tree;
   try {
     await act(() => { tree = create(render(3)); });

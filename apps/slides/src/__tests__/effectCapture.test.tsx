@@ -1,5 +1,6 @@
 // @ts-nocheck Native rendering is mocked; this test exercises capture lifecycle.
 import { expect, mock, spyOn, test } from "bun:test";
+import { frames as uiFrames, flushUI } from "./uiClockMock";
 import React from "react";
 import { observable } from "@legendapp/state";
 import { act, create } from "react-test-renderer";
@@ -68,39 +69,39 @@ test("captures only a visible, measured stage and recaptures after scale changes
     const beforeAnimation = canvasRenders;
     for (const value of [0.25, 0.5, 1]) {
       await act(() => { blur$.set(value * 24); progress$.set(value); });
-      expect(renderer.root.findByType("shader").props.uniforms.progress).toBe(value);
-      expect(renderer.root.findByType("blur").props.blur).toBe(value * 24 * 2);
+      expect(renderer.root.findByType("shader").props.uniforms.value.progress).toBe(value);
+      expect(renderer.root.findByType("blur").props.blur.value).toBe(value * 24 * 2);
     }
     expect(canvasRenders).toBe(beforeAnimation);
     expect(captures).toHaveLength(0);
     await act(() => renderer.update(content(0.5, { isPreview: false, isActive: true, startedAt: 1000 })));
-    await flushFrame(3500);
-    expect(renderer.root.findByType("shader").props.uniforms.time).toBe(2.5);
+    flushUI(); uiFrames.at(-1).tick(1000); uiFrames.at(-1).tick(3500);
+    expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(2.5);
     await act(() => renderer.update(content(0.5, { isPreview: false, isActive: true, startedAt: 3500 })));
-    await flushFrame(3750);
-    expect(renderer.root.findByType("shader").props.uniforms.time).toBe(0.25);
+    flushUI(); uiFrames.at(-1).tick(3500); uiFrames.at(-1).tick(3750);
+    expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(0.25);
     await act(() => renderer.update(content(
       0.5,
       { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 0, stepStartedAt: 4000 },
       { active: false },
     )));
-    await flushFrame(4500);
-    expect(renderer.root.findByType("shader").props.uniforms.time).toBe(0);
+    flushUI(); uiFrames.at(-1).tick(4000); uiFrames.at(-1).tick(4500);
+    expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(0);
     await act(() => renderer.update(content(
       0.5,
       { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 1, stepStartedAt: 4500 },
       { active: true },
     )));
-    await flushFrame(5000);
-    expect(renderer.root.findByType("shader").props.uniforms.time).toBe(0.5);
+    flushUI(); uiFrames.at(-1).tick(4501); uiFrames.at(-1).tick(5001);
+    expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(0.5);
     expect(captures).toHaveLength(0);
     await act(() => renderer.update(content(
       0.5,
       { isPreview: false, isActive: true, startedAt: 1000, stepIndex: 2, stepStartedAt: 5000 },
       { active: true },
     )));
-    await flushFrame(5500);
-    expect(renderer.root.findByType("shader").props.uniforms.time).toBe(1);
+    flushUI(); uiFrames.at(-1).tick(5501);
+    expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(1);
     await act(() => renderer.update(content(1)));
     expect(first.dispose).toHaveBeenCalledTimes(1);
     expect(renderer.root.findAllByType("image")).toHaveLength(0);
@@ -139,22 +140,31 @@ test("Aurora ticks only its shader and cancels its clock when inactive or unmoun
   let tree;
   try {
     await act(() => { tree = create(content(true)); });
+    flushUI();
+    const frame = uiFrames.at(-1);
+    frame.tick(1000);
     const before = canvasRenders;
     for (const timestamp of [1016, 1032, 1048]) {
       now = timestamp;
-      await act(() => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach((callback) => callback(now)); });
-      expect(tree.root.findByType("aurora-shader").props.uniforms.time).toBeCloseTo((now - 1000) / 1000);
+      await act(() => frame.tick(now));
+      expect(tree.root.findByType("aurora-shader").props.uniforms.value.time).toBeCloseTo((now - 1000) / 1000);
     }
     expect(canvasRenders).toBe(before);
     await act(() => tree.update(content(false)));
+    flushUI();
+    expect(frame.active).toBe(false);
     expect(frames.size).toBe(0);
     await act(() => tree.update(content(false, true)));
-    expect(tree.root.findByType("aurora-shader").props.uniforms.time).toBe(8);
+    flushUI();
+    expect(tree.root.findByType("aurora-shader").props.uniforms.value.time).toBeCloseTo(8);
     expect(frames.size).toBe(0);
     await act(() => tree.update(content(true)));
-    expect(frames.size).toBe(1);
+    flushUI();
+    expect(frame.active).toBe(true);
+    expect(frames.size).toBe(0);
   } finally {
     if (tree) await act(() => tree.unmount());
+    expect(uiFrames.at(-1).active).toBe(false);
     expect(frames.size).toBe(0);
     globalThis.requestAnimationFrame = originalRequest;
     globalThis.cancelAnimationFrame = originalCancel;

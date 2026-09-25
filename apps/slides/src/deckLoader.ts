@@ -16,6 +16,8 @@ import { noteRecentDocument } from "@legend-apps/recent-documents";
 import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
+import * as Reanimated from "react-native-reanimated";
+import * as Worklets from "react-native-worklets";
 import * as LottieReactNative from "lottie-react-native";
 import * as ReactNativeWebGPU from "react-native-webgpu";
 import * as ReactNativeWebview from "react-native-webview";
@@ -61,6 +63,8 @@ const hostModules: Record<string, unknown> = {
   "react/jsx-runtime": JsxRuntime,
   "react/jsx-dev-runtime": JsxRuntime,
   "react-native": ReactNative,
+  "react-native-reanimated": Reanimated,
+  "react-native-worklets": Worklets,
   "@legendapp/state": LegendState,
   "@legendapp/state/react": LegendStateReact,
   "@legendapp/state/sync": LegendStateSync,

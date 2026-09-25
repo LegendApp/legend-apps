@@ -14,10 +14,10 @@ const props = (node) => Object.fromEntries(node.attributes.map(({ name, value })
 test("step attributes emit numeric props and compose with shared markers", async () => {
   const tree = await parse('# Title {shared=title step=2}\n\nInitially visible {step=0}');
   expect(tree.children[0].name).toBe("Step");
-  expect(props(tree.children[0])).toEqual({ at: 2 });
+  expect(props(tree.children[0])).toEqual({ at: 2, reveal: "fade", duration: 450 });
   expect(tree.children[0].children[0].name).toBe("SharedElement");
   expect(props(tree.children[0].children[0])).toEqual({ id: "title" });
-  expect(props(tree.children[1])).toEqual({ at: 0 });
+  expect(props(tree.children[1])).toEqual({ at: 0, reveal: "fade", duration: 450 });
 });
 
 test("attributes reject invalid values, duplicates, unknown names and misplaced markers", async () => {
@@ -38,8 +38,8 @@ test("JavaScript, JSX props and code examples are not parsed as attributes", asy
 
 test("until hides a revealed block or a block visible from the beginning", async () => {
   const tree = await parse('Text {step=1 until=3}\n\nInitial text {until=2}');
-  expect(props(tree.children[0])).toEqual({ at: 1, until: 3 });
-  expect(props(tree.children[1])).toEqual({ at: 0, until: 2 });
+  expect(props(tree.children[0])).toEqual({ at: 1, until: 3, reveal: "fade", duration: 450 });
+  expect(props(tree.children[1])).toEqual({ at: 0, until: 2, reveal: "fade", duration: 450 });
   for (const attr of ["until=-1", "until=1.5", "until=0", "step=3 until=2", "step=2 until=2"]) {
     await expect(parse(`Text {${attr}}`)).rejects.toThrow();
   }

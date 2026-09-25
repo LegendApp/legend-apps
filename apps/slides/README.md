@@ -429,10 +429,13 @@ static frame unless live.
 
 Decks may use Markdown, JSX, expressions, hooks, event handlers, and arbitrary JavaScript. They may import local `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, and image files inside the deck directory. macOS and native filename variants are preferred before generic files.
 
+The legacy `<TypeGPU scene={...} />` callback renderer is retired. The older `react-native-desktop/talk.mdx` and `effects.mdx` examples still contain legacy scenes and need migration. It reports a migration error; use `TypeGPUShader` for GPU animation on the shared playback clock.
+
 The host provides these package imports:
 
 - `react`
 - `react-native`
+- `react-native-reanimated` and `react-native-worklets`
 - `@legendapp/state`, `@legendapp/state/react`, and `@legendapp/state/sync`
 - `@legendapp/motion`
 - `@legend-apps/presentation`
@@ -444,6 +447,14 @@ The host provides these package imports:
 - `react-native-webview`
 
 `@legend-apps/presentation` exports `usePresentation`, `useSlideLifecycle`, and `defineTypeGPUScene`. Package imports outside this list, network imports, paths outside the deck directory, and symlink escapes are rejected. A deck has no package manifest or dependencies of its own.
+
+Deck-local animation functions and Reanimated callbacks must begin with an explicit
+`"worklet";` directive. The deck compiler serializes these functions and their local
+helper closures after bundling; implicit hook auto-workletization is not supported.
+Use `usePlayback()` from `@legend-apps/presentation` for timing so preparation,
+preview, pause, and outgoing slides retain the shared lifecycle. Do not start a
+separate frame clock or drive animations from JavaScript. Deck-specific simulations
+and visual treatments belong beside the deck, rather than in the host API.
 
 Deck code is intentionally trusted and runs inside the app's Hermes runtime with the app's permissions. Only open decks you trust.
 
@@ -490,46 +501,8 @@ Effects snapshot their content and are intentionally non-interactive. The origin
 
 ## TypeGPU scenes
 
-The built-in `TypeGPU` component owns the React Native canvas, WebGPU device and
-context, animation loop, presentation, error handling, and slide lifecycle. A
-deck only supplies portable TypeGPU setup and rendering code:
-
-```mdx
-import { scene } from "./scene"
-
-<TypeGPU scene={scene} width={1120} height={560} />
-```
-
-Define a scene in a local TypeScript file. `defineTypeGPUScene` provides the
-host values during setup and the current texture view during each frame:
-
-```ts
-import { defineTypeGPUScene } from "@legend-apps/presentation";
-import { common, d } from "typegpu";
-
-export const scene = defineTypeGPUScene(({ format, root }) => {
-  const pipeline = root.createRenderPipeline({
-    vertex: common.fullScreenTriangle,
-    fragment: () => {
-      "use gpu";
-      return d.vec4f(0.1, 0.7, 1, 1);
-    },
-    targets: { format },
-  });
-
-  return {
-    render({ view }) {
-      pipeline.withColorAttachment({ view }).draw(3);
-    },
-  };
-});
-```
-
-The host also supplies `device`, `size`, and `isPreview` during setup. Each
-frame receives `time`, `deltaTime`, `timestamp`, `frame`, `isPreview`, and
-`view`. Next-slide previews render one stable frame. The presenter’s Current
-view and the audience receive continuous frames with a shared slide clock. Scene instances may return `dispose()` for their
-own non-TypeGPU resources.
+The JavaScript callback API `<TypeGPU scene={...} />` is retired and reports a
+migration error. Use `TypeGPUShader` with WGSL compute/render programs so frames run on the UI runtime and share slide playback timing.
 
 ## Presentation build (no Metro)
 

@@ -106,37 +106,12 @@ fades in outside the filter and stays sharp. Reversal begins at current progress
 This is not the operating system's native backdrop material. Use `Steps` to drive
 `active`, as shown in the authoring reference.
 
-## TypeGPU
+## TypeGPU (retired)
 
-```mdx
-import { scene } from "./scene"
-
-<TypeGPU scene={scene} width={1120} height={560} previewTime={3.5} />
-```
-
-Props: required `scene`; `width=960`, `height=540`, `previewTime=3.5` seconds,
-`backgroundColor="#000"`, `transparent=false`, native `style`.
-Use local TypeScript with `defineTypeGPUScene` from `@legend-apps/presentation`:
-
-```ts
-import { defineTypeGPUScene } from "@legend-apps/presentation";
-import { common, d } from "typegpu";
-export const scene = defineTypeGPUScene(({ format, root }) => {
-  const pipeline = root.createRenderPipeline({
-    vertex: common.fullScreenTriangle,
-    fragment: () => { "use gpu"; return d.vec4f(0.1, 0.7, 1, 1); },
-    targets: { format },
-  });
-  return { render({ view }) { pipeline.withColorAttachment({ view }).draw(3); } };
-});
-```
-
-Setup receives `{device, format, isPreview, root, size:{width,height}}` and may be
-async. Return `{render, dispose?}`. Render receives
-`{view,time,deltaTime,timestamp,frame,isPreview}`. The host owns device/canvas,
-shared slide-clock playback, presentation, and setup/render/device-loss handling.
-Dispose your own non-TypeGPU resources. GPU code is transformed by the compiler;
-ordinary React component rendering should not drive per-particle animation.
+Legacy `TypeGPU scene={...}` callbacks are no longer supported: arbitrary JavaScript
+render callbacks cannot run on the UI runtime. They fail with migration guidance.
+Use `TypeGPUShader` with WGSL instead; the host drives it on the shared UI-thread
+playback clock. Older talk/effects gallery examples using `TypeGPU` require migration.
 
 ## Webview (explicit browser boundary)
 

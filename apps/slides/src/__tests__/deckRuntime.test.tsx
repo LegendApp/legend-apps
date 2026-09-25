@@ -1,4 +1,5 @@
 // @ts-nocheck Exercise the compiled renderer with native leaf views replaced.
+import "./nativeMock";
 import { expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -35,6 +36,8 @@ function compiledRenderer() {
     "./LiquidGlass": { LiquidGlass: "liquid-glass" },
     "./Effect": { Effect: "effect" },
     "./TypeGPU": { TypeGPU: "gpu" },
+    "./TypeGPUShader": { TypeGPUShader: "gpu-shader" },
+    "./slidesSettings": { useBackgroundIntensitySetting: () => 1 },
     "./Webview": { Webview: "webview" },
   };
   const module = { exports: {} };
