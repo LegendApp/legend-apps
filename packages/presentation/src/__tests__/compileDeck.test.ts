@@ -103,6 +103,13 @@ describe("compileDeck", () => {
     expect(getDeckSourceStructure(source).frontmatter).toHaveLength(0);
   });
 
+  test("accepts uppercase MDX extensions", async () => {
+    const lower = createDeck({ "deck.mdx": "# Uppercase" });
+    const upper = lower.replace(/mdx$/, "MDX");
+    fs.renameSync(lower, upper);
+    expect((await compileDeck(upper)).success).toBe(true);
+  });
+
   test("wraps markdown slides and extracts frontmatter and notes", async () => {
     const deckPath = createDeck({
       "deck.mdx": `---\ntitle: Demo\ntransition: fade\n---\n# First\n<!-- first note -->\n---\ntransition: slide\n---\n# Second\n<!-- second note -->`,

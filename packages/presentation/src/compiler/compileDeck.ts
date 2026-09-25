@@ -97,7 +97,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
   return {
     name: "legend-slides-mdx",
     setup(buildApi) {
-      buildApi.onLoad({ filter: /\.mdx$/ }, async (args) => {
+      buildApi.onLoad({ filter: /\.mdx$/i }, async (args) => {
         const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
         const transitions = new Set<string>();
