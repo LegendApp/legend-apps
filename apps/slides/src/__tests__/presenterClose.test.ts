@@ -1,11 +1,11 @@
 // @ts-nocheck Native close and draft decisions are supplied by the test.
 import { expect, mock, test } from "bun:test";
-let allowed = true, audienceOpen = true, notesFail = false;
+let allowed = true, audienceOpen = true, notesFail = false, presenterFail = false, resumes = 0;
 const calls = [];
 mock.module("../slidesExit", () => ({ prepareSlidesExit: async () => allowed }));
 mock.module("../slidesStore", () => ({ getSlidesState: () => ({ audienceOpen }) }));
-mock.module("../notesOutput", () => ({ closeNotesOutput: async () => { calls.push("notes"); if (notesFail) throw Error("notes close failed"); } }));
-mock.module("@legend-apps/window-manager", () => ({ closeWindow: async id => { calls.push(id); return { success: true }; } }));
+mock.module("../notesOutput", () => ({ resumeNotesOutput: () => { resumes++; }, closeNotesOutput: async () => { calls.push("notes"); if (notesFail) throw Error("notes close failed"); } }));
+mock.module("@legend-apps/window-manager", () => ({ closeWindow: async id => { calls.push(id); return { success: !presenterFail }; } }));
 const { closePresenterSession } = await import("../presenterClose");
 
 test("cancel and failed output closure retain the presenter", async () => {
@@ -30,4 +30,12 @@ test("waits for pending audience operations before closing outputs and the contr
   expect(calls).toEqual([]);
   finish(); await closing;
   expect(calls).toEqual(["audience", "notes", "slides-presenter"]);
+});
+
+test("failed presenter closure resumes notes operations", async () => {
+  const before = resumes;
+  presenterFail = true;
+  await expect(closePresenterSession(async () => {})).rejects.toThrow("Could not close the presenter");
+  expect(resumes).toBe(before + 1);
+  presenterFail = false;
 });

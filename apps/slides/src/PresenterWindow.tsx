@@ -2,7 +2,7 @@ import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { closePresenterSession } from "./presenterClose";
 import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
 import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistorySetting, useDisplayRolesSetting } from "./slidesSettings";
-import { identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
+import { resumeNotesOutput, identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legend-apps/file-dialog";
@@ -477,6 +477,7 @@ function PresenterToolbar({
 }
 
 export function PresenterWindow() {
+  useEffect(() => { resumeNotesOutput(); }, []);
   const closingPresenter = useRef(false);
   const [editingDeck, setEditingDeck] = useState(false);
   const editingDeckRef = useRef(false);

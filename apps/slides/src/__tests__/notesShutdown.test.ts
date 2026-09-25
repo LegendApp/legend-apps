@@ -11,7 +11,7 @@ mock.module("../slidesWindows", () => ({ slidesWindows: { open: async () => {
   calls.push("opening"); await new Promise(resolve => { finishOpen = resolve; }); calls.push("opened");
 } } }));
 mock.module("../slidesSettings", () => ({ displayRolesSetting: { get: () => ({}) } }));
-const { previewNotesOutput, closeNotesOutput, notesOutput$ } = await import("../notesOutput");
+const { previewNotesOutput, closeNotesOutput, resumeNotesOutput, syncNotesOutput, notesOutput$ } = await import("../notesOutput");
 
 test("shutdown waits for preview creation and retains state when native close fails", async () => {
   const opening = previewNotesOutput();
@@ -26,4 +26,20 @@ test("shutdown waits for preview creation and retains state when native close fa
   await closeNotesOutput();
   expect(calls.slice(-3)).toEqual(["opened", "close", "close"]);
   expect(notesOutput$.preview.peek()).toBe(false);
+});
+
+test("shutdown rejects later opens until a presenter resumes the session", async () => {
+  const count = calls.length;
+  await previewNotesOutput();
+  await syncNotesOutput([], true);
+  expect(calls.length).toBe(count);
+  resumeNotesOutput();
+  finishOpen = undefined;
+  const opening = previewNotesOutput();
+  while (!finishOpen) await Promise.resolve();
+  const closing = closeNotesOutput();
+  const later = previewNotesOutput();
+  finishOpen();
+  await Promise.all([opening, closing, later]);
+  expect(calls.slice(count)).toEqual(["opening", "opened", "close"]);
 });

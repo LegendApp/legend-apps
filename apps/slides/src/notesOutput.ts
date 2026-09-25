@@ -8,7 +8,10 @@ export const notesOutput$ = observable({ elapsed: 0, preview: false });
 let outputKey: string | null = null;
 let queue = Promise.resolve();
 let replacing = false;
+let shuttingDown = false;
+export function resumeNotesOutput() { shuttingDown = false; }
 export function syncNotesOutput(displays: Display[], presenting: boolean) {
+  if (shuttingDown) return queue;
   queue = queue.catch(() => {}).then(async () => {
     if (notesOutput$.preview.peek()) return;
     const key = displayRolesSetting.get().notes;
@@ -29,14 +32,16 @@ export function syncNotesOutput(displays: Display[], presenting: boolean) {
 }
 /** Drain in-flight preview/output opens before closing the presenter. */
 export function closeNotesOutput() {
+  shuttingDown = true;
   queue = queue.catch(() => {}).then(async () => {
     const result = await closeWindow("slides-notes");
     if (!result.success && result.message !== "No window to close") throw new Error(result.message ?? "Could not close the notes window.");
     notesOutputClosed();
-  });
+  }).catch(error => { shuttingDown = false; throw error; });
   return queue;
 }
 export function previewNotesOutput() {
+  if (shuttingDown) return queue;
   queue = queue.catch(() => {}).then(async () => {
     replacing = true;
     try {
