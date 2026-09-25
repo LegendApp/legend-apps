@@ -47,6 +47,12 @@ function scanSource(lines: readonly SourceLine[], source: string) {
   let blockComment = false;
   let moduleCode = false;
   let tag = false;
+  const nextDelimiters: Array<SourceLine | undefined> = [];
+  let nextDelimiter: SourceLine | undefined;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    nextDelimiters[i] = nextDelimiter;
+    if (/^[ \t]{0,3}---[ \t]*$/.test(lines[i].content)) nextDelimiter = lines[i];
+  }
   lines.forEach((line, index) => {
     if (fence) {
       fenced.add(index);
@@ -60,7 +66,7 @@ function scanSource(lines: readonly SourceLine[], source: string) {
         fence = opening[1]; fenced.add(index); return;
       }
       if (/^[ \t]{0,3}---[ \t]*$/.test(line.content)) {
-        const end = lines.slice(index + 1).find(next => /^[ \t]{0,3}---[ \t]*$/.test(next.content));
+        const end = nextDelimiters[index];
         if (end && isYamlObject(source.slice(line.end, end.start))) {
           literals.push({ start: line.end, end: end.start });
           skipUntil = end.start;
@@ -152,12 +158,14 @@ function jsxDepths(
   const depths: number[] = [];
   let depth = 0;
   let eventIndex = 0;
+  let tagIndex = 0;
   lines.forEach((line) => {
     while (eventIndex < events.length && events[eventIndex].position <= line.start) {
       depth = Math.max(0, depth + events[eventIndex].delta);
       eventIndex += 1;
     }
-    const insideTag = tags.some((tag) => tag.start < line.end && tag.end > line.start);
+    while (tagIndex < tags.length && tags[tagIndex].end <= line.start) tagIndex++;
+    const insideTag = tagIndex < tags.length && tags[tagIndex].start < line.end;
     depths.push(insideTag ? Math.max(1, depth) : depth);
   });
   return depths;
@@ -230,8 +238,20 @@ function sourceStructure(source: string) {
   const { fenced, comments, literals } = scanSource(lines, source);
   const protectedRanges = [...comments, ...literals].sort((a, b) => a.start - b.start);
   const depths = jsxDepths(source, lines, fenced, protectedRanges);
-  const expressions = expressionDepths(lines.map(line => ({ ...line, content: line.content.split("").map((character, index) =>
-    protectedRanges.some(comment => comment.start <= line.start + index && comment.end > line.start + index) ? " " : character).join("") })), fenced);
+  // Ranges and lines are ordered; visit each overlap once instead of scanning
+  // every comment for every UTF-16 code unit in the deck.
+  let rangeIndex = 0;
+  const expressionLines = lines.map(line => {
+    while (rangeIndex < protectedRanges.length && protectedRanges[rangeIndex].end <= line.start) rangeIndex++;
+    let content = line.content;
+    for (let i = rangeIndex; i < protectedRanges.length && protectedRanges[i].start < line.end; i++) {
+      const start = Math.max(0, protectedRanges[i].start - line.start);
+      const end = Math.min(content.length, protectedRanges[i].end - line.start);
+      if (end > start) content = content.slice(0, start) + " ".repeat(end - start) + content.slice(end);
+    }
+    return content === line.content ? line : { ...line, content };
+  });
+  const expressions = expressionDepths(expressionLines, fenced);
   const delimiters = lines
     .map((line, index) => ({ index, line }))
     .filter(({ index, line }) =>
