@@ -52,6 +52,8 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
     })(source);
     return () => {
       cancelled = true;
+      setLoaded(null);
+      setReadyVideo(null);
       frame.setActive(false);
       const previous = owned;
       runOnUI(() => {

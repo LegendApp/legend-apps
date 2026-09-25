@@ -8,7 +8,7 @@ function player() {
   const image = {};
   const result = { polls: 0, disposed: 0, available: false, playing: false,
     nextImage() { this.polls++; return this.available ? image : null; },
-    currentTime: () => 12, duration: () => 100, framerate: () => 60,
+    currentTime: () => 12, duration() { if (this.disposed) throw new Error("disposed player"); return 100; }, framerate: () => 60,
     rotation: () => 0, size: () => ({ width: 100, height: 100 }),
     setLooping() {}, setVolume() {}, play() { this.playing = true; }, pause() { this.playing = false; },
     dispose() { this.disposed++; } };
@@ -55,4 +55,21 @@ test("paused video acquires one frame, stops polling, resumes without replacing 
   await act(() => tree.unmount());
   await act(() => loads.shift()());
   expect(players.at(-1).disposed).toBe(1);
+});
+
+test("returning to a source while its replacement loads never reuses a disposed player", async () => {
+  let tree;
+  function Probe({ source }) { useNativeVideo(source, true); return null; }
+  await act(() => { tree = create(<Probe source="a" />); });
+  await act(() => loads.shift()());
+  const original = players.at(-1);
+  await act(() => tree.update(<Probe source="b" />));
+  expect(original.disposed).toBe(1);
+  await act(() => tree.update(<Probe source="a" />));
+  await act(() => loads.shift()());
+  expect(players.at(-1).disposed).toBe(1);
+  await act(() => loads.shift()());
+  expect(players.at(-1)).not.toBe(original);
+  expect(players.at(-1).playing).toBe(true);
+  await act(() => tree.unmount());
 });
