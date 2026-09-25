@@ -4,7 +4,9 @@ import React, { useMemo, useRef } from "react";
 import { act, create } from "react-test-renderer";
 mock.module("react-native", () => ({ Platform: { OS: "macos" } }));
 const loads = [], frames = [], players = [];
-function player() {
+function player(source) {
+  if (source === "broken") throw new Error("decoder failed");
+  if (source === "missing") return null;
   const image = {};
   const result = { polls: 0, disposed: 0, available: false, playing: false,
     nextImage() { this.polls++; return this.available ? image : null; },
@@ -71,5 +73,21 @@ test("returning to a source while its replacement loads never reuses a disposed 
   await act(() => loads.shift()());
   expect(players.at(-1)).not.toBe(original);
   expect(players.at(-1).playing).toBe(true);
+  await act(() => tree.unmount());
+});
+
+test("video loader failures are contained and cleared by the next source", async () => {
+  let value, tree;
+  function Probe({ source }) { value = useNativeVideo(source, false); return null; }
+  await act(() => { tree = create(<Probe source="broken" />); });
+  await act(() => loads.shift()());
+  expect(value.error).toContain("decoder failed");
+  await act(() => tree.update(<Probe source="missing" />));
+  await act(() => loads.shift()());
+  expect(value.error).toContain("Could not load video");
+  await act(() => tree.update(<Probe source="valid" />));
+  expect(value.error).toBeNull();
+  await act(() => loads.shift()());
+  expect(value.duration).toBe(100);
   await act(() => tree.unmount());
 });

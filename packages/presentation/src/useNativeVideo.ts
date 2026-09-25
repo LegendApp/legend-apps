@@ -8,6 +8,7 @@ let loadingRuntime: ReturnType<typeof createWorkletRuntime> | undefined;
 /** Retain the player and last decoded frame, but stop polling while paused. */
 function useMacNativeVideo(source: string | null, playing: boolean) {
   const [loaded, setLoaded] = useState<{ source: string; video: Video } | null>(null);
+  const [failure, setFailure] = useState<{ source: string; message: string } | null>(null);
   const [readyVideo, setReadyVideo] = useState<Video | null>(null);
   const video = loaded?.source === source ? loaded.video : null;
   const currentFrame = useSharedValue<SkImage | null>(null);
@@ -44,11 +45,20 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
       owned = result;
       setLoaded({ source, video: result });
     };
+    const reject = (message: string) => {
+      if (!cancelled) setFailure({ source, message });
+    };
+    setFailure(null);
     loadingRuntime ??= createWorkletRuntime("slides-video-loading");
     runOnRuntime(loadingRuntime, (uri: string) => {
       "worklet";
-      const result = Skia.Video(uri) as Video;
-      if (result) runOnJS(accept)(result);
+      try {
+        const result = Skia.Video(uri) as Video | null;
+        if (result) runOnJS(accept)(result);
+        else runOnJS(reject)("Could not load video.");
+      } catch (error) {
+        runOnJS(reject)(String(error));
+      }
     })(source);
     return () => {
       cancelled = true;
@@ -80,12 +90,12 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
     return () => frame.setActive(false);
   }, [video, playing, readyVideo, frame]);
 
-  return { currentFrame, currentTime, ...metadata };
+  return { currentFrame, currentTime, ...metadata, error: failure?.source === source ? failure.message : null };
 }
 
 // Other platforms retain Skia's platform-specific texture and loading handling.
 function useStandardNativeVideo(source: string | null, playing: boolean) {
   const paused = useDerivedValue(() => !playing, [playing]);
-  return useVideo(source, { paused, looping: true, volume: 0 });
+  return { ...useVideo(source, { paused, looping: true, volume: 0 }), error: null };
 }
 export const useNativeVideo = Platform.OS === "macos" ? useMacNativeVideo : useStandardNativeVideo;

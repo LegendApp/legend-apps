@@ -1,6 +1,6 @@
 import { Canvas, Image as SkiaImage, useImage } from "@shopify/react-native-skia";
 import { useState } from "react";
-import { View, type LayoutChangeEvent } from "react-native";
+import { Text, View, type LayoutChangeEvent } from "react-native";
 import { useDerivedValue } from "react-native-reanimated";
 import { useNativeVideo } from "./useNativeVideo";
 
@@ -20,5 +20,6 @@ export function NativeVideoView({ source, poster, playing }: {
     <Canvas style={{ flex: 1 }}>
       <SkiaImage image={image} x={0} y={0} width={size.width} height={size.height} fit="contain" />
     </Canvas>
+    {video.error ? <Text accessibilityRole="alert" style={{ color: "#fff", backgroundColor: "#222", padding: 8 }}>Could not load video: {video.error}</Text> : null}
   </View>;
 }
