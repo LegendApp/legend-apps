@@ -37,7 +37,7 @@ export function NotesWindow() {
     <View accessibilityLabel="Resize notes preview" {...responder.panHandlers} style={{ height: 18, alignItems: "center", justifyContent: "center" }}>
       <View style={{ height: 3, width: 60, backgroundColor: "#52525b", borderRadius: 2 }} />
     </View>
-    <ScrollableNotes key={index} notesWidth={width} fontSize={fontSize} editable={false}
+    <ScrollableNotes backgroundColor="#111114" key={index} notesWidth={width} fontSize={fontSize} editable={false}
       markdown={notes} currentStep={step} onSave={noSave} placeholder="No notes for this slide." />
   </View>;
 }

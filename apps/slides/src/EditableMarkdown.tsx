@@ -1,5 +1,6 @@
+import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
 import type { NotesDrafts } from "./notesDrafts";
-import { splitSpeakerNoteSteps, speakerNoteOpacity, speakerNotesEditorMarkdown } from "./speakerNoteSteps";
+import { speakerNotesEditorMarkdown } from "./speakerNoteSteps";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   EnrichedMarkdownTextInput,
@@ -64,17 +65,17 @@ type EditableMarkdownProps = {
   currentStep?: number;
   onSectionLayout?(step: number, y: number, height: number): void;
   fontSize?: number;
+  backgroundColor?: string;
   markdown: string;
   onEditingChange?(editing: boolean): void;
   onSave(markdown: string): Promise<void>;
   placeholder: string;
 };
 
-export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17 }: EditableMarkdownProps) {
+export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17, backgroundColor = "#171819" }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
-  const sectionGap = fontSize * 27 / 17;
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -85,8 +86,8 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   const onEditingChangeRef = useRef(onEditingChange);
   const onSaveRef = useRef(onSave);
   const [editing, setEditing] = useState(false);
-  const [sections, setSections] = useState(() => noteSections(draftMarkdownRef.current));
-  const sectionsRef = useRef(sections);
+  const [document, setDocument] = useState(draftMarkdownRef.current);
+  const [regions, setRegions] = useState<NoteRegion[]>([]);
   const propMarkdownRef = useRef(markdown);
 
   useEffect(() => {
@@ -175,8 +176,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     propMarkdownRef.current = markdown;
     const normalized = markdown.trim();
     draftMarkdownRef.current = savedMarkdownRef.current = normalized;
-    sectionsRef.current = noteSections(markdown);
-    setSections(sectionsRef.current);
+    setDocument(normalized);
   }, [markdown, editing]);
 
   useEffect(() => {
@@ -202,48 +202,45 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     <View accessibilityLabel={editable ? "Edit speaker notes" : "Speaker notes"}
       onTouchStart={event => event.stopPropagation()}
       style={[styles.viewerShell, editing && styles.focusedShell]}>
-      {sections.map((section, index) => (
-        <View key={index} onLayout={event => {
-          if (section.step !== undefined) onSectionLayout?.(section.step, event.nativeEvent.layout.y, event.nativeEvent.layout.height);
-        }} style={[styles.noteSection, { opacity: editing ? 1 : speakerNoteOpacity(section, currentStep), marginTop: index > 0 ? sectionGap : 0 }]}>
-          <NotesText markdown={section.markdown} editable={editable} markdownStyle={markdownStyle}
-            placeholder={sections.length === 1 ? placeholder : ""} textStyle={textStyle}
-            onFocus={input => { inputRef.current = input; startEditing(); }}
-            onBlur={finishEditing}
-            onChange={value => {
-              sectionsRef.current = sectionsRef.current.map((item, i) => i === index ? { ...item, markdown: value } : item);
-              setSections(sectionsRef.current);
-              draftMarkdownRef.current = sectionsRef.current.map(item => item.separator + item.markdown).join("");
-              if (draftKey && drafts) drafts.update(draftKey, draftMarkdownRef.current);
-              if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-              saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
-            }} />
-        </View>
-      ))}
+      <View style={{ position: "relative" }}>
+        <NotesText markdown={document} editable={editable} markdownStyle={markdownStyle}
+          placeholder={placeholder} textStyle={textStyle}
+          onFocus={input => { inputRef.current = input; startEditing(); }} onBlur={finishEditing}
+          onLayout={paragraphs => {
+            const next = notesLayout(paragraphs);
+            setRegions(next);
+            for (const region of next) {
+              if (region.step !== undefined) onSectionLayout?.(region.step, region.y, region.height);
+            }
+          }}
+          onChange={value => {
+            setDocument(value);
+            draftMarkdownRef.current = value;
+            if (draftKey && drafts) drafts.update(draftKey, value);
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
+          }} />
+        {!editing && regions.map((region, index) => region.step !== undefined && region.step !== currentStep
+          ? <View key={index} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+              style={{ position: "absolute", left: 0, right: 0, top: region.y, height: region.height, backgroundColor, opacity: 0.45 }} />
+          : null)}
+      </View>
     </View>
   );
 }
 
-function noteSections(markdown: string) {
-  const source = markdown.trim().replace(/\r\n/g, "\n");
-  let end = 0;
-  const sections = splitSpeakerNoteSteps(source).map(section => {
-    const start = source.indexOf(section.markdown, end);
-    const separator = source.slice(end, start);
-    end = start + section.markdown.length;
-    return { ...section, separator };
-  });
-  return sections.length ? sections : [{ markdown: "", step: undefined, separator: "" }];
-}
-
 /** Keep the native text view and layout alive across focus; AppKit owns click-to-caret hit testing. */
-function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, onFocus, onBlur, onChange }: {
+function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, onFocus, onBlur, onChange, onLayout }: {
   markdown: string; editable: boolean; markdownStyle: MarkdownStyle; placeholder: string;
   textStyle: { fontSize: number; lineHeight: number };
   onFocus(input: EnrichedMarkdownTextInputInstance | null): void;
   onBlur(): void; onChange(markdown: string): void;
+  onLayout(paragraphs: NoteParagraph[]): void;
 }) {
   const input = useRef<EnrichedMarkdownTextInputInstance | null>(null);
+  const [width, setWidth] = useState(0);
+  const layoutCallback = useRef(onLayout);
+  layoutCallback.current = onLayout;
   const value = speakerNotesEditorMarkdown(markdown);
   const lastValue = useRef(value);
   useLayoutEffect(() => {
@@ -252,7 +249,16 @@ function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, 
       input.current?.setValue(value);
     }
   }, [value]);
-  return <EnrichedMarkdownTextInput ref={input} defaultValue={value} editable={editable}
+  useEffect(() => {
+    if (width <= 0) return;
+    let cancelled = false;
+    void input.current?.getParagraphLayouts().then(paragraphs => {
+      if (!cancelled) layoutCallback.current(paragraphs);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [value, width, textStyle.fontSize]);
+  return <EnrichedMarkdownTextInput ref={input}
+    onLayout={event => setWidth(event.nativeEvent.layout.width)} defaultValue={value} editable={editable}
     markdownStyle={markdownStyle} multiline scrollEnabled={false}
     cursorColor="#93c5fd" selectionColor="#3b82f680"
     placeholder={placeholder} placeholderTextColor="#71717a"
@@ -274,7 +280,6 @@ const styles = StyleSheet.create({
     padding: 0,
     width: "100%",
   },
-  noteSection: { width: "100%" },
   viewerShell: { flex: 1, minHeight: 44, width: "100%", borderWidth: 2, borderColor: "transparent", borderRadius: 6, padding: 8 },
   focusedShell: { borderColor: "#3b82f6" },
 });

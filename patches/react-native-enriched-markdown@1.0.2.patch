@@ -37,7 +37,7 @@ index 59b7c43..62ecc7a 100644
    void setEnableTaskListItemToggle(T view, boolean value);
    void setEnableLinkPreview(T view, boolean value);
 diff --git a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
-index 75f9970..cf276b9 100644
+index 75f9970..15d8f6a 100644
 --- a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
 +++ b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
 @@ -18,7 +18,6 @@ import com.facebook.react.uimanager.BaseViewManager;
@@ -58,8 +58,18 @@ index 75f9970..cf276b9 100644
        case "toggleBold":
          mViewManager.toggleBold(view);
          break;
+@@ -166,6 +168,9 @@ public class EnrichedMarkdownTextInputManagerDelegate<T extends View, U extends
+       case "copyToClipboard":
+         mViewManager.copyToClipboard(view);
+         break;
++      case "requestParagraphLayouts":
++        mViewManager.requestParagraphLayouts(view, args.getInt(0));
++        break;
+       case "requestMarkdown":
+         mViewManager.requestMarkdown(view, args.getInt(0));
+         break;
 diff --git a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
-index dc79ca1..41a8f5c 100644
+index dc79ca1..fb396e9 100644
 --- a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
 +++ b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
 @@ -43,6 +43,7 @@ public interface EnrichedMarkdownTextInputManagerInterface<T extends View> exten
@@ -70,6 +80,14 @@ index dc79ca1..41a8f5c 100644
    void toggleBold(T view);
    void toggleItalic(T view);
    void toggleUnderline(T view);
+@@ -60,6 +61,7 @@ public interface EnrichedMarkdownTextInputManagerInterface<T extends View> exten
+   void startMention(T view, String indicator);
+   void removeLink(T view);
+   void copyToClipboard(T view);
++  void requestParagraphLayouts(T view, int requestId);
+   void requestMarkdown(T view, int requestId);
+   void requestCaretRect(T view, int requestId);
+ }
 diff --git a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextManagerDelegate.java b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextManagerDelegate.java
 index 5540a87..60f8dd0 100644
 --- a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextManagerDelegate.java
@@ -4352,7 +4370,7 @@ index 1416540..18e4336 100644
  
  } // namespace facebook::react
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
-index 58b4356..a8eb773 100644
+index 58b4356..1add886 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 @@ -22,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
@@ -4363,7 +4381,15 @@ index 58b4356..a8eb773 100644
  - (void)toggleBold;
  - (void)toggleItalic;
  - (void)toggleUnderline;
-@@ -124,6 +125,34 @@ NSObject *arg1 = args[1];
+@@ -40,6 +41,7 @@ NS_ASSUME_NONNULL_BEGIN
+ - (void)removeLink;
+ - (void)copyToClipboard;
+ - (void)requestMarkdown:(NSInteger)requestId;
++- (void)requestParagraphLayouts:(NSInteger)requestId;
+ - (void)requestCaretRect:(NSInteger)requestId;
+ @end
+ 
+@@ -124,6 +126,34 @@ NSObject *arg1 = args[1];
    return;
  }
  
@@ -4398,6 +4424,33 @@ index 58b4356..a8eb773 100644
  if ([commandName isEqualToString:@"toggleBold"]) {
  #if RCT_DEBUG
    if ([args count] != 0) {
+@@ -414,6 +444,26 @@ if ([commandName isEqualToString:@"copyToClipboard"]) {
+   return;
+ }
+ 
++if ([commandName isEqualToString:@"requestParagraphLayouts"]) {
++#if RCT_DEBUG
++  if ([args count] != 1) {
++    RCTLogError(@"%@ command %@ received %d arguments, expected %d.", @"EnrichedMarkdownTextInput", commandName, (int)[args count], 1);
++    return;
++  }
++#endif
++
++  NSObject *arg0 = args[0];
++#if RCT_DEBUG
++  if (!RCTValidateTypeOfViewCommandArgument(arg0, [NSNumber class], @"number", @"EnrichedMarkdownTextInput", commandName, @"1st")) {
++    return;
++  }
++#endif
++  NSInteger requestId = [(NSNumber *)arg0 intValue];
++
++  [componentView requestParagraphLayouts:requestId];
++  return;
++}
++
+ if ([commandName isEqualToString:@"requestMarkdown"]) {
+ #if RCT_DEBUG
+   if ([args count] != 1) {
 diff --git a/ios/input/ENRMInputEventEmitter.mm b/ios/input/ENRMInputEventEmitter.mm
 index ff3d4c2..40c40cb 100644
 --- a/ios/input/ENRMInputEventEmitter.mm
@@ -4738,6 +4791,7 @@ index 231d841..a244fa2 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
+index 9a9987e..3ac3117 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -4762,7 +4816,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -59,6 +60,13 @@
+@@ -59,6 +60,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -4776,23 +4830,21 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  @end
-@@ -97,9 +105,13 @@
+@@ -97,9 +105,13 @@ @implementation EnrichedMarkdownTextInput {
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
 +  NSView *_scrollContainerView;
    NSScrollView *_scrollView;
--#endif
--
 +  NSString *_blockStyleMarkdownOverride;
 +  NSInteger _hangingPrefixLength;
-+#endif
-+
+ #endif
+ 
 +  BOOL _usesParagraphBaselineOffset;
    NSArray<NSString *> *_contextMenuItemTexts;
    NSArray<NSString *> *_contextMenuItemIcons;
    ENRMAutoLinkDetector *_autoLinkDetector;
-@@ -242,6 +254,9 @@
+@@ -242,6 +254,9 @@ - (void)setupTextView
  #else
    _textView.selectable = YES;
  
@@ -4802,7 +4854,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -256,7 +271,8 @@
+@@ -256,7 +271,8 @@ - (void)setupTextView
    _textView.textContainer.widthTracksTextView = YES;
  
    _scrollView.documentView = _textView;
@@ -4812,7 +4864,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #endif
  
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -339,7 +355,97 @@
+@@ -339,7 +355,97 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
    }
  }
  
@@ -4911,7 +4963,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
  - (CGSize)measureSize:(CGFloat)maxWidth
  {
-@@ -363,12 +469,18 @@
+@@ -363,12 +469,18 @@ - (CGSize)measureSize:(CGFloat)maxWidth
      }
    }
  
@@ -4931,7 +4983,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  #pragma mark - Props
-@@ -504,19 +616,35 @@
+@@ -504,19 +616,35 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      writingDirectionChanged = YES;
    }
  
@@ -4970,7 +5022,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
        [self applyFormatting];
      }
  
-@@ -525,7 +653,6 @@
+@@ -525,7 +653,6 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      [self applyFormatting];
    }
  
@@ -4978,7 +5030,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  #pragma mark - Relayout
-@@ -533,7 +660,7 @@
+@@ -533,7 +660,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -4987,7 +5039,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)_performRelayout
-@@ -542,22 +669,36 @@
+@@ -542,22 +669,36 @@ - (void)_performRelayout
      return;
    }
  
@@ -4995,18 +5047,6 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 -  if (textLength == 0) {
 -    return;
 -  }
--
--  NSRange wholeRange = NSMakeRange(0, textLength);
--  [_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:NULL];
--  [_textView.layoutManager ensureLayoutForTextContainer:_textView.textContainer];
--  [_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
--
--  CGSize measuredSize = [self measureSize:_textView.frame.size.width];
--  CGSize currentSize = _textView.contentSize;
--  BOOL sizeChanged =
--      fabs(currentSize.width - measuredSize.width) > 0.5 || fabs(currentSize.height - measuredSize.height) > 0.5;
--  if (sizeChanged) {
--    ENRMSetContentSize(_textView, measuredSize);
 +  void (^relayout)(void) = ^{
 +    NSUInteger textLength = self->_textView.textStorage.length;
 +    if (textLength > 0) {
@@ -5015,7 +5055,11 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +      [self->_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:&actualRange];
 +      [self->_textView.layoutManager ensureLayoutForCharacterRange:actualRange];
 +      [self->_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
-+
+ 
+-  NSRange wholeRange = NSMakeRange(0, textLength);
+-  [_textView.layoutManager invalidateLayoutForCharacterRange:wholeRange actualCharacterRange:NULL];
+-  [_textView.layoutManager ensureLayoutForTextContainer:_textView.textContainer];
+-  [_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
 +      CGFloat measurementWidth = self.bounds.size.width;
 +#if TARGET_OS_OSX
 +      measurementWidth = measurementWidth > 0 ? measurementWidth : self->_textView.frame.size.width;
@@ -5032,7 +5076,13 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +      }
 +    }
 +  };
-+
+ 
+-  CGSize measuredSize = [self measureSize:_textView.frame.size.width];
+-  CGSize currentSize = _textView.contentSize;
+-  BOOL sizeChanged =
+-      fabs(currentSize.width - measuredSize.width) > 0.5 || fabs(currentSize.height - measuredSize.height) > 0.5;
+-  if (sizeChanged) {
+-    ENRMSetContentSize(_textView, measuredSize);
 +  if ([NSThread isMainThread]) {
 +    relayout();
 +  } else {
@@ -5040,7 +5090,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  }
  
-@@ -569,6 +710,9 @@
+@@ -569,6 +710,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5050,7 +5100,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +806,7 @@
+@@ -662,6 +806,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5058,22 +5108,22 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +818,12 @@
+@@ -673,9 +818,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
 -
+-  [_editSession exitPhase];
 +  [self applyBlockStyleForMarkdown:blockStyleMarkdown];
-+  [self applyFormatting];
-   [_editSession exitPhase];
--  [self applyFormatting];
+   [self applyFormatting];
++  [_editSession exitPhase];
 +#if TARGET_OS_OSX
 +  [self refreshHangingMarkdownPrefixForMarkdown:markdown ?: @""];
 +#endif
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -743,6 +891,20 @@
+@@ -743,6 +891,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5094,7 +5144,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +949,92 @@
+@@ -787,12 +949,92 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -5189,7 +5239,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)applyFormatting
-@@ -829,6 +1071,7 @@
+@@ -829,6 +1071,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
@@ -5197,7 +5247,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -837,6 +1080,9 @@
+@@ -837,6 +1080,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5207,7 +5257,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1125,23 @@
+@@ -879,6 +1125,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -5231,12 +5281,10 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -887,6 +1150,121 @@
-   _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
-   [_inputEventEmitter emitOnChangeSelection];
+@@ -889,6 +1152,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
-+}
-+
+ }
+ 
 +#if TARGET_OS_OSX
 +- (NSUInteger)characterIndexForVerticalNavigationDirection:(NSString *)direction preferredX:(CGFloat)preferredX
 +{
@@ -5350,10 +5398,12 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  [_inputEventEmitter emitOnChangeSelection];
 +  [_inputEventEmitter emitOnChangeState];
 +#endif
- }
- 
++}
++
  - (void)toggleBold
-@@ -1377,9 +1755,31 @@
+ {
+   [self toggleInlineStyle:ENRMInputStyleTypeStrong];
+@@ -1377,9 +1755,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5386,7 +5436,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)copyToClipboard
-@@ -1413,11 +1813,22 @@
+@@ -1413,16 +1813,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5414,7 +5464,38 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  #endif
    return caretRect;
-@@ -1540,6 +1951,32 @@
+ }
+ 
++// Query layout without changing focus, selection, or scroll position.
++- (void)requestParagraphLayouts:(NSInteger)requestId
++{
++  auto emitter = [self fabricEventEmitter];
++  if (emitter == nullptr) return;
++  NSMutableArray *paragraphs = [NSMutableArray new];
++#if TARGET_OS_OSX
++  NSString *text = _textView.string;
++  NSLayoutManager *layout = _textView.layoutManager;
++  NSTextContainer *container = _textView.textContainer;
++  [layout ensureLayoutForTextContainer:container];
++  [text enumerateSubstringsInRange:NSMakeRange(0, text.length)
++                          options:NSStringEnumerationByParagraphs
++                       usingBlock:^(NSString *substring, NSRange range, NSRange enclosingRange, BOOL *stop) {
++    NSRange glyphs = [layout glyphRangeForCharacterRange:range actualCharacterRange:NULL];
++    NSRect rect = [layout boundingRectForGlyphRange:glyphs inTextContainer:container];
++    [paragraphs addObject:@{ @"text": substring ?: @"", @"y": @(rect.origin.y + self->_textView.textContainerInset.top),
++                            @"height": @(rect.size.height) }];
++  }];
++#endif
++  NSData *data = [NSJSONSerialization dataWithJSONObject:paragraphs options:0 error:nil];
++  NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
++  emitter->onRequestMarkdownResult({ .requestId = static_cast<int>(requestId),
++      .markdown = std::string([json UTF8String] ?: "[]") });
++}
++
+ - (void)requestCaretRect:(NSInteger)requestId
+ {
+   [_inputEventEmitter requestCaretRect:requestId];
+@@ -1540,6 +1977,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -5447,7 +5528,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2071,12 @@
+@@ -1634,7 +2097,12 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -5461,7 +5542,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2091,9 @@
+@@ -1649,6 +2117,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5471,7 +5552,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2156,12 @@
+@@ -1711,6 +2182,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -6023,10 +6104,15 @@ index e69c364..b33b347 100644
  
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/lib/module/EnrichedMarkdownTextInput.js b/lib/module/EnrichedMarkdownTextInput.js
-index 0f81eaa..12005e0 100644
+index 0f81eaa..925c98f 100644
 --- a/lib/module/EnrichedMarkdownTextInput.js
 +++ b/lib/module/EnrichedMarkdownTextInput.js
-@@ -42,6 +42,8 @@ export const EnrichedMarkdownTextInput = ({
+@@ -1,3 +1,4 @@
++import { Platform } from 'react-native';
+ "use strict";
+ 
+ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react';
+@@ -42,6 +43,8 @@ export const EnrichedMarkdownTextInput = ({
    onChangeText,
    onChangeMarkdown,
    onChangeSelection,
@@ -6035,7 +6121,7 @@ index 0f81eaa..12005e0 100644
    onChangeState,
    onKeyPress,
    onCaretRectChange,
-@@ -178,6 +180,21 @@ export const EnrichedMarkdownTextInput = ({
+@@ -178,6 +181,21 @@ export const EnrichedMarkdownTextInput = ({
        end
      });
    }, [onChangeSelection]);
@@ -6057,7 +6143,7 @@ index 0f81eaa..12005e0 100644
    const handleChangeState = useCallback(e => {
      const {
        bold,
-@@ -301,6 +318,7 @@ export const EnrichedMarkdownTextInput = ({
+@@ -301,6 +319,7 @@ export const EnrichedMarkdownTextInput = ({
        blur: () => Commands.blur(commandRef),
        setValue: markdown => Commands.setValue(commandRef, markdown),
        setSelection: (start, end) => Commands.setSelection(commandRef, start, end),
@@ -6065,7 +6151,19 @@ index 0f81eaa..12005e0 100644
        toggleBold: () => Commands.toggleBold(commandRef),
        toggleItalic: () => Commands.toggleItalic(commandRef),
        toggleUnderline: () => Commands.toggleUnderline(commandRef),
-@@ -354,6 +372,8 @@ export const EnrichedMarkdownTextInput = ({
+@@ -326,6 +345,11 @@ export const EnrichedMarkdownTextInput = ({
+         });
+         Commands.requestMarkdown(commandRef, requestId);
+       }),
++      getParagraphLayouts: () => Platform.OS !== "macos" ? Promise.resolve([]) : new Promise((resolve, reject) => {
++        const requestId = nextRequestId.current++;
++        pendingRequests.current.set(requestId, { resolve, reject });
++        Commands.requestParagraphLayouts(commandRef, requestId);
++      }).then(value => JSON.parse(value)),
+       getCaretRect: () => new Promise((resolve, reject) => {
+         const requestId = nextRequestId.current++;
+         pendingCaretRectRequests.current.set(requestId, {
+@@ -354,6 +378,8 @@ export const EnrichedMarkdownTextInput = ({
      onChangeText: handleChangeText,
      onChangeMarkdown: handleChangeMarkdown,
      onChangeSelection: handleChangeSelection,
@@ -6082,7 +6180,7 @@ index 258b153..8e3e420 100644
 -{"version":3,"names":["useCallback","useEffect","useImperativeHandle","useLayoutEffect","useMemo","useRef","EnrichedMarkdownTextInputNativeComponent","Commands","normalizeMarkdownTextInputStyle","normalizeMenuItem","toNativeRegexConfig","TextInputState","jsx","_jsx","VALID_HEADING_LEVELS","Set","toHeadingLevel","n","has","getNativeRef","ref","current","Error","EnrichedMarkdownTextInput","markdownStyle","style","defaultValue","placeholder","placeholderTextColor","editable","autoFocus","scrollEnabled","autoCapitalize","multiline","cursorColor","selectionColor","onChangeText","onChangeMarkdown","onChangeSelection","onChangeState","onKeyPress","onCaretRectChange","onLinkDetected","mentionIndicators","onStartMention","onChangeMention","onEndMention","onFocus","onBlur","contextMenuItems","selectionMenuConfig","formatMenuConfig","linkRegex","_linkRegex","writingDirection","rest","nativeRef","initialDefaultValue","nextRequestId","pendingRequests","Map","pendingCaretRectRequests","contextMenuCallbacksRef","callbacksMap","item","set","text","onPress","nativeContextMenuItems","filter","visible","map","icon","pending","pendingCaretRect","err","forEach","reject","clear","instance","registerInput","currentlyFocusedInput","blurTextInput","unregisterInput","normalizedStyle","normalizedSelectionMenuConfig","format","copyAsMarkdown","enabled","formatLabel","label","copyAsMarkdownLabel","normalizedFormatMenuConfig","bold","italic","underline","strikethrough","spoiler","link","boldLabel","italicLabel","underlineLabel","strikethroughLabel","spoilerLabel","linkLabel","handleLinkDetected","e","url","start","end","nativeEvent","handleChangeText","value","handleChangeMarkdown","handleChangeSelection","handleChangeState","heading","unorderedList","orderedList","level","handleCaretRectChange","x","y","width","height","handleStartMention","handleChangeMention","handleEndMention","handleFocus","focusInput","handleBlur","blurInput","handleRequestMarkdownResult","requestId","markdown","get","resolve","delete","handleRequestCaretRectResult","handleContextMenuItemPress","itemText","selectedText","selectionStart","selectionEnd","styleState","callback","selection","node","commandRef","measure","measureInWindow","measureLayout","relativeToNativeNode","onSuccess","onFail","focus","blur","setValue","setSelection","toggleBold","toggleItalic","toggleUnderline","toggleStrikethrough","toggleSpoiler","toggleHeading","toggleUnorderedList","toggleOrderedList","indentList","outdentList","setLink","insertLink","insertText","insertMention","displayText","startMention","indicator","removeLink","copyToClipboard","getMarkdown","Promise","requestMarkdown","getCaretRect","requestCaretRect","isOnChangeMarkdownSet","undefined","onInputKeyPress","onInputFocus","onInputBlur","onRequestMarkdownResult","onRequestCaretRectResult","onContextMenuItemPress"],"sourceRoot":"../../src","sources":["EnrichedMarkdownTextInput.tsx"],"mappings":"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","ignoreList":[]}
 +{"version":3,"names":["useCallback","useEffect","useImperativeHandle","useLayoutEffect","useMemo","useRef","EnrichedMarkdownTextInputNativeComponent","Commands","normalizeMarkdownTextInputStyle","normalizeMenuItem","toNativeRegexConfig","TextInputState","jsx","_jsx","VALID_HEADING_LEVELS","Set","toHeadingLevel","n","has","getNativeRef","ref","current","Error","EnrichedMarkdownTextInput","markdownStyle","style","defaultValue","placeholder","placeholderTextColor","editable","autoFocus","scrollEnabled","autoCapitalize","multiline","cursorColor","selectionColor","onChangeText","onChangeMarkdown","onChangeSelection","onSelectionDragOutside","onVerticalNavigationOutside","onChangeState","onKeyPress","onCaretRectChange","onLinkDetected","mentionIndicators","onStartMention","onChangeMention","onEndMention","onFocus","onBlur","contextMenuItems","selectionMenuConfig","formatMenuConfig","linkRegex","_linkRegex","writingDirection","rest","nativeRef","initialDefaultValue","nextRequestId","pendingRequests","Map","pendingCaretRectRequests","contextMenuCallbacksRef","callbacksMap","item","set","text","onPress","nativeContextMenuItems","filter","visible","map","icon","pending","pendingCaretRect","err","forEach","reject","clear","instance","registerInput","currentlyFocusedInput","blurTextInput","unregisterInput","normalizedStyle","normalizedSelectionMenuConfig","format","copyAsMarkdown","enabled","formatLabel","label","copyAsMarkdownLabel","normalizedFormatMenuConfig","bold","italic","underline","strikethrough","spoiler","link","boldLabel","italicLabel","underlineLabel","strikethroughLabel","spoilerLabel","linkLabel","handleLinkDetected","e","url","start","end","nativeEvent","handleChangeText","value","handleChangeMarkdown","handleChangeSelection","handleSelectionDragOutside","event","direction","windowX","windowY","handleVerticalNavigationOutside","preferredX","handleChangeState","heading","unorderedList","orderedList","level","handleCaretRectChange","x","y","width","height","handleStartMention","handleChangeMention","handleEndMention","handleFocus","focusInput","handleBlur","blurInput","handleRequestMarkdownResult","requestId","markdown","get","resolve","delete","handleRequestCaretRectResult","handleContextMenuItemPress","itemText","selectedText","selectionStart","selectionEnd","styleState","callback","selection","node","commandRef","measure","measureInWindow","measureLayout","relativeToNativeNode","onSuccess","onFail","focus","blur","setValue","setSelection","setSelectionForVerticalNavigation","toggleBold","toggleItalic","toggleUnderline","toggleStrikethrough","toggleSpoiler","toggleHeading","toggleUnorderedList","toggleOrderedList","indentList","outdentList","setLink","insertLink","insertText","insertMention","displayText","startMention","indicator","removeLink","copyToClipboard","getMarkdown","Promise","requestMarkdown","getCaretRect","requestCaretRect","isOnChangeMarkdownSet","undefined","onInputKeyPress","onInputFocus","onInputBlur","onRequestMarkdownResult","onRequestCaretRectResult","onContextMenuItemPress"],"sourceRoot":"../../src","sources":["EnrichedMarkdownTextInput.tsx"],"mappings":"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","ignoreList":[]}
 diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index dc228d5..1a87c35 100644
+index dc228d5..58e265d 100644
 --- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -8,13 +8,15 @@ import {
@@ -6177,7 +6275,15 @@ index dc228d5..1a87c35 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -365,6 +384,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -349,6 +368,7 @@ interface NativeCommands {
+   ) => void;
+   removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
+   copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
++  requestParagraphLayouts: (viewRef: React.ElementRef<ComponentType>, requestId: CodegenTypes.Int32) => void;
+   requestMarkdown: (
+     viewRef: React.ElementRef<ComponentType>,
+     requestId: CodegenTypes.Int32
+@@ -365,6 +385,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -6185,6 +6291,14 @@ index dc228d5..1a87c35 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
+@@ -383,6 +404,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+     'removeLink',
+     'copyToClipboard',
+     'requestMarkdown',
++    'requestParagraphLayouts',
+     'requestCaretRect',
+   ],
+ });
 diff --git a/lib/module/EnrichedMarkdownTextNativeComponent.ts b/lib/module/EnrichedMarkdownTextNativeComponent.ts
 index e011cfc..350799c 100644
 --- a/lib/module/EnrichedMarkdownTextNativeComponent.ts
@@ -6443,7 +6557,7 @@ index a6799f3..e16adb9 100644
 +{"version":3,"file":"EnrichedMarkdownNativeComponent.d.ts","sourceRoot":"","sources":["../../../src/EnrichedMarkdownNativeComponent.ts"],"names":[],"mappings":"AAAA,OAAO,EAEL,KAAK,SAAS,EACd,KAAK,YAAY,EACjB,KAAK,UAAU,EAChB,MAAM,cAAc,CAAC;AAGtB,UAAU,sBAAsB;IAC9B,QAAQ,EAAE,YAAY,CAAC,KAAK,CAAC;IAC7B,UAAU,EAAE,MAAM,CAAC;IACnB,UAAU,EAAE,MAAM,CAAC;IACnB,KAAK,EAAE,UAAU,CAAC;IAClB,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,UAAU,EAAE,YAAY,CAAC,KAAK,CAAC;CAChC;AAED,UAAU,sBAAuB,SAAQ,sBAAsB;IAC7D,SAAS,EAAE,MAAM,CAAC;CACnB;AAED,UAAU,oBAAqB,SAAQ,sBAAsB;IAC3D,SAAS,EAAE,MAAM,CAAC;CACnB;AAED,UAAU,uBAAwB,SAAQ,sBAAsB;IAC9D,WAAW,EAAE,UAAU,CAAC;IACxB,WAAW,EAAE,YAAY,CAAC,KAAK,CAAC;IAChC,QAAQ,EAAE,YAAY,CAAC,KAAK,CAAC;IAC7B,eAAe,EAAE,UAAU,CAAC;IAC5B,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;CAC7B;AAED,UAAU,iBAAkB,SAAQ,sBAAsB;IACxD,WAAW,EAAE,UAAU,CAAC;IACxB,UAAU,EAAE,YAAY,CAAC,KAAK,CAAC;IAC/B,cAAc,EAAE,YAAY,CAAC,KAAK,CAAC;IACnC,WAAW,EAAE,UAAU,CAAC;IACxB,gBAAgB,EAAE,MAAM,CAAC;IACzB,QAAQ,EAAE,YAAY,CAAC,KAAK,CAAC;IAC7B,UAAU,EAAE,YAAY,CAAC,KAAK,CAAC;IAC/B,WAAW,EAAE,YAAY,CAAC,KAAK,CAAC;CACjC;AAED,UAAU,6BAA6B;IACrC,OAAO,EAAE,UAAU,CAAC;IACpB,aAAa,EAAE,UAAU,CAAC;IAC1B,WAAW,EAAE,UAAU,CAAC;IACxB,MAAM,EAAE,UAAU,CAAC;IACnB,MAAM,EAAE,UAAU,CAAC;IACnB,QAAQ,EAAE,UAAU,CAAC;IACrB,OAAO,EAAE,UAAU,CAAC;IACpB,QAAQ,EAAE,UAAU,CAAC;IACrB,IAAI,EAAE,UAAU,CAAC;IACjB,QAAQ,EAAE,UAAU,CAAC;IACrB,QAAQ,EAAE,UAAU,CAAC;IACrB,GAAG,EAAE,UAAU,CAAC;IAChB,SAAS,EAAE,UAAU,CAAC;IACtB,QAAQ,EAAE,UAAU,CAAC;CACtB;AAED,UAAU,sBAAuB,SAAQ,sBAAsB;IAC7D,eAAe,EAAE,UAAU,CAAC;IAC5B,WAAW,EAAE,UAAU,CAAC;IACxB,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,WAAW,EAAE,YAAY,CAAC,KAAK,CAAC;IAChC,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;IAC5B,YAAY,EAAE,6BAA6B,CAAC;CAC7C;AAED,UAAU,iBAAiB;IACzB,UAAU,EAAE,MAAM,CAAC;IACnB,KAAK,EAAE,UAAU,CAAC;IAClB,SAAS,EAAE,OAAO,CAAC;IACnB,eAAe,EAAE,UAAU,CAAC;CAC7B;AAGD,UAAU,wBAAwB;IAChC,OAAO,EAAE,MAAM,CAAC;IAChB,KAAK,EAAE,UAAU,CAAC;IAClB,SAAS,EAAE,OAAO,CAAC;IACnB,eAAe,EAAE,UAAU,CAAC;CAC7B;AAED,UAAU,mBAAmB;IAC3B,UAAU,EAAE,MAAM,CAAC;IACnB,UAAU,EAAE,MAAM,CAAC;IACnB,KAAK,CAAC,EAAE,UAAU,CAAC;CACpB;AAED,UAAU,qBAAqB;IAC7B,UAAU,EAAE,MAAM,CAAC;IACnB,SAAS,EAAE,MAAM,CAAC;IAClB,KAAK,CAAC,EAAE,UAAU,CAAC;CACpB;AAED,UAAU,0BAA0B;IAClC,KAAK,EAAE,UAAU,CAAC;CACnB;AAED,UAAU,sBAAsB;IAC9B,KAAK,EAAE,UAAU,CAAC;CACnB;AAED,UAAU,iBAAiB;IACzB,UAAU,EAAE,MAAM,CAAC;IACnB,QAAQ,EAAE,YAAY,CAAC,KAAK,CAAC;IAC7B,KAAK,EAAE,UAAU,CAAC;IAClB,eAAe,EAAE,UAAU,CAAC;IAC5B,WAAW,EAAE,UAAU,CAAC;CACzB;AAED,UAAU,kBAAkB;IAC1B,MAAM,EAAE,YAAY,CAAC,KAAK,CAAC;IAC3B,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,WAAW,EAAE,YAAY,CAAC,KAAK,CAAC;IAChC,UAAU,EAAE,MAAM,CAAC;IACnB,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;CAClC;AAED,UAAU,wBAAwB;IAChC,IAAI,EAAE,YAAY,CAAC,KAAK,CAAC;CAC1B;AAED,UAAU,0BAA0B;IAClC,KAAK,EAAE,UAAU,CAAC;IAClB,MAAM,EAAE,YAAY,CAAC,KAAK,CAAC;IAC3B,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;CAClC;AAED,UAAU,kBAAmB,SAAQ,sBAAsB;IACzD,gBAAgB,EAAE,MAAM,CAAC;IACzB,qBAAqB,EAAE,UAAU,CAAC;IAClC,eAAe,EAAE,UAAU,CAAC;IAC5B,sBAAsB,EAAE,UAAU,CAAC;IACnC,qBAAqB,EAAE,UAAU,CAAC;IAClC,WAAW,EAAE,UAAU,CAAC;IACxB,WAAW,EAAE,YAAY,CAAC,KAAK,CAAC;IAChC,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,qBAAqB,EAAE,YAAY,CAAC,KAAK,CAAC;IAC1C,mBAAmB,EAAE,YAAY,CAAC,KAAK,CAAC;IACxC,kBAAkB,EAAE,YAAY,CAAC,KAAK,CAAC;IACvC,KAAK,EAAE,MAAM,CAAC;CACf;AAED,UAAU,qBAAqB;IAC7B,YAAY,EAAE,UAAU,CAAC;IACzB,WAAW,EAAE,UAAU,CAAC;IACxB,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,oBAAoB,EAAE,YAAY,CAAC,KAAK,CAAC;IACzC,cAAc,EAAE,UAAU,CAAC;IAC3B,gBAAgB,EAAE,UAAU,CAAC;IAC7B,oBAAoB,EAAE,OAAO,CAAC;CAC/B;AAED,UAAU,iBAAiB;IACzB,QAAQ,EAAE,YAAY,CAAC,KAAK,CAAC;IAC7B,KAAK,EAAE,UAAU,CAAC;IAClB,eAAe,EAAE,UAAU,CAAC;IAC5B,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;IAC5B,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;IACjC,SAAS,EAAE,MAAM,CAAC;CACnB;AAED,UAAU,uBAAuB;IAC/B,KAAK,EAAE,UAAU,CAAC;CACnB;AAED,UAAU,6BAA6B;IACrC,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;IAC5B,KAAK,EAAE,YAAY,CAAC,KAAK,CAAC;CAC3B;AAED,UAAU,yBAAyB;IACjC,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;CAClC;AAED,UAAU,oBAAoB;IAC5B,KAAK,EAAE,UAAU,CAAC;IAClB,SAAS,EAAE,6BAA6B,CAAC;IACzC,KAAK,EAAE,yBAAyB,CAAC;CAClC;AAED,UAAU,wBAAwB;IAChC,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,mBAAmB,EAAE,YAAY,CAAC,KAAK,CAAC;CACzC;AAED,UAAU,sBAAsB;IAC9B,SAAS,EAAE,YAAY,CAAC,KAAK,CAAC;IAC9B,mBAAmB,EAAE,YAAY,CAAC,KAAK,CAAC;CACzC;AAED,UAAU,sBAAsB;IAC9B,KAAK,EAAE,UAAU,CAAC;IAClB,eAAe,EAAE,UAAU,CAAC;CAC7B;AAED,MAAM,WAAW,qBAAqB;IACpC,SAAS,EAAE,sBAAsB,CAAC;IAClC,EAAE,EAAE,oBAAoB,CAAC;IACzB,EAAE,EAAE,oBAAoB,CAAC;IACzB,EAAE,EAAE,oBAAoB,CAAC;IACzB,EAAE,EAAE,oBAAoB,CAAC;IACzB,EAAE,EAAE,oBAAoB,CAAC;IACzB,EAAE,EAAE,oBAAoB,CAAC;IACzB,UAAU,EAAE,uBAAuB,CAAC;IACpC,IAAI,EAAE,iBAAiB,CAAC;IACxB,SAAS,EAAE,sBAAsB,CAAC;IAClC,IAAI,EAAE,iBAAiB,CAAC;IACxB,YAAY,EAAE,aAAa,CAAC,QAAQ,CAAC,wBAAwB,CAAC,CAAC,CAAC;IAChE,MAAM,EAAE,mBAAmB,CAAC;IAC5B,EAAE,EAAE,qBAAqB,CAAC;IAC1B,aAAa,EAAE,0BAA0B,CAAC;IAC1C,SAAS,EAAE,sBAAsB,CAAC;IAClC,IAAI,EAAE,iBAAiB,CAAC;IACxB,KAAK,EAAE,kBAAkB,CAAC;IAC1B,WAAW,EAAE,wBAAwB,CAAC;IACtC,aAAa,EAAE,0BAA0B,CAAC;IAC1C,KAAK,EAAE,kBAAkB,CAAC;IAC1B,QAAQ,EAAE,qBAAqB,CAAC;IAChC,IAAI,EAAE,iBAAiB,CAAC;IACxB,UAAU,EAAE,uBAAuB,CAAC;IACpC,OAAO,EAAE,oBAAoB,CAAC;IAC9B,WAAW,EAAE,wBAAwB,CAAC;IACtC,SAAS,EAAE,sBAAsB,CAAC;IAClC,SAAS,EAAE,sBAAsB,CAAC;CACnC;AAED,MAAM,WAAW,cAAc;IAC7B,GAAG,EAAE,MAAM,CAAC;CACb;AAED,MAAM,WAAW,kBAAkB;IACjC,GAAG,EAAE,MAAM,CAAC;CACb;AAED,MAAM,WAAW,sBAAsB;IACrC,KAAK,EAAE,YAAY,CAAC,KAAK,CAAC;IAC1B,OAAO,EAAE,OAAO,CAAC;IACjB,IAAI,EAAE,MAAM,CAAC;CACd;AAED,MAAM,WAAW,cAAc;IAC7B,IAAI,EAAE,MAAM,CAAC;IACb,QAAQ,EAAE,MAAM,CAAC;CAClB;AAED,MAAM,WAAW,qBAAqB;IACpC,IAAI,EAAE,MAAM,CAAC;IACb,IAAI,CAAC,EAAE,MAAM,CAAC;CACf;AAED,MAAM,WAAW,0BAA0B;IACzC,IAAI,EAAE,MAAM,CAAC;IACb,KAAK,EAAE,MAAM,CAAC;CACf;AAED,MAAM,WAAW,mBAAmB;IAClC,cAAc,EAAE,OAAO,CAAC;IACxB,YAAY,EAAE,OAAO,CAAC;IACtB,SAAS,EAAE,MAAM,CAAC;IAClB,mBAAmB,EAAE,MAAM,CAAC;IAC5B,iBAAiB,EAAE,MAAM,CAAC;IAC1B,kBAAkB,EAAE,MAAM,CAAC;IAG3B,2BAA2B,EAAE,aAAa,CAAC,MAAM,CAAC,CAAC;CACpD;AAED,MAAM,WAAW,2BAA2B;IAC1C,QAAQ,EAAE,MAAM,CAAC;IACjB,YAAY,EAAE,MAAM,CAAC;IACrB,cAAc,EAAE,YAAY,CAAC,KAAK,CAAC;IACnC,YAAY,EAAE,YAAY,CAAC,KAAK,CAAC;CAClC;AAED,MAAM,WAAW,4BAA4B;IAC3C,WAAW,EAAE,MAAM,CAAC;IACpB,iBAAiB,EAAE,MAAM,CAAC;IAC1B,WAAW,EAAE,MAAM,CAAC;IACpB,iBAAiB,EAAE,MAAM,CAAC;CAC3B;AACD,MAAM,WAAW,kCAAkC;IACjD,KAAK,EAAE,MAAM,CAAC;IACd,WAAW,EAAE,MAAM,CAAC;CACrB;AACD,MAAM,WAAW,6BAA6B;IAC5C,GAAG,EAAE,MAAM,CAAC;CACb;AACD,MAAM,WAAW,4BAA4B;IAC3C,QAAQ,EAAE,MAAM,CAAC;CAClB;AACD,MAAM,WAAW,6BAA6B;IAC5C,QAAQ,EAAE,MAAM,CAAC;IACjB,KAAK,EAAE,MAAM,CAAC;IACd,MAAM,EAAE,MAAM,CAAC;CAChB;AACD,MAAM,WAAW,wBAAwB;IACvC,IAAI,EAAE,QAAQ,CAAC,4BAA4B,CAAC,CAAC;IAC7C,UAAU,EAAE,QAAQ,CAAC,kCAAkC,CAAC,CAAC;IACzD,KAAK,EAAE,QAAQ,CAAC,6BAA6B,CAAC,CAAC;IAC/C,IAAI,EAAE,QAAQ,CAAC,4BAA4B,CAAC,CAAC;IAC7C,KAAK,EAAE,QAAQ,CAAC,6BAA6B,CAAC,CAAC;CAChD;AAED,MAAM,WAAW,yBAAyB;IACxC,SAAS,EAAE,MAAM,CAAC;IAClB,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;IAC5B,OAAO,EAAE,YAAY,CAAC,KAAK,CAAC;CAC7B;AAED;;;GAGG;AACH,MAAM,WAAW,iBAAiB;IAChC;;;;;OAKG;IACH,SAAS,EAAE,OAAO,CAAC;IACnB;;;OAGG;IACH,WAAW,EAAE,OAAO,CAAC;IACrB;;;OAGG;IACH,SAAS,EAAE,OAAO,CAAC;IACnB;;;;OAIG;IACH,SAAS,EAAE,OAAO,CAAC;IACnB;;;OAGG;IACH,SAAS,EAAE,OAAO,CAAC;IACnB;;;OAGG;IACH,cAAc,EAAE,OAAO,CAAC;CACzB;AAED,UAAU,uBAAuB;IAC/B,SAAS,EAAE,MAAM,CAAC;IAClB,aAAa,EAAE,MAAM,CAAC;CACvB;AAED,MAAM,WAAW,WAAY,SAAQ,SAAS;IAC5C;;OAEG;IACH,QAAQ,CAAC,EAAE,MAAM,CAAC;IAClB,qBAAqB,CAAC,EAAE,MAAM,CAAC;IAC/B,sBAAsB,CAAC,EAAE,YAAY,CAAC,KAAK,CAAC;IAC5C;;;;OAIG;IACH,aAAa,EAAE,qBAAqB,CAAC;IACrC;;;OAGG;IACH,WAAW,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;IAChE;;;;;OAKG;IACH,eAAe,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,kBAAkB,CAAC,CAAC;IACxE;;;OAGG;IACH,mBAAmB,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,sBAAsB,CAAC,CAAC;IAChF;;;;;;;OAOG;IACH,wBAAwB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,OAAO,EAAE,IAAI,CAAC,CAAC;IACnE;;;;OAIG;IACH,WAAW,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,cAAc,CAAC,CAAC;IAChE;;;;;;;;;;;OAWG;IACH,iBAAiB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,OAAO,EAAE,IAAI,CAAC,CAAC;IAC5D;;;;OAIG;IACH,UAAU,CAAC,EAAE,OAAO,CAAC;IACrB;;;;;;;;OAQG;IACH,cAAc,CAAC,EAAE,UAAU,CAAC;IAC5B;;;;;OAKG;IACH,oBAAoB,CAAC,EAAE,UAAU,CAAC;IAClC;;;OAGG;IACH,SAAS,EAAE,iBAAiB,CAAC;IAC7B;;;;OAIG;IACH,gBAAgB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,OAAO,EAAE,IAAI,CAAC,CAAC;IAC3D;;;;;;;OAOG;IACH,qBAAqB,CAAC,EAAE,YAAY,CAAC,KAAK,CAAC;IAC3C;;;;OAIG;IACH,mBAAmB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,OAAO,EAAE,KAAK,CAAC,CAAC;IAC/D;;;;OAIG;IACH,kBAAkB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,OAAO,EAAE,KAAK,CAAC,CAAC;IAC9D;;OAEG;IACH,eAAe,CAAC,EAAE,uBAAuB,CAAC;IAC1C;;;;;OAKG;IACH,cAAc,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,MAAM,EAAE,WAAW,CAAC,CAAC;IAE/D;;OAEG;IACH,gBAAgB,CAAC,EAAE,aAAa,CAAC,QAAQ,CAAC,qBAAqB,CAAC,CAAC,CAAC;IAClE;;OAEG;IACH,mBAAmB,CAAC,EAAE,aAAa,CAAC,QAAQ,CAAC,0BAA0B,CAAC,CAAC,CAAC;IAC1E;;OAEG;IACH,mBAAmB,EAAE,QAAQ,CAAC,mBAAmB,CAAC,CAAC;IACnD,mBAAmB,EAAE,QAAQ,CAAC,wBAAwB,CAAC,CAAC;IACxD;;;OAGG;IACH,sBAAsB,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,2BAA2B,CAAC,CAAC;IACxF;;;;OAIG;IACH,iBAAiB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,MAAM,EAAE,aAAa,CAAC,CAAC;IACpE;;;;OAIG;IACH,oBAAoB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,MAAM,EAAE,MAAM,CAAC,CAAC;IAChE;;;;;;;;;OASG;IACH,gBAAgB,CAAC,EAAE,YAAY,CAAC,WAAW,CAAC,MAAM,EAAE,cAAc,CAAC,CAAC;IACpE,sBAAsB,CAAC,EAAE,YAAY,CAAC,oBAAoB,CAAC,yBAAyB,CAAC,CAAC;CACvF;;AAED,wBAEG"}
 \ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-index f0d5473..b65005a 100644
+index f0d5473..569fb4d 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 @@ -1,19 +1,17 @@
@@ -6507,7 +6621,15 @@ index f0d5473..b65005a 100644
      toggleBold: () => void;
      toggleItalic: () => void;
      toggleUnderline: () => void;
-@@ -183,6 +162,15 @@ export interface EnrichedMarkdownTextInputProps extends Omit<ViewProps, 'style'
+@@ -125,6 +104,7 @@ export interface EnrichedMarkdownTextInputInstance {
+     copyToClipboard: () => void;
+     getMarkdown: () => Promise<string>;
+     getCaretRect: () => Promise<CaretRect>;
++    getParagraphLayouts: () => Promise<Array<{ text: string; y: number; height: number }>>;
+ }
+ /**
+  * Per-item shape: `{ enabled }` toggles visibility, `label` overrides the
+@@ -183,6 +163,15 @@ export interface EnrichedMarkdownTextInputProps extends Omit<ViewProps, 'style'
          start: number;
          end: number;
      }) => void;
@@ -6523,7 +6645,7 @@ index f0d5473..b65005a 100644
      onChangeState?: (state: StyleState) => void;
      onKeyPress?: (e: NativeSyntheticEvent<OnKeyPressEvent>) => void;
      onCaretRectChange?: (rect: CaretRect) => void;
-@@ -229,6 +217,6 @@ export interface EnrichedMarkdownTextInputProps extends Omit<ViewProps, 'style'
+@@ -229,6 +218,6 @@ export interface EnrichedMarkdownTextInputProps extends Omit<ViewProps, 'style'
       */
      writingDirection?: 'auto' | 'ltr' | 'rtl' | 'first-strong';
  }
@@ -6542,7 +6664,7 @@ index ad039cc..7e53a21 100644
 +{"version":3,"file":"EnrichedMarkdownTextInput.d.ts","sourceRoot":"","sources":["../../../src/EnrichedMarkdownTextInput.tsx"],"names":[],"mappings":"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"}
 \ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index 03fd452..9d9b37c 100644
+index 03fd452..2e8478b 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 @@ -1,11 +1,14 @@
@@ -6622,6 +6744,14 @@ index 03fd452..9d9b37c 100644
      toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
+@@ -321,6 +337,7 @@ interface NativeCommands {
+     startMention: (viewRef: React.ElementRef<ComponentType>, indicator: string) => void;
+     removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
+     copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
++    requestParagraphLayouts: (viewRef: React.ElementRef<ComponentType>, requestId: CodegenTypes.Int32) => void;
+     requestMarkdown: (viewRef: React.ElementRef<ComponentType>, requestId: CodegenTypes.Int32) => void;
+     requestCaretRect: (viewRef: React.ElementRef<ComponentType>, requestId: CodegenTypes.Int32) => void;
+ }
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts.map b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts.map
 index cd71064..9843e67 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts.map
@@ -6922,10 +7052,15 @@ index e69c364..b33b347 100644
  
  export default codegenNativeComponent<NativeProps>('EnrichedMarkdown', {
 diff --git a/src/EnrichedMarkdownTextInput.tsx b/src/EnrichedMarkdownTextInput.tsx
-index eb4acdf..c223a40 100644
+index eb4acdf..ba6505c 100644
 --- a/src/EnrichedMarkdownTextInput.tsx
 +++ b/src/EnrichedMarkdownTextInput.tsx
-@@ -13,6 +13,8 @@ import EnrichedMarkdownTextInputNativeComponent, {
+@@ -1,3 +1,4 @@
++import { Platform } from 'react-native';
+ import {
+   useCallback,
+   useEffect,
+@@ -13,6 +14,8 @@ import EnrichedMarkdownTextInputNativeComponent, {
    type OnChangeTextEvent,
    type OnChangeMarkdownEvent,
    type OnChangeSelectionEvent,
@@ -6934,7 +7069,7 @@ index eb4acdf..c223a40 100644
    type OnChangeStateEvent,
    type OnKeyPressEvent,
    type OnRequestMarkdownResultEvent,
-@@ -44,6 +46,7 @@ import { normalizeMenuItem } from './normalizeMenuItem';
+@@ -44,6 +47,7 @@ import { normalizeMenuItem } from './normalizeMenuItem';
  import { toNativeRegexConfig } from './utils/regexParser';
  import { TextInputState } from './utils/textInputState';
  import type { RefObject } from 'react';
@@ -6942,7 +7077,7 @@ index eb4acdf..c223a40 100644
  
  type NativeRef = HostInstance;
  
-@@ -53,6 +56,8 @@ export interface LinkStyle {
+@@ -53,6 +57,8 @@ export interface LinkStyle {
    backgroundColor?: string;
  }
  
@@ -6951,7 +7086,7 @@ index eb4acdf..c223a40 100644
  export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
  
  const VALID_HEADING_LEVELS = new Set<number>([1, 2, 3, 4, 5, 6]);
-@@ -61,13 +66,7 @@ function toHeadingLevel(n: number): HeadingLevel {
+@@ -61,13 +67,7 @@ function toHeadingLevel(n: number): HeadingLevel {
    return (VALID_HEADING_LEVELS.has(n) ? n : 1) as HeadingLevel;
  }
  
@@ -6966,7 +7101,7 @@ index eb4acdf..c223a40 100644
    strong?: {
      color?: string;
    };
-@@ -80,27 +79,7 @@ export interface MarkdownTextInputStyle {
+@@ -80,27 +80,7 @@ export interface MarkdownTextInputStyle {
      color?: string;
      backgroundColor?: string;
    };
@@ -6995,7 +7130,7 @@ index eb4acdf..c223a40 100644
  
  export interface StyleState {
    bold: { isActive: boolean };
-@@ -140,6 +119,10 @@ export interface EnrichedMarkdownTextInputInstance {
+@@ -140,6 +120,10 @@ export interface EnrichedMarkdownTextInputInstance {
    measureLayout: HostInstance['measureLayout'];
    setValue: (markdown: string) => void;
    setSelection: (start: number, end: number) => void;
@@ -7006,7 +7141,16 @@ index eb4acdf..c223a40 100644
    toggleBold: () => void;
    toggleItalic: () => void;
    toggleUnderline: () => void;
-@@ -218,6 +201,15 @@ export interface EnrichedMarkdownTextInputProps extends Omit<
+@@ -159,6 +143,8 @@ export interface EnrichedMarkdownTextInputInstance {
+   copyToClipboard: () => void;
+   getMarkdown: () => Promise<string>;
+   getCaretRect: () => Promise<CaretRect>;
++  /** Native paragraph geometry in text-view coordinates; currently macOS only. */
++  getParagraphLayouts: () => Promise<Array<{ text: string; y: number; height: number }>>;
+ }
+ 
+ /**
+@@ -218,6 +204,15 @@ export interface EnrichedMarkdownTextInputProps extends Omit<
    onChangeText?: (text: string) => void;
    onChangeMarkdown?: (markdown: string) => void;
    onChangeSelection?: (selection: { start: number; end: number }) => void;
@@ -7022,7 +7166,7 @@ index eb4acdf..c223a40 100644
    onChangeState?: (state: StyleState) => void;
    onKeyPress?: (e: NativeSyntheticEvent<OnKeyPressEvent>) => void;
    onCaretRectChange?: (rect: CaretRect) => void;
-@@ -296,6 +288,8 @@ export const EnrichedMarkdownTextInput = ({
+@@ -296,6 +291,8 @@ export const EnrichedMarkdownTextInput = ({
    onChangeText,
    onChangeMarkdown,
    onChangeSelection,
@@ -7031,7 +7175,7 @@ index eb4acdf..c223a40 100644
    onChangeState,
    onKeyPress,
    onCaretRectChange,
-@@ -469,6 +463,29 @@ export const EnrichedMarkdownTextInput = ({
+@@ -469,6 +466,29 @@ export const EnrichedMarkdownTextInput = ({
      [onChangeSelection]
    );
  
@@ -7061,7 +7205,7 @@ index eb4acdf..c223a40 100644
    const handleChangeState = useCallback(
      (e: NativeSyntheticEvent<OnChangeStateEvent>) => {
        const {
-@@ -600,6 +617,8 @@ export const EnrichedMarkdownTextInput = ({
+@@ -600,6 +620,8 @@ export const EnrichedMarkdownTextInput = ({
        setValue: (markdown) => Commands.setValue(commandRef, markdown),
        setSelection: (start, end) =>
          Commands.setSelection(commandRef, start, end),
@@ -7070,7 +7214,19 @@ index eb4acdf..c223a40 100644
        toggleBold: () => Commands.toggleBold(commandRef),
        toggleItalic: () => Commands.toggleItalic(commandRef),
        toggleUnderline: () => Commands.toggleUnderline(commandRef),
-@@ -657,6 +676,12 @@ export const EnrichedMarkdownTextInput = ({
+@@ -624,6 +646,11 @@ export const EnrichedMarkdownTextInput = ({
+           pendingRequests.current.set(requestId, { resolve, reject });
+           Commands.requestMarkdown(commandRef, requestId);
+         }),
++      getParagraphLayouts: () => Platform.OS !== "macos" ? Promise.resolve([]) : new Promise<string>((resolve, reject) => {
++        const requestId = nextRequestId.current++;
++        pendingRequests.current.set(requestId, { resolve, reject });
++        Commands.requestParagraphLayouts(commandRef, requestId);
++      }).then(value => JSON.parse(value)),
+       getCaretRect: () =>
+         new Promise<CaretRect>((resolve, reject) => {
+           const requestId = nextRequestId.current++;
+@@ -657,6 +684,12 @@ export const EnrichedMarkdownTextInput = ({
        onChangeSelection={
          handleChangeSelection as NativeProps['onChangeSelection']
        }
@@ -7084,7 +7240,7 @@ index eb4acdf..c223a40 100644
        onInputKeyPress={onKeyPress as NativeProps['onInputKeyPress']}
        onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
 diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
-index dc228d5..1a87c35 100644
+index dc228d5..58e265d 100644
 --- a/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -8,13 +8,15 @@ import {
@@ -7179,7 +7335,15 @@ index dc228d5..1a87c35 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -365,6 +384,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -349,6 +368,7 @@ interface NativeCommands {
+   ) => void;
+   removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
+   copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
++  requestParagraphLayouts: (viewRef: React.ElementRef<ComponentType>, requestId: CodegenTypes.Int32) => void;
+   requestMarkdown: (
+     viewRef: React.ElementRef<ComponentType>,
+     requestId: CodegenTypes.Int32
+@@ -365,6 +385,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -7187,6 +7351,14 @@ index dc228d5..1a87c35 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
+@@ -383,6 +404,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+     'removeLink',
+     'copyToClipboard',
+     'requestMarkdown',
++    'requestParagraphLayouts',
+     'requestCaretRect',
+   ],
+ });
 diff --git a/src/EnrichedMarkdownTextNativeComponent.ts b/src/EnrichedMarkdownTextNativeComponent.ts
 index e011cfc..350799c 100644
 --- a/src/EnrichedMarkdownTextNativeComponent.ts
@@ -7902,3 +8074,17 @@ diff --git a/ios/input/ENRMInputTypingAttributesController.mm b/ios/input/ENRMIn
    _textView.typingAttributes = attrs;
  }
  
+diff --git a/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
+index 7ca6a3a..ed42b5b 100644
+--- a/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
++++ b/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
+@@ -501,6 +501,9 @@ class EnrichedMarkdownTextInputManager :
+     view?.copyToClipboard()
+   }
+ 
++  // JS resolves this macOS-only layout query locally on other platforms.
++  override fun requestParagraphLayouts(view: EnrichedMarkdownTextInputView?, requestId: Int) {}
++
+   override fun requestMarkdown(
+     view: EnrichedMarkdownTextInputView?,
+     requestId: Int,

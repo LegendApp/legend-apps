@@ -9,7 +9,7 @@ let nextId = 0;
 mock.module("react-native-enriched-markdown", () => ({
   EnrichedMarkdownTextInput: ({ ref, ...props }) => {
     const id = useRef(++nextId).current;
-    useImperativeHandle(ref, () => ({ blur, setValue, getMarkdown: () => new Promise(() => {}) }));
+    useImperativeHandle(ref, () => ({ blur, setValue, getParagraphLayouts: async () => [{ text: "1.\u2060 First", y: 0, height: 30 }, { text: "2.\u2060 Second", y: 70, height: 30 }], getMarkdown: () => new Promise(() => {}) }));
     return <editor {...props} nativeId={id} />;
   },
 }));
@@ -47,20 +47,24 @@ test("focus preserves native text, layout and selection; outside clicks flush th
   } finally { if (tree) await act(() => tree.unmount()); }
 });
 
-test("moving between sections retains edits and untouched separators", async () => {
-  const save = mock(async () => {});
+test("one native document supports edits spanning step boundaries without remounting", async () => {
+  const save = mock(async () => {}), sectionLayout = mock();
   let tree;
   try {
-    await act(() => { tree = create(<EditableMarkdown editable markdown={"1. First\n\n\n2. Second"} placeholder="Notes" onSave={save} />); });
-    const ids = tree.root.findAllByType("editor").map(x => x.props.nativeId);
-    await act(() => tree.root.findAllByType("editor")[1].props.onFocus());
-    await act(() => tree.root.findAllByType("editor")[1].props.onChangeMarkdown("2. Changed"));
-    await act(async () => tree.root.findAllByType("editor")[1].props.onBlur());
-    await act(() => tree.root.findAllByType("editor")[0].props.onFocus());
-    await act(() => tree.root.findAllByType("editor")[0].props.onChangeMarkdown("1. Updated"));
-    await act(async () => tree.root.findAllByType("editor")[0].props.onBlur());
-    expect(save).toHaveBeenLastCalledWith("1. Updated\n\n\n2. Changed");
-    expect(tree.root.findAllByType("editor").map(x => x.props.nativeId)).toEqual(ids);
+    await act(() => { tree = create(<EditableMarkdown editable currentStep={0} markdown={"1. First\n\n\n2. Second"} placeholder="Notes" onSave={save} onSectionLayout={sectionLayout} />); });
+    expect(tree.root.findAllByType("editor")).toHaveLength(1);
+    const editor = tree.root.findByType("editor");
+    const id = editor.props.nativeId;
+    expect(editor.props.defaultValue).toContain("1.\u2060 First");
+    expect(editor.props.defaultValue).toContain("2.\u2060 Second");
+    await act(async () => editor.props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
+    expect(sectionLayout).toHaveBeenCalledWith(1, 70, 30);
+    await act(() => editor.props.onFocus());
+    // This event models replacing a selection that spans both step sections.
+    await act(async () => editor.props.onChangeMarkdown("Merged selection"));
+    await act(async () => tree.root.findByType("editor").props.onBlur());
+    expect(save).toHaveBeenLastCalledWith("Merged selection");
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
   } finally { if (tree) await act(() => tree.unmount()); }
 });
 
