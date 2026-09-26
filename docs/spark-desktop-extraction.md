@@ -75,9 +75,9 @@ Remaining development warnings observed: the existing source-viewer React Native
 deep import and Music's initial zero-height track-list measurement. They are not
 suppressed by this migration.
 
-Local archives currently occupy about 9.5 GiB; Diff and Music's generated debug
-DerivedData occupy about 7.3 GiB together. These are disposable after validation,
-but were retained rather than deleted.
+Local SDK archives remain retained. After the all-app validation below, the user
+approved removing verified macOS arm64 DerivedData directories. The runnable
+products, dependencies, native projects, and validation logs remain retained.
 
 
 ## All-app validation follow-up — September 26, 2026
@@ -85,11 +85,11 @@ but were retained rather than deleted.
 - Workspace typecheck, the 14 Spark adapter/launch tests, and `verify:all` passed.
 - Production JavaScript/native dependency analysis passed for all eight apps:
   Music, Markdown, Code, Diff, Chat History, Hello World, Slides, and Kitchen Sink.
-- macOS arm64 debug build checks passed for Music, Markdown, Code, Diff,
-  Chat History, Hello World, and Slides. Music, Markdown, and Diff reused products
-  whose native fingerprints were current; the other four compiled successfully.
+- macOS arm64 debug build checks passed for all eight apps. Music, Markdown,
+  and Diff reused products whose native fingerprints were current; Code,
+  Chat History, Hello World, Slides, and Kitchen Sink compiled successfully.
 - App tests passed: Code 22, Diff 170, Music 104, Markdown 96, Chat History 28,
-  and all 88 Slides test files. Hello World and Kitchen Sink have no standalone
+  and all 92 Slides test files in the final rerun. Hello World and Kitchen Sink have no standalone
   app unit suite; their bundle/native checks are separate from interactive coverage.
 - Chat History's test mock now supplies macOS Platform and expects the current
   system window background. No application behavior was changed for that failure.
@@ -98,9 +98,63 @@ but were retained rather than deleted.
 - The source audit found no old standard desktop API imports in app source or
   the non-extracted shared packages. Mobile declarations still use the mobile host.
 
-Kitchen Sink's native build remains pending: completing the other builds left
-about 53 GB available, insufficient headroom for another fresh build while
-preserving the required 50 GB reserve. Cleanup of verified build intermediates
-was requested but has not been authorized. Runnable products remain retained.
+Kitchen Sink initially failed to link a Markdown keyboard-handoff implementation
+added by concurrent work after dependency installation. Rerunning the normal
+Spark build refreshed the local package and CocoaPods graph; the build then
+passed without source changes or a workaround. The user-approved cleanup removed
+the eight verified `.spark/DerivedData/macos-arm64` directories and preserved all
+runnable products. Native changes will regenerate those intermediates.
+
 These checks do not establish interactive runtime or performance parity for all
 apps, nor Intel, release-distribution, Windows, or mobile runtime validation.
+
+## Interactive follow-up — September 26, 2026
+
+The runtime pass found and fixed two development-startup issues:
+
+- Generated Metro configuration now excludes other Spark consumers and retired
+  shell workspaces. Their dependency installs previously raced Metro's crawl,
+  producing missing-directory warnings and unnecessary scanning. Regression
+  coverage preserves the active consumer's dependencies and shared app source.
+- Spark signals readiness immediately after Metro starts, before Expo's online
+  dependency validation. Previously a working server could be killed by the
+  supervisor's startup timeout while that validation waited on the network.
+  The test executes the patched Expo startup and verifies readiness ordering,
+  including no ready signal when the server itself fails.
+
+Both repositories passed typecheck; the Apps Spark tests passed 15 cases and
+Spark's Expo integration suite passed 5 cases. The Spark CLI fix is used by the
+checkout-based app launcher and will be included in the next SDK package build.
+
+Observed runtime evidence:
+
+| App | Checks |
+| --- | --- |
+| Hello World | Visible greeting and native quit. |
+| Code | Fixture document rendering and editing; unsaved quit prompt, Cancel, repeated quit, and Don't Save termination. |
+| Diff | Restored fixture patch, native unified/side-by-side toolbar switching, and native quit. |
+| Chat History | Native split view and conversation rendering, close/reopen, and termination through Spark's native quit API. Automated menu/keyboard termination was inconclusive. |
+| Music | Library and Settings windows, settings navigation, JavaScript reload preserving native windows in the same process, and native quit. |
+| Markdown | Reused the completed concurrent release-readiness task's live Spark checks for headings, lists, code, editing transitions, and saving; 370 document tests and 96 app tests passed there. |
+| Kitchen Sink | Rebuilt after the concurrent Markdown native changes; rendered integration screens, mock command result, test-window close, native child-window open/close, and native quit. |
+| Slides | Presenter and native toolbar render; basic Spark subprocess execution passes. Deck compilation remains blocked by Documents-folder authorization for the new debug binary. |
+
+Slides' compiler succeeds from the terminal but stalls opening its script from
+the app. macOS TCC logs report that the existing Documents authorization's code
+requirement does not match this debug binary. Resetting and approving that
+app-specific permission is pending user approval; no privacy bypass was added.
+
+Expo's online dependency checker separately failed with `Body has already been
+read` / `fetch failed`. The final Music, Slides, and Kitchen runtime checks use
+Expo's supported `--offline` option. This is an outstanding online-development
+limitation, not a claim that the online startup path now passes. Existing React
+Native deep-import and Legend List measurement warnings remain visible.
+
+Intel hardware/runtime, signed release distribution, and measured performance
+parity remain unverified. The runtime pass is not a blanket release-readiness
+claim for every app or for concurrent app-specific changes.
+
+The follow-up Kitchen rebuild regenerated about 3.55 GiB of disposable
+`.spark/DerivedData/macos-arm64` intermediates. They remain retained alongside
+the runnable product; the earlier approved cleanup had removed the previous
+build intermediates.
