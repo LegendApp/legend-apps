@@ -513,7 +513,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const currentRevisionRef = useRef(0);
     const savedRevisionRef = useRef(0);
     const isDirtyRef = useRef(false);
-    const pendingRenderTransactionRef = useRef<MarkdownTransactionResult | undefined>(undefined);
     const autosavePausedRef = useRef(false);
     const conflictRef = useRef(false);
     const saveGenerationRef = useRef(0);
@@ -1062,10 +1061,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         !activeBlockIdValue ||
         markdown === committedMarkdownRef.current
       ) {
-        if (updateReactState && pendingRenderTransactionRef.current) {
-          applyTransactionResult(pendingRenderTransactionRef.current);
-          pendingRenderTransactionRef.current = undefined;
-        }
         return;
       }
 
@@ -1134,13 +1129,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             committedMarkdownRef.current = markdown;
           }
         }
-        if (updateReactState) {
-          applyTransactionResult(result);
-          pendingRenderTransactionRef.current = undefined;
-        } else {
-          currentRevisionRef.current = result.revision;
-          pendingRenderTransactionRef.current = result;
-        }
+        // Native edits mutate the adapter immediately. Publish every transaction
+        // in order so the list's keys, count, and measurements stay in sync.
+        applyTransactionResult(result);
       } catch (error) {
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
@@ -2437,8 +2428,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const targetBlockId = getBlockIdAtIndex(direction === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1);
         if (activeBlockIdValue && activeBlockIndex >= 0 && isAtSelectionBoundary && targetBlockId) {
           const shouldCommitBeforeSelecting = (
-            draftMarkdown$.peek() !== committedMarkdownRef.current ||
-            pendingRenderTransactionRef.current !== undefined
+            draftMarkdown$.peek() !== committedMarkdownRef.current
           );
           if (!shouldCommitBeforeSelecting) {
             setKeyboardBlockSelection(activeBlockIdValue, targetBlockId);
@@ -2584,7 +2574,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       currentRevisionRef.current = 0;
       savedRevisionRef.current = 0;
       isDirtyRef.current = false;
-      pendingRenderTransactionRef.current = undefined;
       autosavePausedRef.current = false;
       loadedSnapshotRef.current = null;
       undoStackRef.current = [];

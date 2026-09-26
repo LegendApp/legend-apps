@@ -317,6 +317,38 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it("publishes native edits before another edit can replace their structural or layout changes", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Original"), block("tail", 1, "Tail")]), { splitParagraphUpdates: true });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    const source = renderer.root.find((node) => !!node.props.dataSource && typeof node.props.renderItem === "function").props.dataSource;
+    const mutations = jest.fn();
+    const unsubscribe = source.subscribe(mutations);
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "a", height: 25, rowHeight: 25, width: 640, x: 40, y: 80, markdown: "Original",
+    } }));
+    await flushPromises();
+    await act(async () => editorInput(renderer).props.onChangeMarkdown("One\n\nTwo"));
+    await flushPromises();
+    expect(source.getLength()).toBe(3);
+    expect(Array.from({ length: source.getLength() }, (_, i) => source.getKey(i))).toEqual(adapter.blockIds);
+    expect(mutations).toHaveBeenCalledWith(expect.objectContaining({ operations: expect.arrayContaining([
+      expect.objectContaining({ type: "splice", insertCount: 1 }),
+    ]) }));
+    mutations.mockClear();
+    await act(async () => editorInput(renderer).props.onChangeMarkdown("One expanded"));
+    await flushPromises();
+    expect(source.getLength()).toBe(3);
+    expect(mutations).toHaveBeenCalledWith(expect.objectContaining({ operations: expect.arrayContaining([
+      expect.objectContaining({ type: "update", layout: "invalidate" }),
+    ]) }));
+    unsubscribe();
+    await act(async () => renderer.unmount());
+  });
+
   it("passes complex pasted Markdown to the document without rich-text normalization", async () => {
     const text = "## 👩🏽‍💻 café 中文 שלום\n\n- [ ] parent\n  - **nested**\n\n| A | B |\n| --- | --- |\n| 0 | 🧪 |\n\n```js\nconst n = 0;\n```\n\n[broken link]( with ~tilde~.";
     const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "beforeafter")]));
