@@ -67,6 +67,7 @@ export function createDeckEditorSession(io: EditorIO) {
 
   const session = {
     getSnapshot: () => state,
+    getSource() { materialize(); return state.source; },
     subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; },
     async open(path: string) {
       refreshPending = false;
@@ -139,6 +140,21 @@ export function createDeckEditorSession(io: EditorIO) {
           }
         }
       }
+    },
+    async reloadFromDisk() {
+      const { path, documentVersion, eventCount } = state;
+      if (!path || state.saving) throw new Error("Wait for the current save before reloading.");
+      // Read before replacing the draft so a missing/unreadable file cannot erase it.
+      const source = await io.read(path);
+      if (state.path !== path || state.documentVersion !== documentVersion || state.eventCount !== eventCount || state.saving) {
+        throw new Error("The draft changed during reload. Please try again.");
+      }
+      invalidate();
+      snapshot = new SourceSnapshot(source);
+      emit({ source, savedSource: source, documentVersion: documentVersion + 1, eventCount: 0,
+        selection: Math.min(state.selection, source.length), dirty: false, conflict: false, error: "",
+        status: "building", slideEnds: [source.length] });
+      await compile();
     },
     async refresh() {
       const { path, documentVersion } = state;

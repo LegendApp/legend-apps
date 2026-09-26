@@ -1,13 +1,14 @@
+import { saveDeckDraftCopy } from "./deckEditorRecovery";
 import { createDeckEditorAutosave } from "./deckEditorAutosave";
 import { presenterEditToolbarItemId } from "./presenterToolbar";
 import { prepareDraftExit, prepareSlidesExit, registerSlidesExitPreparation } from "./slidesExit";
-import { readTextFile, writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
+import { readTextFile, writeTextFileIfUnchanged, saveFileDialog, writeTextFile } from "@legendapp/spark/dialogs";
 import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
 import { addWindowToolbarItemSelectedListener, setWindowOptions } from "@legendapp/spark/windows/managed";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { createDeckEditorSession, type DeckEditorSession, type DeckEditorSnapshot } from "./deckEditorSession";
 import { invalidateDeckBuild, previewDeckSource, setDraftReloadHandler } from "./deckLoader";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -49,9 +50,30 @@ function EditorPreview({ session }: { session: DeckEditorSession }) {
 function EditorStatus({ session }: { session: DeckEditorSession }) {
   const error = useEditorSession(session, (state) => state.error);
   const building = useEditorSession(session, (state) => state.status === "building");
+  const conflict = useEditorSession(session, state => state.conflict);
+  const dirty = useEditorSession(session, state => state.dirty);
+  const saving = useEditorSession(session, state => state.saving);
+  const saveCopy = async () => {
+    try {
+      const copied = await saveDeckDraftCopy(session, () => saveFileDialog({
+        defaultName: "Recovered Deck.mdx", allowedFileTypes: ["mdx"],
+      }), writeTextFile);
+      if (copied) Alert.alert("Draft copy saved", "Your original deck is unchanged. You can now reload its disk version.");
+    } catch (error) { Alert.alert("Could not save draft copy", String(error)); }
+  };
+  const reload = () => Alert.alert("Reload deck from disk?", "This discards your current source edits. Use Save Copy first if you want to keep them.", [
+    { text: "Cancel", style: "cancel" },
+    { text: "Discard Edits and Reload", style: "destructive", onPress: () => {
+      void session.reloadFromDisk().catch(error => Alert.alert("Could not reload deck", String(error)));
+    } },
+  ]);
   const buildErrors = useValue(slidesState$.buildErrors);
   return <>
     {(error || buildErrors.length > 0) && <Text className="p-3 text-red-300">{error || buildErrors.join("\n")}</Text>}
+    {dirty && (conflict || error) && <View className="flex-row gap-4 px-3 py-2">
+      <Pressable accessibilityRole="button" onPress={() => void saveCopy()}><Text className="text-blue-300">Save Copy…</Text></Pressable>
+      <Pressable accessibilityRole="button" disabled={saving} onPress={reload}><Text className="text-blue-300">Reload from Disk…</Text></Pressable>
+    </View>}
     {building && <Text className="px-3 py-1 text-zinc-400">Updating preview…</Text>}
   </>;
 }
