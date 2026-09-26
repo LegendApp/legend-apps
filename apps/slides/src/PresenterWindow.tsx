@@ -554,8 +554,13 @@ export function PresenterWindow() {
     await syncNotesOutput(nextDisplays, slidesState$.audienceOpen.peek());
   }, [audience, setDisplays, setSelectedDisplayId]);
 
+  const canOpenDeck = useCallback(() => {
+    if (!editingDeckRef.current) return true;
+    Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically.");
+    return false;
+  }, []);
   const openDeck = useCallback(async () => {
-    if (editingDeckRef.current) { Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically."); return; }
+    if (!canOpenDeck()) return;
     const paths = await openFileDialog({
       allowedFileTypes: ["mdx"],
       allowsMultipleSelection: false,
@@ -566,7 +571,7 @@ export function PresenterWindow() {
     if (paths?.[0]) {
       await loadDeck(paths[0]);
     }
-  }, []);
+  }, [canOpenDeck]);
 
   const resetPresenterLayout = useCallback(() => {
     resetStoredPresenterLayout();
@@ -595,7 +600,7 @@ export function PresenterWindow() {
       unregisterDocumentGuard();
       closedSubscription.remove();
     };
-  }, [audience, refreshDisplays, setActiveMode]);
+  }, [audience, refreshDisplays, setActiveMode, canOpenDeck]);
 
   useEffect(() => {
     const removeKeys = addKeyDownListener((event) => {
@@ -671,14 +676,11 @@ export function PresenterWindow() {
     const mode = rehearsalEnabled ? "rehearsal" : "presentation";
     if (selectedDisplay) {
       notesOutput$.preview.set(false);
-      await openAudience(selectedDisplay, rehearsalEnabled);
-      setActiveMode(mode);
+      if (await openAudience(selectedDisplay, rehearsalEnabled)) setActiveMode(mode);
     }
   }, [openAudience, setActiveMode, presenter$]);
   const stopAudience = useCallback(async () => {
-    await closeAudience();
-    setActiveMode(null);
-    setSlidesState({ deckLocked: false });
+    if (await closeAudience()) setActiveMode(null);
   }, [closeAudience, setActiveMode]);
 
   const selectDisplay = useCallback((value: string) => {

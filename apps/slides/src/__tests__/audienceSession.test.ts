@@ -96,3 +96,28 @@ describe("audience display recovery", () => {
   await opening;
   expect(calls).toEqual(["audience-ready", "presenter"]);
 });
+
+ test("queued stop then start restores the presentation lock", async () => {
+  const { session, state } = setup();
+  await session.open(projector);
+  const stopping = session.close();
+  const starting = session.open(projector);
+  expect(await stopping).toBe(true);
+  expect(await starting).toBe(true);
+  expect(state()).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: false });
+});
+
+ test("failed close reports failure and keeps the active presentation locked", async () => {
+  let state = {};
+  let failClose = true;
+  const session = createAudienceSession({
+    open: async () => {}, close: async () => { if (failClose) throw new Error("Close failed"); },
+    focusPresenter: async () => {}, update: patch => { state = { ...state, ...patch }; },
+  });
+  expect(await session.open(projector)).toBe(true);
+  expect(await session.close()).toBe(false);
+  expect(state).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: true });
+  failClose = false;
+  expect(await session.close()).toBe(true);
+  expect(state).toMatchObject({ audienceOpen: false, deckLocked: false });
+});
