@@ -34,12 +34,18 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const isPreview = usePresentationValue("isPreview");
   const errorContext = useRef({ slideIndex, isPreview });
   useLayoutEffect(() => { errorContext.current = { slideIndex, isPreview }; }, [slideIndex, isPreview]);
-  useEffect(() => startShaderCanvas({ canvas, code, width, height, particles, particleCount,
+  // Surface dimensions are independent of shader/device ownership. In particular,
+  // live window resizing must not recompile pipelines or reset simulation buffers.
+  useLayoutEffect(() => {
+    const surface = canvas.current?.getNativeSurface();
+    if (surface) { surface.width = width; surface.height = height; }
+  }, [width, height]);
+  useEffect(() => startShaderCanvas({ canvas, code, particles, particleCount,
     reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
-    setResources, setError }), [code, width, height, particles, particleCount]);
+    setResources, setError }), [code, particles, particleCount]);
   return <View style={{ width, height, overflow: "hidden", borderRadius: background ? 0 : 20 }}>
     <Canvas ref={canvas} style={{ width, height }} transparent />
-    {resources && !error && <UIFrames key={code} resources={resources} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} />}
+    {resources && !error && <UIFrames key={code} resources={resources} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} />}
     {error && <Text style={{ color: "#ffb4ae", padding: 24 }}>TypeGPU preview unavailable: {error}</Text>}
   </View>;
 }
@@ -55,8 +61,8 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ canvas, code, width, height, particles, particleCount, reportError, setResources, setError }: {
-  canvas: RefObject<CanvasRef | null>; code: string; width: number; height: number;
+function startShaderCanvas({ canvas, code, particles, particleCount, reportError, setResources, setError }: {
+  canvas: RefObject<CanvasRef | null>; code: string;
   particles: boolean; particleCount: number; reportError(error: unknown): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
 }) {
@@ -85,8 +91,6 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
         });
         const context = canvas.current.getContext("webgpu");
         if (!context) throw new Error("WebGPU surface unavailable");
-        const surface = canvas.current.getNativeSurface();
-        surface.width = width; surface.height = height;
         const format = navigator.gpu.getPreferredCanvasFormat();
         context.configure({ device, format, alphaMode: "premultiplied" });
         const module = device.createShaderModule({ code });
@@ -139,7 +143,7 @@ function startShaderCanvas({ canvas, code, width, height, particles, particleCou
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, aspect, brightness, particleCount, previewTime, onError }: { resources: Resources; aspect: number; brightness: number; particleCount: number; previewTime: number; onError(message: string): void }) {
+function UIFrames({ resources: r, width, height, aspect, brightness, particleCount, previewTime, onError }: { resources: Resources; width: number; height: number; aspect: number; brightness: number; particleCount: number; previewTime: number; onError(message: string): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -198,7 +202,7 @@ function UIFrames({ resources: r, aspect, brightness, particleCount, previewTime
       else if (phase === "playing" && !rendered.value) draw(0);
     })();
     return () => frame.setActive(false);
-  }, [active, preview, preparing, previewTime, step, frame, rendered, brightness, playback]);
+  }, [active, preview, preparing, previewTime, step, frame, rendered, brightness, playback, width, height]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
     runOnUI(destroyGPU)(device, alive, disposed);
