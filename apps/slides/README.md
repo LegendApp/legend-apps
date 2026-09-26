@@ -344,7 +344,9 @@ declare the total number of states (including initial state) in frontmatter,
 for example `steps: 3` for steps 0, 1 and 2.
 
 `useStep(2)` from `@legend-apps/presentation` returns `reached`, `isCurrent`,
-`elapsed` (seconds), `startedAt` and `direction`. Its clock starts when step 2
+`elapsed` (a Reanimated shared value in seconds), `startedAt` and `direction`.
+Read `elapsed.value` inside a worklet or animated style; it does not rerender React
+on each frame. Its clock starts when step 2
 is reached, continues across later steps, and resets when navigating before it.
 Preparing and previewing slides never runs that clock. Presenter previews resolve
 styles immediately at their requested step. `useSlideLifecycle()` exposes the

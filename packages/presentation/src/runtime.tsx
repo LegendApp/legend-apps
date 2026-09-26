@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { observable, type Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import type { PresentationRuntime } from "./types";
-import { PlaybackProvider } from "./playback";
+import { PlaybackProvider, samplePlayback, usePlayback } from "./playback";
+import { useDerivedValue } from "react-native-reanimated";
 
 const defaultRuntime: PresentationRuntime = {
   currentSlide: 0,
@@ -59,21 +60,11 @@ export function useStep(at: number) {
   const reached = useValue(() => runtime$.stepIndex.get() >= at);
   const isCurrent = useValue(() => runtime$.stepIndex.get() === at);
   const epoch = useValue(() => runtime$.stepEpochs[at].get());
-  const isActive = usePresentationValue("isActive");
-  const isPreview = usePresentationValue("isPreview");
   const direction = usePresentationValue("direction");
-  const [clock, setClock] = useState({ epoch, elapsed: 0 });
-  useEffect(() => {
-    if (!reached || !isActive || isPreview || epoch === undefined) return;
-    let frame = 0;
-    const tick = () => {
-      setClock({ epoch, elapsed: Math.max(0, performance.now() - epoch) / 1000 });
-      frame = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(frame);
-  }, [epoch, reached, isActive, isPreview]);
-  return { reached, isCurrent,
-    elapsed: reached && !isPreview && clock.epoch === epoch ? clock.elapsed : 0,
-    startedAt: epoch, direction: direction ?? "forward" };
+  const playback = usePlayback();
+  const elapsed = useDerivedValue(() => {
+    const state = playback.value;
+    return state.phase === "preview" ? 0 : samplePlayback(state, 0, at);
+  }, [at]);
+  return { reached, isCurrent, elapsed, startedAt: epoch, direction: direction ?? "forward" };
 }
