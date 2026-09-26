@@ -26,3 +26,13 @@ test("Finder respects editing both before and during an asynchronous window open
 test("failed presenter creation does not replace the deck", async () => {
   await expect(openRequestedDocument("deck", async () => { throw Error("window failed"); }, async () => { throw Error("must not load"); }, () => {})).rejects.toThrow("window failed");
 });
+
+test("the latest Finder request wins even when window opens finish out of order", async () => {
+  let finish!: () => void;
+  const loaded: string[] = [];
+  const load = async (path: string) => { loaded.push(path); };
+  const first = openRequestedDocument("old", () => new Promise<void>(resolve => { finish = resolve; }), load, () => {});
+  await openRequestedDocument("new", async () => {}, load, () => {});
+  finish(); await first;
+  expect(loaded).toEqual(["new"]);
+});
