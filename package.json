@@ -93,7 +93,9 @@
     "test:markdown-app": "jest --config apps/markdown/jest.config.cjs",
     "test:markdown-native": "bash packages/markdown-block-editor/tests/run-native.sh",
     "test:markdown-regression": "bun run test:markdown-editing && bun run test:markdown-native && bun run test:legend-list && bun run typecheck && bun markdown verify macos",
-    "test:markdown-e2e:large-document": "MARKDOWN_E2E_SCENARIO=editor-large-document bun scripts/test-markdown-e2e.ts"
+    "test:markdown-e2e:large-document": "MARKDOWN_E2E_SCENARIO=editor-large-document bun scripts/test-markdown-e2e.ts",
+    "photos": "bun scripts/run-app.ts photos",
+    "test:photos": "bun test apps/photos/tests"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

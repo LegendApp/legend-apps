@@ -1,0 +1,19 @@
+{
+  "name": "@legend-apps/app-photos",
+  "version": "0.3.0",
+  "private": true,
+  "main": "src/index.tsx",
+  "dependencies": {
+    "@legend-apps/photo-library": "0.0.0",
+    "@legendapp/list": "catalog:",
+    "@legendapp/motion": "catalog:",
+    "@legendapp/state": "catalog:",
+    "@legendapp/spark": "0.0.1-next.2",
+    "react": "catalog:",
+    "react-native": "catalog:",
+    "uniwind": "^1.6.3",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.0.2",
+    "@legend-apps/color-picker": "0.0.0"
+  }
+}

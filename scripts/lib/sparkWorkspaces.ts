@@ -52,6 +52,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     window: {
       width: manifest.id === "music" ? 360 : manifest.id === "diff" ? 1180 : 1280,
       height: manifest.id === "music" ? 640 : manifest.id === "diff" ? 780 : 720,
+      ...(manifest.id === "photos" ? {width: 1000, height: 720, minWidth: 640, minHeight: 460, titleBarStyle: "hidden"} : {}),
       ...(manifest.id === "music" ? { minWidth: 200, minHeight: 300, titleBarStyle: "hidden", appearance: "dark", transparent: true } : {}),
       ...(["chat-history", "diff"].includes(manifest.id) ? { minWidth: 640, minHeight: 460 } : {}),
     },
@@ -68,7 +69,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
           hidden: manifest.hostWindow?.macos?.hidden ?? false,
           autosaveName: manifest.id === "music" ? "MainWindow" : `RCTAppDelegateMainWindow.${manifest.id}`,
           ...(manifest.hostWindow?.macos?.startupBackgroundColors ? { backgroundColors: manifest.hostWindow.macos.startupBackgroundColors } : {}),
-          ...(["music", "chat-history"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
+          ...(["music", "chat-history", "photos"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
           ...(manifest.id === "music" ? { glass: true } : {}),
           ...(manifest.id === "diff" ? { closeBehavior: "request", reopenBehavior: "visibleWindows" } : {}),
           ...(["chat-history", "diff"].includes(manifest.id) ? { toolbarStyle: "unified", titlebarSeparatorStyle: "shadow" } : {}),

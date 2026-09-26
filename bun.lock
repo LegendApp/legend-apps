@@ -123,6 +123,23 @@
         "sf-symbols-typescript": "^2.2.0",
       },
     },
+    "apps/photos": {
+      "name": "@legend-apps/app-photos",
+      "version": "0.3.0",
+      "dependencies": {
+        "@legend-apps/color-picker": "0.0.0",
+        "@legend-apps/photo-library": "0.0.0",
+        "@legendapp/list": "catalog:",
+        "@legendapp/motion": "catalog:",
+        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/state": "catalog:",
+        "clsx": "^2.1.1",
+        "react": "catalog:",
+        "react-native": "catalog:",
+        "tailwind-merge": "^3.0.2",
+        "uniwind": "^1.6.3",
+      },
+    },
     "apps/slides": {
       "name": "@legend-apps/app-slides",
       "version": "0.0.1",
@@ -267,6 +284,14 @@
         "nitrogen": "0.35.6",
         "react-native-nitro-modules": "0.35.6",
       },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
+    "packages/color-picker": {
+      "name": "@legend-apps/color-picker",
+      "version": "0.0.0",
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
@@ -1204,6 +1229,8 @@
 
     "@legend-apps/app-music": ["@legend-apps/app-music@workspace:apps/music"],
 
+    "@legend-apps/app-photos": ["@legend-apps/app-photos@workspace:apps/photos"],
+
     "@legend-apps/app-slides": ["@legend-apps/app-slides@workspace:apps/slides"],
 
     "@legend-apps/app-test-kitchen-sink": ["@legend-apps/app-test-kitchen-sink@workspace:apps/test-kitchen-sink"],
@@ -1223,6 +1250,8 @@
     "@legend-apps/classnames": ["@legend-apps/classnames@workspace:packages/classnames"],
 
     "@legend-apps/codex": ["@legend-apps/codex@workspace:packages/codex"],
+
+    "@legend-apps/color-picker": ["@legend-apps/color-picker@workspace:packages/color-picker"],
 
     "@legend-apps/command-runner": ["@legend-apps/command-runner@workspace:packages/command-runner"],
 

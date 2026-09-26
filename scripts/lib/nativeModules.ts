@@ -8,6 +8,8 @@ import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./t
 export type NativeGraphMode = "dev" | "release";
 
 export const nativePackages: NativePackage[] = [
+  {name: "@legend-apps/color-picker", root: path.join(packagesDir, "color-picker"), platforms: ["macos"]},
+  {name: "@legend-apps/photo-library", root: path.join(packagesDir, "photo-library"), platforms: ["macos"]},
   {
     name: "@legendapp/spark-message-dialog",
     root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/message-dialog"),
