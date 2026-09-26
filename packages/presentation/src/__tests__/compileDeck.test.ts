@@ -31,6 +31,11 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("still rejects separators inside layout containers after preprocessing", async () => {
+    const result = await compileDeck(createDeck({ "deck.mdx": ":::group\n\nOne\n\n---\n\nTwo\n\n:::" }));
+    expect(result.success).toBe(false);
+    expect(result.errors.join("\n")).toContain("Close layout containers");
+  });
   test("uses the same slide boundaries for compilation and notes editing", async () => {
     for (const separator of ["***", "___", "----", "- - -", "---"]) {
       const source = `One\n${separator}\nTwo\n\n<!-- second -->`;

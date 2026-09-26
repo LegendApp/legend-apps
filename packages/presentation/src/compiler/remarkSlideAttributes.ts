@@ -103,7 +103,7 @@ export function remarkSlideAttributes(this: { data(): object; use(plugin: typeof
           const literal = { type: "text", value: String(file.value).slice(node.position?.start.offset, node.position?.end.offset) };
           return node.type === "textDirective" ? literal : { type: "paragraph", children: [literal] };
         }
-        if (node.type === "thematicBreak" && parent.type === "containerDirective") {
+        if ((node.type === "thematicBreak" || node.name === "SlideSeparator") && parent.type === "containerDirective") {
           throw new Error("Close layout containers before starting another slide with ---.");
         }
         if (node.type === "paragraph" && /^:{3,}\s*(group|columns|stack|grid)\s/.test(node.children?.[0]?.value ?? "")) {
