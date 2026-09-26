@@ -5,5 +5,5 @@
 - (void)beginFromBlock:(NSString *)blockId;
 - (BOOL)enqueue:(NSEvent *)event;
 - (NSArray<NSEvent *> *)finishAtBlock:(NSString *)blockId;
-- (void)cancel;
+- (NSArray<NSEvent *> *)cancel;
 @end

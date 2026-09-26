@@ -21,7 +21,7 @@ int main() { @autoreleasepool {
   check([[handoff finishAtBlock:@"third"] isEqualToArray:@[b]]);
   [handoff beginFromBlock:@"third"];
   check([handoff enqueue:a]);
-  [handoff cancel];
+  check([[handoff cancel] isEqualToArray:@[a]]);
   check([handoff finishAtBlock:@"fourth"].count == 0);
   check(![handoff enqueue:b]);
   NSLog(@"PASS keyboard handoff ordering, stale readiness, repeated Enter, and cleanup");

@@ -1687,6 +1687,30 @@ it("updates native selection offsets without rendering the document owner", asyn
 
 
 describe("native editor handoff readiness", () => {
+  it("releases the keyboard handoff when the split transaction fails", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "First")]));
+    const onError = jest.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" onError={onError}
+        savePolicy={{ autosave: false }} />, { createNodeMock: () => ({}) });
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "first", markdown: "First", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    jest.spyOn(adapter, "applyTransaction").mockRejectedValueOnce(new Error("split failed"));
+    jest.mocked(MarkdownEditorHostCommands.cancelKeyboardHandoff).mockClear();
+    await act(async () => nativeHost(renderer).props.onEnterPressed({ nativeEvent: {
+      blockId: "first", beforeMarkdown: "First", afterMarkdown: "",
+    } }));
+    await flushPromises();
+    expect(MarkdownEditorHostCommands.cancelKeyboardHandoff).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "split failed" }));
+    expect(adapter.sourceMarkdown).toBe("First");
+    await act(async () => renderer.unmount());
+  });
+
   it("releases queued keys only after the final focus and selection commands", async () => {
     jest.useFakeTimers();
     const inputRef = { current: null as any };

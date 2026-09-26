@@ -1536,6 +1536,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           if (pendingSplitRef.current === pendingSplit) {
             pendingSplitRef.current = null;
           }
+          if (containerRef.current) MarkdownEditorHostCommands.cancelKeyboardHandoff(containerRef.current);
           const nextError = error instanceof Error ? error : new Error(String(error));
           onErrorRef.current?.(nextError);
         }

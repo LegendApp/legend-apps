@@ -16,12 +16,12 @@
 - (NSArray<NSEvent *> *)finishAtBlock:(NSString *)blockId {
   // The old editor can still finish a scheduled focus effect after Enter.
   if (_sourceBlockId == nil || [_sourceBlockId isEqualToString:blockId]) return @[];
-  NSArray *events = [_events copy];
-  [self cancel];
-  return events;
+  return [self cancel];
 }
-- (void)cancel {
+- (NSArray<NSEvent *> *)cancel {
+  NSArray *events = [_events copy] ?: @[];
   _sourceBlockId = nil;
   _events = nil;
+  return events;
 }
 @end

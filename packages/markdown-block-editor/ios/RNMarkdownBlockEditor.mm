@@ -552,6 +552,11 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   send(input, selector, selection, selection);
 }
 
+- (void)cancelKeyboardHandoff {
+  NSArray<NSEvent *> *events = [_keyboardHandoff cancel];
+  for (NSEvent *event in events.reverseObjectEnumerator) [NSApp postEvent:event atStart:YES];
+}
+
 - (void)completeKeyboardHandoff:(NSString *)blockId {
   if (![_activeBlockId isEqualToString:blockId] || ![self activeEditorContainsFirstResponder]) return;
   NSArray<NSEvent *> *events = [_keyboardHandoff finishAtBlock:blockId];
