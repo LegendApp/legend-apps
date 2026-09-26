@@ -56,10 +56,11 @@ test("lifecycle and step hooks ignore unrelated runtime fields", async () => {
     await act(() => runtime$.stepEpochs[5].set(300));
     expect([lifecycleRenders, stepRenders]).toEqual([0, 0]);
     await act(() => runtime$.stepIndex.set(6));
-    expect([lifecycleRenders, stepRenders]).toEqual([1, 0]);
+    // Navigation updates the shared playback scope even after the trigger was reached.
+    expect([lifecycleRenders, stepRenders]).toEqual([1, 1]);
     await act(() => runtime$.stepIndex.set(2));
     expect(tree.root.findByType("step").props.value.isCurrent).toBe(true);
-    expect(stepRenders).toBe(1);
+    expect(stepRenders).toBe(2);
   } finally {
     if (tree) await act(() => tree.unmount());
     log.mockRestore();
