@@ -16,12 +16,12 @@ import { Text, View } from "react-native"
 import { InteractiveCounter } from "./components/InteractiveCounter"
 import { LifecycleAnimation } from "./components/LifecycleAnimation"
 import { SkiaNebula } from "./components/SkiaNebula"
-import { TypeGPUBoids } from "./components/TypeGPUBoids"
+import { boidsProgram } from "./components/TypeGPUBoids"
 import { cloudProgram } from "./components/CloudProgram"
 
 export const capabilities = [
   ["Markdown", "Headings, lists, links, and code"],
-  ["React Native", "View, Text, Pressable, and Animated"],
+  ["React Native", "View, Text, Pressable, and Reanimated"],
   ["Local modules", "TypeScript components beside the deck"],
 ]
 
@@ -119,9 +119,9 @@ Ray-marched density, self-shadowing, and cinematic light—rendered through Reac
 
 This second React Native example simulates 500 autonomous agents in a TypeGPU compute shader and renders them as instanced triangles.
 
-<TypeGPUBoids />
+<TypeGPUShader code={boidsProgram} width={600} height={600} particles particleCount={500} />
 
-<!-- This is Software Mansion Labs' React Native Boids example, using the official @typegpu/react hooks without Reanimated or interaction. -->
+<!-- The boids simulation and drawing run on the GPU; the host submits frames on the shared UI playback clock. -->
 
 ---
 

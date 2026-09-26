@@ -1,6 +1,6 @@
-import { Canvas, Fill, Shader, Skia, vec } from "@shopify/react-native-skia";
-import { usePresentationValue } from "@legend-apps/presentation";
-import { useEffect, useState } from "react";
+import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
+import { useAnimatedShaderUniforms } from "@legend-apps/presentation";
+
 import { StyleSheet, Text, View } from "react-native";
 
 const canvasWidth = 1500;
@@ -29,37 +29,7 @@ const nebulaEffect = Skia.RuntimeEffect.Make(`
 `);
 
 export function SkiaNebula() {
-  const isActive = usePresentationValue("isActive");
-  const isPreview = usePresentationValue("isPreview");
-  const [time, setTime] = useState(isPreview ? 3.4 : 0);
-
-  useEffect(() => {
-    let cancelled = false;
-    let frame = 0;
-    if (isPreview) {
-      setTime(3.4);
-      return;
-    }
-    if (!isActive) {
-      setTime(0);
-      return;
-    }
-
-    setTime(0);
-    const startedAt = performance.now();
-    const update = (now: number) => {
-      if (cancelled) {
-        return;
-      }
-      setTime((now - startedAt) / 1_000);
-      frame = requestAnimationFrame(update);
-    };
-    frame = requestAnimationFrame(update);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frame);
-    };
-  }, [isActive, isPreview]);
+  const uniforms = useAnimatedShaderUniforms({ resolution: [canvasWidth, canvasHeight] }, 3.4);
 
   if (!nebulaEffect) {
     return <Text style={styles.error}>The Skia runtime shader could not be compiled.</Text>;
@@ -71,7 +41,7 @@ export function SkiaNebula() {
         <Fill>
           <Shader
             source={nebulaEffect}
-            uniforms={{ resolution: vec(canvasWidth, canvasHeight), time }}
+            uniforms={uniforms}
           />
         </Fill>
       </Canvas>

@@ -1,233 +1,40 @@
-import { usePresentationValue } from "@legend-apps/presentation";
-import {
-  Root as TypeGPURoot,
-  useBindGroup,
-  useBuffer,
-  useConfigureContext,
-  useFrame,
-  useRoot,
-  useUniform,
-} from "@typegpu/react";
-import { useEffect, useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
-import { Canvas } from "react-native-webgpu";
-import { d, std, tgpu } from "typegpu";
-
-const canvasSize = 600;
-const triangleAmount = 500;
-const triangleSize = 0.08;
-
-function rotate(v: any, angle: any) {
-  "use gpu";
-  return d.vec2f(
-    v.x * std.cos(angle) - v.y * std.sin(angle),
-    v.x * std.sin(angle) + v.y * std.cos(angle),
-  );
-}
-
-function getRotationFromVelocity(velocity: any) {
-  "use gpu";
-  return -std.atan2(velocity.x, velocity.y);
-}
-
-const Boid = d.struct({
-  position: d.vec2f,
-  velocity: d.vec2f,
-});
-
-const renderLayout = tgpu.bindGroupLayout({
-  boids: { access: "readonly", storage: d.arrayOf(Boid) },
-  colorPalette: { uniform: d.vec3f },
-});
-
-const triangleVertices = tgpu.const(d.arrayOf(d.vec2f), [
-  d.vec2f(0, triangleSize),
-  d.vec2f(-triangleSize / 2, -triangleSize / 2),
-  d.vec2f(triangleSize / 2, -triangleSize / 2),
-]);
-
-function mainVert(input: any) {
-  "use gpu";
-  const boid: any = renderLayout.$.boids[input.$instanceIndex];
-  const localPos: any = triangleVertices.$[input.$vertexIndex];
-  const angle: any = getRotationFromVelocity(boid.velocity);
-  const colorPalette: any = renderLayout.$.colorPalette;
-  return {
-    $position: d.vec4f(boid.position + rotate(localPos, angle), 0, 1),
-    color: d.vec4f((std.sin(colorPalette + angle) * 0.45 + 0.45) as any, 1),
-  };
-}
-
-function mainFrag(input: any) {
-  "use gpu";
-  return input.color;
-}
-
-const Params = d.struct({
-  separationDistance: d.f32,
-  separationStrength: d.f32,
-  alignmentDistance: d.f32,
-  alignmentStrength: d.f32,
-  cohesionDistance: d.f32,
-  cohesionStrength: d.f32,
-});
-
-const computeLayout = tgpu.bindGroupLayout({
-  params: { uniform: Params },
-  boids: { access: "readonly", storage: d.arrayOf(Boid) },
-  nextBoids: { access: "mutable", storage: d.arrayOf(Boid) },
-});
-
-function mainCompute(boidIndex: any) {
-  "use gpu";
-  const params: any = computeLayout.$.params;
-  const currentBoid: any = computeLayout.$.boids[boidIndex];
-  const nextBoid: any = computeLayout.$.nextBoids[boidIndex];
-
-  let separation: any = d.vec2f();
-  let alignment: any = d.vec2f();
-  let cohesion: any = d.vec2f();
-  let alignmentCount: any = d.u32(0);
-  let cohesionCount: any = d.u32(0);
-
-  for (let index: any = d.u32(0); index < computeLayout.$.boids.length; index++) {
-    if (index === boidIndex) {
-      continue;
-    }
-    const other: any = computeLayout.$.boids[index];
-    const distance: any = std.distance(currentBoid.position, other.position);
-    if (distance < params.separationDistance) {
-      separation += currentBoid.position - other.position;
-    }
-    if (distance < params.alignmentDistance) {
-      alignment += other.velocity;
-      alignmentCount++;
-    }
-    if (distance < params.cohesionDistance) {
-      cohesion += other.position;
-      cohesionCount++;
-    }
+/** Render with <TypeGPUShader code={boidsProgram} particles particleCount={500} />. */
+export const boidsProgram = `
+struct Clock { time: f32, dt: f32, frame: f32, step: f32, aspect: f32, brightness: f32, pad: vec2f }
+@group(0) @binding(0) var<uniform> clock: Clock;
+@group(0) @binding(1) var<storage, read> boids: array<vec4f>;
+@group(0) @binding(2) var<storage, read_write> next: array<vec4f>;
+fn hash(i: f32) -> f32 { return fract(sin(i * 12.9898) * 43758.5453); }
+@compute @workgroup_size(64) fn simulate(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x; if (i >= 500u) { return; }
+  if (clock.frame < 1.0) { let angle = hash(f32(i) + 31.0) * 6.283185;
+    next[i] = vec4f(hash(f32(i)+1.0)*2.0-1.0, hash(f32(i)+900.0)*2.0-1.0, cos(angle)*0.2, sin(angle)*0.2); return; }
+  let current = boids[i];
+  var separation = vec2f(0); var alignment = vec2f(0); var cohesion = vec2f(0); var neighbors = 0.0;
+  for (var j = 0u; j < 500u; j++) {
+    if (j == i) { continue; }
+    let other = boids[j]; let distance = length(current.xy - other.xy);
+    if (distance < 0.05) { separation += current.xy - other.xy; }
+    if (distance < 0.3) { alignment += other.zw; cohesion += other.xy; neighbors += 1.0; }
   }
-
-  if (alignmentCount > 0) {
-    alignment /= d.f32(alignmentCount);
-  }
-  if (cohesionCount > 0) {
-    cohesion = cohesion / d.f32(cohesionCount) - currentBoid.position;
-  }
-
-  let newPosition: any = d.vec2f(currentBoid.position);
-  let newVelocity: any = d.vec2f(currentBoid.velocity);
-  newVelocity += separation * params.separationStrength
-    + alignment * params.alignmentStrength
-    + cohesion * params.cohesionStrength;
-  newVelocity = std.normalize(newVelocity) * std.clamp(std.length(newVelocity), 0, 0.01);
-
-  if (newPosition[0] > 1 + triangleSize) newPosition[0] = -1 - triangleSize;
-  if (newPosition[1] > 1 + triangleSize) newPosition[1] = -1 - triangleSize;
-  if (newPosition[0] < -1 - triangleSize) newPosition[0] = 1 + triangleSize;
-  if (newPosition[1] < -1 - triangleSize) newPosition[1] = 1 + triangleSize;
-
-  newPosition += newVelocity;
-  nextBoid.position = d.vec2f(newPosition);
-  nextBoid.velocity = d.vec2f(newVelocity);
+  if (neighbors > 0.0) { alignment /= neighbors; cohesion = cohesion / neighbors - current.xy; }
+  let dt = min(clock.dt, 0.05);
+  var velocity = current.zw + (separation * 6.0 + alignment * 0.6 + cohesion * 0.06) * dt;
+  velocity = velocity / max(length(velocity), 0.0001) * clamp(length(velocity), 0.05, 0.6);
+  let position = fract((current.xy + velocity * dt + vec2f(1.08)) / 2.16) * 2.16 - vec2f(1.08);
+  next[i] = vec4f(position, velocity);
 }
-
-const initialParams = {
-  separationDistance: 0.05,
-  separationStrength: 0.001,
-  alignmentDistance: 0.3,
-  alignmentStrength: 0.01,
-  cohesionDistance: 0.3,
-  cohesionStrength: 0.001,
-};
-
-function BoidsScene() {
-  const isActive = usePresentationValue("isActive");
-  const isPreview = usePresentationValue("isPreview");
-  const root = useRoot();
-  const previewRendered = useRef(false);
-  const even = useRef(false);
-  const paramsUniform = useUniform(Params, { initial: initialParams });
-  const colorPaletteUniform = useUniform(d.vec3f, { initial: d.vec3f(0, 0.345, 0.867) });
-  const initialData = useMemo(
-    () => Array.from({ length: triangleAmount }, () => ({
-      position: [Math.random() * 2 - 1, Math.random() * 2 - 1] as [number, number],
-      velocity: [Math.random() * 0.1 - 0.05, Math.random() * 0.1 - 0.05] as [number, number],
-    })),
-    [],
-  );
-  const firstBoidBuffer = useBuffer(d.arrayOf(Boid, triangleAmount), { initial: initialData }).$usage("storage");
-  const secondBoidBuffer = useBuffer(d.arrayOf(Boid, triangleAmount), { initial: initialData }).$usage("storage");
-  const computePipeline = useMemo(() => root.createGuardedComputePipeline(mainCompute), [root]);
-  const renderPipeline = useMemo(
-    () => root.createRenderPipeline({ fragment: mainFrag, vertex: mainVert }),
-    [root],
-  );
-  const firstComputeBindGroup = useBindGroup(computeLayout, {
-    boids: firstBoidBuffer,
-    nextBoids: secondBoidBuffer,
-    params: paramsUniform.buffer,
-  });
-  const secondComputeBindGroup = useBindGroup(computeLayout, {
-    boids: secondBoidBuffer,
-    nextBoids: firstBoidBuffer,
-    params: paramsUniform.buffer,
-  });
-  const firstRenderBindGroup = useBindGroup(renderLayout, {
-    boids: firstBoidBuffer,
-    colorPalette: colorPaletteUniform.buffer,
-  });
-  const secondRenderBindGroup = useBindGroup(renderLayout, {
-    boids: secondBoidBuffer,
-    colorPalette: colorPaletteUniform.buffer,
-  });
-  const { ctxRef, ref } = useConfigureContext({ alphaMode: "premultiplied" });
-
-  useEffect(() => {
-    previewRendered.current = false;
-  }, [isActive, isPreview]);
-
-  useFrame(() => {
-    const context = ctxRef.current;
-    if (!context || (!isActive && !isPreview) || (isPreview && previewRendered.current)) {
-      return;
-    }
-    previewRendered.current = true;
-    even.current = !even.current;
-    computePipeline
-      .with(even.current ? firstComputeBindGroup : secondComputeBindGroup)
-      .dispatchThreads(triangleAmount);
-    renderPipeline
-      .withColorAttachment({ view: context })
-      .with(even.current ? secondRenderBindGroup : firstRenderBindGroup)
-      .draw(3, triangleAmount);
-    context.present?.();
-  });
-
-  return <Canvas ref={ref} style={styles.canvas} transparent />;
+struct Vertex { @builtin(position) position: vec4f, @location(0) color: vec4f }
+@vertex fn vertexMain(@builtin(vertex_index) i: u32) -> Vertex {
+  var points = array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
+  var out: Vertex; out.position = vec4f(points[i],0,1); out.color = vec4f(0.015,0.025,0.05,1); return out;
 }
-
-export function TypeGPUBoids() {
-  return (
-    <View style={styles.container}>
-      <TypeGPURoot disableWorklets>
-        <BoidsScene />
-      </TypeGPURoot>
-    </View>
-  );
+@fragment fn fragmentMain(v: Vertex) -> @location(0) vec4f { return v.color; }
+@vertex fn particleVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Vertex {
+  var points = array<vec2f,6>(vec2f(0,0.04),vec2f(-0.02,-0.02),vec2f(0.02,-0.02),vec2f(0,0.04),vec2f(0.02,-0.02),vec2f(0,0.04));
+  let b = boids[instance]; let angle = -atan2(b.z,b.w); let p = points[vertex];
+  let rotated = vec2f(p.x*cos(angle)-p.y*sin(angle),p.x*sin(angle)+p.y*cos(angle));
+  var out: Vertex; out.position=vec4f(b.xy+rotated,0,1); out.color=vec4f(sin(vec3f(0,0.345,0.867)+vec3f(angle))*0.45+vec3f(0.45),1); return out;
 }
-
-const styles = StyleSheet.create({
-  canvas: { height: canvasSize, width: canvasSize },
-  container: {
-    alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: "#efeff9",
-    borderRadius: 28,
-    height: canvasSize,
-    justifyContent: "center",
-    overflow: "hidden",
-    width: canvasSize,
-  },
-});
+@fragment fn particleFragment(v: Vertex) -> @location(0) vec4f { return v.color; }
+`;

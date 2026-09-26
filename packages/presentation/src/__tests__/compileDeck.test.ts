@@ -444,7 +444,7 @@ describe("compileDeck", () => {
     expect(result.code).toContain('"type":"focus","from":"engine","duration":1000');
     expect(result.code).toContain("FocusRegion");
     expect(result.code).toContain("SharedElement");
-    expect(result.code).toContain("Animated.loop");
+    expect(result.code).toContain("useAnimatedStyle");
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "components/FocusEngine.tsx"));
   });
 
@@ -462,22 +462,16 @@ describe("compileDeck", () => {
     expect(result.dependencies).toContain(path.join(path.dirname(deckPath), "web/WebParticleField.tsx"));
     expect(result.code).toContain('require("@legend-apps/presentation")');
     expect(result.code).toContain('require("@shopify/react-native-skia")');
-    expect(result.code).toContain('require("react-native-webgpu")');
-    expect(result.code).toContain('require("typegpu")');
-    expect(result.code).toContain('require("@typegpu/react")');
-    expect(result.code).toContain("Animated.timing");
-    expect(result.code).toContain("createRenderPipeline");
-    expect(result.code).toContain("createGuardedComputePipeline");
-    expect(result.code).toContain("dispatchThreads");
+    expect(result.code).toContain("useAnimatedStyle");
+    expect(result.code).toContain("boidsProgram");
+    expect(result.code).not.toContain("disableWorklets");
+    expect(result.code).not.toContain("Animated.timing");
     expect(result.code).toContain("fn density");
     expect(result.code).toContain("cloudProgram");
     expect(result.code).toContain("TypeGPUShader");
     expect(result.code).toContain("TypeGPU");
-    expect(result.code).toContain("triangleAmount");
-    expect(result.code).toContain("useConfigureContext");
-    expect(result.code).toContain("__TYPEGPU_META__");
     expect(result.code).toContain("RuntimeEffect.Make");
-    expect(result.code).toContain("useSlideLifecycle");
+    expect(result.code).toContain("usePlayback");
     expect(result.uniwindCode).toContain("bg-slate-800");
   });
 
