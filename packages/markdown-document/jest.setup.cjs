@@ -135,7 +135,7 @@ jest.mock("@legend-apps/markdown-block-editor", () => {
   const { EnrichedMarkdownText } = require("react-native-enriched-markdown");
 
   return {
-    MarkdownEditorHostCommands: { cancelKeyboardHandoff: jest.fn(), completeKeyboardHandoff: jest.fn(), writeSelectionClipboard: jest.fn(), setSelectionAfterMarkdown: jest.fn() },
+    MarkdownEditorHostCommands: { beginKeyboardHandoff: jest.fn(), cancelKeyboardHandoff: jest.fn(), completeKeyboardHandoff: jest.fn(), writeSelectionClipboard: jest.fn(), setSelectionAfterMarkdown: jest.fn() },
     MarkdownBlockActivationView: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)
     )),

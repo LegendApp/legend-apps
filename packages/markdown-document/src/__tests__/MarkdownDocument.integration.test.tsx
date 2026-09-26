@@ -1,3 +1,4 @@
+import { MarkdownEditorHostCommands } from "@legend-apps/markdown-block-editor";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { View } from "react-native";
@@ -1265,6 +1266,23 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     expectActiveBlockExists(renderer, adapter);
     expectUniqueBlockIds(adapter);
+  });
+
+  it("does not send native history commands to the non-overlay container", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("first", 0, "First")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+      ref={commands} savePolicy={{ autosave: false }} />, { createNodeMock: () => ({}) }); });
+    await flushPromises();
+    jest.mocked(MarkdownEditorHostCommands.beginKeyboardHandoff).mockClear();
+    jest.mocked(MarkdownEditorHostCommands.cancelKeyboardHandoff).mockClear();
+    await undo(commands);
+    await redo(commands);
+    await runPendingTimers();
+    expect(MarkdownEditorHostCommands.beginKeyboardHandoff).not.toHaveBeenCalled();
+    expect(MarkdownEditorHostCommands.cancelKeyboardHandoff).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
   });
 
   it("undoes and redoes a structural paste after autosave", async () => {

@@ -9,6 +9,7 @@ int main() { @autoreleasepool {
   check(![handoff enqueue:a]);
   [handoff beginFromBlock:@"first"];
   check([handoff enqueue:a]);
+  [handoff beginFromBlock:@"first"];
   check([handoff enqueue:enter]);
   check([handoff enqueue:b]);
   check([handoff finishAtBlock:@"first"].count == 0);

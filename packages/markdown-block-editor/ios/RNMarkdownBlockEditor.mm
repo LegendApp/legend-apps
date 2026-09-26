@@ -1,4 +1,5 @@
 #import "LEMarkdownKeyboardHandoff.h"
+#import "LEMarkdownHistoryKey.h"
 #import "LEMarkdownListExit.h"
 #import "RNMarkdownBlockEditor.h"
 #import "LEMarkdownTextSelection.h"
@@ -555,6 +556,10 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   send(input, selector, selection, selection);
 }
 
+- (void)beginKeyboardHandoff {
+  if ([self activeEditorContainsFirstResponder]) [_keyboardHandoff beginFromBlock:_activeBlockId];
+}
+
 - (void)cancelKeyboardHandoff {
   NSArray<NSEvent *> *events = [_keyboardHandoff cancel];
   for (NSEvent *event in events.reverseObjectEnumerator) [NSApp postEvent:event atStart:YES];
@@ -783,6 +788,11 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     RNMarkdownEditorHost *strongSelf = weakSelf;
     if (strongSelf != nil && event.window == strongSelf.window && [strongSelf->_keyboardHandoff enqueue:event]) return nil;
     if (strongSelf == nil || strongSelf->_textSelection.hasSelection || ![strongSelf activeEditorContainsFirstResponder]) {
+      return event;
+    }
+
+    if (LEMarkdownMenuHandlesHistoryKey(NSApp.mainMenu, event)) {
+      [strongSelf->_keyboardHandoff beginFromBlock:strongSelf->_activeBlockId];
       return event;
     }
 

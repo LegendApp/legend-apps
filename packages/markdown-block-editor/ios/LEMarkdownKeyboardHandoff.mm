@@ -5,6 +5,9 @@
   NSMutableArray<NSEvent *> *_events;
 }
 - (void)beginFromBlock:(NSString *)blockId {
+  // Native shortcuts start before JS receives the menu action. Its matching
+  // begin command must not discard keys already buffered in that gap.
+  if (_sourceBlockId != nil) return;
   _sourceBlockId = [blockId copy];
   _events = [NSMutableArray new];
 }

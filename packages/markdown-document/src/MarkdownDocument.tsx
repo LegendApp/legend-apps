@@ -3071,7 +3071,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [adapter, applyTransactionResult, documentState$, getBlockIndexById, markDirty, onErrorRef, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
 
+    const releaseHistoryKeyboard = useCallback(() => {
+      // Let the restored editor's focus/selection effect finish before replaying
+      // keys that arrived while the history transaction was in flight.
+      setTimeout(() => {
+        if (usesNativeEditorOverlay && containerRef.current) MarkdownEditorHostCommands.cancelKeyboardHandoff(containerRef.current);
+      }, 0);
+    }, []);
+
     const undo = useCallback(() => {
+      if (usesNativeEditorOverlay && containerRef.current) MarkdownEditorHostCommands.beginKeyboardHandoff(containerRef.current);
       async function runUndo() {
         clearTypingHistoryGroup();
         await commitActiveBlock({ updateReactState: true });
@@ -3089,10 +3098,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         publishCommandState();
       }
 
-      runUndo().catch(reportAsyncError);
-    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, reportAsyncError]);
+      runUndo().catch(reportAsyncError).finally(releaseHistoryKeyboard);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, releaseHistoryKeyboard, reportAsyncError]);
 
     const redo = useCallback(() => {
+      if (usesNativeEditorOverlay && containerRef.current) MarkdownEditorHostCommands.beginKeyboardHandoff(containerRef.current);
       async function runRedo() {
         clearTypingHistoryGroup();
         await commitActiveBlock({ updateReactState: true });
@@ -3110,8 +3120,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         publishCommandState();
       }
 
-      runRedo().catch(reportAsyncError);
-    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, reportAsyncError]);
+      runRedo().catch(reportAsyncError).finally(releaseHistoryKeyboard);
+    }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, releaseHistoryKeyboard, reportAsyncError]);
 
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({

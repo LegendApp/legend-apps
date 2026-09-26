@@ -1745,6 +1745,76 @@ it("updates native selection offsets without rendering the document owner", asyn
 
 
 describe("native editor handoff readiness", () => {
+  it.each(["undo", "redo"] as const)("buffers keys until a pending %s has restored the editor", async (command) => {
+    jest.useFakeTimers();
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "First")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        ref={commands} savePolicy={{ autosave: false }} />, { createNodeMock: () => ({}) }); });
+      await flushPromises();
+      await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+        blockId: "first", markdown: "First", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+      } }));
+      await act(async () => editorInput(renderer).props.onChangeMarkdown("First edited"));
+      await flushPromises();
+      if (command === "redo") {
+        await act(async () => commands.current!.undo());
+        await flushPromises();
+      }
+      await act(async () => jest.runOnlyPendingTimers());
+      let resolveTransaction!: () => void;
+      adapter.pendingTransactionGate = new Promise<void>((resolve) => { resolveTransaction = resolve; });
+      jest.mocked(MarkdownEditorHostCommands.beginKeyboardHandoff).mockClear();
+      jest.mocked(MarkdownEditorHostCommands.cancelKeyboardHandoff).mockClear();
+      await act(async () => commands.current![command]());
+      await flushPromises();
+      expect(MarkdownEditorHostCommands.beginKeyboardHandoff).toHaveBeenCalledTimes(1);
+      expect(MarkdownEditorHostCommands.cancelKeyboardHandoff).not.toHaveBeenCalled();
+      await act(async () => resolveTransaction());
+      await flushPromises();
+      await act(async () => jest.runOnlyPendingTimers());
+      expect(MarkdownEditorHostCommands.cancelKeyboardHandoff).toHaveBeenCalledTimes(1);
+      const restored = command === "redo" ? "First edited" : "First";
+      expect(adapter.sourceMarkdown).toBe(restored);
+      await act(async () => editorInput(renderer).props.onChangeMarkdown(`${restored} replayed`));
+      await flushPromises();
+      expect(adapter.sourceMarkdown).toBe(`${restored} replayed`);
+    } finally {
+      if (renderer) await act(async () => renderer.unmount());
+      jest.useRealTimers();
+    }
+  });
+
+  it.each(["empty", "failed"])("releases history keyboard buffering after %s undo", async (scenario) => {
+    jest.useFakeTimers();
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "First")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    try {
+      await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        ref={commands} savePolicy={{ autosave: false }} />, { createNodeMock: () => ({}) }); });
+      await flushPromises();
+      if (scenario === "failed") {
+        await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+          blockId: "first", markdown: "First", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+        } }));
+        await act(async () => editorInput(renderer).props.onChangeMarkdown("First edited"));
+        await flushPromises();
+        jest.spyOn(adapter, "applyTransaction").mockRejectedValueOnce(new Error("history failed"));
+      }
+      jest.mocked(MarkdownEditorHostCommands.cancelKeyboardHandoff).mockClear();
+      await act(async () => commands.current!.undo());
+      await flushPromises();
+      await act(async () => jest.runOnlyPendingTimers());
+      expect(MarkdownEditorHostCommands.cancelKeyboardHandoff).toHaveBeenCalledTimes(1);
+    } finally {
+      if (renderer) await act(async () => renderer.unmount());
+      jest.useRealTimers();
+    }
+  });
+
   it("releases the keyboard handoff when the split transaction fails", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "First")]));
     const onError = jest.fn();

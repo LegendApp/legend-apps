@@ -40,10 +40,11 @@ export interface NativeProps extends ViewProps {
 
 type ComponentType = HostComponent<NativeProps>;
 interface NativeCommands {
+  beginKeyboardHandoff: (viewRef: React.ElementRef<ComponentType>) => void;
   cancelKeyboardHandoff: (viewRef: React.ElementRef<ComponentType>) => void;
   completeKeyboardHandoff: (viewRef: React.ElementRef<ComponentType>, blockId: string) => void;
   setSelectionAfterMarkdown: (viewRef: React.ElementRef<ComponentType>, blockId: string, markdownPrefix: string) => void;
   writeSelectionClipboard: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
 }
-export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["cancelKeyboardHandoff", "completeKeyboardHandoff", "writeSelectionClipboard", "setSelectionAfterMarkdown"] });
+export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["beginKeyboardHandoff", "cancelKeyboardHandoff", "completeKeyboardHandoff", "writeSelectionClipboard", "setSelectionAfterMarkdown"] });
 export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as ComponentType;

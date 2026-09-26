@@ -71,3 +71,7 @@ clang++ -std=c++20 -fobjc-arc -framework AppKit \
 clang++ -std=c++20 -fobjc-arc -framework Foundation \
   "$markdown_editor_dir/tests/MarkdownListExit.test.mm" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+clang++ -std=c++20 -fobjc-arc -framework AppKit \
+  "$markdown_editor_dir/tests/MarkdownHistoryKey.test.mm" -o "$markdown_test_binary"
+"$markdown_test_binary"
