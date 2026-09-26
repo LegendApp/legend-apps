@@ -1,4 +1,5 @@
 #import "LEMarkdownKeyboardHandoff.h"
+#import "LEMarkdownListExit.h"
 #import "RNMarkdownBlockEditor.h"
 #import "LEMarkdownTextSelection.h"
 
@@ -10,6 +11,7 @@
 #import <ReactNativeEnrichedMarkdown/EnrichedMarkdown.h>
 #import <ReactNativeEnrichedMarkdown/MarkdownExtractor.h>
 #import <ReactNativeEnrichedMarkdown/ENRMInputParser.h>
+#import <ReactNativeEnrichedMarkdown/ENRMBlockRange.h>
 
 #include <RNMarkdownParser/MarkdownDocumentRegistry.hpp>
 
@@ -20,6 +22,7 @@ using namespace facebook::react;
 // Existing enriched-input serialization, without changing its native selection.
 @interface NSObject (LEMarkdownFragment)
 - (NSString *)markdownForPlainTextRange:(NSRange)range;
+- (ENRMBlockRange *)listBlockForCursorParagraph;
 @end
 
 static NSString *markdownFragment(LEMarkdownSelectionBlock *block, NSRange range) {
@@ -813,16 +816,21 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
       (event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagShift)) == 0;
     RNMarkdownBlockActivationView *activeBlockView = [strongSelf activeBlockView];
     NSString *markdown = [activeBlockView currentMarkdown];
-    if (
-      isPlainEnter &&
-      selection.length == 0 &&
-      shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)
-    ) {
+    if (isPlainEnter && selection.length == 0) {
       NSArray<NSString *> *markdownParts = callMarkdownSplitAtSelectedRange(editorInput);
       if (markdownParts != nil) {
-        [strongSelf->_keyboardHandoff beginFromBlock:activeBlockView.blockId];
-        [strongSelf emitEnterPressedWithMarkdownParts:markdownParts];
-        return nil;
+        const auto metadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(
+          std::string([activeBlockView.blockId UTF8String] ?: ""));
+        BOOL isList = metadata.type == "orderedList" || metadata.type == "unorderedList";
+        ENRMBlockRange *cursorList = [editorInput respondsToSelector:@selector(listBlockForCursorParagraph)]
+          ? [editorInput listBlockForCursorParagraph] : nil;
+        NSString *retainedList = isList && cursorList != nil
+          ? LEMarkdownListBeforeExit(markdownParts[0], markdownParts[1], cursorList.level) : nil;
+        if (retainedList != nil || shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)) {
+          [strongSelf->_keyboardHandoff beginFromBlock:activeBlockView.blockId];
+          [strongSelf emitEnterPressedWithMarkdownParts:retainedList != nil ? @[retainedList, @""] : markdownParts];
+          return nil;
+        }
       }
     }
 

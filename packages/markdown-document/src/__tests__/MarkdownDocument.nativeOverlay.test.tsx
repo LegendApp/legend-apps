@@ -317,6 +317,32 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it.each(["orderedList", "unorderedList"])("keeps typing in the paragraph after exiting a multiline %s", async (type) => {
+    const markdown = type === "orderedList" ? "1. First\n2. Second" : "- [ ] First\n- [x] Second";
+    const adapter = new NativeOverlayAdapter(snapshot([{ ...block("list", 0, markdown), type }, block("tail", 1, "Tail")]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "list", height: 50, rowHeight: 50, width: 640, x: 40, y: 80, markdown,
+    } }));
+    await flushPromises();
+    // Native Return strips the empty final item and hands off to a new paragraph.
+    await act(async () => nativeHost(renderer).props.onEnterPressed({ nativeEvent: {
+      blockId: "list", beforeMarkdown: markdown, afterMarkdown: "",
+    } }));
+    await flushPromises();
+    const paragraphId = adapter.blockIds[1];
+    expect(nativeHost(renderer).props.activeBlockId).toBe(paragraphId);
+    await act(async () => editorInput(renderer).props.onChangeMarkdown("After the list"));
+    await flushPromises();
+    expect(nativeHost(renderer).props.activeBlockId).toBe(paragraphId);
+    expect(adapter.sourceMarkdown).toBe(`${markdown}\n\nAfter the list\n\nTail`);
+    await act(async () => renderer.unmount());
+  });
+
   it("publishes native edits before another edit can replace their structural or layout changes", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Original"), block("tail", 1, "Tail")]), { splitParagraphUpdates: true });
     let renderer!: TestRenderer.ReactTestRenderer;
