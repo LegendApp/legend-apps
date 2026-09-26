@@ -3,12 +3,13 @@ import { mock } from "bun:test";
 import { useRef } from "react";
 
 export const transitions = [];
+export const transitionProgresses = [];
 const numeric = (value) => typeof value === "number" ? value : value.__getValue();
 
 mock.module("react-native", () => ({
   Platform: { OS: "macos" },
-  View: "view", Text: "text", Pressable: "pressable", PixelRatio: { get: () => 2 },
-  StyleSheet: { create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
+  View: "view", Text: "text", TextInput: "input", Pressable: "pressable", PixelRatio: { get: () => 2 },
+  StyleSheet: { flatten: value => Array.isArray(value) ? Object.assign({}, ...value) : value, create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
   Easing: { linear: (value) => value, inOut: (easing) => easing, cubic: (value) => value, out: (easing) => easing },
   Animated: {
     View: "layer",
@@ -40,15 +41,21 @@ mock.module("react-native-reanimated", () => ({
   __esModule: true,
   createWorkletRuntime: () => ({}),
   runOnRuntime: (_runtime, fn) => fn,
-  default: { View: "animated-view" },
+  default: { View: "animated-view", Text: "animated-text", createAnimatedComponent: component => component },
   useSharedValue: value => useRef({ value }).current,
   useDerivedValue: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   useAnimatedStyle: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
+  useAnimatedProps: read => ({ get value() { return read(); } }),
+  useAnimatedRef: () => useRef(null),
+  measure: () => null,
   useAnimatedReaction: () => {},
   useFrameCallback: () => ({ setActive() {} }),
   runOnUI: fn => fn,
   runOnJS: fn => fn,
-  withTiming: value => value,
+  makeMutable: value => { const progress = { value }; transitionProgresses.push(progress); return progress; },
+  Easing: { linear: value => value, cubic: value => value ** 3, inOut: fn => fn, out: fn => fn },
+  cancelAnimation: () => {},
+  withTiming: (value, _, done) => { if (done) { transitions.push(({ finished }) => done(finished)); return 0; } return value; },
 }));
 mock.module("@shopify/react-native-skia", () => ({
   Canvas: "canvas", Image: "image", useImage: () => null,

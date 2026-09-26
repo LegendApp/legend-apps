@@ -8,15 +8,14 @@ const { transformSync } = require("esbuild");
 function load(name, base = "../") {
   const code = transformSync(readFileSync(new URL(`${base}${name}.ts`, import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
   const module = { exports: {} };
-  Function("require", "module", "exports", code)(() => ({ Animated: { subtract: (...args) => ({ subtract: args }), divide: (...args) => ({ divide: args }) } }), module, module.exports);
+  Function("require", "module", "exports", code)((name) => name === "react-native-reanimated" ? { makeMutable: value => ({value}) } : load("transitionValues", "../../../../packages/presentation/src/"), module, module.exports);
   return module.exports;
 }
 const { nativeTransitionStyles } = load("nativeTransitionStyles");
 const { slideTransitionStyles, visibleSlideStyle } = load("slideTransitions");
 const context = { direction: "forward", width: 1920, height: 1080, options: {}, hasBackground: true };
 function clock() {
-  let nodes = 0;
-  return { interpolate(config) { nodes++; return { config }; }, get nodes() { return nodes; } };
+  return { value: 0 };
 }
 test("readiness rerenders retain custom graphs and sample both directions only once", () => {
   let evaluations = 0;

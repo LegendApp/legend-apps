@@ -4,7 +4,7 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 
 import { BackgroundHost } from "@legend-apps/presentation";
-import { transitions } from "./nativeMock";
+import { transitions, transitionProgresses } from "./nativeMock";
 mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
 mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
 const { AudienceWindow } = await import("../AudienceWindow");
@@ -25,16 +25,16 @@ test("crossfade keeps identical backgrounds fully opaque throughout forward and 
     await act(() => { renderer = create(<AudienceWindow />); });
     for (const index of [1, 2, 1, 0]) {
       await act(() => setCurrentSlide(index));
-      const visible = renderer.root.findAllByType("layer")
+      const visible = renderer.root.findAllByType("animated-view")
         .filter((layer) => layer.props.accessibilityElementsHidden === false);
       expect(visible).toHaveLength(2);
-      const outgoing = visible[0].props.style[1].opacity;
-      const incoming = visible[1].props.style[1].opacity;
+      const outgoing = visible[0].props.style[1];
+      const incoming = visible[1].props.style[1];
       expect(visible[1].findByType("deck").props.targetIndex).toBe(index);
       for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
-        incoming.setValue(progress);
-        const incomingAlpha = opacityValue(incoming);
-        const outgoingAlpha = opacityValue(outgoing);
+        transitionProgresses.at(-1).value = progress;
+        const incomingAlpha = incoming.value.opacity;
+        const outgoingAlpha = outgoing.value.opacity;
         // Source-over compositing must leave no contribution from the black window.
         expect(incomingAlpha + outgoingAlpha * (1 - incomingAlpha)).toBe(1);
       }
@@ -93,28 +93,28 @@ test("starting another transition never resets the opacity already attached to t
   const initial = getSlidesState();
   const log = spyOn(console, "error").mockImplementation(() => {});
   let renderer;
-  const incomingOpacity = () => renderer.root.findAllByType("layer")
-    .find((layer) => layer.findByType("deck").props.targetIndex === getSlidesState().currentSlide)
-    .props.style[1].opacity;
+  const incomingOpacity = () => renderer.root.findAllByType("animated-view")
+    .find((layer) => layer.props.accessibilityElementsHidden !== undefined && layer.findByType("deck").props.targetIndex === getSlidesState().currentSlide)
+    .props.style[1];
   try {
     setSlidesState({ currentSlide: 0, config: { transition: "fade" },
       slides: Array.from({ length: 4 }, () => ({ metadata: {}, notes: "" })) });
     await act(() => { renderer = create(<AudienceWindow />); });
     const firstOpacity = incomingOpacity();
     await act(() => setCurrentSlide(1));
-    expect(firstOpacity.__getValue()).toBe(1);
+    expect(firstOpacity.value.opacity).toBe(1);
     const secondOpacity = incomingOpacity();
     expect(secondOpacity).not.toBe(firstOpacity);
-    secondOpacity.setValue(0.6);
+    transitionProgresses.at(-1).value = 0.6;
     await act(() => setCurrentSlide(2));
-    expect(secondOpacity.__getValue()).toBe(0.6);
+    expect(secondOpacity.value.opacity).toBe(0.6);
     expect(incomingOpacity()).not.toBe(secondOpacity);
     // Completion callbacks from interrupted transitions cannot settle the new one.
     const callbacks = transitions.splice(0);
     await act(() => callbacks[0]({ finished: true }));
-    expect(incomingOpacity().__getValue()).toBe(0);
+    expect(incomingOpacity().value.opacity).toBe(0);
     await act(() => callbacks[callbacks.length - 1]({ finished: true }));
-    expect(incomingOpacity().__getValue()).toBe(1);
+    expect(incomingOpacity().value.opacity).toBe(1);
   } finally {
     if (renderer) await act(() => renderer.unmount());
     transitions.splice(0);
@@ -230,9 +230,9 @@ test("a cut with no matching destination marker settles fully visible without an
     surface.entries.add({ id: "unmatched", kind: "element", view: { measureLayout: (_root, done) => done(0, 0, 100, 50) } });
     await act(() => setCurrentSlide(1));
     expect(transitions).toHaveLength(0);
-    const visible = tree.root.findAllByType("layer").filter((layer) => layer.props.accessibilityElementsHidden === false);
+    const visible = tree.root.findAllByType("animated-view").filter((layer) => layer.props.accessibilityElementsHidden === false);
     expect(visible).toHaveLength(1);
-    expect(visible[0].props.style[1].opacity.__getValue()).toBe(1);
+    expect(visible[0].props.style[1].value.opacity).toBe(1);
   } finally {
     if (tree) await act(() => tree.unmount());
     transitions.splice(0);
@@ -259,7 +259,7 @@ test("user transitions receive progress and options, finish visibly, and recover
     await act(() => setCurrentSlide(1));
     expect(calls.some((call) => call.progress === 0 && call.options.distance === 24 && call.direction === "forward")).toBe(true);
     await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-    expect(renderer.root.findAllByType("layer").filter((layer) => layer.props.accessibilityElementsHidden === false)).toHaveLength(1);
+    expect(renderer.root.findAllByType("animated-view").filter((layer) => layer.props.accessibilityElementsHidden === false)).toHaveLength(1);
     await act(() => { setSlidesState({ config: { transition: { name: "custom", options: { fail: true } } } }); });
     await act(() => setCurrentSlide(2));
     expect(getSlidesState().runtimeErrors.some((error) => error.includes("broken transition"))).toBe(true);

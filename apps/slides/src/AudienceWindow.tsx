@@ -4,7 +4,9 @@ import { SnapshotCaptureBoundary, NavigationTransitionContext, useHasBackground,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, Easing, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, withTiming } from "react-native-reanimated";
+import { createTransitionProgress, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "@legend-apps/presentation";
 import { slideTransitionStyles, visibleSlideStyle } from "./slideTransitions";
 import { useNativeTransitionReady } from "./useNativeTransitionReady";
 import { useRetainedTransitionStyle } from "./useRetainedTransitionStyle";
@@ -49,12 +51,12 @@ function AudienceContent() {
     outgoing: null as number | null,
     outgoingStep: 0,
     ...resolve(currentSlide, currentSlide),
-    progress: new Animated.Value(1),
+    progress: createTransitionProgress(1),
     ready: true,
     motions: new Map<number, FocusMotion>(),
   }));
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
-  // Animated.Value here would also hide the still-mounted outgoing slide.
+  // TransitionProgress here would also hide the still-mounted outgoing slide.
   if (transitionState.index !== currentSlide || transitionState.revision !== revision) {
     const resolved = resolve(transitionState.index, currentSlide);
     // Markers opt into motion even when the slide itself uses a cut.
@@ -69,7 +71,7 @@ function AudienceContent() {
       outgoing: cut ? null : transitionState.index,
       outgoingStep: lastPresented.current.index === transitionState.index ? lastPresented.current.step : 0,
       ...resolved,
-      progress: new Animated.Value(cut ? 1 : 0),
+      progress: createTransitionProgress(cut ? 1 : 0),
       ready: cut || (!resolved.focus && !hasShared),
       duration: hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
@@ -125,7 +127,7 @@ function AudienceContent() {
           motions.set(transitionState.index, destinationMotion);
         }
       }
-      if (!cancelled && transitionState.kind === "none" && !motions.size) progress.setValue(1);
+      if (!cancelled && transitionState.kind === "none" && !motions.size) progress.value = 1;
       if (!cancelled) setTransitionState((current) => current === transitionState
         ? { ...current, ready: true, motions,
           preparationIndex: current.kind === "none" && !motions.size ? current.index : current.preparationIndex,
@@ -139,31 +141,29 @@ function AudienceContent() {
 
   useLayoutEffect(() => {
     if (transitionState.outgoing === null || !transitionState.ready) return;
-    const animation = Animated.timing(transitionState.progress, {
-      duration: transitionState.duration,
-      easing: transitionState.definition?.easing === "linear" ? Easing.linear : transitionState.definition?.easing === "ease-in-out" ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    });
     let settled = false;
     const finishTransition = () => {
       if (settled) return;
       settled = true;
-      transitionState.progress.setValue(1);
+      transitionState.progress.value = 1;
       setTransitionState((current) => current === transitionState
         ? { ...current, outgoing: null, preparationIndex: current.index, motions: new Map() } : current);
     };
-    animation.start(({ finished }) => {
-      if (finished) finishTransition();
-    });
+    const clock = transitionState.progress;
+    const duration = transitionState.duration;
+    const easing = transitionState.definition?.easing === "linear" ? Easing.linear : transitionState.definition?.easing === "ease-in-out" ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic);
+    runOnUI(() => {
+      "worklet";
+      clock.value = withTiming(1, { duration, easing }, finished => { if (finished) runOnJS(finishTransition)(); });
+    })();
     const watchdog = setTimeout(() => {
-      animation.stop();
+      cancelAnimation(clock);
       finishTransition();
     }, transitionState.duration + 200);
     return () => {
       settled = true;
       clearTimeout(watchdog);
-      animation.stop();
+      cancelAnimation(clock);
     };
   }, [transitionState]);
 
@@ -225,21 +225,22 @@ function AudienceContent() {
 }
 
 function AudienceLayer({ children, style, preparing, behindBackground }: {
-  children: ReactNode; style: Animated.WithAnimatedObject<import("react-native").ViewStyle>;
+  children: ReactNode; style: TransitionStyle;
   preparing: boolean; behindBackground: boolean;
 }) {
   const retainedStyle = useRetainedTransitionStyle(style, preparing);
+  const animatedStyle = useTransitionStyle({ opacity: 1, transform: [], ...retainedStyle });
   return <Animated.View accessibilityElementsHidden={preparing} importantForAccessibility={preparing ? "no-hide-descendants" : "auto"}
-    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, retainedStyle, { zIndex: behindBackground ? -1 : 1 }]}>{children}</Animated.View>;
+    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, animatedStyle, { zIndex: behindBackground ? -1 : 1 }]}>{children}</Animated.View>;
 }
 
 function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled, preparing }: {
-  children: ReactNode; definition?: TransitionDefinition; reference: SlideTransition; progress: Animated.Value;
+  children: ReactNode; definition?: TransitionDefinition; reference: SlideTransition; progress: TransitionProgress;
   incoming: boolean; settled: boolean; preparing: boolean; reverse: boolean; hasBackground: boolean; shared: boolean;
 }) {
   const width = useValue(() => slidesState$.config.width.get() ?? 1920);
   const height = useValue(() => slidesState$.config.height.get() ?? 1080);
-  let style: Animated.WithAnimatedObject<import("react-native").ViewStyle> = visibleSlideStyle(progress);
+  let style: TransitionStyle = visibleSlideStyle(progress);
   let failure: string | undefined;
   if (definition && !settled) {
     try {
@@ -254,13 +255,14 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
   }
   useEffect(() => {
     if (failure) {
-      progress.stopAnimation();
-      progress.setValue(1);
+      cancelAnimation(progress);
+      progress.value = 1;
       setSlidesState((state) => ({ runtimeErrors: state.runtimeErrors.includes(failure) ? state.runtimeErrors : [...state.runtimeErrors, failure] }));
     }
   }, [failure, progress]);
   const retainedStyle = useRetainedTransitionStyle(style, preparing);
-  return <Animated.View style={[{ flex: 1 }, retainedStyle]}>{children}</Animated.View>;
+  const animatedStyle = useTransitionStyle({ opacity: 1, transform: [], ...retainedStyle });
+  return <Animated.View style={[{ flex: 1 }, animatedStyle]}>{children}</Animated.View>;
 }
 
 function AudienceFocusSurface({ children, index, motion, surfaces, layoutKey }: {

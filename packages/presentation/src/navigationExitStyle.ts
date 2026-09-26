@@ -1,13 +1,14 @@
-import { Animated } from "react-native";
+import { interpolateTransition, type TransitionProgress } from "./transitionValues";
 
-const graphs = new WeakMap<Animated.Value, Map<number, ReturnType<typeof createStyle>>>();
-function createStyle(progress: Animated.Value, scale: number) {
+
+const graphs = new WeakMap<TransitionProgress, Map<number, ReturnType<typeof createStyle>>>();
+function createStyle(progress: TransitionProgress, scale: number) {
   return {
-    opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-    transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, scale] }) }],
+    opacity: interpolateTransition(progress, { inputRange: [0, 1], outputRange: [1, 0] }),
+    transform: [{ scale: interpolateTransition(progress, { inputRange: [0, 1], outputRange: [1, scale] }) }],
   };
 }
-export function navigationExitStyle(progress: Animated.Value, scale: number) {
+export function navigationExitStyle(progress: TransitionProgress, scale: number) {
   let scales = graphs.get(progress);
   if (!scales) { scales = new Map(); graphs.set(progress, scales); }
   let style = scales.get(scale);

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import React, { useState } from "react";
 import { act, create } from "react-test-renderer";
 import "./nativeMock";
-import { Animated } from "react-native";
+import { createTransitionProgress, resolveTransitionStyle } from "@legend-apps/presentation";
 import { FocusRegion, SharedElement, FocusStage, FocusSurfaceContext, FocusLayoutOffsetContext, createFocusSurface,
   measureFocusSurface, measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion } from "../../../../packages/presentation/src/focus";
 import { focusCamera, normalizeTransition, resolveTransition } from "../../../../packages/presentation/src/focusGeometry";
@@ -37,7 +37,7 @@ test("live shared children retain their instance and follow the same rectangle t
   const destination = { x: 800, y: 300, width: 640, height: 360 };
   const region = { x: 150, y: 80, width: 500, height: 300 };
   const camera = focusCamera(region, { width: 1920, height: 1080 });
-  const progress = new Animated.Value(0);
+  const progress = createTransitionProgress(0);
   const motion = createFocusMotion(progress, undefined, camera);
   motion.elements.set("live", { from: source, to: destination, own: source });
   let mounts = 0;
@@ -58,18 +58,19 @@ test("live shared children retain their instance and follow the same rectangle t
     expect([surface.width, surface.height]).toEqual([1920, 1080]);
     await act(() => tree.update(render(motion)));
     expect(surface.root).toBe(root);
-    const shared = tree.root.findAllByType("layer").find((layer) => layer.props.style[1]?.transform?.length === 4);
-    const transform = shared.props.style[1].transform;
+    const shared = tree.root.findAllByType("animated-view").find((layer) => layer.props.style[1]?.value?.transform?.length === 4);
+
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-      progress.setValue(t);
+      progress.value = t;
+      const transform = shared.props.style[1].value.transform;
       const scale = 1 + (camera.scale - 1) * t;
-      const x = transform[0].translateX.__getValue();
-      const y = transform[1].translateY.__getValue();
+      const x = transform[0].translateX;
+      const y = transform[1].translateY;
       expect((source.x + source.width / 2 + x) * scale + camera.x * t)
         .toBeCloseTo(source.x + source.width / 2 + (destination.x + destination.width / 2 - source.x - source.width / 2) * t);
       expect((source.y + source.height / 2 + y) * scale + camera.y * t)
         .toBeCloseTo(source.y + source.height / 2 + (destination.y + destination.height / 2 - source.y - source.height / 2) * t);
-      expect(source.width * transform[2].scaleX.__getValue() * scale).toBeCloseTo(source.width + (destination.width - source.width) * t);
+      expect(source.width * transform[2].scaleX * scale).toBeCloseTo(source.width + (destination.width - source.width) * t);
     }
     await act(() => tree.update(render(undefined)));
     expect(mounts).toBe(1);
@@ -97,7 +98,7 @@ test("ambiguous IDs and unmeasurable views are omitted without stalling navigati
 
 test("framework labels move without stretching while bars resize from their fixed left edge", async () => {
   const surface = createFocusSurface();
-  const progress = new Animated.Value(0);
+  const progress = createTransitionProgress(0);
   const motion = createFocusMotion(progress);
   const fromBar = { x: 285, y: 55, width: 400, height: 30 };
   const toBar = { x: 285, y: 340, width: 900, height: 30 };
@@ -111,18 +112,18 @@ test("framework labels move without stretching while bars resize from their fixe
       <SharedElement id="benchmark-React Native-label" resize="preserve" testID="label"><span /></SharedElement>
       <SharedElement id="benchmark-React Native-bar" testID="bar"><span /></SharedElement>
     </FocusSurfaceContext.Provider>); });
-    const layers = tree.root.findAllByType("layer");
+    const layers = tree.root.findAllByType("animated-view");
     for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-      progress.setValue(t);
-      const label = layers.find(layer => layer.props.testID === "label").props.style[1].transform;
-      const bar = layers.find(layer => layer.props.testID === "bar").props.style[1].transform;
-      expect(label[2].scaleX.__getValue()).toBe(1);
-      expect(label[3].scaleY.__getValue()).toBe(1);
-      expect(fromLabel.y + label[1].translateY.__getValue()).toBeCloseTo(55 + 285 * t);
-      const width = fromBar.width * bar[2].scaleX.__getValue();
+      progress.value = t;
+      const label = layers.find(layer => layer.props.testID === "label").props.style[1].value.transform;
+      const bar = layers.find(layer => layer.props.testID === "bar").props.style[1].value.transform;
+      expect(label[2].scaleX).toBe(1);
+      expect(label[3].scaleY).toBe(1);
+      expect(fromLabel.y + label[1].translateY).toBeCloseTo(55 + 285 * t);
+      const width = fromBar.width * bar[2].scaleX;
       expect(width).toBeCloseTo(400 + 500 * t);
-      expect(fromBar.x + fromBar.width / 2 + bar[0].translateX.__getValue() - width / 2).toBeCloseTo(285);
-      expect(fromBar.y + bar[1].translateY.__getValue()).toBeCloseTo(55 + 285 * t);
+      expect(fromBar.x + fromBar.width / 2 + bar[0].translateX - width / 2).toBeCloseTo(285);
+      expect(fromBar.y + bar[1].translateY).toBeCloseTo(55 + 285 * t);
     }
   } finally {
     if (tree) await act(() => tree.unmount());

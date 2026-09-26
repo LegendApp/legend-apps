@@ -1,10 +1,11 @@
-import { Animated } from "react-native";
+import { interpolateTransition, subtractTransition, divideTransition, type TransitionProgress } from "./transitionValues";
+
 import type { FocusMotion } from "./focus";
 
 type Pair = FocusMotion["elements"] extends Map<string, infer P> ? P : never;
-const interpolate = (progress: Animated.Value, from: number, to: number) =>
-  progress.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
-const graphs = new WeakMap<FocusMotion, { signature: string; progress: Animated.Value;
+const interpolate = (progress: TransitionProgress, from: number, to: number) =>
+  interpolateTransition(progress, { inputRange: [0, 1], outputRange: [from, to] });
+const graphs = new WeakMap<FocusMotion, { signature: string; progress: TransitionProgress;
   camera?: ReturnType<typeof createCameraStyle>;
   elements: WeakMap<Pair, Map<string, ReturnType<typeof createElementTransform>>> }>();
 function graphFor(motion: FocusMotion) {
@@ -47,13 +48,13 @@ function createElementTransform(motion: FocusMotion, pair: Pair, resize: "stretc
     // Both live copies follow the same screen rectangle. Undo the enclosing
     // camera on the overview copy so it doesn't receive the zoom twice.
     return [
-      { translateX: Animated.subtract(Animated.divide(Animated.subtract(
+      { translateX: subtractTransition(divideTransition(subtractTransition(
         interpolate(progress, pair.from.x + pair.from.width / 2, pair.to.x + pair.to.width / 2),
         interpolate(progress, cameraFrom.x, cameraTo.x)), cameraScale), pair.own.x + pair.own.width / 2) },
-      { translateY: Animated.subtract(Animated.divide(Animated.subtract(
+      { translateY: subtractTransition(divideTransition(subtractTransition(
         interpolate(progress, pair.from.y + pair.from.height / 2, pair.to.y + pair.to.height / 2),
         interpolate(progress, cameraFrom.y, cameraTo.y)), cameraScale), pair.own.y + pair.own.height / 2) },
-      { scaleX: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.width / pair.own.width, pair.to.width / pair.own.width), cameraScale) },
-      { scaleY: Animated.divide(resize === "preserve" ? 1 : interpolate(progress, pair.from.height / pair.own.height, pair.to.height / pair.own.height), cameraScale) },
+      { scaleX: divideTransition(resize === "preserve" ? 1 : interpolate(progress, pair.from.width / pair.own.width, pair.to.width / pair.own.width), cameraScale) },
+      { scaleY: divideTransition(resize === "preserve" ? 1 : interpolate(progress, pair.from.height / pair.own.height, pair.to.height / pair.own.height), cameraScale) },
     ];
 }

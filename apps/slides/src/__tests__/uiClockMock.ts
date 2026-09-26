@@ -9,6 +9,7 @@ mock.module("react-native-reanimated", () => ({
   __esModule: true,
   createWorkletRuntime: () => ({}),
   runOnRuntime: (_runtime, fn) => fn,
+  makeMutable: value => ({value}),
   withTiming: value => value,
   runOnJS: callback => callback,
   default: { View: "animated-view" },

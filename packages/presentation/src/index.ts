@@ -56,3 +56,5 @@ export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
 
 export { useNativeVideo } from "./useNativeVideo";
 export { NativeVideoView } from "./NativeVideoView";
+
+export { createTransitionProgress, interpolateTransition, subtractTransition, divideTransition, sampleTransitionValue, resolveTransitionStyle, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "./transitionValues";

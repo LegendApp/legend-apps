@@ -8,7 +8,7 @@ const React = require("react");
 function load(name) {
   const code = transformSync(readFileSync(new URL(`../../../../packages/presentation/src/${name}`, import.meta.url), "utf8"), { loader: name.endsWith("tsx") ? "tsx" : "ts", format: "cjs", jsx: "automatic" }).code;
   const module = { exports: {} };
-  Function("require", "module", "exports", code)(id => id === "./focusGeometry" ? load("focusGeometry.ts") : id === "./focusMotionStyles" ? load("focusMotionStyles.ts") : id === "react-native" ? { Animated: {} } : id === "react" ? React : id === "./nativeChildren" ? {} : require(id), module, module.exports);
+  Function("require", "module", "exports", code)(id => id === "./focusGeometry" ? load("focusGeometry.ts") : id === "./focusMotionStyles" ? load("focusMotionStyles.ts") : id === "./transitionValues" ? {} : id === "react-native-reanimated" ? { default: {} } : id === "react-native" ? { Animated: {} } : id === "react" ? React : id === "./nativeChildren" ? {} : require(id), module, module.exports);
   return module.exports;
 }
 const { createFocusSurface, invalidateFocusSurface, measureFocusSurface, prepareFocusSurface, measureFocusPair } = load("focus.tsx");

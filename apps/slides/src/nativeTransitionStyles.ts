@@ -1,28 +1,29 @@
+import { interpolateTransition, type TransitionProgress, type TransitionStyle } from "@legend-apps/presentation";
 import type { TransitionDefinition, TransitionContext } from "@legend-apps/presentation";
-import { Animated, type ViewStyle } from "react-native";
+
 
 type Context = Omit<TransitionContext, "progress">;
-type NativeStyle = Animated.WithAnimatedObject<ViewStyle>;
+type NativeStyle = TransitionStyle;
 type Compilation = { definition: TransitionDefinition; context: Context;
   samples: ReturnType<TransitionDefinition["styles"]>[]; styles: Map<string, NativeStyle> };
-// Native Animated nodes are resources owned by one transition progress value.
+// UI transition nodes are resources owned by one transition progress value.
 // Preserve them across readiness/layout rerenders instead of rebuilding a graph
 // just after its first native frame. Weak ownership releases completed graphs.
-const compilations = new WeakMap<Animated.Value, Compilation[]>();
+const compilations = new WeakMap<TransitionProgress, Compilation[]>();
 function sameContext(a: Context, b: Context) {
   return a.direction === b.direction && a.width === b.width && a.height === b.height
     && a.hasBackground === b.hasBackground && Object.keys(a.options).length === Object.keys(b.options).length
     && Object.keys(a.options).every(key => a.options[key] === b.options[key]);
 }
 
-/** Compile the numeric authoring callback once; native Animated owns every frame. */
+/** Compile the numeric authoring callback once; UI runtime owns every frame. */
 export function nativeTransitionStyles(
   definition: TransitionDefinition,
-  progress: Animated.Value,
+  progress: TransitionProgress,
   context: Omit<TransitionContext, "progress">,
   incoming: boolean,
   shared: boolean,
-): Animated.WithAnimatedObject<ViewStyle> {
+): TransitionStyle {
   const inputRange = Array.from({ length: 61 }, (_, i) => i / 60);
   let entries = compilations.get(progress);
   if (!entries) { entries = []; compilations.set(progress, entries); }
@@ -49,7 +50,7 @@ export function nativeTransitionStyles(
         !values.every((value) => typeof value === "string" && /^-?[\d.]+(deg|rad)$/.test(value))) {
       throw new Error(`${property} must have compatible numeric values throughout the transition`);
     }
-    return progress.interpolate({ inputRange, outputRange: values as number[] | string[], extrapolate: "clamp" });
+    return interpolateTransition(progress, { inputRange, outputRange: values as number[] | string[], extrapolate: "clamp" });
   };
   const output: Record<string, unknown> = {};
   const keys = new Set(samples.flatMap((style) => Object.keys(style)));

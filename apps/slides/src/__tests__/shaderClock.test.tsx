@@ -150,20 +150,19 @@ test("carousel retargets from its displayed position and freezes for navigation-
 
 test("carousel exit reads the host transition directly without a second animation", async () => {
   const { NavigationExitView, NavigationTransitionContext } = await import("../../../../packages/presentation/src/navigation");
-  const { Animated } = await import("react-native");
-  const progress = new Animated.Value(0);
+  const progress = { value: 0 };
   let tree;
   try {
     await act(() => { tree = create(<NavigationTransitionContext.Provider value={{ progress, outgoing: true }}>
       <NavigationExitView>card</NavigationExitView>
     </NavigationTransitionContext.Provider>); });
-    const style = tree.root.findByType("layer").props.style[1];
-    expect(style.opacity.__getValue()).toBe(1);
-    progress.setValue(0.5);
-    expect(style.opacity.__getValue()).toBe(0.5);
-    expect(style.transform[0].scale.__getValue()).toBeCloseTo(0.94);
-    progress.setValue(1);
-    expect(style.opacity.__getValue()).toBe(0);
+    const style = tree.root.findByType("animated-view").props.style[1];
+    expect(style.value.opacity).toBe(1);
+    progress.value = 0.5;
+    expect(style.value.opacity).toBe(0.5);
+    expect(style.value.transform[0].scale).toBeCloseTo(0.94);
+    progress.value = 1;
+    expect(style.value.opacity).toBe(0);
   } finally {
     if (tree) await act(() => tree.unmount());
   }
