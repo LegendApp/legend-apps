@@ -8,6 +8,17 @@ import type { AppManifest } from "./types";
 export const sparkCheckout = path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"));
 export const sparkWorkspace = (appId: string) => path.join(shellDir, ".legend", "spark", appId);
 
+export function sparkMetroBlockList(appId: string) {
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return [
+    "/shell/\\.legend/.*/(?:macos|ios|android|\\.spark)/",
+    `${escape(path.join(shellDir, ".legend"))}/(?!spark(?:/|$))[^/]+(?:/|$)`,
+    // Each consumer owns its dependency installation. Crawling siblings races
+    // their installs and multiplies Metro startup work for every generated app.
+    `${escape(path.join(shellDir, ".legend", "spark"))}/(?!${escape(appId)}(?:/|$))[^/]+(?:/|$)`,
+  ];
+}
+
 function json(file: string) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
@@ -162,7 +173,7 @@ config.resolver.useWatchman = false;
 const existingBlockList = config.resolver.blockList;
 config.resolver.blockList = [
   ...(Array.isArray(existingBlockList) ? existingBlockList : existingBlockList ? [existingBlockList] : []),
-  new RegExp(${JSON.stringify("/shell/\\.legend/.*/(?:macos|ios|android|\\.spark)/")}),
+  ...${JSON.stringify(sparkMetroBlockList(manifest.id))}.map(pattern => new RegExp(pattern)),
 ];
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, name, platform) => {

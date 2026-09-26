@@ -5,13 +5,25 @@ import fs from "node:fs";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
-import { sparkCheckout, sparkConfig } from "./sparkWorkspaces";
+import { sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 
 const require = createRequire(import.meta.url);
 const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
 const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
+
+test("Metro excludes sibling consumer installs while retaining its dependencies and shared source", () => {
+  const patterns = sparkMetroBlockList("code").map(pattern => new RegExp(pattern));
+  const blocked = (file: string) => patterns.some(pattern => pattern.test(file));
+  assert.equal(blocked(path.join(sparkWorkspace("test-kitchen-sink"), "node_modules/react/index.js")), true);
+  assert.equal(blocked(sparkWorkspace("code-other")), true);
+  assert.equal(blocked(path.resolve("shell/.legend/workspaces/dev/code/node_modules/react/index.js")), true);
+  assert.equal(blocked(path.join(sparkWorkspace("code"), "node_modules/react/index.js")), false);
+  assert.equal(blocked(path.join(sparkWorkspace("code"), ".spark/products/app")), true);
+  assert.equal(blocked(path.resolve("packages/source-editor/src/index.tsx")), false);
+  assert.equal(blocked(path.resolve("apps/code/src/App.tsx")), false);
+});
 
 for (const appId of appIds) {
   test(`Spark preserves ${appId} identity and explicit native graph`, async () => {
