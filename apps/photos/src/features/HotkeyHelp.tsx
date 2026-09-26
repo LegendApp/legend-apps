@@ -14,6 +14,7 @@ const sorter = (a: HotkeyInfo, b: HotkeyInfo) => {
 
 const SpringOpen = {
   type: 'spring',
+  useNativeDriver: false,
   bounciness: 3,
   speed: 36,
 } as const;
@@ -57,7 +58,7 @@ export function HotkeyHelp() {
               <LegendList
                 style={{ maxHeight: 800 }}
                 data={hotkeys}
-                renderItem={HotkeyHelpItem}
+                renderItem={(props) => <HotkeyHelpItem {...props} />}
                 estimatedItemSize={36}
                 contentContainerStyle={styles.list}
                 //   waitForInitialLayout

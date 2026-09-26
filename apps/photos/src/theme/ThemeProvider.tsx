@@ -1,7 +1,6 @@
 import { createJSONManager } from '../utils/JSONManager';
-import { observer, useValue, useObservable } from '@legendapp/state/react';
+import { observer, useValue, useObserveEffect } from '@legendapp/state/react';
 import { Uniwind } from "uniwind";
-import { useEffect } from "react";
 import * as React from 'react';
 import { type ReactNode, createContext, useContext } from 'react';
 import { View } from 'react-native';
@@ -44,8 +43,9 @@ const ThemeContext = createContext<ThemeContextType>(undefined as any);
 export const ThemeProvider = observer(({ children }: { children: ReactNode }) => {
   const theme$ = themeState$;
   const theme = useValue(theme$.currentTheme);
-  const custom = useValue(theme$.customColors[theme]);
-  useEffect(() => {
+  useObserveEffect(() => {
+    const theme = theme$.currentTheme.get();
+    const custom = theme$.customColors[theme].get();
     Uniwind.setTheme(theme);
     Uniwind.updateCSSVariables(theme, {
       "--color-background-primary": custom.background.primary,
@@ -58,7 +58,7 @@ export const ThemeProvider = observer(({ children }: { children: ReactNode }) =>
       "--color-accent-secondary": custom.accent.secondary,
       "--color-border": custom.border,
     });
-  }, [theme, custom]);
+  });
 
   const setTheme = (theme: ThemeType) => {
     theme$.currentTheme.set(theme);
@@ -70,7 +70,7 @@ export const ThemeProvider = observer(({ children }: { children: ReactNode }) =>
 
   // Context value
   const contextValue: ThemeContextType = {
-    currentTheme: theme$.currentTheme.get(),
+    currentTheme: theme,
     setTheme,
     resetTheme,
   };

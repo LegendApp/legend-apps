@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { type HotkeyName, getHotkey, getHotkeyMetadata } from '../../settings/Hotkeys';
 import { state$ } from '../State';
 import KeyboardManager, {
@@ -207,8 +208,14 @@ export function onHotkeys(hotkeyCallbacks: HotkeyCallbacks) {
 }
 
 export function useOnHotkeys(hotkeyCallbacks: HotkeyCallbacks) {
+  const callbacks = useRef(hotkeyCallbacks);
+  callbacks.current = hotkeyCallbacks;
   useObserveEffect((e) => {
-    const sub = onHotkeys(hotkeyCallbacks);
+    // Recycled list cells keep subscriptions but receive new photo/index props.
+    const currentCallbacks = Object.fromEntries(Object.keys(callbacks.current).map(name =>
+      [name, () => callbacks.current[name as HotkeyName]?.()]
+    ));
+    const sub = onHotkeys(currentCallbacks);
     e.onCleanup = sub;
   });
 }

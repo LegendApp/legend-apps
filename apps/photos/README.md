@@ -10,6 +10,9 @@ bun run spark photos analyze
 bun test apps/photos/tests
 ```
 
+After changing native module discovery or pod configuration, rebuild with
+`bun run spark photos build --force` to refresh the CocoaPods graph.
+
 The app uses the workspace React 19 / React Native macOS 0.81, Legend List 3,
 Legend State, Motion, Uniwind, and Spark dependencies. Spark owns windows, menus,
 keyboard events, controls, filesystem access, persistence and updates. PhotoKit
@@ -37,3 +40,7 @@ still materializes image data for albums (including iCloud assets); this migrati
 does not claim to optimize large cloud libraries or implement video playback.
 The old optional Aptabase integration is omitted: it depended on a patched legacy
 native bridge and an external build-time key. No telemetry is sent by this app.
+
+Runtime validation covers an isolated local fixture library. Access to the real
+Apple Photos library and the legacy Documents settings location still needs a
+normal-launch check with the macOS permissions granted by the user.

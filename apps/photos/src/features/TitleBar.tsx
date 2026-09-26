@@ -8,6 +8,8 @@ import { Show } from '@legendapp/state/react';
 import { Pressable, StyleSheet } from 'react-native';
 import * as WindowControls from "@legendapp/spark/windows/controls";
 
+const fade = { type: "tween", duration: 100, useNativeDriver: false } as const;
+
 export function TitleBar() {
   const onHover = () => {
     state$.titleBarHovered.set(true);
@@ -30,7 +32,7 @@ export function TitleBar() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ type: 'tween', duration: 100 }}
+          transition={fade}
         >
           <VibrancyView
             style={styles.vibrancy}

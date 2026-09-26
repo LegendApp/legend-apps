@@ -14,6 +14,8 @@ import { Show, useValue, useObservable } from '@legendapp/state/react';
 import React, { useCallback, useRef } from 'react';
 import { Animated, Dimensions, Pressable } from 'react-native';
 
+const Fade = { type: "tween", duration: 100, useNativeDriver: false } as const;
+
 const SpringOpen = {
   bounciness: 3,
   speed: 24,
@@ -26,12 +28,14 @@ const SpringClose = {
 
 const SpringInfo = {
   type: 'spring',
+  useNativeDriver: false,
   bounciness: 6,
   speed: 24,
 } as const;
 
 const SpringFilmstrip = {
   type: 'spring',
+  useNativeDriver: false,
   bounciness: 4,
   speed: 24,
 } as const;
@@ -232,7 +236,7 @@ export const FullscreenPhoto = () => {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
-            opacity: { type: 'tween', duration: 100 },
+            opacity: Fade,
             y: SpringInfo,
           }}
         >
@@ -248,7 +252,7 @@ export const FullscreenPhoto = () => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 88 }}
           transition={{
-            opacity: { type: 'tween', duration: 100 },
+            opacity: Fade,
             y: SpringFilmstrip,
           }}
         >
