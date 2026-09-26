@@ -1,7 +1,11 @@
+import { useEffect, useRef } from "react";
+import { usePresentationValue } from "@legend-apps/presentation";
+import { webviewPlaybackScript } from "./webviewPlayback";
 import { StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { WebView, type WebViewProps } from "react-native-webview";
 
 type WebviewProps = Omit<WebViewProps, "source" | "style"> & {
+  previewTime?: number;
   baseUrl?: string;
   componentCss?: string;
   componentScript?: string;
@@ -40,6 +44,7 @@ function createComponentDocument(script: string, css: string | undefined, props:
 }
 
 export function Webview({
+  previewTime = 1.25,
   baseUrl,
   componentCss,
   componentScript,
@@ -49,8 +54,19 @@ export function Webview({
   readAccessUrl,
   src,
   style,
+  injectedJavaScriptBeforeContentLoaded,
+  injectedJavaScriptBeforeContentLoadedForMainFrameOnly,
+  onLoadEnd,
   ...webViewProps
 }: WebviewProps) {
+  const ref = useRef<WebView>(null);
+  const configuredPhase = usePresentationValue("playbackPhase");
+  const active = usePresentationValue("isActive");
+  const preview = usePresentationValue("isPreview");
+  const preparing = usePresentationValue("isPreparing");
+  const phase = configuredPhase ?? (preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused");
+  const playbackScript = webviewPlaybackScript(phase, previewTime);
+  useEffect(() => { ref.current?.injectJavaScript(playbackScript); }, [playbackScript]);
   const document = componentScript
     ? createComponentDocument(componentScript, componentCss, props)
     : html;
@@ -61,6 +77,17 @@ export function Webview({
   return (
     <WebView
       {...webViewProps}
+      ref={ref}
+      // Do not widen the frame scope of a caller's custom injected script.
+      injectedJavaScriptBeforeContentLoadedForMainFrameOnly={injectedJavaScriptBeforeContentLoadedForMainFrameOnly ?? Boolean(injectedJavaScriptBeforeContentLoaded)}
+      injectedJavaScriptBeforeContentLoaded={`${playbackScript}
+${injectedJavaScriptBeforeContentLoaded ?? ""}
+true;`}
+      onLoadEnd={event => {
+        // Navigation may complete after a phase change; always send current state.
+        ref.current?.injectJavaScript(playbackScript);
+        onLoadEnd?.(event);
+      }}
       allowingReadAccessToURL={readAccessUrl}
       originWhitelist={originWhitelist}
       source={source}
