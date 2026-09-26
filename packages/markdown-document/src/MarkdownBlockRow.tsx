@@ -116,6 +116,7 @@ export const MarkdownRowEditorInput = memo(
     activationMode,
     initialSelection,
     markdownStyle,
+    onEditorReady,
     onBlurRef,
     onChangeMarkdownRef,
     onChangeSelectionRef,
@@ -128,6 +129,7 @@ export const MarkdownRowEditorInput = memo(
     activationMode: ActiveBlockRenderState["activationMode"];
     initialSelection: number;
     markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+    onEditorReady?: (blockId: string) => void;
     onBlurRef: RefObject<(blockId: string) => void>;
     onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
     onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
@@ -148,10 +150,13 @@ export const MarkdownRowEditorInput = memo(
         }
       };
       applyInitialSelection();
-      const timeout = setTimeout(applyInitialSelection, 0);
+      const timeout = setTimeout(() => {
+        applyInitialSelection();
+        onEditorReady?.(block.id);
+      }, 0);
 
       return () => clearTimeout(timeout);
-    }, [activationMode, activeInputRef, block.id, initialSelectionRef]);
+    }, [activationMode, activeInputRef, block.id, initialSelectionRef, onEditorReady]);
 
     return (
       <EnrichedMarkdownTextInput
@@ -187,6 +192,7 @@ export const MarkdownRowEditorInput = memo(
     previousProps.activeInputRef === nextProps.activeInputRef &&
     previousProps.initialSelection === nextProps.initialSelection &&
     previousProps.markdownStyle === nextProps.markdownStyle &&
+    previousProps.onEditorReady === nextProps.onEditorReady &&
     previousProps.onBlurRef === nextProps.onBlurRef &&
     previousProps.onChangeMarkdownRef === nextProps.onChangeMarkdownRef &&
     previousProps.onChangeSelectionRef === nextProps.onChangeSelectionRef &&
@@ -243,6 +249,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   getBlockIdAtIndex,
   getBlockMetadata,
   onActivate,
+  onEditorReady,
   onBlurRef,
   onChangeMarkdownRef,
   onChangeSelectionRef,
@@ -265,6 +272,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
+  onEditorReady?: (blockId: string) => void;
   onBlurRef: RefObject<(blockId: string) => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
   onChangeSelectionRef: RefObject<ChangeSelectionHandler>;
@@ -370,6 +378,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
     <MarkdownRowEditorInput
       activeInputRef={activeInputRef}
       activationMode={activationMode}
+      onEditorReady={onEditorReady}
       block={activeEditorBlock}
       initialSelection={initialSelection}
       markdownStyle={markdownStyle}

@@ -4,7 +4,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
-import { MarkdownBlockRow } from "../MarkdownBlockRow";
+import { MarkdownBlockRow, MarkdownRowEditorInput } from "../MarkdownBlockRow";
 import { defaultMarkdownStyle } from "../styles";
 import type {
   MarkdownBlockMetadata,
@@ -1683,4 +1683,32 @@ it("updates native selection offsets without rendering the document owner", asyn
     if (renderer) await act(async () => renderer.unmount());
     renderSpy.mockRestore();
   }
+});
+
+
+describe("native editor handoff readiness", () => {
+  it("releases queued keys only after the final focus and selection commands", async () => {
+    jest.useFakeTimers();
+    const inputRef = { current: null as any };
+    const ready = jest.fn();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    const noop = { current: jest.fn() };
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownRowEditorInput
+        block={block("next", 0, "")} activeInputRef={inputRef}
+        activationMode="programmatic" initialSelection={0} markdownStyle={defaultMarkdownStyle}
+        onEditorReady={ready} onBlurRef={noop} onChangeMarkdownRef={noop} onChangeSelectionRef={noop}
+        onSelectionDragOutsideRef={noop} onVerticalNavigationOutsideRef={noop}
+      />);
+    });
+    expect(ready).not.toHaveBeenCalled();
+    await act(async () => jest.runOnlyPendingTimers());
+    expect(ready).toHaveBeenCalledWith("next");
+    // The command must follow selection, otherwise replayed typing moves the caret
+    // and the delayed selection effect moves it back again.
+    expect(inputRef.current.focus.mock.invocationCallOrder.at(-1)).toBeLessThan(inputRef.current.setSelection.mock.invocationCallOrder.at(-1));
+    expect(inputRef.current.setSelection.mock.invocationCallOrder.at(-1)).toBeLessThan(ready.mock.invocationCallOrder[0]);
+    await act(async () => renderer.unmount());
+    jest.useRealTimers();
+  });
 });

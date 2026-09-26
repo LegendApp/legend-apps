@@ -3308,6 +3308,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       () => [styles.blockSelectionOverlay, { backgroundColor: resolveSelectionColor(theme?.selectionColor) }],
       [theme?.selectionColor],
     );
+    const handleEditorReady = useCallback((blockId: string) => {
+      const host = containerRef.current;
+      if (host) MarkdownEditorHostCommands.completeKeyboardHandoff(host, blockId);
+    }, []);
     const renderMarkdownBlockRow = useCallback(
       (props: LegendListDataSourceRenderItemProps<string>) => props.item ? (
         <MarkdownBlockRow
@@ -3321,6 +3325,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
+          onEditorReady={handleEditorReady}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
           onChangeSelectionRef={handleChangeSelectionRef}
@@ -3332,6 +3337,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ) : null,
       [
         activateBlock,
+        handleEditorReady,
         documentRenderState$,
         getBlockCount,
         getBlockIdAtIndex,

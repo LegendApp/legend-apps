@@ -62,3 +62,8 @@ clang++ -std=c++20 -fobjc-arc -framework AppKit -include AppKit/AppKit.h \
   "$markdown_editor_dir/tests/MarkdownAutoLinkCode.test.mm" \
   "$markdown_parser_object" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+clang++ -std=c++20 -fobjc-arc -framework AppKit \
+  "$markdown_editor_dir/ios/LEMarkdownKeyboardHandoff.mm" \
+  "$markdown_editor_dir/tests/MarkdownKeyboardHandoff.test.mm" -o "$markdown_test_binary"
+"$markdown_test_binary"

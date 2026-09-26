@@ -1,3 +1,4 @@
+#import "LEMarkdownKeyboardHandoff.h"
 #import "RNMarkdownBlockEditor.h"
 #import "LEMarkdownTextSelection.h"
 
@@ -445,6 +446,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
   id _editorKeyDownMonitor;
+  LEMarkdownKeyboardHandoff *_keyboardHandoff;
   LEMarkdownTextSelection *_textSelection;
 }
 
@@ -459,6 +461,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     registerNativeMarkdownProvider();
     _props = std::make_shared<const MarkdownEditorHostProps>();
     _activationViews = [NSMapTable strongToWeakObjectsMapTable];
+    _keyboardHandoff = [LEMarkdownKeyboardHandoff new];
     [self installEditorKeyDownMonitorIfNeeded];
     [self installTextSelection];
   }
@@ -547,6 +550,13 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   _pasteSelectionPrefix = nil;
   void (*send)(id, SEL, NSInteger, NSInteger) = (void (*)(id, SEL, NSInteger, NSInteger))[input methodForSelector:selector];
   send(input, selector, selection, selection);
+}
+
+- (void)completeKeyboardHandoff:(NSString *)blockId {
+  if (![_activeBlockId isEqualToString:blockId] || ![self activeEditorContainsFirstResponder]) return;
+  NSArray<NSEvent *> *events = [_keyboardHandoff finishAtBlock:blockId];
+  // Prepend in reverse so queued keys retain their order ahead of newer input.
+  for (NSEvent *event in events.reverseObjectEnumerator) [NSApp postEvent:event atStart:YES];
 }
 
 - (void)writeSelectionClipboard:(NSString *)markdown {
@@ -763,6 +773,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   _editorKeyDownMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                                                  handler:^NSEvent *_Nullable(NSEvent *event) {
     RNMarkdownEditorHost *strongSelf = weakSelf;
+    if (strongSelf != nil && event.window == strongSelf.window && [strongSelf->_keyboardHandoff enqueue:event]) return nil;
     if (strongSelf == nil || strongSelf->_textSelection.hasSelection || ![strongSelf activeEditorContainsFirstResponder]) {
       return event;
     }
@@ -804,6 +815,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     ) {
       NSArray<NSString *> *markdownParts = callMarkdownSplitAtSelectedRange(editorInput);
       if (markdownParts != nil) {
+        [strongSelf->_keyboardHandoff beginFromBlock:activeBlockView.blockId];
         [strongSelf emitEnterPressedWithMarkdownParts:markdownParts];
         return nil;
       }
@@ -958,6 +970,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 - (void)clearActiveEditor
 {
+  [_keyboardHandoff cancel];
   [self showActiveBlockContents];
   [self stopObservingScrollView];
   _activeBlockId = nil;
