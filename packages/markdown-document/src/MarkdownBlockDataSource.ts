@@ -165,7 +165,11 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
     }
   }
 
-  applyTransactionResult(result: MarkdownTransactionResult, move?: Extract<DataSourceOperation, { type: "move" }>) {
+  applyTransactionResult(
+    result: MarkdownTransactionResult,
+    move?: Extract<DataSourceOperation, { type: "move" }>,
+    retainedBlock?: { blockId: string; index: number },
+  ) {
     this.validateTransactionResult(result);
     const { blockIds, deleteCount, startBlockIndex } = result.changedRange;
     const previousLength = this.length;
@@ -178,6 +182,27 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
 
     if (move) {
       this.publish(previousLength, [move, { type: "update", index: startBlockIndex, count: blockIds.length, layout: "invalidate" }]);
+      return;
+    }
+
+    // A native edit can remove an empty placeholder before the active row.
+    // Preserve that row at its old position instead of deleting/recreating it,
+    // which would unmount its input and blur the editor while the user types.
+    const retainedOffset = retainedBlock ? blockIds.indexOf(retainedBlock.blockId) : -1;
+    if (retainedBlock && retainedOffset >= 0 &&
+        retainedBlock.index >= startBlockIndex && retainedBlock.index < startBlockIndex + deleteCount) {
+      const leadingDelete = retainedBlock.index - startBlockIndex;
+      const trailingDelete = deleteCount - leadingDelete - 1;
+      const trailingInsert = blockIds.length - retainedOffset - 1;
+      const operations: DataSourceOperation[] = [];
+      if (leadingDelete > 0 || retainedOffset > 0) {
+        operations.push({ type: "splice", index: startBlockIndex, deleteCount: leadingDelete, insertCount: retainedOffset });
+      }
+      if (trailingDelete > 0 || trailingInsert > 0) {
+        operations.push({ type: "splice", index: startBlockIndex + retainedOffset + 1, deleteCount: trailingDelete, insertCount: trailingInsert });
+      }
+      operations.push({ type: "update", index: startBlockIndex, count: blockIds.length, layout: "invalidate" });
+      this.publish(previousLength, operations);
       return;
     }
 

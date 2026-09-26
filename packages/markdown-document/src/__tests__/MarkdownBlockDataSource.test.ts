@@ -56,6 +56,26 @@ function result(
 }
 
 describe("MarkdownBlockDataSource", () => {
+  it.each([false, true])("retains the active input when typing collapses the preceding empty row (indexed=%s)", (indexed) => {
+    const ids = ["before", "empty", "active", "tail"];
+    const adapter = (indexed ? {
+      getBlockIdAtIndexSync: (_documentId: string, index: number) => ids[index],
+      getBlockIndexForIdSync: (_documentId: string, id: string) => ids.indexOf(id),
+    } : {}) as MarkdownDocumentAdapter;
+    const source = new MarkdownBlockDataSource(adapter, "d1", snapshot(ids.map((id, index) => block(id, index))));
+    const retainedBlock = { blockId: "active", index: source.getIndexForBlockId("active") };
+    const mutations = jest.fn();
+    source.subscribe(mutations);
+    ids.splice(1, 2, "active");
+    source.applyTransactionResult(result(1, 2, [block("active", 1, "typed")], ["empty"], false), undefined, retainedBlock);
+    expect(Array.from({ length: source.getLength() }, (_, index) => source.getKey(index))).toEqual(ids);
+    expect(mutations).toHaveBeenCalledWith(expect.objectContaining({ operations: [
+      // Delete only the placeholder, leaving the active editor's container alive.
+      { type: "splice", index: 1, deleteCount: 1, insertCount: 0 },
+      { type: "update", index: 1, count: 1, layout: "invalidate" },
+    ] }));
+  });
+
   it("preserves the original row while native indexed storage inserts the split suffix", () => {
     const nativeBlockIds = ["a", "b", "c"];
     const adapter = {

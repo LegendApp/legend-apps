@@ -994,12 +994,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockDataSourceRef.current?.validateTransactionResult(result);
     }, []);
 
-    const applyTransactionResult = useCallback((result: MarkdownTransactionResult, move?: Extract<DataSourceOperation, { type: "move" }>) => {
+    const applyTransactionResult = useCallback((
+      result: MarkdownTransactionResult,
+      move?: Extract<DataSourceOperation, { type: "move" }>,
+      retainedBlock?: { blockId: string; index: number },
+    ) => {
       const dataSource = blockDataSourceRef.current;
       if (!dataSource) {
         throw new Error("Markdown block data source is not loaded.");
       }
-      dataSource.applyTransactionResult(result, move);
+      dataSource.applyTransactionResult(result, move, retainedBlock);
       currentRevisionRef.current = result.revision;
       bumpTransactionRowRenderRevisions(result);
 
@@ -1066,6 +1070,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       try {
         const beforeMarkdown = committedMarkdownRef.current;
+        const retainedBlock = { blockId: activeBlockIdValue, index: blockDataSourceRef.current!.getIndexForBlockId(activeBlockIdValue) };
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, markdown);
         }
@@ -1131,7 +1136,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
         // Native edits mutate the adapter immediately. Publish every transaction
         // in order so the list's keys, count, and measurements stay in sync.
-        applyTransactionResult(result);
+        applyTransactionResult(result, undefined, retainedBlock);
       } catch (error) {
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
