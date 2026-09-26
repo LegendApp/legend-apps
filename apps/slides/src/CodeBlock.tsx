@@ -8,6 +8,10 @@ import {
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { createCodeHighlightCache } from "./codeHighlightCache";
+
+const highlightSlideCode = createCodeHighlightCache(highlightString);
+
 type CodeBlockProps = {
   language?: string;
   source: string;
@@ -30,7 +34,7 @@ export function CodeBlock({ language, source }: CodeBlockProps) {
     let active = true;
     setHighlighted(null);
     if (language) {
-      void highlightString(source, language).then((result) => {
+      void highlightSlideCode(source, language, "dark-plus").then((result) => {
         if (active) {
           setHighlighted(result);
         }
