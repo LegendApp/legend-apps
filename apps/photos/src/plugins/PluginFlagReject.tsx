@@ -6,7 +6,7 @@ import { type PhotoMetadataItem, photoMetadatas$, updateMetadata } from '../syst
 import { state$ } from '../systems/State';
 import { KeyCodes } from '../systems/keyboard/KeyboardManager';
 import type { Observable } from '@legendapp/state';
-import { use$ } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { View } from 'react-native';
 
@@ -34,7 +34,7 @@ const handleRejectToggle = (photo: PhotoInfo, photoMetadata$: Observable<PhotoMe
 // Flag/Reject component
 function FlagRejectComponent({ photo, style }: PhotoPluginProps) {
   const photoMetadata$ = photoMetadatas$[photo.id];
-  const photoMetadata = photoMetadata$.get();
+  const photoMetadata = useValue(photoMetadata$);
 
   return (
     <View className="flex-row items-center gap-x-1 h-8 pl-2" style={style}>

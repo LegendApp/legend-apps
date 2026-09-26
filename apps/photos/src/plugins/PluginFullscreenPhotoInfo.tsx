@@ -1,7 +1,7 @@
 import type { DisplayPlugin } from '../plugin-system/PluginTypes';
 import { state$ } from '../systems/State';
 import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
-import { use$ } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
@@ -12,7 +12,7 @@ interface PhotoInfoProps {
  * Component that shows the name and created date of the currently selected photo
  */
 function PhotoInfo({ style }: PhotoInfoProps) {
-  const selectedPhoto = use$(state$.selectedPhoto);
+  const selectedPhoto = useValue(state$.selectedPhoto);
 
   if (!selectedPhoto) {
     return null;

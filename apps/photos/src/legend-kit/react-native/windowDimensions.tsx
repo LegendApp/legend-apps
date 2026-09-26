@@ -1,7 +1,7 @@
 import { HookToObservable } from '../react/HookToObservable';
 import { state$ } from '../../systems/State';
 import { type Observable, observable } from '@legendapp/state';
-import { useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 /**
  * Legend Kit - A collection of utilities for Legend State, Legend List, and Legend Motion
  * https://legendapp.com/kit/
@@ -45,7 +45,7 @@ export const HookWindowDimensions = memo(function HookWindowDimensions({
 });
 
 export function useWindowDimensions() {
-  return useSelector(windowDimensions$);
+  return useValue(windowDimensions$);
 }
 
 /**

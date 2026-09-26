@@ -1,6 +1,6 @@
 import { ColorPickerModule } from '../native-modules/ColorPickerModule';
 import type { Observable } from '@legendapp/state';
-import { use$ } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React, { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
@@ -10,7 +10,7 @@ export interface ColorPickerProps {
 }
 
 export const ColorPicker = ({ $color, label }: ColorPickerProps) => {
-  const color = use$($color);
+  const color = useValue($color);
   const [inputValue, setInputValue] = useState(color);
 
   const handleColorChange = (text: string) => {

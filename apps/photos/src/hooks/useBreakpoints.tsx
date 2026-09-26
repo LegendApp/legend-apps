@@ -1,5 +1,5 @@
 import type { Observable } from '@legendapp/state';
-import { useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import { useMemo } from 'react';
 
 /**
@@ -22,7 +22,7 @@ export function useBreakpoints(
     return breakpointWidths.sort((a, b) => b - a);
   }, [breakpoints]);
 
-  return useSelector(() => {
+  return useValue(() => {
     const width = windowDimensions$.width.get();
 
     // Find the largest breakpoint that is smaller than or equal to the current width

@@ -3,12 +3,8 @@ import { settings$ } from '../settings/SettingsFile';
 import { observe } from '@legendapp/state';
 
 export function initializeUpdater() {
-  // Don't update in dev
-  //   if (__DEV__) {
-  //     return;
-  //   }
+  if (__DEV__ || !AutoUpdaterModule.isAvailable()) return;
 
-  // TODO: Implement auto-updater
   let previousCheckUpdates = false;
   let isCheckingForUpdates = false;
   observe(async () => {
@@ -31,7 +27,7 @@ export function initializeUpdater() {
 
       // Check for updates immediately on app start if enabled
       if (autoUpdateEnabled && !previousCheckUpdates) {
-        AutoUpdaterModule.checkForUpdatesInBackground();
+        await AutoUpdaterModule.checkForUpdatesInBackground();
       }
     } catch (err) {
       console.error('Failed to initialize auto-updater:', err);

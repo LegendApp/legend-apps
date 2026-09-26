@@ -10,7 +10,7 @@ import { ax } from '../utils/ax';
 import { cn } from '../utils/cn';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { observe, syncState } from '@legendapp/state';
-import { observer, use$, useSelector } from '@legendapp/state/react';
+import { observer, useValue } from '@legendapp/state/react';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   type NativeScrollEvent,
@@ -47,17 +47,17 @@ observe(async () => {
   }
 });
 
-const PhotoItem = ({ item, index }: { item: PhotoInfo; index: number }) => {
+const renderPhoto = ({ item, index }: { item: PhotoInfo; index: number }) => {
   return <Photo photo={item} index={index} />;
 };
 
 export const PhotosView = observer(function PhotosView() {
-  const numColumns = useSelector(settings$.state.numColumns);
-  const photos = useSelector(state$.photos);
-  const hasMetadatas = useSelector(() => syncState(photoMetadatas$).isPersistLoaded.get());
+  const numColumns = useValue(settings$.state.numColumns);
+  const photos = useValue(state$.photos);
+  const hasMetadatas = useValue(() => syncState(photoMetadatas$).isPersistLoaded.get());
   const [loading] = useState(false);
   const [error] = useState<string | null>(null);
-  const openingFolder = useSelector(state$.openingFolder);
+  const openingFolder = useValue(state$.openingFolder);
   const refList = useRef<LegendListRef>(null);
 
   // Set up keyboard shortcuts
@@ -95,7 +95,7 @@ export const PhotosView = observer(function PhotosView() {
     <View className="flex-1 bg-background-primary">
       <LegendList
         data={photos}
-        renderItem={PhotoItem}
+        renderItem={renderPhoto}
         numColumns={numColumns}
         estimatedItemSize={200}
         automaticallyAdjustContentInsets={false}
@@ -114,9 +114,9 @@ export const PhotosView = observer(function PhotosView() {
 });
 
 function ListHeaderComponent() {
-  const isFullScreen = use$(isWindowFullScreen$);
-  const selectedFolder = useSelector(settings$.state.openFolder);
-  const photos = useSelector(state$.photos);
+  const isFullScreen = useValue(isWindowFullScreen$);
+  const selectedFolder = useValue(settings$.state.openFolder);
+  const photos = useValue(state$.photos);
 
   let minDate: Date | undefined;
   let maxDate: Date | undefined;
@@ -143,10 +143,10 @@ function ListHeaderComponent() {
 
   return (
     <View className={cn('pb-3', isFullScreen ? 'pt-10' : 'pt-3')}>
-      <Text className="text-3xl font-medium text-white">{folderDisplayName}</Text>
+      <Text className="text-3xl font-medium text-text-primary">{folderDisplayName}</Text>
       <View className="gap-x-3 flex-row">
         {subtitle.map((t) => (
-          <Text key={t} className="text-xs font-medium text-white/60 pt-2">
+          <Text key={t} className="text-xs font-medium text-text-secondary pt-2">
             {t}
           </Text>
         ))}
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   legendListStyle: {
-    marginTop: -28,
+    flex: 1,
   },
   columnWrapperStyle: {
     gap: 12,

@@ -1,5 +1,5 @@
 import { createJSONManager } from '../utils/JSONManager';
-import { observer, use$, useObservable } from '@legendapp/state/react';
+import { observer, useValue, useObservable } from '@legendapp/state/react';
 import { Uniwind } from "uniwind";
 import { useEffect } from "react";
 import * as React from 'react';
@@ -43,8 +43,8 @@ const ThemeContext = createContext<ThemeContextType>(undefined as any);
 // Theme provider component
 export const ThemeProvider = observer(({ children }: { children: ReactNode }) => {
   const theme$ = themeState$;
-  const theme = use$(theme$.currentTheme);
-  const custom = use$(theme$.customColors[theme]);
+  const theme = useValue(theme$.currentTheme);
+  const custom = useValue(theme$.customColors[theme]);
   useEffect(() => {
     Uniwind.setTheme(theme);
     Uniwind.updateCSSVariables(theme, {

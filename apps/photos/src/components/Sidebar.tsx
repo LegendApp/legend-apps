@@ -1,3 +1,4 @@
+import { AnimatedView } from "./AnimatedView";
 import { SidebarButton } from './SidebarButton';
 import type { SidebarGroup, SidebarItem } from '../plugin-system/PluginTypes';
 import { cn } from '../utils/cn';
@@ -63,7 +64,7 @@ export function Sidebar({
   };
 
   return (
-    <Animated.View
+    <AnimatedView
       className="h-full border-r border-border"
       style={{
         width,
@@ -74,7 +75,7 @@ export function Sidebar({
           <ScrollView showsVerticalScrollIndicator={false}>{renderItems()}</ScrollView>
         </View>
       </VibrancyView>
-    </Animated.View>
+    </AnimatedView>
   );
 }
 

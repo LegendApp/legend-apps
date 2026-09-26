@@ -2,12 +2,12 @@ import { Button } from '../native-modules/Button';
 import { FilePicker } from '../native-modules/FilePicker';
 import { addLibraryPath } from '../plugins/PluginLocalFiles';
 import { settings$ } from './SettingsFile';
-import { useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { Text, View } from 'react-native';
 
 export const LibrarySettings = () => {
-  const librarySettings = useSelector(settings$.library);
+  const librarySettings = useValue(settings$.library);
 
   const handleAddFolderPath = (path: string) => {
     addLibraryPath(path);

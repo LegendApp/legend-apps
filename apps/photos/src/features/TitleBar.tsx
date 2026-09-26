@@ -1,7 +1,8 @@
+import { MotionView } from "../components/MotionView";
 import { settings$ } from '../settings/SettingsFile';
 import { state$ } from '../systems/State';
 import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
-import { AnimatePresence, Motion } from '@legendapp/motion';
+import { AnimatePresence } from '@legendapp/motion';
 import { observe } from '@legendapp/state';
 import { Show } from '@legendapp/state/react';
 import { Pressable, StyleSheet } from 'react-native';
@@ -24,7 +25,7 @@ export function TitleBar() {
       onHoverOut={onHoverLeave}
     >
       <Show if={state$.titleBarHovered} wrap={AnimatePresence}>
-        <Motion.View
+        <MotionView
           className="absolute inset-0 border-b border-border"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -34,7 +35,7 @@ export function TitleBar() {
           <VibrancyView
             style={styles.vibrancy}
           />
-        </Motion.View>
+        </MotionView>
       </Show>
     </Pressable>
   );

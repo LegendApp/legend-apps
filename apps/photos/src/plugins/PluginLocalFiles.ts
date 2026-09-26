@@ -45,24 +45,10 @@ export const PluginLocalFiles: SourcePlugin = {
     });
 
     // Initialize file system watcher
-    function initializeFileSystemWatcher() {
-      const paths = settings$.library.paths.get();
-      if (paths.length > 0) {
-        FileSystemWatcher.setWatchedDirectories(paths);
-        FileSystemWatcher.addChangeListener(() => {
-          timeoutOnce(
-            'updateFolders',
-            () => {
-              eventFolderChange.fire();
-            },
-            100
-          );
-        });
-      }
-    }
-
-    // Initialize watcher when plugin is loaded
-    initializeFileSystemWatcher();
+    FileSystemWatcher.addChangeListener(() => {
+      timeoutOnce('updateFolders', () => eventFolderChange.fire(), 100);
+    });
+    FileSystemWatcher.setWatchedDirectories(settings$.library.paths.get());
 
     // Listen for changes to library paths
     settings$.library.paths.onChange(({ value }) => {

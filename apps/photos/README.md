@@ -31,7 +31,7 @@ For runtime QA without changing personal settings or requesting Photos access:
 bun photos run macos -- --photos-test-session=migration --photos-test-library=/absolute/path/to/fixtures
 ```
 
-Test sessions use `Documents/.legendphotos-tests/<session>/` and skip Apple Photos
+Test sessions use `Library/Application Support/Legend Photos/.legendphotos-tests/<session>/` and skip Apple Photos
 permission requests. Ordinary launches retain the Apple Photos source. PhotoKit
 still materializes image data for albums (including iCloud assets); this migration
 does not claim to optimize large cloud libraries or implement video playback.

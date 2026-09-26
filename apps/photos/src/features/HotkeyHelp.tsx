@@ -1,9 +1,10 @@
+import { MotionView } from "../components/MotionView";
 import { SFSymbol } from '../native-modules/SFSymbol';
 import { type HotkeyInfo, hotkeyRegistry$, useOnHotkeys } from '../systems/keyboard/Keyboard';
 import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
 import { LegendList } from '@legendapp/list/react-native';
-import { AnimatePresence, Motion } from '@legendapp/motion';
-import { useObservable, useSelector } from '@legendapp/state/react';
+import { AnimatePresence } from '@legendapp/motion';
+import { useObservable, useValue } from '@legendapp/state/react';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
@@ -20,8 +21,8 @@ const SpringOpen = {
 export function HotkeyHelp() {
   const dims = useWindowDimensions();
   const hotkeyHelpVisible$ = useObservable(false);
-  const isVisible = useSelector(hotkeyHelpVisible$);
-  const hotkeys = useSelector(() => Object.values(hotkeyRegistry$.get()).sort(sorter));
+  const isVisible = useValue(hotkeyHelpVisible$);
+  const hotkeys = useValue(() => Object.values(hotkeyRegistry$.get()).sort(sorter));
 
   const toggle = () => hotkeyHelpVisible$.toggle();
 
@@ -33,7 +34,7 @@ export function HotkeyHelp() {
   return (
     <AnimatePresence>
       {isVisible ? (
-        <Motion.View
+        <MotionView
           key="visible"
           className="absolute bottom-0 right-0 py-2 pr-2 z-10"
           style={{ maxHeight: dims.height }}
@@ -63,7 +64,7 @@ export function HotkeyHelp() {
               />
             </VibrancyView>
           </View>
-        </Motion.View>
+        </MotionView>
       ) : (
         <View
           key="button"

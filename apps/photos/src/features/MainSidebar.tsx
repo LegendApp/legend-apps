@@ -8,13 +8,13 @@ import {
 } from '../plugin-system/FileSources';
 import type { SidebarItem } from '../plugin-system/PluginTypes';
 import { isSettingsLoaded$, settings$ } from '../settings/SettingsFile';
-import { useObserveEffect, useSelector } from '@legendapp/state/react';
+import { useObserveEffect, useValue } from '@legendapp/state/react';
 import React from 'react';
 
 export function MainSidebar() {
-  const selectedFolderId = useSelector(settings$.state.openFolder);
-  const sidebarGroups = useSelector(allSidebarGroups$) || [];
-  const sidebarWidth = useSelector(settings$.state.sidebarWidth);
+  const selectedFolderId = useValue(settings$.state.openFolder);
+  const sidebarGroups = useValue(allSidebarGroups$) || [];
+  const sidebarWidth = useValue(settings$.state.sidebarWidth);
 
   const isItemSelected = (item: SidebarItem) => {
     return selectedFolderId === folderInfoToId(item as SidebarItemWithSource);

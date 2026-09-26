@@ -1,3 +1,5 @@
+import { AnimatedView } from "../components/AnimatedView";
+import { MotionView } from "../components/MotionView";
 import { Img } from '../components/Img';
 import { Filmstrip } from './Filmstrip';
 import { useOnDoubleClick } from '../hooks/useOnDoubleClick';
@@ -7,8 +9,8 @@ import type { PhotoInfo } from '../systems/FileManager';
 import { appView, fullscreenView, state, state$ } from '../systems/State';
 import { useOnHotkeys } from '../systems/keyboard/Keyboard';
 import { windowDimensions$ } from '../legend-kit/react-native/windowDimensions';
-import { AnimatePresence, Motion } from '@legendapp/motion';
-import { Show, use$, useObservable } from '@legendapp/state/react';
+import { AnimatePresence } from '@legendapp/motion';
+import { Show, useValue, useObservable } from '@legendapp/state/react';
 import React, { useCallback, useRef } from 'react';
 import { Animated, Dimensions, Pressable } from 'react-native';
 
@@ -88,12 +90,11 @@ function springPositions(
 
 export const FullscreenPhoto = () => {
   // Use the global observable
-  const fullscreenData = use$(state$.fullscreenPhoto);
-  const photo = use$(state$.selectedPhoto) as PhotoInfo;
+  const fullscreenData = useValue(state$.fullscreenPhoto);
+  const photo = useValue(state$.selectedPhoto) as PhotoInfo;
   const isOpenOrClosing$ = useObservable(false);
   const isOpen$ = useObservable(false);
-  const showFilmstrip$ = use$(() => isOpenOrClosing$.get() && settings$.state.showFilmstrip.get());
-  const showFilmstrip = use$(showFilmstrip$);
+  const showFilmstrip = useValue(() => isOpenOrClosing$.get() && settings$.state.showFilmstrip.get());
 
   // Animation values
   const animatedOpacity = React.useRef(new Animated.Value(0)).current;
@@ -164,34 +165,34 @@ export const FullscreenPhoto = () => {
 
     const dimensions = windowDimensions$.get();
 
-    const {x: left, y: top, width, height} = fullscreenPhoto.initialPosition;
+    const { x: left, y: top, width, height } = fullscreenPhoto.initialPosition;
     const right = dimensions.width - width - left;
     const bottom = dimensions.height - height - top;
-      state$.isPhotoFullscreenCoveringControls.set(false);
-      isOpenOrClosing$.set(false);
+    state$.isPhotoFullscreenCoveringControls.set(false);
+    isOpenOrClosing$.set(false);
 
-      // Animate back to original position and size
-      springPositions(
-        refAnimatedPositions.current!,
-        {
-          left,
-          top,
-          right,
-          bottom,
-        },
-        SpringClose
-      ).start();
+    // Animate back to original position and size
+    springPositions(
+      refAnimatedPositions.current!,
+      {
+        left,
+        top,
+        right,
+        bottom,
+      },
+      SpringClose
+    ).start();
 
-      Animated.timing(animatedOpacity, {
-        delay: 100,
-        toValue: 0,
-        duration: 100,
-        useNativeDriver: false,
-      }).start(() => {
-        fullscreenView.current = null;
-        state$.fullscreenPhoto.set(null);
-        isOpen$.set(false);
-      });
+    Animated.timing(animatedOpacity, {
+      delay: 100,
+      toValue: 0,
+      duration: 100,
+      useNativeDriver: false,
+    }).start(() => {
+      fullscreenView.current = null;
+      state$.fullscreenPhoto.set(null);
+      isOpen$.set(false);
+    });
   };
 
   const onPress = useOnDoubleClick({
@@ -210,11 +211,11 @@ export const FullscreenPhoto = () => {
   }
 
   return (
-    <Animated.View
+    <AnimatedView
       className="bg-black z-[100] absolute"
       style={{ ...refAnimatedPositions.current, opacity: animatedOpacity }}
     >
-      <Motion.View
+      <MotionView
         className="flex-1"
         animate={{ marginBottom: showFilmstrip ? 96 : 0 }}
         transition={SpringFilmstrip}
@@ -222,11 +223,11 @@ export const FullscreenPhoto = () => {
         <Pressable className="flex-1" onPress={onPress}>
           <Img photo={photo} className="flex-1" resizeMode="contain" onLoad={onLoad} native />
         </Pressable>
-      </Motion.View>
+      </MotionView>
 
       {/* Add plugin renderer for photoFullscreen location */}
       <Show if={state$.isPhotoFullscreenCoveringControls} wrap={AnimatePresence}>
-        <Motion.View
+        <MotionView
           className="absolute inset-0"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -236,12 +237,12 @@ export const FullscreenPhoto = () => {
           }}
         >
           <PluginRenderer location="photoFullscreen" className="p-4" />
-        </Motion.View>
+        </MotionView>
       </Show>
 
       {/* Add Filmstrip at the bottom */}
-      <Show if={showFilmstrip$} wrap={AnimatePresence}>
-        <Motion.View
+      <Show if={showFilmstrip} wrap={AnimatePresence}>
+        <MotionView
           className="absolute bottom-0 left-0 right-0"
           initial={{ opacity: 0, y: 88 }}
           animate={{ opacity: 1, y: 0 }}
@@ -252,8 +253,8 @@ export const FullscreenPhoto = () => {
           }}
         >
           <Filmstrip />
-        </Motion.View>
+        </MotionView>
       </Show>
-    </Animated.View>
+    </AnimatedView>
   );
 };

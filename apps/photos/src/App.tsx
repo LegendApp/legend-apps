@@ -16,7 +16,7 @@ import { initializeUpdater } from './systems/Updater';
 import { HookKeyboard } from './systems/keyboard/HookKeyboard';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { HookWindowDimensions, windowDimensions$ } from './legend-kit/react-native/windowDimensions';
-import { useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import type React from 'react';
 import { View } from 'react-native';
 
@@ -32,7 +32,7 @@ function App(): React.JSX.Element {
     });
     return () => subscription.remove();
   }, []);
-  const settingsLoaded = useSelector(isSettingsLoaded$);
+  const settingsLoaded = useValue(isSettingsLoaded$);
 
   return (
     <WindowProvider id="main"><ThemeProvider>

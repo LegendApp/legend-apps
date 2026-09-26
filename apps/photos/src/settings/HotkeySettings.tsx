@@ -4,7 +4,7 @@ import { HiddenTextInput } from '../systems/keyboard/HookKeyboard';
 import { type KeyboardEventCodeHotkey, keysPressed$ } from '../systems/keyboard/Keyboard';
 import { KeyCodes, KeyText } from '../systems/keyboard/KeyboardManager';
 import { cn } from '../utils/cn';
-import { use$, useObservable, useObserveEffect, useSelector } from '@legendapp/state/react';
+import { useValue, useObservable, useObserveEffect } from '@legendapp/state/react';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -14,7 +14,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
  * and allow editing the keys
  */
 export function HotkeySettings() {
-  const hotkeys = use$(hotkeys$);
+  const hotkeys = useValue(hotkeys$);
   const hotkeyNames = Object.keys(hotkeys);
 
   return (
@@ -61,9 +61,9 @@ interface HotkeyInputProps {
 
 function HotkeyInput({ hotkeyName, currentKeyCode }: HotkeyInputProps) {
   const isEditing$ = useObservable(false);
-  const isEditing = useSelector(isEditing$);
+  const isEditing = useValue(isEditing$);
   const accumulatedKeys$ = useObservable<number[]>([]);
-  const accumulatedKeys = useSelector(accumulatedKeys$);
+  const accumulatedKeys = useValue(accumulatedKeys$);
 
   // Convert current keyCode to display text
   const getDisplayText = () => {

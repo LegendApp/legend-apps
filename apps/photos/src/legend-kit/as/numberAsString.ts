@@ -47,7 +47,7 @@ priceStr$.set("29.99");
 Example 2: Using in React components with forms
 
 import { observable, useObservable } from "@legendapp/state";
-import { use$ } from "@legendapp/state/react";
+import { useValue } from "@legendapp/state/react";
 import { numberAsString } from "@legendapp/kit/as/numberAsString";
 
 function PriceInput() {
@@ -57,7 +57,7 @@ function PriceInput() {
   const priceStr$ = useObservable(numberAsString(price$));
 
   // Use the string version in the input
-  const inputValue = use$(priceStr$);
+  const inputValue = useValue(priceStr$);
 
   return (
     <div>
@@ -69,7 +69,7 @@ function PriceInput() {
           onChange={(e) => priceStr$.set(e.target.value)}
         />
       </label>
-      <p>Price in dollars: ${use$(price$).toFixed(2)}</p>
+      <p>Price in dollars: ${useValue(price$).toFixed(2)}</p>
     </div>
   );
 }

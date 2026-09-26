@@ -3,7 +3,7 @@ import type { DisplayPlugin, PhotoPluginProps } from '../plugin-system/PluginTyp
 import { getMetadata, photoMetadatas$, updateMetadata } from '../systems/PhotoMetadata';
 import { state$ } from '../systems/State';
 import { KeyCodes } from '../systems/keyboard/KeyboardManager';
-import { use$ } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -17,7 +17,7 @@ function RatingComponent({ photo, style }: PhotoPluginProps) {
 
   // Render star ratings (1-5)
   const stars = [];
-  const currentRating = use$(photoMetadata$.rating) || 0;
+  const currentRating = useValue(photoMetadata$.rating) || 0;
 
   for (let i = 1; i <= currentRating; i++) {
     stars.push(

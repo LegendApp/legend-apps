@@ -3,7 +3,7 @@ import type { PhotoInfo } from '../systems/FileManager';
 import { state$ } from '../systems/State';
 import { windowDimensions$ } from '../legend-kit/react-native/windowDimensions';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
-import { observer, useObserveEffect, useSelector } from '@legendapp/state/react';
+import { observer, useObserveEffect, useValue } from '@legendapp/state/react';
 import React, { useCallback, useRef } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -16,7 +16,7 @@ interface FilmstripItemProps {
 }
 
 const FilmstripItem = observer(({ item, index, size }: FilmstripItemProps) => {
-  const isSelected = useSelector(() => state$.selectedPhotoIndex.get() === index);
+  const isSelected = useValue(() => state$.selectedPhotoIndex.get() === index);
 
   const handlePress = () => {
     state$.selectedPhotoIndex.set(index);
@@ -35,9 +35,9 @@ const FilmstripItem = observer(({ item, index, size }: FilmstripItemProps) => {
 });
 
 export const Filmstrip = observer(() => {
-  const photos = useSelector(state$.photos);
+  const photos = useValue(state$.photos);
   const listRef = useRef<LegendListRef>(null);
-  const width = useSelector(windowDimensions$.width);
+  const width = useValue(windowDimensions$.width);
   const thumbnailSize = 80;
   const isFirstRender = useRef(true);
   const initialScrollIndex = state$.selectedPhotoIndex.peek();
@@ -75,6 +75,7 @@ export const Filmstrip = observer(() => {
         estimatedItemSize={88} // 64px for item + 8px for margin
         style={{
           width,
+          flex: 1,
         }}
       />
     </View>

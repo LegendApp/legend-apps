@@ -55,7 +55,6 @@ export function getAllSidebarGroups(): SidebarGroupWithSource[] {
     const sourcePlugins = getSourcePlugins();
 
     if (sourcePlugins.length === 0) {
-      console.warn('No source plugins are registered or enabled');
       return [];
     }
 
@@ -91,7 +90,6 @@ export async function getPhotosInFolder(folder: FolderInfo): Promise<PhotoInfo[]
     const sourcePlugins = getSourcePlugins();
 
     if (sourcePlugins.length === 0) {
-      console.warn('No source plugins are registered or enabled');
       return [];
     }
 

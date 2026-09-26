@@ -1,4 +1,4 @@
-import { use$, useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React, { createElement } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import { plugins$ } from './PluginManager';
@@ -11,7 +11,7 @@ interface PluginRendererProps {
 }
 
 export function PluginRenderer({ location, className = '', props = {} }: PluginRendererProps) {
-  const allPlugins = useSelector(plugins$);
+  const allPlugins = useValue(plugins$);
 
   // Filter plugins for this location
   const locationPlugins = Object.values(allPlugins).filter(
@@ -58,7 +58,7 @@ function getPluginStyle(plugin: DisplayPlugin) {
 }
 
 function PluginSlot({plugin, props}: {plugin: DisplayPlugin; props: Record<string, any>}) {
-  const visible = use$(() => plugin.shouldRender?.(props) ?? true);
+  const visible = useValue(() => plugin.shouldRender?.(props) ?? true);
   const Component = plugin.component;
   return visible && Component ? <Component {...props} style={getPluginStyle(plugin)} /> : null;
 }

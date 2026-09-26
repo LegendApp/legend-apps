@@ -47,7 +47,7 @@ export const SettingsContainer = () => {
   return (
     <VibrancyView style={styles.vibrancy}>
       <ThemeProvider>
-        <View className="flex flex-1 flex-row">
+        <View className="flex flex-1 flex-row pt-7">
           <Sidebar
             items={SETTING_CATEGORIES}
             isItemSelected={isItemSelected}
@@ -55,7 +55,7 @@ export const SettingsContainer = () => {
             width={140}
             showGroups={false}
           />
-          <View className="flex-1 bg-[#1a1a1a]">{renderContent()}</View>
+          <View className="flex-1 bg-background-primary">{renderContent()}</View>
         </View>
       </ThemeProvider>
     </VibrancyView>

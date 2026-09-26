@@ -4,7 +4,7 @@ import { PluginRenderer } from '../plugin-system/registerDefaultPlugins';
 import type { PhotoInfo } from '../systems/FileManager';
 import { fullscreenView, state$ } from '../systems/State';
 import { useOnHotkeys } from '../systems/keyboard/Keyboard';
-import { useSelector } from '@legendapp/state/react';
+import { useValue } from '@legendapp/state/react';
 import React, { useRef } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -15,7 +15,7 @@ export interface PhotoProps {
 
 export const Photo = ({ photo, index }: PhotoProps) => {
   const photoRef = useRef<View>(null);
-  const isSelected = useSelector(() => state$.selectedPhotoIndex.get() === index);
+  const isSelected = useValue(() => state$.selectedPhotoIndex.get() === index);
 
 
   const openFullscreen = () => {
