@@ -11,7 +11,7 @@ function setup() {
   const modules = {
     "@legendapp/state": { observable: values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { peek: () => value, set: next => { value = next; } }])) },
     "@legendapp/spark/windows/managed": {
-      closeWindow: async id => { calls.push(["close", id]); },
+      closeWindow: async id => { calls.push(["close", id]); return { success: true }; },
       getDisplays: async () => [{ isMain: true, visibleFrame: { x: 0, y: 0, width: 1440, height: 900 } }],
       WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },
     },
@@ -42,11 +42,11 @@ test("preview uses the laptop frame without changing roles, timer, or requiring 
   app.notesOutput$.elapsed.set(1234);
   await app.previewNotesOutput();
   assert.equal(app.notesOutput$.preview.peek(), true);
-  assert.equal(app.calls[1][2].x, 220);
+  assert.equal(app.calls[0][2].x, 220);
   assert.equal(app.notesOutput$.elapsed.peek(), 1234);
   assert.deepEqual(app.roles, { audience: "audience", notes: "notes" });
   await app.syncNotesOutput([], false);
-  assert.equal(app.calls.length, 2);
+  assert.equal(app.calls.length, 1);
   app.notesOutputClosed();
   assert.equal(app.notesOutput$.preview.peek(), false);
 });

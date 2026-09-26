@@ -6,10 +6,18 @@ import { displayRolesSetting } from "./slidesSettings";
 
 export const notesOutput$ = observable({ elapsed: 0, preview: false });
 let outputKey: string | null = null;
+let windowOpen = false;
 let queue = Promise.resolve();
 let replacing = false;
 let shuttingDown = false;
 export function resumeNotesOutput() { shuttingDown = false; }
+async function closeNotesWindow() {
+  if (!windowOpen) return;
+  const result = await closeWindow("slides-notes");
+  if (!result.success) throw new Error(result.message ?? "Could not close the notes window.");
+  windowOpen = false;
+  outputKey = null;
+}
 export function syncNotesOutput(displays: Display[], presenting: boolean) {
   if (shuttingDown) return queue;
   queue = queue.catch(() => {}).then(async () => {
@@ -17,7 +25,7 @@ export function syncNotesOutput(displays: Display[], presenting: boolean) {
     const key = displayRolesSetting.get().notes;
     const display = presenting ? displays.find(display => displayKey(display) === key || display.id === key) : undefined;
     if (!display) {
-      if (outputKey) await closeWindow("slides-notes");
+      await closeNotesWindow();
       outputKey = null;
       return;
     }
@@ -26,6 +34,7 @@ export function syncNotesOutput(displays: Display[], presenting: boolean) {
     await slidesWindows.open("SlidesNotesWindow", { x: display.frame.x, y: display.frame.y,
       windowStyle: { width: display.frame.width, height: display.frame.height,
         mask: [WindowStyleMask.Titled, WindowStyleMask.Closable, WindowStyleMask.Resizable] } });
+    windowOpen = true;
     outputKey = frameKey;
   });
   return queue;
@@ -45,23 +54,24 @@ export function previewNotesOutput() {
   queue = queue.catch(() => {}).then(async () => {
     replacing = true;
     try {
-      await closeWindow("slides-notes");
+      await closeNotesWindow();
       const displays = await getDisplays();
       const screen = displays.find(display => display.isMain) ?? displays[0];
       const frame = screen?.visibleFrame;
       const width = Math.min(1000, frame?.width ?? 1000);
       const height = Math.min(900, frame?.height ?? 900);
-      notesOutput$.preview.set(true);
       outputKey = null;
       await slidesWindows.open("SlidesNotesWindow", {
         ...(frame ? { x: frame.x + (frame.width - width) / 2, y: frame.y + (frame.height - height) / 2 } : {}),
         windowStyle: { width, height, mask: [WindowStyleMask.Titled, WindowStyleMask.Closable, WindowStyleMask.Resizable] },
       });
+      windowOpen = true;
+      notesOutput$.preview.set(true);
     } finally { replacing = false; }
   });
   return queue;
 }
-export function notesOutputClosed() { if (!replacing) { notesOutput$.preview.set(false); outputKey = null; } }
+export function notesOutputClosed() { windowOpen = false; if (!replacing) { notesOutput$.preview.set(false); outputKey = null; } }
 export async function identifyDisplays(displays: Display[]) {
   await Promise.all(displays.map(async (display, index) => {
     const identifier = `slides-identify-${display.id}`;
