@@ -33,3 +33,32 @@ clang -fobjc-arc -framework AppKit \
   -I"$markdown_dependency_dir/ios/utils" \
   "$markdown_editor_dir/tests/MarkdownInputLayout.test.m" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+# Compile the real detector with a minimal style declaration: these tests exercise
+# detection and serialization, without requiring React's generated prop headers.
+markdown_detector_test_dir="$(mktemp -d "${TMPDIR:-/tmp}/legend-markdown-autolink.XXXXXX")"
+trap 'rm -f "$markdown_test_binary" "$markdown_parser_object"; rm -rf "$markdown_detector_test_dir"' EXIT
+cp "$markdown_dependency_dir/ios/input/ENRMAutoLinkDetector.mm" "$markdown_detector_test_dir/"
+cat > "$markdown_detector_test_dir/InputStylePropsUtils.h" <<'STYLE'
+#import <AppKit/AppKit.h>
+@interface ENRMInputFormatterStyle : NSObject
+@property (nonatomic, strong) NSColor *linkColor;
+@property (nonatomic) BOOL linkUnderline;
+@end
+STYLE
+clang++ -std=c++20 -fobjc-arc -framework AppKit -include AppKit/AppKit.h \
+  -Wno-nonnull -I"$markdown_dependency_dir/ios/input" -I"$markdown_dependency_dir/cpp/md4c" \
+  "$markdown_detector_test_dir/ENRMAutoLinkDetector.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMDetectorPipeline.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMWordsUtils.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMFormattingStore.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMRangeEditAdjustment.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMMarkdownSerializer.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMInputParser.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMInputRemend.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMInputStyledRange.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockRange.mm" \
+  "$markdown_editor_dir/tests/MarkdownAutoLinkCode.test.mm" \
+  "$markdown_parser_object" -o "$markdown_test_binary"
+"$markdown_test_binary"

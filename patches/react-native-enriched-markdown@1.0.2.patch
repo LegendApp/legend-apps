@@ -7689,7 +7689,7 @@ diff --git a/cpp/highlight/CodeBlockHighlighter.cpp b/cpp/highlight/CodeBlockHig
 diff --git a/ios/input/ENRMInputParser.h b/ios/input/ENRMInputParser.h
 --- a/ios/input/ENRMInputParser.h
 +++ b/ios/input/ENRMInputParser.h
-@@ -9,6 +9,7 @@
+@@ -9,13 +9,18 @@
  
  @interface ENRMParseResult : NSObject
  @property (nonatomic, strong, readonly) NSString *plainText;
@@ -7697,9 +7697,12 @@ diff --git a/ios/input/ENRMInputParser.h b/ios/input/ENRMInputParser.h
  @property (nonatomic, strong, readonly) NSArray<ENRMFormattingRange *> *formattingRanges;
  @property (nonatomic, strong, readonly) NSArray<ENRMBlockRange *> *blockRanges;
  @end
-@@ -16,6 +17,7 @@
+ 
  @interface ENRMInputParser : NSObject
  
++/// Literal code content in source UTF-16 coordinates, including unfinished fences.
++- (NSArray<NSValue *> *)codeRangesInMarkdown:(NSString *)markdown;
++
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown;
 +- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection;
  
@@ -7725,30 +7728,83 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
    const char *buffer;
    size_t bufferLength;
    size_t originalLength;
-@@ -333,8 +336,8 @@
+@@ -106,6 +109,7 @@
+   std::vector<BlockInfo> openBlockStack;
+   std::vector<BlockInfo> resolvedBlocks;
+   std::vector<size_t> textStartOffsets;
++  std::vector<std::pair<size_t, size_t>> codeOffsets;
+   size_t lastTextEnd = 0;
+   // Open list containers, innermost last (true = ordered). An item's depth is
+   // the stack size - 1 and its type the innermost container's; md4c carries no
+@@ -292,7 +296,7 @@
+   return 0;
+ }
  
- static bool runMd4cParse(NSString *markdown, ParseContext &context)
+-static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata)
++static int onText(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *userdata)
  {
+   if (!text || size == 0) {
+     return 0;
+@@ -314,6 +318,9 @@
+   size_t textStart = text - context->buffer;
+   size_t textEnd = textStart + size;
+   context->textStartOffsets.push_back(textStart);
++  if (type == MD_TEXT_CODE) {
++    context->codeOffsets.emplace_back(textStart, textEnd);
++  }
+ 
+   for (auto &openSpan : context->openStack) {
+     if (openSpan.contentStartByteOffset == kByteOffsetUnset) {
+@@ -331,10 +338,10 @@
+   return 0;
+ }
+ 
+-static bool runMd4cParse(NSString *markdown, ParseContext &context)
+-{
 -  NSString *completed = ENRMInputRemendComplete(markdown);
 -  const char *completedUTF8 = [completed UTF8String];
-+  context.completedMarkdown = ENRMInputRemendComplete(markdown);
++static bool runMd4cParse(NSString *markdown, ParseContext &context, bool complete = true)
++{
++  context.completedMarkdown = complete ? ENRMInputRemendComplete(markdown) : markdown;
 +  const char *completedUTF8 = [context.completedMarkdown UTF8String];
    size_t completedLength = strlen(completedUTF8);
    size_t originalLength = [markdown lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
  
-@@ -478,6 +481,11 @@
+@@ -461,6 +468,21 @@
+ 
+ @implementation ENRMInputParser
+ 
++- (NSArray<NSValue *> *)codeRangesInMarkdown:(NSString *)markdown
++{
++  if (markdown.length == 0) return @[];
++  ParseContext context;
++  if (!runMd4cParse(markdown, context, false)) return @[];
++  auto byteMap = buildByteToUTF16Map(context.buffer, context.bufferLength);
++  NSMutableArray<NSValue *> *ranges = [NSMutableArray array];
++  for (const auto &offsets : context.codeOffsets) {
++    NSUInteger start = mapByteOffset(byteMap, offsets.first, context.originalLength);
++    NSUInteger end = mapByteOffset(byteMap, offsets.second, context.originalLength);
++    if (end > start) [ranges addObject:[NSValue valueWithRange:NSMakeRange(start, end - start)]];
++  }
++  return ranges;
++}
++
+ - (NSArray<ENRMInputStyledRange *> *)parse:(NSString *)markdown
+ {
+   if (markdown.length == 0) {
+@@ -477,6 +499,11 @@
+ }
  
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
- {
++{
 +  return [self parseToPlainTextAndRanges:markdown sourceSelection:0];
 +}
 +
 +- (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown sourceSelection:(NSUInteger)sourceSelection
-+{
+ {
    ENRMParseResult *parseResult = [[ENRMParseResult alloc] init];
  
-   if (markdown.length == 0) {
-@@ -575,5 +583,8 @@
+@@ -575,6 +602,9 @@
      }
    }
    rawToPlainMap[rawLength] = plainPosition;
@@ -7757,6 +7813,7 @@ diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
 +  parseResult.selectionOffset = rawToPlainMap[MIN(sourceSelection, rawLength)];
  
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
+ 
 diff --git a/ios/views/ENRMCodeBlockContainerView.m b/ios/views/ENRMCodeBlockContainerView.m
 index a668c26e..f9e210ee 100644
 --- a/ios/views/ENRMCodeBlockContainerView.m
@@ -8088,3 +8145,110 @@ index 7ca6a3a..ed42b5b 100644
    override fun requestMarkdown(
      view: EnrichedMarkdownTextInputView?,
      requestId: Int,
+diff --git a/ios/input/ENRMAutoLinkDetector.mm b/ios/input/ENRMAutoLinkDetector.mm
+--- a/ios/input/ENRMAutoLinkDetector.mm
++++ b/ios/input/ENRMAutoLinkDetector.mm
+@@ -1,6 +1,7 @@
+ #import "ENRMAutoLinkDetector.h"
+ 
+ #import "ENRMFormattingRange.h"
++#import "ENRMInputParser.h"
+ #import "InputStylePropsUtils.h"
+ 
+ static NSAttributedStringKey const ENRMAutomaticLinkAttributeName = @"ENRMAutomaticLink";
+@@ -10,6 +11,8 @@
+   __weak ENRMFormattingStore *_formattingStore;
+   __weak ENRMInputFormatterStyle *_style;
+   ENRMLinkRegexConfig *_regexConfig;
++  NSString *_codeRangeText;
++  NSArray<NSValue *> *_codeRanges;
+ }
+ 
+ - (instancetype)initWithTextStorage:(NSTextStorage *)textStorage
+@@ -62,7 +65,7 @@
+                           inRange:NSMakeRange(0, textStorage.length)
+                           options:0
+                        usingBlock:^(id value, NSRange range, BOOL *stop) {
+-                         if (value != nil) {
++                         if (value != nil && ![self intersectsCodeRange:range]) {
+                            [self applyVisualStylingToRange:range];
+                          }
+                        }];
+@@ -81,7 +84,7 @@
+                           inRange:NSMakeRange(0, textStorage.length)
+                           options:0
+                        usingBlock:^(id value, NSRange range, BOOL *stop) {
+-                         if (value != nil && [value isKindOfClass:[NSString class]]) {
++                         if (value != nil && [value isKindOfClass:[NSString class]] && ![self intersectsCodeRange:range]) {
+                            ENRMFormattingRange *fmtRange = [ENRMFormattingRange rangeWithType:ENRMInputStyleTypeLink
+                                                                                         range:range
+                                                                                           url:value];
+@@ -102,6 +105,22 @@
+ 
+ #pragma mark - Link matching
+ 
++// Code remains literal in the input text. Use the Markdown parser rather than
++// punctuation heuristics, and recheck transient ranges when only delimiters changed.
++- (BOOL)intersectsCodeRange:(NSRange)range
++{
++  NSString *text = _textStorage.string ?: @"";
++  if (![_codeRangeText isEqualToString:text]) {
++    _codeRangeText = [text copy];
++    _codeRanges = [[ENRMInputParser new] codeRangesInMarkdown:text];
++  }
++  for (NSValue *value in _codeRanges) {
++    if (NSIntersectionRange(range, value.rangeValue).length > 0) return YES;
++  }
++  return NO;
++}
++
++
+ - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
+                                      inText:(NSString *)word
+                                matchedRange:(NSRange *)outMatchedRange
+@@ -132,7 +151,7 @@
+   }
+ 
+   NSRange localMatch = NSMakeRange(NSNotFound, 0);
+-  NSString *matchedUrl = [self tryMatchWord:word matchedRange:&localMatch];
++  NSString *matchedUrl = [self tryMatchWord:word atLocation:wordRange.location matchedRange:&localMatch];
+ 
+   if (matchedUrl == nil || localMatch.location == NSNotFound) {
+     [self clearAutoLinkInRange:wordRange];
+@@ -169,7 +188,7 @@
+   return matchedUrl;
+ }
+ 
+-- (nullable NSString *)tryMatchWord:(NSString *)word matchedRange:(NSRange *)outRange
++- (nullable NSString *)tryMatchWord:(NSString *)word atLocation:(NSUInteger)location matchedRange:(NSRange *)outRange
+ {
+   if (outRange != NULL) {
+     *outRange = NSMakeRange(NSNotFound, 0);
+@@ -190,16 +209,17 @@
+     return nil;
+   }
+ 
+-  NSTextCheckingResult *match = [regex firstMatchInString:word options:0 range:fullRange];
+-  if (match == nil || match.range.location == NSNotFound) {
+-    return nil;
+-  }
+-
+-  NSRange matchRange = customExact ? fullRange : match.range;
+-  if (outRange != NULL) {
+-    *outRange = matchRange;
+-  }
+-  return [ENRMAutoLinkDetector normalizeUrl:[word substringWithRange:matchRange]];
++  for (NSTextCheckingResult *match in [regex matchesInString:word options:0 range:fullRange]) {
++    NSRange matchRange = customExact ? fullRange : match.range;
++    if ([self intersectsCodeRange:NSMakeRange(location + matchRange.location, matchRange.length)]) {
++      continue;
++    }
++    if (outRange != NULL) {
++      *outRange = matchRange;
++    }
++    return [ENRMAutoLinkDetector normalizeUrl:[word substringWithRange:matchRange]];
++  }
++  return nil;
+ }
+ 
+ + (NSString *)normalizeUrl:(NSString *)url
