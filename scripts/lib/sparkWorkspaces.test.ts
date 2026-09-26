@@ -108,3 +108,13 @@ test("Spark release preserves architecture-specific update identity", async () =
     else process.env.SPARK_MACOS_ARCH = original;
   }
 });
+
+test("Photos native packages expose podspecs to the Apple autolinker", () => {
+  for (const [directory, pod] of [["photo-library", "RNPhotoLibrary"], ["color-picker", "RNColorPicker"]]) {
+    const root = path.resolve("packages", directory);
+    const config = require(path.join(root, "react-native.config.js"));
+    assert.equal(config.dependency.platforms.ios.podspecPath, `./${pod}.podspec`);
+    assert.equal(config.dependency.platforms.macos.podspecPath, `./${pod}.podspec`);
+    assert.ok(fs.existsSync(path.join(root, config.dependency.platforms.ios.podspecPath)));
+  }
+});

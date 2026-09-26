@@ -10,6 +10,7 @@ Pod::Spec.new do |s|
   s.source = { :path => "." }
   s.platforms = { :osx => "14.0" }
   s.source_files = "macos/**/*.{h,m,mm,swift}"
+  s.private_header_files = "macos/RNPhotoLibrary.h"
   s.swift_version = "5.0"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"

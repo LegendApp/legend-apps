@@ -1,23 +1,23 @@
 import Foundation
 import Photos
-import React
+
 
 @objc(PhotoLibraryCore)
-class PhotoLibraryCore: NSObject {
+public class PhotoLibraryCore: NSObject {
 
-    override init() {
+    public override init() {
         super.init()
     }
 
     // MARK: - Permission Methods
 
-    @objc func requestPermissions(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    @objc public func requestPermissions(_ resolve: @escaping (Any?) -> Void, rejecter reject: @escaping (String?, String?, NSError?) -> Void) {
         PHPhotoLibrary.requestAuthorization { status in
             resolve(self.permissionStatusToDictionary(status))
         }
     }
 
-    @objc func getPermissionStatus(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    @objc public func getPermissionStatus(_ resolve: @escaping (Any?) -> Void, rejecter reject: @escaping (String?, String?, NSError?) -> Void) {
         let status = PHPhotoLibrary.authorizationStatus()
         resolve(permissionStatusToDictionary(status))
     }
@@ -43,7 +43,7 @@ class PhotoLibraryCore: NSObject {
 
     // MARK: - Album Methods
 
-    @objc func getAlbums(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    @objc public func getAlbums(_ resolve: @escaping (Any?) -> Void, rejecter reject: @escaping (String?, String?, NSError?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             // Check permission
             let status = PHPhotoLibrary.authorizationStatus()
@@ -98,7 +98,7 @@ class PhotoLibraryCore: NSObject {
 
     // MARK: - Photo Methods
 
-    @objc func getPhotosInAlbum(_ albumIdentifier: String, limit: NSInteger, offset: NSInteger, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    @objc public func getPhotosInAlbum(_ albumIdentifier: String, limit: NSInteger, offset: NSInteger, resolver resolve: @escaping (Any?) -> Void, rejecter reject: @escaping (String?, String?, NSError?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             // Check permission
             let status = PHPhotoLibrary.authorizationStatus()
@@ -145,7 +145,7 @@ class PhotoLibraryCore: NSObject {
         }
     }
 
-    @objc func getPhotoAtIndex(_ albumIdentifier: String, index: NSInteger, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    @objc public func getPhotoAtIndex(_ albumIdentifier: String, index: NSInteger, resolver resolve: @escaping (Any?) -> Void, rejecter reject: @escaping (String?, String?, NSError?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             // Check permission
             let status = PHPhotoLibrary.authorizationStatus()

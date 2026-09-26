@@ -1,1 +1,1 @@
-module.exports = { dependency: { platforms: { ios: null, android: null, macos: { podspecPath: "./RNColorPicker.podspec" } } } };
+module.exports = { dependency: { platforms: { ios: { podspecPath: "./RNColorPicker.podspec" }, android: null, macos: { podspecPath: "./RNColorPicker.podspec" } } } };
