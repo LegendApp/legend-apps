@@ -63,7 +63,7 @@ type EditableMarkdownProps = {
   draftKey?: string;
   drafts?: NotesDrafts;
   currentStep?: number;
-  onSectionLayout?(step: number, y: number, height: number): void;
+  onSectionsLayout?(regions: NoteRegion[]): void;
   fontSize?: number;
   backgroundColor?: string;
   markdown: string;
@@ -72,7 +72,7 @@ type EditableMarkdownProps = {
   placeholder: string;
 };
 
-export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionLayout, fontSize = 17, backgroundColor = "#171819" }: EditableMarkdownProps) {
+export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionsLayout, fontSize = 17, backgroundColor = "#171819" }: EditableMarkdownProps) {
   const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
@@ -210,9 +210,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
           onLayout={paragraphs => {
             const next = notesLayout(paragraphs);
             setRegions(next);
-            for (const region of next) {
-              if (region.step !== undefined) onSectionLayout?.(region.step, region.y, region.height);
-            }
+            onSectionsLayout?.(next);
           }}
           onChange={value => {
             setDocument(value);

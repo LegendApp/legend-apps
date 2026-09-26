@@ -31,9 +31,9 @@ export function ScrollableNotes({ notesWidth, onEditingChange, ...props }: Props
             editing.current = value;
             onEditingChange?.(value);
           }}
-          onSectionLayout={(sectionStep, y, sectionHeight) => {
-            sections.current.set(sectionStep, { y, height: sectionHeight });
-            if (sectionStep === step) follow();
+          onSectionsLayout={regions => {
+            sections.current = new Map(regions.flatMap(region => region.step === undefined ? [] : [[region.step, region]]));
+            follow();
           }} />
       </View>
     </ScrollView>

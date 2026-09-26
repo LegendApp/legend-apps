@@ -57,14 +57,14 @@ test("one native document supports edits spanning step boundaries without remoun
   const save = mock(async () => {}), sectionLayout = mock();
   let tree;
   try {
-    await act(() => { tree = create(<EditableMarkdown editable currentStep={0} markdown={"1. First\n\n\n2. Second"} placeholder="Notes" onSave={save} onSectionLayout={sectionLayout} />); });
+    await act(() => { tree = create(<EditableMarkdown editable currentStep={0} markdown={"1. First\n\n\n2. Second"} placeholder="Notes" onSave={save} onSectionsLayout={sectionLayout} />); });
     expect(tree.root.findAllByType("editor")).toHaveLength(1);
     const editor = tree.root.findByType("editor");
     const id = editor.props.nativeId;
     expect(editor.props.defaultValue).toContain("1.\u2060 First");
     expect(editor.props.defaultValue).toContain("2.\u2060 Second");
     await act(async () => editor.props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
-    expect(sectionLayout).toHaveBeenCalledWith(1, 70, 30);
+    expect(sectionLayout).toHaveBeenLastCalledWith([{ step: 0, y: 0, height: 70 }, { step: 1, y: 70, height: 30 }]);
     await act(() => editor.props.onFocus());
     // This event models replacing a selection that spans both step sections.
     await act(async () => editor.props.onChangeMarkdown("Merged selection"));
@@ -96,17 +96,17 @@ test("newly entered step labels acquire layout markers on blur without replacing
   let tree;
   try {
     await act(() => { tree = create(<EditableMarkdown editable markdown="" placeholder="Notes" onSave={async () => {}}
-      onSectionLayout={sectionLayout} />); });
+      onSectionsLayout={sectionLayout} />); });
     const id = tree.root.findByType("editor").props.nativeId;
     await act(async () => tree.root.findByType("editor").props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
     await act(() => tree.root.findByType("editor").props.onFocus());
     const writes = setValue.mock.calls.length;
     await act(async () => tree.root.findByType("editor").props.onChangeMarkdown("1: First\n\n2: Newly pasted"));
     expect(setValue.mock.calls.length).toBe(writes);
-    expect(sectionLayout).not.toHaveBeenCalled();
+    expect(sectionLayout.mock.calls.at(-1)[0].every(region => region.step === undefined)).toBe(true);
     await act(async () => tree.root.findByType("editor").props.onBlur());
     expect(setValue).toHaveBeenLastCalledWith("1:\u2060 First\n\n2:\u2060 Newly pasted");
-    expect(sectionLayout).toHaveBeenCalledWith(1, 70, 30);
+    expect(sectionLayout).toHaveBeenLastCalledWith([{ step: 0, y: 0, height: 70 }, { step: 1, y: 70, height: 30 }]);
     expect(tree.root.findByType("editor").props.nativeId).toBe(id);
   } finally { if (tree) await act(() => tree.unmount()); }
 });
