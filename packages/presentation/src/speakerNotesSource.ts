@@ -256,10 +256,11 @@ function sourceStructure(source: string) {
     .map((line, index) => ({ index, line }))
     .filter(({ index, line }) =>
       !fenced.has(index) && depths[index] === 0 && expressions[index] === 0
-      && /^[ \t]{0,3}---[ \t]*$/.test(line.content)
-      && !comments.some((comment) => comment.start <= line.start && comment.end >= line.end));
+      && /^[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line.content)
+      && !protectedRanges.some((range) => range.start <= line.start && range.end >= line.end));
   const firstContentLine = lines.findIndex((line) => line.content.trim().length > 0);
   const documentFrontmatter = delimiters[0]?.index === firstContentLine && delimiters.length > 1
+    && delimiters[0].line.content.trim() === "---" && delimiters[1].line.content.trim() === "---"
     ? [delimiters[0], delimiters[1]] as const
     : undefined;
   const slideFrontmatter: Array<readonly [typeof delimiters[number], typeof delimiters[number]]> = [];
@@ -272,7 +273,7 @@ function sourceStructure(source: string) {
   for (let index = documentFrontmatter ? 2 : 0; index < delimiters.length - 1; index += 1) {
     const start = delimiters[index];
     const end = delimiters[index + 1];
-    if (isYamlObject(source.slice(start.line.end, end.line.start))) {
+    if (start.line.content.trim() === "---" && end.line.content.trim() === "---" && isYamlObject(source.slice(start.line.end, end.line.start))) {
       slideFrontmatter.push([start, end]);
       frontmatterDelimiterLines.add(start.index);
       frontmatterDelimiterLines.add(end.index);
@@ -305,15 +306,15 @@ function sourceStructure(source: string) {
     slides.push({ end: source.length, start: slideStart });
   }
 
-  return { comments, slides, frontmatter: [
+  return { comments, slides, separators: events.filter(event => event.kind === "separator"), frontmatter: [
     ...(documentFrontmatter ? [documentFrontmatter] : []), ...slideFrontmatter,
   ].map(([start, end]) => ({ start: start.line.end, end: end.line.start, fullStart: start.line.start, fullEnd: end.line.end, document: start === documentFrontmatter?.[0] })) };
 }
 
 /** UTF-16 ranges match NSTextView selection offsets, including emoji. */
 export function getDeckSourceStructure(source: string) {
-  const { slides, frontmatter, comments } = sourceStructure(source);
-  return { frontmatter, comments, slides: slides.map((slide, index) => ({
+  const { slides, frontmatter, comments, separators } = sourceStructure(source);
+  return { frontmatter, comments, separators, slides: slides.map((slide, index) => ({
     start: index === 0 ? 0 : slides[index - 1].end,
     contentStart: slide.start,
     end: index === slides.length - 1 ? source.length : slide.end,

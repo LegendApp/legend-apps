@@ -31,6 +31,16 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("uses the same slide boundaries for compilation and notes editing", async () => {
+    for (const separator of ["***", "___", "----", "- - -", "---"]) {
+      const source = `One\n${separator}\nTwo\n\n<!-- second -->`;
+      const result = await compileDeck(createDeck({ "deck.mdx": source }));
+      expect(result.success).toBe(true);
+      expect(result.noteTargets).toEqual(["One", "Two"]);
+      expect(getDeckSourceStructure(source).slides).toHaveLength(2);
+      expect(result.code.match(/index: "[0-9]+"/g)).toHaveLength(2);
+    }
+  });
   test("allows double-dot-prefixed names within the deck directory", async () => {
     const result = await compileDeck(createDeck({
       "deck.mdx": '---\ntransition: {source: "./..local/fade.ts"}\n---\nimport Demo from "./..local/Demo"\n\n<Demo />\n\n<Webview component="./..local/Web.tsx" />',
@@ -81,7 +91,7 @@ describe("compileDeck", () => {
     const result = JSON.parse(gunzipSync(Buffer.from(envelope.data, "base64")).toString());
     expect(result.success).toBe(true);
     expect(result.sourceSlideEnds).toEqual(getDeckSourceStructure(source).slides.map((slide) => slide.end));
-    expect(result.sourceSlideEnds).toHaveLength(2);
+    expect(getDeckSourceStructure(source).slides).toHaveLength(2);
     expect(fs.readFileSync(deckPath, "utf8")).toBe("# On disk");
   });
   test("removes MDX whitespace and wraps literal native text", () => {

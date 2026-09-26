@@ -208,3 +208,13 @@ test("note edits preserve inline code, expressions, module strings and YAML lite
   const yaml = '---\ntitle: "<!-- literal -->"\n---\n# Slide\n<!-- actual -->';
   expect(updateSlideSpeakerNotes(yaml, 0, "changed")).toBe(yaml.replace("<!-- actual -->", "<!-- changed -->"));
 });
+
+test("alternate separators keep notes edits bound to their own slide", () => {
+  for (const separator of ["***", "___", "----", "- - -", "---"]) {
+    const source = `One\n\n<!-- first -->\n\n${separator}\n\nTwo\n\n<!-- second -->`;
+    const updated = updateSlideSpeakerNotes(source, 1, "changed");
+    expect(updated).toContain("<!-- first -->");
+    expect(updated).toContain("<!-- changed -->");
+    expect(updated).not.toContain("<!-- second -->");
+  }
+});

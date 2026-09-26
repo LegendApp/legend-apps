@@ -83,8 +83,9 @@ function resolveLocalFile(importPath: string) {
 }
 
 function preprocessDeck(source: string) {
-  const { comments, frontmatter } = getDeckSourceStructure(source);
+  const { comments, frontmatter, separators } = getDeckSourceStructure(source);
   const replacements = [
+    ...separators.map(range => ({ start: range.start, end: range.end, value: "\n\n<SlideSeparator />\n\n" })),
     ...comments.map(comment => ({ start: comment.start, end: comment.end,
       value: `<PresenterNote encoded="${Buffer.from(source.slice(comment.contentStart, comment.contentEnd).trim()).toString("base64")}" />` })),
     ...frontmatter.filter(range => !range.document).map(range => ({ start: range.fullStart, end: range.fullEnd,

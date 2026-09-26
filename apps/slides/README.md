@@ -849,3 +849,9 @@ fullscreen and optional instanced-particle entry points.
 Use `background` inside `Background` to follow viewport dimensions and intensity.
 This is a low-level scene API; the five RN Connection examples are alternate
 slides for evaluation rather than a replacement for Skia or normal native views.
+
+Slide separators (`---`, `***`, `___`, or longer/spaced variants) use the same
+boundaries in the compiler, source editor, and speaker-notes editor. A top-level
+dash separator starts a slide even directly after text; use `## Heading` for a
+heading instead of setext underline syntax. Separators inside code and JSX stay
+inside their containing slide.

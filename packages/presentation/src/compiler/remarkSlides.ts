@@ -195,7 +195,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
     };
 
     for (const node of slideSource) {
-      if (node.type === "thematicBreak") {
+      if (node.type === "mdxJsxFlowElement" && node.name === "SlideSeparator") {
         pushSlide();
         continue;
       }
