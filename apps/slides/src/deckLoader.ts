@@ -131,6 +131,8 @@ function watchDeckDirectory(path: string) {
   const queue = createDeckReloadQueue(async () => {
     if (draftReloadHandler) await draftReloadHandler(path);
     else await loadDeck(path, false);
+  }, 120, error => {
+    setSlidesState({ buildErrors: [String(error)], status: "error" });
   });
   reloadQueue = queue;
   watcher = watchDirectories([directory, transitionDirectoryPath()], queue.changed);

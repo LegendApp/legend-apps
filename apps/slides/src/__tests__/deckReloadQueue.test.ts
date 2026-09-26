@@ -43,3 +43,18 @@ it("drops queued edits when the watched deck changes", async () => {
   await settle();
   expect(builds).toBe(1);
 });
+
+it("reports rejected reloads and continues with the next change", async () => {
+  let builds = 0;
+  const errors: unknown[] = [];
+  const queue = createDeckReloadQueue(async () => {
+    if (++builds === 1) throw new Error("read failed");
+  }, 1, error => { errors.push(error); });
+  queue.changed({});
+  await settle();
+  expect(String(errors[0])).toContain("read failed");
+  queue.changed({});
+  await settle();
+  expect(builds).toBe(2);
+  queue.dispose();
+});

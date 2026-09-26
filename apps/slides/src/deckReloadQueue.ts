@@ -1,5 +1,5 @@
 /** Coalesce file events without interrupting a running rebuild or losing its follow-up. */
-export function createDeckReloadQueue(reload: () => Promise<unknown>, delay = 120) {
+export function createDeckReloadQueue(reload: () => Promise<unknown>, delay = 120, onError: (error: unknown) => void = console.error) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
   let pending = false;
@@ -12,6 +12,8 @@ export function createDeckReloadQueue(reload: () => Promise<unknown>, delay = 12
       running = true;
       try {
         await reload();
+      } catch (error) {
+        onError(error);
       } finally {
         running = false;
         if (!disposed && pending && !timer) timer = setTimeout(() => { void flush(); }, delay);
