@@ -317,8 +317,11 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
-  it.each(["orderedList", "unorderedList"])("keeps typing in the paragraph after exiting a multiline %s", async (type) => {
-    const markdown = type === "orderedList" ? "1. First\n2. Second" : "- [ ] First\n- [x] Second";
+  it.each([
+    ["orderedList", "1. First\n2. Second"],
+    ["unorderedList", "- [ ] First\n- [x] Second"],
+    ["unorderedList", "- Parent\n   - Child"],
+  ])("keeps typing in the paragraph after exiting a multiline %s (%s)", async (type, markdown) => {
     const adapter = new NativeOverlayAdapter(snapshot([{ ...block("list", 0, markdown), type }, block("tail", 1, "Tail")]));
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
