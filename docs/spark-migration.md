@@ -1,8 +1,10 @@
 # Spark host migration
 
-The opt-in `bun run spark <app> ...` commands use the sibling `../legend-framework`
+The default macOS app commands use Spark from the sibling `../legend-framework`
 checkout (or `LEGEND_SPARK_ROOT`) and generate consumers under
-`shell/.legend/spark/<app>`. Existing default commands and release workflows remain.
+`shell/.legend/spark/<app>`. The `bun run spark <app> ...` commands expose the same
+build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
+for the current API mapping and validation scope.
 
 After changing Spark's native SDK, run `npm run pack:local` there, then:
 
@@ -41,10 +43,10 @@ Only selected packages opt into startup hooks. Hello World has no native startup
 plugins. Native hooks cannot replace Spark's quit/reopen/file dispatch. Generic
 API documentation lives in Spark's `docs/host-migration.md`.
 
-Default shell builds retain their existing native implementation and do not link
-Spark. Packages use the Spark native dependency only when built by Spark. Shared
-shell launch-argument normalization removes the internal Metro address before
-passing arguments to app components.
+Mobile shell builds retain their existing native implementation. macOS apps
+import the standard desktop capabilities from Spark and use its native providers.
+Shared shell launch-argument normalization removes the internal Metro address
+before passing arguments to app components.
 
 ## Validation scope
 
@@ -53,8 +55,8 @@ checkout, including native lifecycle policy and module selection.
 
 Native lifecycle tests cover opt-in quit, multiple handlers, refusal, duplicate
 and stale replies, removal, and timeout. Configuration tests cover all manifests
-and reject invalid native policy. Full native acceptance remains necessary for
-individual apps before switching their default commands.
+and reject invalid native policy. The historical acceptance results below cover the initial host migration;
+current extraction validation is recorded in the desktop extraction document.
 
 The lifecycle migration passed Spark's 291 tests, both repository typechecks,
 11 adapter/launch tests, Code's 22 tests, and Diff's 168 tests. The subsequent

@@ -78,3 +78,29 @@ suppressed by this migration.
 Local archives currently occupy about 9.5 GiB; Diff and Music's generated debug
 DerivedData occupy about 7.3 GiB together. These are disposable after validation,
 but were retained rather than deleted.
+
+
+## All-app validation follow-up — September 26, 2026
+
+- Workspace typecheck, the 14 Spark adapter/launch tests, and `verify:all` passed.
+- Production JavaScript/native dependency analysis passed for all eight apps:
+  Music, Markdown, Code, Diff, Chat History, Hello World, Slides, and Kitchen Sink.
+- macOS arm64 debug build checks passed for Music, Markdown, Code, Diff,
+  Chat History, Hello World, and Slides. Music, Markdown, and Diff reused products
+  whose native fingerprints were current; the other four compiled successfully.
+- App tests passed: Code 22, Diff 170, Music 104, Markdown 96, Chat History 28,
+  and all 88 Slides test files. Hello World and Kitchen Sink have no standalone
+  app unit suite; their bundle/native checks are separate from interactive coverage.
+- Chat History's test mock now supplies macOS Platform and expects the current
+  system window background. No application behavior was changed for that failure.
+- Slides explicitly declares Legend List for Spark's settings window. Its actual
+  generated native selection and CocoaPods lockfile both include Spark UI.
+- The source audit found no old standard desktop API imports in app source or
+  the non-extracted shared packages. Mobile declarations still use the mobile host.
+
+Kitchen Sink's native build remains pending: completing the other builds left
+about 53 GB available, insufficient headroom for another fresh build while
+preserving the required 50 GB reserve. Cleanup of verified build intermediates
+was requested but has not been authorized. Runnable products remain retained.
+These checks do not establish interactive runtime or performance parity for all
+apps, nor Intel, release-distribution, Windows, or mobile runtime validation.

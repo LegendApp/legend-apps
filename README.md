@@ -101,14 +101,15 @@ statuses are marked above.
 ## For developers and contributors
 
 This repository is a Bun workspace built around React Native and a reusable
-native host under `shell/`. Each app supplies its JavaScript entrypoint,
+JavaScript shell under `shell/`. Spark owns the macOS native host and standard
+desktop capabilities; iOS and Android use the mobile shell. Each app supplies its JavaScript entrypoint,
 identity, supported platforms, native-module graph, and release metadata through
 `apps/<app>/app.manifest.ts`.
 
 ### Developer baseline and integration apps
 
 - **[Legend Hello World](apps/hello-world/README.md)** is a minimal macOS app
-  using the shared shell, with no app-specific native modules. Run it with
+  using the Spark host, with no app-specific native modules. Run it with
   `bun run hello-world start macos` and `bun run hello-world run macos` in
   separate terminals.
 - **Legend Test Kitchen Sink** is the integration harness for shared packages
@@ -150,9 +151,9 @@ Common actions:
 | `run` | Prepare native configuration, build, and launch a development app |
 | `open` | Open an already-built macOS development app |
 | `verify` | Verify generated configuration, identity, and native package linking |
-| `pods` | Install CocoaPods for a macOS or iOS app |
+| `pods` | Refresh the Spark macOS debug build, or install iOS CocoaPods |
 | `prebuild` | Generate the Expo iOS or Android native project |
-| `build` | Create a release build |
+| `build` | Create a release build; add `--dev` for a macOS debug build |
 | `package` | Package, sign, notarize, and generate appcasts for a macOS release |
 | `githubrelease` | Publish an already-packaged macOS build as a GitHub release |
 
@@ -207,8 +208,8 @@ bun run test:markdown-e2e
   tests.
 - `packages/` contains shared TypeScript libraries and React Native native
   modules.
-- `shell/` is the reusable Expo and React Native host and owns generated native
-  projects.
+- `shell/` contains the shared JavaScript entrypoint and mobile native host.
+  Spark generates the macOS consumers under `shell/.legend/spark/<app>`.
 - `scripts/` contains app selection, configuration generation, verification,
   build, package, and release tooling.
 - `patches/` contains Bun `patchedDependencies` applied during installation.
