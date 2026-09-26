@@ -6,6 +6,7 @@ export interface Spec extends TurboModule {
   getReactNativeStartupTimingJson(): string;
   getDisplays(): Promise<string>;
   openWindow(optionsJson: string): Promise<string>;
+  finishWindowRestoration(): Promise<string>;
   closeWindow(identifier: string): Promise<string>;
   closeFrontmostWindow(): Promise<string>;
   hideMainWindow(): Promise<string>;

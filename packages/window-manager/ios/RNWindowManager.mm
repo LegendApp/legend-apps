@@ -1,5 +1,6 @@
 #include <math.h>
 #import "RNWindowManager.h"
+#import "LegendWindowRegistry.h"
 
 #import <React-RCTAppDelegate/RCTRootViewFactory.h>
 #import <React/RCTBridge.h>
@@ -30,6 +31,9 @@ extern double LegendMainWindowReactRootAttachedTimeMs;
 
 @protocol RNWindowManagerRootViewFactoryProvider <NSObject>
 - (RCTRootViewFactory *)rootViewFactory;
+#if TARGET_OS_OSX
+- (NSWindow *)window;
+#endif
 @end
 
 #if TARGET_OS_OSX
@@ -468,6 +472,7 @@ static char LegendManagedRootViewKey;
 static char LegendContentLayoutModeKey;
 static char LegendTitlebarControlMetadataKey;
 static char LegendToolbarControlMetadataKey;
+static char LegendToolbarWindowIdentifierKey;
 static char LegendToolbarSearchFieldKey;
 static char LegendToolbarSearchItemKey;
 static char LegendToolbarSearchWidthKey;
@@ -475,6 +480,24 @@ static char LegendToolbarSearchButtonKey;
 static char LegendToolbarSearchContainerKey;
 static char LegendToolbarSearchWidthConstraintKey;
 static const CGFloat LegendToolbarSearchCollapsedSize = 34;
+
+// AppKit synchronizes all toolbars with the same identifier as a family.
+// Our windows own independent item state, including across React reloads.
+static NSToolbar *LegendCreateToolbar(NSString *windowIdentifier)
+{
+  NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:
+    [@"LegendToolbar." stringByAppendingString:NSUUID.UUID.UUIDString]];
+  objc_setAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey,
+    windowIdentifier ?: @"", OBJC_ASSOCIATION_COPY_NONATOMIC);
+  toolbar.displayMode = NSToolbarDisplayModeIconOnly;
+  toolbar.showsBaselineSeparator = NO;
+  return toolbar;
+}
+
+static NSString *LegendToolbarWindowIdentifier(NSToolbar *toolbar)
+{
+  return objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey) ?: @"";
+}
 
 static RCTUIView *LegendManagedRootView(NSWindow *window)
 {
@@ -639,9 +662,7 @@ static void LegendApplyWindowOptions(NSWindow *window, NSDictionary *options)
   LegendApplyTitleVisibility(window, titleVisibility);
   if (hasToolbarKey) {
     if (hasToolbar && !window.toolbar) {
-      NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"LegendMainWindowToolbar"];
-      toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-      toolbar.showsBaselineSeparator = NO;
+      NSToolbar *toolbar = LegendCreateToolbar([options[@"identifier"] isKindOfClass:NSString.class] ? options[@"identifier"] : @"main");
       window.toolbar = toolbar;
     } else if (!hasToolbar) {
       window.toolbar = nil;
@@ -798,6 +819,23 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 - (instancetype)init
 {
   if (self = [super init]) {
+#if TARGET_OS_OSX
+    LegendWindowRegistry *registry = LegendWindowRegistry.sharedRegistry;
+    _windows = (id)registry.windows;
+    _rootViews = (id)registry.rootViews;
+    _moduleNames = registry.moduleNames;
+    _titlebarAccessoryControllers = registry.titlebarAccessoryControllers;
+    _titlebarMaterialViews = registry.titlebarMaterialViews;
+    _toolbarItemConfigs = registry.toolbarItemConfigs;
+    _windowBlurFilters = registry.windowBlurFilters;
+    _windowOptions = registry.windowOptions;
+    _closeRequestIdentifiers = registry.closeRequestIdentifiers;
+    for (NSWindow *window in _windows.allValues) {
+      window.delegate = self;
+      [self bindChromeForWindow:window];
+    }
+    [self bindChromeForWindow:[RNWindowManager getMainWindow]];
+#else
     _windows = [NSMutableDictionary new];
     _rootViews = [NSMutableDictionary new];
     _moduleNames = [NSMutableDictionary new];
@@ -807,6 +845,7 @@ RCT_EXPORT_MODULE(NativeWindowManager)
     _windowBlurFilters = [NSMutableDictionary new];
     _windowOptions = [NSMutableDictionary new];
     _closeRequestIdentifiers = [NSMutableSet new];
+#endif
 #if TARGET_OS_OSX
 #if __has_include(<RNDesktopApp/SparkDesktop.h>)
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(sparkDesktopEvent:) name:SparkDesktopEvent object:nil];
@@ -835,6 +874,35 @@ RCT_EXPORT_MODULE(NativeWindowManager)
   }
   return self;
 }
+
+#if TARGET_OS_OSX
+- (void)bindChromeControlView:(NSView *)view
+{
+  BOOL managed = objc_getAssociatedObject(view, &LegendToolbarControlMetadataKey) != nil ||
+    objc_getAssociatedObject(view, &LegendTitlebarControlMetadataKey) != nil ||
+    objc_getAssociatedObject(view, &LegendToolbarSearchItemKey) != nil;
+  if (managed && [view isKindOfClass:NSControl.class]) {
+    ((NSControl *)view).target = self;
+    if ([view isKindOfClass:NSSearchField.class]) ((NSSearchField *)view).delegate = self;
+  }
+  for (NSView *child in view.subviews) [self bindChromeControlView:child];
+}
+
+- (void)bindChromeForWindow:(NSWindow *)window
+{
+  NSToolbar *toolbar = window.toolbar;
+  if (objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey)) {
+    toolbar.delegate = self;
+    for (NSToolbarItem *item in toolbar.items) {
+      if (objc_getAssociatedObject(item, &LegendToolbarControlMetadataKey)) item.target = self;
+      [self bindChromeControlView:item.view];
+    }
+  }
+  for (NSTitlebarAccessoryViewController *controller in window.titlebarAccessoryViewControllers) {
+    [self bindChromeControlView:controller.view];
+  }
+}
+#endif
 
 - (NSArray<NSString *> *)supportedEvents
 {
@@ -1112,10 +1180,8 @@ RCT_EXPORT_MODULE(NativeWindowManager)
 - (NSToolbar *)ensureToolbarForWindow:(NSWindow *)window identifier:(NSString *)identifier
 {
   NSToolbar *toolbar = window.toolbar;
-  if (!toolbar) {
-    toolbar = [[NSToolbar alloc] initWithIdentifier:identifier ?: @"LegendWindowToolbar"];
-    toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-    toolbar.showsBaselineSeparator = NO;
+  if (!toolbar || !objc_getAssociatedObject(toolbar, &LegendToolbarWindowIdentifierKey)) {
+    toolbar = LegendCreateToolbar(identifier);
     window.toolbar = toolbar;
   }
   toolbar.delegate = self;
@@ -1324,7 +1390,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       @"itemId": itemId,
       @"menuItems": menuItems,
       @"value": [config[@"value"] isKindOfClass:NSString.class] ? config[@"value"] : @"",
-      @"windowIdentifier": toolbar.identifier ?: @"",
+      @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
     };
     if (isMenuButton) {
       NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(toolbarButtonItemPressed:)];
@@ -1386,7 +1452,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     BOOL collapses = LegendDictionaryHasKey(config, @"collapses") && [config[@"collapses"] boolValue];
     NSDictionary *metadata = @{
       @"itemId": itemId,
-      @"windowIdentifier": toolbar.identifier ?: @"",
+      @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
     };
 
     NSSearchField *searchField = nil;
@@ -1540,7 +1606,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
   objc_setAssociatedObject(control, &LegendToolbarControlMetadataKey, @{
     @"itemId": itemId,
     @"values": values,
-    @"windowIdentifier": toolbar.identifier ?: @"",
+    @"windowIdentifier": LegendToolbarWindowIdentifier(toolbar),
   }, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   control.frame = NSMakeRect(0, 0, totalWidth, control.fittingSize.height);
 
@@ -1936,6 +2002,22 @@ willBeInsertedIntoToolbar:(BOOL)flag
 }
 #endif
 
+- (void)finishWindowRestoration:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+{
+#if TARGET_OS_OSX
+  RCTExecuteOnMainQueue(^{
+    // Adopted windows are removed from this collection by LegendTakePrecreatedWindow.
+    // Close only unclaimed native shells; preserve saved records and document data.
+    for (NSString *identifier in LegendPrecreatedWindows.allKeys) {
+      LegendRemovePrecreatedWindow(identifier);
+    }
+    resolve([self successJson]);
+  });
+#else
+  resolve([self failureJson:@"WindowManager is only available on macOS"]);
+#endif
+}
+
 - (void)openWindow:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
 #if TARGET_OS_OSX
@@ -2087,9 +2169,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
       }
       LegendApplyTitleVisibility(existingWindow, titleVisibility);
       if (hasToolbar && !existingWindow.toolbar) {
-        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:identifier];
-        toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-        toolbar.showsBaselineSeparator = NO;
+        NSToolbar *toolbar = LegendCreateToolbar(identifier);
         existingWindow.toolbar = toolbar;
       }
       LegendApplyToolbarStyle(existingWindow, toolbarStyle);
@@ -2186,9 +2266,7 @@ willBeInsertedIntoToolbar:(BOOL)flag
     }
     LegendApplyTitleVisibility(window, titleVisibility);
     if (hasToolbar) {
-      NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:identifier];
-      toolbar.displayMode = NSToolbarDisplayModeIconOnly;
-      toolbar.showsBaselineSeparator = NO;
+      NSToolbar *toolbar = LegendCreateToolbar(identifier);
       window.toolbar = toolbar;
     }
     LegendApplyToolbarStyle(window, toolbarStyle);
@@ -2818,12 +2896,10 @@ willBeInsertedIntoToolbar:(BOOL)flag
 #if TARGET_OS_OSX
 + (NSWindow *)getMainWindow
 {
-  for (NSWindow *window in NSApplication.sharedApplication.windows) {
-    if ([window isKindOfClass:NSWindow.class] && !window.sheet && ![window isKindOfClass:NSPanel.class]) {
-      return window;
-    }
-  }
-  return NSApplication.sharedApplication.keyWindow;
+  // AppKit's window list includes precreated/restored document windows and has
+  // no stable ordering. Both supported hosts own the main window on the delegate.
+  id<RNWindowManagerRootViewFactoryProvider> delegate = (id)NSApplication.sharedApplication.delegate;
+  return [delegate respondsToSelector:@selector(window)] ? delegate.window : nil;
 }
 
 - (void)setupMainWindowObservers
@@ -3113,6 +3189,17 @@ willBeInsertedIntoToolbar:(BOOL)flag
   return [identifier isKindOfClass:NSString.class] && identifier.length > 0 ? identifier : @"default";
 }
 #endif
+
+- (void)invalidate
+{
+  // React's host restarts the existing surfaces on reload. Keep their native
+  // registry, but retire this runtime's observers and event delivery.
+  self.hasListeners = NO;
+#if TARGET_OS_OSX
+  [NSNotificationCenter.defaultCenter removeObserver:self];
+#endif
+  [super invalidate];
+}
 
 - (void)dealloc
 {

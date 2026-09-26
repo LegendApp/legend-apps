@@ -26,6 +26,11 @@ public class WindowManagerModule extends NativeWindowManagerSpec {
   }
 
   @Override
+  public void finishWindowRestoration(Promise promise) {
+    promise.resolve(unavailableJson());
+  }
+
+  @Override
   public void closeWindow(String identifier, Promise promise) {
     promise.resolve(unavailableJson());
   }

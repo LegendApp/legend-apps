@@ -400,6 +400,14 @@ export function openWindow(options: WindowOptions = {}): Promise<WindowResult> {
   );
 }
 
+/** Discard native startup placeholders not adopted by the completed app restore. */
+export function finishWindowRestoration(): Promise<WindowResult> {
+  if (Platform.OS !== "macos") return fallbackResult();
+  return NativeWindowManager.finishWindowRestoration().then((value) =>
+    parseJson(value, { success: false, message: "Invalid native response" }),
+  );
+}
+
 export function getDisplays(): Promise<Display[]> {
   if (Platform.OS !== "macos") {
     return Promise.resolve([]);
