@@ -1,5 +1,7 @@
-import { Children, cloneElement, isValidElement, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Animated, View, type ViewStyle } from "react-native";
+import Animated from "react-native-reanimated";
+import { useStepStyle } from "./useStepStyle";
+import { Children, cloneElement, isValidElement, useMemo, type ReactNode } from "react";
+import { View, type ViewStyle } from "react-native";
 import { SceneMotionView, usePresentationValue } from "@legend-apps/presentation";
 
 type Transition = "fade" | "fade-up" | "slide-up" | "none" | { duration?: number };
@@ -42,43 +44,10 @@ export function Step(props: StepProps) {
 
 function LegacyStep(props: StepProps) {
   const stepIndex = usePresentationValue("stepIndex");
-  const isPreview = usePresentationValue("isPreview");
-  const isActive = usePresentationValue("isActive");
   const { at, until, initial, states, transition } = props;
   const target = useMemo(() => stepStyle(stepIndex, { at, until, initial, states, transition }), [stepIndex, at, until, initial, states, transition]);
-  const [progress] = useState(() => new Animated.Value(1));
-  let [range, setRange] = useState(() => ({ from: target, to: target }));
-  if (range.to !== target) {
-    range = { from: range.to, to: target };
-    setRange(range);
-  }
-  useEffect(() => {
-    if (isPreview || !isActive || props.transition === "none") {
-      progress.setValue(1);
-      return;
-    }
-    progress.setValue(0);
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: typeof props.transition === "object" ? props.transition.duration ?? 300 : 300,
-      useNativeDriver: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [isActive, isPreview, progress, target, props.transition]);
-  function interpolate(start: unknown, end: unknown): any {
-    if (typeof end === "number" && typeof start === "number") {
-      return progress.interpolate({ inputRange: [0, 1], outputRange: [start, end] });
-    }
-    if (typeof end === "string" && typeof start === "string" && end.startsWith("#") && start.startsWith("#")) {
-      return progress.interpolate({ inputRange: [0, 1], outputRange: [start, end] });
-    }
-    if (Array.isArray(end)) return end.map((value, index) => interpolate(Array.isArray(start) ? start[index] : value, value));
-    if (end && typeof end === "object") return Object.fromEntries(Object.entries(end).map(([key, value]) =>
-      [key, interpolate(start && typeof start === "object" ? (start as Record<string, unknown>)[key] : value, value)]));
-    return end;
-  }
-  const animatedStyle = isPreview || props.transition === "none" ? target : interpolate(range.from, target);
+  const duration = transition === "none" ? 0 : typeof transition === "object" ? transition.duration ?? 300 : 300;
+  const animatedStyle = useStepStyle(target, duration);
 
   const hidden = target.opacity === 0;
   return <Animated.View accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}

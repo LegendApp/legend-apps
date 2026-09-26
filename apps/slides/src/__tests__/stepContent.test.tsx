@@ -3,35 +3,47 @@ import { expect, test } from "bun:test";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { act, create } from "react-test-renderer";
-import { transitions } from "./nativeMock";
+import "./nativeMock";
+import { frames, flushUI } from "./uiClockMock";
+import { interpolateStepStyle } from "../useStepStyle";
 const { PresentationProvider } = await import("@legend-apps/presentation");
 const { Step, Steps, resolveSteps, stepStyle } = await import("../steps");
 
-test("step interpolation retains its starting style across unrelated renders and reverse navigation", async () => {
+test("step interpolation uses shared playback, retargets from the displayed style and freezes outgoing", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const runtime$ = observable({});
-  const content = (stepIndex, text, isPreview = false) => {
-    runtime$.set({ stepIndex, isPreview, isActive: true });
-    return <PresentationProvider value={runtime$}>
-      <Step at={1}>{text}</Step>
-    </PresentationProvider>;
+  const content = (stepIndex, text, phase = "playing") => {
+    runtime$.set({ stepIndex, slideIndex: 0, playbackPhase: phase });
+    return <PresentationProvider value={runtime$}><Step at={1}>{text}</Step></PresentationProvider>;
   };
   let tree;
-  const initialTransitionCount = transitions.length;
   try {
-    await act(() => { tree = create(content(0, "first")); });
-    await act(() => tree.update(content(1, "first")));
-    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(0);
-    await act(() => tree.update(content(1, "updated content")));
-    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(0);
-    await act(() => tree.update(content(0, "updated content")));
-    expect(tree.root.findByType("layer").props.style.opacity.__getValue()).toBe(1);
-    await act(() => tree.update(content(0, "preview", true)));
-    expect(tree.root.findByType("layer").props.style.opacity).toBe(0);
-  } finally {
-    if (tree) await act(() => tree.unmount());
-    transitions.splice(initialTransitionCount);
-  }
+    await act(() => { tree = create(content(0, "first")); }); flushUI();
+    const opacity = () => tree.root.findByType("animated-view").props.style.value.opacity;
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    await act(() => tree.update(content(1, "first"))); flushUI();
+    expect(opacity()).toBe(0);
+    frame.tick(1100); frame.tick(1250);
+    expect(opacity()).toBeCloseTo(0.5);
+    await act(() => tree.update(content(1, "updated"))); flushUI();
+    expect(opacity()).toBeCloseTo(0.5);
+    await act(() => tree.update(content(0, "reverse"))); flushUI();
+    expect(opacity()).toBeCloseTo(0.5);
+    frame.tick(1300); frame.tick(1450);
+    expect(opacity()).toBeCloseTo(0.25);
+    await act(() => tree.update(content(0, "exit", "outgoing"))); flushUI();
+    frame.tick(2000);
+    expect(opacity()).toBeCloseTo(0.25);
+    await act(() => tree.update(content(1, "preview", "preview"))); flushUI();
+    expect(opacity()).toBe(1);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("UI style interpolation retains numeric transforms, hex colors and discrete properties", () => {
+  expect(interpolateStepStyle({ opacity: 0, transform: [{ translateY: 20 }], backgroundColor: "#000" },
+    { opacity: 1, transform: [{ translateY: 0 }], backgroundColor: "#fff", display: "flex" }, 0.5))
+    .toEqual({ opacity: 0.5, transform: [{ translateY: 10 }], backgroundColor: "rgba(128,128,128,1)", display: "flex" });
 });
 
 test("reveal ordering includes list items, shared positions, exits and animation triggers", () => {
@@ -69,5 +81,23 @@ test("render functions are retained without invocation and declare total states"
   expect(resolveSteps(<Steps count={1}>{render}</Steps>).steps).toBe(1);
   for (const count of [0, -1, 1.5, NaN]) {
     expect(() => resolveSteps(<Steps count={count}>{render}</Steps>)).toThrow("positive integer");
+  }
+});
+
+test("step styles compile with React Compiler and native worklet serialization", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const { fileURLToPath } = await import("node:url");
+  const { transformSync } = await import("@babel/core");
+  for (const file of ["../steps.tsx", "../useStepStyle.ts"]) {
+    const filename = fileURLToPath(new URL(file, import.meta.url));
+    const require = createRequire(filename);
+    const result = transformSync(readFileSync(filename, "utf8"), {
+      filename, babelrc: false, configFile: false,
+      presets: [require.resolve("@react-native/babel-preset")],
+      plugins: [[require.resolve("babel-plugin-react-compiler"), { panicThreshold: "all_errors", target: "19" }], require.resolve("react-native-worklets/plugin")],
+    });
+    expect(result.code).toBeTruthy();
+    if (file.endsWith("useStepStyle.ts")) expect(result.code).toContain("__workletHash");
   }
 });
