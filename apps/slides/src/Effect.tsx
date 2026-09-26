@@ -65,7 +65,7 @@ function EffectShader({ blur, animationEnabled, effect, height, speed, strength,
   const shaderUniforms = useDerivedValue(() => ({
     ...(sharedUniforms ? sharedUniforms.value : resolvedUniforms),
     resolution: [width * pixelRatio, height * pixelRatio], strength: strength * pixelRatio,
-    time: animationEnabled ? time.value.time * speed : 0,
+    time: animationEnabled && speed !== 0 ? time.value.time * speed : 0,
   }));
   const shaderBlur = useDerivedValue(() => Math.max(0, sharedBlur ? sharedBlur.value : resolvedBlur) * pixelRatio);
   return <RuntimeShader source={effect} uniforms={shaderUniforms}><Blur blur={shaderBlur} mode="clamp" /></RuntimeShader>;
@@ -74,7 +74,7 @@ function EffectShader({ blur, animationEnabled, effect, height, speed, strength,
 function EffectCanvas(props: EffectCanvasProps) {
   const { height, image, previewTime, clock, width } = props;
   // Read presentation context outside Skia's renderer.
-  const time = useAnimatedShaderUniforms({}, previewTime, { clock });
+  const time = useAnimatedShaderUniforms({}, previewTime, { clock, active: props.animationEnabled && props.speed !== 0 });
   const pixelRatio = PixelRatio.get();
   return <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
     <Group transform={[{ scale: 1 / pixelRatio }]}>
