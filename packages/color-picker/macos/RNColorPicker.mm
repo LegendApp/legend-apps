@@ -21,7 +21,7 @@ RCT_EXPORT_MODULE(NativeColorPicker)
     panel.showsAlpha = NO;
     self->_resolve = resolve; self->_reject = reject;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(panelClosed:) name:NSWindowWillCloseNotification object:panel];
-    [panel orderFront:nil];
+    [panel makeKeyAndOrderFront:nil];
   });
 }
 - (void)panelClosed:(NSNotification *)notification {

@@ -105,6 +105,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     include: active.map(pkg => pkg.name),
     expo: {
       slug: manifest.id,
+      ...(manifest.id === "photos" ? { plugins: [path.join(rootDir, "apps/photos/app.plugin.cjs")] } : {}),
       ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? {
         plugins: [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")],
       } : {}),
