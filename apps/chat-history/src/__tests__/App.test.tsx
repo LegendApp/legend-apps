@@ -8,6 +8,7 @@ import { readSavedChatSelection } from "../chatStorage";
 
 jest.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
+  Platform: { OS: "macos" },
   Pressable: "Pressable",
   StyleSheet: { create: (styles: unknown) => styles },
   Text: "Text",
@@ -87,7 +88,7 @@ describe("Chat History host window", () => {
       title: "Legend Chat History",
       windowStyle: {
         appearance: "system",
-        backgroundColor: "#f5f6f8",
+        backgroundColor: "system",
         contentLayoutMode: "fullSize",
         titlebarSeparatorStyle: "shadow",
       },
