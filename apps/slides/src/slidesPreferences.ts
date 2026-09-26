@@ -1,4 +1,4 @@
-import { createObservableSettings, getPersistPlugin, type Storage } from "@legend-apps/storage";
+import { createObservableSettings, getPersistPlugin, type Storage } from "@legendapp/spark/settings/observable";
 import { defaultPresenterLayout, normalizePresenterLayout, type PresenterLayout } from "./presenterLayout";
 
 export function createSlidesPreferences(storage?: Storage) {

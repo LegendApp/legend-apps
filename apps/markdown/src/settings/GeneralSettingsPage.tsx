@@ -6,7 +6,7 @@ import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import {
   setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,

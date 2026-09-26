@@ -1,4 +1,4 @@
-import { addWindowClosedListener, setWindowOptions } from "@legend-apps/window-manager";
+import { addWindowClosedListener, setWindowOptions } from "@legendapp/spark/windows/managed";
 import { getSavedDiffWindows, removeSavedDiffWindow } from "../diffAppMetadata";
 import {
   installDiffWindowRestoration,
@@ -7,7 +7,7 @@ import {
 } from "../diffWindowRestoration";
 import { openDiffViewerWindow } from "../diffWindows";
 
-jest.mock("@legend-apps/window-manager", () => ({
+jest.mock("@legendapp/spark/windows/managed", () => ({
   addWindowClosedListener: jest.fn(() => ({ remove: jest.fn() })),
   setWindowOptions: jest.fn().mockResolvedValue({ success: true }),
 }));

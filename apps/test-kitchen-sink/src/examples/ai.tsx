@@ -5,7 +5,7 @@ import {
   runAITool,
   type AIToolId,
 } from "@legend-apps/ai";
-import { commandRunner, createMockCommandRunner } from "@legend-apps/command-runner";
+import { commandRunner, createMockCommandRunner } from "@legendapp/spark/processes/commands";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

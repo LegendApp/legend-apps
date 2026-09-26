@@ -1,11 +1,11 @@
-import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
+import { addRecentDocumentOpenListener } from "@legendapp/spark/app/recent-documents";
 import { openRequestedDocument } from "./documentOpen";
-import { saveFileDialog, writeTextFile } from "@legend-apps/file-dialog";
+import { saveFileDialog, writeTextFile } from "@legendapp/spark/dialogs";
 import { prepareNotesExit } from "./notesRecovery";
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { Alert } from "react-native";
 import { installSlidesExitHandler, registerSlidesExitPreparation } from "./slidesExit";
-import { addApplicationReopenRequestedListener } from "@legend-apps/window-manager";
+import { addApplicationReopenRequestedListener } from "@legendapp/spark/windows/managed";
 import { useEffect, useRef } from "react";
 import { slidesWindows } from "./slidesWindows";
 import { getLastDeckPath, loadDeck } from "./deckLoader";

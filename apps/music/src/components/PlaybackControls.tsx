@@ -14,7 +14,7 @@ import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { library$ } from "../systems/LibraryState";
 import { localMusicState$ } from "../systems/LocalMusicState";
 import { type PlaybackControlId, settings$ } from "../systems/Settings";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import {
     useLibraryToggle,
     usePlaylistOptions,

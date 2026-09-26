@@ -2,7 +2,7 @@ import {
   SettingsSection,
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,

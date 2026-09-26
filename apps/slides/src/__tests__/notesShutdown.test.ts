@@ -3,7 +3,7 @@ import { expect, mock, test } from "bun:test";
 const calls = [];
 let finishOpen;
 let failClose = false;
-mock.module("@legend-apps/window-manager", () => ({
+mock.module("@legendapp/spark/windows/managed", () => ({
   closeWindow: async () => { calls.push("close"); return { success: !failClose }; },
   getDisplays: async () => [], WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },
 }));

@@ -5,8 +5,8 @@
   "main": "src/index.ts",
   "react-native": "src/index.ts",
   "dependencies": {
-    "@legend-apps/file-scanner": "0.0.0",
-    "@legend-apps/media-tags": "0.0.0"
+    "@legend-apps/media-tags": "0.0.0",
+    "@legendapp/spark": "0.0.1-next.2"
   },
   "codegenConfig": {
     "name": "RNMediaLibraryScannerSpec",

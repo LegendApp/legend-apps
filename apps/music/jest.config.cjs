@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
     rootDir: "../..",
     setupFiles: ["<rootDir>/apps/music/jest.setup.cjs"],
     testMatch: [
@@ -12,7 +12,7 @@ module.exports = {
         "^@legend-apps/codex$": "<rootDir>/apps/music/jest/mocks/codexMock.cjs",
         "^@legend-apps/markdown-document$": "<rootDir>/apps/music/jest/mocks/markdownDocumentMock.cjs",
         "^@legend-apps/oauth-loopback$": "<rootDir>/apps/music/jest/mocks/oauthLoopbackMock.cjs",
-        "^@legend-apps/secure-storage$": "<rootDir>/apps/music/jest/mocks/secureStorageMock.cjs",
+        "^@legendapp/spark/secure-storage$": "<rootDir>/apps/music/jest/mocks/secureStorageMock.cjs",
         "^expo-file-system$": "<rootDir>/apps/music/jest/mocks/expoFileSystemMock.cjs",
         "^expo-file-system/next$": "<rootDir>/apps/music/jest/mocks/expoFileSystemNextMock.cjs",
         "^react-native$": "<rootDir>/apps/music/jest/mocks/reactNativeMock.cjs",
@@ -31,4 +31,4 @@ module.exports = {
     transformIgnorePatterns: [
         "node_modules/(?!(react-native|@react-native|@react-native-community|expo-file-system|@legendapp)/)",
     ],
-};
+});

@@ -1,4 +1,4 @@
-import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

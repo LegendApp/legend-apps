@@ -1,4 +1,4 @@
-import { parseAIJson } from "@legend-apps/ai";
+import { parseAIJson } from "@legend-apps/ai/output";
 
 export type PlaylistAISuggestion = {
     filePath?: string;

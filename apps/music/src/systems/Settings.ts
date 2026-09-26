@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-apps/storage";
+import { createObservableFile } from "@legendapp/spark/settings/observable";
 import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
 import { KeyCodes } from "./keyboard/KeyboardManager";
 import { isMusicThemeName, type MusicThemeName } from "../theme/musicThemes";

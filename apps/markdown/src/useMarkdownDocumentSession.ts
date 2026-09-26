@@ -1,11 +1,11 @@
-import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import {
   isMarkdownFileConflictError,
   type MarkdownDocumentCommandState,
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
 } from "@legend-apps/markdown-document";
-import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { useCallback, useRef } from "react";

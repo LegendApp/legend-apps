@@ -4,7 +4,7 @@ import {
   SegmentedOptions,
   SwitchControl,
 } from "@legend-apps/design-system";
-import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
+import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-apps/theme";
 import { Text, TextInput, Pressable, View } from "react-native";
 

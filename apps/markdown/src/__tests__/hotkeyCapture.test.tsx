@@ -9,7 +9,7 @@ type KeyboardEvent = {
 
 type KeyboardListener = (event: KeyboardEvent) => boolean | void;
 
-jest.mock("@legend-apps/keyboard-manager", () => {
+jest.mock("@legendapp/spark/shortcuts/keyboard", () => {
   const keyDownListeners: KeyboardListener[] = [];
   const keyUpListeners: KeyboardListener[] = [];
   const addKeyDownListener = jest.fn((listener: KeyboardListener) => {
@@ -85,9 +85,9 @@ jest.mock("react-native", () => {
   };
 });
 
-import { HotkeyCapture, KeyCodes } from "@legend-apps/hotkeys";
+import { HotkeyCapture, KeyCodes } from "@legendapp/spark/shortcuts/commands";
 
-const keyboardManagerMock = jest.requireMock("@legend-apps/keyboard-manager") as {
+const keyboardManagerMock = jest.requireMock("@legendapp/spark/shortcuts/keyboard") as {
   __mockAddKeyDownListener: jest.Mock;
   __mockAddKeyUpListener: jest.Mock;
   __mockKeyDownListeners: KeyboardListener[];

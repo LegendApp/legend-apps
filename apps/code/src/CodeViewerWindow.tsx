@@ -1,8 +1,8 @@
-import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legend-apps/document-app";
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
-import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
-import { addNativeMenuActionListener, updateMenuItems } from "@legend-apps/native-menu";
-import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legendapp/spark/app/documents";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { addWindowCloseRequestedListener, closeWindow } from "@legendapp/spark/windows/managed";
+import { addNativeMenuActionListener, updateMenuItems } from "@legendapp/spark/menus";
+import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
 import { cancelPreparedDocument, prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";

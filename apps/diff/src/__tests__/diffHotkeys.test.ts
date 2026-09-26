@@ -1,4 +1,4 @@
-import { getDefaultHotkeyBindings, KeyCodes, type HotkeyValue } from "@legend-apps/hotkeys";
+import { getDefaultHotkeyBindings, KeyCodes, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import {
   diffHotkeys$,
   diffHotkeyDefinitions,

@@ -1,6 +1,6 @@
-import { watchDirectories, watchFiles } from "@legend-apps/file-system-watcher";
+import { watchDirectories, watchFiles } from "@legendapp/spark/files/watchers";
 
-jest.unmock("@legend-apps/file-system-watcher");
+jest.unmock("@legendapp/spark/files/watchers");
 
 let mockNativeListener: (event: { path: string; filePath: string; type: string; contentChanged?: boolean }) => void;
 jest.mock("react-native", () => ({

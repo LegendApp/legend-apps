@@ -1,7 +1,7 @@
 import {
   HotkeysSettingsContent as SharedHotkeysSettingsContent,
   HotkeysSettingsPage as SharedHotkeysSettingsPage,
-} from "@legend-apps/hotkeys";
+} from "@legendapp/spark/shortcuts/commands";
 import { markdownHotkeyDefinitions } from "../markdownHotkeys";
 import {
   setMarkdownHotkeySetting,

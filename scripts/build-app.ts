@@ -1,20 +1,13 @@
 #!/usr/bin/env bun
+import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { packageSlidesCompiler, signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, shellDir } from "./lib/apps";
-import {
-  ensureMacOSReleaseWorkspace,
-  getMacOSReleaseAppRootDir,
-  getMacOSReleaseDerivedDataPath,
-  getMacOSEnv,
-  installMacOSPods,
-} from "./lib/macosWorkspaces";
-import { getMacOSAppWrapperName, macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
+import { appIds, assertSupportedPlatform, loadAppManifest, parseAppCommand, rootDir } from "./lib/apps";
 import { writeGeneratedConfig } from "./lib/nativeModules";
-import { getMacOSDevelopmentSigningArgs, getSlidesCompilerPath, runCommand, runPlatformCommand } from "./lib/run";
-import type { MacOSReleaseArch, Platform } from "./lib/types";
+import { runCommand, runPlatformCommand } from "./lib/run";
+import type { Platform } from "./lib/types";
 
 function parseMacOSBuildArch(args: string[]) {
   const arch = args[0] ?? "arm";
@@ -28,10 +21,6 @@ function parseMacOSBuildArch(args: string[]) {
   }
 
   return arch;
-}
-
-function getXcodeArch(arch: MacOSReleaseArch) {
-  return arch === "arm" ? "arm64" : "x86_64";
 }
 
 function getExistingCodeSignIdentity(appPath: string) {
@@ -137,53 +126,17 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
   assertSupportedPlatform(manifest, platform);
 
   if (platform === "macos") {
+    if (args.includes("--dev")) {
+      runCommand("bun", ["scripts/spark-app.ts", appId, "build", ...args.filter(arg => arg !== "--dev")], { cwd: rootDir });
+      return;
+    }
     const arch = parseMacOSBuildArch(args);
     if (appId === "slides" && (arch === "arm" ? "arm64" : "x64") !== process.arch) throw new Error("Package the Slides compiler on a Mac matching the target architecture.");
-    const generated = writeGeneratedConfig(manifest, platform, "release", arch);
-    const appRoot = getMacOSReleaseAppRootDir(appId);
-    const workspaceDir = ensureMacOSReleaseWorkspace(manifest, generated.configPath);
-    const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, arch);
-    const appPath = path.join(derivedDataPath, "Build", "Products", "Release", getMacOSAppWrapperName(manifest.displayName));
-
-    installMacOSPods(workspaceDir, generated.configPath, appId, appRoot);
-    runCommand(
-      "xcodebuild",
-      [
-        "-workspace",
-        `${workspaceDir}/${macOSWorkspaceName}`,
-        "-scheme",
-        macOSSchemeName,
-        "-configuration",
-        "Release",
-        "-derivedDataPath",
-        derivedDataPath,
-        `ARCHS=${getXcodeArch(arch)}`,
-        "ONLY_ACTIVE_ARCH=NO",
-        "DEPLOYMENT_POSTPROCESSING=YES",
-        // Apply to the app and source-built Pods; prebuilt Hermes is stripped below.
-        "DEAD_CODE_STRIPPING=YES",
-        "LLVM_LTO=YES_THIN",
-        "GCC_OPTIMIZATION_LEVEL=z",
-        ...(appId === "slides"
-          ? [
-              "DEBUG_INFORMATION_FORMAT=dwarf-with-dsym",
-              "DWARF_DSYM_FILE_SHOULD_ACCOMPANY_PRODUCT=YES",
-            ]
-          : []),
-        ...getMacOSDevelopmentSigningArgs(
-          process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
-        ),
-      ],
-      {
-        cwd: shellDir,
-        env: {
-          ...getMacOSEnv(appId, generated.configPath, appRoot),
-          EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
-          NODE_ENV: "production",
-          LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
-        },
-      },
-    );
+    runCommand("bun", ["scripts/spark-app.ts", appId, "build-release"], {
+      cwd: rootDir,
+      env: { SPARK_MACOS_ARCH: arch === "arm" ? "arm64" : "x64" },
+    });
+    const appPath = JSON.parse(fs.readFileSync(path.join(sparkWorkspace(appId), ".spark/release-build.json"), "utf8")).app as string;
     if (appId === "slides") {
       const compilerDirectory = path.join(appPath, "Contents/Resources/slides-compiler");
       fs.rmSync(compilerDirectory, { recursive: true, force: true });

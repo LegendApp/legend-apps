@@ -1,4 +1,4 @@
-import type { CommandRunner, CommandRunnerResult } from "@legend-apps/command-runner";
+import type { CommandRunner, CommandRunnerResult } from "@legendapp/spark/processes/commands";
 
 export type AIToolId = "claude" | "codex";
 

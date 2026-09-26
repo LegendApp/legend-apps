@@ -2,7 +2,7 @@ import {
   addDirectoryChangeListener,
   isWatchingDirectory,
   setWatchedDirectories,
-} from "@legend-apps/file-system-watcher";
+} from "@legendapp/spark/files/watchers";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

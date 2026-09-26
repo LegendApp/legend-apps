@@ -1,4 +1,4 @@
-import type { CommandRunnerResult } from "@legend-apps/command-runner";
+import type { CommandRunnerResult } from "@legendapp/spark/processes/commands";
 import { createDiffFilePairSource } from "../diffFiles";
 import {
   createFilePairDiffCommand,

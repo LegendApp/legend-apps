@@ -1,11 +1,11 @@
 import type {
   MarkdownDocumentCommands,
 } from "@legend-apps/markdown-document";
-import { revealInFinder } from "@legend-apps/file-dialog";
+import { revealInFinder } from "@legendapp/spark/dialogs";
 import {
   updateMenuItems,
   type NativeMenuActionHandlers,
-} from "@legend-apps/native-menu";
+} from "@legendapp/spark/menus";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";

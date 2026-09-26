@@ -1,6 +1,6 @@
 import { syncTransitionLibrary } from "./transitionLibraryPolicy";
 import { builtinTransitionSources } from "@legend-apps/presentation";
-import { createStorage } from "@legend-apps/storage";
+import { createStorage } from "@legendapp/spark/settings/observable";
 
 
 export const transitionStorage = createStorage({ subfolder: "slides" });

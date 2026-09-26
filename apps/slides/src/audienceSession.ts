@@ -1,5 +1,5 @@
 import { displayKey } from "./displayRoles";
-import type { Display } from "@legend-apps/window-manager";
+import type { Display } from "@legendapp/spark/windows/managed";
 
 type AudiencePlatform = {
   open(display: Display): Promise<void>;

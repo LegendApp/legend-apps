@@ -5,7 +5,7 @@ import {
   settingsTargetTitles,
   shiftModifier,
   type NativeMenuConfig,
-} from "@legend-apps/native-menu";
+} from "@legendapp/spark/menus";
 
 export const markdownMenuConfig: NativeMenuConfig[] = [
   {

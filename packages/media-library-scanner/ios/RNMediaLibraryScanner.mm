@@ -1,6 +1,11 @@
 #import "RNMediaLibraryScanner.h"
 
+#import <TargetConditionals.h>
+#if TARGET_OS_OSX
+#import <RNDesktopFileSystem/RNFileScannerCore.h>
+#else
 #import <RNFileScanner/RNFileScannerCore.h>
+#endif
 #import <RNMediaTags/RNMediaTagsCore.h>
 #import <React/RCTBridgeModule.h>
 

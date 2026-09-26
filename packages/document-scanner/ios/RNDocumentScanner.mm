@@ -1,6 +1,11 @@
 #import "RNDocumentScanner.h"
 
+#import <TargetConditionals.h>
+#if TARGET_OS_OSX
+#import <RNDesktopFileSystem/RNFileScannerCore.h>
+#else
 #import <RNFileScanner/RNFileScannerCore.h>
+#endif
 #import <React/RCTBridgeModule.h>
 
 @implementation RNDocumentScanner {

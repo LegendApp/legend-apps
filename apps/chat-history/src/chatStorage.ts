@@ -1,7 +1,7 @@
 import {
   readApplicationSupportJson,
   writeApplicationSupportJson,
-} from "@legend-apps/storage/src/applicationSupport";
+} from "@legendapp/spark/settings/paths";
 import type { ChatSummary } from "@legend-apps/chat-history";
 
 const settingsPath = "chat-history/settings.json";

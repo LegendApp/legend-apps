@@ -1,4 +1,4 @@
-import type { DragDropFileEvent } from "@legend-apps/drag-drop";
+import type { DragDropFileEvent } from "@legendapp/spark/drag-drop/views";
 import {
   createDiffFilePairSource,
   createDiffFileSource,

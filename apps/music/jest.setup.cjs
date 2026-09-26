@@ -118,26 +118,26 @@ jest.mock("@legend-apps/media-tags", () => ({
     writeMediaTags: jest.fn(async () => ({ success: true })),
 }));
 
-jest.mock("@legend-apps/file-system-watcher", () => ({
+jest.mock("@legendapp/spark/files/watchers", () => ({
     __esModule: true,
     addDirectoryChangeListener: jest.fn(() => ({ remove: jest.fn() })),
     setWatchedDirectories: jest.fn(),
 }));
 
-jest.mock("@legend-apps/app-exit", () => ({
+jest.mock("@legendapp/spark/app/exit", () => ({
     __esModule: true,
     addAppExitListener: jest.fn(() => ({ remove: jest.fn() })),
     completeAppExit: jest.fn(),
 }));
 
-jest.mock("@legend-apps/auto-updater", () => ({
+jest.mock("@legendapp/spark/updates", () => ({
     __esModule: true,
     AutoUpdater: {
         checkForUpdates: jest.fn(async () => ({ success: true })),
     },
 }));
 
-jest.mock("@legend-apps/native-menu", () => ({
+jest.mock("@legendapp/spark/menus", () => ({
     __esModule: true,
     ...mockNativeMenu,
     useNativeMenu: ({ handlers, menus, onAction, ownerId }) => {
@@ -162,25 +162,25 @@ jest.mock("@legend-apps/native-menu", () => ({
     __emitNativeMenuAction: (action) => nativeMenuListeners.emit("action", action),
 }));
 
-jest.mock("@legend-apps/context-menu", () => ({
+jest.mock("@legendapp/spark/context-menu", () => ({
     __esModule: true,
     showContextMenu: jest.fn(async () => null),
 }));
 
-jest.mock("@legend-apps/drag-drop", () => ({
+jest.mock("@legendapp/spark/drag-drop/views", () => ({
     __esModule: true,
     DragDropView: React.forwardRef((props, ref) => React.createElement(ReactNative.View, { ...props, ref })),
     TrackDragSource: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-apps/file-dialog", () => ({
+jest.mock("@legendapp/spark/dialogs", () => ({
     __esModule: true,
     openFileDialog: jest.fn(async () => null),
     selectDirectory: jest.fn(async () => null),
     showInFinder: jest.fn(async () => false),
 }));
 
-jest.mock("@legend-apps/window-controls", () => ({
+jest.mock("@legendapp/spark/windows/controls", () => ({
     __esModule: true,
     default: {
         close: jest.fn(),
@@ -192,7 +192,7 @@ jest.mock("@legend-apps/window-controls", () => ({
     },
 }));
 
-jest.mock("@legend-apps/window-manager", () => ({
+jest.mock("@legendapp/spark/windows/managed", () => ({
     __esModule: true,
     closeFrontmostWindow: jest.fn(async () => ({ success: true })),
     closeWindow: jest.fn(async () => ({ success: true })),
@@ -222,7 +222,7 @@ jest.mock("@legend-apps/window-manager", () => ({
     },
 }));
 
-jest.mock("@legend-apps/keyboard-manager", () => ({
+jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
     __esModule: true,
     default: {
         addKeyDownListener: jest.fn(() => jest.fn()),
@@ -237,28 +237,28 @@ jest.mock("@legend-apps/keyboard-manager", () => ({
     KeyCodes,
 }));
 
-jest.mock("@legend-apps/sf-symbol", () => ({
+jest.mock("@legendapp/spark/ui/symbol", () => ({
     __esModule: true,
     SFSymbol: () => null,
 }));
 
-jest.mock("@legend-apps/sidebar", () => ({
+jest.mock("@legendapp/spark/ui/sidebar", () => ({
     __esModule: true,
     NativeSidebarItemView: ({ children }) => React.createElement(React.Fragment, null, children),
     NativeSidebarView: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-apps/glass-effect-view", () => ({
+jest.mock("@legendapp/spark/ui/glass", () => ({
     __esModule: true,
     GlassEffectView: ({ children }) => React.createElement(React.Fragment, null, children),
 }));
 
-jest.mock("@legend-apps/text-input-search", () => ({
+jest.mock("@legendapp/spark/ui/search", () => ({
     __esModule: true,
     TextInputSearch: ReactNative.TextInput,
 }));
 
-jest.mock("@legend-apps/storage", () => {
+jest.mock("@legendapp/spark/settings/observable", () => {
     const { observable } = require("@legendapp/state");
     const plugins = new WeakMap();
 

@@ -11,7 +11,7 @@ import type { LibraryItem } from "../systems/LibraryState";
 import { library$ } from "../systems/LibraryState";
 import type { LocalPlaylist, LocalTrack } from "../systems/LocalMusicState";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { getQueueAction, type QueueAction } from "../utils/queueActions";
 
 import {

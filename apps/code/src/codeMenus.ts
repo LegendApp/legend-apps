@@ -1,4 +1,4 @@
-import { commandModifier, openTargetTitles, saveTargetTitles, saveAsTargetTitles, settingsTargetTitles, type NativeMenuConfig } from "@legend-apps/native-menu";
+import { commandModifier, openTargetTitles, saveTargetTitles, saveAsTargetTitles, settingsTargetTitles, type NativeMenuConfig } from "@legendapp/spark/menus";
 
 export const codeMenuConfig: NativeMenuConfig[] = [
   {

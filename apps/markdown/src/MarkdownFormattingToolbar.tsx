@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useResolveClassNames } from "uniwind";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";

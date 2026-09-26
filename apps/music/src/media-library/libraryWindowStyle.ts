@@ -1,5 +1,5 @@
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import type { WindowStyleOptions } from "@legend-apps/window-manager";
+import type { WindowStyleOptions } from "@legendapp/spark/windows/managed";
 import type { MusicTheme } from "../theme/musicThemes";
 
 export function createLibraryWindowStyle(theme: MusicTheme): WindowStyleOptions {

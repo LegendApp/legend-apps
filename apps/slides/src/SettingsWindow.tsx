@@ -7,7 +7,7 @@ import {
   SettingsSection,
   VirtualizedSettingsWindow as SharedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import {
   usePresentationNotesFontSizeSetting,
   setPresentationNotesFontSizeSetting,

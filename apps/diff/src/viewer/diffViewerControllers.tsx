@@ -1,10 +1,10 @@
 import type { DiffDocument } from "@legend-apps/diff-parser";
-import { watchDirectories } from "@legend-apps/file-system-watcher";
-import { useRoutedHotkeys, type HotkeyScope } from "@legend-apps/hotkeys";
-import { updateMenuItems, type NativeMenuItemPatch } from "@legend-apps/native-menu";
+import { watchDirectories } from "@legendapp/spark/files/watchers";
+import { useRoutedHotkeys, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
+import { updateMenuItems, type NativeMenuItemPatch } from "@legendapp/spark/menus";
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-apps/source-viewer";
-import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legend-apps/window-manager";
-import { useWindowId } from "@legend-apps/windows";
+import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legendapp/spark/windows/managed";
+import { useWindowId } from "@legendapp/spark/windows/react";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { TextInput } from "react-native";

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -11,11 +12,7 @@ import {
   rootDir,
   shellDir,
 } from "./lib/apps";
-import { getMacOSAppWrapperName, macOSAppTemplateDir, macOSProjectName } from "./lib/macosShell";
-import {
-  getMacOSReleaseDerivedDataPath,
-  getMacOSReleaseWorkspaceDir,
-} from "./lib/macosWorkspaces";
+import { getMacOSAppWrapperName } from "./lib/macosShell";
 import {
   getGitHubReleaseDownloadUrlPrefix,
   getMacOSReleaseArchiveName,
@@ -189,7 +186,8 @@ function notarizeApp(appPath: string, safeAppName: string, options: PackageOptio
 
 function getGenerateAppcastPath(appId: string) {
   const workspaceToolPath = path.join(
-    getMacOSReleaseWorkspaceDir(appId),
+    sparkWorkspace(appId),
+    "macos",
     "Pods",
     "Sparkle",
     "bin",
@@ -219,10 +217,11 @@ function packageArchitecture(
     runCommand("bun", ["scripts/build-app.ts", appId, "macos", arch], { cwd: rootDir });
   }
 
-  const workspaceDir = getMacOSReleaseWorkspaceDir(appId);
-  const derivedDataPath = getMacOSReleaseDerivedDataPath(workspaceDir, arch);
+  const workspaceDir = path.join(sparkWorkspace(appId), "macos");
+  const products = path.join(sparkWorkspace(appId), `.spark/products/macos-${arch === "arm" ? "arm64" : "x64"}/release`);
+  const product = fs.existsSync(products) ? fs.readdirSync(products).find(name => name.endsWith(".app")) : undefined;
   const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
-  const builtAppPath = path.join(derivedDataPath, "Build", "Products", "Release", appWrapperName);
+  const builtAppPath = path.join(products, product ?? appWrapperName);
   if (!fs.existsSync(builtAppPath)) {
     throw new Error(`Missing built app at ${builtAppPath}. Run bun scripts/build-app.ts ${appId} macos ${arch}.`);
   }
@@ -231,7 +230,9 @@ function packageArchitecture(
   const distAppPath = path.join(distDir, appWrapperName);
   const archiveName = getMacOSReleaseArchiveName(manifest, appPackage, arch);
   const archivePath = path.join(distDir, archiveName);
-  const entitlementsPath = path.join(workspaceDir, macOSAppTemplateDir, `${macOSProjectName}.entitlements`);
+  const entitlement = (fs.readdirSync(workspaceDir, { recursive: true }) as string[]).find(file => !file.startsWith("Pods/") && file.endsWith(".entitlements"));
+  if (!entitlement) throw new Error(`Spark generated no app entitlements in ${workspaceDir}`);
+  const entitlementsPath = path.join(workspaceDir, entitlement);
 
   fs.mkdirSync(distDir, { recursive: true });
   fs.rmSync(distAppPath, { recursive: true, force: true });

@@ -10,7 +10,7 @@ import { DiffNativeRow } from "@legend-apps/diff-parser";
 import {
   sourceViewerCodeFontFamily,
 } from "@legend-apps/source-viewer";
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { memo } from "react";

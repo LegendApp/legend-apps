@@ -1,4 +1,4 @@
-import { Sidebar, SidebarItem } from "@legend-apps/sidebar";
+import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { ExamplePanel, styles } from "./shared";

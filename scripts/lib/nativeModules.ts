@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import path from "node:path";
 import { loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
@@ -7,6 +8,16 @@ import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./t
 export type NativeGraphMode = "dev" | "release";
 
 export const nativePackages: NativePackage[] = [
+  {
+    name: "@legendapp/spark-message-dialog",
+    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/message-dialog"),
+    platforms: ["macos"],
+  },
+  ...Array.from(new Map(Object.values(sparkCapabilities).map(capability => [capability.package, capability])).values()).map(capability => ({
+    name: capability.package,
+    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages", capability.directory),
+    platforms: ["macos"] as Platform[],
+  })).filter(pkg => fs.readdirSync(pkg.root).some(file => file.endsWith(".podspec"))),
   {
     name: "@legend-apps/source-editor",
     root: path.join(packagesDir, "source-editor"),

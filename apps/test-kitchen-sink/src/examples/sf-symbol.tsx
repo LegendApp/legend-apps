@@ -1,4 +1,4 @@
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { Text, View } from "react-native";
 import { ExamplePanel, styles } from "./shared";
 

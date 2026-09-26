@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 export type ListItemVariant = "default" | "compact";
 

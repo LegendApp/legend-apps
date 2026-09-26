@@ -1,0 +1,142 @@
+{
+  "@legend-apps/window-manager": {
+    "package": "@legendapp/spark-desktop-windows",
+    "import": "@legendapp/spark/windows/managed",
+    "directory": "desktop-windows"
+  },
+  "@legend-apps/windows": {
+    "package": "@legendapp/spark-desktop-windows",
+    "import": "@legendapp/spark/windows/react",
+    "directory": "desktop-windows"
+  },
+  "@legend-apps/window-controls": {
+    "package": "@legendapp/spark-desktop-windows",
+    "import": "@legendapp/spark/windows/controls",
+    "directory": "desktop-windows"
+  },
+  "@legend-apps/appkit-split-view": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/split-view",
+    "directory": "ui"
+  },
+  "@legend-apps/sidebar": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/sidebar",
+    "directory": "ui"
+  },
+  "@legend-apps/document-app": {
+    "package": "@legendapp/spark-documents",
+    "import": "@legendapp/spark/app/documents",
+    "directory": "documents"
+  },
+  "@legend-apps/recent-documents": {
+    "package": "@legendapp/spark-desktop-app",
+    "import": "@legendapp/spark/app/recent-documents",
+    "directory": "desktop-app"
+  },
+  "@legend-apps/hotkeys": {
+    "package": "@legendapp/spark-commands",
+    "import": "@legendapp/spark/shortcuts/commands",
+    "directory": "commands"
+  },
+  "@legend-apps/keyboard-manager": {
+    "package": "@legendapp/spark-desktop-shortcuts",
+    "import": "@legendapp/spark/shortcuts/keyboard",
+    "directory": "desktop-shortcuts"
+  },
+  "@legend-apps/glass-effect-view": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/glass",
+    "directory": "ui"
+  },
+  "@legend-apps/sf-symbol": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/symbol",
+    "directory": "ui"
+  },
+  "@legend-apps/native-select": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/select-controls",
+    "directory": "ui"
+  },
+  "@legend-apps/text-input-search": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/search",
+    "directory": "ui"
+  },
+  "@legend-apps/file-scanner": {
+    "package": "@legendapp/spark-file-system",
+    "import": "@legendapp/spark/files/scanner",
+    "directory": "file-system"
+  },
+  "@legend-apps/file-system-watcher": {
+    "package": "@legendapp/spark-file-system",
+    "import": "@legendapp/spark/files/watchers",
+    "directory": "file-system"
+  },
+  "@legend-apps/settings-window": {
+    "package": "@legendapp/spark-settings-ui",
+    "import": "@legendapp/spark/settings/window",
+    "directory": "settings-ui"
+  },
+  "@legend-apps/storage": {
+    "package": "@legendapp/spark-settings",
+    "import": "@legendapp/spark/settings/observable",
+    "directory": "settings"
+  },
+  "@legend-apps/classnames": {
+    "package": "@legendapp/spark-ui",
+    "import": "@legendapp/spark/ui/classnames",
+    "directory": "ui"
+  },
+  "@legend-apps/app-exit": {
+    "package": "@legendapp/spark-desktop-app",
+    "import": "@legendapp/spark/app/exit",
+    "directory": "desktop-app"
+  },
+  "@legend-apps/command-runner": {
+    "package": "@legendapp/spark-processes",
+    "import": "@legendapp/spark/processes/commands",
+    "directory": "processes"
+  },
+  "@legend-apps/file-dialog": {
+    "package": "@legendapp/spark-file-dialog",
+    "import": "@legendapp/spark/dialogs",
+    "directory": "file-dialog"
+  },
+  "@legend-apps/native-menu": {
+    "package": "@legendapp/spark-native-menu",
+    "import": "@legendapp/spark/menus",
+    "directory": "native-menu"
+  },
+  "@legend-apps/context-menu": {
+    "package": "@legendapp/spark-context-menu",
+    "import": "@legendapp/spark/context-menu",
+    "directory": "context-menu"
+  },
+  "@legend-apps/drag-drop": {
+    "package": "@legendapp/spark-drag-drop",
+    "import": "@legendapp/spark/drag-drop/views",
+    "directory": "drag-drop"
+  },
+  "@legend-apps/global-hotkey": {
+    "package": "@legendapp/spark-global-shortcuts",
+    "import": "@legendapp/spark/global-shortcuts/hotkeys",
+    "directory": "global-shortcuts"
+  },
+  "@legend-apps/host-links": {
+    "package": "@legendapp/spark-desktop-links",
+    "import": "@legendapp/spark/links",
+    "directory": "desktop-links"
+  },
+  "@legend-apps/auto-updater": {
+    "package": "@legendapp/spark-updates",
+    "import": "@legendapp/spark/updates",
+    "directory": "updates"
+  },
+  "@legend-apps/secure-storage": {
+    "package": "@legendapp/spark-secure-storage",
+    "import": "@legendapp/spark/secure-storage",
+    "directory": "secure-storage"
+  }
+}

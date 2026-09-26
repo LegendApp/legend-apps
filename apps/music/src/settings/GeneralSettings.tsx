@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { HotkeyCapture } from "@legend-apps/hotkeys";
+import { HotkeyCapture } from "@legendapp/spark/shortcuts/commands";
 import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";

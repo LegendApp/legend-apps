@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   testMatch: ["<rootDir>/packages/diff-parser/src/**/__tests__/**/*.test.ts"],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
@@ -13,4 +13,4 @@ module.exports = {
       },
     ],
   },
-};
+});

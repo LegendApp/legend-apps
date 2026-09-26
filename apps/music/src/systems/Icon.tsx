@@ -1,4 +1,4 @@
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import type { SFSymbols } from "../types/SFSymbols";
 
 interface IconProps {

@@ -1,4 +1,4 @@
-import { sidebarSplitViewTitlebarMetrics } from "@legend-apps/appkit-split-view";
+import { sidebarSplitViewTitlebarMetrics } from "@legendapp/spark/ui/split-view";
 
 export const diffInitialRowCount = 160;
 export const diffProgressiveLoadPollMs = 16;

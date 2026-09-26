@@ -1,9 +1,9 @@
-import { writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
-import { getReactNativeStartupTiming } from "@legend-apps/window-manager";
+import { writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
+import { getReactNativeStartupTiming } from "@legendapp/spark/windows/managed";
 import { emitChatBenchmarkEvent, getChatBenchmarkConfig, type ChatBenchmarkConfig } from "../chatBenchmark";
 
-jest.mock("@legend-apps/storage/src/applicationSupport", () => ({ writeApplicationSupportJson: jest.fn() }));
-jest.mock("@legend-apps/window-manager", () => ({ getReactNativeStartupTiming: jest.fn() }));
+jest.mock("@legendapp/spark/settings/paths", () => ({ writeApplicationSupportJson: jest.fn() }));
+jest.mock("@legendapp/spark/windows/managed", () => ({ getReactNativeStartupTiming: jest.fn() }));
 
 function benchmarkArgument(config: object) {
   return `--chat-history-benchmark=${encodeURIComponent(JSON.stringify(config))}`;

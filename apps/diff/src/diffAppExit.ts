@@ -1,4 +1,4 @@
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
 import type { UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 
 export type DiffWindowExitPreparation = (reason: UnsavedDiffMergeDraftReason) => Promise<boolean>;

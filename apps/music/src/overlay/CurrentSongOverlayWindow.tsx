@@ -1,11 +1,11 @@
 import { PortalProvider } from "@gorhom/portal";
-import { GlassEffectView } from "@legend-apps/glass-effect-view";
+import { GlassEffectView } from "@legendapp/spark/ui/glass";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { PlaybackArea } from "../components/PlaybackArea";
 import { TooltipProvider } from "../components/TooltipProvider";
-import { setWindowBlur } from "@legend-apps/window-manager";
+import { setWindowBlur } from "@legendapp/spark/windows/managed";
 import { IS_TAHOE } from "../systems/constants";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { withWindowProvider } from "../windows";

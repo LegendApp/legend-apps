@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { closeWindow, getDisplays, WindowStyleMask, type Display } from "@legend-apps/window-manager";
+import { closeWindow, getDisplays, WindowStyleMask, type Display } from "@legendapp/spark/windows/managed";
 import { slidesWindows } from "./slidesWindows";
 import { displayKey } from "./displayRoles";
 import { displayRolesSetting } from "./slidesSettings";

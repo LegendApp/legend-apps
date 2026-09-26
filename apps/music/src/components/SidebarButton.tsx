@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 
 import { state$ } from "../systems/State";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { Button } from "./Button";
 
 export interface SidebarButtonProps {

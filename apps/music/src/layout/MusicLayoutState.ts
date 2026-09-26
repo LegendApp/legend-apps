@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-apps/storage";
+import { createObservableFile } from "@legendapp/spark/settings/observable";
 import type { PlaybackControlId } from "../systems/Settings";
 
 export type MusicLayoutDirection = "horizontal" | "vertical";

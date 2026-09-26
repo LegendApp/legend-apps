@@ -1,5 +1,5 @@
-import { commandRunner } from "@legend-apps/command-runner";
-import { createStorage } from "@legend-apps/storage";
+import { commandRunner } from "@legendapp/spark/processes/commands";
+import { createStorage } from "@legendapp/spark/settings/observable";
 
 const cliCommandName = "ldiff";
 const cliScriptRelativePath = "bin/legend-diff";

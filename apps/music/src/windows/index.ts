@@ -1,10 +1,10 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window";
+import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
 import {
     createBorderlessOverlayWindowStyle,
     createDocumentWindowStyle,
     createWindowsNavigator,
     type WindowsConfig,
-} from "@legend-apps/windows";
+} from "@legendapp/spark/windows/react";
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "../overlay/OverlayConstants";
 
 const windowsConfig = {
@@ -57,4 +57,4 @@ export const WindowsNavigator = createWindowsNavigator(windowsConfig);
 
 export type RegisteredWindow = keyof typeof windowsConfig;
 
-export * from "@legend-apps/windows";
+export * from "@legendapp/spark/windows/react";

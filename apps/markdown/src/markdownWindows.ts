@@ -1,9 +1,9 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window";
-import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
+import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows/react";
 import {
   closeWindow,
   setWindowOptions,
-} from "@legend-apps/window-manager";
+} from "@legendapp/spark/windows/managed";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import type { MarkdownSaveState } from "@legend-apps/markdown-document";
 import {

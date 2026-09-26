@@ -1,4 +1,4 @@
-import { closeWindow } from "@legend-apps/window-manager";
+import { closeWindow } from "@legendapp/spark/windows/managed";
 import { closeNotesOutput, resumeNotesOutput } from "./notesOutput";
 import { prepareSlidesExit } from "./slidesExit";
 import { getSlidesState } from "./slidesStore";

@@ -1,1 +1,1 @@
-export * from "@legend-apps/settings-window";
+export * from "@legendapp/spark/settings/window";

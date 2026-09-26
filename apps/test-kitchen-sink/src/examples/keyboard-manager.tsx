@@ -1,4 +1,4 @@
-import { addKeyDownListener, addKeyUpListener, KeyCodes, KeyText, stopKeyboardMonitoring } from "@legend-apps/keyboard-manager";
+import { addKeyDownListener, addKeyUpListener, KeyCodes, KeyText, stopKeyboardMonitoring } from "@legendapp/spark/shortcuts/keyboard";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

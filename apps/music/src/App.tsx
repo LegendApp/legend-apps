@@ -22,7 +22,7 @@ import { perfCount, perfMark } from "@legend-apps/runtime-utils";
 import { runAfterInteractionsWithLabel } from "@legend-apps/runtime-utils";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { WindowsNavigator } from "./windows";
-import { WindowProvider } from "@legend-apps/windows";
+import { WindowProvider } from "@legendapp/spark/windows/react";
 import { SpotifyWebPlayerBridge } from "./providers/spotify/SpotifyWebPlayerBridge";
 import { initializeStreamingProviders } from "./providers/setup";
 

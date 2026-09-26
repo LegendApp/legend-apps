@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   testMatch: ["<rootDir>/packages/hotkeys/src/**/__tests__/**/*.test.ts"],
   moduleNameMapper: {
@@ -14,4 +14,4 @@ module.exports = {
       },
     ],
   },
-};
+});

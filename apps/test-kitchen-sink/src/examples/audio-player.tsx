@@ -10,7 +10,7 @@ import {
   stop,
   updateNowPlayingInfo,
 } from "@legend-apps/audio-player";
-import { openFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog } from "@legendapp/spark/dialogs";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

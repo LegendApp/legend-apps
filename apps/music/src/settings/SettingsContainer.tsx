@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import {
     VirtualizedSettingsWindow,
     type VirtualizedSettingsWindowPage,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import { TooltipProvider } from "../components/TooltipProvider";
 import { ToastProvider } from "../components/Toast";
 import { AccountSettingsContent } from "./AccountSettings";

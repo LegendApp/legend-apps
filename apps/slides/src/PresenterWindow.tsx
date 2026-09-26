@@ -5,8 +5,8 @@ import { displayRolesSetting, displayRolesConfiguredSetting, displayRoleHistoryS
 import { resumeNotesOutput, identifyDisplays, previewNotesOutput, notesOutput$, notesOutputClosed, syncNotesOutput } from "./notesOutput";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { openFileDialog } from "@legend-apps/file-dialog";
-import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import { openFileDialog } from "@legendapp/spark/dialogs";
+import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import { registerDocumentOpenGuard } from "./documentOpen";
 import {
   addDisplaysChangedListener,
@@ -22,7 +22,7 @@ import {
   showWindow,
   type Display,
   WindowStyleMask,
-} from "@legend-apps/window-manager";
+} from "@legendapp/spark/windows/managed";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,

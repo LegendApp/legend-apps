@@ -1,6 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
-import type { HotkeyHandlerContext } from "@legend-apps/hotkeys";
+import type { HotkeyHandlerContext } from "@legendapp/spark/shortcuts/commands";
 import { useStableCallback } from "@legend-apps/runtime-utils";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { playlistNavigationState$ } from "../state/playlistNavigationState";

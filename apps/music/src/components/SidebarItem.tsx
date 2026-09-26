@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Platform, View, type ViewProps } from "react-native";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
-import { SidebarItem as NativeSidebarItemView } from "@legend-apps/sidebar";
-import { cn } from "@legend-apps/classnames";
+import { SidebarItem as NativeSidebarItemView } from "@legendapp/spark/ui/sidebar";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 export interface SidebarItemProps extends ViewProps {
     /** Unique identifier for this item, used for selection */

@@ -12,7 +12,7 @@ import {
 import { Text, View } from "react-native";
 
 import { Button } from "./Button";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 type ToastType = "info" | "error";
 

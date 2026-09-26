@@ -1,4 +1,4 @@
-import { readTextFile, writeTextFileIfUnchanged } from "@legend-apps/file-dialog";
+import { readTextFile, writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
 import { persistSlideSpeakerNotesWithFileAccess } from "@legend-apps/presentation";
 
 const nativeFileAccess = {

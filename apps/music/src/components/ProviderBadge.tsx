@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 export function ProviderBadge({ provider, compact = false }: { provider?: string; compact?: boolean }) {
     if (provider !== "spotify" && provider !== "appleMusic") return null;

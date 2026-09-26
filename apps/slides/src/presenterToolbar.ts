@@ -1,6 +1,6 @@
 import { displayKey, type DisplayRoles } from "./displayRoles";
 export const presenterAppearanceToolbarItemId = "slides-presenter-appearance";
-import type { Display, WindowToolbarItem } from "@legend-apps/window-manager";
+import type { Display, WindowToolbarItem } from "@legendapp/spark/windows/managed";
 
 export const presenterEditToolbarItemId = "slides-presenter-edit";
 export const presenterModeToolbarItemId = "slides-presenter-mode";

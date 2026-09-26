@@ -1,4 +1,4 @@
-import { openFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog } from "@legendapp/spark/dialogs";
 import { addMediaLibraryScannerListener, scanMediaLibrary } from "@legend-apps/media-library-scanner";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";

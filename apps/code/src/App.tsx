@@ -2,9 +2,9 @@ import {
   openSelectedDocumentPath,
   useDocumentAppController,
   type DocumentAppController,
-} from "@legend-apps/document-app";
-import type { NativeMenuActionHandlers } from "@legend-apps/native-menu";
-import { closeWindow } from "@legend-apps/window-manager";
+} from "@legendapp/spark/app/documents";
+import type { NativeMenuActionHandlers } from "@legendapp/spark/menus";
+import { closeWindow } from "@legendapp/spark/windows/managed";
 import { useEffect } from "react";
 import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
 import { installCodeBenchmarkHook } from "./codeBenchmark";

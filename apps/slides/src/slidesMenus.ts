@@ -6,7 +6,7 @@ import {
   openTargetTitles,
   settingsTargetTitles,
   updateMenuItems,
-} from "@legend-apps/native-menu";
+} from "@legendapp/spark/menus";
 import { useEffect } from "react";
 import { getSlidesState, setSlidesState } from "./slidesStore";
 

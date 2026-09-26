@@ -1,6 +1,6 @@
-import { cn } from "@legend-apps/classnames";
-import { showContextMenu } from "@legend-apps/context-menu";
-import { NativeSegmentedControl, NativeSelect } from "@legend-apps/native-select";
+import { cn } from "@legendapp/spark/ui/classnames";
+import { showContextMenu } from "@legendapp/spark/context-menu";
+import { NativeSegmentedControl, NativeSelect } from "@legendapp/spark/ui/select-controls";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";

@@ -1,6 +1,6 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window";
-import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
-import { openWindow, setWindowOptions } from "@legend-apps/window-manager";
+import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
+import { createDocumentWindowStyle, createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows/react";
+import { openWindow, setWindowOptions } from "@legendapp/spark/windows/managed";
 import { cancelPreparedDocument, prepareDocument } from "@legend-apps/source-editor/preload";
 import {
   codeSettingsWindowIdentifier,

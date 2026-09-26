@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { createObservableFile } from "@legend-apps/storage";
+import { createObservableFile } from "@legendapp/spark/settings/observable";
 
 type SettingsPage = "account" | "general" | "library" | "spotify" | "apple-music" | "overlay" | "theme" | "ui-customize" | "open-source";
 

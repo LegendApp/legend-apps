@@ -1,4 +1,4 @@
-import type { Display } from "@legend-apps/window-manager";
+import type { Display } from "@legendapp/spark/windows/managed";
 export type DisplayRoles = { audience: string | null; notes: string | null };
 export function displayKey(display: Pick<Display, "id" | "persistentId">) { return display.persistentId || display.id; }
 export function assignDisplayRole(roles: DisplayRoles, key: string, role: "audience" | "notes" | "unused"): DisplayRoles {

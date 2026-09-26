@@ -1,4 +1,4 @@
-import type { NativeMenuAction, NativeMenuActionHandlers } from "@legend-apps/native-menu";
+import type { NativeMenuAction, NativeMenuActionHandlers } from "@legendapp/spark/menus";
 
 type RecentDocumentHandler = (path: string) => Promise<void>;
 

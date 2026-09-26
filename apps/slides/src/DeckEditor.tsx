@@ -1,10 +1,10 @@
 import { createDeckEditorAutosave } from "./deckEditorAutosave";
 import { presenterEditToolbarItemId } from "./presenterToolbar";
 import { prepareDraftExit, prepareSlidesExit, registerSlidesExitPreparation } from "./slidesExit";
-import { readTextFile, writeTextFileIfUnchanged } from "@legend-apps/file-dialog";
-import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import { readTextFile, writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
+import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
-import { addWindowToolbarItemSelectedListener, setWindowOptions } from "@legend-apps/window-manager";
+import { addWindowToolbarItemSelectedListener, setWindowOptions } from "@legendapp/spark/windows/managed";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Text, View } from "react-native";

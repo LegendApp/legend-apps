@@ -6,9 +6,9 @@ import {
   type HotkeyDefinition,
   type HotkeyScope,
   type HotkeyValue,
-} from "@legend-apps/hotkeys";
-import { createHotkeyStore } from "@legend-apps/hotkeys/storage";
-import type { NativeMenuItemPatch } from "@legend-apps/native-menu";
+} from "@legendapp/spark/shortcuts/commands";
+import { createHotkeyStore } from "@legendapp/spark/shortcuts/commands/storage";
+import type { NativeMenuItemPatch } from "@legendapp/spark/menus";
 import { batch } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 

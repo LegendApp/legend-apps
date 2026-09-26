@@ -1,8 +1,8 @@
 import { builtinTransitionSources } from "@legend-apps/presentation";
-import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
+import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
-import { watchDirectories } from "@legend-apps/file-system-watcher";
+import { watchDirectories } from "@legendapp/spark/files/watchers";
 import { copyLibraryTransitionToDeck } from "./deckLoader";
 import { duplicateTransition, getTransitionDirectory, listTransitions, restoreTransition, transitionDirectoryPath, transitionStorage } from "./transitionLibrary";
 

@@ -1,5 +1,5 @@
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { createUnifiedToolbarWindowStyle } from "@legend-apps/windows";
+import { createUnifiedToolbarWindowStyle } from "@legendapp/spark/windows/react";
 import {
   type StartupSplitViewOptions,
   closeWindow,
@@ -9,7 +9,7 @@ import {
   setWindowOptions,
   showMainWindow,
   showWindow,
-} from "@legend-apps/window-manager";
+} from "@legendapp/spark/windows/managed";
 import { diffPrimaryWindowIdentifier } from "./appConstants";
 import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
 import { getDiffRepresentedUrl, type DiffOpenSource } from "./diffFiles";

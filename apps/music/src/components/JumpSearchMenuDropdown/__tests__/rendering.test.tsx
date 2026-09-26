@@ -53,7 +53,7 @@ test("keyboard highlighting updates only the affected search rows and submits th
     const { JumpSearchMenuDropdown } = compiled("../../JumpSearchMenuDropdown.tsx", {
         "react-native": { View: "view", Text: "text", useWindowDimensions: () => ({ width: 800, height: 600 }) },
         "@legendapp/list/react-native": { LegendList: List },
-        "@legend-apps/classnames": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+        "@legendapp/spark/ui/classnames": { cn: (...parts) => parts.filter(Boolean).join(" ") },
         "./Button": { Button: "button" },
         "./DropdownMenu": { DropdownMenu: { Root: Wrapper, Trigger: Wrapper, Content: Wrapper, Item } },
         "./TextInputSearch": { TextInputSearch: "input" }, "./TrackItem": { TrackItem: Track },

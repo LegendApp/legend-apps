@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   setupFiles: ["<rootDir>/apps/code/jest.setup.cjs"],
   testMatch: ["<rootDir>/apps/code/src/**/__tests__/**/*.test.tsx"],
@@ -9,4 +9,4 @@ module.exports = {
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": ["babel-jest", { presets: ["module:@react-native/babel-preset"] }],
   },
-};
+});

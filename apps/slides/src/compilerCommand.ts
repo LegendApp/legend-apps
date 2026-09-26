@@ -1,4 +1,4 @@
-import { commandRunner } from "@legend-apps/command-runner";
+import { commandRunner } from "@legendapp/spark/processes/commands";
 
 const bundledCompiler = "bundle:slides-compiler/run";
 export async function compilerCommand() {

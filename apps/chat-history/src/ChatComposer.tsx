@@ -1,4 +1,4 @@
-import { GlassSurface } from "@legend-apps/glass-effect-view";
+import { GlassSurface } from "@legendapp/spark/ui/glass";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";

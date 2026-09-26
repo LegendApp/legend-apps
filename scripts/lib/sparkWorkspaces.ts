@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
-import { getMacOSReleaseBuild } from "./release";
+import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import type { AppManifest } from "./types";
 
 export const sparkCheckout = path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"));
@@ -18,9 +18,9 @@ function write(file: string, value: string | object) {
 }
 
 /** Translate app identity and the explicit native module graph into Spark config. */
-export function sparkConfig(manifest: AppManifest) {
+export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "dev") {
   const active = getActiveNativePackages(manifest, "macos");
-  const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name);
+  const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name).filter(name => name !== "@legendapp/spark-desktop-app" && !(name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length));
   // Keep unused Spark features
   // out of custom development builds too, rather than waiting for release pruning.
   const frameworkPackages = path.join(sparkCheckout, "packages");
@@ -29,7 +29,7 @@ export function sparkConfig(manifest: AppManifest) {
     const file = path.join(dir, "package.json");
     if (!fs.existsSync(file)) continue;
     const pkg = json(file);
-    if (pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links") && (pkg.codegenConfig || pkg.spark?.nativeModules || fs.readdirSync(dir).some(name => name.endsWith(".podspec")))) excluded.push(pkg.name);
+    if (!active.some(activePackage => activePackage.name === pkg.name) && pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links") && (pkg.codegenConfig || pkg.spark?.nativeModules || fs.readdirSync(dir).some(name => name.endsWith(".podspec")))) excluded.push(pkg.name);
   }
   excluded.push("@react-native-runtimes/core", "@op-engineering/op-sqlite");
   if (!manifest.nativeModules.macos.includes("react-native-webview")) excluded.push("react-native-webview");
@@ -50,8 +50,8 @@ export function sparkConfig(manifest: AppManifest) {
       lifecycle: {
         ...(manifest.id === "music" ? { appearance: "dark" } : {}),
         plugins: [
-          ...(manifest.nativeModules.macos.includes("@legend-apps/window-manager") ? ["RNWindowManagerStartup"] : []),
-          ...(manifest.nativeModules.macos.includes("@legend-apps/recent-documents") ? ["RNRecentDocumentsStartup"] : []),
+          ...(manifest.nativeModules.macos.includes("@legendapp/spark-desktop-windows") ? ["RNWindowManagerStartup"] : []),
+          ...(manifest.recentDocuments?.macos ? ["RNRecentDocumentsStartup"] : []),
         ],
         mainWindow: {
           hidden: manifest.hostWindow?.macos?.hidden ?? false,
@@ -86,6 +86,7 @@ export function sparkConfig(manifest: AppManifest) {
         } : {}),
       },
     },
+    ...(mode === "release" && manifest.release?.macos ? { updates: { feedURL: getMacOSSparkleFeedUrl(manifest, process.env.SPARK_MACOS_ARCH === "x64" ? "x86" : "arm"), publicKey: getMacOSSparklePublicEdKey(manifest) } } : {}),
     ...(manifest.urlSchemes?.macos ? { scheme: manifest.urlSchemes.macos } : {}),
     // Preserve all document registration fields; Spark's smaller documentTypes
     // contract currently discards extensions and handler rank.
@@ -100,7 +101,7 @@ export function sparkConfig(manifest: AppManifest) {
   };
 }
 
-export function prepareSparkWorkspace(manifest: AppManifest) {
+export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
   const project = sparkWorkspace(manifest.id);
   const sdkManifest = path.join(sparkCheckout, "artifacts/packages/manifest.json");
   if (!fs.existsSync(sdkManifest)) throw new Error(`Pack the local Spark SDK first: cd ${sparkCheckout} && npm run pack:local`);
@@ -130,7 +131,7 @@ export function prepareSparkWorkspace(manifest: AppManifest) {
     const dir = path.join(rootDir, "packages", entry);
     if (fs.existsSync(path.join(dir, "package.json"))) overrides[json(path.join(dir, "package.json")).name] = `file:${dir}`;
   }
-  for (const pkg of active) dependencies[pkg.name] = `file:${pkg.root}`;
+  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = `file:${pkg.root}`;
   for (const name of Object.keys(dependencies)) if (overrides[name]) dependencies[name] = overrides[name];
   fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
@@ -140,12 +141,14 @@ export function prepareSparkWorkspace(manifest: AppManifest) {
     name: `legend-spark-${manifest.id}`, version: app.version, private: true,
     main: "index.ts", packageManager: "bun@1.3.14", catalog: repo.catalog,
     dependencies, overrides,
+    ...(active.some(pkg => pkg.name === "react-native-enriched-markdown")
+      ? { "enriched-markdown": repo["enriched-markdown"] } : {}),
   });
-  const config = sparkConfig(manifest);
+  const config = sparkConfig(manifest, mode);
   // Remove source generated by the retired delegate-subclass adapter.
   for (const file of ["HostExtension.mm", "HostExtension.h"]) fs.rmSync(path.join(project, file), { force: true });
   write(path.join(project, "desktop.config.json"), config);
-  write(path.join(project, "index.ts"), `import { AppRegistry } from "react-native";\nimport ShellApp from ${JSON.stringify(path.join(shellDir, "src/ShellApp"))};\nAppRegistry.registerComponent("main", () => ShellApp);\n`);
+  write(path.join(project, "index.ts"), `import { registerRootComponent } from "expo";\nimport ShellApp from ${JSON.stringify(path.join(shellDir, "src/ShellApp"))};\nregisterRootComponent(ShellApp);\n`);
   write(path.join(project, "babel.config.js"), `process.env.LEGEND_APP = ${JSON.stringify(manifest.id)};\nmodule.exports = require(${JSON.stringify(path.join(shellDir, "babel.config.js"))});\n`);
   write(path.join(project, "metro.config.js"), `const path = require("node:path");
 const { makeMetroConfig } = require("expo-desktop-metro-config");
@@ -156,10 +159,15 @@ config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.string
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
 config.server.unstable_serverRoot = ${JSON.stringify(rootDir)};
 config.resolver.useWatchman = false;
+const existingBlockList = config.resolver.blockList;
+config.resolver.blockList = [
+  ...(Array.isArray(existingBlockList) ? existingBlockList : existingBlockList ? [existingBlockList] : []),
+  new RegExp(${JSON.stringify("/shell/\\.legend/.*/(?:macos|ios|android|\\.spark)/")}),
+];
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, name, platform) => {
-  if (name === "@legend-apps/host-links") return context.resolveRequest({ ...context, originModulePath: path.join(__dirname, "index.ts") }, "@legendapp/spark/links", platform);
-  if (/^(react|react-native|react-native-nitro-modules|uniwind)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
+  if (name === "@legendapp/spark" || name.startsWith("@legendapp/spark/")) return context.resolveRequest({ ...context, originModulePath: path.join(__dirname, "index.ts") }, name, platform);
+  if (/^(react|react-native|react-native-nitro-modules|uniwind|@legendapp\\/state)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
   return resolveRequest ? resolveRequest(context, name, platform) : context.resolveRequest(context, name, platform);
 };
 module.exports = withDesktop(withUniwindConfig(config, { cssEntryFile: ${JSON.stringify(path.relative(project, path.join(shellDir, "src/global.css")))}, dtsFile: "./uniwind-types.d.ts" }), { runtimes: false });

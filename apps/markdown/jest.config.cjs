@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   testEnvironmentOptions: { customExportConditions: ["react-native"] },
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend/"],
@@ -24,4 +24,4 @@ module.exports = {
   transformIgnorePatterns: [
     "node_modules/(?!(react-native|@react-native|@react-native-community|@legendapp)/)",
   ],
-};
+});

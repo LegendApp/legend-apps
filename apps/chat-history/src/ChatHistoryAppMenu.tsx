@@ -1,5 +1,5 @@
-import { AutoUpdater } from "@legend-apps/auto-updater";
-import { useNativeMenu, type NativeMenuConfig } from "@legend-apps/native-menu";
+import { AutoUpdater } from "@legendapp/spark/updates";
+import { useNativeMenu, type NativeMenuConfig } from "@legendapp/spark/menus";
 import { useEffect, useMemo } from "react";
 
 function reportUpdateError(error: unknown) {

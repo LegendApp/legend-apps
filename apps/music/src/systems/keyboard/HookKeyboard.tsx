@@ -1,8 +1,8 @@
-import { useHotkeySuspension, type HotkeyScope } from "@legend-apps/hotkeys";
+import { useHotkeySuspension, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
 import { useMount, useValue } from "@legendapp/state/react";
 import { useRef } from "react";
 import { AppState, type AppStateStatus, TextInput } from "react-native";
-import { useWindowManager } from "@legend-apps/window-manager";
+import { useWindowManager } from "@legendapp/spark/windows/managed";
 import { musicHotkeyRouter } from "./Keyboard";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { state$ } from "../State";

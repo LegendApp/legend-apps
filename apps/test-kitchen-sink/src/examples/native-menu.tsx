@@ -3,7 +3,7 @@ import {
   clearMenus,
   configureMenus,
   updateMenuItems,
-} from "@legend-apps/native-menu";
+} from "@legendapp/spark/menus";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExamplePanel, styles } from "./shared";

@@ -16,7 +16,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon } from "../systems/Icon";
 import { state$ } from "../systems/State";
 import type { NativeMouseEvent } from "../types/NativeMouseEvent";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { Button } from "./Button";
 
 // Context for sharing dropdown state

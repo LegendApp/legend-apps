@@ -4,7 +4,7 @@ import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import {

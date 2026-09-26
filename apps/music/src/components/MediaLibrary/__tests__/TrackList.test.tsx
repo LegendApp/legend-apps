@@ -6,7 +6,7 @@ import { library$, libraryUI$, selectLibraryPlaylist, selectLibraryView } from "
 import { localMusicState$, type LocalTrack } from "../../../systems/LocalMusicState";
 import { TableRow } from "../../Table";
 
-jest.mock("@legend-apps/hotkeys", () => ({ ...jest.requireActual("@legend-apps/hotkeys"), useRoutedHotkeys: jest.fn() }));
+jest.mock("@legendapp/spark/shortcuts/commands", () => ({ ...jest.requireActual("@legendapp/spark/shortcuts/commands"), useRoutedHotkeys: jest.fn() }));
 jest.mock("../../AIButtons", () => ({ AIButtons: () => null }));
 jest.mock("../../TooltipProvider", () => ({
     useTooltip: () => ({ hideTooltip: jest.fn(), showTooltip: jest.fn() }),

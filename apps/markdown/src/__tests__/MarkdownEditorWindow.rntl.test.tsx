@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { watchFiles } from "@legend-apps/file-system-watcher";
+import { watchFiles } from "@legendapp/spark/files/watchers";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
@@ -63,13 +63,13 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
-jest.mock("@legend-apps/file-system-watcher", () => ({
+jest.mock("@legendapp/spark/files/watchers", () => ({
   watchFiles: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
-jest.mock("@legend-apps/document-app", () => {
+jest.mock("@legendapp/spark/app/documents", () => {
   const React = require("react");
-  const { watchFiles } = require("@legend-apps/file-system-watcher");
+  const { watchFiles } = require("@legendapp/spark/files/watchers");
 
   return {
     useWatchedDocumentReload: ({
@@ -115,7 +115,7 @@ jest.mock("@legend-apps/document-app", () => {
   };
 });
 
-jest.mock("@legend-apps/file-dialog", () => ({
+jest.mock("@legendapp/spark/dialogs", () => ({
   openFileDialog: jest.fn(),
   saveFileDialog: jest.fn(),
 }));

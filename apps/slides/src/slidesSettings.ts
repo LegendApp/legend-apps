@@ -1,4 +1,4 @@
-import { createObservableSettings } from "@legend-apps/storage";
+import { createObservableSettings } from "@legendapp/spark/settings/observable";
 
 export const defaultPresentationTimerStartsOnSecondSlide = true;
 export const defaultRehearsalTimerPausesWhileEditing = true;

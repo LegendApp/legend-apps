@@ -1,6 +1,6 @@
 import type { ChatProvider, ChatSummary } from "@legend-apps/chat-history";
-import { writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
-import { getReactNativeStartupTiming } from "@legend-apps/window-manager";
+import { writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
+import { getReactNativeStartupTiming } from "@legendapp/spark/windows/managed";
 
 const benchmarkArgumentPrefix = "--chat-history-benchmark=";
 const defaultTopDelayMs = 0;

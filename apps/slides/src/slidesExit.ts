@@ -1,4 +1,4 @@
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
 
 /** A save can succeed while a newer edit remains unsaved. Never exit in that case. */
 export async function prepareDraftExit(

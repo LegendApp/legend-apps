@@ -1,13 +1,13 @@
 import { useEffect } from "react";
-import { AutoUpdater } from "@legend-apps/auto-updater";
-import { hotkeyToMenuShortcut, type HotkeyValue } from "@legend-apps/hotkeys";
+import { AutoUpdater } from "@legendapp/spark/updates";
+import { hotkeyToMenuShortcut, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import {
     type NativeMenuAction,
     type NativeMenuConfig,
     type NativeMenuItemPatch,
     updateMenuItems,
     useNativeMenu,
-} from "@legend-apps/native-menu";
+} from "@legendapp/spark/menus";
 import { localAudioControls, localPlayerState$, queue$ } from "../components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "../state/savePlaylistUIState";
 import { type RepeatMode, settings$ } from "./Settings";

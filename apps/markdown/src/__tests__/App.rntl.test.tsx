@@ -1,8 +1,8 @@
 import { act, render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { addRecentDocumentOpenListener } from "@legend-apps/recent-documents";
-import { useNativeMenu } from "@legend-apps/native-menu";
-import { addWindowClosedListener } from "@legend-apps/window-manager";
+import { addRecentDocumentOpenListener } from "@legendapp/spark/app/recent-documents";
+import { useNativeMenu } from "@legendapp/spark/menus";
+import { addWindowClosedListener } from "@legendapp/spark/windows/managed";
 import { editorWindowIdentifier } from "../appConstants";
 import { App } from "../App";
 import { registerMarkdownEditorMenuHandlers, registerMarkdownEditorRecentDocumentHandler } from "../markdownEditorActions";
@@ -26,19 +26,20 @@ function closeEditor() {
   mockAddWindowClosedListener.mock.lastCall![0]({ identifier: editorWindowIdentifier });
 }
 
-jest.mock("@legend-apps/file-dialog", () => ({
+jest.mock("@legendapp/spark/dialogs", () => ({
   openFileDialog: jest.fn(),
 }));
 
-jest.mock("@legend-apps/native-menu", () => ({
+jest.mock("@legendapp/spark/menus", () => ({
   useNativeMenu: jest.fn(),
 }));
 
-jest.mock("@legend-apps/recent-documents", () => ({
+jest.mock("@legendapp/spark/app/recent-documents", () => ({
   addRecentDocumentOpenListener: jest.fn(),
 }));
 
-jest.mock("@legend-apps/window-manager", () => ({
+jest.mock("@legendapp/spark/windows/managed", () => ({
+  addApplicationReopenRequestedListener: jest.fn(() => ({ remove: jest.fn() })),
   addWindowClosedListener: jest.fn(),
 }));
 

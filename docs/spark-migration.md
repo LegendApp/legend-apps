@@ -57,7 +57,9 @@ and reject invalid native policy. Full native acceptance remains necessary for
 individual apps before switching their default commands.
 
 The lifecycle migration passed Spark's 291 tests, both repository typechecks,
-11 adapter/launch tests, Code's 22 tests, and Diff's 168 tests. Code and Hello World
+11 adapter/launch tests, Code's 22 tests, and Diff's 168 tests. The subsequent
+bootstrap/autolinking continuation passed all 292 Spark tests, 170 Diff tests,
+and both repository typechecks. Code and Hello World
 debug builds and runtime fingerprint checks passed. Live Code acceptance covered
 cold and warm file delivery, editing, canceling Quit, saving on close and Quit,
 two close/reopen cycles, and Open Recent. The final build quit without the earlier
@@ -78,16 +80,48 @@ the old shell references the same podspec. Spark does not need the old shell's
 post-install header cleanup. Diff's arm64 Spark debug build, production bundle/native
 graph analysis, manifest verification,
 adapter tests, and repository typecheck passed; its libgit2 archive includes both
-arm64 and x86_64 slices. Diff's live URL/close/reopen acceptance remains
-separate from native build verification.
+arm64 and x86_64 slices. Diff's live acceptance now covers cold and warm URL delivery, native toolbar
+controls, closing main/secondary windows, reopening to Welcome, and normal Quit.
+The toolbar-family crash and `Window not found` / startup-chrome errors no longer
+reproduce on React reload. Native window state now lives in an application-lifetime
+registry, matching React Native’s retained Fabric surfaces. Replacement modules
+rebind native delegates and chrome callbacks; invalidation retires only runtime
+observers and event delivery. This avoids destroying surfaces while React Native
+is restarting them. Three consecutive multiwindow reloads retained the same process
+and produced no lifecycle errors. Toolbar mode changes, search expansion, and
+window close/reopen also passed. A native regression test verifies that runtime
+replacement retains surfaces and closing releases them. Existing React Native
+deep-import and Legend List sizing warnings remain separate follow-up work.
+Generated entrypoints use Expo's standard `registerRootComponent` bootstrap,
+including its URL implementation. Diff uses Spark's queued `onOpen` API so opens
+received before React subscribes are delivered. The legacy host-links adapter
+subscribes before reading the initial URL.
+
+Markdown's Spark arm64 debug build and manifest verification passed. Live checks
+covered launch, opening a Markdown file through macOS, native heading/list/code
+rendering with TypeScript highlighting, close/reopen, and normal Quit. Its consumer
+retains the repository's enriched-markdown feature configuration. Spark applies a
+version-checked Expo autolinking fix for symlinked podspec files in Bun `file:`
+dependencies; regression tests cover file links, broken links, directory links,
+idempotence, and preserving package-cache hardlinks.
+
+The window manager obtains the host window from the application delegate rather
+than AppKit's unordered window list. Each independently controlled toolbar has a
+unique native identifier, with its logical window target stored separately.
+`finishWindowRestoration()` closes unclaimed startup placeholders after the app
+finishes adopting its restored windows, without deleting persisted records.
+Diff invokes it after initial opening/restoration. Per-window Diff observables
+are discarded with their provider; unmount only releases native resources and
+cancels pending work, avoiding toolbar updates during teardown.
+
 Intel, mobile, release packaging and before/after performance measurements are
 separate validation work.
 
 Code's downloaded grammars require matching development signing. Configure
 `macOSDevelopmentIdentity` in its generated `.spark/settings.json`, then rebuild.
 Generated dependency and native build trees are ignored, disposable local artifacts.
-This validation left approximately 7 GiB of SDK archives and 10 GiB of native
-DerivedData across Code, Hello World, and Music. Keep or remove those deliberately;
+This validation left approximately 7.3 GiB of SDK archives and 17 GiB of native
+DerivedData across Code, Hello World, Music, Diff, and Markdown. Keep or remove those deliberately;
 they are not source changes.
 
 ## Acceptance before changing default commands

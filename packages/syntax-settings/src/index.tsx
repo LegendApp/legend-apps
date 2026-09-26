@@ -1,5 +1,5 @@
 import { SelectControl, SwitchControl } from "@legend-apps/design-system";
-import { SettingsRow, SettingsSection } from "@legend-apps/settings-window";
+import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import {
   ensureSyntaxTheme,
   getAvailableSyntaxThemes,

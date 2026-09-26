@@ -1,5 +1,5 @@
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
-import { addWindowCloseRequestedListener } from "@legend-apps/window-manager";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { addWindowCloseRequestedListener } from "@legendapp/spark/windows/managed";
 import { useEffect, useRef } from "react";
 import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";

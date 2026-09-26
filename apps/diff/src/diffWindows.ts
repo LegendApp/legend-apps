@@ -1,6 +1,6 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window/options";
-import { createWindowsNavigator, type WindowsConfig } from "@legend-apps/windows";
-import type { WindowFrame } from "@legend-apps/window-manager";
+import { createSettingsWindowOptions } from "@legendapp/spark/settings/window/options";
+import { createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows/react";
+import type { WindowFrame } from "@legendapp/spark/windows/managed";
 import {
   diffSettingsWindowIdentifier,
   diffSettingsWindowModuleName,

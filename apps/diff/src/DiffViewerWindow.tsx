@@ -2,8 +2,8 @@ import {
   createSidebarSplitViewTitlebarChrome,
   SidebarSplitView,
   type SidebarSplitViewResizeEvent,
-} from "@legend-apps/appkit-split-view";
-import { commandRunner } from "@legend-apps/command-runner";
+} from "@legendapp/spark/ui/split-view";
+import { commandRunner } from "@legendapp/spark/processes/commands";
 import {
   DiffHorizontalScroller,
   DiffMergeNativePane,
@@ -25,17 +25,17 @@ import {
   type DiffSideBySideRenderRow,
   type DiffSyntaxStyle,
 } from "@legend-apps/diff-parser";
-import { DragDropView, type DragDropFileEvent } from "@legend-apps/drag-drop";
-import { revealInFinder } from "@legend-apps/file-dialog";
-import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import { DragDropView, type DragDropFileEvent } from "@legendapp/spark/drag-drop/views";
+import { revealInFinder } from "@legendapp/spark/dialogs";
+import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import { nowMs, type SyntaxStyleMap } from "@legend-apps/source-viewer";
-import { noteRecentDocument } from "@legend-apps/recent-documents";
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { ensureTreeGrammarsForPaths, detectGrammar, getSyntaxTheme, highlightTreeString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
 import { DiffGrammarProgress } from "./viewer/DiffGrammarProgress";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { addWindowCloseRequestedListener } from "@legend-apps/window-manager";
-import { useWindowId } from "@legend-apps/windows";
+import { addWindowCloseRequestedListener } from "@legendapp/spark/windows/managed";
+import { useWindowId } from "@legendapp/spark/windows/react";
 import {
   VirtualizedFixedDocumentList,
   type VirtualizedDocumentRowsState,
@@ -2992,26 +2992,10 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     mergeDraftsRef.current = new Map();
     mergeDraftsSourceKeyRef.current = null;
     mergeResolveQueuesRef.current = new Map();
-    resolvingMergeConflictKeys$.set(new Set<string>());
-
-    setDocumentErrorValue(null);
-    setLoadProgressValue(emptyDiffLoadProgressState);
-    setLoadStatisticsValue(null);
-    setLoadingSourceValue(null);
-    setMergeStateValue(unavailableDiffMergeState);
-    setOpenErrorValue(null);
-    setViewerState(emptyDiffViewerState);
-  }, [
-    setDocumentErrorValue,
-    setLoadProgressValue,
-    setLoadStatisticsValue,
-    setLoadingSourceValue,
-    setMergeStateValue,
-    setOpenErrorValue,
-    setViewerState,
-    state$,
-    resolvingMergeConflictKeys$,
-  ]);
+    // This model belongs to the discarded window. Resetting its observables
+    // here wakes child chrome observers before their own unmount cleanup and
+    // sends toolbar updates to a native window that has already closed.
+  }, [state$]);
 
   const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
     const currentKeys = resolvingMergeConflictKeys$.peek();

@@ -1,13 +1,13 @@
-import { AutoUpdater } from "@legend-apps/auto-updater";
-import { commandRunner } from "@legend-apps/command-runner";
-import { useDocumentAppController, type DocumentAppController } from "@legend-apps/document-app";
-import { useRoutedHotkeys } from "@legend-apps/hotkeys";
-import { updateMenuItems, type NativeMenuActionHandlers } from "@legend-apps/native-menu";
-import { addWindowFocusedListener, showMainWindow } from "@legend-apps/window-manager";
-import { WindowProvider } from "@legend-apps/windows";
+import { AutoUpdater } from "@legendapp/spark/updates";
+import { commandRunner } from "@legendapp/spark/processes/commands";
+import { useDocumentAppController, type DocumentAppController } from "@legendapp/spark/app/documents";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { updateMenuItems, type NativeMenuActionHandlers } from "@legendapp/spark/menus";
+import { addWindowFocusedListener, finishWindowRestoration, showMainWindow } from "@legendapp/spark/windows/managed";
+import { WindowProvider } from "@legendapp/spark/windows/react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogBox } from "react-native";
-import * as Linking from "@legend-apps/host-links";
+import * as Linking from "@legendapp/spark/links";
 import { diffMenuOwnerId, diffPrimaryWindowIdentifier } from "./appConstants";
 import { installDiffAppExitHandler } from "./diffAppExit";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
@@ -305,8 +305,13 @@ export function App({ launchArguments }: DiffAppProps) {
     [openViewer],
   );
   const handleInitialOpen = useCallback(
-    (args: string[] | undefined, documentController: DocumentAppController) =>
-      openInitialDiffViewer(args, documentController, openPrimaryViewer),
+    async (args: string[] | undefined, documentController: DocumentAppController) => {
+      try {
+        await openInitialDiffViewer(args, documentController, openPrimaryViewer);
+      } finally {
+        await finishWindowRestoration();
+      }
+    },
     [openPrimaryViewer],
   );
   const handleRecentDocumentOpen = useCallback(
@@ -349,7 +354,10 @@ export function App({ launchArguments }: DiffAppProps) {
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+    let subscription: { remove(): void } | undefined;
     const openUrl = (url: string | null | undefined) => {
+      if (disposed) return;
       const now = Date.now();
       const lastHandled = handledOpenUrlRef.current;
       const isImmediateDuplicate = lastHandled !== null && lastHandled.url === url && now - lastHandled.handledAt < 1000;
@@ -367,17 +375,18 @@ export function App({ launchArguments }: DiffAppProps) {
       }
     };
 
-    Linking.getInitialURL()
-      .then(openUrl)
+    Linking.onOpen((event) => openUrl(event.url))
+      .then((nextSubscription) => {
+        if (disposed) nextSubscription.remove();
+        else subscription = nextSubscription;
+      })
       .catch((error: unknown) => {
-        controllerRef.current.reportError(error);
+        if (!disposed) controllerRef.current.reportError(error);
       });
-    const subscription = Linking.addEventListener("url", (event) => {
-      openUrl(event.url);
-    });
 
     return () => {
-      subscription.remove();
+      disposed = true;
+      subscription?.remove();
     };
   }, [openViewer]);
 

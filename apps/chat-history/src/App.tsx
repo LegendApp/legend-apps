@@ -4,7 +4,7 @@ import {
   createSidebarSplitViewTitlebarChrome,
   SidebarSplitView,
   sidebarSplitViewTitlebarMetrics,
-} from "@legend-apps/appkit-split-view";
+} from "@legendapp/spark/ui/split-view";
 import {
   cancelPendingOpen,
   getRecentChats,
@@ -14,7 +14,7 @@ import {
   type ChatSummary,
 } from "@legend-apps/chat-history";
 import { useSystemLegendDisplayTheme } from "@legend-apps/theme";
-import { addApplicationReopenRequestedListener, setMainWindowOptions } from "@legend-apps/window-manager";
+import { addApplicationReopenRequestedListener, setMainWindowOptions } from "@legendapp/spark/windows/managed";
 import {
   LegendList,
   type LegendListDataSource,

@@ -6,31 +6,15 @@
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
     "@legend-apps/appearance-settings": "workspace:*",
-    "@legend-apps/app-exit": "0.0.0",
-    "@legend-apps/appkit-split-view": "0.0.0",
-    "@legend-apps/classnames": "0.0.0",
-    "@legend-apps/context-menu": "0.0.0",
-    "@legend-apps/document-app": "0.0.0",
     "@legend-apps/design-system": "workspace:*",
-    "@legend-apps/file-dialog": "0.0.0",
-    "@legend-apps/file-system-watcher": "0.0.0",
-    "@legend-apps/hotkeys": "workspace:*",
-    "@legend-apps/keyboard-manager": "0.0.0",
     "@legend-apps/markdown-block-editor": "0.0.0",
     "@legend-apps/markdown-document": "workspace:*",
-    "@legend-apps/native-menu": "0.0.0",
-    "@legend-apps/native-select": "workspace:*",
-    "@legend-apps/recent-documents": "0.0.0",
     "@legend-apps/reorder-controls": "0.0.0",
-    "@legend-apps/settings-window": "0.0.0",
-    "@legend-apps/sf-symbol": "0.0.0",
-    "@legend-apps/storage": "0.0.0",
     "@legend-apps/theme": "workspace:*",
-    "@legend-apps/window-manager": "0.0.0",
-    "@legend-apps/windows": "0.0.0",
     "@legendapp/list": "catalog:",
     "@legendapp/state": "catalog:",
     "react-native-enriched-markdown": "1.0.2",
-    "uniwind": "^1.6.3"
+    "uniwind": "^1.6.3",
+    "@legendapp/spark": "0.0.1-next.2"
   }
 }

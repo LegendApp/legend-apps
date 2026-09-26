@@ -2,7 +2,7 @@ import { PortalProvider } from "@gorhom/portal";
 import {
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import { getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import { settingsWindowIdentifier } from "./appConstants";
 import { useMarkdownDisplayThemeSetting } from "./markdownSettings";

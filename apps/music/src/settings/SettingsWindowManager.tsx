@@ -1,6 +1,6 @@
 import { useMount } from "@legendapp/state/react";
 
-import { useWindowManager } from "@legend-apps/window-manager";
+import { useWindowManager } from "@legendapp/spark/windows/managed";
 import { state$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";

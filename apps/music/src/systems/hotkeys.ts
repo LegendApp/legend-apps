@@ -4,9 +4,9 @@ import {
     serializeHotkeyFile,
     type HotkeyDefinition,
     type HotkeyValue,
-} from "@legend-apps/hotkeys";
-import { createHotkeyStore } from "@legend-apps/hotkeys/storage";
-import { createStorage } from "@legend-apps/storage";
+} from "@legendapp/spark/shortcuts/commands";
+import { createHotkeyStore } from "@legendapp/spark/shortcuts/commands/storage";
+import { createStorage } from "@legendapp/spark/settings/observable";
 import { batch, syncState } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { KeyCodes } from "./keyboard/KeyboardManager";

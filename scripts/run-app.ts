@@ -10,12 +10,6 @@ import {
   rootDir,
   shellDir,
 } from "./lib/apps";
-import {
-  ensureMacOSDevWorkspace,
-  getMacOSAppDevProjectPath,
-  getMacOSEnv,
-  installMacOSPods,
-} from "./lib/macosWorkspaces";
 import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand, runPlatformCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
@@ -45,13 +39,7 @@ async function installPods(appId: string, platform: Platform) {
     throw new Error("CocoaPods install only supports macos and ios.");
   }
 
-  const { generated, manifest } = await prepare(appId, platform);
-
-  if (platform === "macos") {
-    const workspaceDir = ensureMacOSDevWorkspace(manifest);
-    installMacOSPods(workspaceDir, generated.configPath, appId);
-    return;
-  }
+  const { generated } = await prepare(appId, platform);
 
   runCommand("pod", ["install"], {
     cwd: path.join(shellDir, platform),
@@ -62,25 +50,6 @@ async function installPods(appId: string, platform: Platform) {
       LEGEND_NATIVE_CONFIG: generated.configPath,
     },
   });
-}
-
-function withMacOSDevProjectPath(appId: string, args: string[]) {
-  const hasProjectPath = args.includes("--project-path") || args.some((arg) => arg.startsWith("--project-path="));
-  if (hasProjectPath) {
-    return args;
-  }
-
-  const launchArgsSeparatorIndex = args.indexOf("--");
-  const projectPathArgs = ["--project-path", getMacOSAppDevProjectPath(appId)];
-  if (launchArgsSeparatorIndex < 0) {
-    return [...args, ...projectPathArgs];
-  }
-
-  return [
-    ...args.slice(0, launchArgsSeparatorIndex),
-    ...projectPathArgs,
-    ...args.slice(launchArgsSeparatorIndex),
-  ];
 }
 
 async function main() {
@@ -99,6 +68,11 @@ async function main() {
         await prepare(appId, platform);
       }
     }
+    return;
+  }
+
+  if (command.platform === "macos" && (["run", "pods", "prebuild"].includes(command.mode) || (command.mode === "build" && command.extraArgs.includes("--dev")))) {
+    runCommand("bun", ["scripts/spark-app.ts", command.appId, command.mode === "run" ? "run" : "build", ...command.extraArgs.filter(arg => arg !== "--dev")], { cwd: rootDir });
     return;
   }
 
@@ -164,26 +138,8 @@ async function main() {
     return;
   }
 
-  const { generated, manifest } = await prepare(command.appId, command.platform);
+  const { generated } = await prepare(command.appId, command.platform);
   await ensurePrebuild(command.appId, command.platform);
-
-  if (command.platform === "macos") {
-    const workspaceDir = ensureMacOSDevWorkspace(manifest);
-    installMacOSPods(workspaceDir, generated.configPath, command.appId);
-    runPlatformCommand(
-      command.appId,
-      command.platform,
-      "dev",
-      withMacOSDevProjectPath(command.appId, command.extraArgs),
-      {
-        ...getMacOSEnv(command.appId, generated.configPath),
-        LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
-        LEGEND_MACOS_DEVELOPMENT_TEAM:
-          process.env.LEGEND_MACOS_DEVELOPMENT_TEAM ?? manifest.signing?.macos?.developmentTeam,
-      },
-    );
-    return;
-  }
 
   runPlatformCommand(command.appId, command.platform, "dev", command.extraArgs, {
     LEGEND_APP_CONFIG: generated.configPath,

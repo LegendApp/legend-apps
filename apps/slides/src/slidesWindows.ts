@@ -1,5 +1,5 @@
-import { createSettingsWindowOptions } from "@legend-apps/settings-window/options";
-import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "@legend-apps/windows";
+import { createSettingsWindowOptions } from "@legendapp/spark/settings/window/options";
+import { createWindowsNavigator, WindowStyleMask, type WindowsConfig } from "@legendapp/spark/windows/react";
 import { createPresenterToolbarItems } from "./presenterToolbar";
 
 export const slidesSettingsWindowIdentifier = "slides-settings";

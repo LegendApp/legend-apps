@@ -22,9 +22,9 @@ import { localAudioControls } from "../LocalAudioPlayer";
 import type { TextInputSearchRef } from "../TextInputSearch";
 import { showToast } from "../Toast";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
-import { type ContextMenuItem, showContextMenu } from "@legend-apps/context-menu";
-import { DragDropView } from "@legend-apps/drag-drop";
-import { revealInFinder } from "@legend-apps/file-dialog";
+import { type ContextMenuItem, showContextMenu } from "@legendapp/spark/context-menu";
+import { DragDropView } from "@legendapp/spark/drag-drop/views";
+import { revealInFinder } from "@legendapp/spark/dialogs";
 import { SUPPORT_PLAYLISTS } from "../../systems/constants";
 import { type LibraryView, libraryUI$, selectLibraryPlaylist, selectLibraryView } from "../../systems/LibraryState";
 import { createLocalPlaylist, type LocalPlaylist, localMusicState$ } from "../../systems/LocalMusicState";
@@ -35,7 +35,7 @@ import {
     exportPlaylistToFile,
     renamePlaylist,
 } from "../../systems/LocalPlaylists";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { perfCount } from "@legend-apps/runtime-utils";
 import { getQueueAction } from "../../utils/queueActions";
 import { buildTrackLookup, resolvePlaylistTracks } from "../../utils/trackResolution";

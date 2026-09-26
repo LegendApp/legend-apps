@@ -1,6 +1,6 @@
 import { Profiler } from "react";
 import { getRecentChats, openChat, type ChatDocument, type ChatSummary } from "@legend-apps/chat-history";
-import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions } from "@legend-apps/window-manager";
+import { addApplicationReopenRequestedListener, openWindow, setMainWindowOptions } from "@legendapp/spark/windows/managed";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { App, ChatHistoryWindow } from "../App";
 import { emitChatBenchmarkEvent, getChatBenchmarkConfig } from "../chatBenchmark";
@@ -14,7 +14,7 @@ jest.mock("react-native", () => ({
   View: "View",
 }));
 jest.mock("uniwind", () => ({ Uniwind: { setTheme: jest.fn() } }));
-jest.mock("@legend-apps/appkit-split-view", () => ({
+jest.mock("@legendapp/spark/ui/split-view", () => ({
   createSidebarSplitViewTitlebarChrome: () => ({}),
   SidebarSplitView: "SidebarSplitView",
   sidebarSplitViewTitlebarMetrics: { contentInsetTop: 52, sidebarInsetTop: 52 },
@@ -30,13 +30,13 @@ jest.mock("@legend-apps/theme", () => ({
     colors: { windowBackground: "#f5f6f8", background: "#fff", surfaceMuted: "#eee" },
   }),
 }));
-jest.mock("@legend-apps/window-manager", () => ({
+jest.mock("@legendapp/spark/windows/managed", () => ({
   addApplicationReopenRequestedListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
   openWindow: jest.fn().mockResolvedValue({ success: true }),
   setMainWindowOptions: jest.fn().mockResolvedValue({ success: true }),
 }));
 // A host-root app must not register or open a second React window.
-jest.mock("@legend-apps/windows", () => ({
+jest.mock("@legendapp/spark/windows/react", () => ({
   createWindowsNavigator: () => { throw new Error("Chat History must use the host window"); },
 }));
 jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList" }));

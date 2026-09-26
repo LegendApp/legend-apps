@@ -25,7 +25,7 @@ function preferencesFactory() {
     }, __esModule: true },
   });
   return compileModule(fileURLToPath(new URL("../slidesPreferences.ts", import.meta.url)), {
-    "@legend-apps/storage": storage,
+    "@legendapp/spark/settings/observable": storage,
   }).createSlidesPreferences;
 }
 

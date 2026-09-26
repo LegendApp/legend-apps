@@ -4,6 +4,7 @@ import {
   loadAppManifest,
   parseAppCommand,
   resolveDevServerPort,
+  rootDir,
   shellDir,
   withDefaultPortArg,
 } from "./lib/apps";
@@ -12,6 +13,10 @@ import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "
 import type { Platform } from "./lib/types";
 
 async function startOne(appId: string, platform: Platform, extraArgs: string[]) {
+  if (platform === "macos") {
+    runCommand("bun", ["scripts/spark-app.ts", appId, "start", ...extraArgs], { cwd: rootDir });
+    return;
+  }
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, platform);
   const generated = writeGeneratedConfig(manifest, platform, "dev");
@@ -28,17 +33,10 @@ async function startOne(appId: string, platform: Platform, extraArgs: string[]) 
     RCT_METRO_PORT: String(devServerPort),
   };
 
-  if (platform === "macos") {
-    runCommand("bun", ["x", "react-native", "start", ...argsWithPort], {
-      cwd: shellDir,
-      env,
-    });
-  } else {
-    runCommand("bun", ["x", "expo", "start", "--dev-client", ...argsWithPort], {
-      cwd: shellDir,
-      env,
-    });
-  }
+  runCommand("bun", ["x", "expo", "start", "--dev-client", ...argsWithPort], {
+    cwd: shellDir,
+    env,
+  });
 }
 
 async function main() {

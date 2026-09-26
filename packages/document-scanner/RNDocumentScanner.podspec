@@ -10,9 +10,9 @@ Pod::Spec.new do |s|
   s.author = "Legend"
   s.homepage = "https://legendapp.com"
   s.source = { :path => "." }
-  s.platforms = { :ios => "15.0", :osx => "14.0" }
+  s.platforms = { :osx => "14.0" }
   s.source_files = "ios/**/*.{h,m,mm}"
   s.dependency "React-Core"
   s.dependency "ReactCodegen"
-  s.dependency "RNFileScanner"
+  s.dependency "RNDesktopFileSystem"
 end

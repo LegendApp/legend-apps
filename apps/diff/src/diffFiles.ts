@@ -1,4 +1,4 @@
-import { openFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog } from "@legendapp/spark/dialogs";
 
 const diffFolderLaunchArgument = "--diff-folder";
 const diffSourceLaunchArgument = "--diff-source";

@@ -1,6 +1,6 @@
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-apps/reorder-controls";
-import { SFSymbol } from "@legend-apps/sf-symbol";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { Fragment, useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";

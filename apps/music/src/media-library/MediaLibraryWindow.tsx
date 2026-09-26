@@ -3,8 +3,8 @@ import { useValue } from "@legendapp/state/react";
 import {
     SidebarSplitView,
     sidebarSplitViewTitlebarMetrics,
-} from "@legend-apps/appkit-split-view";
-import { setWindowOptions, showWindow } from "@legend-apps/window-manager";
+} from "@legendapp/spark/ui/split-view";
+import { setWindowOptions, showWindow } from "@legendapp/spark/windows/managed";
 import { useCallback, useEffect, useRef } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { Platform, StyleSheet, View } from "react-native";

@@ -10,7 +10,7 @@ function setup() {
   const display = { id: "current-id", persistentId: "notes", frame: { x: 1920, y: 0, width: 1920, height: 1080 } };
   const modules = {
     "@legendapp/state": { observable: values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { peek: () => value, set: next => { value = next; } }])) },
-    "@legend-apps/window-manager": {
+    "@legendapp/spark/windows/managed": {
       closeWindow: async id => { calls.push(["close", id]); },
       getDisplays: async () => [{ isMain: true, visibleFrame: { x: 0, y: 0, width: 1440, height: 900 } }],
       WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },

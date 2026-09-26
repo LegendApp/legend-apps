@@ -79,10 +79,10 @@ function renderUrlSchemes(schemes: string[]) {
   ].join("\n");
 }
 
-function renderCustomStrings(values: Record<string, string>) {
+function renderCustomStrings(values: Record<string, string | string[]>) {
   return Object.entries(values)
     .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([key, value]) => [
+    .flatMap(([key, value]) => Array.isArray(value) ? [renderStringArray(escapePlistString(key), value, "\t")] : [
       `\t<key>${escapePlistString(key)}</key>`,
       `\t<string>${escapePlistString(value)}</string>`,
     ])

@@ -32,7 +32,7 @@ test("moving a drag rerenders only the previous and next drop zones", async () =
     new Function("require", "module", "exports", code)((name) => ({
         "@legendapp/state/react": stateReact,
         "react-native": { View: "view" },
-        "@legend-apps/classnames": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+        "@legendapp/spark/ui/classnames": { cn: (...parts) => parts.filter(Boolean).join(" ") },
         "./DragDropContext": { useDragDrop: () => { renders++; return model; } },
     }[name] ?? require(name)), module, module.exports);
     const { DroppableZone } = module.exports;

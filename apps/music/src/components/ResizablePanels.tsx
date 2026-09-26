@@ -5,7 +5,7 @@ import { type GestureResponderEvent, PanResponder, type PanResponderGestureState
 
 import { useRefValue } from "@legend-apps/runtime-utils";
 import { settings$ } from "../systems/Settings";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 interface PanelConfig {
     id: string;

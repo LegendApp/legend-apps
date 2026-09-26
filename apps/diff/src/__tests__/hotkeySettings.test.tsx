@@ -6,8 +6,8 @@ import { act, fireEvent, render } from "@testing-library/react-native";
 const mockKeyDownListeners = new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>();
 const mockKeyUpListeners = new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>();
 
-jest.mock("@legend-apps/keyboard-manager", () => {
-  const actual = jest.requireActual("@legend-apps/keyboard-manager");
+jest.mock("@legendapp/spark/shortcuts/keyboard", () => {
+  const actual = jest.requireActual("@legendapp/spark/shortcuts/keyboard");
   return {
     ...actual,
     addKeyDownListener: (
@@ -32,7 +32,7 @@ import {
   serializeHotkey,
   type HotkeyDefinition,
   type HotkeyValue,
-} from "@legend-apps/hotkeys";
+} from "@legendapp/spark/shortcuts/commands";
 import {
   diffHotkeys$,
   setDiffHotkeyBindings,

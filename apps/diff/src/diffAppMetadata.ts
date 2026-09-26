@@ -1,5 +1,5 @@
-import { createObservableFile } from "@legend-apps/storage";
-import type { WindowFrame } from "@legend-apps/window-manager";
+import { createObservableFile } from "@legendapp/spark/settings/observable";
+import type { WindowFrame } from "@legendapp/spark/windows/managed";
 import type { DiffOpenSource } from "./diffFiles";
 
 const maxRecentSources = 12;

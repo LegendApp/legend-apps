@@ -3,7 +3,7 @@ import {
   hideWindowControls,
   isWindowFullScreen,
   showWindowControls,
-} from "@legend-apps/window-controls";
+} from "@legendapp/spark/windows/controls";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

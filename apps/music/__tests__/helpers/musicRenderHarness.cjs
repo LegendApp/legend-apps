@@ -58,7 +58,7 @@ module.exports = function createMusicRenderHarness() {
       "react-native": native,
       "@legendapp/state": state,
       "@legendapp/state/react": stateReact,
-      "@legend-apps/classnames": {
+      "@legendapp/spark/ui/classnames": {
         cn
       },
       ...mocks
@@ -238,8 +238,8 @@ module.exports = function createMusicRenderHarness() {
       "../hooks/usePlaylistSelection": {
         usePlaylistSelection: () => selection
       },
-      "@legend-apps/context-menu": contextMenu,
-      "@legend-apps/drag-drop": {
+      "@legendapp/spark/context-menu": contextMenu,
+      "@legendapp/spark/drag-drop/views": {
         DragDropView: Wrapper,
         TrackDragSource: "track-drag"
       },
@@ -327,11 +327,11 @@ module.exports = function createMusicRenderHarness() {
       "../../hooks/useListItemStyles": {
         useListItemStyles
       },
-      "@legend-apps/context-menu": contextMenu,
-      "@legend-apps/drag-drop": {
+      "@legendapp/spark/context-menu": contextMenu,
+      "@legendapp/spark/drag-drop/views": {
         DragDropView: Wrapper
       },
-      "@legend-apps/file-dialog": {},
+      "@legendapp/spark/dialogs": {},
       "../../systems/constants": {
         SUPPORT_PLAYLISTS: true
       },
@@ -375,7 +375,7 @@ module.exports = function createMusicRenderHarness() {
       "../../hooks/usePlaylistSelection": {
         usePlaylistSelection: () => selection
       },
-      "@legend-apps/context-menu": contextMenu,
+      "@legendapp/spark/context-menu": contextMenu,
       "../../systems/LibraryState": library,
       "../../systems/LocalMusicState": local,
       "../../systems/LocalPlaylists": {},
@@ -414,8 +414,8 @@ module.exports = function createMusicRenderHarness() {
           return useListItemStyles();
         }
       },
-      "@legend-apps/context-menu": contextMenu,
-      "@legend-apps/drag-drop": {
+      "@legendapp/spark/context-menu": contextMenu,
+      "@legendapp/spark/drag-drop/views": {
         TrackDragSource: "track-drag"
       },
       "../../systems/Icon": {

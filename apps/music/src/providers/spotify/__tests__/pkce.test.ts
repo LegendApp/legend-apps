@@ -1,4 +1,4 @@
-import { getSecureStorage } from "@legend-apps/secure-storage";
+import { getSecureStorage } from "@legendapp/spark/secure-storage";
 import { createPKCE } from "../pkce";
 
 describe("createPKCE", () => {

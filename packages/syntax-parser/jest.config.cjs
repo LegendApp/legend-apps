@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   roots: ["<rootDir>/packages/syntax-parser"],
   setupFiles: ["<rootDir>/packages/syntax-parser/jest.setup.cjs"],
@@ -6,7 +6,7 @@ module.exports = {
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
     "^\\./NativeStorage$": "<rootDir>/packages/syntax-parser/jest/nativeStorageMock.cjs",
-    "^@legend-apps/storage$": "<rootDir>/packages/storage/src/index.ts",
+    "^@legendapp/spark/settings/observable$": "<rootDir>/packages/storage/src/index.ts",
   },
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": [
@@ -16,4 +16,4 @@ module.exports = {
       },
     ],
   },
-};
+});

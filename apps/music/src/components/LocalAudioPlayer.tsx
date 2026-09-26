@@ -1,6 +1,6 @@
 import { observable } from "@legendapp/state";
 import { File } from "../utils/fileSystem";
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
 import { audioPlayer as audioPlayerApi, type NowPlayingInfoPayload } from "@legend-apps/audio-player";
 import { showToast } from "./Toast";
 import { appState$ } from "../observables/appState";
@@ -10,7 +10,7 @@ import { ensureLocalTrackThumbnail } from "../systems/LocalMusicState";
 import { playbackInteractionState$ } from "../systems/PlaybackInteractionState";
 import { type RepeatMode, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";
-import { getPersistPlugin } from "@legend-apps/storage";
+import { getPersistPlugin } from "@legendapp/spark/settings/observable";
 import { parseDurationToSeconds } from "../utils/m3u";
 import { clearQueueM3U, loadQueueFromM3U, saveQueueToM3U } from "../utils/m3uManager";
 import { perfCount, perfDelta, perfLog, perfMark } from "@legend-apps/runtime-utils";

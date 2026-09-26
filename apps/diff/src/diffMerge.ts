@@ -1,4 +1,4 @@
-import { commandRunner, type CommandRunner } from "@legend-apps/command-runner";
+import { commandRunner, type CommandRunner } from "@legendapp/spark/processes/commands";
 
 export type DiffMergeConflictStage = {
   mode: string;

@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   setupFiles: ["<rootDir>/apps/diff/jest.setup.cjs"],
   testMatch: [
@@ -7,14 +7,14 @@ module.exports = {
   ],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
-    "^@legend-apps/app-exit$": "<rootDir>/apps/diff/jest/mocks/appExitMock.cjs",
-    "^@legend-apps/appkit-split-view$": "<rootDir>/apps/diff/jest/mocks/appKitSplitViewMock.cjs",
-    "^@legend-apps/command-runner$": "<rootDir>/apps/diff/jest/mocks/commandRunnerMock.cjs",
+    "^@legendapp/spark/app/exit$": "<rootDir>/apps/diff/jest/mocks/appExitMock.cjs",
+    "^@legendapp/spark/ui/split-view$": "<rootDir>/apps/diff/jest/mocks/appKitSplitViewMock.cjs",
+    "^@legendapp/spark/processes/commands$": "<rootDir>/apps/diff/jest/mocks/commandRunnerMock.cjs",
     "^@legend-apps/diff-parser$": "<rootDir>/apps/diff/jest/mocks/diffParserMock.cjs",
-    "^@legend-apps/file-dialog$": "<rootDir>/apps/diff/jest/mocks/fileDialogMock.cjs",
-    "^@legend-apps/sf-symbol$": "<rootDir>/apps/diff/jest/mocks/sfSymbolMock.cjs",
+    "^@legendapp/spark/dialogs$": "<rootDir>/apps/diff/jest/mocks/fileDialogMock.cjs",
+    "^@legendapp/spark/ui/symbol$": "<rootDir>/apps/diff/jest/mocks/sfSymbolMock.cjs",
     "^@legend-apps/source-viewer$": "<rootDir>/apps/diff/jest/mocks/sourceViewerMock.cjs",
-    "^@legend-apps/storage$": "<rootDir>/apps/diff/jest/mocks/storageMock.cjs",
+    "^@legendapp/spark/settings/observable$": "<rootDir>/apps/diff/jest/mocks/storageMock.cjs",
     "^@legend-apps/syntax-parser$": "<rootDir>/apps/diff/jest/mocks/syntaxParserMock.cjs",
     "^react-native-nitro-modules$": "<rootDir>/packages/diff-parser/jest/reactNativeNitroModulesMock.cjs",
     "^react-native$": "<rootDir>/apps/diff/jest/mocks/reactNativeMock.cjs",
@@ -27,4 +27,4 @@ module.exports = {
       },
     ],
   },
-};
+});

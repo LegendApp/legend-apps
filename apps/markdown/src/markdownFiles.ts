@@ -1,4 +1,4 @@
-import { getDirectory, getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legend-apps/document-app";
+import { getDirectory, getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legendapp/spark/app/documents";
 import { markdownFileTypes } from "./appConstants";
 
 export const newMarkdownDocumentLaunchArgument = "--markdown-new-document";

@@ -2,7 +2,7 @@ import * as FileSystem from "../utils/fileSystem";
 import { useEffect, useState } from "react";
 import { Image, type ImageProps, Text, View } from "react-native";
 import { ensureCacheDirectory, getCacheDirectory } from "../utils/cacheDirectories";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 interface AlbumArtProps extends Omit<ImageProps, "source"> {
     uri?: string;

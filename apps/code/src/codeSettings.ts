@@ -1,4 +1,4 @@
-import { createObservableSettings } from "@legend-apps/storage";
+import { createObservableSettings } from "@legendapp/spark/settings/observable";
 import {
   normalizeBooleanSetting,
   normalizeSourceFontFamily,

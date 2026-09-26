@@ -1,6 +1,6 @@
 import { batch, observable } from "@legendapp/state";
 import { Directory, File } from "../utils/fileSystem";
-import { addDirectoryChangeListener, setWatchedDirectories } from "@legend-apps/file-system-watcher";
+import { addDirectoryChangeListener, setWatchedDirectories } from "@legendapp/spark/files/watchers";
 import {
     addMediaLibraryScannerListener,
     scanMediaLibrary,

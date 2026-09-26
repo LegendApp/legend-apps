@@ -23,13 +23,12 @@ const manifest = {
   },
   nativeModules: {
     macos: [
-      "@legend-apps/appkit-split-view",
-      "@legend-apps/auto-updater",
+      "@legendapp/spark-ui",
+      "@legendapp/spark-updates",
       "@legend-apps/chat-history",
-      "@legend-apps/glass-effect-view",
-      "@legend-apps/native-menu",
-      "@legend-apps/storage",
-      "@legend-apps/window-manager",
+      "@legendapp/spark-native-menu",
+      "@legendapp/spark-settings",
+      "@legendapp/spark-desktop-windows",
       "react-native-enriched-markdown",
     ],
     ios: [],

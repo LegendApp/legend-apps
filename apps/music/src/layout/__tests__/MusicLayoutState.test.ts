@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legend-apps/storage";
+import { createObservableFile } from "@legendapp/spark/settings/observable";
 import {
     DEFAULT_MAIN_LAYOUT,
     cloneMusicLayoutFile,

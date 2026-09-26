@@ -1,4 +1,4 @@
-import { addAppExitListener, isAppExitSupported } from "@legend-apps/app-exit";
+import { addAppExitListener, isAppExitSupported } from "@legendapp/spark/app/exit";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExamplePanel, styles } from "./shared";

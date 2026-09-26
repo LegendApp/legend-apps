@@ -6,7 +6,7 @@ import { Button } from "./Button";
 import { PlaybackIndicator } from "./PlaybackIndicator";
 import { useListItemStyles } from "../hooks/useListItemStyles";
 import { Icon } from "../systems/Icon";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 
 export type TableColumnAlign = "left" | "center" | "right";
 

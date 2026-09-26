@@ -3,8 +3,8 @@ import {
     KeyCodes,
     type KeyboardEvent,
     type KeyboardEventListener,
-} from "@legend-apps/keyboard-manager";
-import { KeyText } from "@legend-apps/hotkeys";
+} from "@legendapp/spark/shortcuts/keyboard";
+import { KeyText } from "@legendapp/spark/shortcuts/commands";
 
 export type { KeyboardEvent, KeyboardEventListener };
 export { KeyCodes, KeyText };

@@ -1,4 +1,4 @@
-import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@legend-apps/hotkeys";
+import { createDefaultHotkeyState, KeyCodes, type HotkeyDefinition } from "@legendapp/spark/shortcuts/commands";
 
 export const markdownHotkeyDefinitions = [
   {

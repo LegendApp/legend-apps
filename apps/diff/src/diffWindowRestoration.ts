@@ -1,7 +1,7 @@
 import {
   addWindowClosedListener,
   setWindowOptions,
-} from "@legend-apps/window-manager";
+} from "@legendapp/spark/windows/managed";
 import { diffPrimaryWindowIdentifier, diffViewerWindowIdentifier } from "./appConstants";
 import {
   getSavedDiffWindows,

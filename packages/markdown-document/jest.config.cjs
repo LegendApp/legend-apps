@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = require("../../scripts/jest/spark.cjs")({
   rootDir: "../..",
   testMatch: [
     "<rootDir>/packages/markdown-document/src/**/*.test.ts",
@@ -16,4 +16,4 @@ module.exports = {
   transformIgnorePatterns: [
     "node_modules/(?!(react-native|@react-native|@react-native-community|@legendapp)/)",
   ],
-};
+});

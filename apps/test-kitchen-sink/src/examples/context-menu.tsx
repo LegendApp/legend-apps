@@ -1,4 +1,4 @@
-import { showContextMenu } from "@legend-apps/context-menu";
+import { showContextMenu } from "@legendapp/spark/context-menu";
 import { useState } from "react";
 import { type GestureResponderEvent, Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";

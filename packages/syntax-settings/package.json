@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@legend-apps/design-system": "workspace:*",
-    "@legend-apps/settings-window": "0.0.0",
-    "@legend-apps/syntax-parser": "workspace:*"
+    "@legend-apps/syntax-parser": "workspace:*",
+    "@legendapp/spark": "0.0.1-next.2"
   },
   "peerDependencies": {
     "react": "catalog:",

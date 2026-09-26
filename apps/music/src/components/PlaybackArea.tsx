@@ -9,7 +9,7 @@ import { Icon } from "../systems/Icon";
 import { localMusicState$ } from "../systems/LocalMusicState";
 import { setIsScrubbing } from "../systems/PlaybackInteractionState";
 import { type PlaybackControlId, settings$ } from "../systems/Settings";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { perfCount } from "@legend-apps/runtime-utils";
 
 export type OverlayPlaybackMode = {

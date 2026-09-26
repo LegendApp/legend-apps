@@ -1,4 +1,4 @@
-import { GlassSurface } from "@legend-apps/glass-effect-view";
+import { GlassSurface } from "@legendapp/spark/ui/glass";
 import { Pressable, StyleSheet, Text, View, type ColorValue, type StyleProp, type ViewStyle } from "react-native";
 
 export type GlassToastAction = {

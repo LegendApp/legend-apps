@@ -1,4 +1,4 @@
-import type { NativeMenuAction } from "@legend-apps/native-menu";
+import type { NativeMenuAction } from "@legendapp/spark/menus";
 
 type DiffViewerActionId =
   | "copyFilePath"

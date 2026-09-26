@@ -1,4 +1,4 @@
-import { HotkeyBindingsSettingsContent } from "@legend-apps/hotkeys";
+import { HotkeyBindingsSettingsContent } from "@legendapp/spark/shortcuts/commands";
 import {
     musicHotkeyDefinitions,
     resetMusicHotkeyBindings,

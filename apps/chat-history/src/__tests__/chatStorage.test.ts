@@ -1,7 +1,7 @@
-import { readApplicationSupportJson, writeApplicationSupportJson } from "@legend-apps/storage/src/applicationSupport";
+import { readApplicationSupportJson, writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
 import { flushSelectedChatWrite, readSavedChatSelection, writeSelectedChat } from "../chatStorage";
 
-jest.mock("@legend-apps/storage/src/applicationSupport", () => ({
+jest.mock("@legendapp/spark/settings/paths", () => ({
   readApplicationSupportJson: jest.fn(),
   writeApplicationSupportJson: jest.fn(),
 }));

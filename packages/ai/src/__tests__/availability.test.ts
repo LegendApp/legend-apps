@@ -1,4 +1,4 @@
-import { createMockCommandRunner } from "@legend-apps/command-runner";
+import { createMockCommandRunner } from "@legendapp/spark/processes/commands";
 import { getAICommandAvailability, selectPreferredAITool } from "../availability";
 
 describe("AI availability", () => {

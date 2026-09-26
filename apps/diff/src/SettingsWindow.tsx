@@ -1,5 +1,5 @@
 import { SwitchControl } from "@legend-apps/design-system";
-import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legend-apps/hotkeys";
+import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legendapp/spark/shortcuts/commands";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -8,7 +8,7 @@ import {
   SettingsSection,
   VirtualizedSettingsWindow,
   type VirtualizedSettingsWindowPage,
-} from "@legend-apps/settings-window";
+} from "@legendapp/spark/settings/window";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,

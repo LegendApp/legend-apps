@@ -1,33 +1,33 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { getLaunchDocumentPath, openSelectedDocumentPath, useWatchedDocumentReload } from "@legend-apps/document-app";
-import { noteRecentDocument } from "@legend-apps/recent-documents";
+import { getLaunchDocumentPath, openSelectedDocumentPath, useWatchedDocumentReload } from "@legendapp/spark/app/documents";
+import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
 import { loadCodeFile } from "@legend-apps/syntax-parser";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
 import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "../codeFiles";
-import { addWindowCloseRequestedListener, closeWindow } from "@legend-apps/window-manager";
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
-import { addNativeMenuActionListener } from "@legend-apps/native-menu";
+import { addWindowCloseRequestedListener, closeWindow } from "@legendapp/spark/windows/managed";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { addNativeMenuActionListener } from "@legendapp/spark/menus";
 import { setCodeViewerWindowOptions } from "../codeWindows";
 import { codeMenuOwnerId, codeViewerWindowIdentifier } from "../appConstants";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
 
 const mockEditorCommand = jest.fn(async () => true);
 
-jest.mock("@legend-apps/document-app", () => ({
+jest.mock("@legendapp/spark/app/documents", () => ({
   createDocumentTransitionGuard: jest.requireActual("../../../../packages/document-app/src/documentTransition").createDocumentTransitionGuard,
   getLaunchDocumentPath: jest.fn(() => null),
   getFilename: (path: string) => path.split("/").pop(),
   openSelectedDocumentPath: jest.fn(),
   useWatchedDocumentReload: jest.fn(),
 }));
-jest.mock("@legend-apps/app-exit", () => ({ addAppExitListener: jest.fn(() => ({ remove() {} })), completeAppExit: jest.fn() }));
-jest.mock("@legend-apps/window-manager", () => ({ addWindowCloseRequestedListener: jest.fn(() => ({ remove() {} })), closeWindow: jest.fn() }));
-jest.mock("@legend-apps/native-menu", () => ({ addNativeMenuActionListener: jest.fn(() => ({ remove() {} })), updateMenuItems: jest.fn() }));
-jest.mock("@legend-apps/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
+jest.mock("@legendapp/spark/app/exit", () => ({ addAppExitListener: jest.fn(() => ({ remove() {} })), completeAppExit: jest.fn() }));
+jest.mock("@legendapp/spark/windows/managed", () => ({ addWindowCloseRequestedListener: jest.fn(() => ({ remove() {} })), closeWindow: jest.fn() }));
+jest.mock("@legendapp/spark/menus", () => ({ addNativeMenuActionListener: jest.fn(() => ({ remove() {} })), updateMenuItems: jest.fn() }));
+jest.mock("@legendapp/spark/app/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
 jest.mock("@legend-apps/source-editor", () => {
   const React = require("react");
   return { prepareDocument: jest.fn((path: string) => `prepared:${path}`), cancelPreparedDocument: jest.fn(), SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
@@ -43,7 +43,7 @@ jest.mock("@legend-apps/source-viewer", () => ({
   SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
   useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
 }));
-jest.mock("@legend-apps/storage", () => ({ createStorage: jest.fn(() => ({})) }));
+jest.mock("@legendapp/spark/settings/observable", () => ({ createStorage: jest.fn(() => ({})) }));
 jest.mock("@legend-apps/syntax-parser", () => ({
   loadCodeFile: jest.fn(),
   getSyntaxLanguageForPath: jest.requireActual("../../../../packages/syntax-parser/src/syntaxAssets").getSyntaxLanguageForPath,

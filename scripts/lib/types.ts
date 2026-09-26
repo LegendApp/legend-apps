@@ -38,6 +38,7 @@ export type AppManifest = {
     };
   };
   nativeModules: Record<Platform, string[]>;
+  recentDocuments?: { macos?: boolean };
   documentTypes?: {
     macos?: MacOSDocumentType[];
   };
@@ -45,7 +46,7 @@ export type AppManifest = {
     macos?: string[];
   };
   infoPlist?: {
-    macos?: Record<string, string>;
+    macos?: Record<string, string | string[]>;
   };
   signing?: {
     macos?: {

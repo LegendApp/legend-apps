@@ -1,5 +1,5 @@
-import { useHotkeys } from "@legend-apps/hotkeys";
-import { addKeyDownListener, KeyCodes } from "@legend-apps/keyboard-manager";
+import { useHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { useEffect, useMemo, type RefObject } from "react";
 import { Platform } from "react-native";

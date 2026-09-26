@@ -34,7 +34,7 @@ jest.mock("@legend-apps/reorder-controls", () => {
   };
 });
 
-jest.mock("@legend-apps/sf-symbol", () => ({
+jest.mock("@legendapp/spark/ui/symbol", () => ({
   SFSymbol: () => null,
 }));
 

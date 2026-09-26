@@ -6,12 +6,12 @@ import { getActiveNativePackages } from "../../../../scripts/lib/nativeModules";
 test("Slides release includes the native dependencies used by shared settings", () => {
   const releasePackages = getActiveNativePackages(manifest, "macos").map((pkg) => pkg.name);
   for (const dependency of [
-    "@legend-apps/appkit-split-view",
-    "@legend-apps/context-menu",
-    "@legend-apps/native-select",
-    "@legend-apps/native-menu",
-    "@legend-apps/storage",
-    "@legend-apps/window-manager",
+    "@legendapp/spark-ui",
+    "@legendapp/spark-context-menu",
+    "@legendapp/spark-ui",
+    "@legendapp/spark-native-menu",
+    "@legendapp/spark-settings",
+    "@legendapp/spark-desktop-windows",
   ]) {
     assert.ok(releasePackages.includes(dependency), `${dependency} must be linked in release`);
   }

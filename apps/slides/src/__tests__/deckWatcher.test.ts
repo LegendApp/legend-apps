@@ -17,17 +17,17 @@ test("failed replacement opens retain the visible deck watcher until a successfu
     "./slidesPreferences": { rememberDeckPath() {} },
     "./slidesStore": { getSlidesState: () => state, setSlidesState: update => Object.assign(state, update) },
     "./deckBuildPolicy": { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate },
-    "@legend-apps/command-runner": { commandRunner: { runCommand: async ({ args }) => {
+    "@legendapp/spark/processes/commands": { commandRunner: { runCommand: async ({ args }) => {
       commands.push(args[0]);
       return { stdout: JSON.stringify(fail ? { success: false, errors: ["broken"], warnings: [] } : {
         success: true, code: "module.exports.default = function Deck() {};", uniwindCode: "{}", warnings: [],
       }) };
     } } },
-    "@legend-apps/file-system-watcher": { watchDirectories: (paths, changed) => {
+    "@legendapp/spark/files/watchers": { watchDirectories: (paths, changed) => {
       const watcher = { paths, changed, removed: false, remove() { this.removed = true; } };
       watchers.push(watcher); return watcher;
     } },
-    "@legend-apps/recent-documents": { noteRecentDocument() {} },
+    "@legendapp/spark/app/recent-documents": { noteRecentDocument() {} },
     uniwind: { Uniwind: { __reinit() {} } },
   };
   const module = { exports: {} };

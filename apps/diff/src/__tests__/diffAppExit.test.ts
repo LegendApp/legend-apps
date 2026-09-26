@@ -1,4 +1,4 @@
-import { addAppExitListener, completeAppExit } from "@legend-apps/app-exit";
+import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
 import {
   installDiffAppExitHandler,
   prepareDiffWindowsForAppExit,

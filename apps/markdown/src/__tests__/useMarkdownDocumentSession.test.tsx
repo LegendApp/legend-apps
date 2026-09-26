@@ -2,7 +2,7 @@ import { act, render, waitFor } from "@testing-library/react-native";
 import React, { useEffect, useRef } from "react";
 import { Text } from "react-native";
 import { useValue } from "@legendapp/state/react";
-import { openFileDialog, saveFileDialog } from "@legend-apps/file-dialog";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { markdownFileTypes } from "../appConstants";
 import { confirmDirtyDocumentTransition } from "../confirmDirtyDocumentTransition";
@@ -11,7 +11,7 @@ import { useMarkdownDocumentSession, type MarkdownDocumentSessionState$ } from "
 const mockOpenFileDialog = openFileDialog as jest.MockedFunction<typeof openFileDialog>;
 const mockConfirmDirtyDocumentTransition = confirmDirtyDocumentTransition as jest.MockedFunction<typeof confirmDirtyDocumentTransition>;
 
-jest.mock("@legend-apps/file-dialog", () => ({
+jest.mock("@legendapp/spark/dialogs", () => ({
   openFileDialog: jest.fn(),
   saveFileDialog: jest.fn(),
 }));
@@ -25,7 +25,7 @@ jest.mock("../confirmDirtyDocumentTransition", () => ({
   confirmDirtyDocumentTransition: jest.fn(),
 }));
 
-jest.mock("@legend-apps/recent-documents", () => ({
+jest.mock("@legendapp/spark/app/recent-documents", () => ({
   noteRecentDocument: jest.fn(),
 }));
 

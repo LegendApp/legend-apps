@@ -4,7 +4,7 @@ import {
     type HotkeyHandlerContext,
     type HotkeyScope,
     type HotkeyValue,
-} from "@legend-apps/hotkeys";
+} from "@legendapp/spark/shortcuts/commands";
 import { useMemo } from "react";
 import {
     allMusicHotkeyDefinitions,

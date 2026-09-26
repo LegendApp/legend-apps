@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { parseHotkey, type HotkeyHandlerContext } from "@legend-apps/hotkeys";
+import { parseHotkey, type HotkeyHandlerContext } from "@legendapp/spark/shortcuts/commands";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { initializeLocalAudioPlayer, localAudioControls } from "./LocalAudioPlayer";

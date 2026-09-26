@@ -1,19 +1,10 @@
 #!/usr/bin/env bun
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { assertSupportedPlatform, loadAppManifest, resolveDevServerPort, shellDir } from "./lib/apps";
+import { assertSupportedPlatform, loadAppManifest, resolveDevServerPort } from "./lib/apps";
 import { parseAppCommand } from "./lib/apps";
+import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { splitLaunchArgs, type OptionSpecs } from "./lib/launchArgs";
-import { macOSSchemeName, macOSWorkspaceName } from "./lib/macosShell";
-import {
-  ensureMacOSDevWorkspace,
-  getMacOSDevDerivedDataPath,
-  getMacOSReleaseDerivedDataPath,
-  getMacOSEnv,
-  getMacOSReleaseWorkspaceDir,
-} from "./lib/macosWorkspaces";
-import { writeGeneratedConfig } from "./lib/nativeModules";
 import { runCommand } from "./lib/run";
 import type { Platform } from "./lib/types";
 
@@ -58,72 +49,6 @@ function shouldPrintOnly(args: string[]) {
   return args.includes("--print");
 }
 
-function parseBuildSettings(output: string) {
-  const jsonStart = output.indexOf("[");
-  if (jsonStart < 0) {
-    throw new Error("Could not parse xcodebuild settings output.");
-  }
-
-  return JSON.parse(output.slice(jsonStart)) as Array<{
-    buildSettings?: Record<string, string | undefined>;
-  }>;
-}
-
-function getBuiltMacAppPath(workspaceDir: string, mode: string, arch: MacOSBuildArch) {
-  const macosWorkspace = path.join(workspaceDir, macOSWorkspaceName);
-  const buildSettingsArgs = [
-    "-workspace",
-    macosWorkspace,
-    "-scheme",
-    macOSSchemeName,
-    "-configuration",
-    mode,
-    "-showBuildSettings",
-    "-json",
-  ];
-  const args = mode === "Release"
-    ? [...buildSettingsArgs, "-derivedDataPath", getMacOSReleaseDerivedDataPath(workspaceDir, arch)]
-    : [...buildSettingsArgs, "-derivedDataPath", getMacOSDevDerivedDataPath(workspaceDir)];
-  const result = spawnSync(
-    "xcodebuild",
-    args,
-    {
-      cwd: shellDir,
-      encoding: "utf8",
-    },
-  );
-
-  if (result.status !== 0) {
-    throw new Error(result.stderr || "Failed to read macOS build settings.");
-  }
-
-  const targets = parseBuildSettings(result.stdout);
-  const appSettings = targets
-    .map((target) => target.buildSettings)
-    .find((settings) => settings?.WRAPPER_NAME?.endsWith(".app") || settings?.FULL_PRODUCT_NAME?.endsWith(".app"));
-
-  const productsDir = appSettings?.BUILT_PRODUCTS_DIR;
-  const wrapperName = appSettings?.WRAPPER_NAME ?? appSettings?.FULL_PRODUCT_NAME;
-
-  if (!productsDir || !wrapperName) {
-    throw new Error("Could not find the built macOS app path in Xcode build settings.");
-  }
-
-  return path.join(productsDir, wrapperName);
-}
-
-function getOpenEnvironmentArgs(appId: string, generated: ReturnType<typeof writeGeneratedConfig>, metroPort?: number) {
-  const env = {
-    ...getMacOSEnv(appId, generated.configPath),
-    LEGEND_MACOS_INFOPLIST_FILE: generated.macosInfoPlistPath,
-    RCT_METRO_PORT: metroPort === undefined ? undefined : String(metroPort),
-  };
-
-  return Object.entries(env)
-    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0)
-    .flatMap(([key, value]) => ["--env", `${key}=${value}`]);
-}
-
 async function openOne(appId: string, platform: Platform, args: string[]) {
   if (platform !== "macos") {
     throw new Error("Opening an already built app is currently implemented for macos only.");
@@ -134,25 +59,22 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   assertSupportedPlatform(manifest, platform);
 
   const mode = readMode(runnerArgs);
-  const arch = readMacOSBuildArch(runnerArgs);
-  const graphMode = mode === "Release" ? "release" : "dev";
-  const generated = writeGeneratedConfig(manifest, platform, graphMode);
-  const workspaceDir = mode === "Release" ? getMacOSReleaseWorkspaceDir(appId) : ensureMacOSDevWorkspace(manifest);
-  const metroPort = mode === "Release" ? undefined : resolveDevServerPort(appId, runnerArgs);
-
-  const appPath = getBuiltMacAppPath(workspaceDir, mode, arch);
-
-  if (!fs.existsSync(appPath)) {
-    throw new Error(`No built macOS app found at ${appPath}. Run bun run ${appId} macos first.`);
+  const buildMode = mode === "Release" ? "release" : "dev";
+  const record = path.join(sparkWorkspace(appId), `.spark/${buildMode}-build.json`);
+  if (!fs.existsSync(record)) throw new Error(`Build the Spark app first: bun run ${appId} build macos${mode === "Debug" ? " --dev" : ""}`);
+  const built = JSON.parse(fs.readFileSync(record, "utf8"));
+  const appPath = built.app as string;
+  if (!fs.existsSync(appPath)) throw new Error(`Spark app is missing: ${appPath}`);
+  if (mode === "Release" && (runnerArgs.includes("--arch") || runnerArgs.some(arg => arg.startsWith("--arch=")))) {
+    const expected = readMacOSBuildArch(runnerArgs) === "arm" ? "arm64" : "x64";
+    if (built.runtime.arch !== expected) throw new Error(`The latest release build is ${built.runtime.arch}, not ${expected}. Build the requested architecture first.`);
   }
+  if (shouldPrintOnly(runnerArgs)) { console.log(appPath); return; }
+  const port = resolveDevServerPort(appId, runnerArgs);
+  const envArgs = mode === "Debug" ? ["--env", `SPARK_BUNDLE_URL=http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`] : [];
+  const runtimeArgs = mode === "Debug" ? ["-RCT_jsLocation", `127.0.0.1:${port}`] : [];
+  runCommand("open", [...(launchArgs.length ? ["-n"] : []), ...envArgs, appPath, ...((runtimeArgs.length || launchArgs.length) ? ["--args", ...runtimeArgs, ...launchArgs] : [])]);
 
-  if (shouldPrintOnly(runnerArgs)) {
-    console.log(appPath);
-    return;
-  }
-
-  const envArgs = getOpenEnvironmentArgs(appId, generated, metroPort);
-  runCommand("open", launchArgs.length > 0 ? ["-n", ...envArgs, appPath, "--args", ...launchArgs] : [...envArgs, appPath]);
 }
 
 async function main() {

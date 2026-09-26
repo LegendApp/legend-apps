@@ -1,4 +1,4 @@
-import { getFilename } from "@legend-apps/document-app";
+import { getFilename } from "@legendapp/spark/app/documents";
 import { getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
 
 export function isCodePath(path: string) {

@@ -1,9 +1,9 @@
-import { AutoUpdater } from "@legend-apps/auto-updater";
-import { useNativeMenu } from "@legend-apps/native-menu";
+import { AutoUpdater } from "@legendapp/spark/updates";
+import { useNativeMenu } from "@legendapp/spark/menus";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { ChatHistoryAppMenu } from "../ChatHistoryAppMenu";
 
-jest.mock("@legend-apps/auto-updater", () => ({
+jest.mock("@legendapp/spark/updates", () => ({
   AutoUpdater: {
     isAvailable: jest.fn(),
     checkForUpdates: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock("@legend-apps/auto-updater", () => ({
     setUpdateCheckInterval: jest.fn(),
   },
 }));
-jest.mock("@legend-apps/native-menu", () => ({ useNativeMenu: jest.fn() }));
+jest.mock("@legendapp/spark/menus", () => ({ useNativeMenu: jest.fn() }));
 
 describe("Chat History updates", () => {
   let renderer: ReactTestRenderer | undefined;

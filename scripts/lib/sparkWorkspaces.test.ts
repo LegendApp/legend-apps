@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
+import fs from "node:fs";
+import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { sparkCheckout, sparkConfig } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
+import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 
 const require = createRequire(import.meta.url);
 const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
@@ -21,9 +24,9 @@ for (const appId of appIds) {
     assert.equal(config.macos.bundleIdentifier, manifest.bundleIds.macos);
     assert.equal(config.version, loadAppPackageMetadata(appId).version);
     assert.deepEqual(config.include, getActiveNativePackages(manifest, "macos").map(pkg => pkg.name));
-    for (const pkg of getExcludedNativePackages(manifest, "macos")) assert.ok(config.expo.autolinking.exclude.includes(pkg.name));
+    for (const pkg of getExcludedNativePackages(manifest, "macos")) if (pkg.name !== "@legendapp/spark-desktop-app" && !(pkg.name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length)) assert.ok(config.expo.autolinking.exclude.includes(pkg.name));
     assert.ok(!config.expo.autolinking.exclude.includes("@legendapp/spark-desktop-app"));
-    assert.ok(config.expo.autolinking.exclude.includes("@legendapp/spark-desktop-windows"));
+    assert.equal(config.expo.autolinking.exclude.includes("@legendapp/spark-desktop-windows"), !manifest.nativeModules.macos.includes("@legendapp/spark-desktop-windows"));
     assert.equal(config.macos.infoPlist.LegendHostWindowHidden, manifest.hostWindow?.macos?.hidden ?? false);
     assert.deepEqual(config.scheme, manifest.urlSchemes?.macos);
     const documents = config.macos.infoPlist.CFBundleDocumentTypes;
@@ -48,4 +51,48 @@ test("Spark uses native policy without replacing its application delegate", asyn
   assert.equal(diff.expo.autolinking.exclude.includes("@legendapp/spark-desktop-links"), false);
   assert.deepEqual(diff.expo.plugins, [path.resolve("packages/diff-parser/app.plugin.cjs")]);
   assert.equal("plugins" in hello.expo, false);
+});
+
+test("standard desktop capabilities are owned by Spark in every app", async () => {
+  const moved = new Set(Object.keys(sparkCapabilities));
+  for (const appId of appIds) {
+    const manifest = await loadAppManifest(appId);
+    if (manifest.nativeModules.macos.includes("@legendapp/spark-file-dialog")) {
+      assert.ok(manifest.nativeModules.macos.includes("@legendapp/spark-message-dialog"), "The public dialogs entry includes both file and message dialogs");
+    }
+    for (const name of manifest.nativeModules.macos) {
+      assert.ok(!moved.has(name), `${appId} still links the old desktop module ${name}`);
+    }
+    const source = path.resolve("apps", appId, "src");
+    for (const relative of fs.readdirSync(source, { recursive: true }) as string[]) {
+      if (!/\.[cm]?[jt]sx?$/.test(relative)) continue;
+      const content = fs.readFileSync(path.join(source, relative), "utf8");
+      for (const name of moved) {
+        assert.ok(!content.includes(`"${name}"`) && !content.includes(`"${name}/`), `${appId}/${relative} still imports ${name}`);
+      }
+    }
+  }
+});
+
+test("recent document lifecycle follows the app option rather than its identity", async () => {
+  const manifest = await loadAppManifest("hello-world");
+  assert.ok(sparkConfig({ ...manifest, recentDocuments: { macos: true } }).macos.lifecycle.plugins.includes("RNRecentDocumentsStartup"));
+});
+
+test("Spark release preserves architecture-specific update identity", async () => {
+  const manifest = await loadAppManifest("diff");
+  const original = process.env.SPARK_MACOS_ARCH;
+  try {
+    for (const arch of ["arm", "x86"] as const) {
+      process.env.SPARK_MACOS_ARCH = arch === "arm" ? "arm64" : "x64";
+      const release = sparkConfig(manifest, "release");
+      const plist = identity(toExpo(release).expo);
+      assert.equal(plist.SUFeedURL, getMacOSSparkleFeedUrl(manifest, arch));
+      assert.equal(plist.SUPublicEDKey, getMacOSSparklePublicEdKey(manifest));
+      assert.equal(sparkConfig(manifest).updates, undefined);
+    }
+  } finally {
+    if (original === undefined) delete process.env.SPARK_MACOS_ARCH;
+    else process.env.SPARK_MACOS_ARCH = original;
+  }
 });

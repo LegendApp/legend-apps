@@ -4,7 +4,7 @@ import { memo } from "react";
 import { type LayoutChangeEvent, Text, View } from "react-native";
 import type { OverlayPlaybackMode } from "./PlaybackArea";
 import { PlaybackTimelineSlider } from "./PlaybackTimelineSlider";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { perfCount } from "@legend-apps/runtime-utils";
 
 type PlaybackTimelineProps = {

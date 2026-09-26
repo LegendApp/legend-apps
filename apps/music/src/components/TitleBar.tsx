@@ -4,11 +4,11 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import type { JSX } from "react";
 import { Pressable } from "react-native";
 import { EffectView } from "./EffectView";
-import { hideWindowControls, showWindowControls } from "@legend-apps/window-controls";
+import { hideWindowControls, showWindowControls } from "@legendapp/spark/windows/controls";
 import { IS_TAHOE } from "../systems/constants";
 import { settings$ } from "../systems/Settings";
 import { state$ } from "../systems/State";
-import { cn } from "@legend-apps/classnames";
+import { cn } from "@legendapp/spark/ui/classnames";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 
 type MotionViewProps = Parameters<typeof Motion.View>[0];

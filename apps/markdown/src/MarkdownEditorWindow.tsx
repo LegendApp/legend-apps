@@ -1,4 +1,4 @@
-import { useWatchedDocumentReload } from "@legend-apps/document-app";
+import { useWatchedDocumentReload } from "@legendapp/spark/app/documents";
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,

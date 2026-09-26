@@ -2,7 +2,7 @@
 import { expect, mock, test } from "bun:test";
 let listener: (event: { reason: string }) => void;
 const complete = mock();
-mock.module("@legend-apps/app-exit", () => ({
+mock.module("@legendapp/spark/app/exit", () => ({
   addAppExitListener: (callback: typeof listener) => { listener = callback; return { remove() {} }; },
   completeAppExit: complete,
 }));
