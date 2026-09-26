@@ -23,7 +23,7 @@ export function resolveTransitionFile(reference: string, deckRoot: string, libra
       const realRoot = fs.realpathSync(root);
       const real = fs.realpathSync(candidate);
       const relative = path.relative(realRoot, real);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Transition "${reference}" escapes its directory.`);
+      if ((relative === ".." || relative.startsWith(`..${path.sep}`)) || path.isAbsolute(relative)) throw new Error(`Transition "${reference}" escapes its directory.`);
       if (!fs.statSync(real).isFile()) throw new Error(`Transition "${reference}" is not a file.`);
       file = real;
     }

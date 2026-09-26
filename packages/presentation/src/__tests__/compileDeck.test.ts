@@ -31,6 +31,15 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("allows double-dot-prefixed names within the deck directory", async () => {
+    const result = await compileDeck(createDeck({
+      "deck.mdx": '---\ntransition: {source: "./..local/fade.ts"}\n---\nimport Demo from "./..local/Demo"\n\n<Demo />\n\n<Webview component="./..local/Web.tsx" />',
+      "..local/Demo.tsx": 'export default function Demo() { return null; }',
+      "..local/Web.tsx": 'export default function Web() { return <div>Local</div>; }',
+      "..local/fade.ts": 'export default { duration: 100, entering: { from: { opacity: 0 }, to: { opacity: 1 } } };',
+    }));
+    expect(result.success).toBe(true);
+  });
   test("serializes deck-local worklets and their imported helper closures", async () => {
     const deckPath = createDeck({
       "deck.mdx": 'export { makePose } from "./motion"\n\n# Worklets',
