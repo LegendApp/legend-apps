@@ -5205,6 +5205,23 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "transaction failed" }));
   });
 
+  it.each(["save", "saveAs", "overwrite"] as const)("rejects %s when committing the draft fails and preserves it for retry", async (command) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, renderer } = await renderDocument({ adapter });
+    const apply = adapter.applyTransaction.bind(adapter);
+    adapter.applyTransaction = jest.fn(async () => { throw new Error("Cannot commit draft"); });
+    const save = () => command === "saveAs" ? commandsRef.current!.saveAs("copy.md") : commandsRef.current![command]();
+    await changeText(editorInput(renderer), "Unsaved draft");
+    await act(async () => {
+      await expect(save()).rejects.toThrow("Cannot commit draft");
+    });
+    expect(adapter.saveCount).toBe(0);
+    adapter.applyTransaction = apply;
+    await act(async () => save());
+    expect(adapter.sourceMarkdown).toBe("Unsaved draft");
+    expect(adapter.saveCount).toBe(1);
+  });
+
   it("waits for a pending edit transaction before save completes", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const transactionGate = adapter.deferNextTransaction();

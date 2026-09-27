@@ -1054,7 +1054,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
     }, [documentRenderState$, activeEditor$]);
 
-    const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean } = {}) => {
+    const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean; throwOnError?: boolean } = {}) => {
       const documentState = documentState$.peek();
       const updateReactState = options.updateReactState ?? true;
       const activeBlockIdValue = activeEditor$.blockId.peek();
@@ -1147,6 +1147,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           setActiveSelection(Math.min(activeInputSelectionRef.current.start, committedMarkdownRef.current.length));
         }
         const nextError = error instanceof Error ? error : new Error(String(error));
+        if (options.throwOnError) throw nextError;
         onErrorRef.current?.(nextError);
       }
     }, [adapter,
@@ -1159,7 +1160,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       updateRenderedBlockMarkdown,
       validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown]);
 
-    const commitActiveBlock = useCallback((options: { updateReactState?: boolean } = {}) => {
+    const commitActiveBlock = useCallback((options: { updateReactState?: boolean; throwOnError?: boolean } = {}) => {
       const commitPromise = commitQueueRef.current
         .catch(() => {})
         .then(() => runCommitActiveBlock(options));
@@ -2764,7 +2765,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         setNextSaveState("saving");
 
         async function performSave() {
-          await commitActiveBlock({ updateReactState: false });
+          await commitActiveBlock({ updateReactState: false, throwOnError: true });
           const savingRevision = currentRevisionRef.current;
           if (overwrite) {
             if (!adapter.overwrite) throw new Error("This document does not support overwriting conflicts.");
