@@ -1,5 +1,6 @@
+import { loadHotkeys } from "../systems/keyboard/hotkeySerialization";
 import type { KeyboardEventCodeHotkey } from '../systems/keyboard/Keyboard';
-import { KeyCodes, KeyText } from '../systems/keyboard/KeyboardManager';
+import { KeyCodes, KeyText, keyCodeFromText } from '../systems/keyboard/KeyboardManager';
 import { createJSONManager } from '../utils/JSONManager';
 import { syncState } from '@legendapp/state';
 import { observable } from '@legendapp/state';
@@ -89,19 +90,7 @@ export const hotkeys$ = createJSONManager<Record<HotkeyName, KeyboardEventCodeHo
   initialValue: DEFAULT_HOTKEYS,
   saveDefaultToFile: true,
   transform: {
-    load: (value: Record<string, string>) => {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, val]) => {
-          const vals = `${val}`.split('+');
-          const parts = vals.map((v) => {
-            const keyCode = Object.entries(KeyText).find(([, text]) => text === v)?.[0];
-            return keyCode || v;
-          });
-          // Convert the KeyText to corresponding key code
-          return [key, parts.join('+')];
-        })
-      );
-    },
+    load: (value: Record<string, string | number>) => loadHotkeys(value, keyCodeFromText),
     save: (value: Record<string, string>) => {
       return Object.fromEntries(
         Object.entries(value).map(([key, val]) => {
