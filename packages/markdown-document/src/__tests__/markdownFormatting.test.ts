@@ -56,3 +56,8 @@ describe("links across selected blocks", () => {
       .toBe("[First](https://example.com/a%20\\(b\\))\n\n# [Heading](https://example.com/a%20\\(b\\))\n\n- [Item](https://example.com/a%20\\(b\\))");
   });
 });
+
+it("preserves closing heading markers and fenced code inside quotes", () => {
+  const source = "## Title ##\n\n> ```js\n> const x = 1;\n> ```\n\nTail";
+  expect(toggleInlineMarkdown(source, "**")).toBe("## **Title** ##\n\n> ```js\n> const x = 1;\n> ```\n\n**Tail**");
+});

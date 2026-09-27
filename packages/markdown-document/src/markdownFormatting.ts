@@ -191,9 +191,10 @@ export function thematicBreakMarkdown() {
 function inlineMarkdownLines(markdown: string) {
   let fence: { marker: string; length: number } | undefined;
   return markdown.split(/(\r?\n)/).map((line) => {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    const match = /^(\s*(?:>\s*)*(?:(?:#{1,6}|[-+*]|\d+[.)])\s+)?(?:\[[ xX]\]\s+)?)(.*?)(\s*)$/.exec(line);
+    const marker = /^(`{3,}|~{3,})/.exec(match?.[2] ?? "")?.[1];
     if (fence) {
-      if (marker?.[0] === fence.marker && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+      if (marker?.[0] === fence.marker && marker.length >= fence.length && match?.[2] === marker) fence = undefined;
       return { line };
     }
     if (marker) {
@@ -201,10 +202,15 @@ function inlineMarkdownLines(markdown: string) {
       return { line };
     }
     // Keep block syntax and surrounding whitespace outside inline delimiters.
-    const match = /^(\s*(?:>\s*)*(?:(?:#{1,6}|[-+*]|\d+[.)])\s+)?(?:\[[ xX]\]\s+)?)(.*?)(\s*)$/.exec(line);
     if (!match?.[2] || /^(?:[-*_]\s*){3,}$/.test(line.trim()) || /^ {4}|^\t/.test(line)
       || /^\s*\|(?!\|).*\|\s*$/.test(line) || /^ {0,3}(?:=+|-+)\s*$/.test(line)) return { line };
-    const [, prefix, content, suffix] = match;
+    const [, prefix] = match;
+    let content = match[2]!, suffix = match[3]!;
+    const closingHeading = /#{1,6}\s+$/.test(prefix!) ? /\s+#+$/.exec(content)?.[0] : undefined;
+    if (closingHeading) {
+      content = content.slice(0, -closingHeading.length);
+      suffix = closingHeading + suffix;
+    }
     return { line, prefix, content, suffix };
   });
 }
