@@ -30,6 +30,7 @@ observe(async () => {
   state$.fullscreenPhoto.set(null);
   state.photosViewScrollY = 0;
   if (!folder) {
+    state$.openingFolder.set(false);
     state$.photos.set([]);
     return;
   }

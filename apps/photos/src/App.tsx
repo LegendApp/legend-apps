@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
 import { flushPhotoSettings } from "./utils/JSONManager";
 import { WindowProvider } from "@legendapp/spark/windows/react";
+import { HookWindowFullscreen } from "./hooks/HookWindowFullscreen";
 import { FullscreenPhoto } from './features/FullscreenPhoto';
 import { HotkeyHelp } from './features/HotkeyHelp';
 import { MainSidebar } from './features/MainSidebar';
@@ -50,6 +51,7 @@ function App(): React.JSX.Element {
         <FullscreenPhoto />
         <HookWindowDimensions windowDimensions$={windowDimensions$} />
         <HookKeyboard />
+        <HookWindowFullscreen />
         <TitleBar />
         <SettingsWindowManager />
         <HotkeyHelp />

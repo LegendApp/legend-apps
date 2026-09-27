@@ -11,7 +11,7 @@ import { useOnHotkeys } from '../systems/keyboard/Keyboard';
 import { windowDimensions$ } from '../legend-kit/react-native/windowDimensions';
 import { AnimatePresence } from '@legendapp/motion';
 import { Show, useValue, useObservable } from '@legendapp/state/react';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Dimensions, Pressable } from 'react-native';
 
 const Fade = { type: "tween", duration: 100, useNativeDriver: false } as const;
@@ -93,12 +93,17 @@ function springPositions(
 }
 
 export const FullscreenPhoto = () => {
-  // Use the global observable
   const fullscreenData = useValue(state$.fullscreenPhoto);
-  const photo = useValue(state$.selectedPhoto) as PhotoInfo;
+  const photo = useValue(state$.selectedPhoto);
+  return fullscreenData && photo ? <FullscreenSession photo={photo} /> : null;
+};
+
+function FullscreenSession({ photo }: { photo: PhotoInfo }) {
   const isOpenOrClosing$ = useObservable(false);
   const isOpen$ = useObservable(false);
   const showFilmstrip = useValue(() => isOpenOrClosing$.get() && settings$.state.showFilmstrip.get());
+
+  const controlsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Animation values
   const animatedOpacity = React.useRef(new Animated.Value(0)).current;
@@ -111,6 +116,13 @@ export const FullscreenPhoto = () => {
       bottom: new Animated.Value(0),
     };
   }
+
+  useEffect(() => () => {
+    clearTimeout(controlsTimer.current);
+    animatedOpacity.stopAnimation();
+    for (const value of Object.values(refAnimatedPositions.current!)) value.stopAnimation();
+    state$.isPhotoFullscreenCoveringControls.set(false);
+  }, [animatedOpacity]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   const onLoad = useCallback(() => {
@@ -138,7 +150,7 @@ export const FullscreenPhoto = () => {
         fullscreenPhoto.initialPosition.y;
 
       // Hide window controls (stoplight buttons) if on macOS
-      setTimeout(() => {
+      controlsTimer.current = setTimeout(() => {
         state$.isPhotoFullscreenCoveringControls.set(true);
       }, 150);
 
@@ -172,6 +184,7 @@ export const FullscreenPhoto = () => {
     const { x: left, y: top, width, height } = fullscreenPhoto.initialPosition;
     const right = dimensions.width - width - left;
     const bottom = dimensions.height - height - top;
+    clearTimeout(controlsTimer.current);
     state$.isPhotoFullscreenCoveringControls.set(false);
     isOpenOrClosing$.set(false);
 
@@ -192,7 +205,8 @@ export const FullscreenPhoto = () => {
       toValue: 0,
       duration: 100,
       useNativeDriver: false,
-    }).start(() => {
+    }).start(({ finished }) => {
+      if (!finished) return;
       fullscreenView.current = null;
       state$.fullscreenPhoto.set(null);
       isOpen$.set(false);
@@ -208,11 +222,6 @@ export const FullscreenPhoto = () => {
     'Close Photo-2': closeFullscreen,
     'Toggle Filmstrip': () => settings$.state.showFilmstrip.toggle(),
   });
-
-  // If no fullscreen data, don't render anything
-  if (!fullscreenData || !photo) {
-    return null;
-  }
 
   return (
     <AnimatedView
@@ -233,6 +242,7 @@ export const FullscreenPhoto = () => {
       <Show if={state$.isPhotoFullscreenCoveringControls} wrap={AnimatePresence}>
         <MotionView
           className="absolute inset-0"
+          pointerEvents="box-none"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{

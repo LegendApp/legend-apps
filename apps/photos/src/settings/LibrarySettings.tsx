@@ -7,7 +7,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 
 export const LibrarySettings = () => {
-  const librarySettings = useValue(settings$.library);
+  const libraryPaths = useValue(() => settings$.library.paths.get().slice());
 
   const handleAddFolderPath = (path: string) => {
     addLibraryPath(path);
@@ -53,8 +53,8 @@ export const LibrarySettings = () => {
         </View>
 
         <View className="gap-y-2">
-          {librarySettings.paths.length > 0 ? (
-            librarySettings.paths.map((path) => (
+          {libraryPaths.length > 0 ? (
+            libraryPaths.map((path) => (
               <View
                 key={path}
                 className="flex-row items-center justify-between bg-[#222] p-2 rounded-md border border-[#444]"
