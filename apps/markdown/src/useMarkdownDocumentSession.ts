@@ -161,6 +161,8 @@ export function useMarkdownDocumentSession() {
 
     const documentGeneration = documentGenerationRef.current;
     const originalFilename = state.filename;
+    const isCurrentDocument = () => sessionState$.filename.peek() === originalFilename
+      && documentGenerationRef.current === documentGeneration;
     let defaultName = getFilename(originalFilename);
     if (saveSeparately) defaultName = defaultName.replace(/(\.[^.]+)?$/, " copy$1");
     let directory: string | undefined = getDirectory(state.filename);
@@ -176,7 +178,7 @@ export function useMarkdownDocumentSession() {
         directory,
       });
 
-      if (!path || sessionState$.filename.peek() !== originalFilename || documentGenerationRef.current !== documentGeneration || !documentCommandsRef.current) {
+      if (!path || !isCurrentDocument() || !documentCommandsRef.current) {
         return false;
       }
 
@@ -184,10 +186,11 @@ export function useMarkdownDocumentSession() {
         throw new Error("Choose a different filename to save your local version separately.");
       }
       await documentCommandsRef.current.saveAs(path);
+      if (!isCurrentDocument()) return false;
       completeSaveAs(path);
       return true;
     } catch (error) {
-      handleError(error);
+      if (isCurrentDocument()) handleError(error);
       return false;
     }
   }, [completeSaveAs, handleError, sessionState$]);

@@ -209,6 +209,28 @@ describe("useMarkdownDocumentSession", () => {
     await view.unmount();
   });
 
+  it.each([false, true])("ignores a stale Save As write completion (failure=%s)", async (fail) => {
+    let session!: MarkdownDocumentSession;
+    let finish!: () => void;
+    const view = await render(<SessionApiHarness onSession={(value) => { session = value; }} />);
+    session.openSelectedFile("/tmp/first.md");
+    const saveAs = jest.fn(() => new Promise<void>((resolve, reject) => {
+      finish = () => fail ? reject(new Error("Old write failed")) : resolve();
+    }));
+    session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
+    (saveFileDialog as jest.Mock).mockResolvedValue("/tmp/copy.md");
+    const saving = session.saveCurrentDocumentAs();
+    await waitFor(() => expect(saveAs).toHaveBeenCalled());
+    session.openSelectedFile("/tmp/second.md");
+    session.setIsDirty(true);
+    finish();
+    expect(await saving).toBe(false);
+    expect(session.sessionState$.filename.peek()).toBe("/tmp/second.md");
+    expect(session.sessionState$.isDirty.peek()).toBe(true);
+    expect(session.sessionState$.lastError.peek()).toBeNull();
+    await view.unmount();
+  });
+
   async function openSession() {
     let session!: MarkdownDocumentSession;
     await render(<SessionApiHarness onSession={(value) => { session = value; }} />);
