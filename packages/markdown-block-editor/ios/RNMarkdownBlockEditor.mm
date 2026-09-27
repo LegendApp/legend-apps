@@ -1102,6 +1102,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 @implementation RNMarkdownBlockActivationView {
   NSString *_registeredBlockId;
+  __weak RNMarkdownEditorHost *_registeredHost;
   BOOL _contentsHidden;
   RCTUIView<RCTComponentViewProtocol> *_editorInput;
   NSValue *_pendingActivationWindowPoint;
@@ -1305,13 +1306,18 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   if (host == nil || self.blockId.length == 0) {
     return;
   }
+  if (_registeredHost == host && [_registeredBlockId isEqualToString:self.blockId]) {
+    return;
+  }
+  [self unregisterFromHost];
+  _registeredHost = host;
   [host registerActivationView:self];
   _registeredBlockId = [self.blockId copy];
 }
 
 - (void)unregisterFromHost
 {
-  RNMarkdownEditorHost *host = [self editorHost];
+  RNMarkdownEditorHost *host = _registeredHost;
   if (host != nil && _registeredBlockId.length > 0) {
     NSString *currentBlockId = self.blockId;
     self.blockId = _registeredBlockId;
@@ -1319,6 +1325,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     self.blockId = currentBlockId;
   }
   _registeredBlockId = nil;
+  _registeredHost = nil;
 }
 
 - (void)viewWillMoveToSuperview:(nullable NSView *)newSuperview
@@ -1333,6 +1340,18 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 {
   [super viewDidMoveToSuperview];
   [self registerWithHostIfNeeded];
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  // Fabric can attach an already assembled subtree. Its rows do not receive
+  // another superview callback when their ancestor finally reaches the host.
+  if (self.window != nil) {
+    [self registerWithHostIfNeeded];
+  } else {
+    [self unregisterFromHost];
+  }
 }
 
 - (void)layout

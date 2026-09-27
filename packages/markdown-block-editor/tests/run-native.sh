@@ -78,3 +78,4 @@ clang++ -std=c++20 -fobjc-arc -framework AppKit \
 
 # Copy/selection must preserve semantic formatting, not paragraph baseline styling.
 bash "$markdown_editor_dir/tests/run-extraction.sh"
+bash "$markdown_editor_dir/tests/run-activation-lifecycle.sh"
