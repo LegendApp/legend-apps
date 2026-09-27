@@ -176,14 +176,12 @@ export function onHotkeys(hotkeyCallbacks: HotkeyCallbacks) {
       MODIFIERS.every(mod => !!keysPressed$[mod].peek() === keys.includes(String(mod)));
 
     const checkHotkeys = () => {
-      if (state$.showSettings.get()) {
-        // Disable hotkeys when settings is open
-        return;
-      }
+      const disabled = state$.showSettings.peek();
+      // Keep release state current even while Settings suppresses shortcut actions.
       for (const [keys, callback] of hotkeyMap) {
         // If every key in the hotkey is pressed, call the callback
         const allKeysPressed = matches(keys);
-        if (allKeysPressed && !activeKeys.has(keys)) callback();
+        if (!disabled && allKeysPressed && !activeKeys.has(keys)) callback();
         if (allKeysPressed) activeKeys.add(keys);
         else activeKeys.delete(keys);
       }

@@ -33,3 +33,20 @@ test("shortcuts accept key code zero, update live, match modifiers, and clean up
   expect(calls).toBe(2);
   keysPressed$.set({});
 });
+
+test("the first shortcut press after closing Settings is not lost", () => {
+  bindings$.Help.set(43);
+  keysPressed$.set({});
+  state$.showSettings.set(false);
+  let opened = 0;
+  const dispose = onHotkeys({Help: () => { opened++; state$.showSettings.set(true); }});
+  keysPressed$.set({43: true});
+  expect(opened).toBe(1);
+  keysPressed$.set({}); // Key-up arrives while Settings is open.
+  state$.showSettings.set(false);
+  keysPressed$.set({43: true});
+  expect(opened).toBe(2);
+  dispose();
+  keysPressed$.set({});
+  state$.showSettings.set(false);
+});
