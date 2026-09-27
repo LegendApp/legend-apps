@@ -8252,3 +8252,59 @@ diff --git a/ios/input/ENRMAutoLinkDetector.mm b/ios/input/ENRMAutoLinkDetector.
  }
  
  + (NSString *)normalizeUrl:(NSString *)url
+diff --git a/ios/renderer/BaselineShiftTextAttributes.h b/ios/renderer/BaselineShiftTextAttributes.h
+--- a/ios/renderer/BaselineShiftTextAttributes.h
++++ b/ios/renderer/BaselineShiftTextAttributes.h
+@@ -2,5 +2,8 @@
+ #import "ENRMUIKit.h"
+ #import <Foundation/Foundation.h>
+
++// Semantic script direction, independent of paragraph layout and custom baseline styling.
++static NSString *const ENRMScriptAttributeName = @"ENRMScript";
++
+ void ENRMApplyBaselineShift(NSMutableAttributedString *output, NSRange range, CGFloat fontScale,
+                             CGFloat baselineOffsetScale);
+diff --git a/ios/renderer/SuperscriptRenderer.m b/ios/renderer/SuperscriptRenderer.m
+--- a/ios/renderer/SuperscriptRenderer.m
++++ b/ios/renderer/SuperscriptRenderer.m
+@@ -18,6 +18,7 @@
+   if (range.length == 0)
+     return;
+
++  [output addAttribute:ENRMScriptAttributeName value:@(1) range:range];
+   ENRMApplyBaselineShift(output, range, _config.superscriptFontScale, _config.superscriptBaselineOffsetScale);
+ }
+
+diff --git a/ios/renderer/SubscriptRenderer.m b/ios/renderer/SubscriptRenderer.m
+--- a/ios/renderer/SubscriptRenderer.m
++++ b/ios/renderer/SubscriptRenderer.m
+@@ -18,6 +18,7 @@
+   if (range.length == 0)
+     return;
+
++  [output addAttribute:ENRMScriptAttributeName value:@(-1) range:range];
+   ENRMApplyBaselineShift(output, range, _config.subscriptFontScale, -_config.subscriptBaselineOffsetScale);
+ }
+
+diff --git a/ios/utils/MarkdownExtractor.m b/ios/utils/MarkdownExtractor.m
+--- a/ios/utils/MarkdownExtractor.m
++++ b/ios/utils/MarkdownExtractor.m
+@@ -1,4 +1,5 @@
+ #import "MarkdownExtractor.h"
++#import "BaselineShiftTextAttributes.h"
+ #import "BlockquoteBorder.h"
+ #import "ENRMFeatureFlags.h"
+ #import "ENRMImageAttachment.h"
+@@ -300,9 +301,9 @@
+                         BOOL isStrikethrough = (strikethroughStyle != nil && [strikethroughStyle integerValue] != 0);
+                         NSNumber *underlineStyle = attrs[NSUnderlineStyleAttributeName];
+                         BOOL isUnderline = (underlineStyle != nil && [underlineStyle integerValue] != 0);
+-                        NSNumber *baselineOffset = attrs[NSBaselineOffsetAttributeName];
+-                        BOOL isSuperscript = baselineOffset != nil && [baselineOffset doubleValue] > 0;
+-                        BOOL isSubscript = baselineOffset != nil && [baselineOffset doubleValue] < 0;
++                        NSNumber *script = attrs[ENRMScriptAttributeName];
++                        BOOL isSuperscript = script.integerValue > 0;
++                        BOOL isSubscript = script.integerValue < 0;
+
+                         BOOL isHighlight = [attrs[HighlightAttributeName] boolValue];
+                         NSString *linkURL = attrs[NSLinkAttributeName];

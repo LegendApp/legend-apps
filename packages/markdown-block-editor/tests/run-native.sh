@@ -75,3 +75,6 @@ clang++ -std=c++20 -fobjc-arc -framework Foundation \
 clang++ -std=c++20 -fobjc-arc -framework AppKit \
   "$markdown_editor_dir/tests/MarkdownHistoryKey.test.mm" -o "$markdown_test_binary"
 "$markdown_test_binary"
+
+# Copy/selection must preserve semantic formatting, not paragraph baseline styling.
+bash "$markdown_editor_dir/tests/run-extraction.sh"
