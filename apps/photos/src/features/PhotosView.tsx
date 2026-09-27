@@ -1,11 +1,12 @@
 import { Photo } from './Photo';
 import { isWindowFullScreen$ } from '../hooks/HookWindowFullscreen';
 import { usePhotosViewKeyboard } from '../hooks/usePhotosViewKeyboard';
-import { getOpenFolder, getPhotosInFolder } from '../plugin-system/FileSources';
+import { getOpenFolder, getPhotosInFolder, parseFolderId } from '../plugin-system/FileSources';
 import { settings$ } from '../settings/SettingsFile';
 import { type PhotoInfo, getFolderName } from '../systems/FileManager';
 import { photoMetadatas$ } from '../systems/PhotoMetadata';
 import { state, state$ } from '../systems/State';
+import { photoKitAlbumTitle } from "../utils/photoKitPaths";
 import { ax } from '../utils/ax';
 import { cn } from '../utils/cn';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
@@ -140,7 +141,10 @@ function ListHeaderComponent() {
   }
   const subtitle = ax(dateRange, `${photos.length} photos`);
 
-  const folderDisplayName = selectedFolder ? getFolderName(selectedFolder) : '';
+  const folder = selectedFolder ? parseFolderId(selectedFolder) : null;
+  const folderDisplayName = folder
+    ? folder.path.startsWith("photokit://") ? photoKitAlbumTitle(folder.path) : getFolderName(folder.path)
+    : "";
 
   return (
     <View className={cn('pb-3', isFullScreen ? 'pt-10' : 'pt-3')}>

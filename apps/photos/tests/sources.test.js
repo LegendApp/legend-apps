@@ -6,7 +6,7 @@ mock.module("../src/native-modules/FileSystemWatcher", () => ({
   addChangeListener: () => () => {}, setWatchedDirectories: () => {},
 }));
 let finishSlowScan;
-import { photoKitAlbumPath, photoKitAlbumIdentifier } from "../src/utils/photoKitPaths";
+import { photoKitAlbumPath, photoKitAlbumIdentifier, photoKitAlbumTitle } from "../src/utils/photoKitPaths";
 const requests = [];
 mock.module("@legend-apps/photo-library", () => ({default: {
   getPermissionStatus: async () => ({status: "denied"}),
@@ -58,4 +58,10 @@ test("removing a library while its scan is pending does not restore stale sideba
   settings$.library.paths.set([]);
   finishSlowScan([]);
   await Bun.sleep(0);
+});
+
+test("album headers display encoded and legacy titles without losing slash-separated names", () => {
+  const title = "Trips / 100% #1 日本";
+  expect(photoKitAlbumTitle(photoKitAlbumPath("UUID/L0/040", title))).toBe(title);
+  expect(photoKitAlbumTitle(`photokit://UUID/L0/040/${title}`)).toBe(title);
 });
