@@ -197,6 +197,8 @@ export type MarkdownDocumentProps = {
   filename: string;
   adapter?: MarkdownDocumentAdapter;
   autoFocusFirstBlock?: boolean;
+  /** Retain the active text range while an external formatting control owns focus. */
+  preserveEditingOnBlur?: boolean;
   savePolicy?: MarkdownSavePolicy;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;

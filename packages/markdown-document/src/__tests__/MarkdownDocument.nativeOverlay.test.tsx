@@ -26,6 +26,7 @@ const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-
     inputInstances: () => Array<{
       setSelection: jest.Mock;
       setValue: jest.Mock;
+      insertLink: jest.Mock;
     }>;
   };
 };
@@ -330,6 +331,30 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it("retains the active editor while a formatting popover owns focus", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "First"), block("b", 1, "Selected text")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />); });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "b", markdown: "Selected text", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    await act(async () => editorInput(renderer).props.onChangeSelection({ start: 0, end: 8 }));
+    await act(async () => renderer.update(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" preserveEditingOnBlur savePolicy={{ autosave: false }} />));
+    await act(async () => editorInput(renderer).props.onBlur());
+    await act(async () => editorInput(renderer).props.onChangeSelection({ start: 13, end: 13 }));
+    await act(async () => commands.current!.insertLink({ url: "https://example.com" }));
+    expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)!.insertLink).toHaveBeenCalledWith("Selected", "https://example.com");
+    await flushPromises();
+    expect(nativeHost(renderer).props.activeBlockId).toBe("b");
+    await act(async () => renderer.update(<MarkdownDocument adapter={adapter} filename="test.md" preserveEditingOnBlur={false} savePolicy={{ autosave: false }} />));
+    await act(async () => editorInput(renderer).props.onBlur());
+    await flushPromises();
+    expect(nativeHost(renderer).props.activeBlockId).toBe("");
+    await act(async () => renderer.unmount());
+  });
+
   it.each([
     ["toggleBold", "**"], ["toggleItalic", "*"], ["toggleUnderline", "_"],
     ["toggleStrikethrough", "~~"], ["toggleSpoiler", "||"],

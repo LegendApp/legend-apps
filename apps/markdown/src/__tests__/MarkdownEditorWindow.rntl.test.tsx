@@ -213,6 +213,20 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
+  it("preserves the editor selection only while the link popover is open", async () => {
+    const view = await render(<MarkdownEditorWindow />);
+    const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
+    const documentProps = () => mockMarkdownDocument.mock.calls.at(-1)![0] as { preserveEditingOnBlur: boolean };
+    expect(documentProps().preserveEditingOnBlur).toBe(false);
+    await act(async () => useMarkdownMenus.mock.calls.at(-1)[0].onInsertLink());
+    expect(documentProps().preserveEditingOnBlur).toBe(true);
+    expect(view.getByTestId("markdown-document-input-surface").props.pointerEvents).toBe("none");
+    await fireEvent.press(view.getByLabelText("Cancel"));
+    expect(documentProps().preserveEditingOnBlur).toBe(false);
+    expect(view.getByTestId("markdown-document-input-surface").props.pointerEvents).toBe("auto");
+    await view.unmount();
+  });
+
   it.each([
     ["editor-ui-smoke", "ui", false],
     ["editor-selection-smoke", "selection", true],

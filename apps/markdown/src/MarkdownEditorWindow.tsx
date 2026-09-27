@@ -300,12 +300,6 @@ function MarkdownEditorSessionContent({
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={onInsertLink} />
       ) : null}
       <View style={styles.documentFrame}>
-        {isLinkPopoverOpen ? (
-          <MarkdownLinkPopover
-            onCancel={onCancelLink}
-            onSubmit={onApplyLink}
-          />
-        ) : null}
         <MarkdownUntitledPlaceholder
           foregroundColor={foregroundColor}
           isUntitledDocument={isUntitledDocument}
@@ -313,6 +307,7 @@ function MarkdownEditorSessionContent({
           session={session}
         />
         <MarkdownDocumentSurface
+          preserveEditingOnBlur={isLinkPopoverOpen}
           autosaveEnabled={autosaveEnabled}
           backgroundStyle={backgroundStyle}
           filename={filename}
@@ -324,6 +319,12 @@ function MarkdownEditorSessionContent({
           selectionToolbarEnabled={formattingToolbarMode === "selection"}
           theme={theme}
         />
+        {isLinkPopoverOpen ? (
+          <MarkdownLinkPopover
+            onCancel={onCancelLink}
+            onSubmit={onApplyLink}
+          />
+        ) : null}
       </View>
       {formattingToolbarMode === "bottom" ? (
         <MarkdownFormattingToolbar
@@ -407,6 +408,7 @@ function MarkdownUntitledPlaceholder({
 }
 
 type MarkdownDocumentSurfaceProps = {
+  preserveEditingOnBlur: boolean;
   autosaveEnabled: boolean;
   backgroundStyle: { backgroundColor: string };
   filename: string;
@@ -420,6 +422,7 @@ type MarkdownDocumentSurfaceProps = {
 };
 
 const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
+  preserveEditingOnBlur,
   autosaveEnabled,
   backgroundStyle,
   filename,
@@ -439,26 +442,29 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
   );
 
   return (
-    <MarkdownDocument
-      adapter={adapter}
-      autoFocusFirstBlock={isUntitledDocument}
-      commandsRef={session.documentCommandsRef}
-      filename={filename}
-      markdownLayout={markdownLayout}
-      markdownStyle={markdownStyle}
-      onCommandStateChange={session.setCommandState}
-      onDirtyChange={session.setIsDirty}
-      onError={session.handleError}
-      onLoadError={session.handleDocumentLoadError}
-      onLoaded={session.handleDocumentLoaded}
-      onConflictChange={session.setConflict}
-      onSaveStateChange={session.setSaveState}
-      renderSelectionToolbar={renderSelectionToolbar}
-      savePolicy={savePolicy}
-      selectionToolbarEnabled={selectionToolbarEnabled}
-      style={documentStyle}
-      theme={theme}
-    />
+    <View pointerEvents={preserveEditingOnBlur ? "none" : "auto"} style={styles.document} testID="markdown-document-input-surface">
+      <MarkdownDocument
+        preserveEditingOnBlur={preserveEditingOnBlur}
+        adapter={adapter}
+        autoFocusFirstBlock={isUntitledDocument}
+        commandsRef={session.documentCommandsRef}
+        filename={filename}
+        markdownLayout={markdownLayout}
+        markdownStyle={markdownStyle}
+        onCommandStateChange={session.setCommandState}
+        onDirtyChange={session.setIsDirty}
+        onError={session.handleError}
+        onLoadError={session.handleDocumentLoadError}
+        onLoaded={session.handleDocumentLoaded}
+        onConflictChange={session.setConflict}
+        onSaveStateChange={session.setSaveState}
+        renderSelectionToolbar={renderSelectionToolbar}
+        savePolicy={savePolicy}
+        selectionToolbarEnabled={selectionToolbarEnabled}
+        style={documentStyle}
+        theme={theme}
+      />
+    </View>
   );
 });
 

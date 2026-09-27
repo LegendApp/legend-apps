@@ -446,6 +446,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     {
       adapter = nativeMarkdownDocumentAdapter,
       autoFocusFirstBlock,
+      preserveEditingOnBlur,
       commandsRef,
       commentAnchor,
       contentContainerStyle,
@@ -562,6 +563,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onLoadErrorRef = useLatestRef(onLoadError);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
+    const preserveEditingOnBlurRef = useLatestRef(preserveEditingOnBlur);
     const onSelectionAnchorChangeRef = useLatestRef(onSelectionAnchorChange);
     const resolvedMarkdownLayout = markdownLayout ?? defaultMarkdownLayout;
     const resolvedMarkdownStyle = markdownStyle ?? defaultMarkdownStyle;
@@ -831,6 +833,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [publishTextSelectionAnchor]);
 
     const updateTextSelectionAnchor = useCallback((selection: { start: number; end: number }) => {
+      if (preserveEditingOnBlurRef.current) return;
       activeInputSelectionRef.current = selection;
       const requestId = selectionAnchorRequestRef.current + 1;
       selectionAnchorRequestRef.current = requestId;
@@ -901,7 +904,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           });
         }).catch(reportAsyncError);
       });
-    }, [getBlockIndexById,
+    }, [preserveEditingOnBlurRef, getBlockIndexById,
       inactiveOverlayWidth$,
       layoutMetrics$,
       publishTextSelectionAnchor,
@@ -1624,6 +1627,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const handleChangeMarkdownRef = useLatestRef(handleChangeMarkdown);
 
     const handleEditorBlur = useCallback((blurredBlockId: string) => {
+      if (preserveEditingOnBlurRef.current) return;
       // Keep the anchor's native text layout mounted while the document's
       // selection input owns keyboard/IME events. Hiding its editing chrome
       // would change the endpoint's coordinate space midway through selection.
@@ -1633,7 +1637,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       commitActiveBlock({ updateReactState: true }).then(() => {
-        if (activeEditor$.blockId.peek() !== blurredBlockId || documentRenderState$.blockSelection.peek()?.textSelection) {
+        if (preserveEditingOnBlurRef.current || activeEditor$.blockId.peek() !== blurredBlockId || documentRenderState$.blockSelection.peek()?.textSelection) {
           return;
         }
         nativeEditingBlockIdRef.current = null;
@@ -1646,7 +1650,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         clearTextSelectionAnchor();
         clearTypingHistoryGroup();
       }).catch(reportAsyncError);
-    }, [clearOverlayFrame, clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError, activeEditor$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId]);
+    }, [preserveEditingOnBlurRef, clearOverlayFrame, clearTextSelectionAnchor, clearTypingHistoryGroup, commitActiveBlock, reportAsyncError, activeEditor$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId]);
     const handleEditorBlurRef = useLatestRef(handleEditorBlur);
 
     const commitAndBlurActiveBlock = useCallback(() => {
