@@ -5241,6 +5241,35 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
+  it("preserves newer typing while an earlier draft commit is pending", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const gate = adapter.deferNextTransaction();
+    const { commandsRef, renderer, onError } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), "First edit");
+    await changeText(editorInput(renderer), "Latest edit");
+    await act(async () => { gate.resolve(); });
+    await flushPromises();
+    await act(async () => commandsRef.current!.save());
+    expect(adapter.sourceMarkdown).toBe("Latest edit");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("ignores a previous document's pending commit after another document loads", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const gate = adapter.deferNextTransaction();
+    const { commandsRef, renderer, onError } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), "Old edit");
+    const nextAdapter = new MountedEditorAdapter(snapshot([block("d2:b0", 0, "New document")]));
+    await act(async () => renderer.update(<MarkdownDocument adapter={nextAdapter} filename="other.md"
+      commandsRef={commandsRef} onError={onError} autoFocusFirstBlock savePolicy={{ autosave: false }} />));
+    await flushPromises();
+    await act(async () => { gate.resolve(); });
+    await flushPromises();
+    expect(nextAdapter.sourceMarkdown).toBe("New document");
+    expect(editorInput(renderer).props.defaultValue).toBe("New document");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("waits for a pending edit transaction before save completes", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const transactionGate = adapter.deferNextTransaction();

@@ -1056,6 +1056,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const runCommitActiveBlock = useCallback(async (options: { updateReactState?: boolean; throwOnError?: boolean } = {}) => {
       const documentState = documentState$.peek();
+      const loadVersion = loadVersionRef.current;
       const updateReactState = options.updateReactState ?? true;
       const activeBlockIdValue = activeEditor$.blockId.peek();
       const markdown = draftMarkdown$.peek();
@@ -1079,6 +1080,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockId: activeBlockIdValue,
           markdown,
         });
+        if (loadVersion !== loadVersionRef.current) return;
         validateTransactionResult(result);
         const firstChangedBlockId = result.changedRange.blockIds[0];
         const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
@@ -1116,18 +1118,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             nextActiveBlock = result.changedBlocks[0];
           }
           if (nextActiveBlock) {
+            const hasNewerDraft = draftMarkdown$.peek() !== markdown;
             activeBlockSnapshotRef.current = nextActiveBlock;
             activeEditor$.blockId.set(nextActiveBlock.id);
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
-            draftMarkdown$.set(nextActiveBlock.markdown);
+            if (!hasNewerDraft) draftMarkdown$.set(nextActiveBlock.markdown);
             committedMarkdownRef.current = nextActiveBlock.markdown;
-            if (updateReactState || !usesNativeEditorOverlay) {
+            if (!hasNewerDraft && (updateReactState || !usesNativeEditorOverlay)) {
               setDraftMarkdown(nextActiveBlock.markdown);
               setActiveActivationMode("programmatic");
               setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
             }
             setActiveBlockId(nextActiveBlock.id);
-            if (!isSingleActiveBlockChange) {
+            if (!hasNewerDraft && !isSingleActiveBlockChange) {
               activeInputRef.current?.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
             }
           } else {
@@ -1138,6 +1141,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         // in order so the list's keys, count, and measurements stay in sync.
         applyTransactionResult(result, undefined, retainedBlock);
       } catch (error) {
+        if (loadVersion !== loadVersionRef.current) return;
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, committedMarkdownRef.current);
           draftMarkdown$.set(committedMarkdownRef.current);
