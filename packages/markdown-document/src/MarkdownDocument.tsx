@@ -2765,24 +2765,31 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         setNextSaveState("saving");
 
         async function performSave() {
-          await commitActiveBlock({ updateReactState: false, throwOnError: true });
-          const savingRevision = currentRevisionRef.current;
-          if (overwrite) {
-            if (!adapter.overwrite) throw new Error("This document does not support overwriting conflicts.");
-            await adapter.overwrite(documentId);
-          } else if (saveFilename) {
-            await adapter.saveAs(documentId, saveFilename);
-          } else {
-            await adapter.save(documentId);
-          }
-          if (loadVersion !== loadVersionRef.current) return;
+          // Close and Save As rely on completion meaning every current edit is durable.
+          // Edits may arrive while an adapter write is pending, so flush until stable.
+          let savingRevision: number;
+          do {
+            await commitActiveBlock({ updateReactState: false, throwOnError: true });
+            if (loadVersion !== loadVersionRef.current) return;
+            savingRevision = currentRevisionRef.current;
+            if (overwrite) {
+              if (!adapter.overwrite) throw new Error("This document does not support overwriting conflicts.");
+              await adapter.overwrite(documentId);
+            } else if (saveFilename) {
+              await adapter.saveAs(documentId, saveFilename);
+            } else {
+              await adapter.save(documentId);
+            }
+            if (loadVersion !== loadVersionRef.current) return;
+          } while (currentRevisionRef.current !== savingRevision ||
+            (activeEditor$.blockId.peek() && draftMarkdown$.peek() !== committedMarkdownRef.current));
+          clearAutosaveTimer();
           conflictRef.current = false;
           onConflictChangeRef.current?.(null);
           savedRevisionRef.current = savingRevision;
           setNextSaveState("idle");
-          isDirtyRef.current = currentRevisionRef.current !== savedRevisionRef.current;
-          onDirtyChangeRef.current?.(isDirtyRef.current);
-          if (isDirtyRef.current) scheduleAutosave();
+          isDirtyRef.current = false;
+          onDirtyChangeRef.current?.(false);
         }
 
         const savePromise = performSave();
@@ -2821,7 +2828,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         onDirtyChangeRef,
         onConflictChangeRef,
         onErrorRef,
-        scheduleAutosave,
+        activeEditor$,
+        draftMarkdown$,
         setNextSaveState,
       ],
     );

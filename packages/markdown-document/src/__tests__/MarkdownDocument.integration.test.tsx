@@ -5222,6 +5222,25 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.saveCount).toBe(1);
   });
 
+  it.each(["save", "saveAs", "overwrite"] as const)("flushes edits made during asynchronous %s before reporting completion", async (command) => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const gate = new Deferred<void>();
+    const writes: string[] = [];
+    adapter[command] = async () => {
+      writes.push(adapter.sourceMarkdown);
+      if (writes.length === 1) await gate.promise;
+    };
+    const { commandsRef, renderer, onDirtyChange } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), "First edit");
+    let saving!: Promise<void>;
+    await act(async () => { saving = command === "saveAs" ? commandsRef.current!.saveAs("copy.md") : commandsRef.current![command](); await Promise.resolve(); });
+    expect(writes).toEqual(["First edit"]);
+    await changeText(editorInput(renderer), "Latest edit");
+    await act(async () => { gate.resolve(); await saving; });
+    expect(writes).toEqual(["First edit", "Latest edit"]);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("waits for a pending edit transaction before save completes", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const transactionGate = adapter.deferNextTransaction();
