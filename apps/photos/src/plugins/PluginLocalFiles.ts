@@ -25,7 +25,9 @@ export const PluginLocalFiles: SourcePlugin = {
   isLoaded: () => folders$.get() !== null,
   initialize: async () => {
     folders$.get();
+    let scanVersion = 0;
     observe(async () => {
+      const version = ++scanVersion;
       try {
         // Use the folder change event to trigger refresh
         eventFolderChange.get();
@@ -34,12 +36,13 @@ export const PluginLocalFiles: SourcePlugin = {
         if (libraryPaths.length > 0) {
           const ret = await listFoldersWithPhotosRecursive(libraryPaths);
 
-          folders$.set(ret);
+          if (version === scanVersion) folders$.set(ret);
         } else {
           folders$.set([]);
         }
       } catch (error) {
         console.error('Error listing folders in LocalFiles plugin:', error);
+        if (version === scanVersion) folders$.set([]);
       }
       return [];
     });

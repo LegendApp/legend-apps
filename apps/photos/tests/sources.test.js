@@ -1,4 +1,11 @@
 import { expect, mock, test } from "bun:test";
+import { observable } from "@legendapp/state";
+const settings$ = observable({library: {paths: []}});
+mock.module("../src/settings/SettingsFile", () => ({settings$}));
+mock.module("../src/native-modules/FileSystemWatcher", () => ({
+  addChangeListener: () => () => {}, setWatchedDirectories: () => {},
+}));
+let finishSlowScan;
 import { photoKitAlbumPath, photoKitAlbumIdentifier } from "../src/utils/photoKitPaths";
 const requests = [];
 mock.module("@legend-apps/photo-library", () => ({default: {
@@ -7,8 +14,11 @@ mock.module("@legend-apps/photo-library", () => ({default: {
   getPhotosInAlbum: async (id) => { requests.push(id); return [{identifier: "asset/L0/001", uri: "/tmp/photo.jpg", filename: "photo.jpg", creationDate: "2024-01-01", modificationDate: "2024-01-02"}]; },
 }}));
 mock.module("@legendapp/spark/files", () => ({
-  list: async (path) => path === "/photos" ? ["b.HEIC", "a.jpg", "notes.txt", "nested"] : ["c.png"],
-  stat: async (path) => ({type: path.endsWith("nested") ? "directory" : "file", size: 10, modifiedAt: 1000}),
+  list: async (path) => path === "/slow" ? new Promise(resolve => { finishSlowScan = resolve; }) : path === "/changing" ? ["kept.jpg", "removed.jpg", "folder.jpg"] : path === "/photos" ? ["b.HEIC", "a.jpg", "notes.txt", "nested"] : ["c.png"],
+  stat: async (path) => {
+    if (path.endsWith("removed.jpg")) throw new Error("File no longer exists");
+    return {type: path.endsWith("nested") || path.endsWith("folder.jpg") ? "directory" : "file", size: 10, modifiedAt: 1000};
+  },
 }));
 const { PluginPhotoKit } = await import("../src/plugins/PluginPhotoKit");
 const { listPhotosInFolder, scanFolderRecursive } = await import("../src/systems/FileManager");
@@ -31,4 +41,21 @@ test("Spark directory entries retain local metadata keys and case-insensitive ph
   expect(photos.map(photo => photo.id)).toEqual(["/photos/a.jpg", "/photos/b.HEIC"]);
   expect(photos[0].mtime).toEqual(new Date(1000));
   expect(await scanFolderRecursive("/photos")).toEqual(["/photos/nested", "/photos"]);
+});
+
+test("a disappearing entry does not hide remaining photos or treat folders as images", async () => {
+  expect((await listPhotosInFolder("/changing")).map(photo => photo.name)).toEqual(["kept.jpg"]);
+});
+test("removing a library while its scan is pending does not restore stale sidebar folders", async () => {
+  const { PluginLocalFiles } = await import("../src/plugins/PluginLocalFiles");
+  settings$.library.paths.set(["/slow"]);
+  await PluginLocalFiles.initialize();
+  settings$.library.paths.set([]);
+  finishSlowScan(["photo.jpg"]);
+  await Bun.sleep(0);
+  settings$.library.paths.set(["/slow"]);
+  expect(PluginLocalFiles.getSidebarGroups()).toEqual([]);
+  settings$.library.paths.set([]);
+  finishSlowScan([]);
+  await Bun.sleep(0);
 });

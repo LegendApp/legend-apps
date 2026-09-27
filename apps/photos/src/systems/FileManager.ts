@@ -4,11 +4,19 @@ export interface ReadDirResItemT {
   isDirectory(): boolean; isFile(): boolean;
 }
 async function readDir(path: string): Promise<ReadDirResItemT[]> {
-  return Promise.all((await list(path)).map(async name => {
+  const entries = await Promise.all((await list(path)).map(async name => {
     const fullPath = `${path.replace(/\/$/, "")}/${name}`;
-    const info = await stat(fullPath);
+    let info;
+    try {
+      info = await stat(fullPath);
+    } catch (error) {
+      // Files can disappear between listing a directory and reading their metadata.
+      console.warn(`Unable to read photo directory entry ${fullPath}:`, error);
+      return null;
+    }
     return {name, path: fullPath, size: info.size, mtime: new Date(info.modifiedAt), ctime: new Date(info.modifiedAt), isDirectory: () => info.type === "directory", isFile: () => info.type === "file"};
   }));
+  return entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 }
 
 // Supported photo file extensions
@@ -58,7 +66,7 @@ export async function listPhotosInFolder(folderPath: string): Promise<PhotoInfo[
 
     // Filter to only include photo files and extract just the filename
     return files
-      .filter((file) => isPhotoFile(file.name))
+      .filter((file) => file.isFile() && isPhotoFile(file.name))
       .map((file) => ({
         ...file,
         id: `${folderPath}/${file.name}`,
