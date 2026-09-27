@@ -55,6 +55,7 @@ import {
   toggleBlockquoteMarkdown,
   toggleCodeBlockMarkdown,
   toggleOrderedListMarkdown,
+  toggleInlineMarkdown,
   toggleTaskListMarkdown,
   toggleUnorderedListMarkdown,
   type HeadingLevel,
@@ -2473,7 +2474,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [commitActiveBlock, getBlockIdAtIndex, getBlockIndexById, reportAsyncError, setKeyboardBlockSelection, setNextBlockSelection, activeEditor$, draftMarkdown$, documentRenderState$],
     );
 
-    const runActiveInputCommand = useCallback((command: () => void) => {
+    const runActiveInputCommand = useCallback((command: () => void, delimiter?: Parameters<typeof toggleInlineMarkdown>[1]) => {
+      if (delimiter && documentRenderState$.blockSelection.peek()) {
+        formatCurrentBlockRange((markdown) => toggleInlineMarkdown(markdown, delimiter));
+        return;
+      }
       const input = activeInputRef.current;
       if (!input) {
         return;
@@ -2487,7 +2492,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activeInputSelectionForBlock(activeBlock, selection.end, draftMarkdown$.peek()),
       );
       command();
-    }, [draftMarkdown$]);
+    }, [draftMarkdown$, documentRenderState$, formatCurrentBlockRange]);
 
     const handleBlockSelectionKeyPress = useCallback(
       (event: { nativeEvent: { key: string } }) => {
@@ -3208,7 +3213,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           formatCurrentBlockRange(setParagraphMarkdown);
         },
         toggleBold() {
-          runActiveInputCommand(() => activeInputRef.current?.toggleBold());
+          runActiveInputCommand(() => activeInputRef.current?.toggleBold(), "**");
         },
         toggleBlockquote() {
           formatCurrentBlockRange(toggleBlockquoteMarkdown);
@@ -3217,22 +3222,22 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           formatCurrentBlockRange(toggleCodeBlockMarkdown);
         },
         toggleItalic() {
-          runActiveInputCommand(() => activeInputRef.current?.toggleItalic());
+          runActiveInputCommand(() => activeInputRef.current?.toggleItalic(), "*");
         },
         toggleOrderedList() {
           formatCurrentBlockRange(toggleOrderedListMarkdown);
         },
         toggleSpoiler() {
-          runActiveInputCommand(() => activeInputRef.current?.toggleSpoiler());
+          runActiveInputCommand(() => activeInputRef.current?.toggleSpoiler(), "||");
         },
         toggleStrikethrough() {
-          runActiveInputCommand(() => activeInputRef.current?.toggleStrikethrough());
+          runActiveInputCommand(() => activeInputRef.current?.toggleStrikethrough(), "~~");
         },
         toggleTaskList() {
           formatCurrentBlockRange(toggleTaskListMarkdown);
         },
         toggleUnderline() {
-          runActiveInputCommand(() => activeInputRef.current?.toggleUnderline());
+          runActiveInputCommand(() => activeInputRef.current?.toggleUnderline(), "_");
         },
         toggleUnorderedList() {
           formatCurrentBlockRange(toggleUnorderedListMarkdown);
