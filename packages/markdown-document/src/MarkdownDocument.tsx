@@ -1783,8 +1783,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           applyTransactionResult(result);
           blockSelectionGestureRef.current = null;
           setNextBlockSelection(null);
-          const nextActiveBlock = result.changedBlocks[0];
+          const pasteCaret = getPasteCaret(result.changedBlocks, selectedBlocks.blocks[0]!.sourceStartByte, partial?.insertionPrefix ?? markdown);
+          const nextActiveBlock = pasteCaret?.block ?? result.changedBlocks[0];
           if (nextActiveBlock) {
+            const nativeCaret = usesNativeEditorOverlay && pasteCaret && containerRef.current;
             const nextSelection = Math.min(partial?.caret ?? markdown.length, nextActiveBlock.markdown.length);
             activeBlockSnapshotRef.current = nextActiveBlock;
             activeEditor$.blockId.set(nextActiveBlock.id);
@@ -1792,7 +1794,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             draftMarkdown$.set(nextActiveBlock.markdown);
             committedMarkdownRef.current = nextActiveBlock.markdown;
             setDraftMarkdown(nextActiveBlock.markdown);
-            setActiveActivationMode("programmatic");
+            setActiveActivationMode(nativeCaret ? "nativePointer" : "programmatic");
             setActiveSelection(nextSelection);
             setActiveBlockId(nextActiveBlock.id);
             activeInputSelectionRef.current = { start: nextSelection, end: nextSelection };
@@ -1800,7 +1802,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const input = activeInputRef.current;
               input?.setValue(nextActiveBlock.markdown);
               input?.focus();
-              input?.setSelection(nextSelection, nextSelection);
+              if (!nativeCaret) input?.setSelection(nextSelection, nextSelection);
+            }
+            if (nativeCaret) {
+              MarkdownEditorHostCommands.setSelectionAfterMarkdown(containerRef.current!, nextActiveBlock.id, pasteCaret.markdownPrefix);
+              await prepareBlockIndexForKeyboardFocus(nextActiveBlock.index, "down");
             }
           }
           markDirty();
@@ -1810,6 +1816,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
       },
       [adapter,
+        prepareBlockIndexForKeyboardFocus,
         applyTransactionResult,
         documentRenderState$,
         commitActiveBlock,

@@ -159,20 +159,33 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
       } satisfies MarkdownBlockSnapshot;
       const deleteCount = endIndex - startIndex + 1;
       const retiredBlockIds = this.blocks.slice(startIndex + 1, endIndex + 1).map((candidate) => candidate.id);
-      this.blocks.splice(startIndex, deleteCount, nextBlock);
+      const changedBlocks = this.options.splitParagraphUpdates
+        ? markdown.split("\n\n").map((text, offset) => ({
+          ...nextBlock, markdown: text, index: startIndex + offset,
+          id: offset === 0 ? nextBlock.id : this.nextBlockId(),
+        })) : [nextBlock];
+      let sourceOffset = nextBlock.sourceStartByte;
+      for (const changed of changedBlocks) {
+        changed.sourceStartByte = sourceOffset;
+        changed.sourceEndByte = sourceOffset + Buffer.byteLength(changed.markdown);
+        changed.contentStartByte = changed.sourceStartByte;
+        changed.contentEndByte = changed.sourceEndByte;
+        sourceOffset = changed.sourceEndByte + 2;
+      }
+      this.blocks.splice(startIndex, deleteCount, ...changedBlocks);
       this.blocks = this.blocks.map((candidate, index) => ({ ...candidate, index }));
       this.revision += 1;
 
       return {
-        changedBlocks: [nextBlock],
+        changedBlocks,
         changedRange: {
-          blockIds: [nextBlock.id],
+          blockIds: changedBlocks.map((changed) => changed.id),
           deleteCount,
           startBlockIndex: startIndex,
         },
         retiredBlockIds,
         revision: this.revision,
-        sourceLength: markdown.length,
+        sourceLength: sourceOffset,
       };
     }
 
@@ -317,6 +330,29 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it.each(["Last", "**👩🏽‍💻 café**"])("places the caret after a multi-paragraph selection paste ending in %s", async (last) => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Alpha old"), block("b", 1, "remove suffix"), block("tail", 2, "Tail")]), { splitParagraphUpdates: true });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+      savePolicy={{ autosave: false }} />, { createNodeMock: () => ({ focus: jest.fn() }) }); });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "a", markdown: "Alpha old", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    const selection = {
+      anchor: { blockId: "a", index: 0, offset: 6, beforeMarkdown: "Alpha ", afterMarkdown: "old" },
+      focus: { blockId: "b", index: 1, offset: 6, beforeMarkdown: "remove", afterMarkdown: " suffix" },
+      sameBlockMarkdown: "",
+    };
+    await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: false } }));
+    await act(async () => nativeHost(renderer).props.onTextSelectionAction({ nativeEvent: { action: "v", text: `First\n\n${last}` } }));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe(`Alpha First\n\n${last} suffix\n\nTail`);
+    expect(nativeHost(renderer).props.activeBlockId).toBe(adapter.blockIds[1]);
+    expect(MarkdownEditorHostCommands.setSelectionAfterMarkdown).toHaveBeenLastCalledWith(expect.anything(), adapter.blockIds[1], last);
+    await act(async () => renderer.unmount());
+  });
+
   it.each([
     ["orderedList", "1. First\n2. Second"],
     ["unorderedList", "- [ ] First\n- [x] Second"],
@@ -459,7 +495,7 @@ describe("native document text selection", () => {
     const onError = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />);
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" ref={commands} onError={onError} savePolicy={{ autosave: false }} />, { createNodeMock: () => ({ focus: jest.fn() }) });
     });
     await flushPromises();
     const selection = {
@@ -478,8 +514,9 @@ describe("native document text selection", () => {
     await flushPromises();
     expect(adapter.sourceMarkdown).toBe(`Hello **wo**${action === "v" ? "X" : ""}*od* bye`);
     expect(inputInstance.setValue).toHaveBeenCalledWith(adapter.sourceMarkdown);
-    const caret = action === "v" ? 9 : 8;
-    expect(inputInstance.setSelection).toHaveBeenCalledWith(caret, caret);
+    expect(MarkdownEditorHostCommands.setSelectionAfterMarkdown).toHaveBeenLastCalledWith(
+      expect.anything(), "a", `Hello **wo**${action === "v" ? "X" : ""}`,
+    );
     expect(nativeHost(renderer).props.textSelectionJson).toBe("");
     await act(async () => commands.current?.undo());
     await flushPromises();

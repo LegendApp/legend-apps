@@ -28,9 +28,9 @@ function joinInlineFragments(left: string, right: string) {
     if (before.endsWith(delimiter[0]!) || after.startsWith(delimiter[0]!)) continue;
     const escapes = before.match(/\\+$/)?.[0].length ?? 0;
     if (escapes % 2 === 1 || !before.includes(delimiter) || !after.includes(delimiter)) continue;
-    return before + after;
+    return { markdown: before + after, leftEnd: before.length };
   }
-  return left + right;
+  return { markdown: left + right, leftEnd: left.length };
 }
 
 export function selectedTextFragments(selection: MarkdownTextSelection, blocks: readonly MarkdownBlockSnapshot[]) {
@@ -60,10 +60,17 @@ export function replaceSelectedText(selection: MarkdownTextSelection, blocks: re
   // Paragraphs form one text flow. Distinct structural blocks retain their
   // boundary, rather than splicing a heading/list/fence into a paragraph.
   const joinsText = selected.startIndex === selected.endIndex || (first.type === "paragraph" && last.type === "paragraph");
-  const markdown = joinsText
-    ? first.type === "paragraph" && last.type === "paragraph"
-      ? joinInlineFragments(joinInlineFragments(before, insertion), after)
-      : before + insertion + after
-    : [before, insertion, after].filter(Boolean).join("\n\n");
-  return { ...selected, replacement: markdown, caret: selected.start.offset + insertion.length };
+  let replacement: string;
+  let insertionPrefix: string;
+  if (joinsText) {
+    const paragraphs = first.type === "paragraph" && last.type === "paragraph";
+    const leading = paragraphs ? joinInlineFragments(before, insertion).markdown : before + insertion;
+    const joined = paragraphs ? joinInlineFragments(leading, after) : { markdown: leading + after, leftEnd: leading.length };
+    replacement = joined.markdown;
+    insertionPrefix = replacement.slice(0, joined.leftEnd);
+  } else {
+    replacement = [before, insertion, after].filter(Boolean).join("\n\n");
+    insertionPrefix = [before, insertion].filter(Boolean).join("\n\n");
+  }
+  return { ...selected, replacement, insertionPrefix, caret: selected.start.offset + insertion.length };
 }

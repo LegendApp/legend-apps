@@ -24,7 +24,15 @@ describe("document text selection", () => {
       anchor: { ...selection.anchor, beforeMarkdown: "Hello **wo**" },
       focus: { ...selection.focus, afterMarkdown: "**rld** bye" },
     };
-    expect(replaceSelectedText(sameFormat, blocks, "")?.replacement).toBe("Hello **world** bye");
+    expect(replaceSelectedText(sameFormat, blocks, "")).toMatchObject({
+      replacement: "Hello **world** bye", insertionPrefix: "Hello **wo",
+    });
+    expect(replaceSelectedText(sameFormat, blocks, "**👩🏽‍💻 café**")).toMatchObject({
+      replacement: "Hello **wo👩🏽‍💻 caférld** bye", insertionPrefix: "Hello **wo👩🏽‍💻 café",
+    });
+    expect(replaceSelectedText(sameFormat, blocks, "First\n\n**Last**")).toMatchObject({
+      replacement: "Hello **wo**First\n\n**Lastrld** bye", insertionPrefix: "Hello **wo**First\n\n**Last",
+    });
     expect(replaceSelectedText(sameFormat, blocks, "X")?.replacement).toBe("Hello **wo**X**rld** bye");
   });
   it("uses native serialization inside one block and preserves Unicode offsets", () => {
@@ -35,7 +43,9 @@ describe("document text selection", () => {
   });
   it("preserves structural boundaries and rejects stale deleted endpoints", () => {
     const structural = [block("a", "# Hello", "heading"), blocks[2]!];
-    expect(replaceSelectedText(selection, structural, "")?.replacement).toBe("Hello **wo**\n\n*od* bye");
+    expect(replaceSelectedText(selection, structural, "")).toMatchObject({
+      replacement: "Hello **wo**\n\n*od* bye", insertionPrefix: "Hello **wo**",
+    });
     expect(replaceSelectedText(selection, [blocks[0]!], "")).toBeUndefined();
   });
 });
