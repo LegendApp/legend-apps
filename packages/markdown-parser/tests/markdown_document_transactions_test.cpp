@@ -247,6 +247,25 @@ void testLoadsBaselineBlocks() {
   expectDocumentInvariants(loaded.document);
 }
 
+void testSavePreservesDocumentSymlinks() {
+  for (bool saveAs : {false, true}) {
+    TempFile target("Original");
+    TempFile link;
+    std::remove(link.path.c_str());
+    expect(symlink(target.path.c_str(), link.path.c_str()) == 0, "create document symlink");
+    HybridMarkdownParser parser;
+    auto document = parser.loadMarkdownFile(saveAs ? target.path : link.path, 1000)->get().document;
+    document->applyTransaction(updateBlock(document->getBlockKey(0), "Edited"));
+    if (saveAs) document->saveAs(link.path); else document->save();
+    struct stat info;
+    expect(lstat(link.path.c_str(), &info) == 0 && S_ISLNK(info.st_mode), "saving must retain the document symlink");
+    std::ifstream file(target.path);
+    const std::string contents((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    expectEqual(contents, "Edited", "save updates the symlink target");
+    expectEqual(document->getFileStatus()->get(), "unchanged", "symlink save establishes the new baseline");
+  }
+}
+
 void testSavePreservesPermissions() {
   LoadedDocument loaded("Original");
   for (mode_t mode : {0600, 0640, 0644}) {
@@ -869,6 +888,7 @@ int main() {
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"save preserves permissions", testSavePreservesPermissions},
+      {"save preserves document symlinks", testSavePreservesDocumentSymlinks},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
       {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
       {"creates document from markdown string", testCreatesDocumentFromMarkdownString},

@@ -910,7 +910,11 @@ std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockI
   return blockSequence_->markdownForId(blockId);
 }
 
-void HybridMarkdownDocument::writeToFilePath(const std::string& filePath, bool checkBaseline) {
+void HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, bool checkBaseline) {
+  // Atomic replacement must replace the document, not a symbolic link used to open it.
+  const std::string filePath = std::filesystem::is_symlink(requestedPath)
+      ? std::filesystem::canonical(requestedPath).string()
+      : requestedPath;
   const auto requireUnchanged = [&]() {
     if (checkBaseline && !filePath_.empty() &&
         std::filesystem::weakly_canonical(filePath) == std::filesystem::weakly_canonical(filePath_)) {
