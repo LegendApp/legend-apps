@@ -5,7 +5,7 @@ import { type KeyboardEventCodeHotkey, keysPressed$ } from '../systems/keyboard/
 import { KeyCodes, KeyText } from '../systems/keyboard/KeyboardManager';
 import { cn } from '../utils/cn';
 import { useValue, useObservable, useObserveEffect } from '@legendapp/state/react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 /**
@@ -14,8 +14,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
  * and allow editing the keys
  */
 export function HotkeySettings() {
-  const hotkeys = useValue(hotkeys$);
-  const hotkeyNames = Object.keys(hotkeys);
+  const hotkeyNames = useValue(() => Object.keys(hotkeys$.get()));
 
   return (
     <ScrollView contentContainerClassName="p-5">
@@ -29,7 +28,6 @@ export function HotkeySettings() {
           key={name}
           name={name as HotkeyName}
           description={HotkeyMetadata[name as HotkeyName]?.description || ''}
-          keyCode={hotkeys[name as HotkeyName]}
         />
       ))}
     </ScrollView>
@@ -39,10 +37,10 @@ export function HotkeySettings() {
 interface HotkeyItemProps {
   name: HotkeyName;
   description: string;
-  keyCode: KeyboardEventCodeHotkey;
 }
 
-function HotkeyItem({ name, description, keyCode }: HotkeyItemProps) {
+function HotkeyItem({ name, description }: HotkeyItemProps) {
+  const keyCode = useValue(hotkeys$[name]);
   return (
     <View className="flex-row justify-between items-center my-2">
       <View className="flex-1">
@@ -64,6 +62,9 @@ function HotkeyInput({ hotkeyName, currentKeyCode }: HotkeyInputProps) {
   const isEditing = useValue(isEditing$);
   const accumulatedKeys$ = useObservable<number[]>([]);
   const accumulatedKeys = useValue(accumulatedKeys$);
+  useEffect(() => () => {
+    if (isEditing$.peek()) state$.listeningForKeyPress.set(false);
+  }, [isEditing$]);
 
   // Convert current keyCode to display text
   const getDisplayText = () => {
