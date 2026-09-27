@@ -185,6 +185,12 @@ static NSUInteger hitOffset(LEMarkdownSelectionBlock *block, NSPoint windowPoint
     if (!NSPointInRect([_host convertPoint:event.locationInWindow fromView:nil], _host.bounds)) return event;
     LEMarkdownSelectionBlock *block = [self blockAtPoint:event.locationInWindow];
     if (!block || !NSPointInRect([block.view convertPoint:event.locationInWindow fromView:nil], block.view.bounds)) return event;
+    // A floating toolbar may cover the row. Only start a document selection
+    // when AppKit's actual hit target belongs to that row.
+    NSView *root = _host.window.contentView;
+    NSPoint rootPoint = root.superview ? [root.superview convertPoint:event.locationInWindow fromView:nil] : event.locationInWindow;
+    NSView *target = [root hitTest:rootPoint];
+    if (target != block.view && ![target isDescendantOf:block.view]) return event;
     BOOL hadSelection = _selecting;
     [self setSelectionJSON:@""];
     if (hadSelection && self.onChange) self.onChange(@"", NO);

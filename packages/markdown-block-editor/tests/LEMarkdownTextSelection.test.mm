@@ -64,6 +64,14 @@ int main() {
     assert([selection[@"anchor"][@"afterMarkdown"] isEqualToString:@"st paragraph"]);
     [controller handleEvent:mouse(window, NSEventTypeLeftMouseUp, pointAt(b, 5))];
     assert(!dragging);
+    // Floating controls can overlap a row geometrically without targeting it.
+    NSButton *toolbarButton = [[NSButton alloc] initWithFrame:a.view.frame];
+    [host addSubview:toolbarButton positioned:NSWindowAbove relativeTo:nil];
+    NSDictionary *selectionBeforeToolbar = selection;
+    NSEvent *toolbarClick = mouse(window, NSEventTypeLeftMouseDown, pointAt(a, 3));
+    assert([controller handleEvent:toolbarClick] == toolbarClick);
+    assert(controller.hasSelection && [selection isEqual:selectionBeforeToolbar]);
+    [toolbarButton removeFromSuperview];
     // Endpoint state survives virtualization; mounted rows only supply geometry.
     blocks = @[b]; [controller refresh]; assert(controller.hasSelection);
     blocks = @[a, b]; [controller refresh];
