@@ -231,8 +231,69 @@ export function toggleInlineMarkdown(markdown: string, delimiter: "**" | "*" | "
       : wrapped ? content : delimiter + content + delimiter) + suffix).join("");
 }
 
+function codeSpanEnd(markdown: string, start: number) {
+  const delimiter = /^`+/.exec(markdown.slice(start))?.[0];
+  if (!delimiter) return start;
+  let end = markdown.indexOf(delimiter, start + delimiter.length);
+  while (end >= 0) {
+    if (markdown[end - 1] !== "`" && markdown[end + delimiter.length] !== "`") return end + delimiter.length;
+    end = markdown.indexOf(delimiter, end + delimiter.length);
+  }
+  return start;
+}
+
+function linkPartEnd(markdown: string, start: number, opening: string, closing: string) {
+  let depth = 1;
+  for (let index = start + 1; index < markdown.length; index++) {
+    const character = markdown[index];
+    if (character === "\\") { index++; continue; }
+    if (opening === "[" && character === "`") {
+      const end = codeSpanEnd(markdown, index);
+      if (end > index) { index = end - 1; continue; }
+    }
+    if (opening === "(" && (character === "<" || ((character === '"' || character === "'") && /\s/.test(markdown[index - 1]!)))) {
+      const endQuote = character === "<" ? ">" : character;
+      for (index++; index < markdown.length && markdown[index] !== endQuote; index++) {
+        if (markdown[index] === "\\") index++;
+      }
+      continue;
+    }
+    if (character === opening) depth++;
+    if (character === closing && --depth === 0) return index;
+  }
+  return -1;
+}
+
+/** A new link must contain the old labels, never nested link destinations. */
+function withoutInlineLinks(markdown: string): string {
+  let result = "";
+  for (let index = 0; index < markdown.length;) {
+    if (markdown[index] === "\\") { result += markdown.slice(index, index + 2); index += 2; continue; }
+    const codeEnd = markdown[index] === "`" ? codeSpanEnd(markdown, index) : index;
+    if (codeEnd > index) { result += markdown.slice(index, codeEnd); index = codeEnd; continue; }
+    const autolink = markdown[index] === "<"
+      ? /^<([a-z][a-z\d+.-]*:[^<>\s]*|[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+)>/i.exec(markdown.slice(index)) : null;
+    if (autolink) { result += autolink[1]; index += autolink[0].length; continue; }
+    const image = markdown[index] === "!" && markdown[index + 1] === "[";
+    const labelStart = index + (image ? 1 : 0);
+    if (markdown[labelStart] === "[") {
+      const labelEnd = linkPartEnd(markdown, labelStart, "[", "]");
+      const destinationEnd = labelEnd >= 0 && markdown[labelEnd + 1] === "("
+        ? linkPartEnd(markdown, labelEnd + 1, "(", ")") : -1;
+      if (destinationEnd >= 0) {
+        result += image ? markdown.slice(index, destinationEnd + 1)
+          : withoutInlineLinks(markdown.slice(labelStart + 1, labelEnd));
+        index = destinationEnd + 1;
+        continue;
+      }
+    }
+    result += markdown[index++];
+  }
+  return result;
+}
+
 export function linkSelectedMarkdown(markdown: string, url: string) {
   const destination = url.replace(/[\\()]/g, "\\$&").replace(/\s/g, (space) => encodeURIComponent(space));
   return inlineMarkdownLines(markdown).map(({ line, prefix, content, suffix }) => content === undefined
-    ? line : `${prefix}[${content}](${destination})${suffix}`).join("");
+    ? line : `${prefix}[${withoutInlineLinks(content)}](${destination})${suffix}`).join("");
 }

@@ -61,3 +61,27 @@ it("preserves closing heading markers and fenced code inside quotes", () => {
   const source = "## Title ##\n\n> ```js\n> const x = 1;\n> ```\n\nTail";
   expect(toggleInlineMarkdown(source, "**")).toBe("## **Title** ##\n\n> ```js\n> const x = 1;\n> ```\n\n**Tail**");
 });
+
+it("replaces existing destinations when linking an already-linked selection", () => {
+  expect(linkSelectedMarkdown("[First](https://old.example)\n\nA [**second**](https://old.example/path_(one)) link", "https://new.example"))
+    .toBe("[First](https://new.example)\n\n[A **second** link](https://new.example)");
+});
+
+it.each([
+  ["[**bold** and `code`](old)", "**bold** and `code`"],
+  ["[label](old \"title (with parentheses)\")", "label"],
+  ["[label](<https://old.example/a)b>)", "label"],
+  ["[label](https://old.example/a\\)b)", "label"],
+  ["[a [nested] label](old)", "a [nested] label"],
+  ["[a `]` label](old)", "a `]` label"],
+  ["`[literal](old)` and [real](old)", "`[literal](old)` and real"],
+  ["``code ` [literal](old)``", "``code ` [literal](old)``"],
+  ["![image](image.png) and [real](old)", "![image](image.png) and real"],
+  ["[![image](image.png)](old)", "![image](image.png)"],
+  ["<https://old.example>", "https://old.example"],
+  ["<mail@example.com>", "mail@example.com"],
+  ["\\[literal](old)", "\\[literal](old)"],
+  ["[unfinished](old", "[unfinished](old"],
+])("retains label content while replacing destinations in %s", (source, label) => {
+  expect(linkSelectedMarkdown(source, "https://new.example")).toBe(`[${label}](https://new.example)`);
+});
