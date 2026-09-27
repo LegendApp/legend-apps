@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 import { observable } from "@legendapp/state";
-const settings$ = observable({library: {paths: []}});
+const settings$ = observable({library: {paths: []}, state: {openFolder: null}});
 mock.module("../src/settings/SettingsFile", () => ({settings$}));
 mock.module("../src/native-modules/FileSystemWatcher", () => ({
   addChangeListener: () => () => {}, setWatchedDirectories: () => {},
@@ -64,4 +64,20 @@ test("album headers display encoded and legacy titles without losing slash-separ
   const title = "Trips / 100% #1 日本";
   expect(photoKitAlbumTitle(photoKitAlbumPath("UUID/L0/040", title))).toBe(title);
   expect(photoKitAlbumTitle(`photokit://UUID/L0/040/${title}`)).toBe(title);
+});
+
+test("removing a library clears only selections no longer covered by a configured path", async () => {
+  const { removeLibraryPath } = await import("../src/plugins/PluginLocalFiles");
+  settings$.library.paths.set(["/photos", "/photos/nested"]);
+  settings$.state.openFolder.set("plugin-local-files:/photos/nested");
+  removeLibraryPath("/photos");
+  expect(settings$.state.openFolder.get()).toBe("plugin-local-files:/photos/nested");
+  removeLibraryPath("/photos/nested");
+  expect(settings$.state.openFolder.get()).toBe(null);
+  settings$.library.paths.set(["/photos"]);
+  settings$.state.openFolder.set("plugin-photokit:photokit://album/title");
+  removeLibraryPath("/missing");
+  expect(settings$.library.paths.get()).toEqual(["/photos"]);
+  removeLibraryPath("/photos");
+  expect(settings$.state.openFolder.get()).toBe("plugin-photokit:photokit://album/title");
 });

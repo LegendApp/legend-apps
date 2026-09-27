@@ -4,6 +4,7 @@ import {
   allSidebarGroups$,
   folderInfoToId,
   getOpenFolder,
+  getAllSidebarGroups,
   setOpenFolder,
 } from '../plugin-system/FileSources';
 import type { SidebarItem } from '../plugin-system/PluginTypes';
@@ -28,27 +29,11 @@ export function MainSidebar() {
     });
   };
 
-  useObserveEffect((e) => {
-    // If settings are loaded and there's no open folder, select one
-    // TODO: Move this out of this file to somewhere more appropriate
-    const isSettingsLoaded = isSettingsLoaded$.get();
-    if (!selectedFolderId && isSettingsLoaded) {
-      const openFolder = getOpenFolder();
-      if (openFolder) {
-        e.cancel = true;
-      } else {
-        const allSidebarGroups = allSidebarGroups$.get();
-        if (allSidebarGroups?.length) {
-          console.log('selecting first folder');
-          for (const group of allSidebarGroups) {
-            for (const item of group.items) {
-              onSelectFolder(item);
-              e.cancel = true;
-              return;
-            }
-          }
-        }
-      }
+  useObserveEffect(() => {
+    if (isSettingsLoaded$.get() && !getOpenFolder()) {
+      // Read current source groups so removed paths cannot be reselected from an old async result.
+      const first = getAllSidebarGroups().flatMap(group => group.items)[0];
+      if (first) setOpenFolder({path: first.path, source: first.source});
     }
   });
 

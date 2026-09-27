@@ -1,6 +1,6 @@
 import { Button } from '../native-modules/Button';
 import { FilePicker } from '../native-modules/FilePicker';
-import { addLibraryPath } from '../plugins/PluginLocalFiles';
+import { addLibraryPath, removeLibraryPath } from '../plugins/PluginLocalFiles';
 import { settings$ } from './SettingsFile';
 import { useValue } from '@legendapp/state/react';
 import React from 'react';
@@ -13,11 +13,7 @@ export const LibrarySettings = () => {
     addLibraryPath(path);
   };
 
-  const handleRemovePath = async (path: string) => {
-    const currentPaths = settings$.library.paths.get();
-    const idx = currentPaths.indexOf(path);
-    settings$.library.paths.splice(idx, 1);
-  };
+
 
   //   const handlePreviewSizeChange = async (size: 'small' | 'medium' | 'large') => {
   //     settings$.library.previewSize.set(size);
@@ -64,7 +60,7 @@ export const LibrarySettings = () => {
                   title="Remove"
                   bezelStyle="textured"
                   controlSize="regular"
-                  onPress={() => handleRemovePath(path)}
+                  onPress={() => removeLibraryPath(path)}
                 />
               </View>
             ))

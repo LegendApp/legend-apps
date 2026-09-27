@@ -124,6 +124,16 @@ export async function addLibraryPath(path: string): Promise<boolean> {
   }
 }
 
+export function removeLibraryPath(path: string) {
+  const remaining = settings$.library.paths.peek().filter(item => item !== path);
+  settings$.library.paths.set(remaining);
+  const openFolder = settings$.state.openFolder.peek();
+  const prefix = `${PluginLocalFiles.id}:`;
+  if (openFolder?.startsWith(prefix) && !findParentLibraryPath(openFolder.slice(prefix.length), remaining)) {
+    settings$.state.openFolder.set(null);
+  }
+}
+
 // Helper function to find the parent library path for a folder
 function findParentLibraryPath(folderPath: string, libraryPaths: string[]): string | undefined {
   // Sort library paths by length (descending) to prioritize more specific paths
