@@ -355,6 +355,27 @@ describe("native document text selection", () => {
     await act(async () => renderer.unmount());
   });
 
+  it("links a document selection instead of replacing the active input selection", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Alpha old"), block("b", 1, "remove suffix")]), { splitParagraphUpdates: true });
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />); });
+    await flushPromises();
+    const selection = {
+      anchor: { blockId: "a", index: 0, offset: 6, beforeMarkdown: "Alpha ", afterMarkdown: "old" },
+      focus: { blockId: "b", index: 1, offset: 6, beforeMarkdown: "remove", afterMarkdown: " suffix" },
+      sameBlockMarkdown: "",
+    };
+    await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: false } }));
+    await act(async () => commands.current!.insertLink({ url: "https://example.com" }));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("Alpha [old](https://example.com)\n\n[remove](https://example.com) suffix");
+    await act(async () => commands.current!.undo());
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe("Alpha old\n\nremove suffix");
+    await act(async () => renderer.unmount());
+  });
+
   it.each(["Last", "**👩🏽‍💻 café**"])("places the caret after a multi-paragraph selection paste ending in %s", async (last) => {
     const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "Alpha old"), block("b", 1, "remove suffix"), block("tail", 2, "Tail")]), { splitParagraphUpdates: true });
     let renderer!: TestRenderer.ReactTestRenderer;

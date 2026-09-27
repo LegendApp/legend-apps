@@ -1,4 +1,4 @@
-import { setParagraphMarkdown, toggleCodeBlockMarkdown, toggleInlineMarkdown } from "../markdownFormatting";
+import { setParagraphMarkdown, toggleCodeBlockMarkdown, toggleInlineMarkdown, linkSelectedMarkdown } from "../markdownFormatting";
 
 describe("code fence formatting", () => {
   it.each([
@@ -46,5 +46,13 @@ describe("inline selection formatting", () => {
   });
   it("preserves CRLF and existing styled paragraphs when applying to mixed content", () => {
     expect(toggleInlineMarkdown("**First**\r\n\r\nSecond", "**")).toBe("**First**\r\n\r\n**Second**");
+  });
+});
+
+
+describe("links across selected blocks", () => {
+  it("keeps paragraph boundaries, block prefixes, and destination escapes", () => {
+    expect(linkSelectedMarkdown("First\n\n# Heading\n\n- Item", "https://example.com/a (b)"))
+      .toBe("[First](https://example.com/a%20\\(b\\))\n\n# [Heading](https://example.com/a%20\\(b\\))\n\n- [Item](https://example.com/a%20\\(b\\))");
   });
 });

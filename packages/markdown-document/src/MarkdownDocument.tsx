@@ -49,6 +49,7 @@ import {
 import { resolveTextSelectionAnchor } from "./selectionAnchor";
 import {
   getSplitContinuationMarkdown,
+  linkSelectedMarkdown,
   setHeadingMarkdown,
   setParagraphMarkdown,
   thematicBreakMarkdown,
@@ -3159,12 +3160,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           activeInputRef.current?.focus();
         },
         insertLink(options) {
+          const url = (options?.url ?? "https://").trim();
+          if (!url) return;
+          if (documentRenderState$.blockSelection.peek()) {
+            formatCurrentBlockRange((markdown) => linkSelectedMarkdown(options?.text ?? markdown, url));
+            return;
+          }
           const selection = activeInputSelectionRef.current;
           const selectionStart = Math.min(selection.start, selection.end);
           const selectionEnd = Math.max(selection.start, selection.end);
           const selectedText = draftMarkdown$.peek().slice(selectionStart, selectionEnd);
           const text = options?.text ?? (selectedText.length > 0 ? selectedText : "Link");
-          const url = (options?.url ?? "https://").trim();
           if (url.length > 0) {
             runActiveInputCommand(() => activeInputRef.current?.insertLink(text, url));
           }

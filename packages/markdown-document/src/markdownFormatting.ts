@@ -188,10 +188,9 @@ export function thematicBreakMarkdown() {
   return "---";
 }
 
-/** Apply inline styles separately on each line so delimiters never cross block boundaries. */
-export function toggleInlineMarkdown(markdown: string, delimiter: "**" | "*" | "_" | "~~" | "||") {
+function inlineMarkdownLines(markdown: string) {
   let fence: { marker: string; length: number } | undefined;
-  const lines = markdown.split(/(\r?\n)/).map((line) => {
+  return markdown.split(/(\r?\n)/).map((line) => {
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
     if (fence) {
       if (marker?.[0] === fence.marker && marker.length >= fence.length && line.trim() === marker) fence = undefined;
@@ -206,14 +205,28 @@ export function toggleInlineMarkdown(markdown: string, delimiter: "**" | "*" | "
     if (!match?.[2] || /^(?:[-*_]\s*){3,}$/.test(line.trim()) || /^ {4}|^\t/.test(line)
       || /^\s*\|(?!\|).*\|\s*$/.test(line) || /^ {0,3}(?:=+|-+)\s*$/.test(line)) return { line };
     const [, prefix, content, suffix] = match;
-    const wrapped = content!.startsWith(delimiter) && content!.endsWith(delimiter)
-      && content!.length > delimiter.length * 2
-      && (delimiter !== "*" || !content!.startsWith("**") || content!.startsWith("***"));
-    return { line, prefix, content, suffix, wrapped };
+    return { line, prefix, content, suffix };
+  });
+}
+
+/** Apply inline styles separately on each line so delimiters never cross block boundaries. */
+export function toggleInlineMarkdown(markdown: string, delimiter: "**" | "*" | "_" | "~~" | "||") {
+  const lines = inlineMarkdownLines(markdown).map((line) => {
+    const content = line.content;
+    const wrapped = content !== undefined && content.startsWith(delimiter) && content.endsWith(delimiter)
+      && content.length > delimiter.length * 2
+      && (delimiter !== "*" || !content.startsWith("**") || content.startsWith("***"));
+    return { ...line, wrapped };
   });
   const eligible = lines.filter((line) => line.content !== undefined);
   const remove = eligible.length > 0 && eligible.every((line) => line.wrapped);
   return lines.map(({ line, prefix, content, suffix, wrapped }) => content === undefined ? line
     : prefix + (remove ? content.slice(delimiter.length, -delimiter.length)
       : wrapped ? content : delimiter + content + delimiter) + suffix).join("");
+}
+
+export function linkSelectedMarkdown(markdown: string, url: string) {
+  const destination = url.replace(/[\\()]/g, "\\$&").replace(/\s/g, (space) => encodeURIComponent(space));
+  return inlineMarkdownLines(markdown).map(({ line, prefix, content, suffix }) => content === undefined
+    ? line : `${prefix}[${content}](${destination})${suffix}`).join("");
 }
