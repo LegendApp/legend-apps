@@ -4,11 +4,11 @@ import { Text, View } from "react-native";
 import { ExamplePanel, styles } from "./shared";
 
 const sidebarDataItems = [
-  { id: "library", title: "Library" },
-  { id: "playlists", title: "Playlists" },
-  { id: "artists", title: "Artists" },
-  { id: "downloads", title: "Downloads" },
-  { id: "disabled", selectable: false, title: "Disabled Row" },
+  { id: "library", label: "Library" },
+  { id: "playlists", label: "Playlists" },
+  { id: "artists", label: "Artists" },
+  { id: "downloads", label: "Downloads" },
+  { id: "disabled", selectable: false, label: "Disabled Row" },
 ];
 
 const sidebarReactRows = [
@@ -29,7 +29,7 @@ const sidebarDynamicRows = [
 ];
 
 export function SidebarExample({ testId }: { testId: string }) {
-  const [selectedId, setSelectedId] = useState(
+  const [selectedId, setSelectedId] = useState<string | null>(
     testId === "sidebar-dynamic-heights" ? "compact" : testId === "sidebar-react-rows" ? "albums" : "library",
   );
   const [status, setStatus] = useState("No sidebar event yet.");
@@ -42,15 +42,15 @@ export function SidebarExample({ testId }: { testId: string }) {
         <Sidebar
           defaultRowHeight={30}
           items={sidebarDataItems}
-          onSidebarLayout={(event) => {
-            const { height, width } = event.nativeEvent;
+          onContentLayout={(event) => {
+            const { height, width } = event;
             setStatus(`Layout: ${Math.round(width)}x${Math.round(height)}`);
           }}
-          onSidebarSelectionChange={(event) => {
-            setSelectedId(event.nativeEvent.id);
-            setStatus(`Selected ${event.nativeEvent.id}`);
+          onSelectionChange={(event) => {
+            setSelectedId(event.id);
+            setStatus(`Selected ${event.id}`);
           }}
-          selectedId={selectedId}
+          selectedId={selectedId ?? null}
           style={styles.sidebarPreview}
         />
       </ExamplePanel>
@@ -64,15 +64,15 @@ export function SidebarExample({ testId }: { testId: string }) {
         <Text style={styles.bodyText}>{status}</Text>
         <Sidebar
           defaultRowHeight={28}
-          onSidebarSelectionChange={(event) => {
-            setSelectedId(event.nativeEvent.id);
-            setStatus(`Selected ${event.nativeEvent.id}`);
+          onSelectionChange={(event) => {
+            setSelectedId(event.id);
+            setStatus(`Selected ${event.id}`);
           }}
-          selectedId={selectedId}
+          selectedId={selectedId ?? null}
           style={styles.sidebarPreview}
         >
           {sidebarDynamicRows.map((row) => (
-            <SidebarItem itemId={row.id} key={row.id} rowHeight="auto" style={{ height: row.height }}>
+            <SidebarItem id={row.id} key={row.id} rowHeight="auto" style={{ height: row.height }}>
               <View style={styles.sidebarDynamicRow}>
                 <Text style={styles.sidebarRowTitle}>{row.title}</Text>
                 <Text style={styles.sidebarRowDetail}>{row.detail}</Text>
@@ -90,20 +90,20 @@ export function SidebarExample({ testId }: { testId: string }) {
       <Text style={styles.bodyText}>{status}</Text>
       <Sidebar
         defaultRowHeight={44}
-        onSidebarSelectionChange={(event) => {
-          setSelectedId(event.nativeEvent.id);
-          setStatus(`Selected ${event.nativeEvent.id}`);
+        onSelectionChange={(event) => {
+          setSelectedId(event.id);
+          setStatus(`Selected ${event.id}`);
         }}
-        selectedId={selectedId}
+        selectedId={selectedId ?? null}
         style={styles.sidebarPreview}
       >
         {sidebarReactRows.map((row) => (
           <SidebarItem
-            itemId={row.id}
+            id={row.id}
             key={row.id}
-            onRightClick={(event) => {
+            onContextMenu={(event) => {
               setStatus(
-                `Right clicked ${row.id} at ${Math.round(event.nativeEvent.pageX)}, ${Math.round(event.nativeEvent.pageY)}`,
+                `Right clicked ${row.id} at ${Math.round(event.windowPosition.x)}, ${Math.round(event.windowPosition.y)}`,
               );
             }}
             rowHeight={44}

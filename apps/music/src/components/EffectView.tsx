@@ -1,10 +1,10 @@
-import { GlassEffectView, type GlassEffectStyle } from "@legendapp/spark/ui/glass";
+import { GlassView, type GlassStyle } from "@legendapp/spark/ui/glass";
 import type { ReactNode } from "react";
 import type { ColorValue, ViewProps } from "react-native";
 
 export interface EffectViewProps extends ViewProps {
     children?: ReactNode;
-    glassStyle?: GlassEffectStyle;
+    glassStyle?: GlassStyle;
     tintColor?: ColorValue;
     blendingMode?: string;
     material?: string;
@@ -21,8 +21,8 @@ export function EffectView({
     ...props
 }: EffectViewProps) {
     return (
-        <GlassEffectView glassStyle={glassStyle} tintColor={tintColor} {...props}>
+        <GlassView glassStyle={glassStyle} tintColor={tintColor} {...props}>
             {children}
-        </GlassEffectView>
+        </GlassView>
     );
 }

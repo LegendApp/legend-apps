@@ -1,20 +1,20 @@
-import type { ContextMenuItem } from "@legendapp/spark/context-menu";
-import { revealInFinder } from "@legendapp/spark/dialogs";
+import type { MenuItem } from "@legendapp/spark/context-menu";
+import { revealInFileManager } from "@legendapp/spark/files";
 
 export const TRACK_CONTEXT_MENU_ITEMS = {
-    queueAdd: { id: "queue-add", title: "Add to Queue" } as const,
-    queuePlayNext: { id: "queue-play-next", title: "Play Next" } as const,
-    showInFinder: { id: "show-in-finder", title: "Show in Finder" } as const,
+    queueAdd: { type: "action", id: "queue-add", label: "Add to Queue" } as const,
+    queuePlayNext: { type: "action", id: "queue-play-next", label: "Play Next" } as const,
+    showInFinder: { type: "action", id: "show-in-finder", label: "Show in Finder" } as const,
 };
 
 type BuildTrackContextMenuOptions = {
     includeQueueActions?: boolean;
     includeFinder?: boolean;
-    extraItems?: ContextMenuItem[];
+    extraItems?: MenuItem[];
 };
 
-export function buildTrackContextMenuItems(options: BuildTrackContextMenuOptions = {}): ContextMenuItem[] {
-    const items: ContextMenuItem[] = [];
+export function buildTrackContextMenuItems(options: BuildTrackContextMenuOptions = {}): MenuItem[] {
+    const items: MenuItem[] = [];
 
     if (options.includeQueueActions) {
         items.push(TRACK_CONTEXT_MENU_ITEMS.queueAdd, TRACK_CONTEXT_MENU_ITEMS.queuePlayNext);
@@ -52,7 +52,7 @@ export async function handleTrackContextMenuSelection({
 
     if (selection === TRACK_CONTEXT_MENU_ITEMS.showInFinder.id) {
         if (filePath) {
-            await revealInFinder(filePath);
+            await revealInFileManager(filePath);
         }
         return;
     }

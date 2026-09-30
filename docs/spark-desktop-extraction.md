@@ -9,7 +9,8 @@ rejects new app imports or macOS links to the retired package names.
 
 Spark owns managed windows/chrome/navigation, native split views/sidebar,
 document/recent-file lifecycle, routed shortcuts, native UI primitives,
-file scanning/watching, observable preferences and settings windows.
+file scanning/watching and settings windows. Legend Apps keeps its synchronous
+observable persistence in `@legend-apps/storage`.
 
 Existing Spark providers now also serve menus, dialogs, context menus, command
 execution, global hotkeys, secure storage and updates. Managed and standard
@@ -17,8 +18,7 @@ windows share their native registry. Both macOS select APIs share one control.
 Document and settings UI helpers remain optional; importing basic lifecycle
 functionality does not require them. Quit and close guards remain opt-in.
 
-App-specific Kitchen Sink navigation menus remain in the test app. Music's
-existing Keychain service is explicitly declared, preserving credential access.
+App-specific Kitchen Sink navigation menus remain in the test app. Music credentials use Spark's project-scoped secure storage.
 Music imports the AI package's pure output parser without loading its process
 execution API. The native document/media scanners depend on Spark's file-system
 pod on macOS and retain separate iOS podspecs for the existing mobile backend.
@@ -158,3 +158,26 @@ The follow-up Kitchen rebuild regenerated about 3.55 GiB of disposable
 `.spark/DerivedData/macos-arm64` intermediates. They remain retained alongside
 the runnable product; the earlier approved cleanup had removed the previous
 build intermediates.
+
+## API redesign migration — September 30, 2026
+
+All app consumers use Spark's consolidated public paths. Window options group
+geometry and macOS chrome; menus and context menus use typed item trees and
+action results; dialogs return explicit cancellation results. Process execution
+uses `runCommand` with a target and byte output. The Slides compiler is packaged
+as a Spark helper under `Contents/Helpers/slides-compiler.helper`.
+
+Async native resources retain an owner during setup and teardown. Components
+release listeners, watchers, and shortcuts on unmount, including registrations
+that finish after unmount. Diff menu commands and state follow the focused
+viewer. Changing Music and Photos library paths retires removed watches.
+
+AI invocation and Codex execution now come from Spark's `/ai` and `/ai/codex`
+exports. App-specific prompts and playlists remain in Music. Spark's secure
+storage owns credentials; the app's `crypto` package supplies PKCE randomness.
+
+This migration is checked with application TypeScript, app tests, registration
+lifetime tests, and every declared app/platform configuration graph. Generated
+consumers point at the current immutable SDK archive. Earlier native/runtime
+acceptance above predates the API redesign; native builds and interactive
+acceptance must be repeated with this SDK.

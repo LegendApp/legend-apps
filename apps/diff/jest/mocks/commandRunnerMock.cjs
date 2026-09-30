@@ -1,24 +1,4 @@
-function createMockCommandRunner({ availability = {}, run } = {}) {
-  return {
-    async getAvailability(commands) {
-      return Object.fromEntries(commands.map((command) => [command, Boolean(availability[command])]));
-    },
-    async runCommand(params) {
-      if (run) {
-        return run(params);
-      }
-      return {
-        exitCode: 0,
-        stderr: "",
-        stdout: params.input ?? params.args?.join(" ") ?? "",
-        timedOut: false,
-      };
-    },
-  };
-}
-
 module.exports = {
-  __esModule: true,
-  commandRunner: createMockCommandRunner(),
-  createMockCommandRunner,
+ runCommand: jest.fn(async () => ({ exit: { type: "exited", code: 0 }, stdout: new Uint8Array(), stderr: new Uint8Array(), timedOut: false })),
+ resolveCommand: jest.fn(async name => ({ type: "executable", path: `/usr/bin/${name}` })),
 };

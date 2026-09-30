@@ -1,6 +1,6 @@
 import { applyLegendDisplayThemeToUniwind } from "@legend-apps/theme";
-import { type HotkeyState, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
-import { createObservableFile } from "@legendapp/spark/settings/observable";
+import { type HotkeyBindingState, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
+import { createObservableFile } from "@legend-apps/storage";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import {
@@ -50,7 +50,7 @@ type MarkdownSettingsFile = {
   fontFamily: MarkdownFontFamilySetting;
   fontSize: MarkdownFontSizeSetting;
   formattingToolbarMode: MarkdownFormattingToolbarModeSetting;
-  hotkeys: HotkeyState<MarkdownHotkeyId>;
+  hotkeys: HotkeyBindingState<MarkdownHotkeyId>;
   lastDocumentPath: string | null;
   layoutTheme: MarkdownLayoutThemeSetting;
   lineHeight: MarkdownLineHeightSetting;
@@ -201,7 +201,7 @@ function readStoredMarkdownToolbarLayout(layoutId: MarkdownToolbarLayoutId): Mar
   return undefined;
 }
 
-export function getMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
+export function getMarkdownHotkeySettings(): HotkeyBindingState<MarkdownHotkeyId> {
   const hotkeys = markdownSettings$.hotkeys.get();
   return hotkeys && typeof hotkeys === "object" ? hotkeys : initialMarkdownSettings.hotkeys;
 }
@@ -306,7 +306,7 @@ export function useMarkdownAppearanceSettings(): MarkdownAppearanceSettings {
   );
 }
 
-export function useMarkdownHotkeySettings(): HotkeyState<MarkdownHotkeyId> {
+export function useMarkdownHotkeySettings(): HotkeyBindingState<MarkdownHotkeyId> {
   return useValue(markdownSettings$.hotkeys);
 }
 
@@ -385,7 +385,7 @@ export function setMarkdownDocumentDensitySetting(density: MarkdownDocumentDensi
   markdownSettings$.density.set(density);
 }
 
-export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: HotkeyValue | null) {
+export function setMarkdownHotkeySetting(id: MarkdownHotkeyId, value: readonly HotkeyValue[]) {
   const nextSettings = {
     ...getMarkdownHotkeySettings(),
     [id]: value,

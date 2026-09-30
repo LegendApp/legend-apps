@@ -1,17 +1,17 @@
 {
   "@legend-apps/window-manager": {
     "package": "@legendapp/spark-desktop-windows",
-    "import": "@legendapp/spark/windows/managed",
+    "import": "@legendapp/spark/windows",
     "directory": "desktop-windows"
   },
   "@legend-apps/windows": {
     "package": "@legendapp/spark-desktop-windows",
-    "import": "@legendapp/spark/windows/react",
+    "import": "@legendapp/spark/windows",
     "directory": "desktop-windows"
   },
   "@legend-apps/window-controls": {
     "package": "@legendapp/spark-desktop-windows",
-    "import": "@legendapp/spark/windows/controls",
+    "import": "@legendapp/spark/windows",
     "directory": "desktop-windows"
   },
   "@legend-apps/appkit-split-view": {
@@ -31,7 +31,7 @@
   },
   "@legend-apps/recent-documents": {
     "package": "@legendapp/spark-desktop-app",
-    "import": "@legendapp/spark/app/recent-documents",
+    "import": "@legendapp/spark/app/documents",
     "directory": "desktop-app"
   },
   "@legend-apps/hotkeys": {
@@ -56,7 +56,7 @@
   },
   "@legend-apps/native-select": {
     "package": "@legendapp/spark-ui",
-    "import": "@legendapp/spark/ui/select-controls",
+    "import": "@legendapp/spark/ui",
     "directory": "ui"
   },
   "@legend-apps/text-input-search": {
@@ -66,23 +66,18 @@
   },
   "@legend-apps/file-scanner": {
     "package": "@legendapp/spark-file-system",
-    "import": "@legendapp/spark/files/scanner",
+    "import": "@legendapp/spark/files",
     "directory": "file-system"
   },
   "@legend-apps/file-system-watcher": {
     "package": "@legendapp/spark-file-system",
-    "import": "@legendapp/spark/files/watchers",
+    "import": "@legendapp/spark/files",
     "directory": "file-system"
   },
   "@legend-apps/settings-window": {
     "package": "@legendapp/spark-settings-ui",
     "import": "@legendapp/spark/settings/window",
     "directory": "settings-ui"
-  },
-  "@legend-apps/storage": {
-    "package": "@legendapp/spark-settings",
-    "import": "@legendapp/spark/settings/observable",
-    "directory": "settings"
   },
   "@legend-apps/classnames": {
     "package": "@legendapp/spark-ui",
@@ -91,12 +86,12 @@
   },
   "@legend-apps/app-exit": {
     "package": "@legendapp/spark-desktop-app",
-    "import": "@legendapp/spark/app/exit",
+    "import": "@legendapp/spark/app",
     "directory": "desktop-app"
   },
   "@legend-apps/command-runner": {
     "package": "@legendapp/spark-processes",
-    "import": "@legendapp/spark/processes/commands",
+    "import": "@legendapp/spark/processes",
     "directory": "processes"
   },
   "@legend-apps/file-dialog": {
@@ -116,12 +111,12 @@
   },
   "@legend-apps/drag-drop": {
     "package": "@legendapp/spark-drag-drop",
-    "import": "@legendapp/spark/drag-drop/views",
+    "import": "@legendapp/spark/drag-drop",
     "directory": "drag-drop"
   },
   "@legend-apps/global-hotkey": {
     "package": "@legendapp/spark-global-shortcuts",
-    "import": "@legendapp/spark/global-shortcuts/hotkeys",
+    "import": "@legendapp/spark/global-shortcuts",
     "directory": "global-shortcuts"
   },
   "@legend-apps/host-links": {
@@ -133,10 +128,5 @@
     "package": "@legendapp/spark-updates",
     "import": "@legendapp/spark/updates",
     "directory": "updates"
-  },
-  "@legend-apps/secure-storage": {
-    "package": "@legendapp/spark-secure-storage",
-    "import": "@legendapp/spark/secure-storage",
-    "directory": "secure-storage"
   }
 }

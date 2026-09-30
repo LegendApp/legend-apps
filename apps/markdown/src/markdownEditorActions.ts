@@ -1,11 +1,13 @@
-import type { NativeMenuAction, NativeMenuActionHandlers } from "@legendapp/spark/menus";
+import type { MenuAction } from "@legendapp/spark/menus";
+
+export type MarkdownMenuHandlers = Record<string, (action: MenuAction) => unknown>;
 
 type RecentDocumentHandler = (path: string) => Promise<void>;
 
-let currentMenuHandlers: NativeMenuActionHandlers | null = null;
+let currentMenuHandlers: MarkdownMenuHandlers | null = null;
 let currentRecentDocumentHandler: RecentDocumentHandler | null = null;
 
-export function registerMarkdownEditorMenuHandlers(handlers: NativeMenuActionHandlers) {
+export function registerMarkdownEditorMenuHandlers(handlers: MarkdownMenuHandlers) {
   currentMenuHandlers = handlers;
 
   return () => {
@@ -15,7 +17,7 @@ export function registerMarkdownEditorMenuHandlers(handlers: NativeMenuActionHan
   };
 }
 
-export function dispatchMarkdownEditorMenuAction(action: NativeMenuAction) {
+export function dispatchMarkdownEditorMenuAction(action: MenuAction) {
   const handler = currentMenuHandlers?.[action.itemId];
   if (!handler) {
     return false;

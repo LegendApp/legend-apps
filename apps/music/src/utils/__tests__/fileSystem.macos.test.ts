@@ -1,4 +1,4 @@
-import { createStorage, pathExists, readTextFile, writeStorageBytes } from "@legendapp/spark/settings/observable";
+import { createStorage, pathExists, readTextFile, writeStorageBytes } from "@legend-apps/storage";
 import { Directory, File, Paths } from "../fileSystem.macos";
 
 const cacheStorage = jest.mocked(createStorage).mock.results[0].value;

@@ -1,40 +1,26 @@
-import { AutoUpdaterModule } from '../native-modules/AutoUpdater';
-import { settings$ } from '../settings/SettingsFile';
-import { observe } from '@legendapp/state';
-
+import { getUpdateStatus, configureUpdates, startUpdates, checkForUpdates } from "@legendapp/spark/updates";
+import { settings$ } from "../settings/SettingsFile";
+import { observe } from "@legendapp/state";
 export function initializeUpdater() {
-  if (__DEV__ || !AutoUpdaterModule.isAvailable()) return;
-
-  let previousCheckUpdates = false;
-  let isCheckingForUpdates = false;
-  observe(async () => {
-    const autoUpdateEnabled = settings$.general.autoUpdate.enabled.get();
-    const checkInterval = settings$.general.autoUpdate.checkInterval.get() * 3600; // Convert hours to seconds
-
-    if (isCheckingForUpdates) {
-      return;
-    }
-
-    isCheckingForUpdates = true;
-    try {
-      // Configure auto-update based on settings
-      await Promise.all([
-        AutoUpdaterModule.setAutomaticallyChecksForUpdates(autoUpdateEnabled),
-        autoUpdateEnabled
-          ? AutoUpdaterModule.setUpdateCheckInterval(checkInterval)
-          : Promise.resolve(true),
-      ]);
-
-      // Check for updates immediately on app start if enabled
-      if (autoUpdateEnabled && !previousCheckUpdates) {
-        await AutoUpdaterModule.checkForUpdatesInBackground();
-      }
-    } catch (err) {
-      console.error('Failed to initialize auto-updater:', err);
-    } finally {
-      isCheckingForUpdates = false;
-    }
-
-    previousCheckUpdates = autoUpdateEnabled;
+  let active = true, previousEnabled = false;
+  let queue = Promise.resolve();
+  let dispose: (() => void) | undefined;
+  const ready = getUpdateStatus().then(status => {
+    if (!active || __DEV__ || !status.available) return;
+    dispose = observe(() => {
+      const enabled = settings$.general.autoUpdate.enabled.get();
+      const interval = settings$.general.autoUpdate.checkInterval.get() * 3600;
+      queue = queue.catch(console.error).then(async () => {
+        if (!active) return;
+        await configureUpdates({ automaticallyChecks: enabled, checkIntervalSeconds: interval });
+        if (!active) return;
+        await startUpdates();
+        if (enabled && !previousEnabled) await checkForUpdates({ mode: "background" });
+        previousEnabled = enabled;
+      });
+      void queue.catch(console.error);
+    });
   });
+  void ready.catch(console.error);
+  return { async remove() { active = false; dispose?.(); await ready; await queue; } };
 }

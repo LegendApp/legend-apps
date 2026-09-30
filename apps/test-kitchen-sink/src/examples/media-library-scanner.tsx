@@ -35,9 +35,9 @@ export function MediaLibraryScannerExample() {
       <ExampleButton
         onPress={() => {
           void openFileDialog({
-            canChooseDirectories: true,
-            canChooseFiles: false,
-          }).then((paths) => {
+            selection: "directories",
+          }).then((result) => {
+            const paths = result.canceled ? [] : result.paths;
             if (!paths?.length) {
               setStatus("Directory selection canceled.");
               return;

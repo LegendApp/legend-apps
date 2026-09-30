@@ -12,13 +12,15 @@ export function ExamplePanel({ title, children }: { title: string; children: Rea
 
 export function ExampleButton({
   children,
+  disabled,
   onPress,
 }: {
   children: string;
+  disabled?: boolean;
   onPress: (event: GestureResponderEvent) => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+    <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
       <Text style={styles.buttonText}>{children}</Text>
     </Pressable>
   );

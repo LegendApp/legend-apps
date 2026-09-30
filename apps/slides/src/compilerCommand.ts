@@ -1,10 +1,8 @@
-import { commandRunner } from "@legendapp/spark/processes/commands";
-
-const bundledCompiler = "bundle:slides-compiler/run";
-export async function compilerCommand() {
-  const availability = await commandRunner.getAvailability([bundledCompiler, "bun"]);
-  if (availability[bundledCompiler]) return { command: bundledCompiler, prefix: [] as string[] };
+import { resolveCommand, type ProcessTarget } from "@legendapp/spark/processes";
+export async function compilerCommand(): Promise<{ target: ProcessTarget; prefix: string[] }> {
+  if (!__DEV__) return { target: { type: "helper", name: "slides-compiler" }, prefix: [] };
   const source = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH;
-  if (!source || !availability.bun) throw new Error("The bundled Slides compiler is unavailable. Development builds require Bun and a compiler path.");
-  return { command: "bun", prefix: [source] };
+  const bun = await resolveCommand("bun");
+  if (!source || !bun) throw new Error("Development builds require Bun and a Slides compiler path.");
+  return { target: { type: "executable", path: bun }, prefix: [source] };
 }

@@ -1,8 +1,14 @@
 import { NativeEventEmitter } from "react-native";
 import NativeDocumentScanner from "./NativeDocumentScanner";
-import type { FileScannerOptions, ScannedFile } from "@legendapp/spark/files/scanner";
+import type { ScannedFile } from "@legendapp/spark/files";
 
-export type DocumentScannerOptions = FileScannerOptions;
+export type DocumentScannerOptions = Readonly<{
+  allowedExtensions?: readonly string[];
+  batchSize?: number;
+  includeHidden?: boolean;
+  includeStats?: boolean;
+  skipEntries?: readonly { relativePath: string; rootIndex: number }[];
+}>;
 export type ScannedDocument = ScannedFile;
 
 export type DocumentScanBatchEvent = Readonly<{

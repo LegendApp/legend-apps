@@ -1,5 +1,6 @@
-import { commandRunner } from "@legendapp/spark/processes/commands";
-import { createStorage } from "@legendapp/spark/settings/observable";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import { runCommand } from "@legendapp/spark/processes";
+import { createStorage } from "@legend-apps/storage";
 
 const cliCommandName = "ldiff";
 const cliScriptRelativePath = "bin/legend-diff";
@@ -117,12 +118,12 @@ export function getLegendDiffCliScriptPath() {
 }
 
 async function getShellEnvironment() {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["-c", "printf '%s\\n%s\\n' \"${HOME:-}\" \"${SHELL:-}\""],
-    command: "/bin/sh",
+    target: { type: "executable", path: "/bin/sh" },
     timeoutMs: 1000,
   });
-  const [home = "", shell = ""] = result.stdout.split("\n");
+  const [home = "", shell = ""] = decodeProcessText(result.stdout).split("\n");
   return {
     home: home.trim() || null,
     shell: shell.trim() || null,
@@ -130,21 +131,21 @@ async function getShellEnvironment() {
 }
 
 async function readProfile(profilePath: string) {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: [profilePath],
-    command: "/bin/cat",
+    target: { type: "executable", path: "/bin/cat" },
     timeoutMs: 1000,
   }).catch(() => null);
-  return result?.exitCode === 0 ? result.stdout : "";
+  return result && result.exit.type === "exited" && result.exit.code === 0 ? decodeProcessText(result.stdout) : "";
 }
 
 async function directoryExists(path: string) {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["-c", "test -d \"$1\"", "sh", path],
-    command: "/bin/sh",
+    target: { type: "executable", path: "/bin/sh" },
     timeoutMs: 1000,
   }).catch(() => null);
-  return result?.exitCode === 0;
+  return (result?.exit.type === "exited" ? result.exit.code : -1) === 0;
 }
 
 function getInstalledAppPathCandidates(home: string | null | undefined) {
@@ -166,31 +167,31 @@ async function getInstalledAppPath(home: string | null | undefined) {
 }
 
 async function isExecutable(path: string) {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["-c", "test -x \"$1\"", "sh", path],
-    command: "/bin/sh",
+    target: { type: "executable", path: "/bin/sh" },
     timeoutMs: 1000,
   }).catch(() => null);
-  return result?.exitCode === 0;
+  return (result?.exit.type === "exited" ? result.exit.code : -1) === 0;
 }
 
 async function writeCliScript(scriptPath: string) {
   const storage = getCliStorage();
   storage.write(cliScriptRelativePath, getLegendDiffCliScript(), { format: "text" });
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["755", scriptPath],
-    command: "/bin/chmod",
+    target: { type: "executable", path: "/bin/chmod" },
     timeoutMs: 1000,
   });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || `Unable to mark ${cliCommandName} as executable.`);
+  if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(result.stderr) || `Unable to mark ${cliCommandName} as executable.`);
   }
 }
 
 async function installProfileBlock(profilePath: string, scriptPath: string) {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["-s", profilePath],
-    command: "/bin/sh",
+    target: { type: "executable", path: "/bin/sh" },
     input: `${managedBlockStart}
 ${managedBlockEnd}
 profile_path="$1"
@@ -211,15 +212,15 @@ rm -f "$tmp_file"
 `,
     timeoutMs: 3000,
   });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || `Unable to update ${profilePath}.`);
+  if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(result.stderr) || `Unable to update ${profilePath}.`);
   }
 }
 
 async function removeProfileBlock(profilePath: string) {
-  const result = await commandRunner.runCommand({
+  const result = await runCommand({
     args: ["-s", profilePath],
-    command: "/bin/sh",
+    target: { type: "executable", path: "/bin/sh" },
     input: `${managedBlockStart}
 ${managedBlockEnd}
 profile_path="$1"
@@ -233,8 +234,8 @@ rm -f "$tmp_file"
 `,
     timeoutMs: 3000,
   });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || `Unable to update ${profilePath}.`);
+  if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(result.stderr) || `Unable to update ${profilePath}.`);
   }
 }
 

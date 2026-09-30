@@ -1,4 +1,5 @@
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { beforeQuit } from "@legendapp/spark/app";
 
 /** A save can succeed while a newer edit remains unsaved. Never exit in that case. */
 export async function prepareDraftExit(
@@ -27,11 +28,5 @@ export function prepareSlidesExit() {
   return pending;
 }
 export function installSlidesExitHandler() {
-  let exiting = false;
-  return addAppExitListener(event => {
-    if (event.reason === "requested" && !exiting) {
-      exiting = true;
-      void prepareSlidesExit().then(completeAppExit).finally(() => { exiting = false; });
-    }
-  });
+  return ownRegistration(beforeQuit(prepareSlidesExit));
 }

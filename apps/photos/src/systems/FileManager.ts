@@ -4,8 +4,9 @@ export interface ReadDirResItemT {
   isDirectory(): boolean; isFile(): boolean;
 }
 async function readDir(path: string): Promise<ReadDirResItemT[]> {
-  const entries = await Promise.all((await list(path)).map(async name => {
-    const fullPath = `${path.replace(/\/$/, "")}/${name}`;
+  const entries = await Promise.all((await list(path)).map(async entry => {
+    const fullPath = entry.path;
+    const name = entry.name;
     let info;
     try {
       info = await stat(fullPath);

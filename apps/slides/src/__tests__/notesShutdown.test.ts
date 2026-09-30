@@ -1,16 +1,18 @@
 // @ts-nocheck Native windows are supplied by this test.
 import { expect, mock, test } from "bun:test";
+mock.module("react-native", () => ({ Platform: { OS: "macos" }, AppRegistry: {}, TurboModuleRegistry: { get: () => null }, NativeEventEmitter: class {} }));
 const calls = [];
 let finishOpen;
 let failClose = false;
-mock.module("@legendapp/spark/windows/managed", () => ({
-  closeWindow: async () => { calls.push("close"); return { success: !failClose }; },
-  getDisplays: async () => [], WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },
+mock.module("@legendapp/spark/windows", () => ({
+  closeWindow: async () => { calls.push("close"); return { closed: !failClose }; },
+  getDisplays: async () => [], WindowProvider: () => null, openWindow: async () => {},
 }));
 mock.module("../slidesWindows", () => ({ slidesWindows: { open: async () => {
   calls.push("opening"); await new Promise(resolve => { finishOpen = resolve; }); calls.push("opened");
 } } }));
 mock.module("../slidesSettings", () => ({ displayRolesSetting: { get: () => ({}) } }));
+mock.module("@legendapp/spark/windows/macos", () => ({ setWindowBounds: async () => {} }));
 const { previewNotesOutput, closeNotesOutput, resumeNotesOutput, syncNotesOutput, notesOutput$ } = await import("../notesOutput");
 
 test("shutdown waits for preview creation and retains state when native close fails", async () => {
@@ -20,7 +22,7 @@ test("shutdown waits for preview creation and retains state when native close fa
   expect(calls.at(-1)).toBe("opening");
   failClose = true;
   finishOpen(); await opening;
-  await expect(shutdown).rejects.toThrow("Could not close");
+  await expect(shutdown).rejects.toThrow("Closing the notes window was vetoed");
   expect(notesOutput$.preview.peek()).toBe(true);
   failClose = false;
   await closeNotesOutput();

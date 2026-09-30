@@ -1,4 +1,3 @@
-import { sidebarSplitViewTitlebarMetrics } from "@legendapp/spark/ui/split-view";
 
 export const diffInitialRowCount = 160;
 export const diffProgressiveLoadPollMs = 16;
@@ -21,8 +20,8 @@ export const diffVisibleFileTokenizeMaxScrollVelocity = 0.6;
 export const diffLineOverscan = 240;
 export const diffOverscanRequestDelayMs = 80;
 export const diffFileHeaderRowHeight = 40;
-export const diffTitlebarTopInset = sidebarSplitViewTitlebarMetrics.contentInsetTop;
-export const diffSidebarTopInset = sidebarSplitViewTitlebarMetrics.sidebarInsetTop;
+export const diffTitlebarTopInset = 52;
+export const diffSidebarTopInset = 52;
 export const diffDocumentErrorHeight = 78;
 export const diffDocumentPermissionErrorHeight = 134;
 export const diffScrollIdleMs = 120;

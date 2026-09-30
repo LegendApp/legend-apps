@@ -1,4 +1,4 @@
-import { NativeSegmentedControl } from "@legendapp/spark/ui/select-controls";
+import { SegmentedControl } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import type { RefObject, ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -365,9 +365,9 @@ export function DiffStartScreen({
               <>
                 <View style={styles.recentToolbar}>
                   <Text style={[styles.recentTitle, { color: foregroundColor }]}>Recents</Text>
-                  <NativeSegmentedControl
-                    onChange={(nextFilter) => setRecentFilter(nextFilter as typeof recentFilter)}
-                    segments={diffRecentFilters.map((filter) => ({
+                  <SegmentedControl
+                    onValueChange={(nextFilter) => setRecentFilter(nextFilter as typeof recentFilter)}
+                    options={diffRecentFilters.map((filter) => ({
                       label: filter.title,
                       value: filter.key,
                     }))}

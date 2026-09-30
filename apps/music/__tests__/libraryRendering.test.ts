@@ -22,7 +22,7 @@ test("unrelated playlist edits leave Songs idle and retained menus read current 
         expect(hook.handleTrackContextMenu).toBe(retainedMenu);
         h.menuResponses.push("add-to-playlist");
         await act(() => retainedMenu(0, { pageX: 0, pageY: 0 }));
-        expect(h.menus.at(-1)).toContainEqual({ id: "playlist:unrelated", title: "Renamed 4", enabled: true });
+        expect(h.menus.at(-1).items).toContainEqual({ type: "action", id: "playlist:unrelated", label: "Renamed 4", disabled: false });
 
         // Switching to an editable playlist must still subscribe to its contents and name.
         await act(() => {

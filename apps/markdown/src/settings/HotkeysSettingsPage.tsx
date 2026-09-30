@@ -1,6 +1,6 @@
 import {
-  HotkeysSettingsContent as SharedHotkeysSettingsContent,
-  HotkeysSettingsPage as SharedHotkeysSettingsPage,
+  HotkeyBindingsSettingsContent as SharedHotkeysSettingsContent,
+  HotkeyBindingsSettingsPage as SharedHotkeysSettingsPage,
 } from "@legendapp/spark/shortcuts/commands";
 import { markdownHotkeyDefinitions } from "../markdownHotkeys";
 import {
@@ -13,6 +13,7 @@ export function HotkeysSettingsPage() {
 
   return (
     <SharedHotkeysSettingsPage
+      maxBindingsPerCommand={1}
       definitions={markdownHotkeyDefinitions}
       onChange={setMarkdownHotkeySetting}
       values={hotkeys}
@@ -25,6 +26,7 @@ export function HotkeysSettingsContent() {
 
   return (
     <SharedHotkeysSettingsContent
+      maxBindingsPerCommand={1}
       definitions={markdownHotkeyDefinitions}
       onChange={setMarkdownHotkeySetting}
       showTitle={false}

@@ -1,8 +1,9 @@
 import { useObservable, useObserveEffect } from "@legendapp/state/react";
-import type { ReactNode } from "react";
+import { Children, Fragment, cloneElement, isValidElement, type ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { Platform, type StyleProp, View, type ViewStyle } from "react-native";
 import { Sidebar as NativeSidebarView, type SidebarItemData } from "@legendapp/spark/ui/sidebar";
+import { SidebarItem, renderNativeSidebarRow, type SidebarItemProps } from "./SidebarItem";
 import { Sidebar } from "./Sidebar";
 
 export type NativeSidebarItem = {
@@ -33,6 +34,15 @@ export interface NativeSidebarProps {
     children?: ReactNode;
 }
 
+function nativeRows(children: ReactNode): ReactNode {
+    return Children.map(children, child => {
+        if (!isValidElement<SidebarItemProps>(child)) return child;
+        if (child.type === Fragment) return nativeRows(child.props.children);
+        if (child.type === SidebarItem) return cloneElement(renderNativeSidebarRow(child.props), { key: child.key });
+        return child;
+    });
+}
+
 export function NativeSidebar({
     items,
     selectedId,
@@ -53,7 +63,7 @@ export function NativeSidebar({
         return items.map((item) => ({ id: item.id, name: item.label }));
     }, [items, hasChildren]);
     const nativeItems = useMemo<SidebarItemData[] | undefined>(
-        () => items?.map((item) => ({ id: item.id, title: item.label, selectable: item.selectable })),
+        () => items?.map((item) => ({ id: item.id, label: item.label, selectable: item.selectable })),
         [items],
     );
 
@@ -76,14 +86,14 @@ export function NativeSidebar({
         if (hasChildren) {
             return (
                 <NativeSidebarView
-                    selectedId={selectedId}
+                    selectedId={selectedId ?? null}
                     contentInsetTop={contentInsetTop}
-                    onSidebarSelectionChange={(event) => onSelectionChange?.(event.nativeEvent.id)}
-                    onSidebarLayout={onLayout ? (event) => onLayout(event.nativeEvent) : undefined}
+                    onSelectionChange={(event) => event.id !== null && onSelectionChange?.(event.id)}
+                    onContentLayout={onLayout ? (event) => onLayout(event) : undefined}
                     style={[style, width !== undefined ? { width } : null]}
                     className={className}
                 >
-                    {children}
+                    {nativeRows(children)}
                 </NativeSidebarView>
             );
         }
@@ -91,11 +101,11 @@ export function NativeSidebar({
         // Legacy mode: native rendering from items array
         return (
             <NativeSidebarView
-                items={nativeItems}
-                selectedId={selectedId}
+                items={nativeItems ?? []}
+                selectedId={selectedId ?? null}
                 contentInsetTop={contentInsetTop}
-                onSidebarSelectionChange={(event) => onSelectionChange?.(event.nativeEvent.id)}
-                onSidebarLayout={onLayout ? (event) => onLayout(event.nativeEvent) : undefined}
+                onSelectionChange={(event) => event.id !== null && onSelectionChange?.(event.id)}
+                onContentLayout={onLayout ? (event) => onLayout(event) : undefined}
                 style={[style, width !== undefined ? { width } : null]}
                 className={className}
             />

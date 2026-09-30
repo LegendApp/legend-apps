@@ -1,11 +1,13 @@
-import { addRecentDocumentOpenListener } from "@legendapp/spark/app/recent-documents";
+import { addAppListener } from "@legendapp/spark/app";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { writeText } from "@legendapp/spark/files";
+import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { openRequestedDocument } from "./documentOpen";
-import { saveFileDialog, writeTextFile } from "@legendapp/spark/dialogs";
+import { saveFileDialog } from "@legendapp/spark/dialogs";
 import { prepareNotesExit } from "./notesRecovery";
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { Alert } from "react-native";
 import { installSlidesExitHandler, registerSlidesExitPreparation } from "./slidesExit";
-import { addApplicationReopenRequestedListener } from "@legendapp/spark/windows/managed";
 import { useEffect, useRef } from "react";
 import { slidesWindows } from "./slidesWindows";
 import { getLastDeckPath, loadDeck } from "./deckLoader";
@@ -26,9 +28,9 @@ export function App({ launchArguments }: SlidesAppProps) {
             { text: "Export Drafts…", onPress: () => resolve("export") },
           ]);
         }), async contents => {
-          const path = await saveFileDialog({ defaultName: "Speaker Notes Recovery.md", allowedFileTypes: ["md"] });
-          if (!path) return false;
-          await writeTextFile(path, contents);
+          const path = await saveFileDialog({ defaultName: "Speaker Notes Recovery.md", filters: [{ extensions: ["md"] }] });
+          if (path.canceled) return false;
+          await writeText(path.path, contents);
           return true;
         });
       } catch (error) {
@@ -51,11 +53,13 @@ export function App({ launchArguments }: SlidesAppProps) {
         void loadDeck(initialPath, Boolean(launchedPath));
       }
     }
-    const documents = addRecentDocumentOpenListener(({ path }) => {
+    const documents = ownRegistration(subscribeToOpenRequests(event => {
+      if (event.type !== "file") return;
+      const { path } = event;
       void openRequestedDocument(path, openPresenter, loadDeck, () => Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically.")).catch(reportOpenError);
-    });
-    const subscription = addApplicationReopenRequestedListener(() => void openPresenter().catch(reportOpenError));
-    return () => { documents.remove(); subscription.remove(); exitSubscription.remove(); unregisterNotes(); };
+    }));
+    const subscription = ownRegistration(addAppListener("reopen", () => void openPresenter().catch(reportOpenError)));
+    return () => { void documents.remove().catch(console.error); void subscription.remove().catch(console.error); void exitSubscription.remove().catch(console.error); unregisterNotes(); };
   }, [launchedPath]);
   return null;
 }

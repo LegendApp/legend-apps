@@ -4,21 +4,21 @@ const { cleanup } = require("@testing-library/react-native/pure");
 afterEach(cleanup);
 
 // Keep document-app and design-system real while isolating OS-only services.
-jest.mock("@legendapp/spark/files/watchers", () => ({
-  watchFiles: jest.fn(() => ({ remove: jest.fn() })),
+jest.mock("@legendapp/spark/files", () => ({
+  watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
 jest.mock("@legendapp/spark/dialogs", () => ({
-  openFileDialog: jest.fn(async () => null),
-  saveFileDialog: jest.fn(async () => null),
+  openFileDialog: jest.fn(async () => ({ canceled: true })),
+  saveFileDialog: jest.fn(async () => ({ canceled: true })),
 }));
 
 jest.mock("@legendapp/spark/context-menu", () => ({
-  showContextMenu: jest.fn(async () => null),
+  showContextMenu: jest.fn(async () => ({ canceled: true })),
 }));
 
 jest.mock("@legendapp/spark/menus", () => ({
-  useNativeMenu: jest.fn(),
+  useMenu: jest.fn(),
 }));
 
 // Mock Fabric hosts, not their JS wrappers or the design-system controls.
@@ -49,7 +49,7 @@ jest.mock("@legend-apps/reorder-controls", () => {
   };
 });
 
-jest.mock("@legendapp/spark/settings/observable", () => {
+jest.mock("@legend-apps/storage", () => {
   const { observable } = require("@legendapp/state");
 
   return {
@@ -58,8 +58,8 @@ jest.mock("@legendapp/spark/settings/observable", () => {
 });
 
 jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
-  addKeyDownListener: jest.fn(() => () => undefined),
-  addKeyUpListener: jest.fn(() => () => undefined),
+  ...jest.requireActual("@legendapp/spark/shortcuts/keyboard"),
+  addKeyboardListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
   createModifierMask: (...modifiers) => modifiers.reduce((mask, modifier) => mask | modifier, 0),
   hasModifier: (event, modifier) => (event.modifiers & modifier) === modifier,
   KeyCodes: {
@@ -116,7 +116,7 @@ jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
   },
 }));
 
-jest.mock("@legendapp/spark/windows/managed", () => ({
+jest.mock("@legendapp/spark/windows", () => ({
   setWindowOptions: jest.fn(async () => undefined),
   setWindowTitle: jest.fn(async () => undefined),
   WindowStyleMask: {
@@ -131,3 +131,7 @@ jest.mock("@legendapp/spark/windows/managed", () => ({
 jest.mock("@legendapp/spark/ui/symbol", () => ({
   SFSymbol: () => null,
 }));
+
+jest.mock("@legendapp/spark-ui/src/SparkSelectNativeComponent", () => "NativeSelect");
+jest.mock("@legendapp/spark-ui/src/SparkButtonNativeComponent", () => "NativeButton");
+jest.mock("@legendapp/spark-ui/src/SparkTextInputNativeComponent", () => "NativeTextInput");

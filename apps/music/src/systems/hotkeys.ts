@@ -5,62 +5,52 @@ import {
     type HotkeyDefinition,
     type HotkeyValue,
 } from "@legendapp/spark/shortcuts/commands";
-import { createHotkeyStore } from "@legendapp/spark/shortcuts/commands/storage";
-import { createStorage } from "@legendapp/spark/settings/observable";
+import { createObservableFile } from "@legend-apps/storage";
+import { createStorage } from "@legend-apps/storage";
 import { batch, syncState } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
-import { KeyCodes } from "./keyboard/KeyboardManager";
 
-function binding(...keyCodes: number[]) {
-    return keyCodes.join("+") as HotkeyValue;
-}
+
 
 export const musicHotkeyDefinitions = [
     {
-        defaultBindings: [binding(KeyCodes.KEY_J)],
-        defaultValue: binding(KeyCodes.KEY_J),
+        defaultBindings: ["J"],
         description: "Open the playlist search control.",
         id: "Search",
         title: "Search",
     },
     {
-        defaultBindings: [binding(KeyCodes.KEY_L)],
-        defaultValue: binding(KeyCodes.KEY_L),
+        defaultBindings: ["L"],
         description: "Show or hide the media library.",
         id: "ToggleLibrary",
         title: "Toggle Media Library",
     },
     {
-        defaultBindings: [binding(KeyCodes.KEY_MEDIA_PLAY_PAUSE), binding(KeyCodes.KEY_SPACE)],
-        defaultValue: binding(KeyCodes.KEY_MEDIA_PLAY_PAUSE),
+        defaultBindings: ["MediaPlayPause", "Space"],
         description: "Play or pause the current track.",
         id: "PlayPause",
         title: "Play/Pause",
     },
     {
-        defaultBindings: [binding(KeyCodes.KEY_MEDIA_NEXT)],
-        defaultValue: binding(KeyCodes.KEY_MEDIA_NEXT),
+        defaultBindings: ["MediaNext"],
         description: "Play the next track.",
         id: "NextTrack",
         title: "Next Track",
     },
     {
-        defaultBindings: [binding(KeyCodes.KEY_MEDIA_PREVIOUS)],
-        defaultValue: binding(KeyCodes.KEY_MEDIA_PREVIOUS),
+        defaultBindings: ["MediaPrevious"],
         description: "Play the previous track.",
         id: "PreviousTrack",
         title: "Previous Track",
     },
     {
-        defaultBindings: [binding(KeyCodes.MODIFIER_OPTION, KeyCodes.KEY_S)],
-        defaultValue: binding(KeyCodes.MODIFIER_OPTION, KeyCodes.KEY_S),
+        defaultBindings: ["Alt+S"],
         description: "Turn shuffle mode on or off.",
         id: "ToggleShuffle",
         title: "Toggle Shuffle",
     },
     {
-        defaultBindings: [binding(KeyCodes.MODIFIER_OPTION, KeyCodes.KEY_R)],
-        defaultValue: binding(KeyCodes.MODIFIER_OPTION, KeyCodes.KEY_R),
+        defaultBindings: ["Alt+R"],
         description: "Cycle between off, repeat all, and repeat one.",
         id: "ToggleRepeatMode",
         title: "Cycle Repeat Mode",
@@ -70,24 +60,24 @@ export const musicHotkeyDefinitions = [
 export const musicInteractionHotkeyDefinitions = [
     {
         allowExtraModifiers: true,
-        defaultValue: binding(KeyCodes.KEY_UP),
+        defaultBindings: ["Up"],
         id: "Up",
         title: "Move Selection Up",
     },
     {
         allowExtraModifiers: true,
-        defaultValue: binding(KeyCodes.KEY_DOWN),
+        defaultBindings: ["Down"],
         id: "Down",
         title: "Move Selection Down",
     },
-    { defaultValue: binding(KeyCodes.KEY_RETURN), id: "Enter", title: "Activate Selection" },
-    { defaultValue: binding(KeyCodes.KEY_SPACE), id: "Space", title: "Activate Selection" },
-    { defaultValue: binding(KeyCodes.KEY_ESCAPE), id: "Escape", title: "Clear Selection" },
-    { defaultValue: binding(KeyCodes.KEY_DELETE), id: "Delete", title: "Delete Selection" },
-    { defaultValue: binding(KeyCodes.KEY_FORWARD_DELETE), id: "ForwardDelete", title: "Delete Selection" },
-    { defaultValue: binding(KeyCodes.KEY_BACKSPACE), id: "Backspace", title: "Delete Selection" },
+    { defaultBindings: ["Enter"], id: "Enter", title: "Activate Selection" },
+    { defaultBindings: ["Space"], id: "Space", title: "Activate Selection" },
+    { defaultBindings: ["Escape"], id: "Escape", title: "Clear Selection" },
+    { defaultBindings: ["Backspace"], id: "Delete", title: "Delete Selection" },
+    { defaultBindings: ["Delete"], id: "ForwardDelete", title: "Delete Selection" },
+    { defaultBindings: ["Backspace"], id: "Backspace", title: "Delete Selection" },
     {
-        defaultValue: binding(KeyCodes.MODIFIER_COMMAND, KeyCodes.KEY_A),
+        defaultBindings: ["Cmd+A"],
         id: "SelectAll",
         title: "Select All",
     },
@@ -101,29 +91,9 @@ export const allMusicHotkeyDefinitions = [
 export type HotkeyName = (typeof musicHotkeyDefinitions)[number]["id"];
 export type MusicHotkeyBindingName = (typeof allMusicHotkeyDefinitions)[number]["id"];
 
-function migrateLegacyHotkeys() {
-    const currentStorage = createStorage({ root: "applicationSupport" });
-    if (currentStorage.read("hotkeys.json", { format: "text" }) === undefined) {
-        const legacyStorage = createStorage({ root: "cache", subfolder: "data" });
-        const legacy = legacyStorage.read<Record<string, unknown>>("hotkeys.json.json", { format: "json" })
-            ?? legacyStorage.read<Record<string, unknown>>("hotkeys.json", { format: "json" });
-        if (legacy) {
-            const migrated = {
-                ...legacy,
-                PlayPause: [legacy.PlayPause, legacy.PlayPauseSpace].filter((value) => value !== undefined),
-            };
-            const normalized = normalizeHotkeyFile(migrated, musicHotkeyDefinitions);
-            currentStorage.write("hotkeys.json", serializeHotkeyFile(normalized, musicHotkeyDefinitions), {
-                format: "json",
-            });
-        }
-    }
-}
-
-migrateLegacyHotkeys();
-
-const musicHotkeyFile$ = createHotkeyStore({
-    definitions: musicHotkeyDefinitions,
+const musicHotkeyFile$ = createObservableFile({
+    initialValue: normalizeHotkeyFile(undefined, musicHotkeyDefinitions),
+    transform: { load: value => normalizeHotkeyFile(value, musicHotkeyDefinitions), save: value => serializeHotkeyFile(value, musicHotkeyDefinitions) },
     filename: "hotkeys",
 });
 

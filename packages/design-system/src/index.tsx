@@ -1,6 +1,7 @@
 import { cn } from "@legendapp/spark/ui/classnames";
+import { useWindowId } from "@legendapp/spark/windows";
 import { showContextMenu } from "@legendapp/spark/context-menu";
-import { NativeSegmentedControl, NativeSelect } from "@legendapp/spark/ui/select-controls";
+import { SegmentedControl, Select } from "@legendapp/spark/ui";
 import { useCallback, useMemo } from "react";
 import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View, type GestureResponderEvent } from "react-native";
 import { useResolveClassNames } from "uniwind";
@@ -70,9 +71,9 @@ export function SegmentedOptions<Value extends OptionValue>({
 
   if (Platform.OS === "macos") {
     return (
-      <NativeSegmentedControl
-        onChange={handleNativeChange}
-        segments={nativeSegments}
+      <SegmentedControl
+        onValueChange={handleNativeChange}
+        options={nativeSegments}
         style={[styles.nativeSegmentedControl, { width: nativeWidth }]}
         value={nativeValue}
       />
@@ -145,6 +146,7 @@ export function SelectControl<Value extends OptionValue = string>({
   options,
   value,
 }: SelectControlProps<Value>) {
+  const windowId = useWindowId();
   const selectedOption = options.find((option) => option.value === value) ?? options[0];
   const nativeOptions = useMemo(() => options.map((option) => ({
     label: option.label,
@@ -161,14 +163,14 @@ export function SelectControl<Value extends OptionValue = string>({
   const handlePress = async (event: GestureResponderEvent) => {
     if (!disabled) {
       const location = await getContextMenuLocation(event);
-      const selected = await showContextMenu(
-        options.map((option) => ({
+      const selected = await showContextMenu({
+        windowId, position: location, items: options.map((option) => ({
+          type: "checkbox", checked: option.value === value,
           id: String(option.value),
-          title: option.value === value ? `* ${option.label}` : option.label,
+          label: option.label,
         })),
-        location,
-      );
-      const selectedOption = selected ? options.find((option) => String(option.value) === selected) : null;
+      });
+      const selectedOption = !selected.canceled ? options.find((option) => String(option.value) === selected.itemId) : null;
       if (selectedOption) {
         onChange(selectedOption.value);
       }
@@ -177,10 +179,10 @@ export function SelectControl<Value extends OptionValue = string>({
 
   if (Platform.OS === "macos") {
     return (
-      <NativeSelect
+      <Select
         accessibilityLabel={accessibilityLabel}
-        enabled={!disabled}
-        onChange={handleNativeChange}
+        disabled={disabled}
+        onValueChange={handleNativeChange}
         options={nativeOptions}
         style={styles.nativeSelect}
         value={nativeValue}

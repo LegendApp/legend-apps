@@ -1,11 +1,12 @@
-import type { CommandRunnerResult } from "@legendapp/spark/processes/commands";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import type { ProcessResult } from "@legendapp/spark/processes";
 import { getFilename, type DiffFilePairOpenSource } from "./diffFiles";
 
 export type DiffFilePairSource = DiffFilePairOpenSource;
 
 export type FilePairDiffCommand = {
   args: string[];
-  command: string;
+  target: { type: "executable"; path: string };
   timeoutMs: number;
 };
 
@@ -38,29 +39,29 @@ export function createFilePairDiffCommand(
       source.oldPath,
       source.newPath,
     ],
-    command: filePairDiffCommand,
+    target: { type: "executable", path: filePairDiffCommand },
     timeoutMs: filePairDiffTimeoutMs,
   };
 }
 
-function createFilePairDiffCommandError(commandResult: CommandRunnerResult) {
+function createFilePairDiffCommandError(commandResult: ProcessResult) {
   if (commandResult.timedOut) {
     return new Error("File comparison timed out. The files may be too large to compare.");
   }
-  const message = commandResult.stderr
-    ? commandResult.stderr
-    : `diff exited with code ${commandResult.exitCode}.`;
+  const message = decodeProcessText(commandResult.stderr)
+    ? decodeProcessText(commandResult.stderr)
+    : `diff exited with code ${(commandResult.exit.type === "exited" ? commandResult.exit.code : -1)}.`;
   return new Error(message);
 }
 
-export function createFilePairUnifiedDiff(source: DiffFilePairSource, commandResult: CommandRunnerResult) {
+export function createFilePairUnifiedDiff(source: DiffFilePairSource, commandResult: ProcessResult) {
   let diffText = "";
-  if (commandResult.exitCode === 0 && !commandResult.timedOut) {
+  if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) === 0 && !commandResult.timedOut) {
     diffText = "";
-  } else if (commandResult.exitCode === 1 && !commandResult.timedOut) {
+  } else if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) === 1 && !commandResult.timedOut) {
     const oldDisplayPath = getFilePairDiffDisplayPath(source.oldPath, "a");
     const newDisplayPath = getFilePairDiffDisplayPath(source.newPath, "b");
-    diffText = `diff --git ${oldDisplayPath} ${newDisplayPath}\n${commandResult.stdout}`;
+    diffText = `diff --git ${oldDisplayPath} ${newDisplayPath}\n${decodeProcessText(commandResult.stdout)}`;
   } else {
     throw createFilePairDiffCommandError(commandResult);
   }

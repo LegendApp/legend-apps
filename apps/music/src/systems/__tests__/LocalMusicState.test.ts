@@ -217,9 +217,8 @@ jest.mock("@legend-apps/media-library-scanner", () => ({
     })(),
 }));
 
-jest.mock("@legendapp/spark/files/watchers", () => ({
-    addDirectoryChangeListener: jest.fn(() => ({ remove: jest.fn() })),
-    setWatchedDirectories: jest.fn(),
+jest.mock("@legendapp/spark/files", () => ({
+    watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
 jest.mock("../LibraryCache", () => ({

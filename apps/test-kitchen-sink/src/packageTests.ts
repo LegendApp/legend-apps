@@ -1,8 +1,8 @@
 import type { KitchenSinkPackage, KitchenSinkTest } from "./kitchenSinkMenus";
-import { type WindowOptions } from "@legendapp/spark/windows/managed";
+import { type NavigatorWindowOptions } from "@legendapp/spark/windows";
 
 export type KitchenSinkTestConfig = KitchenSinkTest & {
-  windowOptions?: WindowOptions;
+  windowOptions?: NavigatorWindowOptions;
 };
 
 export const packages: KitchenSinkPackage[] = [

@@ -11,5 +11,6 @@
   "devDependencies": {
     "nitrogen": "0.35.6",
     "react-native-nitro-modules": "0.35.6"
-  }
+  },
+  "dependencies": {}
 }

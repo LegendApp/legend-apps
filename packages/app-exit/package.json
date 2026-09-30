@@ -20,5 +20,6 @@
   "peerDependencies": {
     "react": "catalog:",
     "react-native": "catalog:"
-  }
+  },
+  "dependencies": {}
 }

@@ -6,5 +6,6 @@
   "types": "src/index.ts",
   "peerDependencies": {
     "react-native": "*"
-  }
+  },
+  "dependencies": {}
 }

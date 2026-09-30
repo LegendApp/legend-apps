@@ -20,6 +20,7 @@ const manifest = {
   recentDocuments: { macos: true },
   nativeModules: {
     macos: [
+      "@legend-apps/storage",
       "@legendapp/spark-desktop-app",
       "@legendapp/spark-ui",
       "@legendapp/spark-context-menu",

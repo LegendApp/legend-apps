@@ -1,10 +1,12 @@
 // @ts-nocheck Bun test globals follow the repository test setup.
 import { expect, mock, test } from "bun:test";
+import { ownRegistration } from "../../../../packages/runtime-utils/src/ownRegistration";
+mock.module("@legend-apps/runtime-utils", () => ({ ownRegistration }));
 let listener: (event: { reason: string }) => void;
-const complete = mock();
-mock.module("@legendapp/spark/app/exit", () => ({
-  addAppExitListener: (callback: typeof listener) => { listener = callback; return { remove() {} }; },
-  completeAppExit: complete,
+
+mock.module("@legendapp/spark/app", () => ({
+  beforeQuit: (callback: typeof listener) => { listener = callback; return Promise.resolve({ remove: async () => {} }); },
+
 }));
 const { prepareDraftExit, prepareSlidesExit, registerSlidesExitPreparation, installSlidesExitHandler } = await import("../slidesExit");
 
@@ -36,15 +38,16 @@ test("window close and Quit share a pending decision and Cancel replies to nativ
   const unregister = registerSlidesExitPreparation(handler);
   const subscription = installSlidesExitHandler();
   const closing = prepareSlidesExit();
-  listener({ reason: "requested" });
-  listener({ reason: "requested" });
+  const firstQuit = listener();
+  const secondQuit = listener();
   await Promise.resolve();
   expect(handler).toHaveBeenCalledTimes(1);
   decide(false);
   expect(await closing).toBe(false);
   await Promise.resolve();
-  expect(complete).toHaveBeenLastCalledWith(false);
-  unregister(); subscription.remove();
+  expect(await firstQuit).toBe(false);
+  expect(await secondQuit).toBe(false);
+  unregister(); await subscription.remove();
   expect(await prepareSlidesExit()).toBe(true);
 });
 

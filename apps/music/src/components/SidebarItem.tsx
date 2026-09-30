@@ -33,7 +33,7 @@ export interface SidebarItemProps extends ViewProps {
  *   </SidebarItem>
  * </NativeSidebar>
  */
-export function SidebarItem({
+export function renderNativeSidebarRow({
     itemId,
     selectable = true,
     rowHeight,
@@ -53,11 +53,11 @@ export function SidebarItem({
     if (isMacOS) {
         return (
             <NativeSidebarItemView
-                itemId={itemId}
+                id={itemId}
                 selectable={selectable}
                 rowHeight={rowHeight}
                 style={style}
-                onRightClick={handleRightClick}
+                onContextMenu={event => onRightClick?.({ x: event.position.x, y: event.position.y, pageX: event.windowPosition.x, pageY: event.windowPosition.y, altKey: event.modifiers.alt, ctrlKey: event.modifiers.control, metaKey: event.modifiers.meta, shiftKey: event.modifiers.shift })}
                 {...props}
             >
                 {children}
@@ -72,3 +72,5 @@ export function SidebarItem({
         </View>
     );
 }
+
+export function SidebarItem(props: SidebarItemProps) { return renderNativeSidebarRow(props); }

@@ -1,4 +1,4 @@
-import { getDefaultHotkeyBindings, KeyCodes, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
+import { getDefaultHotkeyBindings, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import {
   diffHotkeys$,
   diffHotkeyDefinitions,
@@ -18,8 +18,7 @@ describe("Diff hotkeys", () => {
   it("uses the primary representable binding for each native menu item", () => {
     const bindings = defaultBindings();
     bindings.nextHunk = [
-      KeyCodes.KEY_MEDIA_NEXT,
-      `${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_DOWN}`,
+      "Cmd+ArrowDown",
     ];
 
     const patches = getDiffHotkeyMenuPatches(bindings);
@@ -27,11 +26,11 @@ describe("Diff hotkeys", () => {
     expect(patches).toHaveLength(diffHotkeyDefinitions.length);
     expect(patches).toContainEqual({
       id: "nextHunk",
-      shortcut: { key: String.fromCharCode(0xf701), modifiers: KeyCodes.MODIFIER_COMMAND },
+      shortcut: "Cmd+ArrowDown",
     });
     expect(patches).toContainEqual({
       id: "previousHunk",
-      shortcut: { key: "[", modifiers: KeyCodes.MODIFIER_COMMAND },
+      shortcut: "Cmd+[",
     });
   });
 
@@ -41,7 +40,7 @@ describe("Diff hotkeys", () => {
 
     expect(getDiffHotkeyMenuPatches(bindings)).toContainEqual({
       id: "reload",
-      shortcut: null,
+      shortcut: undefined,
     });
   });
 

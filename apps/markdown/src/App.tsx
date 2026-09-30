@@ -3,7 +3,9 @@ import {
   useDocumentAppController,
   type DocumentAppController,
 } from "@legendapp/spark/app/documents";
-import type { NativeMenuAction, NativeMenuActionHandlers } from "@legendapp/spark/menus";
+import type { MenuAction } from "@legendapp/spark/menus";
+import { useValue } from "@legendapp/state/react";
+import { withMenuState } from "@legend-apps/runtime-utils";
 import { useEffect } from "react";
 import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId } from "./appConstants";
 import {
@@ -11,7 +13,7 @@ import {
   getMarkdownEditorRecentDocumentHandler,
 } from "./markdownEditorActions";
 import { isMarkdownPath, newMarkdownDocumentLaunchArgument } from "./markdownFiles";
-import { markdownMenuConfig } from "./markdownMenus";
+import { markdownMenuConfig, markdownMenuState$ } from "./markdownMenus";
 import { applyMarkdownThemeSetting } from "./markdownSettings";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import {
@@ -22,6 +24,8 @@ import {
 
 loadMarkdownUserThemesSync();
 registerMarkdownWindows();
+
+type MenuHandlers = Record<string, (action: MenuAction) => unknown>;
 
 type MarkdownAppProps = {
   launchArguments?: string[];
@@ -53,24 +57,24 @@ async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
   controller.setDocumentWindowOpen(true);
 }
 
-function createMarkdownMenuHandlers(controller: DocumentAppController): NativeMenuActionHandlers {
-  const dispatchOpenEditorMenuAction = (action: NativeMenuAction) =>
+function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHandlers {
+  const dispatchOpenEditorMenuAction = (action: MenuAction) =>
     controller.isDocumentWindowOpen() && dispatchMarkdownEditorMenuAction(action);
 
   return {
-    new: (action: NativeMenuAction) => {
+    new: (action: MenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
         openNewMarkdownEditorWindow(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
-    open: (action: NativeMenuAction) => {
+    open: (action: MenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
         openMarkdownEditorForSelectedFile(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
-    settings: (action: NativeMenuAction) => {
+    settings: (action: MenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
         openMarkdownSettingsWindow().catch(reportMarkdownAppControllerError);
       }
@@ -116,15 +120,17 @@ async function openInitialMarkdownEditor(launchArguments: string[] | undefined, 
 }
 
 export function App({ launchArguments }: MarkdownAppProps) {
+  const menuState = useValue(markdownMenuState$);
+  const menus = withMenuState(markdownMenuConfig, menuState);
   useDocumentAppController({
-    createMenuHandlers: createMarkdownMenuHandlers,
+    onMenuAction: (action, controller) => { if (action.type === "action") createMarkdownMenuHandlers(controller)[action.itemId]?.(action); },
     launchArguments,
-    menus: markdownMenuConfig,
+    menus,
     onInitialOpen: openInitialMarkdownEditor,
-    onRecentDocumentOpen: openRecentMarkdownDocument,
+    onOpenDocument: openRecentMarkdownDocument,
     ownerId: markdownMenuOwnerId,
     reportError: reportMarkdownAppControllerError,
-    windowIdentifier: editorWindowIdentifier,
+    windowId: editorWindowIdentifier,
   });
 
   useEffect(() => {

@@ -1,10 +1,10 @@
-import { getSecureStorage } from "@legendapp/spark/secure-storage";
+import { randomBase64Url } from "@legend-apps/crypto";
 import { createPKCE } from "../pkce";
 
 describe("createPKCE", () => {
     it("uses native cryptographic randomness for the verifier and state", async () => {
-        const randomBase64Url = jest.mocked(getSecureStorage().randomBase64Url);
-        randomBase64Url
+        const random = jest.mocked(randomBase64Url);
+        random
             .mockReturnValueOnce("v".repeat(64))
             .mockReturnValueOnce("state-from-secure-randomness");
 

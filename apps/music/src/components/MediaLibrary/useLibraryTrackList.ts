@@ -1,3 +1,4 @@
+import { useWindowId } from "@legendapp/spark/windows";
 import { useStableCallback } from "@legend-apps/runtime-utils";
 import type { Observable } from "@legendapp/state";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
@@ -9,7 +10,7 @@ import { localAudioControls } from "../LocalAudioPlayer";
 import { showToast } from "../Toast";
 import type { TrackData } from "../TrackItem";
 import { usePlaylistSelection } from "../../hooks/usePlaylistSelection";
-import { type ContextMenuItem, showContextMenu } from "@legendapp/spark/context-menu";
+import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
 import {
     getArtistKey,
     type LibraryTrack,
@@ -29,7 +30,7 @@ import { providerLibrary$, providerSearch$, searchProviders } from "../../provid
 
 type LibraryTrackListItem = TrackData & { sourceTrack?: LibraryTrack };
 
-const ADD_TO_PLAYLIST_MENU_ITEM: ContextMenuItem = { id: "add-to-playlist", title: "Add to Playlist…" };
+const ADD_TO_PLAYLIST_MENU_ITEM = { type: "action" as const, id: "add-to-playlist", label: "Add to Playlist…" };
 
 const getSortableTrackNumber = (track: LibraryTrack): number | null => {
     const trackNumber = track.trackNumber;
@@ -466,6 +467,7 @@ export function buildTrackItems({
 }
 
 export function useLibraryTrackList(): UseLibraryTrackListResult {
+    const windowId = useWindowId();
     const selectedView = useValue(libraryUI$.selectedView);
     const selectedPlaylistId = useValue(libraryUI$.selectedPlaylistId);
     const searchQuery = useValue(libraryUI$.searchQuery);
@@ -663,16 +665,16 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
 
             const sourceTrack = trackItems[index]?.sourceTrack;
             const menuItems = sourceTrack?.provider ? streamingTrackContextMenuItems : localTrackContextMenuItems;
-            const selection = await showContextMenu(menuItems, { x, y });
+            const selection = await showContextMenu({ items: menuItems, windowId, position: { x, y } });
 
             await handleTrackContextMenuSelection({
-                selection,
+                selection: selection.canceled ? null : selection.itemId,
                 filePath: trackItems[index]?.sourceTrack?.filePath,
                 onQueueAction: (action) => {
                     handleTrackAction(index, action === "play-next" ? "play-next" : "enqueue");
                 },
                 onCustomSelect: async (customSelection) => {
-                    if (customSelection !== ADD_TO_PLAYLIST_MENU_ITEM.id) {
+                    if (customSelection !== "add-to-playlist") {
                         return;
                     }
 
@@ -685,17 +687,17 @@ export function useLibraryTrackList(): UseLibraryTrackListResult {
                         return;
                     }
 
-                    const playlistSelectionItems: ContextMenuItem[] = playlists.map((playlist) => ({
+                    const playlistSelectionItems: MenuItem[] = playlists.map((playlist) => ({ type: "action",
                         id: `playlist:${playlist.id}`,
-                        title: playlist.name,
-                        enabled: playlist.source === "cache" && Boolean(playlist.filePath),
+                        label: playlist.name,
+                        disabled: !(playlist.source === "cache" && Boolean(playlist.filePath)),
                     }));
-                    const playlistSelection = await showContextMenu(playlistSelectionItems, { x, y });
-                    if (!playlistSelection?.startsWith("playlist:")) {
+                    const playlistSelection = await showContextMenu({ items: playlistSelectionItems, windowId, position: { x, y } });
+                    if (playlistSelection.canceled || !playlistSelection.itemId.startsWith("playlist:")) {
                         return;
                     }
 
-                    const playlistId = playlistSelection.replace(/^playlist:/, "");
+                    const playlistId = playlistSelection.itemId.replace(/^playlist:/, "");
                     const currentSelection = selectedIndices$.get();
                     const indicesToAdd =
                         currentSelection.size > 0 && currentSelection.has(index)

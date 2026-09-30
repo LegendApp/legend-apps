@@ -1,3 +1,4 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -6,7 +7,7 @@ import { Button } from "./Button";
 import { DropdownMenu } from "./DropdownMenu";
 import { TextInputSearch, type TextInputSearchRef } from "./TextInputSearch";
 import { savePlaylistUI$ } from "../state/savePlaylistUIState";
-import KeyboardManager, { KeyCodes } from "../systems/keyboard/KeyboardManager";
+import { addKeyboardListener, hasModifier, KeyCodes } from "../systems/keyboard/KeyboardManager";
 
 type SavePlaylistDropdownProps = {
     disabled?: boolean;
@@ -69,7 +70,7 @@ export function SavePlaylistDropdown({ disabled = false, onSave }: SavePlaylistD
             return;
         }
 
-            return KeyboardManager.addKeyDownListener((event) => {
+            const registration = ownRegistration(addKeyboardListener("down", (event) => {
                 if (event.keyCode === KeyCodes.KEY_ESCAPE) {
                     close();
                     return true;
@@ -83,7 +84,8 @@ export function SavePlaylistDropdown({ disabled = false, onSave }: SavePlaylistD
                 }
 
                 return false;
-            });
+            }));
+        return () => { void registration.remove().catch(console.error); };
     }, [canSave, close, handleSave, isOpen]);
 
     return (

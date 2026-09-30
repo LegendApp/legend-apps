@@ -10,7 +10,7 @@ test("Slides release includes the native dependencies used by shared settings", 
     "@legendapp/spark-ui",
     "@legendapp/spark-context-menu",
     "@legendapp/spark-native-menu",
-    "@legendapp/spark-settings",
+    "@legend-apps/storage",
     "@legendapp/spark-desktop-windows",
   ]) {
     assert.ok(releasePackages.includes(dependency), `${dependency} must be linked in release`);

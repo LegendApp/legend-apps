@@ -1,307 +1,276 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { getLaunchDocumentPath, openSelectedDocumentPath, useWatchedDocumentReload } from "@legendapp/spark/app/documents";
-import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { loadCodeFile } from "@legend-apps/syntax-parser";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
 import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "../codeFiles";
-import { addWindowCloseRequestedListener, closeWindow } from "@legendapp/spark/windows/managed";
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
-import { addNativeMenuActionListener } from "@legendapp/spark/menus";
+import { beforeWindowClose } from "@legendapp/spark/windows";
+import { beforeQuit } from "@legendapp/spark/app";
+import { dispatchCodeViewerMenu } from "../codeViewerRequests";
 import { setCodeViewerWindowOptions } from "../codeWindows";
 import { codeMenuOwnerId, codeViewerWindowIdentifier } from "../appConstants";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
-
 const mockEditorCommand = jest.fn(async () => true);
-
 jest.mock("@legendapp/spark/app/documents", () => ({
-  createDocumentTransitionGuard: jest.requireActual("../../../../packages/document-app/src/documentTransition").createDocumentTransitionGuard,
-  getLaunchDocumentPath: jest.fn(() => null),
-  getFilename: (path: string) => path.split("/").pop(),
-  openSelectedDocumentPath: jest.fn(),
-  useWatchedDocumentReload: jest.fn(),
+    createDocumentTransitionGuard: jest.requireActual("@legendapp/spark/app/documents").createDocumentTransitionGuard,
+    getLaunchDocumentPath: jest.fn(() => null),
+    getFilename: (path: string) => path.split("/").pop(),
+    openSelectedDocumentPath: jest.fn(),
+    useWatchedDocumentReload: jest.fn(),
+    noteRecentDocument: jest.fn(),
 }));
-jest.mock("@legendapp/spark/app/exit", () => ({ addAppExitListener: jest.fn(() => ({ remove() {} })), completeAppExit: jest.fn() }));
-jest.mock("@legendapp/spark/windows/managed", () => ({ addWindowCloseRequestedListener: jest.fn(() => ({ remove() {} })), closeWindow: jest.fn() }));
-jest.mock("@legendapp/spark/menus", () => ({ addNativeMenuActionListener: jest.fn(() => ({ remove() {} })), updateMenuItems: jest.fn() }));
-jest.mock("@legendapp/spark/app/recent-documents", () => ({ noteRecentDocument: jest.fn() }));
+jest.mock("@legendapp/spark/app", () => ({ beforeQuit: jest.fn(async () => ({ remove: async () => {} })) }));
+jest.mock("@legendapp/spark/windows", () => ({ beforeWindowClose: jest.fn(async () => ({ remove: async () => {} })) }));
 jest.mock("@legend-apps/source-editor", () => {
-  const React = require("react");
-  return { prepareDocument: jest.fn((path: string) => `prepared:${path}`), cancelPreparedDocument: jest.fn(), SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
-    React.useImperativeHandle(ref, () => ({ command: mockEditorCommand }), []);
-    return React.createElement("SourceDocumentEditor", props);
-  }) };
+    const React = require("react");
+    return { prepareDocument: jest.fn((path: string) => `prepared:${path}`), cancelPreparedDocument: jest.fn(), SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
+            React.useImperativeHandle(ref, () => ({ command: mockEditorCommand }), []);
+            return React.createElement("SourceDocumentEditor", props);
+        }) };
 });
 jest.mock("@legend-apps/source-editor/preload", () => {
-  const editor = jest.requireMock("@legend-apps/source-editor");
-  return { prepareDocument: editor.prepareDocument, cancelPreparedDocument: editor.cancelPreparedDocument };
+    const editor = jest.requireMock("@legend-apps/source-editor");
+    return { prepareDocument: editor.prepareDocument, cancelPreparedDocument: editor.cancelPreparedDocument };
 });
 jest.mock("@legend-apps/source-viewer", () => ({
-  SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
-  useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
+    SourceDocumentView: () => { throw new Error("The old viewer must not mount"); },
+    useSourceDocumentRows: () => { throw new Error("The old tokenization pipeline must not run"); },
 }));
-jest.mock("@legendapp/spark/settings/observable", () => ({ createStorage: jest.fn(() => ({})) }));
+jest.mock("@legend-apps/storage", () => ({ createStorage: jest.fn(() => ({})) }));
 jest.mock("@legend-apps/syntax-parser", () => ({
-  loadCodeFile: jest.fn(),
-  getSyntaxLanguageForPath: jest.requireActual("../../../../packages/syntax-parser/src/syntaxAssets").getSyntaxLanguageForPath,
+    loadCodeFile: jest.fn(),
+    getSyntaxLanguageForPath: jest.requireActual("../../../../packages/syntax-parser/src/syntaxAssets").getSyntaxLanguageForPath,
 }));
-jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => {}) }));
+jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => { }) }));
 jest.mock("../codeSettings", () => ({
-  useCodeFontFamilySetting: () => "Menlo",
-  useCodeFontSizeSetting: () => 13,
-  useCodeSyntaxHighlightingEnabledSetting: jest.fn(() => true),
-  useCodeSyntaxThemeSetting: jest.fn(() => "dark"),
-  useCodeSyntaxTheme: () => ({ appearance: "dark", background: "#000", foreground: "#fff" }),
+    useCodeFontFamilySetting: () => "Menlo",
+    useCodeFontSizeSetting: () => 13,
+    useCodeSyntaxHighlightingEnabledSetting: jest.fn(() => true),
+    useCodeSyntaxThemeSetting: jest.fn(() => "dark"),
+    useCodeSyntaxTheme: () => ({ appearance: "dark", background: "#000", foreground: "#fff" }),
 }));
 jest.mock("@legendapp/list/react-native", () => {
-  const React = require("react");
-  return {
-    LegendList: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({ getState: () => ({ start: -1, end: -1 }) }), []);
-      return React.createElement("List", props);
-    }),
-  };
+    const React = require("react");
+    return {
+        LegendList: React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
+            React.useImperativeHandle(ref, () => ({ getState: () => ({ start: -1, end: -1 }) }), []);
+            return React.createElement("List", props);
+        }),
+    };
 });
-
 describe("Code default editor", () => {
-  let renderer: ReactTestRenderer;
-  const editor = () => renderer.root.findByType("SourceDocumentEditor" as never);
-  const openButton = () => renderer.root.findAll((node) =>
-    node.props.accessibilityRole === "button" && typeof node.props.onPress === "function")[0];
-
-  beforeEach(() => {
-    jest.useFakeTimers();
-    jest.clearAllMocks();
-    mockEditorCommand.mockReset().mockResolvedValue(true);
-    jest.replaceProperty(process, "argv", ["node", "code"]);
-    jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
-    jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
-    jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
-    codeViewerFileRequest$.set({ path: null, version: 0 });
-  });
-  afterEach(async () => {
-    if (renderer) await act(async () => renderer.unmount());
-    jest.useRealTimers();
-    jest.restoreAllMocks();
-  });
-
-  it("opens directly in the editor without loading or mounting the old viewer", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]} />); });
-    expect(renderer.root.findAllByType("Text" as never).map(node => node.props.children)).toEqual(["Open File"]);
-    expect(openButton().props.accessibilityLabel).toBe("Open File");
-    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    expect(prepareDocument).toHaveBeenCalledTimes(1);
-    expect(prepareDocument).toHaveBeenCalledWith("/one.ts");
-    expect(editor().props.preparedDocumentId).toBe("prepared:/one.ts");
-    expect(codeViewerFileRequest$.path.peek()).toBeNull();
-    expect(editor().props.filePath).toBe("/one.ts");
-    expect(editor().props.language).toBe("typescript");
-    expect(editor().props.syntaxHighlightingEnabled).toBe(true);
-    expect(editor().props.syntaxHighlightingMode).toBe("background");
-    expect(editor().props.showFileLoadingBanner).toBe(false);
-    expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
-    expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
-    expect(loadCodeFile).not.toHaveBeenCalled();
-    expect(useWatchedDocumentReload).not.toHaveBeenCalled();
-    expect(noteRecentDocument).not.toHaveBeenCalled();
-    await act(async () => editor().props.onLoad());
-    expect(noteRecentDocument).toHaveBeenCalledWith("/one.ts");
-  });
-
-  it("opens launch files directly in the editor", async () => {
-    jest.mocked(getLaunchDocumentPath).mockReturnValue("/launch.tsx");
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.tsx"]} />); });
-    expect(editor().props.filePath).toBe("/launch.tsx");
-    expect(editor().props.language).toBe("tsx");
-    expect(loadCodeFile).not.toHaveBeenCalled();
-  });
-
-  it.each(["/readme.md", "/data.json", "/script.py", "/notes.txt", "/LICENSE", "/.env", "/custom.unknown"])("accepts text path %s", (path) => {
-    expect(isCodePath(path)).toBe(true);
-    expect(getLaunchCodeFile(["--debug", path])).toBe(path);
-  });
-
-  it("detects supported languages and falls back to plain text", () => {
-    const binary = "/Applications/Legend Code.app/Contents/MacOS/Legend Code";
-    expect(getLaunchCodeFile([binary, "--syntax-backend=tree-sitter", "/tmp/README"])).toBe("/tmp/README");
-    expect(getLaunchCodeFile([binary])).toBeNull();
-    expect(getCodeLanguage("/script.py")).toBe("python");
-    expect(getCodeLanguage("/data.json")).toBe("json");
-    expect(getCodeLanguage("/README.MD")).toBe("markdown");
-    expect(getCodeLanguage("/LICENSE")).toBe("");
-    expect(getCodeLanguage("/file.unknown")).toBe("");
-    expect(getLaunchCodeFile([])).toBeNull();
-    expect(isCodePath("--debug")).toBe(false);
-    expect(isCodePath("/folder/")).toBe(false);
-  });
-
-  it("preserves the buffer on settings changes and same-file requests", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    const mountedEditor = editor();
-    jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("github-light");
-    await act(async () => renderer.update(<CodeViewerWindow />));
-    expect(editor()).toBe(mountedEditor);
-    expect(editor().props.syntaxTheme).toBe("github-light");
-    jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(false);
-    await act(async () => renderer.update(<CodeViewerWindow />));
-    expect(editor()).toBe(mountedEditor);
-    expect(editor().props.syntaxHighlightingEnabled).toBe(false);
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    expect(editor()).toBe(mountedEditor);
-    expect(loadCodeFile).not.toHaveBeenCalled();
-  });
-
-  it("replaces the editor only when switching to another file", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    const first = editor();
-    await act(async () => requestCodeViewerFile("/two.tsx"));
-    expect(editor()).not.toBe(first);
-    expect(editor().props.filePath).toBe("/two.tsx");
-    expect(editor().props.language).toBe("tsx");
-  });
-
-  it("keeps a second file open when the window originally launched with a document", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]} />); });
-    expect(editor().props.filePath).toBe("/one.ts");
-    await act(async () => requestCodeViewerFile("/two.tsx"));
-    expect(editor().props.filePath).toBe("/two.tsx");
-    expect(mockEditorCommand).toHaveBeenCalledTimes(1);
-    const second = editor();
-    await act(async () => renderer.update(<CodeViewerWindow launchArguments={["/one.ts"]} />));
-    expect(editor()).toBe(second);
-    expect(editor().props.filePath).toBe("/two.tsx");
-    await act(async () => requestCodeViewerFile("/three.md"));
-    expect(editor().props.filePath).toBe("/three.md");
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    expect(editor().props.filePath).toBe("/one.ts");
-  });
-
-  it("preserves edits when opening another file is cancelled or saving fails", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    const first = editor();
-    mockEditorCommand.mockResolvedValueOnce(false);
-    await act(async () => requestCodeViewerFile("/two.ts"));
-    expect(editor()).toBe(first);
-    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
-    jest.mocked(cancelPreparedDocument).mockClear();
-    mockEditorCommand.mockRejectedValueOnce(new Error("File changed outside the editor"));
-    await act(async () => requestCodeViewerFile("/two.ts"));
-    expect(editor()).toBe(first);
-    expect(JSON.stringify(renderer.toJSON())).toContain("File changed outside the editor");
-    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
-  });
-
-  it("passes a launch preparation through without starting a duplicate read", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token" />); });
-    expect(editor().props.preparedDocumentId).toBe("launch-token");
-    expect(prepareDocument).not.toHaveBeenCalled();
-    await act(async () => renderer.unmount());
-    expect(cancelPreparedDocument).toHaveBeenCalledWith("launch-token");
-  });
-
-  it("does not replay an old request when the viewer is reopened", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    await act(async () => renderer.unmount());
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/new.ts"]} preparedDocumentId="new-token" />); });
-    expect(editor().props.filePath).toBe("/new.ts");
-    expect(editor().props.preparedDocumentId).toBe("new-token");
-  });
-
-  it("disposes an in-flight preparation if the window closes during confirmation", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]} />); });
-    let confirm!: (allow: boolean) => void;
-    mockEditorCommand.mockImplementationOnce(() => new Promise((resolve) => { confirm = resolve; }));
-    await act(async () => requestCodeViewerFile("/two.ts"));
-    await act(async () => renderer.unmount());
-    await act(async () => confirm(true));
-    expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
-  });
-
-  it("updates the Save As title and language without remounting, then can reopen the original", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    const first = editor();
-    await act(async () => editor().props.onDocumentState({ dirty: false, path: "/copy.py" }));
-    expect(editor()).toBe(first);
-    expect(editor().props.language).toBe("python");
-    expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/copy.py" }));
-    await act(async () => requestCodeViewerFile("/copy.py"));
-    expect(editor()).toBe(first);
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    expect(editor()).not.toBe(first);
-  });
-
-  it("guards close and quit, routes menu commands and toggles pairing", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    await act(async () => requestCodeViewerFile("/one.ts"));
-    const close = jest.mocked(addWindowCloseRequestedListener).mock.calls[0][0];
-    const quit = jest.mocked(addAppExitListener).mock.calls[0][0];
-    const menu = jest.mocked(addNativeMenuActionListener).mock.calls[0][0];
-    mockEditorCommand.mockResolvedValueOnce(false);
-    await act(async () => close({ identifier: codeViewerWindowIdentifier }));
-    expect(closeWindow).not.toHaveBeenCalled();
-    await act(async () => close({ identifier: codeViewerWindowIdentifier }));
-    expect(closeWindow).toHaveBeenCalledWith(codeViewerWindowIdentifier);
-    mockEditorCommand.mockResolvedValueOnce(false);
-    await act(async () => quit({ reason: "requested" }));
-    expect(completeAppExit).toHaveBeenLastCalledWith(false);
-    await act(async () => quit({ reason: "requested" }));
-    expect(completeAppExit).toHaveBeenLastCalledWith(true);
-    for (const itemId of ["save", "saveAs", "find", "goToLine", "indent", "toggleComment", "duplicateLine", "moveLineUp"]) {
-      await act(async () => menu({ ownerId: codeMenuOwnerId, menuId: "editor", itemId }));
-      expect(mockEditorCommand).toHaveBeenLastCalledWith(itemId);
-    }
-    await act(async () => menu({ ownerId: codeMenuOwnerId, menuId: "editor", itemId: "automaticPairs" }));
-    expect(editor().props.automaticPairs).toBe(false);
-  });
-
-  it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {
-    await act(async () => { renderer = create(<CodeViewerWindow />); });
-    jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
-    await act(async () => openButton().props.onPress());
-    expect(openSelectedDocumentPath).toHaveBeenCalledWith(expect.objectContaining({ allowedFileTypes: [] }));
-    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
-    jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
-    await act(async () => openButton().props.onPress());
-    expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
-    expect(JSON.stringify(renderer.toJSON())).toContain("Dialog failed");
-    jest.mocked(openSelectedDocumentPath).mockResolvedValue("/two.ts");
-    await act(async () => openButton().props.onPress());
-    expect(editor().props.filePath).toBe("/two.ts");
-    expect(JSON.stringify(renderer.toJSON())).not.toContain("Dialog failed");
-  });
-
-  it("restarts initial requests for a new viewer dataset and cancels old overscan work", async () => {
-    // Retain shared-list regression coverage even though Code no longer uses it.
-    const requestRange = jest.fn();
-    const onInitialRowsRequested = jest.fn();
-    const list = () => renderer.root.findByType("List" as never);
-    const render = (dataKey: string) => (
-      <VirtualizedFixedDocumentList
-        dataKey={dataKey} itemIndexes={[0, 1, 2]} rowHeight={22}
-        getRow={() => undefined} renderRow={() => <></>}
-        requestRange={requestRange} onInitialRowsRequested={onInitialRowsRequested}
-        lineOverscan={10} overscanRequestDelayMs={80}
-      />
-    );
-    await act(async () => { renderer = create(render("one")); });
-    await act(async () => list().props.onLayout({ nativeEvent: { layout: { height: 440 } } }));
-    expect(onInitialRowsRequested).toHaveBeenCalledTimes(1);
-    await act(async () => renderer.update(render("two")));
-    expect(onInitialRowsRequested).toHaveBeenCalledTimes(2);
-    await act(async () => jest.advanceTimersByTime(100));
-    expect(requestRange.mock.calls.filter((call) => call[2].reason === "overscan")).toHaveLength(1);
-    await act(async () => renderer.update(render("two")));
-    expect(onInitialRowsRequested).toHaveBeenCalledTimes(2);
-  });
+    let renderer: ReactTestRenderer;
+    const editor = () => renderer.root.findByType("SourceDocumentEditor" as never);
+    const openButton = () => renderer.root.findAll((node) => node.props.accessibilityRole === "button" && typeof node.props.onPress === "function")[0];
+    beforeEach(() => {
+        jest.useFakeTimers();
+        jest.clearAllMocks();
+        mockEditorCommand.mockReset().mockResolvedValue(true);
+        jest.replaceProperty(process, "argv", ["node", "code"]);
+        jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
+        jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
+        jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
+        codeViewerFileRequest$.set({ path: null, version: 0 });
+    });
+    afterEach(async () => {
+        if (renderer)
+            await act(async () => renderer.unmount());
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+    it("opens directly in the editor without loading or mounting the old viewer", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]}/>); });
+        expect(renderer.root.findAllByType("Text" as never).map(node => node.props.children)).toEqual(["Open File"]);
+        expect(openButton().props.accessibilityLabel).toBe("Open File");
+        expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        expect(prepareDocument).toHaveBeenCalledTimes(1);
+        expect(prepareDocument).toHaveBeenCalledWith("/one.ts");
+        expect(editor().props.preparedDocumentId).toBe("prepared:/one.ts");
+        expect(codeViewerFileRequest$.path.peek()).toBeNull();
+        expect(editor().props.filePath).toBe("/one.ts");
+        expect(editor().props.language).toBe("typescript");
+        expect(editor().props.syntaxHighlightingEnabled).toBe(true);
+        expect(editor().props.syntaxHighlightingMode).toBe("background");
+        expect(editor().props.showFileLoadingBanner).toBe(false);
+        expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
+        expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
+        expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
+        expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
+        expect(loadCodeFile).not.toHaveBeenCalled();
+        expect(useWatchedDocumentReload).not.toHaveBeenCalled();
+        expect(noteRecentDocument).not.toHaveBeenCalled();
+        await act(async () => editor().props.onLoad());
+        expect(noteRecentDocument).toHaveBeenCalledWith("/one.ts");
+    });
+    it("opens launch files directly in the editor", async () => {
+        jest.mocked(getLaunchDocumentPath).mockReturnValue("/launch.tsx");
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.tsx"]}/>); });
+        expect(editor().props.filePath).toBe("/launch.tsx");
+        expect(editor().props.language).toBe("tsx");
+        expect(loadCodeFile).not.toHaveBeenCalled();
+    });
+    it.each(["/readme.md", "/data.json", "/script.py", "/notes.txt", "/LICENSE", "/.env", "/custom.unknown"])("accepts text path %s", (path) => {
+        expect(isCodePath(path)).toBe(true);
+        expect(getLaunchCodeFile(["--debug", path])).toBe(path);
+    });
+    it("detects supported languages and falls back to plain text", () => {
+        const binary = "/Applications/Legend Code.app/Contents/MacOS/Legend Code";
+        expect(getLaunchCodeFile([binary, "--syntax-backend=tree-sitter", "/tmp/README"])).toBe("/tmp/README");
+        expect(getLaunchCodeFile([binary])).toBeNull();
+        expect(getCodeLanguage("/script.py")).toBe("python");
+        expect(getCodeLanguage("/data.json")).toBe("json");
+        expect(getCodeLanguage("/README.MD")).toBe("markdown");
+        expect(getCodeLanguage("/LICENSE")).toBe("");
+        expect(getCodeLanguage("/file.unknown")).toBe("");
+        expect(getLaunchCodeFile([])).toBeNull();
+        expect(isCodePath("--debug")).toBe(false);
+        expect(isCodePath("/folder/")).toBe(false);
+    });
+    it("preserves the buffer on settings changes and same-file requests", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        const mountedEditor = editor();
+        jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("github-light");
+        await act(async () => renderer.update(<CodeViewerWindow />));
+        expect(editor()).toBe(mountedEditor);
+        expect(editor().props.syntaxTheme).toBe("github-light");
+        jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(false);
+        await act(async () => renderer.update(<CodeViewerWindow />));
+        expect(editor()).toBe(mountedEditor);
+        expect(editor().props.syntaxHighlightingEnabled).toBe(false);
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        expect(editor()).toBe(mountedEditor);
+        expect(loadCodeFile).not.toHaveBeenCalled();
+    });
+    it("replaces the editor only when switching to another file", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        const first = editor();
+        await act(async () => requestCodeViewerFile("/two.tsx"));
+        expect(editor()).not.toBe(first);
+        expect(editor().props.filePath).toBe("/two.tsx");
+        expect(editor().props.language).toBe("tsx");
+    });
+    it("keeps a second file open when the window originally launched with a document", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
+        expect(editor().props.filePath).toBe("/one.ts");
+        await act(async () => requestCodeViewerFile("/two.tsx"));
+        expect(editor().props.filePath).toBe("/two.tsx");
+        expect(mockEditorCommand).toHaveBeenCalledTimes(1);
+        const second = editor();
+        await act(async () => renderer.update(<CodeViewerWindow launchArguments={["/one.ts"]}/>));
+        expect(editor()).toBe(second);
+        expect(editor().props.filePath).toBe("/two.tsx");
+        await act(async () => requestCodeViewerFile("/three.md"));
+        expect(editor().props.filePath).toBe("/three.md");
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        expect(editor().props.filePath).toBe("/one.ts");
+    });
+    it("preserves edits when opening another file is cancelled or saving fails", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        const first = editor();
+        mockEditorCommand.mockResolvedValueOnce(false);
+        await act(async () => requestCodeViewerFile("/two.ts"));
+        expect(editor()).toBe(first);
+        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+        jest.mocked(cancelPreparedDocument).mockClear();
+        mockEditorCommand.mockRejectedValueOnce(new Error("File changed outside the editor"));
+        await act(async () => requestCodeViewerFile("/two.ts"));
+        expect(editor()).toBe(first);
+        expect(JSON.stringify(renderer.toJSON())).toContain("File changed outside the editor");
+        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+    });
+    it("passes a launch preparation through without starting a duplicate read", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token"/>); });
+        expect(editor().props.preparedDocumentId).toBe("launch-token");
+        expect(prepareDocument).not.toHaveBeenCalled();
+        await act(async () => renderer.unmount());
+        expect(cancelPreparedDocument).toHaveBeenCalledWith("launch-token");
+    });
+    it("does not replay an old request when the viewer is reopened", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => renderer.unmount());
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/new.ts"]} preparedDocumentId="new-token"/>); });
+        expect(editor().props.filePath).toBe("/new.ts");
+        expect(editor().props.preparedDocumentId).toBe("new-token");
+    });
+    it("disposes an in-flight preparation if the window closes during confirmation", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
+        let confirm!: (allow: boolean) => void;
+        mockEditorCommand.mockImplementationOnce(() => new Promise((resolve) => { confirm = resolve; }));
+        await act(async () => requestCodeViewerFile("/two.ts"));
+        await act(async () => renderer.unmount());
+        await act(async () => confirm(true));
+        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+    });
+    it("updates the Save As title and language without remounting, then can reopen the original", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        const first = editor();
+        await act(async () => editor().props.onDocumentState({ dirty: false, path: "/copy.py" }));
+        expect(editor()).toBe(first);
+        expect(editor().props.language).toBe("python");
+        expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/copy.py" }));
+        await act(async () => requestCodeViewerFile("/copy.py"));
+        expect(editor()).toBe(first);
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        expect(editor()).not.toBe(first);
+    });
+    it("guards close and quit, routes menu commands and toggles pairing", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        await act(async () => requestCodeViewerFile("/one.ts"));
+        const close = jest.mocked(beforeWindowClose).mock.calls[0][1];
+        const quit = jest.mocked(beforeQuit).mock.calls[0][0];
+        const menu = dispatchCodeViewerMenu;
+        mockEditorCommand.mockResolvedValueOnce(false);
+        await act(async () => { expect(await close()).toBe(false); });
+        await act(async () => { expect(await close()).toBe(true); });
+        mockEditorCommand.mockResolvedValueOnce(false);
+        await act(async () => { expect(await quit()).toBe(false); });
+        await act(async () => { expect(await quit()).toBe(true); });
+        for (const itemId of ["save", "saveAs", "find", "goToLine", "indent", "toggleComment", "duplicateLine", "moveLineUp"]) {
+            await act(async () => menu(itemId));
+            expect(mockEditorCommand).toHaveBeenLastCalledWith(itemId);
+        }
+        await act(async () => menu("automaticPairs"));
+        expect(editor().props.automaticPairs).toBe(false);
+    });
+    it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow />); });
+        jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
+        await act(async () => openButton().props.onPress());
+        expect(openSelectedDocumentPath).toHaveBeenCalledWith(expect.objectContaining({ allowedFileTypes: [] }));
+        expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
+        jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
+        await act(async () => openButton().props.onPress());
+        expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
+        expect(JSON.stringify(renderer.toJSON())).toContain("Dialog failed");
+        jest.mocked(openSelectedDocumentPath).mockResolvedValue("/two.ts");
+        await act(async () => openButton().props.onPress());
+        expect(editor().props.filePath).toBe("/two.ts");
+        expect(JSON.stringify(renderer.toJSON())).not.toContain("Dialog failed");
+    });
+    it("restarts initial requests for a new viewer dataset and cancels old overscan work", async () => {
+        // Retain shared-list regression coverage even though Code no longer uses it.
+        const requestRange = jest.fn();
+        const onInitialRowsRequested = jest.fn();
+        const list = () => renderer.root.findByType("List" as never);
+        const render = (dataKey: string) => (<VirtualizedFixedDocumentList dataKey={dataKey} itemIndexes={[0, 1, 2]} rowHeight={22} getRow={() => undefined} renderRow={() => <></>} requestRange={requestRange} onInitialRowsRequested={onInitialRowsRequested} lineOverscan={10} overscanRequestDelayMs={80}/>);
+        await act(async () => { renderer = create(render("one")); });
+        await act(async () => list().props.onLayout({ nativeEvent: { layout: { height: 440 } } }));
+        expect(onInitialRowsRequested).toHaveBeenCalledTimes(1);
+        await act(async () => renderer.update(render("two")));
+        expect(onInitialRowsRequested).toHaveBeenCalledTimes(2);
+        await act(async () => jest.advanceTimersByTime(100));
+        expect(requestRange.mock.calls.filter((call) => call[2].reason === "overscan")).toHaveLength(1);
+        await act(async () => renderer.update(render("two")));
+        expect(onInitialRowsRequested).toHaveBeenCalledTimes(2);
+    });
 });

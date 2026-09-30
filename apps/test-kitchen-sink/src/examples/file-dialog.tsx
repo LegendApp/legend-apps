@@ -11,8 +11,8 @@ export function FileDialogExample() {
       <Text style={styles.bodyText}>{result}</Text>
       <ExampleButton
         onPress={() => {
-          void openFileDialog({ allowsMultipleSelection: true }).then((paths) => {
-            setResult(paths?.length ? paths.join("\n") : "Open canceled.");
+          void openFileDialog({ multiple: true }).then((paths) => {
+            setResult(!paths.canceled ? paths.paths.join("\n") : "Open canceled.");
           });
         }}
       >
@@ -21,7 +21,7 @@ export function FileDialogExample() {
       <ExampleButton
         onPress={() => {
           void saveFileDialog({ defaultName: "legend-apps.txt" }).then((path) => {
-            setResult(path ?? "Save canceled.");
+            setResult(path.canceled ? "Save canceled." : path.path);
           });
         }}
       >

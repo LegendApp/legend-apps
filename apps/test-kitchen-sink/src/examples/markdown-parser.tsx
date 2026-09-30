@@ -441,10 +441,10 @@ export function MarkdownParserExample() {
 
   const chooseMarkdownFileForLoad = () => {
     void openFileDialog({
-      allowedFileTypes: ["md", "mdown", "markdown"],
-      allowsMultipleSelection: false,
+      filters: [{ extensions: ["md", "mdown", "markdown"] }],
+      multiple: false,
     }).then((paths) => {
-      const path = paths?.[0];
+      const path = paths.canceled ? undefined : paths.paths[0];
       if (!path) {
         setStatus("File selection canceled.");
         return;

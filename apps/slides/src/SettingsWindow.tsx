@@ -6,7 +6,7 @@ import {
   SettingsRow,
   SettingsSection,
   VirtualizedSettingsWindow as SharedSettingsWindow,
-  type VirtualizedSettingsWindowPage,
+  type SettingsWindowPage,
 } from "@legendapp/spark/settings/window";
 import {
   usePresentationNotesFontSizeSetting,
@@ -85,20 +85,20 @@ function AppearanceSettingsContent() {
   </SettingsSection>;
 }
 
-const pages: VirtualizedSettingsWindowPage<SlidesSettingsPage>[] = [{
-  id: "appearance", title: "Appearance", renderContent: () => <AppearanceSettingsContent />,
+const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
+  id: "appearance", title: "Appearance", render: () => <AppearanceSettingsContent />,
 }, {
   id: "timer",
-  renderContent: () => <TimerSettingsPage />,
+  render: () => <TimerSettingsPage />,
   title: "Timer",
-}, { id: "transitions", title: "Transitions", renderContent: () => <TransitionSettingsPage /> }];
+}, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> }];
 
 export function SettingsWindow() {
   return (
     <SharedSettingsWindow
       appearance="dark"
       pages={pages}
-      windowIdentifier={slidesSettingsWindowIdentifier}
+      windowId={slidesSettingsWindowIdentifier}
     />
   );
 }

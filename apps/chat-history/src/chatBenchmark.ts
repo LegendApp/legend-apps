@@ -1,6 +1,7 @@
 import type { ChatProvider, ChatSummary } from "@legend-apps/chat-history";
-import { writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
-import { getReactNativeStartupTiming } from "@legendapp/spark/windows/managed";
+import { createStorage } from "@legend-apps/storage";
+const benchmarkStorage = createStorage();
+import { getStartupTiming } from "@legendapp/spark/diagnostics";
 
 const benchmarkArgumentPrefix = "--chat-history-benchmark=";
 const defaultTopDelayMs = 0;
@@ -61,7 +62,7 @@ export type ChatBenchmarkEvent =
   | { name: "windowShown" };
 type LoggedChatBenchmarkEvent = ChatBenchmarkEvent & {
   reactNativeClockOffsetMs?: number;
-  reactNativeStartupTiming?: ReturnType<typeof getReactNativeStartupTiming>;
+  reactNativeStartupTiming?: ReturnType<typeof getStartupTiming>;
   timestampMs: number;
 };
 type PendingChatBenchmarkEvent = {
@@ -105,7 +106,7 @@ function flushChatBenchmarkEvents(config: ChatBenchmarkConfig) {
   const events = eventsByFile.get(config.eventFileName) ?? [];
   for (const pending of pendingEvents) {
     const startupTiming = pending.event.name === "contentReady" || pending.event.name === "windowShown"
-      ? getReactNativeStartupTiming()
+      ? getStartupTiming()
       : undefined;
     const nativeWindowTime = startupTiming?.mainWindowFirstVisibleTime;
     const clockOffset = startupTiming?.clockOffsetMs;
@@ -124,7 +125,7 @@ function flushChatBenchmarkEvents(config: ChatBenchmarkConfig) {
     });
   }
   eventsByFile.set(config.eventFileName, events);
-  writeApplicationSupportJson(`chat-history-benchmark/${config.eventFileName}`, events);
+  benchmarkStorage.write(`chat-history-benchmark/${config.eventFileName}`, events, { format: "json" });
 }
 
 export function emitChatBenchmarkEvent(config: ChatBenchmarkConfig, event: ChatBenchmarkEvent) {

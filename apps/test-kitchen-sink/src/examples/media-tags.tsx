@@ -15,10 +15,10 @@ export function MediaTagsExample() {
       <ExampleButton
         onPress={() => {
           void openFileDialog({
-            allowedFileTypes: ["mp3", "m4a", "aac", "wav", "flac", "aif", "aiff", "caf"],
-            allowsMultipleSelection: false,
+            filters: [{ extensions: ["mp3", "m4a", "aac", "wav", "flac", "aif", "aiff", "caf"] }],
+            multiple: false,
           }).then((paths) => {
-            const path = paths?.[0];
+            const path = paths.canceled ? undefined : paths.paths[0];
             if (!path) {
               setStatus("File selection canceled.");
               return;

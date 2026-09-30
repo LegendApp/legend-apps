@@ -3,24 +3,17 @@ import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { act, fireEvent, render } from "@testing-library/react-native";
 
-const mockKeyDownListeners = new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>();
-const mockKeyUpListeners = new Set<(event: { keyCode: number; modifiers: number }) => boolean | void>();
+const mockKeyDownListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string }) => boolean | void>();
+const mockKeyUpListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string }) => boolean | void>();
 
 jest.mock("@legendapp/spark/shortcuts/keyboard", () => {
   const actual = jest.requireActual("@legendapp/spark/shortcuts/keyboard");
   return {
     ...actual,
-    addKeyDownListener: (
-      listener: (event: { keyCode: number; modifiers: number }) => boolean | void,
-    ) => {
-      mockKeyDownListeners.add(listener);
-      return () => mockKeyDownListeners.delete(listener);
-    },
-    addKeyUpListener: (
-      listener: (event: { keyCode: number; modifiers: number }) => boolean | void,
-    ) => {
-      mockKeyUpListeners.add(listener);
-      return () => mockKeyUpListeners.delete(listener);
+    addKeyboardListener: async (type: "down" | "up", listener: any) => {
+      const listeners = type === "down" ? mockKeyDownListeners : mockKeyUpListeners;
+      listeners.add(listener);
+      return { remove: async () => { listeners.delete(listener); } };
     },
   };
 });
@@ -28,11 +21,10 @@ jest.mock("@legendapp/spark/shortcuts/keyboard", () => {
 import {
   HotkeyCapture,
   HotkeyBindingsSettingsContent,
-  KeyCodes,
-  serializeHotkey,
   type HotkeyDefinition,
   type HotkeyValue,
 } from "@legendapp/spark/shortcuts/commands";
+import { KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import {
   diffHotkeys$,
   setDiffHotkeyBindings,
@@ -41,8 +33,7 @@ import {
 
 const definitions = [
   {
-    defaultBindings: [KeyCodes.KEY_R],
-    defaultValue: KeyCodes.KEY_R,
+    defaultBindings: ["R"],
     id: "reload",
     title: "Reload",
   },
@@ -58,7 +49,7 @@ describe("Diff hotkey settings", () => {
     const renders = [0, 0, 0];
     const transitions: string[] = [];
     const view = await render(<>
-      {[KeyCodes.KEY_R, KeyCodes.KEY_S, KeyCodes.KEY_T].map((key, index) => (
+      {["R", "S", "T"].map((key, index) => (
         <Profiler key={key} id={String(index)} onRender={() => { renders[index]! += 1; }}>
           <HotkeyCapture value={key} onChange={() => {}} onCaptureChange={(active) => transitions.push(`${index}:${active}`)} />
         </Profiler>
@@ -76,7 +67,7 @@ describe("Diff hotkey settings", () => {
     expect(transitions).toEqual(["0:true", "0:false", "1:true"]);
     await act(() => {
       for (const listener of mockKeyDownListeners) {
-        listener({ keyCode: KeyCodes.KEY_ESCAPE, modifiers: 0 });
+        listener({ keyCode: KeyCodes.KEY_ESCAPE, modifiers: 0, key: "\u001b" } as any);
       }
     });
     expect(transitions.at(-1)).toBe("1:false");
@@ -106,6 +97,7 @@ describe("Diff hotkey settings", () => {
       await act(() => {
         for (const listener of mockKeyDownListeners) {
           listener({
+            key: "k",
             keyCode: KeyCodes.KEY_K,
             modifiers: KeyCodes.MODIFIER_COMMAND,
           });
@@ -114,13 +106,14 @@ describe("Diff hotkey settings", () => {
       await act(() => {
         for (const listener of mockKeyUpListeners) {
           listener({
+            key: "k",
             keyCode: KeyCodes.KEY_K,
             modifiers: KeyCodes.MODIFIER_COMMAND,
           });
         }
       });
 
-      const expectedValue = serializeHotkey([KeyCodes.MODIFIER_COMMAND, KeyCodes.KEY_K]);
+      const expectedValue = "Cmd+K";
       expect(diffHotkeys$.bindings.reload.peek()).toEqual([expectedValue]);
       expect(view.getByText("⌘ + K")).toBeTruthy();
     } finally {
@@ -131,7 +124,7 @@ describe("Diff hotkey settings", () => {
 
   it("clears the single configured shortcut", async () => {
     const bindings$ = observable<Record<"reload", readonly HotkeyValue[]>>({
-      reload: [KeyCodes.KEY_R],
+      reload: ["R"],
     });
 
     function Harness() {
@@ -153,7 +146,7 @@ describe("Diff hotkey settings", () => {
     expect(view.queryByLabelText("Clear Reload shortcut R")).toBeNull();
     expect(view.getByText("Click to record")).toBeTruthy();
     await fireEvent.press(view.getByLabelText("Restore Reload default shortcut"));
-    expect(bindings$.reload.peek()).toEqual([KeyCodes.KEY_R]);
+    expect(bindings$.reload.peek()).toEqual(["R"]);
     expect(view.getByLabelText("Clear Reload shortcut R")).toBeTruthy();
     expect(view.queryByLabelText("Restore Reload default shortcut")).toBeNull();
     await view.unmount();

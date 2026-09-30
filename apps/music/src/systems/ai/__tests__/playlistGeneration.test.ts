@@ -1,4 +1,4 @@
-import type { CodexRunResult } from "@legend-apps/codex";
+import type { CodexRunResult } from "@legendapp/spark/ai/codex";
 import { generatePlaylistExtension, type PlaylistCodexClient } from "../playlistGeneration";
 import type { LocalPlaylist, LocalTrack } from "../../LocalMusicState";
 

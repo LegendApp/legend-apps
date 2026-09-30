@@ -1,10 +1,15 @@
-import { AutoUpdater } from "@legendapp/spark/updates";
-import { commandRunner } from "@legendapp/spark/processes/commands";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import { configureUpdates, getUpdateStatus, startUpdates, checkForUpdates } from "@legendapp/spark/updates";
+import { runCommand } from "@legendapp/spark/processes";
 import { useDocumentAppController, type DocumentAppController } from "@legendapp/spark/app/documents";
 import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
-import { updateMenuItems, type NativeMenuActionHandlers } from "@legendapp/spark/menus";
-import { addWindowFocusedListener, finishWindowRestoration, showMainWindow } from "@legendapp/spark/windows/managed";
-import { WindowProvider } from "@legendapp/spark/windows/react";
+import type { MenuAction } from "@legendapp/spark/menus";
+import { showWindow } from "@legendapp/spark/windows";
+import { finishWindowRestoration } from "@legendapp/spark/app";
+import { useValue } from "@legendapp/state/react";
+import { withMenuState } from "@legend-apps/runtime-utils";
+import { diffMenuState$, diffMenuShortcuts$, diffActiveMenuWindow$ } from "./diffMenuState";
+import { WindowProvider } from "@legendapp/spark/windows";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogBox } from "react-native";
 import * as Linking from "@legendapp/spark/links";
@@ -51,6 +56,8 @@ const LazyDiffViewerWindowShell = lazy(() =>
   import("./DiffViewerWindowShell").then((module) => ({ default: module.DiffViewerWindowShell })),
 );
 
+type MenuHandlers = Record<string, (action: MenuAction) => unknown>;
+
 type DiffAppProps = {
   launchArguments?: string[];
 };
@@ -77,10 +84,10 @@ function reportDiffAppControllerError(error: unknown) {
 }
 
 async function configureDiffAutoUpdates() {
-  const available = AutoUpdater.isAvailable();
-  if (available) {
-    await AutoUpdater.setAutomaticallyChecksForUpdates(true);
-    await AutoUpdater.setUpdateCheckInterval(60 * 60 * 24);
+  const status = await getUpdateStatus();
+  if (status.available) {
+    await configureUpdates({ automaticallyChecks: true, checkIntervalSeconds: 86400 });
+    await startUpdates();
   }
 }
 
@@ -113,13 +120,13 @@ async function openDiffStartWindow(controller: DocumentAppController, openViewer
 }
 
 async function openDiffViewerFromClipboard(controller: DocumentAppController, openViewer: DiffViewerOpener) {
-  const result = await commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 });
+  const result = await runCommand({ target: { type: "command", name: "pbpaste" }, timeoutMs: 1000 });
 
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr || "Unable to read the clipboard.");
+  if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(result.stderr) || "Unable to read the clipboard.");
   }
 
-  const source = normalizeDiffOpenSource(result.stdout);
+  const source = normalizeDiffOpenSource(decodeProcessText(result.stdout));
   if (!source) {
     throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
   }
@@ -128,7 +135,7 @@ async function openDiffViewerFromClipboard(controller: DocumentAppController, op
   controller.setDocumentWindowOpen(true);
 }
 
-function createDiffMenuHandlers(controller: DocumentAppController, openViewer: DiffViewerOpener): NativeMenuActionHandlers {
+function createDiffMenuHandlers(controller: DocumentAppController, openViewer: DiffViewerOpener): MenuHandlers {
   return {
     startWindow: () => {
       openDiffStartWindow(controller, openViewer).catch(reportDiffAppControllerError);
@@ -149,7 +156,7 @@ function createDiffMenuHandlers(controller: DocumentAppController, openViewer: D
       openDiffSettingsWindow().catch(reportDiffAppControllerError);
     },
     checkForUpdates: () => {
-      AutoUpdater.checkForUpdates().catch(reportDiffAppControllerError);
+      checkForUpdates().catch(reportDiffAppControllerError);
     },
     filterFiles: dispatchDiffViewerAction,
     nextHunk: dispatchDiffViewerAction,
@@ -207,14 +214,7 @@ function DiffApplicationHotkeysController({
   });
 
   useEffect(() => {
-    const subscription = addWindowFocusedListener(({ identifier }) => {
-      diffHotkeyRouter.setActiveWindowId(identifier);
-    });
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    updateMenuItems(diffMenuOwnerId, getDiffHotkeyMenuPatches(bindings));
+    diffMenuShortcuts$.set(Object.fromEntries(getDiffHotkeyMenuPatches(bindings).map(({ id, shortcut }) => [id, { shortcut }])));
   }, [bindings]);
 
   return null;
@@ -289,7 +289,7 @@ export function App({ launchArguments }: DiffAppProps) {
       id: diffPrimaryWindowIdentifier,
       ...(source ? { source } : {}),
     });
-    await showMainWindow();
+    await showWindow(diffPrimaryWindowIdentifier);
   }, []);
 
   const openViewer = useCallback<DiffViewerOpener>(async (sourceInput, options = {}) => {
@@ -322,17 +322,20 @@ export function App({ launchArguments }: DiffAppProps) {
     (documentController: DocumentAppController) => openDiffStartWindow(documentController, openViewer),
     [openViewer],
   );
-  const controller = useDocumentAppController({
-    createMenuHandlers,
+  const menuState = useValue(() => ({ ...diffMenuShortcuts$.get(), ...(diffMenuState$[diffActiveMenuWindow$.get()].get() ?? {}) }));
+  const menus = useMemo(() => withMenuState(diffMenuConfig, menuState), [menuState]);
+  const controllerState = useDocumentAppController({
+    onMenuAction: (action, controller) => { if (action.type === "action") createMenuHandlers(controller)[action.itemId]?.(action); },
     launchArguments,
-    menus: diffMenuConfig,
+    menus,
     onInitialOpen: handleInitialOpen,
-    onRecentDocumentOpen: handleRecentDocumentOpen,
+    onOpenDocument: handleRecentDocumentOpen,
     onReopenRequested: handleReopenRequested,
     ownerId: diffMenuOwnerId,
     reportError: reportDiffAppControllerError,
-    windowIdentifier: diffPrimaryWindowIdentifier,
+    windowId: diffPrimaryWindowIdentifier,
   });
+  const controller = controllerState.status === "ready" ? controllerState.controller : null;
   const controllerRef = useRef(controller);
 
   useEffect(() => {
@@ -368,21 +371,14 @@ export function App({ launchArguments }: DiffAppProps) {
           const currentController = controllerRef.current;
           openViewer(source)
             .then(() => {
-              currentController.setDocumentWindowOpen(true);
+              currentController?.setDocumentWindowOpen(true);
             })
-            .catch(currentController.reportError);
+            .catch(reportDiffAppControllerError);
         }
       }
     };
 
-    Linking.onOpen((event) => openUrl(event.url))
-      .then((nextSubscription) => {
-        if (disposed) nextSubscription.remove();
-        else subscription = nextSubscription;
-      })
-      .catch((error: unknown) => {
-        if (!disposed) controllerRef.current.reportError(error);
-      });
+    subscription = Linking.addEventListener("url", event => openUrl(event.url));
 
     return () => {
       disposed = true;
@@ -397,7 +393,7 @@ export function App({ launchArguments }: DiffAppProps) {
 
   return (
     <>
-      <DiffApplicationHotkeysController controller={controller} openViewer={openViewer} />
+      {controller ? <DiffApplicationHotkeysController controller={controller} openViewer={openViewer} /> : null}
       {primaryWindow ? (
         <WindowProvider id={diffPrimaryWindowIdentifier}>
           <Suspense fallback={null}>

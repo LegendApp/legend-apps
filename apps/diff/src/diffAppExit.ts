@@ -1,4 +1,5 @@
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { beforeQuit } from "@legendapp/spark/app";
 import type { UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 
 export type DiffWindowExitPreparation = (reason: UnsavedDiffMergeDraftReason) => Promise<boolean>;
@@ -27,23 +28,5 @@ export async function prepareDiffWindowsForAppExit() {
 }
 
 export function installDiffAppExitHandler(reportError: (error: unknown) => void) {
-  let exitInFlight = false;
-  const subscription = addAppExitListener((event) => {
-    if (event.reason === "requested" && !exitInFlight) {
-      exitInFlight = true;
-      prepareDiffWindowsForAppExit()
-        .then((canExit) => {
-          completeAppExit(canExit);
-        })
-        .catch((error: unknown) => {
-          reportError(error);
-          completeAppExit(false);
-        })
-        .finally(() => {
-          exitInFlight = false;
-        });
-    }
-  });
-
-  return subscription;
+  return ownRegistration(beforeQuit(prepareDiffWindowsForAppExit, { onError: reportError }), reportError);
 }

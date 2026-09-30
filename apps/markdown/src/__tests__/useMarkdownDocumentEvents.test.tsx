@@ -1,6 +1,6 @@
 import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { beforeQuit } from "@legendapp/spark/app";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import {
   getLastMarkdownDocumentPath,
@@ -8,21 +8,19 @@ import {
 } from "../markdownSettings";
 import { useMarkdownAppExit, useMarkdownStartupDocument } from "../useMarkdownDocumentEvents";
 
-const mockAddAppExitListener = addAppExitListener as jest.MockedFunction<typeof addAppExitListener>;
-const mockCompleteAppExit = completeAppExit as jest.MockedFunction<typeof completeAppExit>;
+const mockAddAppExitListener = beforeQuit as jest.MockedFunction<typeof beforeQuit>;
 const mockGetLastMarkdownDocumentPath = getLastMarkdownDocumentPath as jest.MockedFunction<typeof getLastMarkdownDocumentPath>;
 const mockGetMarkdownStartupBehaviorSetting = getMarkdownStartupBehaviorSetting as jest.MockedFunction<typeof getMarkdownStartupBehaviorSetting>;
 
-jest.mock("@legendapp/spark/app/exit", () => ({
-  addAppExitListener: jest.fn(),
-  completeAppExit: jest.fn(),
+jest.mock("@legendapp/spark/app", () => ({
+  beforeQuit: jest.fn(),
 }));
 
-jest.mock("@legendapp/spark/app/recent-documents", () => ({
+jest.mock("@legendapp/spark/app/documents", () => ({
   addRecentDocumentOpenListener: jest.fn(),
 }));
 
-jest.mock("@legendapp/spark/windows/managed", () => ({
+jest.mock("@legendapp/spark/windows", () => ({
   addWindowCloseRequestedListener: jest.fn(),
 }));
 
@@ -78,8 +76,7 @@ function StartupHarness({
 describe("useMarkdownAppExit", () => {
   beforeEach(() => {
     mockAddAppExitListener.mockReset();
-    mockCompleteAppExit.mockReset();
-    mockAddAppExitListener.mockReturnValue({ remove: jest.fn() });
+    mockAddAppExitListener.mockResolvedValue({ remove: jest.fn(async () => {}) });
     mockGetLastMarkdownDocumentPath.mockReturnValue(null);
     mockGetMarkdownStartupBehaviorSetting.mockReturnValue("newDocument");
   });
@@ -95,14 +92,13 @@ describe("useMarkdownAppExit", () => {
       />,
     );
 
-    mockAddAppExitListener.mock.calls[0][0]({ reason: "requested" });
+    expect(await mockAddAppExitListener.mock.calls[0][0]()).toBe(true);
 
     await waitFor(() => {
       expect(prepareCurrentDocumentForClose).toHaveBeenCalledWith({
         autosaveEnabled: true,
         reason: "quit",
       });
-      expect(mockCompleteAppExit).toHaveBeenCalledWith(true);
     });
     expect(handleError).not.toHaveBeenCalled();
   });

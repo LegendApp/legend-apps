@@ -6,7 +6,7 @@ import { LibrarySettings } from './LibrarySettings';
 import { PluginSettings } from './PluginSettings';
 import { ThemeSettings } from './ThemeSettings';
 import { ThemeProvider } from '../theme/ThemeProvider';
-import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
+import { GlassView as VibrancyView } from "@legendapp/spark/ui/glass";
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 

@@ -2,7 +2,7 @@ import { AnimatedView } from "./AnimatedView";
 import { SidebarButton } from './SidebarButton';
 import type { SidebarGroup, SidebarItem } from '../plugin-system/PluginTypes';
 import { cn } from '../utils/cn';
-import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
+import { GlassView as VibrancyView } from "@legendapp/spark/ui/glass";
 import React from 'react';
 import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 

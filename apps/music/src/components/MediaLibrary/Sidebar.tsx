@@ -1,3 +1,5 @@
+import { musicTrackMime, droppedMusicTracks } from "../../utils/musicDrag";
+import { useWindowId } from "@legendapp/spark/windows";
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useRef } from "react";
@@ -22,9 +24,9 @@ import { localAudioControls } from "../LocalAudioPlayer";
 import type { TextInputSearchRef } from "../TextInputSearch";
 import { showToast } from "../Toast";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
-import { type ContextMenuItem, showContextMenu } from "@legendapp/spark/context-menu";
-import { DragDropView } from "@legendapp/spark/drag-drop/views";
-import { revealInFinder } from "@legendapp/spark/dialogs";
+import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
+import { DragDropView } from "@legendapp/spark/drag-drop";
+import { revealInFileManager } from "@legendapp/spark/files";
 import { SUPPORT_PLAYLISTS } from "../../systems/constants";
 import { type LibraryView, libraryUI$, selectLibraryPlaylist, selectLibraryView } from "../../systems/LibraryState";
 import { createLocalPlaylist, type LocalPlaylist, localMusicState$ } from "../../systems/LocalMusicState";
@@ -55,6 +57,7 @@ const LIBRARY_VIEWS: { id: LibraryView; label: string; disabled?: boolean }[] = 
 ];
 
 export function MediaLibrarySidebar() {
+    const windowId = useWindowId();
     perfCount("MediaLibrary.Sidebar.render");
     const selectedView = useValue(libraryUI$.selectedView);
     const playlists = useValue(localMusicState$.playlists);
@@ -144,7 +147,7 @@ export function MediaLibrarySidebar() {
             setEditingPlaylistId(null);
             setEditingPlaylistName("");
         });
-    }, [setEditingPlaylistId, setEditingPlaylistName]);
+    }, [setEditingPlaylistId, setEditingPlaylistName, windowId]);
 
     const finalizeRename = useCallback(async () => {
         const editingPlaylistId = editing$.editingPlaylistId.peek();
@@ -241,32 +244,32 @@ export function MediaLibrarySidebar() {
             const y = event.pageY ?? event.y ?? 0;
 
             const isEditable = playlist.source === "cache" && Boolean(playlist.filePath);
-            const menuItems: ContextMenuItem[] = [];
+            const menuItems: MenuItem[] = [];
 
             if (mode === "basic") {
                 if (!isEditable) {
                     return;
                 }
 
-                menuItems.push({ id: "rename", title: "Rename" });
-                menuItems.push({ id: "delete", title: "Delete" });
+                menuItems.push({ type: "action", id: "rename", label: "Rename" });
+                menuItems.push({ type: "action", id: "delete", label: "Delete" });
             } else if (isEditable) {
-                menuItems.push({ id: "rename", title: "Rename" });
-                menuItems.push({ id: "delete", title: "Delete" });
-                menuItems.push({ id: "export", title: "Export .m3u" });
-                menuItems.push({ id: "reveal", title: "Reveal in Finder" });
+                menuItems.push({ type: "action", id: "rename", label: "Rename" });
+                menuItems.push({ type: "action", id: "delete", label: "Delete" });
+                menuItems.push({ type: "action", id: "export", label: "Export .m3u" });
+                menuItems.push({ type: "action", id: "reveal", label: "Reveal in Finder" });
             } else {
-                menuItems.push({ id: "import", title: "Import to Local Playlists" });
-                menuItems.push({ id: "export", title: "Export .m3u" });
-                menuItems.push({ id: "reveal", title: "Reveal in Finder" });
+                menuItems.push({ type: "action", id: "import", label: "Import to Local Playlists" });
+                menuItems.push({ type: "action", id: "export", label: "Export .m3u" });
+                menuItems.push({ type: "action", id: "reveal", label: "Reveal in Finder" });
             }
 
-            const selection = await showContextMenu(menuItems, { x, y });
-            if (!selection) {
+            const selection = await showContextMenu({ items: menuItems, windowId, position: { x, y } });
+            if (selection.canceled) {
                 return;
             }
 
-            switch (selection) {
+            switch (selection.itemId) {
                 case "rename":
                     batch(() => {
                         setEditingPlaylistName(playlist.name);
@@ -295,17 +298,14 @@ export function MediaLibrarySidebar() {
                     ]);
                     return;
                 case "reveal": {
-                    const didReveal = await revealInFinder(playlist.filePath);
-                    if (!didReveal) {
-                        showToast("Unable to reveal playlist", "error");
-                    }
+                    await revealInFileManager(playlist.filePath);
                     return;
                 }
                 case "export": {
                     try {
                         const exportedPath = await exportPlaylistToFile(playlist.id);
                         if (exportedPath) {
-                            await revealInFinder(exportedPath);
+                            await revealInFileManager(exportedPath);
                             showToast(`Exported ${playlist.name}`, "info");
                         }
                     } catch (error) {
@@ -329,7 +329,7 @@ export function MediaLibrarySidebar() {
                     return;
             }
         },
-        [setEditingPlaylistId, setEditingPlaylistName],
+        [setEditingPlaylistId, setEditingPlaylistName, windowId],
     );
 
     return (
@@ -590,21 +590,21 @@ function LibraryPlaylistRow({ playlist, editing$, finalizeTempPlaylist, finalize
                     "relative",
                     isNativeDropActive ? "bg-blue-500/15 border border-blue-400/50" : "",
                 )}
-                onTrackDragEnter={() => {
+                acceptedTypes={[musicTrackMime]} onDragEnter={() => {
                     if (isDroppable) {
                         setActiveNativeDropPlaylistId(playlist.id);
                     }
                 }}
-                onTrackDragLeave={() => {
+                onDragLeave={() => {
                     setActiveNativeDropPlaylistId((prev) =>
                         prev === playlist.id ? null : prev,
                     );
                 }}
-                onTrackDrop={(event) => {
+                onDrop={(event) => {
                     setActiveNativeDropPlaylistId((prev) =>
                         prev === playlist.id ? null : prev,
                     );
-                    const tracks = event.nativeEvent.tracks ?? [];
+                    const tracks = droppedMusicTracks(event);
                     const trackPaths = tracks
                         .map((track) => track.filePath ?? track.id)
                         .filter((path): path is string => Boolean(path));

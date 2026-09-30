@@ -1,6 +1,6 @@
 // @ts-nocheck Bun test types are not included in the app TypeScript configuration.
 import { expect, test } from "bun:test";
-import type { Storage } from "@legendapp/spark/settings/observable";
+import type { Storage } from "@legend-apps/storage";
 import { syncTransitionLibrary } from "../transitionLibraryPolicy";
 import { builtinTransitionSources } from "../../../../packages/presentation/src/transitions";
 

@@ -1,6 +1,7 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { observable } from "@legendapp/state";
 import { File } from "../utils/fileSystem";
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { beforeQuit } from "@legendapp/spark/app";
 import { audioPlayer as audioPlayerApi, type NowPlayingInfoPayload } from "@legend-apps/audio-player";
 import { showToast } from "./Toast";
 import { appState$ } from "../observables/appState";
@@ -10,7 +11,7 @@ import { ensureLocalTrackThumbnail } from "../systems/LocalMusicState";
 import { playbackInteractionState$ } from "../systems/PlaybackInteractionState";
 import { type RepeatMode, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";
-import { getPersistPlugin } from "@legendapp/spark/settings/observable";
+import { getPersistPlugin } from "@legend-apps/storage";
 import { parseDurationToSeconds } from "../utils/m3u";
 import { clearQueueM3U, loadQueueFromM3U, saveQueueToM3U } from "../utils/m3uManager";
 import { perfCount, perfDelta, perfLog, perfMark } from "@legend-apps/runtime-utils";
@@ -62,7 +63,7 @@ let lastNativeProgressTimestamp = 0;
 let isWindowOccluded = false;
 let latestPlaybackTime = 0;
 const stateSavedPersistPlugin = getPersistPlugin(stateSaved$);
-let appExitSubscription: { remove: () => void } | null = null;
+let appExitSubscription: ReturnType<typeof ownRegistration> | null = null;
 
 function createQueueEntryId(seed: string): string {
     queueEntryCounter += 1;
@@ -385,15 +386,10 @@ function initializeAppExitHandler(): void {
         return;
     }
 
-    appExitSubscription = addAppExitListener(() => {
-        persistPlaybackTimeNow()
-            .catch((error) => {
-                console.error("Failed to persist playback time on exit", error);
-            })
-            .finally(() => {
-                completeAppExit(true);
-            });
-    });
+    appExitSubscription = ownRegistration(beforeQuit(async () => {
+        try { await persistPlaybackTimeNow(); return true; }
+        catch (error) { console.error("Failed to persist playback time on exit", error); return false; }
+    }));
 }
 
 function resetPlayerForEmptyQueue(): void {

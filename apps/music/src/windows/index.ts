@@ -1,60 +1,42 @@
 import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
-import {
-    createBorderlessOverlayWindowStyle,
-    createDocumentWindowStyle,
-    createWindowsNavigator,
-    type WindowsConfig,
-} from "@legendapp/spark/windows/react";
+import { createWindowsNavigator, type WindowsConfig, } from "@legendapp/spark/windows";
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "../overlay/OverlayConstants";
-
 const windowsConfig = {
     SettingsWindow: {
         loadComponent: () => import("../settings/SettingsContainer"),
-        identifier: "settings",
+        id: "settings",
         options: createSettingsWindowOptions(),
     },
     MediaLibraryWindow: {
         loadComponent: () => import("../media-library/MediaLibraryWindow"),
-        identifier: "media-library",
-        options: {
-            deferOrderFront: false,
-            restoreOnLaunch: true,
-            title: "",
-            transparentBackground: true,
-            windowStyle: {
-                ...createDocumentWindowStyle({
-                    frame: {
-                        width: 800,
-                        height: 600,
-                        minWidth: 400,
-                        minHeight: 400,
-                    },
-                    includeFrame: true,
-                }),
-                titleVisibility: "hidden",
-            },
-        },
+        id: "media-library",
+        options: { title: "", transparent: true, size: { width: 800, height: 600 }, minSize: { width: 400, height: 400 }, macos: { restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "hidden" } } },
     },
     CurrentSongOverlayWindow: {
         loadComponent: () => import("../overlay/CurrentSongOverlayWindow"),
-        identifier: "current-song-overlay",
+        id: "current-song-overlay",
         options: {
             title: "",
-            level: "status",
-            transparentBackground: true,
+            transparent: true,
             hasShadow: false,
-            windowStyle: createBorderlessOverlayWindowStyle({
-                width: OVERLAY_WINDOW_WIDTH_COMPACT,
-                height: OVERLAY_WINDOW_HEIGHT_COMPACT,
-                minWidth: OVERLAY_WINDOW_WIDTH_COMPACT,
-                minHeight: OVERLAY_WINDOW_HEIGHT_COMPACT,
-            }),
+            ...{
+                size: {
+                    width: OVERLAY_WINDOW_WIDTH_COMPACT,
+                    height: OVERLAY_WINDOW_HEIGHT_COMPACT
+                },
+                minSize: {
+                    width: OVERLAY_WINDOW_WIDTH_COMPACT,
+                    height: OVERLAY_WINDOW_HEIGHT_COMPACT
+                },
+                kind: "overlay",
+                titleBarStyle: "borderless"
+            },
+            macos: {
+                level: "status"
+            }
         },
     },
 } satisfies WindowsConfig;
-
 export const WindowsNavigator = createWindowsNavigator(windowsConfig);
-
 export type RegisteredWindow = keyof typeof windowsConfig;
-
-export * from "@legendapp/spark/windows/react";
+export * from "@legendapp/spark/windows";

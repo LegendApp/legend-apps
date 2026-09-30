@@ -36,13 +36,13 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
-    name: "@legend-apps/secure-storage",
-    root: path.join(packagesDir, "secure-storage"),
+    name: "@legend-apps/crypto",
+    root: path.join(packagesDir, "crypto"),
     platforms: ["macos"],
   },
   {
-    name: "@legend-apps/codex",
-    root: path.join(packagesDir, "codex"),
+    name: "@legendapp/spark-codex",
+    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/codex"),
     platforms: ["macos"],
   },
   {

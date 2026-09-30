@@ -1,4 +1,4 @@
-import { createObservableFile, createStorage, getPersistPlugin, readTextFile } from "@legendapp/spark/settings/observable";
+import { createObservableFile, createStorage, getPersistPlugin, readTextFile } from "@legend-apps/storage";
 import { detectGrammar } from "./grammarDownloads";
 
 import darkPlusTheme from "../themes/dark-plus.json";

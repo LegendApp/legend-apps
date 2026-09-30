@@ -1,9 +1,11 @@
+import { useWindowId } from "@legendapp/spark/windows";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { useState } from "react";
 import { type GestureResponderEvent, Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
 
 export function ContextMenuExample() {
+  const windowId = useWindowId();
   const [selected, setSelected] = useState("No context menu action yet.");
 
   return (
@@ -12,18 +14,17 @@ export function ContextMenuExample() {
       <ExampleButton
         onPress={(event: GestureResponderEvent) => {
           const nativeEvent = event.nativeEvent as { pageX?: number; pageY?: number; locationX?: number; locationY?: number };
-          void showContextMenu(
-            [
-              { id: "copy", title: "Copy" },
-              { id: "rename", title: "Rename" },
-              { enabled: false, id: "disabled", title: "Disabled" },
+          void showContextMenu({ windowId, items: [
+              { type: "action", id: "copy", label: "Copy" },
+              { type: "action", id: "rename", label: "Rename" },
+              { type: "action", disabled: true, id: "disabled", label: "Disabled" },
             ],
-            {
+            position: {
               x: nativeEvent.pageX ?? nativeEvent.locationX ?? 0,
               y: nativeEvent.pageY ?? nativeEvent.locationY ?? 0,
             },
-          ).then((id) => {
-            setSelected(id ? `Selected: ${id}` : "Context menu dismissed.");
+          }).then((result) => {
+            setSelected(!result.canceled ? `Selected: ${result.itemId}` : "Context menu dismissed.");
           });
         }}
       >

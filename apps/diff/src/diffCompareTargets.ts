@@ -1,4 +1,5 @@
-import { commandRunner } from "@legendapp/spark/processes/commands";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import { runCommand } from "@legendapp/spark/processes";
 import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
@@ -129,9 +130,7 @@ function createRefMenuItems(activeSelection: string, refs: readonly string[], sy
 }
 
 function createSeparator(): DiffCompareToolbarMenuItem {
-  return {
-    separator: true,
-  };
+  return { separator: true };
 }
 
 function getLocalRefForRemoteRef(ref: string | null | undefined) {
@@ -281,13 +280,13 @@ export function parseDiffCompareRepoRefs(value: string | null) {
 
 export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
   const commands = [
-    { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
-    { args: ["remote"], command: "git", cwd: repoPath, timeoutMs: 5_000 },
+    { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
+    { args: ["remote"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
   ];
-  const [refsResult, remotesResult] = await commandRunner.runCommands(commands);
-  const refsValue = refsResult.exitCode === 0 ? refsResult.stdout.trim() || null : null;
-  const remoteNames = remotesResult.exitCode === 0
-    ? remotesResult.stdout.split("\n").map((line) => line.trim()).filter(Boolean)
+  const [refsResult, remotesResult] = await Promise.all(commands.map(command => runCommand({ ...command, target: { type: "command", name: "git" } })));
+  const refsValue = (refsResult.exit.type === "exited" ? refsResult.exit.code : -1) === 0 ? decodeProcessText(refsResult.stdout).trim() || null : null;
+  const remoteNames = (remotesResult.exit.type === "exited" ? remotesResult.exit.code : -1) === 0
+    ? decodeProcessText(remotesResult.stdout).split("\n").map((line) => line.trim()).filter(Boolean)
     : [];
   const refs = parseDiffCompareRepoRefs(refsValue);
 

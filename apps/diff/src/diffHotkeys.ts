@@ -1,120 +1,100 @@
 import {
-  KeyCodes,
   createHotkeyRouter,
   getDefaultHotkeyBindings,
-  hotkeyToMenuShortcut,
+  normalizeHotkeyFile,
   type HotkeyDefinition,
   type HotkeyScope,
   type HotkeyValue,
 } from "@legendapp/spark/shortcuts/commands";
-import { createHotkeyStore } from "@legendapp/spark/shortcuts/commands/storage";
-import type { NativeMenuItemPatch } from "@legendapp/spark/menus";
+import { createObservableFile } from "@legend-apps/storage";
+
 import { batch } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 
-const command = KeyCodes.MODIFIER_COMMAND;
-const option = KeyCodes.MODIFIER_OPTION;
-const shift = KeyCodes.MODIFIER_SHIFT;
 
-function binding(...keyCodes: number[]) {
-  return keyCodes.join("+") as HotkeyValue;
-}
+
 
 export const diffHotkeyDefinitions = [
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_N)],
-    defaultValue: binding(command, KeyCodes.KEY_N),
+    defaultBindings: ["Cmd+N"],
     description: "Open another Diff window.",
     id: "startWindow",
     title: "New Window",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_O)],
-    defaultValue: binding(command, KeyCodes.KEY_O),
+    defaultBindings: ["Cmd+O"],
     description: "Choose a repository or folder to compare.",
     id: "openFolder",
     title: "Open Folder",
   },
   {
-    defaultBindings: [binding(command, option, KeyCodes.KEY_O)],
-    defaultValue: binding(command, option, KeyCodes.KEY_O),
+    defaultBindings: ["Cmd+Alt+O"],
     description: "Choose two files to compare.",
     id: "compareFiles",
     title: "Compare Files",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_L)],
-    defaultValue: binding(command, KeyCodes.KEY_L),
+    defaultBindings: ["Cmd+L"],
     description: "Open a GitHub or diff URL.",
     id: "openUrl",
     title: "Open URL",
   },
   {
-    defaultBindings: [binding(command, shift, KeyCodes.KEY_O)],
-    defaultValue: binding(command, shift, KeyCodes.KEY_O),
+    defaultBindings: ["Cmd+Shift+O"],
     description: "Open a supported path or URL from the clipboard.",
     id: "openFromClipboard",
     title: "Open from Clipboard",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_R)],
-    defaultValue: binding(command, KeyCodes.KEY_R),
+    defaultBindings: ["Cmd+R"],
     description: "Reload the active diff source.",
     id: "reload",
     title: "Reload",
   },
   {
-    defaultBindings: [binding(command, option, KeyCodes.KEY_C)],
-    defaultValue: binding(command, option, KeyCodes.KEY_C),
+    defaultBindings: ["Cmd+Alt+C"],
     description: "Copy the active repository, file, or URL source.",
     id: "copySource",
     title: "Copy Source",
   },
   {
-    defaultBindings: [binding(command, option, shift, KeyCodes.KEY_C)],
-    defaultValue: binding(command, option, shift, KeyCodes.KEY_C),
+    defaultBindings: ["Cmd+Alt+Shift+C"],
     description: "Copy the selected file path relative to its repository.",
     id: "copyRelativePath",
     title: "Copy Relative Path",
   },
   {
-    defaultBindings: [binding(command, option, KeyCodes.KEY_S)],
-    defaultValue: binding(command, option, KeyCodes.KEY_S),
+    defaultBindings: ["Cmd+Alt+S"],
     description: "Show or hide the file sidebar.",
     id: "toggleSidebar",
     title: "Toggle Sidebar",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_F)],
-    defaultValue: binding(command, KeyCodes.KEY_F),
+    defaultBindings: ["Cmd+F"],
     description: "Focus the file filter in the active Diff window.",
     id: "filterFiles",
     title: "Search Files",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_1)],
-    defaultValue: binding(command, KeyCodes.KEY_1),
+    defaultBindings: ["Cmd+1"],
     description: "Switch the active Diff window to unified view.",
     id: "viewUnified",
     title: "Unified View",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_2)],
-    defaultValue: binding(command, KeyCodes.KEY_2),
+    defaultBindings: ["Cmd+2"],
     description: "Switch the active Diff window to side-by-side view.",
     id: "viewBlocks",
     title: "Side-by-Side View",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_LEFT_BRACKET)],
-    defaultValue: binding(command, KeyCodes.KEY_LEFT_BRACKET),
+    defaultBindings: ["Cmd+["],
     description: "Scroll to the previous changed hunk.",
     id: "previousHunk",
     title: "Previous Hunk",
   },
   {
-    defaultBindings: [binding(command, KeyCodes.KEY_RIGHT_BRACKET)],
-    defaultValue: binding(command, KeyCodes.KEY_RIGHT_BRACKET),
+    defaultBindings: ["Cmd+]"],
     description: "Scroll to the next changed hunk.",
     id: "nextHunk",
     title: "Next Hunk",
@@ -126,10 +106,10 @@ export type DiffHotkeyId = (typeof diffHotkeyDefinitions)[number]["id"];
 export const diffHotkeyRouter = createHotkeyRouter();
 export const diffApplicationHotkeyScope: HotkeyScope = { kind: "application" };
 
-export const diffHotkeys$ = createHotkeyStore({
-  definitions: diffHotkeyDefinitions,
+export const diffHotkeys$ = createObservableFile({
+  initialValue: normalizeHotkeyFile(undefined, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 }),
+  transform: { load: value => normalizeHotkeyFile(value, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 }) },
   filename: "hotkeys",
-  maxBindingsPerCommand: 1,
 });
 
 export function useDiffHotkeyBindings() {
@@ -160,11 +140,9 @@ export function resetDiffHotkeyBindings() {
 
 export function getDiffHotkeyMenuPatches(
   bindings: Record<DiffHotkeyId, readonly HotkeyValue[]>,
-): NativeMenuItemPatch[] {
+) {
   return diffHotkeyDefinitions.map((definition) => ({
     id: definition.id,
-    shortcut: bindings[definition.id]
-      .map(hotkeyToMenuShortcut)
-      .find((shortcut) => shortcut !== null) ?? null,
+    shortcut: bindings[definition.id][0],
   }));
 }

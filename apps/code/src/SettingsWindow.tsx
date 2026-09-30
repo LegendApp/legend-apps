@@ -1,7 +1,7 @@
 import {
   SettingsSection,
   VirtualizedSettingsWindow,
-  type VirtualizedSettingsWindowPage,
+  type SettingsWindowPage,
 } from "@legendapp/spark/settings/window";
 import {
   SourceSyntaxToggleSettingsRows,
@@ -59,10 +59,10 @@ function AppearanceSettingsContent() {
   );
 }
 
-const pages: VirtualizedSettingsWindowPage<CodeSettingsPage>[] = [
+const pages: SettingsWindowPage<CodeSettingsPage>[] = [
   {
     id: "appearance",
-    renderContent: () => <AppearanceSettingsContent />,
+    render: () => <AppearanceSettingsContent />,
     title: "Appearance",
   },
 ];
@@ -75,7 +75,7 @@ export function SettingsWindow() {
       appearance={syntaxTheme.appearance}
       estimatedItemSize={360}
       pages={pages}
-      windowIdentifier={codeSettingsWindowIdentifier}
+      windowId={codeSettingsWindowIdentifier}
     />
   );
 }

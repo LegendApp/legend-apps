@@ -23,5 +23,6 @@
     "react": "catalog:",
     "react-native": "catalog:",
     "react-native-enriched-markdown": "*"
-  }
+  },
+  "dependencies": {}
 }

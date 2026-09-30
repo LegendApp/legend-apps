@@ -3,7 +3,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Text, View } from "react-native";
 import { configurePhotosLaunch } from "./systems/launch";
 const ready = getAppContext().then(context => {
-  configurePhotosLaunch(context.launchArguments);
+  configurePhotosLaunch([...context.launchArguments]);
   return import("./App");
 });
 export function App() {

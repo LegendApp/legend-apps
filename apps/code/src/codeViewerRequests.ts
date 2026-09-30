@@ -30,3 +30,13 @@ export function consumeCodeViewerFileRequest(version: number) {
   codeViewerFileRequest$.set({ path: null, version });
   return request;
 }
+
+const menuHandlers = new Set<(itemId: string) => void>();
+export function subscribeCodeViewerMenu(handler: (itemId: string) => void) {
+  menuHandlers.add(handler);
+  return () => { menuHandlers.delete(handler); };
+}
+export function dispatchCodeViewerMenu(itemId: string) {
+  for (const handler of menuHandlers) handler(itemId);
+}
+export const codeAutomaticPairs$ = observable(true);

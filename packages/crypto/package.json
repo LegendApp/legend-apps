@@ -1,5 +1,5 @@
 {
-  "name": "@legend-apps/codex",
+  "name": "@legend-apps/crypto",
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
@@ -11,5 +11,6 @@
   "devDependencies": {
     "nitrogen": "0.35.6",
     "react-native-nitro-modules": "0.35.6"
-  }
+  },
+  "dependencies": {}
 }

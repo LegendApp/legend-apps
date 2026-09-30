@@ -1,5 +1,5 @@
-import { createObservableFile } from "@legendapp/spark/settings/observable";
-import type { WindowFrame } from "@legendapp/spark/windows/managed";
+import { createObservableFile } from "@legend-apps/storage";
+import type { WindowBounds } from "@legendapp/spark/windows";
 import type { DiffOpenSource } from "./diffFiles";
 
 const maxRecentSources = 12;
@@ -12,7 +12,7 @@ export type RecentDiffSource = {
 };
 
 export type SavedDiffWindow = {
-  frame?: WindowFrame;
+  frame?: WindowBounds;
   id: string;
   lastOpenedAt: number;
   source?: DiffOpenSource;
@@ -51,13 +51,13 @@ export function getRecentDiffSources() {
   return diffAppMetadata$.recentSources.peek() ?? [];
 }
 
-function normalizeSavedWindowFrame(frame: unknown): WindowFrame | undefined {
+function normalizeSavedWindowFrame(frame: unknown): WindowBounds | undefined {
   if (!frame || typeof frame !== "object") {
     return undefined;
   }
-  const candidate = frame as Partial<WindowFrame>;
-  const { height, width, x, y } = candidate;
-  return typeof height === "number" &&
+  const candidate = frame as Partial<WindowBounds>;
+  const { displayId, height, width, x, y } = candidate;
+  return typeof displayId === "string" && displayId.length > 0 && typeof height === "number" &&
     typeof width === "number" &&
     typeof x === "number" &&
     typeof y === "number" &&
@@ -67,7 +67,7 @@ function normalizeSavedWindowFrame(frame: unknown): WindowFrame | undefined {
     Number.isFinite(y) &&
     height > 0 &&
     width > 0
-    ? { height, width, x, y }
+    ? { displayId, height, width, x, y }
     : undefined;
 }
 

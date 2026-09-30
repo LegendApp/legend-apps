@@ -133,7 +133,7 @@ function signApp(appPath: string, entitlementsPath: string, options: PackageOpti
     args.push("--entitlements", entitlementsPath);
   }
 
-  signSlidesCompiler(path.join(appPath, "Contents/Resources/slides-compiler"), identity);
+  signSlidesCompiler(path.join(appPath, "Contents/Helpers/slides-compiler.helper"), identity);
   runCommand("codesign", [...args, appPath]);
 }
 

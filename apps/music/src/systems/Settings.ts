@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legendapp/spark/settings/observable";
+import { createObservableFile } from "@legend-apps/storage";
 import type { KeyboardEventCodeHotkey } from "./keyboard/Keyboard";
 import { KeyCodes } from "./keyboard/KeyboardManager";
 import { isMusicThemeName, type MusicThemeName } from "../theme/musicThemes";
@@ -205,7 +205,7 @@ export const settings$ = createObservableFile<AppSettings>({
             showHints: true,
             showTitleBarOnHover: true,
             globalHotkeyEnabled: false,
-            globalHotkey: `${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.MODIFIER_SHIFT}+${KeyCodes.KEY_L}` as KeyboardEventCodeHotkey,
+            globalHotkey: "Cmd+Shift+L",
         },
         // Registration settings
         registration: {

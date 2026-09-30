@@ -5,7 +5,7 @@ import { refreshProviderPlaylists, registerStreamingProvider } from "./registry"
 import { spotifyProvider } from "./spotify/provider";
 
 let providersRegistered = false;
-let providersInitialized = false;
+let initialization: Promise<void> | undefined;
 
 export function ensureStreamingProvidersRegistered(): void {
     if (providersRegistered) return;
@@ -15,11 +15,15 @@ export function ensureStreamingProvidersRegistered(): void {
     providersRegistered = true;
 }
 
-export async function initializeStreamingProviders(): Promise<void> {
+export function initializeStreamingProviders(): Promise<void> {
     ensureStreamingProvidersRegistered();
-    if (providersInitialized) return;
-    providersInitialized = true;
-    initializeProviderCredentials();
-    await Promise.allSettled([spotifyProvider.initialize(), appleMusicProvider.initialize()]);
-    await refreshProviderPlaylists();
+    initialization ??= (async () => {
+        await initializeProviderCredentials();
+        await Promise.allSettled([spotifyProvider.initialize(), appleMusicProvider.initialize()]);
+        await refreshProviderPlaylists();
+    })().catch(error => {
+        initialization = undefined;
+        throw error;
+    });
+    return initialization;
 }

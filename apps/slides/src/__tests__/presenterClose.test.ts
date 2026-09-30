@@ -5,7 +5,7 @@ const calls = [];
 mock.module("../slidesExit", () => ({ prepareSlidesExit: async () => allowed }));
 mock.module("../slidesStore", () => ({ getSlidesState: () => ({ audienceOpen }) }));
 mock.module("../notesOutput", () => ({ resumeNotesOutput: () => { resumes++; }, closeNotesOutput: async () => { calls.push("notes"); if (notesFail) throw Error("notes close failed"); } }));
-mock.module("@legendapp/spark/windows/managed", () => ({ closeWindow: async id => { calls.push(id); return { success: !presenterFail }; } }));
+mock.module("@legendapp/spark/windows", () => ({ closeWindow: async id => { calls.push(id); return { closed: !presenterFail }; } }));
 const { closePresenterSession } = await import("../presenterClose");
 
 test("cancel and failed output closure retain the presenter", async () => {
@@ -35,7 +35,7 @@ test("waits for pending audience operations before closing outputs and the contr
 test("failed presenter closure resumes notes operations", async () => {
   const before = resumes;
   presenterFail = true;
-  await expect(closePresenterSession(async () => {})).rejects.toThrow("Could not close the presenter");
+  await expect(closePresenterSession(async () => {})).rejects.toThrow("Closing the presenter window was vetoed");
   expect(resumes).toBe(before + 1);
   presenterFail = false;
 });

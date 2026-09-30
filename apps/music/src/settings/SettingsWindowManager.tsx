@@ -1,58 +1,58 @@
+import { addAppListener } from "@legendapp/spark/app";
 import { useMount } from "@legendapp/state/react";
-
-import { useWindowManager } from "@legendapp/spark/windows/managed";
+import { getWindow, getDisplays } from "@legendapp/spark/windows";
 import { state$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
-
 const SETTINGS_WINDOW_KEY = "SettingsWindow" as const;
-const SETTINGS_WINDOW_ID = WindowsNavigator.getIdentifier(SETTINGS_WINDOW_KEY);
-
+const SETTINGS_WINDOW_ID = WindowsNavigator.getId(SETTINGS_WINDOW_KEY);
 export const SettingsWindowManager = () => {
-    const windowManager = useWindowManager();
-
     useMount(() => {
         perfLog("SettingsWindowManager.mount");
-        state$.showSettings.onChange(async ({ value }) => {
+        const unsubscribeSettings = state$.showSettings.onChange(async ({ value }) => {
             perfLog("SettingsWindowManager.showSettingsChange", { value });
             if (value) {
                 try {
                     const initialPage = state$.showSettingsPage.get();
-                    const openOptions: { initialProperties?: { initialPage: typeof initialPage } } = {};
+                    const openOptions: {
+                        props?: {
+                            initialPage: typeof initialPage;
+                        };
+                    } = {};
                     if (initialPage) {
-                        openOptions.initialProperties = { initialPage };
+                        openOptions.props = { initialPage };
                     }
                     await WindowsNavigator.open(SETTINGS_WINDOW_KEY, openOptions);
-                } catch (error) {
+                }
+                catch (error) {
                     console.error("Failed to open window:", error);
                     perfLog("SettingsWindowManager.openWindow.error", error);
                 }
-            } else {
+            }
+            else {
                 try {
                     await WindowsNavigator.close(SETTINGS_WINDOW_KEY);
-                } catch (error) {
+                }
+                catch (error) {
                     console.error("Failed to close settings window:", error);
                     perfLog("SettingsWindowManager.closeWindow.error", error);
                 }
             }
         });
-
-        const subscription = windowManager.onWindowClosed(({ identifier }) => {
+        const subscription = addAppListener("windowClosed", ({ windowId: identifier }) => {
             perfCount("SettingsWindowManager.windowClosedEvent");
             if (identifier !== SETTINGS_WINDOW_ID) {
                 return;
             }
-
             state$.assign({
                 showSettings: false,
                 showSettingsPage: undefined,
             });
         });
-
         return () => {
             subscription.remove();
+            unsubscribeSettings();
         };
     });
-
     return null;
 };

@@ -1,4 +1,4 @@
-import { createStorage } from "@legendapp/spark/settings/observable";
+import { createStorage } from "@legend-apps/storage";
 import { createNotesDrafts, type NotesDraft } from "./notesDrafts";
 const storage = createStorage({ subfolder: "slides" });
 export const speakerNotesDrafts = createNotesDrafts({

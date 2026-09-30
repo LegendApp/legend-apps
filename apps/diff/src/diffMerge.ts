@@ -1,4 +1,6 @@
-import { commandRunner, type CommandRunner } from "@legendapp/spark/processes/commands";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import { runCommand } from "@legendapp/spark/processes";
+type DiffMergeCommands = Pick<typeof import("@legendapp/spark/processes"), "runCommand">;
 
 export type DiffMergeConflictStage = {
   mode: string;
@@ -1019,19 +1021,19 @@ export function resolveDiffMergeConflictContent(
 async function loadConflictMarkers(
   folderPath: string,
   files: DiffMergeConflictFile[],
-  runner: CommandRunner,
+  runner: DiffMergeCommands,
 ) {
   const loadedFiles: DiffMergeConflictFile[] = [];
   for (const file of files) {
     const result = await runner.runCommand({
       args: ["--", file.path],
-      command: "cat",
+      target: { type: "command", name: "cat" },
       cwd: folderPath,
       timeoutMs: 5_000,
     });
-    loadedFiles.push(result.exitCode === 0
+    loadedFiles.push((result.exit.type === "exited" ? result.exit.code : -1) === 0
       ? createDiffMergeConflictFileFromContent({
-        content: result.stdout,
+        content: decodeProcessText(result.stdout),
         path: file.path,
         stages: file.stages,
       })
@@ -1048,44 +1050,44 @@ async function loadConflictMarkers(
 export async function readDiffMergeFileContent({
   folderPath,
   path,
-  runner = commandRunner,
+  runner = { runCommand },
 }: {
   folderPath: string;
   path: string;
-  runner?: CommandRunner;
+  runner?: DiffMergeCommands;
 }) {
   const readResult = await runner.runCommand({
     args: ["--", path],
-    command: "cat",
+    target: { type: "command", name: "cat" },
     cwd: folderPath,
     timeoutMs: 5_000,
   });
-  if (readResult.exitCode !== 0) {
-    throw new Error(readResult.stderr || `Unable to read ${path}.`);
+  if ((readResult.exit.type === "exited" ? readResult.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(readResult.stderr) || `Unable to read ${path}.`);
   }
-  return readResult.stdout;
+  return decodeProcessText(readResult.stdout);
 }
 
 export async function writeDiffMergeFileContent({
   content,
   folderPath,
   path,
-  runner = commandRunner,
+  runner = { runCommand },
 }: {
   content: string;
   folderPath: string;
   path: string;
-  runner?: CommandRunner;
+  runner?: DiffMergeCommands;
 }) {
   const writeResult = await runner.runCommand({
     args: ["-c", "cat > \"$1\"", "legend-diff-write", path],
-    command: "sh",
+    target: { type: "command", name: "sh" },
     cwd: folderPath,
     input: content,
     timeoutMs: 5_000,
   });
-  if (writeResult.exitCode !== 0) {
-    throw new Error(writeResult.stderr || `Unable to write ${path}.`);
+  if ((writeResult.exit.type === "exited" ? writeResult.exit.code : -1) !== 0) {
+    throw new Error(decodeProcessText(writeResult.stderr) || `Unable to write ${path}.`);
   }
 }
 
@@ -1093,13 +1095,13 @@ export async function resolveDiffMergeConflictBlock({
   choice,
   folderPath,
   path,
-  runner = commandRunner,
+  runner = { runCommand },
   startLine,
 }: {
   choice: DiffMergeConflictChoice;
   folderPath: string;
   path: string;
-  runner?: CommandRunner;
+  runner?: DiffMergeCommands;
   startLine: number;
 }) {
   const content = await readDiffMergeFileContent({ folderPath, path, runner });
@@ -1109,23 +1111,23 @@ export async function resolveDiffMergeConflictBlock({
 
 export async function loadDiffMergeState(
   folderPath: string,
-  runner: CommandRunner = commandRunner,
+  runner: DiffMergeCommands = { runCommand },
 ): Promise<DiffMergeState> {
   try {
     const unmergedResult = await runner.runCommand({
       args: ["ls-files", "-u", "-z"],
-      command: "git",
+      target: { type: "command", name: "git" },
       cwd: folderPath,
       timeoutMs: 10_000,
     });
-    if (unmergedResult.exitCode !== 0) {
+    if ((unmergedResult.exit.type === "exited" ? unmergedResult.exit.code : -1) !== 0) {
       return {
         status: "error",
-        message: unmergedResult.stderr || "Unable to read Git merge conflicts.",
+        message: decodeProcessText(unmergedResult.stderr) || "Unable to read Git merge conflicts.",
       };
     }
 
-    const conflictFiles = parseGitUnmergedEntries(unmergedResult.stdout);
+    const conflictFiles = parseGitUnmergedEntries(decodeProcessText(unmergedResult.stdout));
     if (conflictFiles.length === 0) {
       return createReadyMergeState([]);
     }

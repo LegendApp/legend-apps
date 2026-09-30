@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from "@testing-library/react-native";
-import { watchFiles } from "@legendapp/spark/files/watchers";
+import { watch } from "@legendapp/spark/files";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
@@ -9,7 +9,7 @@ import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession
 
 const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
 const mockUseMarkdownWindowCloseRequest = useMarkdownWindowCloseRequest as jest.MockedFunction<typeof useMarkdownWindowCloseRequest>;
-const mockWatchFiles = watchFiles as jest.MockedFunction<typeof watchFiles>;
+const mockWatchFiles = watch as jest.MockedFunction<typeof watch>;
 
 const mockMarkdownE2EEditorSmoke = jest.fn((props: { autoSelectBlocks?: boolean; variant?: string }) => (
   <Text>{`editor-smoke:${props.variant}:${props.autoSelectBlocks ? "auto" : "manual"}`}</Text>
@@ -63,57 +63,10 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
-jest.mock("@legendapp/spark/files/watchers", () => ({
-  watchFiles: jest.fn(() => ({ remove: jest.fn() })),
+jest.mock("@legendapp/spark/files", () => ({
+  watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
-jest.mock("@legendapp/spark/app/documents", () => {
-  const React = require("react");
-  const { watchFiles } = require("@legendapp/spark/files/watchers");
-
-  return {
-    useWatchedDocumentReload: ({
-      delayMs = 100,
-      enabled = true,
-      onReload,
-      path,
-      shouldReload,
-    }: {
-      delayMs?: number;
-      enabled?: boolean;
-      onReload: () => void;
-      path: string | null;
-      shouldReload?: () => boolean;
-    }) => {
-      React.useEffect(() => {
-        if (enabled && path) {
-          let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-          const subscription = watchFiles([path], () => {
-            if (!shouldReload || shouldReload()) {
-              if (reloadTimeout) {
-                clearTimeout(reloadTimeout);
-              }
-              reloadTimeout = setTimeout(() => {
-                if (!shouldReload || shouldReload()) {
-                  onReload();
-                }
-              }, delayMs);
-            }
-          });
-
-          return () => {
-            if (reloadTimeout) {
-              clearTimeout(reloadTimeout);
-            }
-            subscription.remove();
-          };
-        }
-
-        return undefined;
-      }, [delayMs, enabled, onReload, path, shouldReload]);
-    },
-  };
-});
 
 jest.mock("@legendapp/spark/dialogs", () => ({
   openFileDialog: jest.fn(),
@@ -199,7 +152,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockInvalidateLayoutMeasurements.mockClear();
     mockReloadDocument.mockClear();
     mockWatchFiles.mockClear();
-    mockWatchFiles.mockReturnValue({ remove: jest.fn() });
+    mockWatchFiles.mockResolvedValue({ remove: jest.fn(async () => {}) });
     mockUseMarkdownAppExit.mockClear();
     mockUseMarkdownWindowCloseRequest.mockClear();
     mockSessionState$.assign({
@@ -308,7 +261,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     const view = await render(<MarkdownEditorWindow />);
     const changed = mockWatchFiles.mock.calls[0]?.[1];
     await act(async () => {
-      changed?.({ filePath: "/tmp/test.md", path: "/tmp", type: "change" });
+      changed?.("/tmp/test.md");
       jest.advanceTimersByTime(100);
     });
     expect(mockCheckForExternalChanges).toHaveBeenCalledTimes(1);

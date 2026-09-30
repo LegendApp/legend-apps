@@ -4,7 +4,7 @@ import {
     readTextFile,
     writeStorageBytes,
     type StoragePath,
-} from "@legendapp/spark/settings/observable";
+} from "@legend-apps/storage";
 
 const cacheStorage = createStorage({ root: "cache" });
 const cacheRootUri = cacheStorage.root.uri.replace(/\/+$/, "");

@@ -1,7 +1,8 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useRef } from "react";
 import { type HotkeyName, getHotkey, getHotkeyMetadata } from '../../settings/Hotkeys';
 import { state$ } from '../State';
-import KeyboardManager, {
+import { addKeyboardListener,
   type KeyboardEvent,
   KeyCodes,
   KeyText,
@@ -97,27 +98,9 @@ const onKeyUp = (e: KeyboardEvent) => {
 
 export function useHookKeyboard() {
   useMount(() => {
-    // Set up listeners
-    let cleanupFns: (() => void)[] = [];
-    try {
-      cleanupFns = [
-        KeyboardManager.addKeyDownListener(onKeyDown),
-        KeyboardManager.addKeyUpListener(onKeyUp),
-      ];
-    } catch (error) {
-      console.error('Failed to set up keyboard listeners:', error);
-    }
+    const registrations = [ownRegistration(addKeyboardListener("down", onKeyDown)), ownRegistration(addKeyboardListener("up", onKeyUp))];
+    return () => { for (const registration of registrations) void registration.remove().catch(console.error); };
 
-    // Return cleanup function
-    return () => {
-      try {
-        for (const cleanup of cleanupFns) {
-          cleanup();
-        }
-      } catch (error) {
-        console.error('Failed to clean up keyboard listeners:', error);
-      }
-    };
   });
 }
 

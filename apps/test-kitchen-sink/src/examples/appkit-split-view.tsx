@@ -27,7 +27,7 @@ const splitViewSidebarItems = [
 
 export function SidebarSplitViewExample() {
   return (
-    <SidebarSplitView contentMinWidth={320} sidebarMinWidth={180} style={styles.root}>
+    <SidebarSplitView contentMinWidth={320} sidebarMinWidth={180} style={styles.root} sidebar={
       <View style={splitStyles.sidebar}>
         <Text style={splitStyles.sidebarTitle}>Sidebar</Text>
         <View style={splitStyles.sidebarList}>
@@ -44,12 +44,11 @@ export function SidebarSplitViewExample() {
             </View>
           ))}
         </View>
-      </View>
+      </View>} content={
       <View style={splitStyles.content}>
         <Text style={splitStyles.contentTitle}>Main Content</Text>
         <Text style={splitStyles.contentBody}>Both split view panes are rendered from React content.</Text>
-      </View>
-    </SidebarSplitView>
+      </View>} />
   );
 }
 

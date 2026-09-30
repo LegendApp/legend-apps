@@ -1,8 +1,8 @@
 import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legendapp/spark/app/documents";
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
-import { addWindowCloseRequestedListener, closeWindow } from "@legendapp/spark/windows/managed";
-import { addNativeMenuActionListener, updateMenuItems } from "@legendapp/spark/menus";
-import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { beforeQuit } from "@legendapp/spark/app";
+import { beforeWindowClose } from "@legendapp/spark/windows";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { cancelPreparedDocument, prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
@@ -17,7 +17,7 @@ import {
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
-import { codeViewerFileRequest$, consumeCodeViewerFileRequest } from "./codeViewerRequests";
+import { codeViewerFileRequest$, consumeCodeViewerFileRequest, subscribeCodeViewerMenu, codeAutomaticPairs$ } from "./codeViewerRequests";
 import { setCodeViewerWindowOptions } from "./codeWindows";
 
 type CodeViewerWindowProps = {
@@ -39,8 +39,7 @@ export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPr
   const [error, setError] = useState<string | null>(null);
   const [documentPath, setDocumentPath] = useState<string | null>(launchFile);
   const editor = useRef<SourceDocumentEditorHandle>(null);
-  const [automaticPairs, setAutomaticPairs] = useState(true);
-  useEffect(() => { updateMenuItems(codeMenuOwnerId, [{ id: "automaticPairs", checked: automaticPairs }]); }, [automaticPairs]);
+  const automaticPairs = useValue(codeAutomaticPairs$);
   const [transition] = useState(createDocumentTransitionGuard);
   const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef(launchFile);
@@ -74,18 +73,17 @@ export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPr
 
   useEffect(() => {
     const prepare = () => editor.current?.command("confirmClose") ?? Promise.resolve(true);
-    const close = addWindowCloseRequestedListener((event) => {
-      if (event.identifier === codeViewerWindowIdentifier) void transition(prepare, async () => { await closeWindow(codeViewerWindowIdentifier); }).catch((cause) => setError(String(cause)));
+    let active = true;
+    const report = (cause: unknown) => { if (active) setError(String(cause)); else console.error(cause); };
+    const approve = () => active ? transition(prepare, () => {}) : Promise.resolve(false);
+    const close = ownRegistration(beforeWindowClose(codeViewerWindowIdentifier, approve, { onError: report }), report);
+    const quit = ownRegistration(beforeQuit(approve, { onError: report }), report);
+    const unsubscribeMenu = subscribeCodeViewerMenu(itemId => {
+      if (itemId === "automaticPairs") codeAutomaticPairs$.set(value => !value);
+      if (["save", "saveAs", "find", "goToLine", "indent", "outdent", "duplicateLine", "moveLineUp", "moveLineDown", "toggleComment"].includes(itemId))
+        void editor.current?.command(itemId).then(completed => { if (active && completed) setError(null); }).catch(report);
     });
-    const quit = addAppExitListener((event) => {
-      if (event.reason === "requested") void transition(prepare, () => {}).then(completeAppExit, (cause) => { setError(String(cause)); completeAppExit(false); });
-    });
-    const menu = addNativeMenuActionListener((event) => {
-      if (event.ownerId === codeMenuOwnerId && event.itemId === "automaticPairs") setAutomaticPairs((value) => !value);
-      if (event.ownerId === codeMenuOwnerId && ["save", "saveAs", "find", "goToLine", "indent", "outdent", "duplicateLine", "moveLineUp", "moveLineDown", "toggleComment"].includes(event.itemId))
-        void editor.current?.command(event.itemId).then((completed) => { if (completed) setError(null); }).catch((cause) => setError(String(cause)));
-    });
-    return () => { close.remove(); quit.remove(); menu.remove(); };
+    return () => { active = false; unsubscribeMenu(); void close.remove().catch(report); void quit.remove().catch(report); };
   }, [transition]);
 
   const openCodeDialog = useCallback(async () => {

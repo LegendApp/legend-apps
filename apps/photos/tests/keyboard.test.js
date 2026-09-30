@@ -1,4 +1,6 @@
 import { expect, mock, test } from "bun:test";
+import { ownRegistration } from "../../../packages/runtime-utils/src/ownRegistration";
+mock.module("@legend-apps/runtime-utils", () => ({ ownRegistration }));
 import { observable } from "@legendapp/state";
 const bindings$ = observable({Help: 0});
 const state$ = observable({showSettings: false, listeningForKeyPress: false});
@@ -8,7 +10,7 @@ mock.module("../src/settings/Hotkeys", () => ({
 }));
 mock.module("../src/systems/State", () => ({state$}));
 mock.module("../src/systems/keyboard/KeyboardManager", () => ({
-  default: {}, KeyText: {}, KeyCodes: {MODIFIER_COMMAND: 1048576, MODIFIER_SHIFT: 131072, MODIFIER_OPTION: 524288, MODIFIER_CONTROL: 262144},
+  addKeyboardListener: async () => ({ remove: async () => {} }), KeyText: {}, KeyCodes: {MODIFIER_COMMAND: 1048576, MODIFIER_SHIFT: 131072, MODIFIER_OPTION: 524288, MODIFIER_CONTROL: 262144},
 }));
 const {onHotkeys, keysPressed$} = await import("../src/systems/keyboard/Keyboard");
 test("shortcuts accept key code zero, update live, match modifiers, and clean up", () => {

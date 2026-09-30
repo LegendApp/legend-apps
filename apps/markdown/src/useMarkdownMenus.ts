@@ -1,11 +1,9 @@
 import type {
   MarkdownDocumentCommands,
 } from "@legend-apps/markdown-document";
-import { revealInFinder } from "@legendapp/spark/dialogs";
-import {
-  updateMenuItems,
-  type NativeMenuActionHandlers,
-} from "@legendapp/spark/menus";
+import { revealInFileManager } from "@legendapp/spark/files";
+import type { MarkdownMenuHandlers } from "./markdownEditorActions";
+import { markdownMenuState$ } from "./markdownMenus";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useEffect, useMemo, type RefObject } from "react";
 import { markdownMenuOwnerId } from "./appConstants";
@@ -48,7 +46,7 @@ const disabledDocumentMenuItems = [
 ];
 
 function disableDocumentMenuItems() {
-  updateMenuItems(markdownMenuOwnerId, disabledDocumentMenuItems.map((id) => ({ id, enabled: false })));
+  markdownMenuState$.set(Object.fromEntries(disabledDocumentMenuItems.map(id => [id, { disabled: true }])));
 }
 
 export function useMarkdownMenus({
@@ -62,7 +60,7 @@ export function useMarkdownMenus({
   onSaveDocumentAs,
   sessionState$,
 }: MarkdownMenuOptions) {
-  const menuHandlers = useMemo<NativeMenuActionHandlers>(() => ({
+  const menuHandlers = useMemo<MarkdownMenuHandlers>(() => ({
     bold: () => documentCommandsRef.current?.toggleBold(),
     decreaseFontSize: decreaseMarkdownFontSizeSetting,
     italic: () => documentCommandsRef.current?.toggleItalic(),
@@ -78,12 +76,7 @@ export function useMarkdownMenus({
     revealInFinder: () => {
       const currentFilePath = getCurrentFilePath(sessionState$.peek());
       if (currentFilePath) {
-        revealInFinder(currentFilePath)
-          .then((didReveal) => {
-            if (!didReveal) {
-              onError(new Error("Unable to reveal document in Finder."));
-            }
-          })
+        revealInFileManager(currentFilePath)
           .catch(onError);
       }
     },
@@ -125,7 +118,7 @@ export function useMarkdownMenus({
     const hasDocument = state.filename !== null;
     const currentFilePath = getCurrentFilePath(state);
 
-    updateMenuItems(markdownMenuOwnerId, [
+    markdownMenuState$.set(Object.fromEntries([
       { id: "save", enabled: hasDocument && state.isDirty && state.saveState !== "saving" },
       { id: "saveAs", enabled: hasDocument && state.saveState !== "saving" },
       { id: "revealInFinder", enabled: currentFilePath !== null },
@@ -138,6 +131,6 @@ export function useMarkdownMenus({
       { id: "strikethrough", enabled: hasDocument },
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
-    ]);
+    ].map(({ id, enabled }) => [id, { disabled: !enabled }])));
   }, [sessionState$]);
 }

@@ -1,75 +1,38 @@
-import {
-  addNativeMenuActionListener,
-  clearMenus,
-  commandModifier,
-  configureMenus,
-  openTargetTitles,
-  settingsTargetTitles,
-  updateMenuItems,
-} from "@legendapp/spark/menus";
-import { useEffect } from "react";
+import { useMenu } from "@legendapp/spark/menus";
 import { getSlidesState, setSlidesState } from "./slidesStore";
-
-const menuOwner = "slides-presenter";
-
-export function useSlidesMenus(
-  openDeck: () => void | Promise<void>,
-  audienceOpen: boolean,
-  blackout: boolean,
-  resetPresenterLayout: () => void,
-  openSettings: () => void | Promise<void>,
-) {
-  useEffect(() => {
-    configureMenus(menuOwner, [
-      {
+export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, blackout: boolean, resetPresenterLayout: () => void, openSettings: () => unknown) {
+ useMenu({ id: "slides-presenter", items: [
+      { type: "submenu",
         id: "app",
-        title: "Application",
-        systemMenu: "app",
-        items: [{ id: "settings", targetTitles: settingsTargetTitles, enabled: true }],
+        label: "Application",
+        target: { menu: "app" },
+        items: [{ type: "action", id: "settings", target: { role: "settings" }, label: "Settings…", }],
       },
-      {
+      { type: "submenu",
         id: "file",
-        title: "File",
-        placement: { before: "Window" },
-        items: [{ id: "open", targetTitles: openTargetTitles, enabled: true }],
+        label: "File",
+        placement: { before: { menu: "window" } },
+        items: [{ type: "action", id: "open", target: { role: "open" }, label: "Open…", }],
       },
-      {
+      { type: "submenu",
         id: "presentation",
-        title: "Presentation",
-        placement: { before: "Window" },
-        items: [{
+        label: "Presentation",
+        placement: { before: { menu: "window" } },
+        items: [{ type: "checkbox", checked: blackout,
           id: "blackout",
-          title: "Blackout Audience",
-          enabled: false,
-          shortcut: { key: "b", modifiers: commandModifier },
-        }, {
+          label: blackout ? "Restore Audience" : "Blackout Audience",
+          disabled: !audienceOpen,
+          shortcut: "Cmd+b",
+        }, { type: "action",
           id: "reset-presenter-layout",
-          title: "Reset Presenter Layout",
-          enabled: true,
-        }],
+          label: "Reset Presenter Layout",
+          }],
       },
-    ]);
-    const subscription = addNativeMenuActionListener((action) => {
-      if (action.ownerId !== menuOwner) return;
-      if (action.itemId === "open") void openDeck();
-      if (action.itemId === "blackout" && getSlidesState().audienceOpen) {
-        setSlidesState((current) => ({ blackout: !current.blackout }));
-      }
-      if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
-      if (action.itemId === "settings") void openSettings();
-    });
-    return () => {
-      subscription.remove();
-      clearMenus(menuOwner);
-    };
-  }, [openDeck, openSettings, resetPresenterLayout]);
-
-  useEffect(() => {
-    updateMenuItems(menuOwner, [{
-      id: "blackout",
-      checked: blackout,
-      enabled: audienceOpen,
-      title: blackout ? "Restore Audience" : "Blackout Audience",
-    }]);
-  }, [audienceOpen, blackout]);
+    ], onAction(action) {
+  if (action.type !== "action") return;
+  if (action.itemId === "open") void openDeck();
+  if (action.itemId === "blackout" && getSlidesState().audienceOpen) setSlidesState(current => ({ blackout: !current.blackout }));
+  if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
+  if (action.itemId === "settings") void openSettings();
+ } });
 }

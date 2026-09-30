@@ -2,7 +2,8 @@ import { builtinTransitionSources } from "@legend-apps/presentation";
 import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
-import { watchDirectories } from "@legendapp/spark/files/watchers";
+import { watch } from "@legendapp/spark/files";
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { copyLibraryTransitionToDeck } from "./deckLoader";
 import { duplicateTransition, getTransitionDirectory, listTransitions, restoreTransition, transitionDirectoryPath, transitionStorage } from "./transitionLibrary";
 
@@ -13,8 +14,8 @@ export function TransitionSettingsPage() {
   const [names, setNames] = useState(listTransitions);
   const [message, setMessage] = useState("");
   useEffect(() => {
-    const watcher = watchDirectories([transitionDirectoryPath()], () => setNames(listTransitions()));
-    return () => watcher.remove();
+    const watcher = ownRegistration(watch(transitionDirectoryPath(), () => setNames(listTransitions()), { recursive: true }));
+    return () => { void watcher.remove().catch(console.error); };
   }, []);
   const run = (action: () => string | void | Promise<string | void>) => {
     void Promise.resolve().then(action).then((result) => { setNames(listTransitions()); setMessage(result ?? "Done"); }).catch((error) => setMessage(String(error)));

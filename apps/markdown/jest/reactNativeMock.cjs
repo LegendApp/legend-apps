@@ -40,6 +40,9 @@ class ValueXY {
 }
 
 module.exports = {
+  UIManager: { hasViewManagerConfig: () => true },
+  TurboModuleRegistry: { get: jest.fn(() => null), getEnforcing: jest.fn(() => ({})) },
+  NativeEventEmitter: class { addListener() { return { remove() {} }; } },
   AccessibilityInfo: {
     isScreenReaderEnabled: jest.fn(async () => false),
   },

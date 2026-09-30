@@ -1,4 +1,5 @@
-import { addKeyDownListener, addKeyUpListener, KeyCodes, KeyText, stopKeyboardMonitoring } from "@legendapp/spark/shortcuts/keyboard";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { addKeyboardListener, KeyCodes, KeyText } from "@legendapp/spark/shortcuts/keyboard";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
@@ -16,18 +17,18 @@ export function KeyboardManagerExample() {
       return;
     }
 
-    const removeDown = addKeyDownListener((event) => {
+    const removeDown = ownRegistration(addKeyboardListener("down", (event) => {
       const handled = event.keyCode === KeyCodes.KEY_ESCAPE;
       setStatus(`Down: ${describeKey(event.keyCode)} modifiers=${event.modifiers}${handled ? " handled" : ""}`);
       return handled;
-    });
-    const removeUp = addKeyUpListener((event) => {
+    }));
+    const removeUp = ownRegistration(addKeyboardListener("up", (event) => {
       setStatus(`Up: ${describeKey(event.keyCode)} modifiers=${event.modifiers}`);
-    });
+    }));
 
     return () => {
-      removeDown();
-      removeUp();
+      void removeDown.remove().catch(console.error);
+      void removeUp.remove().catch(console.error);
     };
   }, [enabled]);
 
@@ -38,7 +39,6 @@ export function KeyboardManagerExample() {
       <ExampleButton
         onPress={() => {
           setEnabled(false);
-          void stopKeyboardMonitoring();
           setStatus("Monitoring stopped.");
         }}
       >

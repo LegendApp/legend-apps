@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { parseHotkey, type HotkeyHandlerContext } from "@legendapp/spark/shortcuts/commands";
+import { type HotkeyHandlerContext } from "@legendapp/spark/shortcuts/commands";
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { initializeLocalAudioPlayer, localAudioControls } from "./LocalAudioPlayer";
@@ -24,7 +24,7 @@ function handleConfigurableMediaHotkey(
     nativeMediaKey: number,
     action: () => void,
 ) {
-    const isNativeMediaKey = parseHotkey(context.binding).includes(nativeMediaKey);
+    const isNativeMediaKey = context.binding === ({ [KeyCodes.KEY_MEDIA_PLAY_PAUSE]: "MediaPlayPause", [KeyCodes.KEY_MEDIA_NEXT]: "MediaNextTrack", [KeyCodes.KEY_MEDIA_PREVIOUS]: "MediaPreviousTrack" }[nativeMediaKey]);
     if (!isNativeMediaKey) {
         action();
         return true;

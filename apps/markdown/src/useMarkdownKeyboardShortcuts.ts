@@ -1,9 +1,10 @@
-import { useHotkeys } from "@legendapp/spark/shortcuts/commands";
-import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { useEffect, useMemo, type RefObject } from "react";
 import { Platform } from "react-native";
-import { markdownHotkeyDefinitions } from "./markdownHotkeys";
+import { markdownHotkeyDefinitions, markdownHotkeyRouter } from "./markdownHotkeys";
 import {
   toggleMarkdownFormattingToolbarModeSetting,
   useMarkdownHotkeySettings,
@@ -26,19 +27,23 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKe
     toggleFormattingToolbar: toggleMarkdownFormattingToolbarModeSetting,
   }), [documentCommandsRef]);
 
-  useHotkeys({
+  useRoutedHotkeys({
     definitions: markdownHotkeyDefinitions,
     handlers: hotkeyHandlers,
-    values: hotkeys,
+    bindings: hotkeys,
+    router: markdownHotkeyRouter,
+    scope: { kind: "window", windowId: "markdown-editor" },
+    onError: console.error,
   });
 
   useEffect(() => {
-    return addKeyDownListener((event) => {
+    const registration = ownRegistration(addKeyboardListener("down", (event) => {
       if (event.keyCode === KeyCodes.KEY_ESCAPE) {
         return documentCommandsRef.current?.commitAndBlurActiveBlock() === true;
       }
 
       return false;
-    });
+    }));
+    return () => { void registration.remove().catch(console.error); };
   }, [documentCommandsRef]);
 }

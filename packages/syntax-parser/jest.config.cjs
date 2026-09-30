@@ -6,7 +6,7 @@ module.exports = require("../../scripts/jest/spark.cjs")({
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
     "^\\./NativeStorage$": "<rootDir>/packages/syntax-parser/jest/nativeStorageMock.cjs",
-    "^@legendapp/spark/settings/observable$": "<rootDir>/packages/storage/src/index.ts",
+    "^@legend-apps/storage$": "<rootDir>/packages/storage/src/index.ts",
   },
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": [

@@ -4,7 +4,7 @@ import { useObserveEffect, useValue } from "@legendapp/state/react";
 import type { JSX } from "react";
 import { Pressable } from "react-native";
 import { EffectView } from "./EffectView";
-import { hideWindowControls, showWindowControls } from "@legendapp/spark/windows/controls";
+import { setWindowOptions } from "@legendapp/spark/windows";
 import { IS_TAHOE } from "../systems/constants";
 import { settings$ } from "../systems/Settings";
 import { state$ } from "../systems/State";
@@ -83,9 +83,9 @@ observe(() => {
         areControlsVisible = shouldShowControls;
         setTimeout(() => {
             if (shouldHideControls) {
-                hideWindowControls();
+                setWindowOptions("main", { macos: { titleBar: { trafficLights: false } } });
             } else {
-                showWindowControls();
+                setWindowOptions("main", { macos: { titleBar: { trafficLights: true } } });
             }
             perfLog("TitleBar.observe.timeout", { hide: shouldHideControls, showOnHover });
         }, 100);

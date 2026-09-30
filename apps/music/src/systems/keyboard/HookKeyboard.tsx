@@ -1,8 +1,9 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useHotkeySuspension, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
 import { useMount, useValue } from "@legendapp/state/react";
 import { useRef } from "react";
 import { AppState, type AppStateStatus, TextInput } from "react-native";
-import { useWindowManager } from "@legendapp/spark/windows/managed";
+import { addWindowListener } from "@legendapp/spark/windows";
 import { musicHotkeyRouter } from "./Keyboard";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { state$ } from "../State";
@@ -12,7 +13,6 @@ const applicationHotkeyScope: HotkeyScope = { kind: "application" };
 export function HookKeyboard() {
     perfCount("HookKeyboard.render");
     const isDropdownOpen = useValue(state$.isDropdownOpen);
-    const windowManagerRef = useRef(useWindowManager());
 
     useHotkeySuspension({
         active: isDropdownOpen,
@@ -23,13 +23,10 @@ export function HookKeyboard() {
     useMount(() => {
         musicHotkeyRouter.setActiveWindowId("main");
 
-        const subscription = windowManagerRef.current.onWindowFocused(({ identifier }) => {
-            const nextIdentifier = identifier && identifier.length > 0 ? identifier : "main";
-            musicHotkeyRouter.setActiveWindowId(nextIdentifier);
-        });
+        const subscription = ownRegistration(addWindowListener("main", "focusChanged", ({ focused }) => { if (focused) musicHotkeyRouter.setActiveWindowId("main"); }));
 
         return () => {
-            subscription.remove();
+            void subscription.remove().catch(console.error);
         };
     });
 

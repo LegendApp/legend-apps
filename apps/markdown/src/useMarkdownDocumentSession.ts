@@ -5,7 +5,7 @@ import {
   type MarkdownDocumentCommands,
   type MarkdownSaveState,
 } from "@legend-apps/markdown-document";
-import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import type { Observable } from "@legendapp/state";
 import { useObservable } from "@legendapp/state/react";
 import { useCallback, useRef } from "react";
@@ -172,12 +172,13 @@ export function useMarkdownDocumentSession() {
     }
 
     try {
-      const path = await saveFileDialog({
-        allowedFileTypes: markdownFileTypes,
+      const result = await saveFileDialog({
+        filters: [{ extensions: markdownFileTypes }],
         defaultName,
         directory,
       });
 
+      const path = result.canceled ? null : result.path;
       if (!path || !isCurrentDocument() || !documentCommandsRef.current) {
         return false;
       }
@@ -283,10 +284,11 @@ export function useMarkdownDocumentSession() {
     const markdownFileTypeList = markdownFileTypes.map((type) => `.${type}`).join(", ");
 
     try {
-      const paths = await openFileDialog({
-        allowedFileTypes: markdownFileTypes,
-        canChooseFiles: true,
+      const result = await openFileDialog({
+        filters: [{ extensions: markdownFileTypes }],
+        selection: "files",
       });
+      const paths = result.canceled ? [] : result.paths;
       let path: string | null = null;
       if (paths) {
         const markdownPath = paths.find(isMarkdownPath);

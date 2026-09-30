@@ -1,4 +1,4 @@
-import { GlassSurface } from "@legendapp/spark/ui/glass";
+import { GlassView } from "@legendapp/spark/ui/glass";
 import { Pressable, StyleSheet, Text, View, type ColorValue, type StyleProp, type ViewStyle } from "react-native";
 
 export type GlassToastAction = {
@@ -23,7 +23,7 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
   return (
     <View className="items-center" style={style}>
       <View style={[styles.shadow, maxWidthStyle]}>
-        <GlassSurface
+        <GlassView
           className="min-h-10 rounded-lg"
           glassStyle="regular"
           style={maxWidthStyle}
@@ -63,7 +63,7 @@ export function GlassToast({ actions, maxWidth = 420, style, tintColor = "#00000
               </View>
             ) : null}
           </View>
-        </GlassSurface>
+        </GlassView>
       </View>
     </View>
   );

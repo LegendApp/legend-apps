@@ -56,6 +56,9 @@ module.exports = function createMusicRenderHarness() {
     new Function("require", "module", "exports", code)(n => ({
       "react": React,
       "react-native": native,
+      "@legendapp/spark/windows": { useWindowId: () => "main" },
+      "../utils/musicDrag": { MusicTrackDragSource: "track-drag" },
+      "../../utils/musicDrag": { MusicTrackDragSource: "track-drag", droppedMusicTracks: event => JSON.parse(event.data?.["application/x-legend-music-tracks"] ?? "[]") },
       "@legendapp/state": state,
       "@legendapp/state/react": stateReact,
       "@legendapp/spark/ui/classnames": {
@@ -123,7 +126,7 @@ module.exports = function createMusicRenderHarness() {
   const contextMenu = {
     showContextMenu: async items => {
       menus.push(items);
-      return menuResponses.shift() ?? null;
+      const itemId = menuResponses.shift(); return itemId ? { canceled: false, itemId } : { canceled: true };
     }
   };
   const trackMenus = {
@@ -239,7 +242,7 @@ module.exports = function createMusicRenderHarness() {
         usePlaylistSelection: () => selection
       },
       "@legendapp/spark/context-menu": contextMenu,
-      "@legendapp/spark/drag-drop/views": {
+      "@legendapp/spark/drag-drop": {
         DragDropView: Wrapper,
         TrackDragSource: "track-drag"
       },
@@ -328,7 +331,7 @@ module.exports = function createMusicRenderHarness() {
         useListItemStyles
       },
       "@legendapp/spark/context-menu": contextMenu,
-      "@legendapp/spark/drag-drop/views": {
+      "@legendapp/spark/drag-drop": {
         DragDropView: Wrapper
       },
       "@legendapp/spark/dialogs": {},
@@ -415,7 +418,7 @@ module.exports = function createMusicRenderHarness() {
         }
       },
       "@legendapp/spark/context-menu": contextMenu,
-      "@legendapp/spark/drag-drop/views": {
+      "@legendapp/spark/drag-drop": {
         TrackDragSource: "track-drag"
       },
       "../../systems/Icon": {

@@ -23,6 +23,7 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/storage",
       "@legendapp/spark-ui",
       "@legendapp/spark-updates",
       "@legend-apps/chat-history",

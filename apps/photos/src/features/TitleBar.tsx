@@ -1,12 +1,12 @@
 import { MotionView } from "../components/MotionView";
 import { settings$ } from '../settings/SettingsFile';
 import { state$ } from '../systems/State';
-import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
+import { GlassView as VibrancyView } from "@legendapp/spark/ui/glass";
 import { AnimatePresence } from '@legendapp/motion';
 import { observe } from '@legendapp/state';
 import { Show } from '@legendapp/state/react';
 import { Pressable, StyleSheet } from 'react-native';
-import * as WindowControls from "@legendapp/spark/windows/controls";
+import * as WindowControls from "@legendapp/spark/windows";
 
 const fade = { type: "tween", duration: 100, useNativeDriver: false } as const;
 
@@ -50,10 +50,10 @@ observe(() => {
   const hide =
     !state$.titleBarHovered.get() && (isPhotoFullscreenCoveringControls || !isSidebarOpen);
   if (hide) {
-    WindowControls.hideWindowControls();
+    WindowControls.setWindowOptions("main", { macos: { titleBar: { trafficLights: false } } });
   } else {
     setTimeout(() => {
-      WindowControls.showWindowControls();
+      WindowControls.setWindowOptions("main", { macos: { titleBar: { trafficLights: true } } });
     }, 100);
   }
 });

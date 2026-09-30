@@ -1,9 +1,9 @@
-import { readTextFile, writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
+import { readText, writeTextIfUnchanged } from "@legendapp/spark/files";
 import { persistSlideSpeakerNotesWithFileAccess } from "@legend-apps/presentation";
 
 const nativeFileAccess = {
-  read: readTextFile,
-  writeIfUnchanged: writeTextFileIfUnchanged,
+  read: readText,
+  writeIfUnchanged: async (path: string, expected: string, contents: string) => (await writeTextIfUnchanged(path, expected, contents)).written,
 };
 
 export async function persistSlideSpeakerNotes(

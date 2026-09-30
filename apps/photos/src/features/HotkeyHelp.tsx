@@ -1,7 +1,7 @@
 import { MotionView } from "../components/MotionView";
 import { SFSymbol } from '../native-modules/SFSymbol';
 import { type HotkeyInfo, hotkeyRegistry$, useOnHotkeys } from '../systems/keyboard/Keyboard';
-import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
+import { GlassView as VibrancyView } from "@legendapp/spark/ui/glass";
 import { LegendList } from '@legendapp/list/react-native';
 import { AnimatePresence } from '@legendapp/motion';
 import { useObservable, useValue } from '@legendapp/state/react';

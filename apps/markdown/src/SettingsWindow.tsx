@@ -1,7 +1,7 @@
 import { PortalProvider } from "@gorhom/portal";
 import {
   VirtualizedSettingsWindow,
-  type VirtualizedSettingsWindowPage,
+  type SettingsWindowPage,
 } from "@legendapp/spark/settings/window";
 import { getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import { settingsWindowIdentifier } from "./appConstants";
@@ -11,20 +11,20 @@ import { GeneralSettingsContent } from "./settings/GeneralSettingsPage";
 import { HotkeysSettingsContent } from "./settings/HotkeysSettingsPage";
 import { isSettingsPage, type SettingsPage } from "./settings/settingsPages";
 
-const pages: VirtualizedSettingsWindowPage<SettingsPage>[] = [
+const pages: SettingsWindowPage<SettingsPage>[] = [
   {
     id: "general",
-    renderContent: () => <GeneralSettingsContent />,
+    render: () => <GeneralSettingsContent />,
     title: "General",
   },
   {
     id: "hotkeys",
-    renderContent: () => <HotkeysSettingsContent />,
+    render: () => <HotkeysSettingsContent />,
     title: "Hotkeys",
   },
   {
     id: "appearance",
-    renderContent: () => <AppearanceSettingsContent />,
+    render: () => <AppearanceSettingsContent />,
     title: "Appearance",
   },
 ];
@@ -39,9 +39,9 @@ export function SettingsWindow({ initialPage }: { initialPage?: string }) {
       <VirtualizedSettingsWindow
         appearance={appearance}
         estimatedItemSize={640}
-        initialPage={initialSettingsPage}
+        defaultPageId={initialSettingsPage}
         pages={pages}
-        windowIdentifier={settingsWindowIdentifier}
+        windowId={settingsWindowIdentifier}
       />
     </PortalProvider>
   );

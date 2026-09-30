@@ -1,4 +1,4 @@
-import { getSecureStorage } from "@legendapp/spark/secure-storage";
+import { randomBase64Url } from "@legend-apps/crypto";
 
 const SHA256_CONSTANTS = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -70,11 +70,11 @@ function base64Url(buffer: ArrayBuffer): string {
 }
 
 export async function createPKCE(): Promise<{ verifier: string; challenge: string; state: string }> {
-    const verifier = getSecureStorage().randomBase64Url(48);
+    const verifier = randomBase64Url(48);
     const encoded = encode(verifier);
     const input = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer;
     const digest = typeof crypto !== "undefined" && crypto.subtle
         ? await crypto.subtle.digest("SHA-256", input)
         : sha256Fallback(verifier);
-    return { verifier, challenge: base64Url(digest), state: getSecureStorage().randomBase64Url(24) };
+    return { verifier, challenge: base64Url(digest), state: randomBase64Url(24) };
 }

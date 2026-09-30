@@ -1,11 +1,11 @@
 import { PortalProvider } from "@gorhom/portal";
-import { GlassEffectView } from "@legendapp/spark/ui/glass";
+import { GlassView } from "@legendapp/spark/ui/glass";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { PlaybackArea } from "../components/PlaybackArea";
 import { TooltipProvider } from "../components/TooltipProvider";
-import { setWindowBlur } from "@legendapp/spark/windows/managed";
+import { setWindowBlur } from "@legendapp/spark/windows/macos";
 import { IS_TAHOE } from "../systems/constants";
 import { ThemeProvider } from "../theme/ThemeProvider";
 import { withWindowProvider } from "../windows";
@@ -101,7 +101,7 @@ function CurrentSongOverlayWindow() {
 
         if (exiting) {
             try {
-                setWindowBlur(WINDOW_ID, OVERLAY_WINDOW_MAX_BLUR_RADIUS, OVERLAY_WINDOW_HIDE_DURATION_MS);
+                setWindowBlur(WINDOW_ID, { radius: OVERLAY_WINDOW_MAX_BLUR_RADIUS, durationMs: OVERLAY_WINDOW_HIDE_DURATION_MS });
             } catch (error) {
                 console.error("Failed to animate overlay blur on hide:", error);
             }
@@ -117,8 +117,8 @@ function CurrentSongOverlayWindow() {
 
         if (Platform.OS === "macos") {
             try {
-                await setWindowBlur(WINDOW_ID, OVERLAY_WINDOW_MAX_BLUR_RADIUS, 0);
-                await setWindowBlur(WINDOW_ID, 0, OVERLAY_WINDOW_SHOW_DURATION_MS);
+                await setWindowBlur(WINDOW_ID, { radius: OVERLAY_WINDOW_MAX_BLUR_RADIUS, durationMs: 0 });
+                await setWindowBlur(WINDOW_ID, { radius: 0, durationMs: OVERLAY_WINDOW_SHOW_DURATION_MS });
             } catch {}
         }
     });
@@ -132,7 +132,7 @@ function CurrentSongOverlayWindow() {
         <View style={styles.root} {...mouseHandlers}>
             <View style={styles.shadowContainer}>
                 <View style={styles.overlayWrapper}>
-                    <GlassEffectView glassStyle="regular" tintColor="#00000022" style={styles.overlaySurface}>
+                    <GlassView glassStyle="regular" tintColor="#00000022" style={styles.overlaySurface}>
                         <View className="flex-1 bg-black/10">
                             <ThemeProvider>
                                 <PortalProvider>
@@ -145,7 +145,7 @@ function CurrentSongOverlayWindow() {
                                 </PortalProvider>
                             </ThemeProvider>
                         </View>
-                    </GlassEffectView>
+                    </GlassView>
                 </View>
             </View>
         </View>

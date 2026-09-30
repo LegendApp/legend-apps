@@ -1,3 +1,3 @@
-import { createStorage } from "@legendapp/spark/settings/observable";
+import { createStorage } from "@legend-apps/storage";
 
 export const markdownStorage = createStorage();

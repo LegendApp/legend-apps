@@ -1,4 +1,4 @@
 module.exports = {
-  addAppExitListener: jest.fn(),
-  completeAppExit: jest.fn(),
+ beforeQuit: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+ addAppListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 };

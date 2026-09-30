@@ -1,6 +1,6 @@
 import type { DisplayPlugin } from '../plugin-system/PluginTypes';
 import { state$ } from '../systems/State';
-import { GlassEffectView as VibrancyView } from "@legendapp/spark/ui/glass";
+import { GlassView as VibrancyView } from "@legendapp/spark/ui/glass";
 import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';

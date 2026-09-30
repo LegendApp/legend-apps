@@ -5,12 +5,12 @@ import { showToast } from "../Toast";
 import { generatePlaylistExtension } from "../../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../../systems/ai/playlistContext";
 import type { LocalTrack } from "../../systems/LocalMusicState";
-import { getCodexAvailability } from "@legend-apps/codex";
+import { getCodexAvailability } from "@legendapp/spark/ai/codex";
 import { spotifyStatus$ } from "../../providers/spotify/provider";
 import { settings$ } from "../../systems/Settings";
 import { Checkbox } from "../Checkbox";
 
-jest.mock("@legend-apps/codex", () => ({
+jest.mock("@legendapp/spark/ai/codex", () => ({
     __esModule: true,
     getCodexAvailability: jest.fn(),
 }));

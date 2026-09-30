@@ -1,4 +1,5 @@
-import type { NativeMenuAction } from "@legendapp/spark/menus";
+import { diffActiveMenuWindow$ } from "./diffMenuState";
+import type { MenuAction } from "@legendapp/spark/menus";
 
 type DiffViewerActionId =
   | "copyFilePath"
@@ -12,21 +13,21 @@ type DiffViewerActionId =
   | "save"
   | "showOnlyHunks"
   | "toggleSidebar";
-type DiffViewerActionHandlers = Partial<Record<DiffViewerActionId, (action?: NativeMenuAction) => boolean | void>>;
+type DiffViewerActionHandlers = Partial<Record<DiffViewerActionId, (action?: MenuAction) => boolean | void>>;
 
-let currentHandlers: DiffViewerActionHandlers | null = null;
+const windowHandlers = new Map<string, DiffViewerActionHandlers>();
 
-export function registerDiffViewerActionHandlers(handlers: DiffViewerActionHandlers) {
-  currentHandlers = handlers;
+export function registerDiffViewerActionHandlers(windowId: string, handlers: DiffViewerActionHandlers) {
+  windowHandlers.set(windowId, handlers);
 
   return () => {
-    if (currentHandlers === handlers) {
-      currentHandlers = null;
+    if (windowHandlers.get(windowId) === handlers) {
+      windowHandlers.delete(windowId);
     }
   };
 }
 
-export function dispatchDiffViewerAction(action: NativeMenuAction) {
-  const handler = currentHandlers?.[action.itemId as DiffViewerActionId];
+export function dispatchDiffViewerAction(action: MenuAction) {
+  const handler = windowHandlers.get(diffActiveMenuWindow$.peek())?.[action.itemId as DiffViewerActionId];
   return handler ? handler(action) !== false : false;
 }

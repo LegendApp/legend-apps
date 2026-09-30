@@ -1,4 +1,4 @@
-import { createObservableFile } from "@legendapp/spark/settings/observable";
+import { createObservableFile } from "@legend-apps/storage";
 
 const maxRecentFiles = 20;
 

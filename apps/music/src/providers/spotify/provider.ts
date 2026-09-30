@@ -136,7 +136,7 @@ export async function ensureSpotifyAccessToken(): Promise<string> {
         throw new Error("Spotify is not connected. Connect it in Settings → Spotify, then try again.");
     }
     const token = await fetchToken({ grant_type: "refresh_token", refresh_token: credentials.refreshToken });
-    setSpotifyCredentials({
+    await setSpotifyCredentials({
         accessToken: token.access_token,
         refreshToken: token.refresh_token ?? credentials.refreshToken,
     });
@@ -227,7 +227,7 @@ async function completeLogin(url: string, redirectUri: string): Promise<void> {
             redirect_uri: redirectUri,
             code_verifier: credentials.codeVerifier,
         });
-        setSpotifyCredentials({
+        await setSpotifyCredentials({
             accessToken: token.access_token,
             refreshToken: token.refresh_token ?? "",
             codeVerifier: "",
@@ -384,7 +384,7 @@ export const spotifyProvider: StreamingProvider = {
             throw new Error(`Add a Spotify Client ID in Settings → Spotify. Register ${SPOTIFY_REDIRECT_URI_FOR_DASHBOARD} as its redirect URI.`);
         }
         const pkce = await createPKCE();
-        setSpotifyCredentials({ codeVerifier: pkce.verifier, codeState: pkce.state });
+        await setSpotifyCredentials({ codeVerifier: pkce.verifier, codeState: pkce.state });
         const loopback = getOAuthLoopback();
         spotifyStatus$.assign({ isLoading: true, error: null });
         try {
@@ -412,7 +412,7 @@ export const spotifyProvider: StreamingProvider = {
     },
     async logout() {
         await spotifyPlayback.stop();
-        clearSpotifyCredentials();
+        await clearSpotifyCredentials();
         spotifySettings().assign({
             expiresAt: 0,
             displayName: "",

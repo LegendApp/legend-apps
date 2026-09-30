@@ -1,12 +1,10 @@
-import { useEffect } from "react";
-import { AutoUpdater } from "@legendapp/spark/updates";
-import { hotkeyToMenuShortcut, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
+import { useEffect, useState } from "react";
+import { getUpdateStatus, configureUpdates, startUpdates, checkForUpdates } from "@legendapp/spark/updates";
+import { useValue } from "@legendapp/state/react";
 import {
-    type NativeMenuAction,
-    type NativeMenuConfig,
-    type NativeMenuItemPatch,
-    updateMenuItems,
-    useNativeMenu,
+    type MenuAction,
+    type MenuItem,
+    useMenu,
 } from "@legendapp/spark/menus";
 import { localAudioControls, localPlayerState$, queue$ } from "../components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "../state/savePlaylistUIState";
@@ -22,140 +20,84 @@ const FILE_MENU_ID = "file";
 const PLAYBACK_MENU_ID = "playback";
 const VIEW_MENU_ID = "view";
 
-const MENU_CONFIG: NativeMenuConfig[] = [
-    {
+const MENU_CONFIG: MenuItem[] = [
+    { type: "submenu",
         id: APP_MENU_ID,
-        title: "Legend Music",
-        systemMenu: "app",
+        label: "Legend Music",
+        target: { menu: "app" },
         items: [
-            {
+            { type: "action",
                 id: "settings",
-                targetTitles: ["Settings…", "Settings...", "Preferences…", "Preferences..."],
+                target: { role: "settings" }, label: "Settings…",
             },
-            {
+            { type: "action",
                 id: "checkForUpdates",
-                title: "Check for Updates...",
+                label: "Check for Updates...",
             },
         ],
     },
-    {
+    { type: "submenu",
         id: FILE_MENU_ID,
-        title: "File",
+        label: "File",
         items: [
-            {
+            { type: "action",
                 id: "savePlaylist",
-                title: "Save Playlist",
-                targetTitles: ["Save…", "Save..."],
+                label: "Save Playlist",
+                target: { role: "save" },
             },
-            {
+            { type: "action",
                 id: "jump",
-                title: "Jump",
-                shortcut: { key: "j", modifiers: KeyCodes.MODIFIER_COMMAND },
+                label: "Jump",
+                shortcut: "Cmd+j",
             },
         ],
     },
-    {
+    { type: "submenu",
         id: VIEW_MENU_ID,
-        title: "View",
+        label: "View",
         items: [
-            {
+            { type: "action",
                 id: "toggleLibrary",
-                title: "Media Library",
+                label: "Media Library",
             },
         ],
     },
-    {
+    { type: "submenu",
         id: PLAYBACK_MENU_ID,
-        title: "Playback",
-        placement: { before: "Window" },
+        label: "Playback",
+        placement: { before: { menu: "window" } },
         items: [
-            {
+            { type: "action",
                 id: "playbackPrevious",
-                title: "Previous Track",
+                label: "Previous Track",
             },
-            {
+            { type: "action",
                 id: "playbackPlayPause",
-                title: "Play",
+                label: "Play",
             },
-            {
+            { type: "action",
                 id: "playbackNext",
-                title: "Next Track",
+                label: "Next Track",
             },
-            {
-                id: "playbackSeparator",
-                separator: true,
-            },
-            {
+            { type: "separator" },
+            { type: "action",
                 id: "playbackToggleShuffle",
-                title: "Shuffle",
+                label: "Shuffle",
             },
-            {
+            { type: "action",
                 id: "playbackToggleRepeat",
-                title: "Repeat Off",
+                label: "Repeat Off",
             },
         ],
     },
 ];
-
-function updateMusicMenuItems(patches: NativeMenuItemPatch[]) {
-    updateMenuItems(MENU_OWNER_ID, patches);
-}
-
-function getRepeatMenuPatch(mode: RepeatMode): NativeMenuItemPatch {
-    return {
-        id: "playbackToggleRepeat",
-        checked: mode !== "off",
-        title: mode === "all" ? "Repeat All" : mode === "one" ? "Repeat One" : "Repeat Off",
-    };
-}
-
-function getMenuShortcut(bindings: readonly HotkeyValue[]) {
-    return bindings
-        .map(hotkeyToMenuShortcut)
-        .find((shortcut) => shortcut !== null) ?? null;
-}
-
-function getPlaybackShortcutPatches(): NativeMenuItemPatch[] {
-    const hotkeys = hotkeys$.get();
-
-    return [
-        { id: "playbackPrevious", shortcut: getMenuShortcut(hotkeys.PreviousTrack) },
-        { id: "playbackPlayPause", shortcut: getMenuShortcut(hotkeys.PlayPause) },
-        { id: "playbackNext", shortcut: getMenuShortcut(hotkeys.NextTrack) },
-        { id: "playbackToggleShuffle", shortcut: getMenuShortcut(hotkeys.ToggleShuffle) },
-        { id: "playbackToggleRepeat", shortcut: getMenuShortcut(hotkeys.ToggleRepeatMode) },
-    ];
-}
-
-function syncMenuState() {
-    updateMusicMenuItems([
-        {
-            id: "playbackToggleShuffle",
-            checked: !!settings$.playback.shuffle.get(),
-        },
-        getRepeatMenuPatch(settings$.playback.repeatMode.get()),
-        {
-            id: "playbackPlayPause",
-            title: localPlayerState$.isPlaying.get() ? "Pause" : "Play",
-        },
-        {
-            id: "toggleLibrary",
-            checked: !!stateSaved$.libraryIsOpen.get(),
-        },
-        {
-            id: "savePlaylist",
-            enabled: queue$.tracks.get().length > 0,
-        },
-        ...getPlaybackShortcutPatches(),
-    ]);
-}
 
 function toggleLibraryWindow() {
     const current = stateSaved$.libraryIsOpen.get();
     stateSaved$.libraryIsOpen.set(!current);
 }
 
-function handleMenuAction(action: NativeMenuAction) {
+function handleMenuAction(action: MenuAction) {
     perfCount("AppMenu.onMenuCommand");
     perfLog("AppMenu.onMenuCommand", action);
 
@@ -190,7 +132,7 @@ function handleMenuAction(action: NativeMenuAction) {
             localAudioControls.cycleRepeatMode();
             break;
         case "checkForUpdates":
-            void AutoUpdater.checkForUpdates();
+            void checkForUpdates().catch(console.error);
             break;
         default:
             break;
@@ -198,42 +140,39 @@ function handleMenuAction(action: NativeMenuAction) {
 }
 
 export function AppMenuController() {
-    useNativeMenu({
-        menus: MENU_CONFIG,
-        onAction: handleMenuAction,
-        ownerId: MENU_OWNER_ID,
-    });
-
+    const [canUpdate, setCanUpdate] = useState(false);
     useEffect(() => {
-        const unsubscribeMenuState = [
-            settings$.playback.shuffle.onChange(({ value }) => {
-                updateMusicMenuItems([{ id: "playbackToggleShuffle", checked: !!value }]);
-            }),
-            settings$.playback.repeatMode.onChange(({ value }) => {
-                updateMusicMenuItems([getRepeatMenuPatch(value as RepeatMode)]);
-            }),
-            localPlayerState$.isPlaying.onChange(({ value }) => {
-                updateMusicMenuItems([{ id: "playbackPlayPause", title: value ? "Pause" : "Play" }]);
-            }),
-            stateSaved$.libraryIsOpen.onChange(() => {
-                updateMusicMenuItems([{ id: "toggleLibrary", checked: !!stateSaved$.libraryIsOpen.get() }]);
-            }),
-            queue$.tracks.onChange(() => {
-                updateMusicMenuItems([{ id: "savePlaylist", enabled: queue$.tracks.get().length > 0 }]);
-            }),
-            hotkeys$.onChange(() => {
-                updateMusicMenuItems(getPlaybackShortcutPatches());
-            }),
-        ];
-
-        syncMenuState();
-
-        return () => {
-            for (const unsubscribe of unsubscribeMenuState) {
-                unsubscribe();
-            }
-        };
+        let active = true;
+        if (!__DEV__) void getUpdateStatus().then(async status => {
+            if (!active || !status.available) return;
+            await configureUpdates({ automaticallyChecks: true, checkIntervalSeconds: 86400 });
+            if (!active) return;
+            await startUpdates();
+            if (active) setCanUpdate(true);
+        }).catch(console.error);
+        return () => { active = false; };
     }, []);
-
+    const items = useValue(() => {
+        const shuffle = settings$.playback.shuffle.get();
+        const repeat = settings$.playback.repeatMode.get();
+        const playing = localPlayerState$.isPlaying.get();
+        const libraryOpen = stateSaved$.libraryIsOpen.get();
+        const hasTracks = queue$.tracks.get().length > 0;
+        const hotkeys = hotkeys$.get();
+        const bindings = { playbackPrevious: hotkeys.PreviousTrack, playbackPlayPause: hotkeys.PlayPause,
+            playbackNext: hotkeys.NextTrack, playbackToggleShuffle: hotkeys.ToggleShuffle, playbackToggleRepeat: hotkeys.ToggleRepeatMode };
+        return MENU_CONFIG.map(menu => menu.type !== "submenu" ? menu : { ...menu, items: menu.items.map((item): MenuItem => {
+            if (item.type !== "action" && item.type !== "checkbox") return item;
+            const shortcut = bindings[item.id as keyof typeof bindings]?.find(value => /^(Cmd|CmdOrCtrl|Ctrl|Alt|Shift)\+/.test(value));
+            if (item.id === "playbackToggleShuffle") return { ...item, type: "checkbox", checked: !!shuffle, shortcut };
+            if (item.id === "playbackToggleRepeat") return { ...item, type: "checkbox", checked: repeat !== "off", label: repeat === "all" ? "Repeat All" : repeat === "one" ? "Repeat One" : "Repeat Off", shortcut };
+            if (item.id === "toggleLibrary") return { ...item, type: "checkbox", checked: !!libraryOpen };
+            if (item.id === "savePlaylist") return { ...item, disabled: !hasTracks };
+            if (item.id === "playbackPlayPause") return { ...item, label: playing ? "Pause" : "Play", shortcut };
+            if (item.id === "checkForUpdates") return { ...item, disabled: !canUpdate };
+            return item.type === "action" || item.type === "checkbox" ? { ...item, shortcut: shortcut ?? item.shortcut } : item;
+        }) });
+    });
+    useMenu({ id: MENU_OWNER_ID, items, onAction: handleMenuAction, onError: console.error });
     return null;
 }

@@ -9,7 +9,9 @@
     "type": "all",
     "jsSrcsDir": "src",
     "ios": {
-      "modulesProvider": { "NativeSourceDocuments": "RNSourceDocuments" },
+      "modulesProvider": {
+        "NativeSourceDocuments": "RNSourceDocuments"
+      },
       "componentProvider": {
         "SourceEditorHost": "RNSourceEditorHost",
         "SourceEditorProgressRing": "RNSourceEditorProgressRing",
@@ -17,6 +19,13 @@
       }
     }
   },
-  "dependencies": { "@legendapp/list": "catalog:", "@legend-apps/design-system": "workspace:*", "@legend-apps/syntax-parser": "workspace:*" },
-  "peerDependencies": { "react": "catalog:", "react-native": "catalog:" }
+  "dependencies": {
+    "@legendapp/list": "catalog:",
+    "@legend-apps/design-system": "workspace:*",
+    "@legend-apps/syntax-parser": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:"
+  }
 }

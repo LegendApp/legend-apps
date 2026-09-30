@@ -1,9 +1,10 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { playlistNavigationState$ } from "../../state/playlistNavigationState";
-import KeyboardManager, { type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
+import { addKeyboardListener, hasModifier, type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
 import type { LibraryItem } from "../../systems/LibraryState";
 import type { LocalPlaylist, LocalTrack } from "../../systems/LocalMusicState";
 import { getQueueAction, type QueueAction } from "../../utils/queueActions";
@@ -159,11 +160,11 @@ export function useDropdownKeyboardNavigation({
 
     const updateModifierState = useCallback((event: KeyboardEvent) => {
         modifierStateRef.current = {
-            shift: KeyboardManager.hasModifier(event, KeyCodes.MODIFIER_SHIFT),
-            option: KeyboardManager.hasModifier(event, KeyCodes.MODIFIER_OPTION),
-            alt: KeyboardManager.hasModifier(event, KeyCodes.MODIFIER_OPTION),
-            ctrl: KeyboardManager.hasModifier(event, KeyCodes.MODIFIER_CONTROL),
-            meta: KeyboardManager.hasModifier(event, KeyCodes.MODIFIER_COMMAND),
+            shift: hasModifier(event, KeyCodes.MODIFIER_SHIFT),
+            option: hasModifier(event, KeyCodes.MODIFIER_OPTION),
+            alt: hasModifier(event, KeyCodes.MODIFIER_OPTION),
+            ctrl: hasModifier(event, KeyCodes.MODIFIER_CONTROL),
+            meta: hasModifier(event, KeyCodes.MODIFIER_COMMAND),
         };
     }, []);
 
@@ -182,7 +183,7 @@ export function useDropdownKeyboardNavigation({
     }, [highlightedIndex$, isOpen, resultsLength]);
 
     useEffect(() => {
-        const removeKeyDown = KeyboardManager.addKeyDownListener((event) => {
+        const down = ownRegistration(addKeyboardListener("down", (event) => {
             updateModifierState(event);
 
             if (!isOpen || resultsLength === 0) {
@@ -227,19 +228,19 @@ export function useDropdownKeyboardNavigation({
             }
 
             return false;
-        });
+        }));
 
-        const removeKeyUp = KeyboardManager.addKeyUpListener((event) => {
+        const up = ownRegistration(addKeyboardListener("up", (event) => {
             updateModifierState(event);
             if (event.modifiers === 0) {
                 resetModifiers();
             }
             return false;
-        });
+        }));
 
         return () => {
-            removeKeyDown();
-            removeKeyUp();
+            void down.remove().catch(console.error);
+            void up.remove().catch(console.error);
         };
     }, [highlightedIndex$, isOpen, onEscape, onSubmit, resetModifiers, resultsLength, updateModifierState]);
 

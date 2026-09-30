@@ -1,3 +1,4 @@
+import { useWindowId } from "@legendapp/spark/windows";
 import { LegendList } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
@@ -21,8 +22,8 @@ import { localPlayerState$ } from "../LocalAudioPlayer";
 import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from "../Table";
 import type { TrackData } from "../TrackItem";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
-import { type ContextMenuItem, showContextMenu } from "@legendapp/spark/context-menu";
-import { type NativeDragTrack, TrackDragSource } from "@legendapp/spark/drag-drop/views";
+import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
+import { type MusicDragTrack, MusicTrackDragSource } from "../../utils/musicDrag";
 import { Icon } from "../../systems/Icon";
 import { libraryUI$ } from "../../systems/LibraryState";
 import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
@@ -483,10 +484,10 @@ interface LibraryTrackRowProps {
     trackPath: string | null;
 }
 
-const TRACK_ROW_MENU_ITEMS: ContextMenuItem[] = [
-    { id: "play-now", title: "Play Now" },
-    { id: "play-next", title: "Play Next" },
-    { id: "star", title: "Star", enabled: false },
+const TRACK_ROW_MENU_ITEMS: MenuItem[] = [
+    { type: "action", id: "play-now", label: "Play Now" },
+    { type: "action", id: "play-next", label: "Play Next" },
+    { type: "action", id: "star", label: "Star", disabled: true },
 ];
 
 function LibraryTrackRow({
@@ -504,6 +505,7 @@ function LibraryTrackRow({
     playlistId,
     trackPath,
 }: LibraryTrackRowProps) {
+    const windowId = useWindowId();
     const dragData = buildDragData(index);
     const listItemStyles = useListItemStyles();
     const isSelected = useValue(() => selectedIndices$.get().has(index));
@@ -527,16 +529,16 @@ function LibraryTrackRow({
             const x = event.pageX ?? event.x ?? 0;
             const y = event.pageY ?? event.y ?? 0;
 
-            const selection = await showContextMenu(TRACK_ROW_MENU_ITEMS, { x, y });
-            if (!selection) {
+            const selection = await showContextMenu({ items: TRACK_ROW_MENU_ITEMS, windowId, position: { x, y } });
+            if (selection.canceled) {
                 return;
             }
 
-            if (selection === "play-now" || selection === "play-next") {
-                onMenuAction(index, selection);
+            if (selection.itemId === "play-now" || selection.itemId === "play-next") {
+                onMenuAction(index, selection.itemId);
             }
         },
-        [index, onMenuAction],
+        [index, onMenuAction, windowId],
     );
 
     const row = (
@@ -598,13 +600,13 @@ function LibraryTrackRow({
 
     if (Platform.OS === "macos") {
         return (
-            <TrackDragSource
-                tracks={dragData.tracks as NativeDragTrack[]}
+            <MusicTrackDragSource
+                tracks={dragData.tracks as MusicDragTrack[]}
                 onDragStart={onNativeDragStart}
                 className="flex-1"
             >
                 {row}
-            </TrackDragSource>
+            </MusicTrackDragSource>
         );
     }
 

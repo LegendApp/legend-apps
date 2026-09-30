@@ -1,7 +1,5 @@
-import {
-  readApplicationSupportJson,
-  writeApplicationSupportJson,
-} from "@legendapp/spark/settings/paths";
+import { createStorage } from "@legend-apps/storage";
+const chatStorage = createStorage();
 import type { ChatSummary } from "@legend-apps/chat-history";
 
 const settingsPath = "chat-history/settings.json";
@@ -32,7 +30,7 @@ function isChatSummary(value: unknown): value is ChatSummary {
 }
 
 export function readSavedChatSelection(): SavedChatSelection {
-  const settings = readApplicationSupportJson<ChatHistorySettings>(settingsPath);
+  const settings = chatStorage.read<ChatHistorySettings>(settingsPath, { format: "json" });
   const selectedChat = isChatSummary(settings?.selectedChat) ? settings.selectedChat : undefined;
   const selectedId = typeof settings?.selectedId === "string" ? settings.selectedId : selectedChat?.id;
   return { selectedChat, selectedId };
@@ -44,10 +42,10 @@ function persistSelectedChat() {
   selectedChatWriteTimer = undefined;
   if (selectedChat) {
     try {
-      writeApplicationSupportJson(settingsPath, {
+      chatStorage.write(settingsPath, {
         selectedChat,
         selectedId: selectedChat.id,
-      });
+      }, { format: "json" });
     } catch (error) {
       console.error(`[ChatHistoryStorage] ${error instanceof Error ? error.message : String(error)}`);
     }

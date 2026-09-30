@@ -133,9 +133,10 @@
     "@legendapp/state": "^3.0.0-beta.42"
   },
   "dependencies": {
-    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-f8eace4e0dce.tgz"
+    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-335ebf5f6f86.tgz",
+    "@legend-apps/storage": "0.0.0"
   },
   "overrides": {
-    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-f8eace4e0dce.tgz"
+    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-335ebf5f6f86.tgz"
   }
 }

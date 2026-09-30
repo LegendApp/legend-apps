@@ -4,17 +4,16 @@ import {
     type TextInputSearchProps as NativeTextInputSearchProps,
     type TextInputSearchRef,
 } from "@legendapp/spark/ui/search";
+import { View } from "react-native";
 import { forwardRef, memo, useCallback } from "react";
 
-export interface TextInputSearchProps extends NativeTextInputSearchProps {
-    value$?: Observable<string>;
-}
+export type TextInputSearchProps = Omit<NativeTextInputSearchProps, "value" | "defaultValue"> & { className?: string; value$?: Observable<string>; defaultValue?: string; value?: string };
 
 export type { TextInputSearchRef };
 
 export const TextInputSearch = memo(
     forwardRef<TextInputSearchRef, TextInputSearchProps>(function TextInputSearch(
-        { value$, defaultValue, onChangeText, ...rest },
+        { className, value$, defaultValue, value, onChangeText, ...rest },
         ref,
     ) {
         const handleChangeText = useCallback(
@@ -26,13 +25,13 @@ export const TextInputSearch = memo(
         );
 
         return (
-            <NativeTextInputSearch
+            <View className={className}><NativeTextInputSearch
                 ref={ref}
-                defaultValue={defaultValue ?? value$?.peek()}
+                {...(value !== undefined ? { value } : { defaultValue: defaultValue ?? value$?.peek() })}
                 onChangeText={handleChangeText}
                 style={{ minHeight: 32 }}
                 {...rest}
-            />
+            /></View>
         );
     }),
 );

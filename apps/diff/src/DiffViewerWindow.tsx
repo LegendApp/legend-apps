@@ -1,54 +1,21 @@
-import {
-  createSidebarSplitViewTitlebarChrome,
-  SidebarSplitView,
-  type SidebarSplitViewResizeEvent,
-} from "@legendapp/spark/ui/split-view";
-import { commandRunner } from "@legendapp/spark/processes/commands";
-import {
-  DiffHorizontalScroller,
-  DiffMergeNativePane,
-  DiffNativeRowConfig,
-  loadUnifiedDiff,
-  loadUnifiedDiffFile,
-  loadUnifiedDiffFromUrl,
-  startGitFolderDiff,
-  startUnifiedDiffFromUrl,
-  type DiffDocument,
-  type DiffFileSummary,
-  type DiffLoadProgress,
-  type DiffLoadResult,
-  type DiffLoadSession,
-  type DiffLoadStatus,
-  type DiffLoadTiming,
-  type DiffRenderRow,
-  type DiffSideBySideFileHeader,
-  type DiffSideBySideRenderRow,
-  type DiffSyntaxStyle,
-} from "@legend-apps/diff-parser";
-import { DragDropView, type DragDropFileEvent } from "@legendapp/spark/drag-drop/views";
-import { revealInFinder } from "@legendapp/spark/dialogs";
-import { addKeyDownListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { SidebarSplitView, type SidebarSplitViewResizeEvent, } from "@legendapp/spark/ui/split-view";
+import { runCommand } from "@legendapp/spark/processes";
+import { DiffHorizontalScroller, DiffMergeNativePane, DiffNativeRowConfig, loadUnifiedDiff, loadUnifiedDiffFile, loadUnifiedDiffFromUrl, startGitFolderDiff, startUnifiedDiffFromUrl, type DiffDocument, type DiffFileSummary, type DiffLoadProgress, type DiffLoadResult, type DiffLoadSession, type DiffLoadStatus, type DiffLoadTiming, type DiffRenderRow, type DiffSideBySideFileHeader, type DiffSideBySideRenderRow, type DiffSyntaxStyle, } from "@legend-apps/diff-parser";
+import { DragDropView, type DropEvent } from "@legendapp/spark/drag-drop";
+import { revealInFileManager } from "@legendapp/spark/files";
+import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import { nowMs, type SyntaxStyleMap } from "@legend-apps/source-viewer";
-import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { ensureTreeGrammarsForPaths, detectGrammar, getSyntaxTheme, highlightTreeString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
 import { DiffGrammarProgress } from "./viewer/DiffGrammarProgress";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { addWindowCloseRequestedListener } from "@legendapp/spark/windows/managed";
-import { useWindowId } from "@legendapp/spark/windows/react";
-import {
-  VirtualizedFixedDocumentList,
-  type VirtualizedDocumentRowsState,
-  type VirtualizedDocumentRequestOptions,
-  type VirtualizedDocumentRequestReason,
-  type VirtualizedDocumentVisibleRangeInfo,
-  type VirtualizedFixedDocumentListRef,
-  type VirtualizedFixedDocumentListRenderRowProps,
-} from "@legend-apps/virtualized-document";
-import {
-  LegendList,
-  type LegendListRenderItemProps,
-} from "@legendapp/list/react-native";
+import { beforeWindowClose, addWindowListener } from "@legendapp/spark/windows";
+import { useWindowId } from "@legendapp/spark/windows";
+import { VirtualizedFixedDocumentList, type VirtualizedDocumentRowsState, type VirtualizedDocumentRequestOptions, type VirtualizedDocumentRequestReason, type VirtualizedDocumentVisibleRangeInfo, type VirtualizedFixedDocumentListRef, type VirtualizedFixedDocumentListRenderRowProps, } from "@legend-apps/virtualized-document";
+import { LegendList, type LegendListRenderItemProps, } from "@legendapp/list/react-native";
 import { batch, computed, ObservableHint, type OpaqueObject, type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
@@ -56,179 +23,34 @@ import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Text, Text
 import { confirmUnsavedDiffMergeDrafts, type UnsavedDiffMergeDraftReason } from "./confirmUnsavedDiffMergeDrafts";
 import { registerDiffWindowExitPreparation } from "./diffAppExit";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "./diffAppMetadata";
-import {
-  createDiffCompareSource,
-  createDiffCompareSourceForRef,
-  loadDiffCompareRepoState,
-} from "./diffCompareTargets";
+import { createDiffCompareSource, createDiffCompareSourceForRef, loadDiffCompareRepoState, } from "./diffCompareTargets";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "./diffDrop";
 import { getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, getDiffSourceLabel, getFilename, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog, type DiffOpenSource } from "./diffFiles";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "./filePairDiff";
 import { getDiffPalette } from "./diffPalette";
 import { closeDiffViewerWindow, focusDiffSearchToolbarItem } from "./diffWindowControls";
-import {
-  createDiffMergeDraftFileWithResolvedBlock,
-  createReadyMergeState,
-  createDiffMergeHunkDisplayModel,
-  loadDiffMergeState,
-  readDiffMergeFileContent,
-  resolveDiffMergeConflictContent,
-  type DiffMergeConflictBlock,
-  type DiffMergeConflictChoice,
-  type DiffMergeConflictRange,
-  type DiffMergeDisplayRow,
-  type DiffMergeConflictFile,
-  type DiffMergeDisplayModel,
-  type DiffMergeHunkHeaderInfo,
-  type DiffMergeSideChangeType,
-  type DiffMergeState,
-  writeDiffMergeFileContent,
-} from "./diffMerge";
+import { createDiffMergeDraftFileWithResolvedBlock, createReadyMergeState, createDiffMergeHunkDisplayModel, loadDiffMergeState, readDiffMergeFileContent, resolveDiffMergeConflictContent, type DiffMergeConflictBlock, type DiffMergeConflictChoice, type DiffMergeConflictRange, type DiffMergeDisplayRow, type DiffMergeConflictFile, type DiffMergeDisplayModel, type DiffMergeHunkHeaderInfo, type DiffMergeSideChangeType, type DiffMergeState, writeDiffMergeFileContent, } from "./diffMerge";
 import { GlassToast } from "./GlassToast";
-import {
-  diffMergeSaveConflictKey,
-  getMergeConflictKey,
-  isDiffMergeSavePending,
-} from "./diffMergeControls";
-import {
-  defaultDiffSidebarWidth,
-  diffSettings$,
-  getDiffIgnoreWhitespaceChangesSetting,
-  getDiffViewModeSetting,
-  getDiffShowOnlyHunksSetting,
-  setDiffShowOnlyHunksSetting,
-  setDiffSidebarWidthSetting,
-  useDiffAdaptiveLightModeEnabledSetting,
-  useDiffFontFamilySetting,
-  useDiffFontSizeSetting,
-  useDiffHighlightChangedCharactersSetting,
-  useDiffIgnoreWhitespaceChangesSetting,
-  useDiffShowOnlyHunksSetting,
-  useDiffRestoreWindowsOnStartupSetting,
-  useDiffShowStatisticsPanelSetting,
-  useDiffShowWhitespaceCharactersSetting,
-  useDiffSidebarWidthSetting,
-  useDiffSyntaxHighlightingEnabledSetting,
-  useDiffSyntaxTheme,
-  useDiffViewModeSetting,
-  type DiffSettingsFile,
-} from "./diffSettings";
-import {
-  diffAdaptiveRender,
-  diffDocumentErrorHeight,
-  diffDocumentPermissionErrorHeight,
-  diffDropAllowedFileTypes,
-  diffFileHeaderRowHeight,
-  diffBackgroundTokenizeChunkBudgetMs,
-  diffBackgroundTokenizeChunkRowCount,
-  diffBackgroundTokenizeMaxFileCount,
-  diffBackgroundTokenizeMaxSourceLineCount,
-  diffBackgroundTokenizePollMs,
-  diffBackgroundTokenizeStartDelayMs,
-  diffInitialRowCount,
-  diffLineOverscan,
-  diffLoadedCacheMaxRows,
-  diffOverscanRequestDelayMs,
-  diffProgressiveInitialPaintMaxDelayMs,
-  diffProgressiveInitialPaintRowCount,
-  diffProgressiveItemCountExpandChunkRowCount,
-  diffProgressiveItemCountExpandThresholdRows,
-  diffProgressiveLoadPollMs,
-  diffProgressivePostInitialLoadPollMs,
-  diffProgressivePostInitialLoadResumeMs,
-  diffRowKindFileHeader,
-  diffSidebarFileRowHeight,
-  diffSidebarTopInset,
-  diffTitlebarTopInset,
-} from "./viewer/diffViewerConstants";
-import {
-  createCollapsedFileIndexList,
-  createFileByRowStart,
-  findFileIndexForRow,
-  getFilesForSourceRowRange,
-  getBoundedSideBySideLayoutMetadata,
-  useDiffLoadedModel,
-  useVisibleDiffFileTokenizationScheduler,
-  useDiffSideBySideRuntime,
-} from "./viewer/diffLoadedDocumentModel";
-import {
-  createDiffInlineMergeItemIndexAllocator,
-  createDiffInlineMergeList,
-  createInlineRowsForFile,
-  getMergeFileForDiffFile,
-  type DiffInlineMergeItemIndexAllocator,
-  type DiffInlineMergeRow,
-} from "./viewer/diffInlineMergeModel";
+import { diffMergeSaveConflictKey, getMergeConflictKey, isDiffMergeSavePending, } from "./diffMergeControls";
+import { defaultDiffSidebarWidth, diffSettings$, getDiffIgnoreWhitespaceChangesSetting, getDiffViewModeSetting, getDiffShowOnlyHunksSetting, setDiffShowOnlyHunksSetting, setDiffSidebarWidthSetting, useDiffAdaptiveLightModeEnabledSetting, useDiffFontFamilySetting, useDiffFontSizeSetting, useDiffHighlightChangedCharactersSetting, useDiffIgnoreWhitespaceChangesSetting, useDiffShowOnlyHunksSetting, useDiffRestoreWindowsOnStartupSetting, useDiffShowStatisticsPanelSetting, useDiffShowWhitespaceCharactersSetting, useDiffSidebarWidthSetting, useDiffSyntaxHighlightingEnabledSetting, useDiffSyntaxTheme, useDiffViewModeSetting, type DiffSettingsFile, } from "./diffSettings";
+import { diffAdaptiveRender, diffDocumentErrorHeight, diffDocumentPermissionErrorHeight, diffDropAllowedFileTypes, diffFileHeaderRowHeight, diffBackgroundTokenizeChunkBudgetMs, diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeMaxFileCount, diffBackgroundTokenizeMaxSourceLineCount, diffBackgroundTokenizePollMs, diffBackgroundTokenizeStartDelayMs, diffInitialRowCount, diffLineOverscan, diffLoadedCacheMaxRows, diffOverscanRequestDelayMs, diffProgressiveInitialPaintMaxDelayMs, diffProgressiveInitialPaintRowCount, diffProgressiveItemCountExpandChunkRowCount, diffProgressiveItemCountExpandThresholdRows, diffProgressiveLoadPollMs, diffProgressivePostInitialLoadPollMs, diffProgressivePostInitialLoadResumeMs, diffRowKindFileHeader, diffSidebarFileRowHeight, diffSidebarTopInset, diffTitlebarTopInset, } from "./viewer/diffViewerConstants";
+import { createCollapsedFileIndexList, createFileByRowStart, findFileIndexForRow, getFilesForSourceRowRange, getBoundedSideBySideLayoutMetadata, useDiffLoadedModel, useVisibleDiffFileTokenizationScheduler, useDiffSideBySideRuntime, } from "./viewer/diffLoadedDocumentModel";
+import { createDiffInlineMergeItemIndexAllocator, createDiffInlineMergeList, createInlineRowsForFile, getMergeFileForDiffFile, type DiffInlineMergeItemIndexAllocator, type DiffInlineMergeRow, } from "./viewer/diffInlineMergeModel";
 import type { DiffSideBySideDataSource } from "./viewer/diffSideBySideDataSource";
 import { DiffSideBySideInlineMergeDataSource } from "./viewer/diffSideBySideInlineMergeDataSource";
 import { DiffUnifiedInlineMergeDataSource } from "./viewer/diffUnifiedInlineMergeDataSource";
-import {
-  createActiveDiffSearchHighlightMap,
-  createDiffSearchHighlightMap,
-  getDiffSearchSubmitIndex,
-  parseDiffSearchQuery,
-  type DiffSearchResult,
-} from "./viewer/diffSearch";
-import {
-  getActiveDiffFile,
-  getConflictedFileStatusPresentation,
-  getDirectoryPath,
-  getFileStatusPresentation,
-  getJoinedPath,
-} from "./viewer/diffFilePresentation";
-import {
-  DiffSideBySideRow,
-  DiffUnifiedRow,
-  diffHunkHeaderHeight,
-  diffSideBySideLineNumberWidth,
-  diffSideBySideMarkerWidth,
-  diffUnifiedChangeBarWidth,
-  diffUnifiedLineNumberWidth,
-  diffUnifiedMarkerWidth,
-  createDiffUnifiedHunkRowIndexSet,
-  getDiffRowPalette,
-  getSideBySideDividerColor,
-  type DiffRowRenderState,
-} from "./viewer/DiffRows";
-import {
-  DiffActionHandlersController,
-  DiffFileWatcherController,
-  DiffLaunchController,
-  DiffLoadCompletionController,
-  DiffNativeMenuController,
-  DiffWindowChromeController,
-  DiffWindowToolbarItemController,
-} from "./viewer/diffViewerControllers";
+import { createActiveDiffSearchHighlightMap, createDiffSearchHighlightMap, getDiffSearchSubmitIndex, parseDiffSearchQuery, type DiffSearchResult, } from "./viewer/diffSearch";
+import { getActiveDiffFile, getConflictedFileStatusPresentation, getDirectoryPath, getFileStatusPresentation, getJoinedPath, } from "./viewer/diffFilePresentation";
+import { DiffSideBySideRow, DiffUnifiedRow, diffHunkHeaderHeight, diffSideBySideLineNumberWidth, diffSideBySideMarkerWidth, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, createDiffUnifiedHunkRowIndexSet, getDiffRowPalette, getSideBySideDividerColor, type DiffRowRenderState, } from "./viewer/DiffRows";
+import { DiffActionHandlersController, DiffFileWatcherController, DiffLaunchController, DiffLoadCompletionController, DiffNativeMenuController, DiffWindowChromeController, DiffWindowToolbarItemController, } from "./viewer/diffViewerControllers";
 import { getAdjacentDiffHunkIndex } from "./viewer/diffHunkNavigation";
-import {
-  DiffViewerModelProvider,
-  emptyDiffLoadProgressState,
-  emptyDiffViewerState,
-  unavailableDiffMergeState,
-  useDiffViewerModel,
-  type DiffFatalError,
-  type DiffLoadedState,
-  type DiffLoadSourceOptions,
-  type DiffLoadTrace,
-  type DiffLoadProgressState,
-  type DiffRecoverableError,
-  type DiffSplitPaneMetrics,
-  type DiffViewerState,
-} from "./viewer/diffViewerModel";
+import { DiffViewerModelProvider, emptyDiffLoadProgressState, emptyDiffViewerState, unavailableDiffMergeState, useDiffViewerModel, type DiffFatalError, type DiffLoadedState, type DiffLoadSourceOptions, type DiffLoadTrace, type DiffLoadProgressState, type DiffRecoverableError, type DiffSplitPaneMetrics, type DiffViewerState, } from "./viewer/diffViewerModel";
 import { createDiffStartupSplitView, diffContentMinWidth, setDiffViewerStartupSplitView } from "./diffWindowControls";
 import { DiffStartScreen } from "./start-screen/DiffStartScreen";
 import { useDiffStartScreenController } from "./start-screen/useDiffStartScreenController";
-import {
-  createOpenError,
-  createRefreshError,
-  getDiffVisibleSourceModel,
-  getErrorMessage,
-  shouldPrepareMergeDraftsForSourceChange,
-  sourcesMatch,
-} from "./viewer/diffViewerSupport";
-
+import { createOpenError, createRefreshError, getDiffVisibleSourceModel, getErrorMessage, shouldPrepareMergeDraftsForSourceChange, sourcesMatch, } from "./viewer/diffViewerSupport";
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
-const diffMergeSaveWatchSuppressMs = 2_000;
+const diffMergeSaveWatchSuppressMs = 2000;
 const diffLoadingAccentColor = "#72b7ff";
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
 const diffUnsavedMergeBannerHeight = 48;
@@ -236,821 +58,682 @@ const diffActiveSearchHighlightColor = "#ff7a00d9";
 const diffActiveSearchRowHighlightColor = "#ff950038";
 const diffSearchHighlightColor = "#ffcc336b";
 const diffListContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: diffTitlebarTopInset,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: diffTitlebarTopInset,
 };
 const diffListViewabilityConfig = { startOffset: diffTitlebarTopInset };
 const diffSidebarContentInset = {
-  bottom: 0,
-  left: 0,
-  right: 0,
-  top: diffSidebarTopInset,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: diffSidebarTopInset,
 };
 const emptyDiffListIndexByFileIndex: ReadonlyMap<number, number> = new Map();
 const emptyDiffItemIndexes: Array<number | undefined> = [];
-
-
-type DiffCommandResult = Awaited<ReturnType<typeof commandRunner.runCommand>>;
+type DiffCommandResult = Awaited<ReturnType<typeof runCommand>>;
 type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
-
 type DiffLoadedCacheEntry = {
-  loaded: DiffLoadedPayload;
-  loadComplete: boolean;
+    loaded: DiffLoadedPayload;
+    loadComplete: boolean;
 };
-
 function disposeDiffDocument(document: DiffDocument, reason: string) {
-  document.cancelTokenizationRequests(reason);
-  document.releaseNativeResources();
+    document.cancelTokenizationRequests(reason);
+    document.releaseNativeResources();
 }
-
 function disposeLoadedCacheEntry(entry: DiffLoadedCacheEntry | undefined, reason: string) {
-  if (entry) {
-    disposeDiffDocument(entry.loaded.document, reason);
-  }
+    if (entry) {
+        disposeDiffDocument(entry.loaded.document, reason);
+    }
 }
-
 function deleteLoadedCacheEntry(cache: Map<string, DiffLoadedCacheEntry>, key: string, reason: string) {
-  disposeLoadedCacheEntry(cache.get(key), reason);
-  cache.delete(key);
+    disposeLoadedCacheEntry(cache.get(key), reason);
+    cache.delete(key);
 }
-
 function clearLoadedCache(cache: Map<string, DiffLoadedCacheEntry>, reason: string) {
-  for (const entry of cache.values()) {
-    disposeDiffDocument(entry.loaded.document, reason);
-  }
-  cache.clear();
+    for (const entry of cache.values()) {
+        disposeDiffDocument(entry.loaded.document, reason);
+    }
+    cache.clear();
 }
-
 function deleteLoadedCacheEntriesWithPrefix(cache: Map<string, DiffLoadedCacheEntry>, prefix: string, reason: string) {
-  for (const key of Array.from(cache.keys())) {
-    if (key.startsWith(prefix)) {
-      deleteLoadedCacheEntry(cache, key, reason);
+    for (const key of Array.from(cache.keys())) {
+        if (key.startsWith(prefix)) {
+            deleteLoadedCacheEntry(cache, key, reason);
+        }
     }
-  }
 }
-
 type DiffItemCountLimitState = {
-  documentId: number;
-  limit: number;
+    documentId: number;
+    limit: number;
 };
-
 type DiffMergeDraftFile = {
-  content: string;
-  file: DiffMergeConflictFile;
+    content: string;
+    file: DiffMergeConflictFile;
 };
-
 type DiffMergeFileResolveQueue = {
-  chain: Promise<void>;
-  completedOriginalBlockIndexes: number[];
+    chain: Promise<void>;
+    completedOriginalBlockIndexes: number[];
 };
-
 export type DiffViewerWindowProps = {
-  focusUrlInputRequestId?: number;
-  folderPath?: string;
-  initialSplitPaneMetrics?: DiffSplitPaneMetrics | null;
-  onClose?: () => void;
-  source?: DiffOpenSource;
+    windowIdentifier?: string;
+    focusUrlInputRequestId?: number;
+    folderPath?: string;
+    initialSplitPaneMetrics?: DiffSplitPaneMetrics | null;
+    onClose?: () => void;
+    source?: DiffOpenSource;
 };
-
 function getBackgroundTokenizationPlan(files: readonly DiffFileSummary[]) {
-  const selectedFiles: DiffFileSummary[] = [];
-  let sourceLineCount = 0;
-  let rowLimit = 0;
-
-  for (const file of files) {
-    if (selectedFiles.length >= diffBackgroundTokenizeMaxFileCount) {
-      break;
+    const selectedFiles: DiffFileSummary[] = [];
+    let sourceLineCount = 0;
+    let rowLimit = 0;
+    for (const file of files) {
+        if (selectedFiles.length >= diffBackgroundTokenizeMaxFileCount) {
+            break;
+        }
+        const rowCount = Math.max(0, Math.ceil(file.rowCount));
+        const rowStart = Math.max(0, Math.floor(file.rowStart));
+        if (rowCount > 0 && sourceLineCount + rowCount <= diffBackgroundTokenizeMaxSourceLineCount) {
+            selectedFiles.push(file);
+            sourceLineCount += rowCount;
+            rowLimit = Math.max(rowLimit, rowStart + rowCount);
+        }
+        else {
+            break;
+        }
     }
-
-    const rowCount = Math.max(0, Math.ceil(file.rowCount));
-    const rowStart = Math.max(0, Math.floor(file.rowStart));
-    if (rowCount > 0 && sourceLineCount + rowCount <= diffBackgroundTokenizeMaxSourceLineCount) {
-      selectedFiles.push(file);
-      sourceLineCount += rowCount;
-      rowLimit = Math.max(rowLimit, rowStart + rowCount);
-    } else {
-      break;
-    }
-  }
-
-  return {
-    files: selectedFiles,
-    rowLimit,
-    sourceLineCount,
-  };
-}
-
-function createGitDiffCommandError(commandResult: DiffCommandResult) {
-  const message = commandResult.stderr
-    ? commandResult.stderr
-    : `git diff exited with code ${commandResult.exitCode}.`;
-  return new Error(message);
-}
-
-function waitForDiffProgressPoll(delayMs = diffProgressiveLoadPollMs) {
-  return new Promise<void>((resolve) => {
-    setTimeout(resolve, delayMs);
-  });
-}
-
-function shouldPublishInitialProgress(progress: DiffLoadStatus, initialRowCount: number, elapsedMs: number) {
-  if (progress.complete || progress.error || (initialRowCount > 0 && progress.rowCount > 0)) {
-    return true;
-  }
-
-  if (initialRowCount <= 0 && progress.fileCount > 0) {
-    const rowCount = Math.max(0, Math.floor(progress.rowCount));
-    return rowCount >= diffProgressiveInitialPaintRowCount ||
-      elapsedMs >= diffProgressiveInitialPaintMaxDelayMs;
-  }
-
-  return false;
-}
-
-function getDiffLoadProgressState(
-  source: DiffOpenSource,
-  requestId: number,
-  progress: DiffLoadStatus,
-): DiffLoadProgressState {
-  return {
-    complete: progress.complete,
-    fileCount: Math.max(0, Math.floor(progress.fileCount)),
-    fileVersion: progress.fileVersion,
-    requestId,
-    rowCount: Math.max(0, Math.floor(progress.rowCount)),
-    rowVersion: progress.rowVersion,
-    source,
-    visible: !progress.complete && !progress.error,
-  };
-}
-
-function getDiffSourceCacheKey(source: DiffOpenSource) {
-  if (source.kind === "github") {
-    return `${source.kind}:${source.diffUrl}`;
-  }
-  if (source.kind === "git") {
-    return `${source.kind}:${source.cwd}:${source.args.join("\u0000")}`;
-  }
-  if (source.kind === "filePair") {
-    return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
-  }
-  if (source.kind === "diffFile") {
-    return `${source.kind}:${source.value}`;
-  }
-  return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
-}
-
-function getDiffLoadedCacheKey(
-  source: DiffOpenSource,
-  showOnlyHunks: boolean,
-  ignoreWhitespaceChanges: boolean,
-) {
-  const mode = showOnlyHunks ? "hunks" : "full";
-  const whitespace = ignoreWhitespaceChanges ? "ignore-whitespace" : "include-whitespace";
-  return `${getDiffSourceCacheKey(source)}:${mode}:${whitespace}`;
-}
-
-function getDiffGitFolderLoadCompareOptions(source: DiffOpenSource) {
-  if (source.kind === "folder" && source.compareBase?.kind === "ref") {
     return {
-      compareBaseKind: "ref",
-      compareBaseRef: source.compareBase.ref,
-      compareUseMergeBase: source.compareBase.useMergeBase !== false,
+        files: selectedFiles,
+        rowLimit,
+        sourceLineCount,
     };
-  }
-  return {
-    compareBaseKind: "head",
-    compareBaseRef: "",
-    compareUseMergeBase: true,
-  };
 }
-
-function shouldCacheLoadedDiff(loaded: DiffLoadedPayload) {
-  return loaded.document.rowCount <= diffLoadedCacheMaxRows;
+function createGitDiffCommandError(commandResult: DiffCommandResult) {
+    const message = decodeProcessText(commandResult.stderr)
+        ? decodeProcessText(commandResult.stderr)
+        : `git diff exited with code ${(commandResult.exit.type === "exited" ? commandResult.exit.code : -1)}.`;
+    return new Error(message);
 }
-
-function applyDiffMergeDraftsToState(
-  mergeState: DiffMergeState,
-  drafts: ReadonlyMap<string, DiffMergeDraftFile>,
-): DiffMergeState {
-  if (mergeState.status !== "ready" || drafts.size === 0) {
-    return mergeState;
-  }
-
-  return createReadyMergeState(
-    mergeState.files
-      .map((file) => drafts.get(file.path)?.file ?? file)
-      .filter((file) => file.markerBlocks.length > 0 || file.hasUnsavedDraft),
-  );
+function waitForDiffProgressPoll(delayMs = diffProgressiveLoadPollMs) {
+    return new Promise<void>((resolve) => {
+        setTimeout(resolve, delayMs);
+    });
 }
-
-function clearDiffMergeDraftFlag(file: DiffMergeConflictFile) {
-  if (!file.hasUnsavedDraft) {
-    return file;
-  }
-  const { hasUnsavedDraft: _hasUnsavedDraft, ...savedFile } = file;
-  return savedFile;
-}
-
-function getUnsavedDiffMergeDraftFiles(mergeState: DiffMergeState) {
-  return mergeState.status === "ready" ? mergeState.files.filter((file) => file.hasUnsavedDraft) : [];
-}
-
-function isSaveKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const saveModifiers = KeyCodes.MODIFIER_COMMAND;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_S && (event.modifiers & relevantModifiers) === saveModifiers;
-}
-
-function isPasteKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const pasteModifiers = KeyCodes.MODIFIER_COMMAND;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_V && (event.modifiers & relevantModifiers) === pasteModifiers;
-}
-
-function isSearchKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const searchModifiers = KeyCodes.MODIFIER_COMMAND;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_F && (event.modifiers & relevantModifiers) === searchModifiers;
-}
-
-function isFileJumpKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const jumpModifiers = KeyCodes.MODIFIER_COMMAND;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_P && (event.modifiers & relevantModifiers) === jumpModifiers;
-}
-
-function isSearchNextKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const nextModifiers = KeyCodes.MODIFIER_COMMAND;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === nextModifiers;
-}
-
-function isSearchPreviousKeyEvent(event: { keyCode: number; modifiers: number }) {
-  const previousModifiers = KeyCodes.MODIFIER_COMMAND | KeyCodes.MODIFIER_SHIFT;
-  const relevantModifiers =
-    KeyCodes.MODIFIER_COMMAND |
-    KeyCodes.MODIFIER_OPTION |
-    KeyCodes.MODIFIER_CONTROL |
-    KeyCodes.MODIFIER_SHIFT;
-  return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === previousModifiers;
-}
-
-type DiffSidebarFileRowProps = {
-  activeFileIndex$: Observable<number | null>;
-  file: DiffFileSummary;
-  mergeState$: Observable<DiffMergeState>;
-  onPressFile: (file: DiffFileSummary) => void;
-  sidebarRender$: Observable<DiffSidebarRenderState>;
-};
-
-type DiffSidebarFolderRowProps = {
-  collapsed: boolean;
-  onToggleFolder: (title: string) => void;
-  sidebarRender$: Observable<DiffSidebarRenderState>;
-  title: string;
-};
-
-type DiffSidebarRenderState = {
-  conflictBadgeBackgroundColor: string;
-  conflictBadgeTextColor: string;
-  foregroundColor: string;
-  selectedBackgroundColor: string;
-  selectedBorderColor: string;
-  sidebarFolderColor: string;
-};
-
-type DiffSidebarEntry =
-  | {
-      id: string;
-      collapsed: boolean;
-      title: string;
-      type: "folder";
+function shouldPublishInitialProgress(progress: DiffLoadStatus, initialRowCount: number, elapsedMs: number) {
+    if (progress.complete || progress.error || (initialRowCount > 0 && progress.rowCount > 0)) {
+        return true;
     }
-  | {
-      file: DiffFileSummary;
-      id: string;
-      type: "file";
+    if (initialRowCount <= 0 && progress.fileCount > 0) {
+        const rowCount = Math.max(0, Math.floor(progress.rowCount));
+        return rowCount >= diffProgressiveInitialPaintRowCount ||
+            elapsedMs >= diffProgressiveInitialPaintMaxDelayMs;
+    }
+    return false;
+}
+function getDiffLoadProgressState(source: DiffOpenSource, requestId: number, progress: DiffLoadStatus): DiffLoadProgressState {
+    return {
+        complete: progress.complete,
+        fileCount: Math.max(0, Math.floor(progress.fileCount)),
+        fileVersion: progress.fileVersion,
+        requestId,
+        rowCount: Math.max(0, Math.floor(progress.rowCount)),
+        rowVersion: progress.rowVersion,
+        source,
+        visible: !progress.complete && !progress.error,
     };
-
+}
+function getDiffSourceCacheKey(source: DiffOpenSource) {
+    if (source.kind === "github") {
+        return `${source.kind}:${source.diffUrl}`;
+    }
+    if (source.kind === "git") {
+        return `${source.kind}:${source.cwd}:${source.args.join("\u0000")}`;
+    }
+    if (source.kind === "filePair") {
+        return `${source.kind}:${source.oldPath}\u0000${source.newPath}`;
+    }
+    if (source.kind === "diffFile") {
+        return `${source.kind}:${source.value}`;
+    }
+    return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
+}
+function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean, ignoreWhitespaceChanges: boolean) {
+    const mode = showOnlyHunks ? "hunks" : "full";
+    const whitespace = ignoreWhitespaceChanges ? "ignore-whitespace" : "include-whitespace";
+    return `${getDiffSourceCacheKey(source)}:${mode}:${whitespace}`;
+}
+function getDiffGitFolderLoadCompareOptions(source: DiffOpenSource) {
+    if (source.kind === "folder" && source.compareBase?.kind === "ref") {
+        return {
+            compareBaseKind: "ref",
+            compareBaseRef: source.compareBase.ref,
+            compareUseMergeBase: source.compareBase.useMergeBase !== false,
+        };
+    }
+    return {
+        compareBaseKind: "head",
+        compareBaseRef: "",
+        compareUseMergeBase: true,
+    };
+}
+function shouldCacheLoadedDiff(loaded: DiffLoadedPayload) {
+    return loaded.document.rowCount <= diffLoadedCacheMaxRows;
+}
+function applyDiffMergeDraftsToState(mergeState: DiffMergeState, drafts: ReadonlyMap<string, DiffMergeDraftFile>): DiffMergeState {
+    if (mergeState.status !== "ready" || drafts.size === 0) {
+        return mergeState;
+    }
+    return createReadyMergeState(mergeState.files
+        .map((file) => drafts.get(file.path)?.file ?? file)
+        .filter((file) => file.markerBlocks.length > 0 || file.hasUnsavedDraft));
+}
+function clearDiffMergeDraftFlag(file: DiffMergeConflictFile) {
+    if (!file.hasUnsavedDraft) {
+        return file;
+    }
+    const { hasUnsavedDraft: _hasUnsavedDraft, ...savedFile } = file;
+    return savedFile;
+}
+function getUnsavedDiffMergeDraftFiles(mergeState: DiffMergeState) {
+    return mergeState.status === "ready" ? mergeState.files.filter((file) => file.hasUnsavedDraft) : [];
+}
+function isSaveKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const saveModifiers = KeyCodes.MODIFIER_COMMAND;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_S && (event.modifiers & relevantModifiers) === saveModifiers;
+}
+function isPasteKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const pasteModifiers = KeyCodes.MODIFIER_COMMAND;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_V && (event.modifiers & relevantModifiers) === pasteModifiers;
+}
+function isSearchKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const searchModifiers = KeyCodes.MODIFIER_COMMAND;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_F && (event.modifiers & relevantModifiers) === searchModifiers;
+}
+function isFileJumpKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const jumpModifiers = KeyCodes.MODIFIER_COMMAND;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_P && (event.modifiers & relevantModifiers) === jumpModifiers;
+}
+function isSearchNextKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const nextModifiers = KeyCodes.MODIFIER_COMMAND;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === nextModifiers;
+}
+function isSearchPreviousKeyEvent(event: {
+    keyCode: number;
+    modifiers: number;
+}) {
+    const previousModifiers = KeyCodes.MODIFIER_COMMAND | KeyCodes.MODIFIER_SHIFT;
+    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
+        KeyCodes.MODIFIER_OPTION |
+        KeyCodes.MODIFIER_CONTROL |
+        KeyCodes.MODIFIER_SHIFT;
+    return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === previousModifiers;
+}
+type DiffSidebarFileRowProps = {
+    activeFileIndex$: Observable<number | null>;
+    file: DiffFileSummary;
+    mergeState$: Observable<DiffMergeState>;
+    onPressFile: (file: DiffFileSummary) => void;
+    sidebarRender$: Observable<DiffSidebarRenderState>;
+};
+type DiffSidebarFolderRowProps = {
+    collapsed: boolean;
+    onToggleFolder: (title: string) => void;
+    sidebarRender$: Observable<DiffSidebarRenderState>;
+    title: string;
+};
+type DiffSidebarRenderState = {
+    conflictBadgeBackgroundColor: string;
+    conflictBadgeTextColor: string;
+    foregroundColor: string;
+    selectedBackgroundColor: string;
+    selectedBorderColor: string;
+    sidebarFolderColor: string;
+};
+type DiffSidebarEntry = {
+    id: string;
+    collapsed: boolean;
+    title: string;
+    type: "folder";
+} | {
+    file: DiffFileSummary;
+    id: string;
+    type: "file";
+};
 type DiffLoadedBodyProps = {
-  activeFileIndex$: Observable<number | null>;
-  activeItemCount: number;
-  backgroundColor: string;
-  collapsedSidebarFolders$: Observable<Set<string>>;
-  diffPaneHeight$: Observable<number>;
-  diffTopChromeHeight: number;
-  diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
-  documentErrorBody: ReactNode;
-  floatingDocumentBanner: ReactNode;
-  getItemSize: (index: number) => number;
-  getItemType: (index: number) => string;
-  getRow: (index: number) => DiffRenderRow | undefined;
-  getSideBySideItemSize: (index: number) => number;
-  getSideBySideItemType: (index: number) => string;
-  getSideBySideRow: (index: number, listIndex: number) => DiffSideBySideRenderRow | undefined;
-  handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
-  handleSidebarListLayout: (event: LayoutChangeEvent) => void;
-  handleSideBySideTopItemChanged: (lineIndex: number) => void;
-  handleSideBySideVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
-  handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
-  handleTopItemChanged: (rowIndex: number) => void;
-  handleVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
-  rowConfig: DiffRowConfig;
-  listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
-  mergeState: DiffMergeState;
-  mergeState$: Observable<DiffMergeState>;
-  nativeSideBySideRowConfig: DiffNativeRowConfigProps;
-  nativeUnifiedRowConfig: DiffNativeRowConfigProps;
-  onInlineListIndexesChanged: (indexes: ReadonlyMap<number, number>) => void;
-  adaptiveLightModeEnabled: boolean;
-  mutedColor: string;
-  noChangesBody: ReactElement;
-  primaryColor: string;
-  renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
-  renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
-  renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
-  requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  rowHeight: number;
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
-  sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
-  sideBySideDataSource: DiffSideBySideDataSource | null;
-  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
-  state: DiffLoadedState;
-  syntaxAppearance: "dark" | "light";
-  syntaxTokenizationState$: Observable<{ ranges: string; version: number }>;
-  viewMode: ReturnType<typeof getDiffViewModeSetting>;
-  visibleItemIndexes: Array<number | undefined>;
+    activeFileIndex$: Observable<number | null>;
+    activeItemCount: number;
+    backgroundColor: string;
+    collapsedSidebarFolders$: Observable<Set<string>>;
+    diffPaneHeight$: Observable<number>;
+    diffTopChromeHeight: number;
+    diffRows: VirtualizedDocumentRowsState<DiffRenderRow, DiffSyntaxStyle, DiffLoadTiming>;
+    documentErrorBody: ReactNode;
+    floatingDocumentBanner: ReactNode;
+    getItemSize: (index: number) => number;
+    getItemType: (index: number) => string;
+    getRow: (index: number) => DiffRenderRow | undefined;
+    getSideBySideItemSize: (index: number) => number;
+    getSideBySideItemType: (index: number) => string;
+    getSideBySideRow: (index: number, listIndex: number) => DiffSideBySideRenderRow | undefined;
+    handleDiffPaneLayout: (event: LayoutChangeEvent) => void;
+    handleSidebarListLayout: (event: LayoutChangeEvent) => void;
+    handleSideBySideTopItemChanged: (lineIndex: number) => void;
+    handleSideBySideVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
+    handleSplitViewResize: (event: SidebarSplitViewResizeEvent) => void;
+    handleTopItemChanged: (rowIndex: number) => void;
+    handleVisibleRowsRequested: (start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => void;
+    rowConfig: DiffRowConfig;
+    listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
+    mergeState: DiffMergeState;
+    mergeState$: Observable<DiffMergeState>;
+    nativeSideBySideRowConfig: DiffNativeRowConfigProps;
+    nativeUnifiedRowConfig: DiffNativeRowConfigProps;
+    onInlineListIndexesChanged: (indexes: ReadonlyMap<number, number>) => void;
+    adaptiveLightModeEnabled: boolean;
+    mutedColor: string;
+    noChangesBody: ReactElement;
+    primaryColor: string;
+    renderRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => ReactElement;
+    renderSidebarEntry: (props: LegendListRenderItemProps<DiffSidebarEntry>) => ReactElement;
+    renderSideBySideRow: (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => ReactElement;
+    requestSideBySideRange: (lineStart: number, lineCount: number, options?: VirtualizedDocumentRequestOptions) => void;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    rowHeight: number;
+    sidebarCollapsed: boolean;
+    sidebarWidth: number;
+    sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
+    sideBySideDataSource: DiffSideBySideDataSource | null;
+    splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
+    state: DiffLoadedState;
+    syntaxAppearance: "dark" | "light";
+    syntaxTokenizationState$: Observable<{
+        ranges: string;
+        version: number;
+    }>;
+    viewMode: ReturnType<typeof getDiffViewModeSetting>;
+    visibleItemIndexes: Array<number | undefined>;
 };
-
 type DiffLoadingSplitBodyProps = {
-  backgroundColor: string;
-  handleSplitViewResize: (event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => void;
-  sidebarBackgroundColor: string;
-  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
-  sidebarCollapsed: boolean;
-  sidebarWidth: number;
-  syntaxAppearance: "dark" | "light";
+    backgroundColor: string;
+    handleSplitViewResize: (event: SidebarSplitViewResizeEvent) => void;
+    sidebarBackgroundColor: string;
+    splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
+    sidebarCollapsed: boolean;
+    sidebarWidth: number;
+    syntaxAppearance: "dark" | "light";
 };
-
 type DiffSplitBodyProps = DiffLoadingSplitBodyProps & {
-  content: ReactElement;
-  debugPayload?: Record<string, unknown>;
-  sidebar: ReactElement;
+    content: ReactElement;
+    debugPayload?: Record<string, unknown>;
+    sidebar: ReactElement;
 };
-
-type DiffLoadedSidebarPaneProps = Pick<
-  DiffLoadedBodyProps,
-  | "collapsedSidebarFolders$"
-  | "handleSidebarListLayout"
-  | "mutedColor"
-  | "renderSidebarEntry"
-  | "sidebarCollapsed"
-  | "splitPaneMetrics$"
-  | "state"
-> & {
-  backgroundColor: string;
+type DiffLoadedSidebarPaneProps = Pick<DiffLoadedBodyProps, "collapsedSidebarFolders$" | "handleSidebarListLayout" | "mutedColor" | "renderSidebarEntry" | "sidebarCollapsed" | "splitPaneMetrics$" | "state"> & {
+    backgroundColor: string;
 };
-
-type DiffLoadedContentPaneProps = Omit<
-  DiffLoadedBodyProps,
-  | "backgroundColor"
-  | "collapsedSidebarFolders$"
-  | "handleSidebarListLayout"
-  | "handleSplitViewResize"
-  | "mutedColor"
-  | "primaryColor"
-  | "renderSidebarEntry"
-  | "sidebarCollapsed"
-  | "sidebarWidth"
-  | "syntaxAppearance"
->;
-
+type DiffLoadedContentPaneProps = Omit<DiffLoadedBodyProps, "backgroundColor" | "collapsedSidebarFolders$" | "handleSidebarListLayout" | "handleSplitViewResize" | "mutedColor" | "primaryColor" | "renderSidebarEntry" | "sidebarCollapsed" | "sidebarWidth" | "syntaxAppearance">;
 type DiffRowConfig = {
-  borderColor: string;
-  collapsedFileIndexes: ReadonlySet<number>;
-  fileHeaderBackgroundColor: string;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  mutedColor: string;
-  showOnlyHunks: boolean;
-  syntaxHighlightingEnabled: boolean;
-  syntaxTheme: DiffSettingsFile["syntaxTheme"];
+    borderColor: string;
+    collapsedFileIndexes: ReadonlySet<number>;
+    fileHeaderBackgroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    foregroundColor: string;
+    mutedColor: string;
+    showOnlyHunks: boolean;
+    syntaxHighlightingEnabled: boolean;
+    syntaxTheme: DiffSettingsFile["syntaxTheme"];
 };
-
 type DiffNativeRowConfigProps = {
-  addAccentColor: string;
-  addBackgroundColor: string;
-  activeSearchHighlightColor: string;
-  activeSearchRowHighlightColor: string;
-  changeBarWidth: number;
-  collapsedFileIndexes: string;
-  configId: string;
-  configVersion: number;
-  dividerColor: string;
-  documentId: number;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  highlightChangedCharacters: boolean;
-  lineNumberWidth: number;
-  markerWidth: number;
-  mutedColor: string;
-  presentation: "blocks" | "unified";
-  projectionId: number;
-  removeAccentColor: string;
-  removeBackgroundColor: string;
-  rowHeight: number;
-  searchHighlightColor: string;
-  showWhitespaceCharacters: boolean;
-  syntaxHighlightingEnabled: boolean;
-  themeName: string;
+    addAccentColor: string;
+    addBackgroundColor: string;
+    activeSearchHighlightColor: string;
+    activeSearchRowHighlightColor: string;
+    changeBarWidth: number;
+    collapsedFileIndexes: string;
+    configId: string;
+    configVersion: number;
+    dividerColor: string;
+    documentId: number;
+    fontFamily: string;
+    fontSize: number;
+    foregroundColor: string;
+    highlightChangedCharacters: boolean;
+    lineNumberWidth: number;
+    markerWidth: number;
+    mutedColor: string;
+    presentation: "blocks" | "unified";
+    projectionId: number;
+    removeAccentColor: string;
+    removeBackgroundColor: string;
+    rowHeight: number;
+    searchHighlightColor: string;
+    showWhitespaceCharacters: boolean;
+    syntaxHighlightingEnabled: boolean;
+    themeName: string;
 };
-
 type DiffMergeRenderState = {
-  borderColor: string;
-  fileHeaderBackgroundColor: string;
-  fontFamily: string;
-  fontSize: number;
-  foregroundColor: string;
-  mutedColor: string;
-  primaryColor: string;
-  rowHeight: number;
-  syntaxAppearance: "dark" | "light";
+    borderColor: string;
+    fileHeaderBackgroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    foregroundColor: string;
+    mutedColor: string;
+    primaryColor: string;
+    rowHeight: number;
+    syntaxAppearance: "dark" | "light";
 };
-
 function noopVirtualizedDocumentRequestRange() {
 }
-
 function useRenderLatestRef<T>(value: T) {
-  const ref = useRef(value);
-  useLayoutEffect(() => {
-    ref.current = value;
-  }, [value]);
-  return ref;
+    const ref = useRef(value);
+    useLayoutEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref;
 }
-
 function getDiffSidebarItemSize() {
-  return diffSidebarFileRowHeight;
+    return diffSidebarFileRowHeight;
 }
-
 function getDiffSidebarItemType(entry: DiffSidebarEntry) {
-  return entry.type;
+    return entry.type;
 }
-
 function getDiffSidebarItemKey(entry: DiffSidebarEntry) {
-  return entry.id;
+    return entry.id;
 }
-
 function hashDiffNativeRowConfigVersion(parts: readonly unknown[]) {
-  let hash = 2166136261;
-  for (const part of parts) {
-    const value = String(part);
-    for (let index = 0; index < value.length; index += 1) {
-      hash ^= value.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
+    let hash = 2166136261;
+    for (const part of parts) {
+        const value = String(part);
+        for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+        hash ^= 31;
+        hash = Math.imul(hash, 16777619);
     }
-    hash ^= 31;
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+    return hash >>> 0;
 }
-
 function createDiffSearchHighlightPayload(highlights: ReadonlyMap<number, string>) {
-  const record: Record<string, string> = {};
-  highlights.forEach((value, key) => {
-    record[String(key)] = value;
-  });
-  return JSON.stringify(record);
+    const record: Record<string, string> = {};
+    highlights.forEach((value, key) => {
+        record[String(key)] = value;
+    });
+    return JSON.stringify(record);
 }
-
 function getCurrentDiffSettingsSnapshot() {
-  const fontFamily = diffSettings$.fontFamily.get();
-  const fontSize = diffSettings$.fontSize.get();
-  const syntaxHighlightingEnabled = diffSettings$.syntaxHighlightingEnabled.get();
-  const syntaxThemeName = diffSettings$.syntaxTheme.get();
-  const showOnlyHunks = diffSettings$.showOnlyHunks.get();
-  const syntaxTheme = getSyntaxTheme(syntaxThemeName);
-  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const diffPalette = getDiffPalette(syntaxTheme, displayTheme.colors);
-  const rowHeight = getDiffLineRowHeight(fontSize);
-
-  return {
-    diffPalette,
-    fontFamily,
-    fontSize,
-    rowHeight,
-    showOnlyHunks,
-    syntaxHighlightingEnabled,
-    syntaxTheme,
-    syntaxThemeName,
-  };
+    const fontFamily = diffSettings$.fontFamily.get();
+    const fontSize = diffSettings$.fontSize.get();
+    const syntaxHighlightingEnabled = diffSettings$.syntaxHighlightingEnabled.get();
+    const syntaxThemeName = diffSettings$.syntaxTheme.get();
+    const showOnlyHunks = diffSettings$.showOnlyHunks.get();
+    const syntaxTheme = getSyntaxTheme(syntaxThemeName);
+    const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
+    const diffPalette = getDiffPalette(syntaxTheme, displayTheme.colors);
+    const rowHeight = getDiffLineRowHeight(fontSize);
+    return {
+        diffPalette,
+        fontFamily,
+        fontSize,
+        rowHeight,
+        showOnlyHunks,
+        syntaxHighlightingEnabled,
+        syntaxTheme,
+        syntaxThemeName,
+    };
 }
-
 const diffRenderSettings$ = computed(getCurrentDiffSettingsSnapshot);
-
 function getCurrentLoadedDiffState(state$: Observable<DiffViewerState>) {
-  const currentState = state$.get();
-  return currentState.status === "loaded" ? currentState : null;
+    const currentState = state$.get();
+    return currentState.status === "loaded" ? currentState : null;
 }
-
 function createFileByIndex(files: readonly DiffFileSummary[]) {
-  const map = new Map<number, DiffFileSummary>();
-  for (const file of files) {
-    map.set(file.index, file);
-  }
-  return map;
+    const map = new Map<number, DiffFileSummary>();
+    for (const file of files) {
+        map.set(file.index, file);
+    }
+    return map;
 }
-
 function createFileHeaderRowIndexes(files: readonly DiffFileSummary[]) {
-  const indexes = new Set<number>();
-  for (const file of files) {
-    indexes.add(Math.max(0, Math.floor(file.rowStart)));
-  }
-  return indexes;
+    const indexes = new Set<number>();
+    for (const file of files) {
+        indexes.add(Math.max(0, Math.floor(file.rowStart)));
+    }
+    return indexes;
 }
-
 function createSideBySideFileHeaderByListIndex(fileHeaders: readonly DiffSideBySideFileHeader[]) {
-  const map = new Map<number, DiffSideBySideFileHeader>();
-  for (const header of fileHeaders) {
-    map.set(header.listIndex, header);
-  }
-  return map;
+    const map = new Map<number, DiffSideBySideFileHeader>();
+    for (const header of fileHeaders) {
+        map.set(header.listIndex, header);
+    }
+    return map;
 }
-
 function getCurrentCollapsedFileIndexList(collapsedFileIndexes$: Observable<Set<number>>) {
-  return createCollapsedFileIndexList(collapsedFileIndexes$.get());
+    return createCollapsedFileIndexList(collapsedFileIndexes$.get());
 }
-
-function createDiffRowRenderState(
-  state$: Observable<DiffViewerState>,
-  collapsedFileIndexes$: Observable<Set<number>>,
-) {
-  return {
-    document: {
-      collapsedFileIndexList: () => getCurrentCollapsedFileIndexList(collapsedFileIndexes$),
-      current: () => getCurrentLoadedDiffState(state$)?.document ?? null,
-      fileByIndex: () => {
-        const currentState = getCurrentLoadedDiffState(state$);
-        return currentState ? createFileByIndex(currentState.files) : new Map<number, DiffFileSummary>();
-      },
-      fileByRowStart: () => {
-        const currentState = getCurrentLoadedDiffState(state$);
-        return currentState ? createFileByRowStart(currentState.files) : new Map<number, DiffFileSummary>();
-      },
-      fileHeaderRowIndexes: () => {
-        const currentState = getCurrentLoadedDiffState(state$);
-        return currentState ? createFileHeaderRowIndexes(currentState.files) : new Set<number>();
-      },
-      sideBySideFileHeaderByListIndex: () => {
-        const document = getCurrentLoadedDiffState(state$)?.document;
-        const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
-        const rowCount = document
-          ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
-          : 0;
-        const layoutMetadata = document
-          ? getBoundedSideBySideLayoutMetadata(document, rowCount, collapsedFileIndexList)
-          : { fileHeaders: [] };
-        return createSideBySideFileHeaderByListIndex(layoutMetadata.fileHeaders);
-      },
-      sideBySideRowCount: () => {
-        const document = getCurrentLoadedDiffState(state$)?.document;
-        const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
-        return document
-          ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
-          : 0;
-      },
-    },
-    presentation: {
-      borderColor: () => diffRenderSettings$.get().diffPalette.border,
-      fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
-      fontFamily: () => diffRenderSettings$.get().fontFamily,
-      fontSize: () => diffRenderSettings$.get().fontSize,
-      foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
-      hunkHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.hunkHeaderBackground,
-      mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
-      rowHeight: () => diffRenderSettings$.get().rowHeight,
-      showOnlyHunks: () => diffRenderSettings$.get().showOnlyHunks,
-      syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
-      syntaxHighlightingEnabled: () => diffRenderSettings$.get().syntaxHighlightingEnabled,
-      syntaxThemeName: () => diffRenderSettings$.get().syntaxThemeName,
-    },
-  };
+function createDiffRowRenderState(state$: Observable<DiffViewerState>, collapsedFileIndexes$: Observable<Set<number>>) {
+    return {
+        document: {
+            collapsedFileIndexList: () => getCurrentCollapsedFileIndexList(collapsedFileIndexes$),
+            current: () => getCurrentLoadedDiffState(state$)?.document ?? null,
+            fileByIndex: () => {
+                const currentState = getCurrentLoadedDiffState(state$);
+                return currentState ? createFileByIndex(currentState.files) : new Map<number, DiffFileSummary>();
+            },
+            fileByRowStart: () => {
+                const currentState = getCurrentLoadedDiffState(state$);
+                return currentState ? createFileByRowStart(currentState.files) : new Map<number, DiffFileSummary>();
+            },
+            fileHeaderRowIndexes: () => {
+                const currentState = getCurrentLoadedDiffState(state$);
+                return currentState ? createFileHeaderRowIndexes(currentState.files) : new Set<number>();
+            },
+            sideBySideFileHeaderByListIndex: () => {
+                const document = getCurrentLoadedDiffState(state$)?.document;
+                const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
+                const rowCount = document
+                    ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
+                    : 0;
+                const layoutMetadata = document
+                    ? getBoundedSideBySideLayoutMetadata(document, rowCount, collapsedFileIndexList)
+                    : { fileHeaders: [] };
+                return createSideBySideFileHeaderByListIndex(layoutMetadata.fileHeaders);
+            },
+            sideBySideRowCount: () => {
+                const document = getCurrentLoadedDiffState(state$)?.document;
+                const collapsedFileIndexList = getCurrentCollapsedFileIndexList(collapsedFileIndexes$);
+                return document
+                    ? Math.max(0, Math.floor(document.getSideBySideRowCount(collapsedFileIndexList)))
+                    : 0;
+            },
+        },
+        presentation: {
+            borderColor: () => diffRenderSettings$.get().diffPalette.border,
+            fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
+            fontFamily: () => diffRenderSettings$.get().fontFamily,
+            fontSize: () => diffRenderSettings$.get().fontSize,
+            foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+            hunkHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.hunkHeaderBackground,
+            mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
+            rowHeight: () => diffRenderSettings$.get().rowHeight,
+            showOnlyHunks: () => diffRenderSettings$.get().showOnlyHunks,
+            syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
+            syntaxHighlightingEnabled: () => diffRenderSettings$.get().syntaxHighlightingEnabled,
+            syntaxThemeName: () => diffRenderSettings$.get().syntaxThemeName,
+        },
+    };
 }
-
 function createDiffSidebarRenderState() {
-  return {
-    conflictBadgeBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeBackground,
-    conflictBadgeTextColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeText,
-    foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
-    selectedBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBackground,
-    selectedBorderColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBorder,
-    sidebarFolderColor: () => diffRenderSettings$.get().diffPalette.sidebarFolder,
-  };
+    return {
+        conflictBadgeBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeBackground,
+        conflictBadgeTextColor: () => diffRenderSettings$.get().diffPalette.sidebarConflictBadgeText,
+        foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+        selectedBackgroundColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBackground,
+        selectedBorderColor: () => diffRenderSettings$.get().diffPalette.sidebarSelectedBorder,
+        sidebarFolderColor: () => diffRenderSettings$.get().diffPalette.sidebarFolder,
+    };
 }
-
 function createDiffMergeRenderState() {
-  return {
-    borderColor: () => diffRenderSettings$.get().diffPalette.border,
-    fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
-    fontFamily: () => diffRenderSettings$.get().fontFamily,
-    fontSize: () => diffRenderSettings$.get().fontSize,
-    foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
-    mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
-    primaryColor: () => diffRenderSettings$.get().diffPalette.primary,
-    rowHeight: () => diffRenderSettings$.get().rowHeight,
-    syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
-  };
+    return {
+        borderColor: () => diffRenderSettings$.get().diffPalette.border,
+        fileHeaderBackgroundColor: () => diffRenderSettings$.get().diffPalette.fileHeaderBackground,
+        fontFamily: () => diffRenderSettings$.get().fontFamily,
+        fontSize: () => diffRenderSettings$.get().fontSize,
+        foregroundColor: () => diffRenderSettings$.get().diffPalette.foreground,
+        mutedColor: () => diffRenderSettings$.get().diffPalette.muted,
+        primaryColor: () => diffRenderSettings$.get().diffPalette.primary,
+        rowHeight: () => diffRenderSettings$.get().rowHeight,
+        syntaxAppearance: () => diffRenderSettings$.get().syntaxTheme.appearance,
+    };
 }
-
 function getDiffSidebarFolderTitle(file: DiffFileSummary) {
-  return getDirectoryPath(file.path) || "Files";
+    return getDirectoryPath(file.path) || "Files";
 }
-
 function createDiffSidebarEntries(files: readonly DiffFileSummary[], collapsedFolders: ReadonlySet<string>) {
-  const entries: DiffSidebarEntry[] = [];
-  let currentFolder = "";
-  let currentFolderCollapsed = false;
-  for (const file of files) {
-    const folder = getDiffSidebarFolderTitle(file);
-    if (folder !== currentFolder) {
-      currentFolderCollapsed = collapsedFolders.has(folder);
-      entries.push({
-        collapsed: currentFolderCollapsed,
-        id: `folder:${folder}:${entries.length}`,
-        title: folder,
-        type: "folder",
-      });
-      currentFolder = folder;
+    const entries: DiffSidebarEntry[] = [];
+    let currentFolder = "";
+    let currentFolderCollapsed = false;
+    for (const file of files) {
+        const folder = getDiffSidebarFolderTitle(file);
+        if (folder !== currentFolder) {
+            currentFolderCollapsed = collapsedFolders.has(folder);
+            entries.push({
+                collapsed: currentFolderCollapsed,
+                id: `folder:${folder}:${entries.length}`,
+                title: folder,
+                type: "folder",
+            });
+            currentFolder = folder;
+        }
+        if (!currentFolderCollapsed) {
+            entries.push({
+                file,
+                id: `file:${file.index}:${file.path}`,
+                type: "file",
+            });
+        }
     }
-    if (!currentFolderCollapsed) {
-      entries.push({
-        file,
-        id: `file:${file.index}:${file.path}`,
-        type: "file",
-      });
-    }
-  }
-  return entries;
+    return entries;
 }
-
-const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({
-  collapsed,
-  onToggleFolder,
-  sidebarRender$,
-  title,
-}: DiffSidebarFolderRowProps) {
-  const color = useValue(() => sidebarRender$.sidebarFolderColor.get());
-  const handleToggle = useCallback(() => {
-    onToggleFolder(title);
-  }, [onToggleFolder, title]);
-
-  return (
-    <View className="flex-row items-center gap-2 px-3 pb-1 pt-3" style={styles.sidebarFolder}>
+const DiffSidebarFolderRow = memo(function DiffSidebarFolderRow({ collapsed, onToggleFolder, sidebarRender$, title, }: DiffSidebarFolderRowProps) {
+    const color = useValue(() => sidebarRender$.sidebarFolderColor.get());
+    const handleToggle = useCallback(() => {
+        onToggleFolder(title);
+    }, [onToggleFolder, title]);
+    return (<View className="flex-row items-center gap-2 px-3 pb-1 pt-3" style={styles.sidebarFolder}>
       <Text className="min-w-0 flex-1 text-xs font-medium leading-4" numberOfLines={1} style={{ color }}>
         {title}
       </Text>
-      <Pressable
-        accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}`}
-        accessibilityRole="button"
-        hitSlop={6}
-        onPress={handleToggle}
-        style={({ pressed }) => [
-          styles.sidebarFolderCollapseButton,
-          { opacity: pressed ? 0.6 : 1 },
-        ]}
-      >
-        <SFSymbol color={color} name={collapsed ? "chevron.right" : "chevron.down"} size={10} />
+      <Pressable accessibilityLabel={`${collapsed ? "Expand" : "Collapse"} ${title}`} accessibilityRole="button" hitSlop={6} onPress={handleToggle} style={({ pressed }) => [
+            styles.sidebarFolderCollapseButton,
+            { opacity: pressed ? 0.6 : 1 },
+        ]}>
+        <SFSymbol color={color} name={collapsed ? "chevron.right" : "chevron.down"} size={10}/>
       </Pressable>
-    </View>
-  );
+    </View>);
 });
-
 function diffSidebarFileRowPropsEqual(previous: DiffSidebarFileRowProps, next: DiffSidebarFileRowProps) {
-  return previous.activeFileIndex$ === next.activeFileIndex$
-    && previous.file === next.file
-    && previous.mergeState$ === next.mergeState$
-    && previous.onPressFile === next.onPressFile
-    && previous.sidebarRender$ === next.sidebarRender$;
+    return previous.activeFileIndex$ === next.activeFileIndex$
+        && previous.file === next.file
+        && previous.mergeState$ === next.mergeState$
+        && previous.onPressFile === next.onPressFile
+        && previous.sidebarRender$ === next.sidebarRender$;
 }
-
-const DiffSidebarFileRow = memo(function DiffSidebarFileRow({
-  activeFileIndex$,
-  file,
-  mergeState$,
-  onPressFile,
-  sidebarRender$,
-}: DiffSidebarFileRowProps) {
-  const isActive = useValue(() => activeFileIndex$.get() === file.index);
-  const conflictBadgeBackgroundColor = useValue(() => sidebarRender$.conflictBadgeBackgroundColor.get());
-  const conflictBadgeTextColor = useValue(() => sidebarRender$.conflictBadgeTextColor.get());
-  const foregroundColor = useValue(() => sidebarRender$.foregroundColor.get());
-  const selectedBackgroundColor = useValue(() => sidebarRender$.selectedBackgroundColor.get());
-  const selectedBorderColor = useValue(() => sidebarRender$.selectedBorderColor.get());
-  const mergeFile = useValue(() => getMergeConflictFileForDiffFile(mergeState$.get(), file));
-  const statusPresentation = mergeFile?.markerBlocks.length
-    ? getConflictedFileStatusPresentation()
-    : getFileStatusPresentation(file);
-  const filename = getFilename(file.path);
-  const handlePress = useCallback(() => {
-    onPressFile(file);
-  }, [file, onPressFile]);
-
-  return (
-    <Pressable
-      accessibilityLabel={`${filename}, ${statusPresentation.title}`}
-      accessibilityRole="button"
-      className="flex-row items-center gap-2 px-3"
-      onPress={handlePress}
-      style={({ pressed }) => [
-        styles.sidebarFile,
-        isActive
-          ? {
-              backgroundColor: selectedBackgroundColor,
-              borderColor: selectedBorderColor,
-            }
-          : null,
-        { opacity: pressed ? 0.72 : 1 },
-      ]}
-    >
+const DiffSidebarFileRow = memo(function DiffSidebarFileRow({ activeFileIndex$, file, mergeState$, onPressFile, sidebarRender$, }: DiffSidebarFileRowProps) {
+    const isActive = useValue(() => activeFileIndex$.get() === file.index);
+    const conflictBadgeBackgroundColor = useValue(() => sidebarRender$.conflictBadgeBackgroundColor.get());
+    const conflictBadgeTextColor = useValue(() => sidebarRender$.conflictBadgeTextColor.get());
+    const foregroundColor = useValue(() => sidebarRender$.foregroundColor.get());
+    const selectedBackgroundColor = useValue(() => sidebarRender$.selectedBackgroundColor.get());
+    const selectedBorderColor = useValue(() => sidebarRender$.selectedBorderColor.get());
+    const mergeFile = useValue(() => getMergeConflictFileForDiffFile(mergeState$.get(), file));
+    const statusPresentation = mergeFile?.markerBlocks.length
+        ? getConflictedFileStatusPresentation()
+        : getFileStatusPresentation(file);
+    const filename = getFilename(file.path);
+    const handlePress = useCallback(() => {
+        onPressFile(file);
+    }, [file, onPressFile]);
+    return (<Pressable accessibilityLabel={`${filename}, ${statusPresentation.title}`} accessibilityRole="button" className="flex-row items-center gap-2 px-3" onPress={handlePress} style={({ pressed }) => [
+            styles.sidebarFile,
+            isActive
+                ? {
+                    backgroundColor: selectedBackgroundColor,
+                    borderColor: selectedBorderColor,
+                }
+                : null,
+            { opacity: pressed ? 0.72 : 1 },
+        ]}>
       <View className="h-4 w-4 items-center justify-center rounded" style={{ backgroundColor: statusPresentation.backgroundColor }}>
-        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={11} yOffset={statusPresentation.iconYOffset} />
+        <SFSymbol color={statusPresentation.color} name={statusPresentation.symbolName} size={11} yOffset={statusPresentation.iconYOffset}/>
       </View>
       <Text className="min-w-0 flex-1 text-sm font-normal leading-5" numberOfLines={1} style={{ color: foregroundColor }}>
         {filename}{mergeFile?.hasUnsavedDraft ? " *" : ""}
       </Text>
-      {mergeFile && mergeFile.markerBlocks.length > 0 ? (
-        <View className="h-4 min-w-4 items-center justify-center rounded-full px-1" style={{ backgroundColor: conflictBadgeBackgroundColor }}>
+      {mergeFile && mergeFile.markerBlocks.length > 0 ? (<View className="h-4 min-w-4 items-center justify-center rounded-full px-1" style={{ backgroundColor: conflictBadgeBackgroundColor }}>
           <Text className="text-xs font-bold leading-3" style={{ color: conflictBadgeTextColor }}>
             {mergeFile.markerBlocks.length}
           </Text>
-        </View>
-      ) : null}
-    </Pressable>
-  );
+        </View>) : null}
+    </Pressable>);
 }, diffSidebarFileRowPropsEqual);
-
 function getDiffLineRowHeight(fontSize: number) {
-  return Math.max(20, fontSize + 9);
+    return Math.max(20, fontSize + 9);
 }
-
-function DiffErrorPanel({
-  borderColor,
-  error,
-  foregroundColor,
-  mutedColor,
-  onChooseFolder,
-  chooseFolderLabel = "Choose Folder",
-  onDismiss,
-  onOpenExternalUrl,
-  onOpenSystemSettings,
-  onRetry,
-  surfaceColor,
-}: {
-  borderColor: string;
-  chooseFolderLabel?: string;
-  error: DiffRecoverableError | DiffFatalError;
-  foregroundColor: string;
-  mutedColor: string;
-  onChooseFolder?: () => void;
-  onDismiss?: () => void;
-  onOpenExternalUrl?: (url: string) => void;
-  onOpenSystemSettings?: () => void;
-  onRetry?: () => void;
-  surfaceColor: string;
+function DiffErrorPanel({ borderColor, error, foregroundColor, mutedColor, onChooseFolder, chooseFolderLabel = "Choose Folder", onDismiss, onOpenExternalUrl, onOpenSystemSettings, onRetry, surfaceColor, }: {
+    borderColor: string;
+    chooseFolderLabel?: string;
+    error: DiffRecoverableError | DiffFatalError;
+    foregroundColor: string;
+    mutedColor: string;
+    onChooseFolder?: () => void;
+    onDismiss?: () => void;
+    onOpenExternalUrl?: (url: string) => void;
+    onOpenSystemSettings?: () => void;
+    onRetry?: () => void;
+    surfaceColor: string;
 }) {
-  const recoverySteps = "recoverySteps" in error ? error.recoverySteps : undefined;
-  const externalUrl = "externalUrl" in error ? error.externalUrl : undefined;
-  const externalUrlLabel = ("externalUrlLabel" in error ? error.externalUrlLabel : undefined) ?? "Open in Browser";
-  const canOpenExternalUrl = Boolean(onOpenExternalUrl && externalUrl);
-  return (
-    <View style={[styles.errorPanel, { backgroundColor: surfaceColor, borderColor }]}>
+    const recoverySteps = "recoverySteps" in error ? error.recoverySteps : undefined;
+    const externalUrl = "externalUrl" in error ? error.externalUrl : undefined;
+    const externalUrlLabel = ("externalUrlLabel" in error ? error.externalUrlLabel : undefined) ?? "Open in Browser";
+    const canOpenExternalUrl = Boolean(onOpenExternalUrl && externalUrl);
+    return (<View style={[styles.errorPanel, { backgroundColor: surfaceColor, borderColor }]}>
       <View style={styles.errorPanelBody}>
         <Text style={[styles.errorPanelTitle, { color: foregroundColor }]}>
           {error.title}
@@ -1058,300 +741,140 @@ function DiffErrorPanel({
         <Text style={[styles.errorPanelMessage, { color: mutedColor }]} numberOfLines={3}>
           {error.message}
         </Text>
-        {recoverySteps ? (
-          <View style={styles.errorPanelSteps}>
-            {recoverySteps.map((step, index) => (
-              <Text key={step} style={[styles.errorPanelStep, { color: mutedColor }]}>
+        {recoverySteps ? (<View style={styles.errorPanelSteps}>
+            {recoverySteps.map((step, index) => (<Text key={step} style={[styles.errorPanelStep, { color: mutedColor }]}>
                 {index + 1}. {step}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-        {onRetry || canOpenExternalUrl || onOpenSystemSettings || onChooseFolder || onDismiss ? (
-          <View style={styles.errorPanelActions}>
-            {onRetry ? (
-              <Pressable accessibilityRole="button" onPress={onRetry} style={styles.errorPanelButton}>
+              </Text>))}
+          </View>) : null}
+        {onRetry || canOpenExternalUrl || onOpenSystemSettings || onChooseFolder || onDismiss ? (<View style={styles.errorPanelActions}>
+            {onRetry ? (<Pressable accessibilityRole="button" onPress={onRetry} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>Retry</Text>
-              </Pressable>
-            ) : null}
-            {onOpenExternalUrl && externalUrl ? (
-              <Pressable accessibilityRole="button" onPress={() => onOpenExternalUrl(externalUrl)} style={styles.errorPanelButton}>
+              </Pressable>) : null}
+            {onOpenExternalUrl && externalUrl ? (<Pressable accessibilityRole="button" onPress={() => onOpenExternalUrl(externalUrl)} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>{externalUrlLabel}</Text>
-              </Pressable>
-            ) : null}
-            {onOpenSystemSettings ? (
-              <Pressable accessibilityRole="button" onPress={onOpenSystemSettings} style={styles.errorPanelButton}>
+              </Pressable>) : null}
+            {onOpenSystemSettings ? (<Pressable accessibilityRole="button" onPress={onOpenSystemSettings} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>Open System Settings</Text>
-              </Pressable>
-            ) : null}
-            {onChooseFolder ? (
-              <Pressable accessibilityRole="button" onPress={onChooseFolder} style={styles.errorPanelButton}>
+              </Pressable>) : null}
+            {onChooseFolder ? (<Pressable accessibilityRole="button" onPress={onChooseFolder} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: foregroundColor }]}>{chooseFolderLabel}</Text>
-              </Pressable>
-            ) : null}
-            {onDismiss ? (
-              <Pressable accessibilityRole="button" onPress={onDismiss} style={styles.errorPanelButton}>
+              </Pressable>) : null}
+            {onDismiss ? (<Pressable accessibilityRole="button" onPress={onDismiss} style={styles.errorPanelButton}>
                 <Text style={[styles.errorPanelButtonText, { color: mutedColor }]}>Dismiss</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+              </Pressable>) : null}
+          </View>) : null}
       </View>
-    </View>
-  );
+    </View>);
 }
-
-function DiffDocumentErrorBody({
-  borderColor,
-  documentError,
-  foregroundColor,
-  mutedColor,
-  onDismiss,
-  onOpenExternalUrl,
-  onOpenSystemSettings,
-  onRetry,
-  surfaceColor,
-}: {
-  borderColor: string;
-  documentError: DiffRecoverableError | null;
-  foregroundColor: string;
-  mutedColor: string;
-  onDismiss: () => void;
-  onOpenExternalUrl: (url: string) => void;
-  onOpenSystemSettings: () => void;
-  onRetry: () => boolean;
-  surfaceColor: string;
+function DiffDocumentErrorBody({ borderColor, documentError, foregroundColor, mutedColor, onDismiss, onOpenExternalUrl, onOpenSystemSettings, onRetry, surfaceColor, }: {
+    borderColor: string;
+    documentError: DiffRecoverableError | null;
+    foregroundColor: string;
+    mutedColor: string;
+    onDismiss: () => void;
+    onOpenExternalUrl: (url: string) => void;
+    onOpenSystemSettings: () => void;
+    onRetry: () => boolean;
+    surfaceColor: string;
 }) {
-  return documentError ? (
-    <View style={styles.documentError}>
-      <DiffErrorPanel
-        borderColor={borderColor}
-        chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined}
-        error={documentError}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onDismiss={onDismiss}
-        onOpenExternalUrl={onOpenExternalUrl}
-        onOpenSystemSettings={documentError.kind === "permission" ? onOpenSystemSettings : undefined}
-        onRetry={documentError.kind !== "permission" && documentError.source ? onRetry : undefined}
-        surfaceColor={surfaceColor}
-      />
-    </View>
-  ) : null;
+    return documentError ? (<View style={styles.documentError}>
+      <DiffErrorPanel borderColor={borderColor} chooseFolderLabel={documentError.kind === "permission" ? "Choose Another Folder" : undefined} error={documentError} foregroundColor={foregroundColor} mutedColor={mutedColor} onDismiss={onDismiss} onOpenExternalUrl={onOpenExternalUrl} onOpenSystemSettings={documentError.kind === "permission" ? onOpenSystemSettings : undefined} onRetry={documentError.kind !== "permission" && documentError.source ? onRetry : undefined} surfaceColor={surfaceColor}/>
+    </View>) : null;
 }
-
-function DiffUnsavedMergeDraftBanner({
-  dangerColor,
-  disabled,
-  fileCount,
-  onDiscard,
-  onSave,
-  primaryColor,
-}: {
-  dangerColor: string;
-  disabled: boolean;
-  fileCount: number;
-  onDiscard: () => void;
-  onSave: () => void;
-  primaryColor: string;
+function DiffUnsavedMergeDraftBanner({ dangerColor, disabled, fileCount, onDiscard, onSave, primaryColor, }: {
+    dangerColor: string;
+    disabled: boolean;
+    fileCount: number;
+    onDiscard: () => void;
+    onSave: () => void;
+    primaryColor: string;
 }) {
-  const fileLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
-  return (
-    <GlassToast
-      actions={[
-        { disabled, label: "Discard", onPress: onDiscard },
-        { color: primaryColor, disabled, label: "Save", minWidth: 56, onPress: onSave, variant: "primary" },
-      ]}
-      style={styles.unsavedMergeBanner}
-      tintColor={`${dangerColor}24`}
-      title={`Unsaved merge resolutions - ${fileLabel}`}
-    />
-  );
+    const fileLabel = fileCount === 1 ? "1 file" : `${fileCount} files`;
+    return (<GlassToast actions={[
+            { disabled, label: "Discard", onPress: onDiscard },
+            {
+                color: primaryColor, disabled, label: "Save", onPress: onSave, variant: "primary",
+                minWidth: 56
+            },
+        ]} style={styles.unsavedMergeBanner} tintColor={`${dangerColor}24`} title={`Unsaved merge resolutions - ${fileLabel}`}/>);
 }
-
-function DiffUnsavedMergeDraftBannerWithSavingState({
-  dangerColor,
-  fileCount,
-  onDiscard,
-  onSave,
-  primaryColor,
-  resolvingMergeConflictKeys$,
-}: {
-  dangerColor: string;
-  fileCount: number;
-  onDiscard: () => void;
-  onSave: () => void;
-  primaryColor: string;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
+function DiffUnsavedMergeDraftBannerWithSavingState({ dangerColor, fileCount, onDiscard, onSave, primaryColor, resolvingMergeConflictKeys$, }: {
+    dangerColor: string;
+    fileCount: number;
+    onDiscard: () => void;
+    onSave: () => void;
+    primaryColor: string;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
-  const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
-  return (
-    <DiffUnsavedMergeDraftBanner
-      dangerColor={dangerColor}
-      disabled={isSavingMergeDrafts}
-      fileCount={fileCount}
-      onDiscard={onDiscard}
-      onSave={onSave}
-      primaryColor={primaryColor}
-    />
-  );
+    const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
+    return (<DiffUnsavedMergeDraftBanner dangerColor={dangerColor} disabled={isSavingMergeDrafts} fileCount={fileCount} onDiscard={onDiscard} onSave={onSave} primaryColor={primaryColor}/>);
 }
-
-function DiffNativeMenuSavingStateController({
-  hasUnsavedMergeDrafts,
-  resolvingMergeConflictKeys$,
-}: {
-  hasUnsavedMergeDrafts: boolean;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
+function DiffNativeMenuSavingStateController({ hasUnsavedMergeDrafts, resolvingMergeConflictKeys$, }: {
+    hasUnsavedMergeDrafts: boolean;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
-  const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
-  return (
-    <DiffNativeMenuController
-      hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
-      isSavingMergeDrafts={isSavingMergeDrafts}
-    />
-  );
+    const isSavingMergeDrafts = useValue(() => resolvingMergeConflictKeys$.get().has(diffMergeSaveConflictKey));
+    return (<DiffNativeMenuController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} isSavingMergeDrafts={isSavingMergeDrafts}/>);
 }
-
-function DiffFatalBody({
-  borderColor,
-  error,
-  foregroundColor,
-  mutedColor,
-  onChooseFolder,
-  surfaceColor,
-}: {
-  borderColor: string;
-  error: DiffFatalError;
-  foregroundColor: string;
-  mutedColor: string;
-  onChooseFolder: () => void;
-  surfaceColor: string;
+function DiffFatalBody({ borderColor, error, foregroundColor, mutedColor, onChooseFolder, surfaceColor, }: {
+    borderColor: string;
+    error: DiffFatalError;
+    foregroundColor: string;
+    mutedColor: string;
+    onChooseFolder: () => void;
+    surfaceColor: string;
 }) {
-  return (
-    <View style={styles.empty}>
-      <DiffErrorPanel
-        borderColor={borderColor}
-        error={error}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onChooseFolder={onChooseFolder}
-        surfaceColor={surfaceColor}
-      />
-    </View>
-  );
+    return (<View style={styles.empty}>
+      <DiffErrorPanel borderColor={borderColor} error={error} foregroundColor={foregroundColor} mutedColor={mutedColor} onChooseFolder={onChooseFolder} surfaceColor={surfaceColor}/>
+    </View>);
 }
-
-function DiffNoChangesBody({
-  foregroundColor,
-  mutedColor,
-  visibleSourceLabel,
-}: {
-  foregroundColor: string;
-  mutedColor: string;
-  visibleSourceLabel: string;
+function DiffNoChangesBody({ foregroundColor, mutedColor, visibleSourceLabel, }: {
+    foregroundColor: string;
+    mutedColor: string;
+    visibleSourceLabel: string;
 }) {
-  return (
-    <View style={styles.empty}>
+    return (<View style={styles.empty}>
       <Text style={[styles.emptyTitle, { color: foregroundColor }]}>
         No changes
       </Text>
       <Text style={[styles.emptyText, { color: mutedColor }]} numberOfLines={2}>
         {visibleSourceLabel}
       </Text>
-    </View>
-  );
+    </View>);
 }
-
-const DiffSplitBody = memo(function DiffSplitBody({
-  backgroundColor,
-  content,
-  debugPayload,
-  handleSplitViewResize,
-  sidebar,
-  sidebarBackgroundColor,
-  splitPaneMetrics$,
-  sidebarCollapsed,
-  sidebarWidth,
-  syntaxAppearance,
-}: DiffSplitBodyProps) {
-  const splitPaneMetrics = useValue(splitPaneMetrics$);
-  const titlebarChromeProps = createSidebarSplitViewTitlebarChrome({
-    colorScheme: syntaxAppearance,
-    contentBackgroundColor: backgroundColor,
-    sidebarBackgroundColor,
-  });
-
-  return (
-    <View style={styles.loadedRoot}>
-      <SidebarSplitView
-        {...titlebarChromeProps}
-        appearance={syntaxAppearance}
-        contentMinWidth={diffContentMinWidth}
-        initialPaneMetrics={splitPaneMetrics}
-        onSplitViewDidResize={handleSplitViewResize}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarMinWidth={defaultDiffSidebarWidth}
-        sidebarWidth={sidebarWidth}
-        style={styles.content}
-      >
-        {sidebar}
-        <View style={styles.diffWorkspace}>
-          {content}
-        </View>
-      </SidebarSplitView>
-    </View>
-  );
+const DiffSplitBody = memo(function DiffSplitBody({ backgroundColor, content, debugPayload, handleSplitViewResize, sidebar, sidebarBackgroundColor, splitPaneMetrics$, sidebarCollapsed, sidebarWidth, syntaxAppearance, }: DiffSplitBodyProps) {
+    const splitPaneMetrics = useValue(splitPaneMetrics$);
+    const titleBar = { content: { height: 52, material: "glass" as const, overlay: { color: backgroundColor, opacity: 0.8 } }, sidebar: { overlay: { color: sidebarBackgroundColor, opacity: 0.8 } } };
+    return (<View style={styles.loadedRoot}>
+      <SidebarSplitView titleBar={titleBar} appearance={syntaxAppearance} contentMinWidth={diffContentMinWidth} initialPaneMetrics={splitPaneMetrics ?? undefined} onResize={handleSplitViewResize} sidebarCollapsed={sidebarCollapsed} sidebarMinWidth={defaultDiffSidebarWidth} sidebarWidth={sidebarWidth} style={styles.content} sidebar={sidebar} content={<View style={styles.diffWorkspace}>{content}</View>} />
+    </View>);
 });
-
-function DiffDownloadingBody({
-  foregroundColor,
-  mutedColor,
-  source,
-}: {
-  foregroundColor: string;
-  mutedColor: string;
-  source: DiffOpenSource;
+function DiffDownloadingBody({ foregroundColor, mutedColor, source, }: {
+    foregroundColor: string;
+    mutedColor: string;
+    source: DiffOpenSource;
 }) {
-  return (
-    <View
-      accessibilityLabel={`Downloading diff for ${source.label}`}
-      accessibilityRole="progressbar"
-      style={styles.downloadingBody}
-    >
-      <ActivityIndicator color={foregroundColor} size="small" />
+    return (<View accessibilityLabel={`Downloading diff for ${source.label}`} accessibilityRole="progressbar" style={styles.downloadingBody}>
+      <ActivityIndicator color={foregroundColor} size="small"/>
       <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading diff…</Text>
       <Text numberOfLines={1} style={[styles.loadingDetail, { color: mutedColor }]}>{source.label}</Text>
-    </View>
-  );
+    </View>);
 }
-
-function DiffProgressiveLoadingBanner({
-  foregroundColor,
-  mutedColor,
-  source,
-  surfaceColor,
-}: {
-  foregroundColor: string;
-  mutedColor: string;
-  source: DiffOpenSource;
-  surfaceColor: string;
+function DiffProgressiveLoadingBanner({ foregroundColor, mutedColor, source, surfaceColor, }: {
+    foregroundColor: string;
+    mutedColor: string;
+    source: DiffOpenSource;
+    surfaceColor: string;
 }) {
-  const { loadProgress$ } = useDiffViewerModel();
-  const progress = useValue(loadProgress$);
-  const visible = source.kind === "github" &&
-    progress.visible &&
-    progress.source !== null &&
-    sourcesMatch(progress.source, source);
-
-  return visible ? (
-    <View pointerEvents="none" style={styles.progressiveLoadingBanner}>
-      <View
-        accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`}
-        accessibilityRole="progressbar"
-        style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor }]}
-      >
-        <ActivityIndicator color={foregroundColor} size="small" />
+    const { loadProgress$ } = useDiffViewerModel();
+    const progress = useValue(loadProgress$);
+    const visible = source.kind === "github" &&
+        progress.visible &&
+        progress.source !== null &&
+        sourcesMatch(progress.source, source);
+    return visible ? (<View pointerEvents="none" style={styles.progressiveLoadingBanner}>
+      <View accessibilityLabel={`Downloading changes, ${formatStatNumber(progress.fileCount)} files, ${formatStatNumber(progress.rowCount)} lines`} accessibilityRole="progressbar" style={[styles.progressiveLoadingSurface, { backgroundColor: surfaceColor }]}>
+        <ActivityIndicator color={foregroundColor} size="small"/>
         <View style={styles.progressiveLoadingText}>
           <Text style={[styles.loadingTitle, { color: foregroundColor }]}>Downloading…</Text>
           <Text style={[styles.loadingDetail, { color: mutedColor }]}>
@@ -1359,1405 +882,867 @@ function DiffProgressiveLoadingBanner({
           </Text>
         </View>
       </View>
-    </View>
-  ) : null;
+    </View>) : null;
 }
-
-const DiffLoadedContentPane = memo(function DiffLoadedContentPane({
-  activeFileIndex$,
-  activeItemCount,
-  diffPaneHeight$,
-  diffTopChromeHeight,
-  diffRows,
-  documentErrorBody,
-  floatingDocumentBanner,
-  getItemSize,
-  getItemType,
-  getRow,
-  getSideBySideItemSize,
-  getSideBySideItemType,
-  getSideBySideRow,
-  handleDiffPaneLayout,
-  handleSideBySideTopItemChanged,
-  handleSideBySideVisibleRowsRequested,
-  handleTopItemChanged,
-  handleVisibleRowsRequested,
-  rowConfig,
-  listRef,
-  mergeState,
-  mergeState$,
-  nativeSideBySideRowConfig,
-  nativeUnifiedRowConfig,
-  noChangesBody,
-  onInlineListIndexesChanged,
-  renderRow,
-  renderSideBySideRow,
-  requestSideBySideRange,
-  resolvingMergeConflictKeys$,
-  onResolveMergeConflict,
-  rowHeight,
-  sideBySideFileHeaderByListIndex,
-  sideBySideDataSource,
-  splitPaneMetrics$,
-  state,
-  adaptiveLightModeEnabled,
-  syntaxTokenizationState$,
-  viewMode,
-  visibleItemIndexes,
-}: DiffLoadedContentPaneProps) {
-  const diffPaneHeight = useValue(diffPaneHeight$);
-  const splitPaneMetrics = useValue(splitPaneMetrics$);
-  const diffContentHeight = diffPaneHeight;
-  const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
-  const nativeUnifiedRows = viewMode === "unified";
-  const nativeSideBySideRows = viewMode !== "unified";
-  const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
-  const inlineMergeModel = useDiffInlineMergeModel({
-    collapsedFileIndexes: rowConfig.collapsedFileIndexes,
-    documentId: state.document.documentId,
-    files: state.files,
-    horizontalConfigId: nativeRowConfig?.configId ?? "",
-    mergeState,
-    onResolveMergeConflict,
-    resolvingMergeConflictKeys$,
-    rowHeight,
-    showOnlyHunks: rowConfig.showOnlyHunks,
-    sideBySideFileHeaderByListIndex,
-    sideBySideDataSource,
-    syntaxHighlightingEnabled: rowConfig.syntaxHighlightingEnabled,
-    syntaxThemeName: rowConfig.syntaxTheme,
-    unifiedItemIndexes: visibleItemIndexes,
-    viewMode,
-  });
-  const inlineMergeModelRef = useRenderLatestRef(inlineMergeModel);
-  useLayoutEffect(() => {
-    onInlineListIndexesChanged(inlineMergeModel.listIndexByFileIndex);
-    return () => {
-      onInlineListIndexesChanged(emptyDiffListIndexByFileIndex);
-    };
-  }, [inlineMergeModel.listIndexByFileIndex, onInlineListIndexesChanged]);
-  const nativeRowsRef = useRenderLatestRef({ nativeSideBySideRows, nativeUnifiedRows });
-  const getItemSizeRef = useRenderLatestRef(getItemSize);
-  const getItemTypeRef = useRenderLatestRef(getItemType);
-  const getRowRef = useRenderLatestRef(getRow);
-  const getSideBySideItemSizeRef = useRenderLatestRef(getSideBySideItemSize);
-  const getSideBySideItemTypeRef = useRenderLatestRef(getSideBySideItemType);
-  const getSideBySideRowRef = useRenderLatestRef(getSideBySideRow);
-  const handleTopItemChangedRef = useRenderLatestRef(handleTopItemChanged);
-  const handleSideBySideTopItemChangedRef = useRenderLatestRef(handleSideBySideTopItemChanged);
-  const renderRowRef = useRenderLatestRef(renderRow);
-  const renderSideBySideRowRef = useRenderLatestRef(renderSideBySideRow);
-  const diffRowsRequestRangeRef = useRenderLatestRef(diffRows.requestRange);
-  const requestSideBySideRangeRef = useRenderLatestRef(requestSideBySideRange);
-  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
-  const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
-  const shouldShowNoChanges = useValue(() => (
-    activeItemCount === 0 &&
-    !getActiveMergeFile({
-      activeFileIndex: activeFileIndex$.get(),
-      files: state.files,
-      mergeState,
-    })
-  ));
-  const requestUnifiedRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    if (!nativeRowsRef.current.nativeUnifiedRows) {
-      diffRowsRequestRangeRef.current(start, count, options);
-    }
-  }, [diffRowsRequestRangeRef, nativeRowsRef]);
-  const requestBlocksRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
-    if (!nativeRowsRef.current.nativeSideBySideRows) {
-      requestSideBySideRangeRef.current(start, count, options);
-    }
-  }, [nativeRowsRef, requestSideBySideRangeRef]);
-  const hasTopChrome = diffTopChromeHeight > 0;
-  const contentInset = hasTopChrome ? undefined : diffListContentInset;
-  const viewabilityConfig = hasTopChrome ? undefined : diffListViewabilityConfig;
-  const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
-  const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
-  const diffListStyle = useMemo(
-    () => [styles.list, { height: diffListHeight, minHeight: diffListHeight }],
-    [diffListHeight],
-  );
-  const getUnifiedItemSize = useCallback(
-    (index: number) => inlineMergeModelRef.current.getItemSize(index, getItemSizeRef.current),
-    [getItemSizeRef, inlineMergeModelRef],
-  );
-  const getUnifiedItemType = useCallback(
-    (index: number) => inlineMergeModelRef.current.getItemType(index, getItemTypeRef.current),
-    [getItemTypeRef, inlineMergeModelRef],
-  );
-  const getUnifiedRow = useCallback(
-    (index: number) => inlineMergeModelRef.current.getInlineMergeRow(index) ?? (nativeRowsRef.current.nativeUnifiedRows ? undefined : getRowRef.current(index)),
-    [getRowRef, inlineMergeModelRef, nativeRowsRef],
-  );
-  const handleUnifiedTopItemChanged = useCallback((index: number) => {
-    const mergeRow = inlineMergeModelRef.current.getInlineMergeRow(index);
-    if (mergeRow) {
-      activeFileIndex$.set(mergeRow.sourceFileIndex);
-    } else {
-      handleTopItemChangedRef.current(index);
-    }
-  }, [activeFileIndex$, handleTopItemChangedRef, inlineMergeModelRef]);
-  const renderUnifiedRow = useCallback(
-    (props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow | DiffInlineMergeRow>) => (
-      props.index < 0
+const DiffLoadedContentPane = memo(function DiffLoadedContentPane({ activeFileIndex$, activeItemCount, diffPaneHeight$, diffTopChromeHeight, diffRows, documentErrorBody, floatingDocumentBanner, getItemSize, getItemType, getRow, getSideBySideItemSize, getSideBySideItemType, getSideBySideRow, handleDiffPaneLayout, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, handleTopItemChanged, handleVisibleRowsRequested, rowConfig, listRef, mergeState, mergeState$, nativeSideBySideRowConfig, nativeUnifiedRowConfig, noChangesBody, onInlineListIndexesChanged, renderRow, renderSideBySideRow, requestSideBySideRange, resolvingMergeConflictKeys$, onResolveMergeConflict, rowHeight, sideBySideFileHeaderByListIndex, sideBySideDataSource, splitPaneMetrics$, state, adaptiveLightModeEnabled, syntaxTokenizationState$, viewMode, visibleItemIndexes, }: DiffLoadedContentPaneProps) {
+    const diffPaneHeight = useValue(diffPaneHeight$);
+    const splitPaneMetrics = useValue(splitPaneMetrics$);
+    const diffContentHeight = diffPaneHeight;
+    const diffListHeight = Math.max(0, diffContentHeight - diffTopChromeHeight);
+    const nativeUnifiedRows = viewMode === "unified";
+    const nativeSideBySideRows = viewMode !== "unified";
+    const nativeRowConfig = nativeUnifiedRows ? nativeUnifiedRowConfig : nativeSideBySideRows ? nativeSideBySideRowConfig : null;
+    const inlineMergeModel = useDiffInlineMergeModel({
+        collapsedFileIndexes: rowConfig.collapsedFileIndexes,
+        documentId: state.document.documentId,
+        files: state.files,
+        horizontalConfigId: nativeRowConfig?.configId ?? "",
+        mergeState,
+        onResolveMergeConflict,
+        resolvingMergeConflictKeys$,
+        rowHeight,
+        showOnlyHunks: rowConfig.showOnlyHunks,
+        sideBySideFileHeaderByListIndex,
+        sideBySideDataSource,
+        syntaxHighlightingEnabled: rowConfig.syntaxHighlightingEnabled,
+        syntaxThemeName: rowConfig.syntaxTheme,
+        unifiedItemIndexes: visibleItemIndexes,
+        viewMode,
+    });
+    const inlineMergeModelRef = useRenderLatestRef(inlineMergeModel);
+    useLayoutEffect(() => {
+        onInlineListIndexesChanged(inlineMergeModel.listIndexByFileIndex);
+        return () => {
+            onInlineListIndexesChanged(emptyDiffListIndexByFileIndex);
+        };
+    }, [inlineMergeModel.listIndexByFileIndex, onInlineListIndexesChanged]);
+    const nativeRowsRef = useRenderLatestRef({ nativeSideBySideRows, nativeUnifiedRows });
+    const getItemSizeRef = useRenderLatestRef(getItemSize);
+    const getItemTypeRef = useRenderLatestRef(getItemType);
+    const getRowRef = useRenderLatestRef(getRow);
+    const getSideBySideItemSizeRef = useRenderLatestRef(getSideBySideItemSize);
+    const getSideBySideItemTypeRef = useRenderLatestRef(getSideBySideItemType);
+    const getSideBySideRowRef = useRenderLatestRef(getSideBySideRow);
+    const handleTopItemChangedRef = useRenderLatestRef(handleTopItemChanged);
+    const handleSideBySideTopItemChangedRef = useRenderLatestRef(handleSideBySideTopItemChanged);
+    const renderRowRef = useRenderLatestRef(renderRow);
+    const renderSideBySideRowRef = useRenderLatestRef(renderSideBySideRow);
+    const diffRowsRequestRangeRef = useRenderLatestRef(diffRows.requestRange);
+    const requestSideBySideRangeRef = useRenderLatestRef(requestSideBySideRange);
+    const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarTopInset) : 0;
+    const adaptiveRender = adaptiveLightModeEnabled ? diffAdaptiveRender : undefined;
+    const shouldShowNoChanges = useValue(() => (activeItemCount === 0 &&
+        !getActiveMergeFile({
+            activeFileIndex: activeFileIndex$.get(),
+            files: state.files,
+            mergeState,
+        })));
+    const requestUnifiedRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+        if (!nativeRowsRef.current.nativeUnifiedRows) {
+            diffRowsRequestRangeRef.current(start, count, options);
+        }
+    }, [diffRowsRequestRangeRef, nativeRowsRef]);
+    const requestBlocksRange = useCallback((start: number, count: number, options?: VirtualizedDocumentRequestOptions) => {
+        if (!nativeRowsRef.current.nativeSideBySideRows) {
+            requestSideBySideRangeRef.current(start, count, options);
+        }
+    }, [nativeRowsRef, requestSideBySideRangeRef]);
+    const hasTopChrome = diffTopChromeHeight > 0;
+    const contentInset = hasTopChrome ? undefined : diffListContentInset;
+    const viewabilityConfig = hasTopChrome ? undefined : diffListViewabilityConfig;
+    const listHeaderHeight = hasTopChrome ? 0 : diffTitlebarTopInset;
+    const sideBySideLineOverscan = Math.max(12, Math.floor(diffLineOverscan / 10));
+    const diffListStyle = useMemo(() => [styles.list, {
+            height: diffListHeight,
+            minHeight: diffListHeight
+        }], [diffListHeight]);
+    const getUnifiedItemSize = useCallback((index: number) => inlineMergeModelRef.current.getItemSize(index, getItemSizeRef.current), [getItemSizeRef, inlineMergeModelRef]);
+    const getUnifiedItemType = useCallback((index: number) => inlineMergeModelRef.current.getItemType(index, getItemTypeRef.current), [getItemTypeRef, inlineMergeModelRef]);
+    const getUnifiedRow = useCallback((index: number) => inlineMergeModelRef.current.getInlineMergeRow(index) ?? (nativeRowsRef.current.nativeUnifiedRows ? undefined : getRowRef.current(index)), [getRowRef, inlineMergeModelRef, nativeRowsRef]);
+    const handleUnifiedTopItemChanged = useCallback((index: number) => {
+        const mergeRow = inlineMergeModelRef.current.getInlineMergeRow(index);
+        if (mergeRow) {
+            activeFileIndex$.set(mergeRow.sourceFileIndex);
+        }
+        else {
+            handleTopItemChangedRef.current(index);
+        }
+    }, [activeFileIndex$, handleTopItemChangedRef, inlineMergeModelRef]);
+    const renderUnifiedRow = useCallback((props: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow | DiffInlineMergeRow>) => (props.index < 0
         ? inlineMergeModelRef.current.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
-        : renderRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)
-    ),
-    [inlineMergeModelRef, renderRowRef],
-  );
-  const getSideBySideListItemSize = useCallback(
-    (index: number) => inlineMergeModelRef.current.getItemSize(index, getSideBySideItemSizeRef.current),
-    [getSideBySideItemSizeRef, inlineMergeModelRef],
-  );
-  const getSideBySideListItemType = useCallback(
-    (index: number) => inlineMergeModelRef.current.getItemType(index, getSideBySideItemTypeRef.current),
-    [getSideBySideItemTypeRef, inlineMergeModelRef],
-  );
-  const getSideBySideListRow = useCallback(
-    (index: number, listIndex: number) => inlineMergeModelRef.current.getInlineMergeRow(index) ?? (nativeRowsRef.current.nativeSideBySideRows ? undefined : getSideBySideRowRef.current(index, listIndex)),
-    [getSideBySideRowRef, inlineMergeModelRef, nativeRowsRef],
-  );
-  const handleSideBySideListTopItemChanged = useCallback((index: number) => {
-    const mergeRow = inlineMergeModelRef.current.getInlineMergeRow(index);
-    if (mergeRow) {
-      activeFileIndex$.set(mergeRow.sourceFileIndex);
-    } else {
-      handleSideBySideTopItemChangedRef.current(index);
-    }
-  }, [activeFileIndex$, handleSideBySideTopItemChangedRef, inlineMergeModelRef]);
-  const renderSideBySideListRow = useCallback(
-    (props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow | DiffInlineMergeRow>) => (
-      props.index < 0
+        : renderRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>)), [inlineMergeModelRef, renderRowRef]);
+    const getSideBySideListItemSize = useCallback((index: number) => inlineMergeModelRef.current.getItemSize(index, getSideBySideItemSizeRef.current), [getSideBySideItemSizeRef, inlineMergeModelRef]);
+    const getSideBySideListItemType = useCallback((index: number) => inlineMergeModelRef.current.getItemType(index, getSideBySideItemTypeRef.current), [getSideBySideItemTypeRef, inlineMergeModelRef]);
+    const getSideBySideListRow = useCallback((index: number, listIndex: number) => inlineMergeModelRef.current.getInlineMergeRow(index) ?? (nativeRowsRef.current.nativeSideBySideRows ? undefined : getSideBySideRowRef.current(index, listIndex)), [getSideBySideRowRef, inlineMergeModelRef, nativeRowsRef]);
+    const handleSideBySideListTopItemChanged = useCallback((index: number) => {
+        const mergeRow = inlineMergeModelRef.current.getInlineMergeRow(index);
+        if (mergeRow) {
+            activeFileIndex$.set(mergeRow.sourceFileIndex);
+        }
+        else {
+            handleSideBySideTopItemChangedRef.current(index);
+        }
+    }, [activeFileIndex$, handleSideBySideTopItemChangedRef, inlineMergeModelRef]);
+    const renderSideBySideListRow = useCallback((props: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow | DiffInlineMergeRow>) => (props.index < 0
         ? inlineMergeModelRef.current.renderMergeRow(props as VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>)
-        : renderSideBySideRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)
-    ),
-    [inlineMergeModelRef, renderSideBySideRowRef],
-  );
-
-
-  let diffContent: ReactElement;
-  if (diffListHeight <= 0) {
-    diffContent = <View style={styles.diffPaneContent} />;
-  } else {
-    let contentBody: ReactElement;
-    if (shouldShowNoChanges) {
-      contentBody = noChangesBody;
-    } else if (viewMode === "unified") {
-      contentBody = (
-        <VirtualizedFixedDocumentList
-          adaptiveRender={adaptiveRender}
-          contentInset={contentInset}
-          viewabilityConfig={viewabilityConfig}
-          dataKey={`diff:${state.document.documentId}:unified`}
-          dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`}
-          debugName="diff-unified-list"
-          estimatedItemSize={rowHeight}
-          dataSource={inlineMergeModel.unifiedDataSource}
-          itemKeyVersion={state.document.documentId}
-          getDocumentIndex={inlineMergeModel.getDocumentIndex}
-          getItemSize={getUnifiedItemSize}
-          getItemType={getUnifiedItemType}
-          listHeaderHeight={listHeaderHeight}
-          lineOverscan={diffLineOverscan}
-          listRef={listRef}
-          onTopItemChanged={handleUnifiedTopItemChanged}
-          onVisibleRowsRequested={handleVisibleRowsRequested}
-          overscanRequestDelayMs={diffOverscanRequestDelayMs}
-          requestRange={requestUnifiedRange}
-          requestRangesOnScroll
-          getRow={getUnifiedRow}
-          rowHeight={rowHeight}
-          renderRow={renderUnifiedRow}
-          style={diffListStyle}
-        />
-      );
-    } else {
-      contentBody = (
-        <VirtualizedFixedDocumentList
-          adaptiveRender={adaptiveRender}
-          contentInset={contentInset}
-          viewabilityConfig={viewabilityConfig}
-          dataKey={`diff:${state.document.documentId}:${viewMode}`}
-          dataSource={inlineMergeModel.sideBySideDataSource ?? undefined}
-          debugName="diff-side-by-side-list"
-          estimatedItemSize={rowHeight}
-          itemKeyVersion={state.document.documentId}
-          getDocumentIndex={inlineMergeModel.getSideBySideDocumentIndex}
-          getItemSize={getSideBySideListItemSize}
-          getItemType={getSideBySideListItemType}
-          getRow={getSideBySideListRow}
-          listHeaderHeight={listHeaderHeight}
-          lineOverscan={sideBySideLineOverscan}
-          listRef={listRef}
-          onTopItemChanged={handleSideBySideListTopItemChanged}
-          onVisibleRowsRequested={handleSideBySideVisibleRowsRequested}
-          overscanRequestDelayMs={diffOverscanRequestDelayMs}
-          requestRange={requestBlocksRange}
-          requestRangesOnScroll
-          rowHeight={rowHeight}
-          renderRow={renderSideBySideListRow}
-          style={diffListStyle}
-        />
-      );
+        : renderSideBySideRowRef.current(props as VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>)), [inlineMergeModelRef, renderSideBySideRowRef]);
+    let diffContent: ReactElement;
+    if (diffListHeight <= 0) {
+        diffContent = <View style={styles.diffPaneContent}/>;
     }
-
-    diffContent = (
-      <View
-        style={[
-          styles.diffPaneContent,
-          {
-            height: diffContentHeight,
-            minHeight: diffContentHeight,
-          },
-        ]}
-      >
-        {hasTopChrome ? (
-          <View style={[styles.diffPaneTopChrome, { height: diffTopChromeHeight, minHeight: diffTopChromeHeight }]}>
+    else {
+        let contentBody: ReactElement;
+        if (shouldShowNoChanges) {
+            contentBody = noChangesBody;
+        }
+        else if (viewMode === "unified") {
+            contentBody = (<VirtualizedFixedDocumentList adaptiveRender={adaptiveRender} contentInset={contentInset} viewabilityConfig={viewabilityConfig} dataKey={`diff:${state.document.documentId}:unified`} dataVersion={`${diffRows.dataVersion}:${inlineMergeModel.dataVersion}`} debugName="diff-unified-list" estimatedItemSize={rowHeight} dataSource={inlineMergeModel.unifiedDataSource} itemKeyVersion={state.document.documentId} getDocumentIndex={inlineMergeModel.getDocumentIndex} getItemSize={getUnifiedItemSize} getItemType={getUnifiedItemType} listHeaderHeight={listHeaderHeight} lineOverscan={diffLineOverscan} listRef={listRef} onTopItemChanged={handleUnifiedTopItemChanged} onVisibleRowsRequested={handleVisibleRowsRequested} overscanRequestDelayMs={diffOverscanRequestDelayMs} requestRange={requestUnifiedRange} requestRangesOnScroll getRow={getUnifiedRow} rowHeight={rowHeight} renderRow={renderUnifiedRow} style={diffListStyle}/>);
+        }
+        else {
+            contentBody = (<VirtualizedFixedDocumentList adaptiveRender={adaptiveRender} contentInset={contentInset} viewabilityConfig={viewabilityConfig} dataKey={`diff:${state.document.documentId}:${viewMode}`} dataSource={inlineMergeModel.sideBySideDataSource ?? undefined} debugName="diff-side-by-side-list" estimatedItemSize={rowHeight} itemKeyVersion={state.document.documentId} getDocumentIndex={inlineMergeModel.getSideBySideDocumentIndex} getItemSize={getSideBySideListItemSize} getItemType={getSideBySideListItemType} getRow={getSideBySideListRow} listHeaderHeight={listHeaderHeight} lineOverscan={sideBySideLineOverscan} listRef={listRef} onTopItemChanged={handleSideBySideListTopItemChanged} onVisibleRowsRequested={handleSideBySideVisibleRowsRequested} overscanRequestDelayMs={diffOverscanRequestDelayMs} requestRange={requestBlocksRange} requestRangesOnScroll rowHeight={rowHeight} renderRow={renderSideBySideListRow} style={diffListStyle}/>);
+        }
+        diffContent = (<View style={[
+                styles.diffPaneContent,
+                {
+                    height: diffContentHeight,
+                    minHeight: diffContentHeight
+                },
+            ]}>
+        {hasTopChrome ? (<View style={[styles.diffPaneTopChrome, {
+                    height: diffTopChromeHeight,
+                    minHeight: diffTopChromeHeight
+                }]}>
             {documentErrorBody}
-          </View>
-        ) : null}
-        {nativeRowConfig && !shouldShowNoChanges ? (
-          <DiffNativeRowConfigView
-            nativeRowConfig={nativeRowConfig}
-            splitPaneMetrics$={splitPaneMetrics$}
-            syntaxTokenizationState$={syntaxTokenizationState$}
-          />
-        ) : null}
+          </View>) : null}
+        {nativeRowConfig && !shouldShowNoChanges ? (<DiffNativeRowConfigView nativeRowConfig={nativeRowConfig} splitPaneMetrics$={splitPaneMetrics$} syntaxTokenizationState$={syntaxTokenizationState$}/>) : null}
         {contentBody}
-        {nativeRowConfig && !shouldShowNoChanges ? (
-          <DiffHorizontalScroller
-            collapsable={false}
-            configId={nativeRowConfig.configId}
-            style={styles.diffHorizontalScroller}
-          />
-        ) : null}
-      </View>
-    );
-  }
-
-  return (
-    <View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
+        {nativeRowConfig && !shouldShowNoChanges ? (<DiffHorizontalScroller collapsable={false} configId={nativeRowConfig.configId} style={styles.diffHorizontalScroller}/>) : null}
+      </View>);
+    }
+    return (<View onLayout={handleDiffPaneLayout} style={styles.diffPane}>
       {diffContent}
-      <DiffProgressiveLoadingBanner
-        foregroundColor={rowConfig.foregroundColor}
-        mutedColor={rowConfig.mutedColor}
-        source={state.source}
-        surfaceColor={rowConfig.fileHeaderBackgroundColor}
-      />
+      <DiffProgressiveLoadingBanner foregroundColor={rowConfig.foregroundColor} mutedColor={rowConfig.mutedColor} source={state.source} surfaceColor={rowConfig.fileHeaderBackgroundColor}/>
       {floatingDocumentBanner}
-      {rowConfig.syntaxHighlightingEnabled && <DiffGrammarProgress key={state.document.documentId} document={state.document} files={state.files} />}
-    </View>
-  );
+      {rowConfig.syntaxHighlightingEnabled && <DiffGrammarProgress key={state.document.documentId} document={state.document} files={state.files}/>}
+    </View>);
 });
-
-const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({
-  backgroundColor,
-  collapsedSidebarFolders$,
-  handleSidebarListLayout,
-  mutedColor,
-  renderSidebarEntry,
-  sidebarCollapsed,
-  splitPaneMetrics$,
-  state,
-}: DiffLoadedSidebarPaneProps) {
-  const splitPaneMetrics = useValue(splitPaneMetrics$);
-  const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-  const sidebarListHeight = isSidebarLayoutReady ? splitPaneMetrics.sidebarHeight : 0;
-  const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
-  const sidebarListStyle = useMemo(
-    () => [styles.sidebarList, { height: sidebarListHeight, minHeight: sidebarListHeight }],
-    [sidebarListHeight],
-  );
-  const collapsedSidebarFolders = useValue(collapsedSidebarFolders$);
-  const sidebarEntries = useMemo(
-    () => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [],
-    [collapsedSidebarFolders, shouldRenderSidebarList, state.files],
-  );
-
-  return (
-    <View
-      style={[
-        styles.sidebar,
-        {
-          backgroundColor: Platform.OS === "macos" ? "transparent" : backgroundColor,
-          height: splitPaneMetrics.sidebarHeight || undefined,
-          minHeight: splitPaneMetrics.sidebarHeight || undefined,
-          width: splitPaneMetrics.sidebarWidth || undefined,
-        },
-      ]}
-    >
-      {shouldRenderSidebarList ? (
-        state.files.length > 0 ? (
-          <LegendList
-            contentContainerStyle={styles.sidebarContent}
-            contentInset={diffSidebarContentInset}
-            data={sidebarEntries}
-            estimatedItemSize={diffSidebarFileRowHeight}
-            getFixedItemSize={getDiffSidebarItemSize}
-            getItemType={getDiffSidebarItemType}
-            keyExtractor={getDiffSidebarItemKey}
-            onLayout={handleSidebarListLayout}
-            recycleItems
-            renderItem={renderSidebarEntry}
-            style={sidebarListStyle}
-          />
-        ) : (
-          <View style={[styles.sidebarEmpty, { height: sidebarListHeight, minHeight: sidebarListHeight }]}>
+const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({ backgroundColor, collapsedSidebarFolders$, handleSidebarListLayout, mutedColor, renderSidebarEntry, sidebarCollapsed, splitPaneMetrics$, state, }: DiffLoadedSidebarPaneProps) {
+    const splitPaneMetrics = useValue(splitPaneMetrics$);
+    const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
+    const sidebarListHeight = isSidebarLayoutReady ? splitPaneMetrics.sidebarHeight : 0;
+    const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
+    const sidebarListStyle = useMemo(() => [styles.sidebarList, {
+            height: sidebarListHeight,
+            minHeight: sidebarListHeight
+        }], [sidebarListHeight]);
+    const collapsedSidebarFolders = useValue(collapsedSidebarFolders$);
+    const sidebarEntries = useMemo(() => shouldRenderSidebarList ? createDiffSidebarEntries(state.files, collapsedSidebarFolders) : [], [collapsedSidebarFolders, shouldRenderSidebarList, state.files]);
+    return (<View style={[
+            styles.sidebar,
+            {
+                backgroundColor: Platform.OS === "macos" ? "transparent" : backgroundColor,
+                height: splitPaneMetrics.sidebarHeight || undefined, width: splitPaneMetrics.sidebarWidth || undefined,
+                minHeight: splitPaneMetrics.sidebarHeight || undefined
+            },
+        ]}>
+      {shouldRenderSidebarList ? (state.files.length > 0 ? (<LegendList contentContainerStyle={styles.sidebarContent} contentInset={diffSidebarContentInset} data={sidebarEntries} estimatedItemSize={diffSidebarFileRowHeight} getFixedItemSize={getDiffSidebarItemSize} getItemType={getDiffSidebarItemType} keyExtractor={getDiffSidebarItemKey} onLayout={handleSidebarListLayout} recycleItems renderItem={renderSidebarEntry} style={sidebarListStyle}/>) : (<View style={[styles.sidebarEmpty, {
+                height: sidebarListHeight,
+                minHeight: sidebarListHeight
+            }]}>
             <Text style={[styles.sidebarEmptyText, { color: mutedColor }]}>
               No files
             </Text>
-          </View>
-        )
-      ) : (
-        <View style={styles.sidebarList} />
-      )}
-    </View>
-  );
+          </View>)) : (<View style={styles.sidebarList}/>)}
+    </View>);
 });
-
-function DiffNativeRowConfigView({
-  nativeRowConfig,
-  splitPaneMetrics$,
-  syntaxTokenizationState$,
-}: {
-  nativeRowConfig: DiffNativeRowConfigProps;
-  splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
-  syntaxTokenizationState$: Observable<{ ranges: string; version: number }>;
+function DiffNativeRowConfigView({ nativeRowConfig, splitPaneMetrics$, syntaxTokenizationState$, }: {
+    nativeRowConfig: DiffNativeRowConfigProps;
+    splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
+    syntaxTokenizationState$: Observable<{
+        ranges: string;
+        version: number;
+    }>;
 }) {
-  const { searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
-  const searchHighlights = useValue(() => createDiffSearchHighlightPayload(createDiffSearchHighlightMap(searchResults$.get())));
-  const activeSearchHighlights = useValue(() => {
-    const results = searchResults$.get();
-    const index = Math.min(activeSearchResultIndex$.get(), Math.max(0, results.length - 1));
-    return createDiffSearchHighlightPayload(createActiveDiffSearchHighlightMap(results[index] ?? null));
-  });
-  const tokenizationState = useValue(() => syntaxTokenizationState$.get());
-  const horizontalViewportWidth = useValue(() => splitPaneMetrics$.contentWidth.get());
-  return (
-    <DiffNativeRowConfig
-      addAccentColor={nativeRowConfig.addAccentColor}
-      addBackgroundColor={nativeRowConfig.addBackgroundColor}
-      activeSearchHighlightByRowIndex={activeSearchHighlights}
-      activeSearchHighlightColor={nativeRowConfig.activeSearchHighlightColor}
-      activeSearchRowHighlightColor={nativeRowConfig.activeSearchRowHighlightColor}
-      changeBarWidth={nativeRowConfig.changeBarWidth}
-      collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes}
-      collapsable={false}
-      configId={nativeRowConfig.configId}
-      configVersion={nativeRowConfig.configVersion}
-      dividerColor={nativeRowConfig.dividerColor}
-      documentId={nativeRowConfig.documentId}
-      fontFamily={nativeRowConfig.fontFamily}
-      fontSize={nativeRowConfig.fontSize}
-      foregroundColor={nativeRowConfig.foregroundColor}
-      highlightChangedCharacters={nativeRowConfig.highlightChangedCharacters}
-      horizontalViewportWidth={horizontalViewportWidth}
-      lineNumberWidth={nativeRowConfig.lineNumberWidth}
-      markerWidth={nativeRowConfig.markerWidth}
-      mutedColor={nativeRowConfig.mutedColor}
-      presentation={nativeRowConfig.presentation}
-      projectionId={nativeRowConfig.projectionId}
-      removeAccentColor={nativeRowConfig.removeAccentColor}
-      removeBackgroundColor={nativeRowConfig.removeBackgroundColor}
-      rowHeight={nativeRowConfig.rowHeight}
-      searchHighlightByRowIndex={searchHighlights}
-      searchHighlightColor={nativeRowConfig.searchHighlightColor}
-      showWhitespaceCharacters={nativeRowConfig.showWhitespaceCharacters}
-      style={styles.nativeDiffRowConfig}
-      syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled}
-      themeName={nativeRowConfig.themeName}
-      tokenizationVersion={tokenizationState.version}
-      tokenizedRowRanges={tokenizationState.ranges}
-    />
-  );
+    const { searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
+    const searchHighlights = useValue(() => createDiffSearchHighlightPayload(createDiffSearchHighlightMap(searchResults$.get())));
+    const activeSearchHighlights = useValue(() => {
+        const results = searchResults$.get();
+        const index = Math.min(activeSearchResultIndex$.get(), Math.max(0, results.length - 1));
+        return createDiffSearchHighlightPayload(createActiveDiffSearchHighlightMap(results[index] ?? null));
+    });
+    const tokenizationState = useValue(() => syntaxTokenizationState$.get());
+    const horizontalViewportWidth = useValue(() => splitPaneMetrics$.contentWidth.get());
+    return (<DiffNativeRowConfig addAccentColor={nativeRowConfig.addAccentColor} addBackgroundColor={nativeRowConfig.addBackgroundColor} activeSearchHighlightByRowIndex={activeSearchHighlights} activeSearchHighlightColor={nativeRowConfig.activeSearchHighlightColor} activeSearchRowHighlightColor={nativeRowConfig.activeSearchRowHighlightColor} changeBarWidth={nativeRowConfig.changeBarWidth} collapsedFileIndexes={nativeRowConfig.collapsedFileIndexes} collapsable={false} configId={nativeRowConfig.configId} configVersion={nativeRowConfig.configVersion} dividerColor={nativeRowConfig.dividerColor} documentId={nativeRowConfig.documentId} fontFamily={nativeRowConfig.fontFamily} fontSize={nativeRowConfig.fontSize} foregroundColor={nativeRowConfig.foregroundColor} highlightChangedCharacters={nativeRowConfig.highlightChangedCharacters} horizontalViewportWidth={horizontalViewportWidth} lineNumberWidth={nativeRowConfig.lineNumberWidth} markerWidth={nativeRowConfig.markerWidth} mutedColor={nativeRowConfig.mutedColor} presentation={nativeRowConfig.presentation} projectionId={nativeRowConfig.projectionId} removeAccentColor={nativeRowConfig.removeAccentColor} removeBackgroundColor={nativeRowConfig.removeBackgroundColor} rowHeight={nativeRowConfig.rowHeight} searchHighlightByRowIndex={searchHighlights} searchHighlightColor={nativeRowConfig.searchHighlightColor} showWhitespaceCharacters={nativeRowConfig.showWhitespaceCharacters} style={styles.nativeDiffRowConfig} syntaxHighlightingEnabled={nativeRowConfig.syntaxHighlightingEnabled} themeName={nativeRowConfig.themeName} tokenizationVersion={tokenizationState.version} tokenizedRowRanges={tokenizationState.ranges}/>);
 }
-
 function getMergeConflictFileForDiffFile(mergeState: DiffMergeState, file: DiffFileSummary | null) {
-  if (mergeState.status !== "ready" || !file) {
-    return null;
-  }
-  return mergeState.fileByPath.get(file.path) ?? (file.oldPath ? mergeState.fileByPath.get(file.oldPath) : undefined) ?? null;
+    if (mergeState.status !== "ready" || !file) {
+        return null;
+    }
+    return mergeState.fileByPath.get(file.path) ?? (file.oldPath ? mergeState.fileByPath.get(file.oldPath) : undefined) ?? null;
 }
-
-function getActiveMergeFile({
-  activeFileIndex,
-  files,
-  mergeState,
-}: {
-  activeFileIndex: number | null;
-  files: DiffFileSummary[];
-  mergeState: DiffMergeState;
+function getActiveMergeFile({ activeFileIndex, files, mergeState, }: {
+    activeFileIndex: number | null;
+    files: DiffFileSummary[];
+    mergeState: DiffMergeState;
 }) {
-  if (mergeState.status !== "ready") {
-    return null;
-  }
-  const activeFile = getActiveDiffFile(files, activeFileIndex);
-  return getMergeConflictFileForDiffFile(mergeState, activeFile);
+    if (mergeState.status !== "ready") {
+        return null;
+    }
+    const activeFile = getActiveDiffFile(files, activeFileIndex);
+    return getMergeConflictFileForDiffFile(mergeState, activeFile);
 }
-
-function DiffMergeActionButton({
-  borderColor,
-  choice,
-  disabled,
-  file,
-  label,
-  onResolveMergeConflict,
-  primaryColor,
-  block,
-}: {
-  borderColor: string;
-  block: DiffMergeConflictBlock;
-  choice: DiffMergeConflictChoice;
-  disabled: boolean;
-  file: DiffMergeConflictFile;
-  label: string;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  primaryColor: string;
+function DiffMergeActionButton({ borderColor, choice, disabled, file, label, onResolveMergeConflict, primaryColor, block, }: {
+    borderColor: string;
+    block: DiffMergeConflictBlock;
+    choice: DiffMergeConflictChoice;
+    disabled: boolean;
+    file: DiffMergeConflictFile;
+    label: string;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    primaryColor: string;
 }) {
-  const iconColor = disabled ? borderColor : primaryColor;
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={() => onResolveMergeConflict(file, block, choice)}
-      style={[
-        styles.mergeChoiceButton,
-        {
-          borderColor: disabled ? borderColor : primaryColor,
-          opacity: disabled ? 0.48 : 1,
-        },
-      ]}
-    >
-      {choice === "both" ? (
-        <View style={styles.mergeChoiceBothIcons}>
-          <SFSymbol color={iconColor} name="arrow.left" size={12} />
-          <SFSymbol color={iconColor} name="arrow.right" size={12} />
-        </View>
-      ) : (
-        <SFSymbol color={iconColor} name={choice === "ours" ? "arrow.left" : "arrow.right"} size={14} />
-      )}
-    </Pressable>
-  );
+    const iconColor = disabled ? borderColor : primaryColor;
+    return (<Pressable accessibilityLabel={label} accessibilityRole="button" disabled={disabled} onPress={() => onResolveMergeConflict(file, block, choice)} style={[
+            styles.mergeChoiceButton,
+            {
+                borderColor: disabled ? borderColor : primaryColor,
+                opacity: disabled ? 0.48 : 1,
+            },
+        ]}>
+      {choice === "both" ? (<View style={styles.mergeChoiceBothIcons}>
+          <SFSymbol color={iconColor} name="arrow.left" size={12}/>
+          <SFSymbol color={iconColor} name="arrow.right" size={12}/>
+        </View>) : (<SFSymbol color={iconColor} name={choice === "ours" ? "arrow.left" : "arrow.right"} size={14}/>)}
+    </Pressable>);
 }
-
 type DiffMergeSyntaxState = {
-  configVersion: number;
-  key: string;
-  leftLines: readonly SyntaxRenderLine[];
-  rightLines: readonly SyntaxRenderLine[];
-  tokenStyleById: SyntaxStyleMap;
+    configVersion: number;
+    key: string;
+    leftLines: readonly SyntaxRenderLine[];
+    rightLines: readonly SyntaxRenderLine[];
+    tokenStyleById: SyntaxStyleMap;
 };
-
 type DiffMergeSyntaxByPath = Record<string, DiffMergeSyntaxState | undefined>;
-
 type DiffMergeFileRenderModel = {
-  controlRowByBlockKey: ReadonlyMap<string, number>;
-  file: DiffMergeConflictFile;
-  horizontalConfigId: string;
-  model: DiffMergeDisplayModel;
-  showOnlyHunks: boolean;
+    controlRowByBlockKey: ReadonlyMap<string, number>;
+    file: DiffMergeConflictFile;
+    horizontalConfigId: string;
+    model: DiffMergeDisplayModel;
+    showOnlyHunks: boolean;
 };
-
 type DiffMergeFileRenderByPath = Record<string, OpaqueObject<DiffMergeFileRenderModel> | undefined>;
-
 function createMergeSyntaxStyleMap(styles: readonly SyntaxStyle[]): SyntaxStyleMap {
-  return new Map(styles.map((style) => [style.id, style]));
+    return new Map(styles.map((style) => [style.id, style]));
 }
-
-function encodeMergeNativeTokens(
-  line: SyntaxRenderLine | undefined,
-  tokenStyleById: SyntaxStyleMap,
-  foregroundColor: string,
-) {
-  return line?.tokens.map((token) => {
-    const tokenStyle = tokenStyleById.get(token.styleId);
-    return [
-      Math.max(0, Math.floor(token.startColumn)),
-      Math.max(0, Math.floor(token.length)),
-      tokenStyle?.foreground || foregroundColor,
-      tokenStyle?.fontStyle ?? 0,
-    ].join(",");
-  }).join(";") ?? "";
+function encodeMergeNativeTokens(line: SyntaxRenderLine | undefined, tokenStyleById: SyntaxStyleMap, foregroundColor: string) {
+    return line?.tokens.map((token) => {
+        const tokenStyle = tokenStyleById.get(token.styleId);
+        return [
+            Math.max(0, Math.floor(token.startColumn)),
+            Math.max(0, Math.floor(token.length)),
+            tokenStyle?.foreground || foregroundColor,
+            tokenStyle?.fontStyle ?? 0,
+        ].join(",");
+    }).join(";") ?? "";
 }
-
-function encodeMergeInlineHighlights(ranges: readonly { length: number; startColumn: number }[] | undefined) {
-  return ranges?.map((range) => [
-    Math.max(0, Math.floor(range.startColumn)),
-    Math.max(0, Math.floor(range.length)),
-  ].join(",")).join(";") ?? "";
+function encodeMergeInlineHighlights(ranges: readonly {
+    length: number;
+    startColumn: number;
+}[] | undefined) {
+    return ranges?.map((range) => [
+        Math.max(0, Math.floor(range.startColumn)),
+        Math.max(0, Math.floor(range.length)),
+    ].join(",")).join(";") ?? "";
 }
-
-function getMergeSyntaxLine(
-  lines: readonly SyntaxRenderLine[] | undefined,
-  index: number,
-  text: string,
-): SyntaxRenderLine {
-  return lines?.[index] ?? {
-    index,
-    text,
-    tokens: [],
-  };
+function getMergeSyntaxLine(lines: readonly SyntaxRenderLine[] | undefined, index: number, text: string): SyntaxRenderLine {
+    return lines?.[index] ?? {
+        index,
+        text,
+        tokens: [],
+    };
 }
-
-function getMergeControlRowByBlockKey(
-  conflictRanges: readonly DiffMergeConflictRange[],
-  file: DiffMergeConflictFile,
-) {
-  const rowByBlockKey = new Map<string, number>();
-  for (const range of conflictRanges) {
-    rowByBlockKey.set(getMergeConflictKey(file, range.block), Math.floor((range.startRow + range.endRow) / 2));
-  }
-  return rowByBlockKey;
+function getMergeControlRowByBlockKey(conflictRanges: readonly DiffMergeConflictRange[], file: DiffMergeConflictFile) {
+    const rowByBlockKey = new Map<string, number>();
+    for (const range of conflictRanges) {
+        rowByBlockKey.set(getMergeConflictKey(file, range.block), Math.floor((range.startRow + range.endRow) / 2));
+    }
+    return rowByBlockKey;
 }
-
 function getFullMergeDisplayModel(file: DiffMergeConflictFile | null): DiffMergeDisplayModel {
-  return file
-    ? {
-        conflictRanges: file.conflictRanges,
-        rows: file.displayRows,
-      }
-    : {
-        conflictRanges: [],
-        rows: [],
-      };
+    return file
+        ? {
+            conflictRanges: file.conflictRanges,
+            rows: file.displayRows,
+        }
+        : {
+            conflictRanges: [],
+            rows: [],
+        };
 }
-
-function DiffMergeHunkHeader({
-  borderColor,
-  fileHeaderBackgroundColor,
-  fontFamily,
-  fontSize,
-  info,
-  mutedColor,
-}: {
-  borderColor: string;
-  fileHeaderBackgroundColor: string;
-  fontFamily: string;
-  fontSize: number;
-  info: DiffMergeHunkHeaderInfo;
-  mutedColor: string;
+function DiffMergeHunkHeader({ borderColor, fileHeaderBackgroundColor, fontFamily, fontSize, info, mutedColor, }: {
+    borderColor: string;
+    fileHeaderBackgroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    info: DiffMergeHunkHeaderInfo;
+    mutedColor: string;
 }) {
-  return (
-    <View style={[styles.mergeHunkHeader, { backgroundColor: fileHeaderBackgroundColor, borderColor }]}>
+    return (<View style={[styles.mergeHunkHeader, { backgroundColor: fileHeaderBackgroundColor, borderColor }]}>
       <Text selectable={false} style={[styles.mergeHunkHeaderTitle, { color: mutedColor, fontFamily, fontSize }]}>
         Conflict {info.hunkNumber}: {info.lineLabel}
       </Text>
-    </View>
-  );
+    </View>);
 }
-
 function getMergeConflictPalette(syntaxAppearance: "dark" | "light") {
-  return syntaxAppearance === "dark"
-    ? {
-        accent: "#ffc857",
-        hunkBackground: "#6f5f2e",
-        inlineBackground: "#8f5f1f",
-        rowBackground: "#463f20",
-      }
-    : {
-        accent: "#9a6400",
-        hunkBackground: "#fff0c2",
-        inlineBackground: "#ffffffd9",
-        rowBackground: "#fff8e5",
-      };
+    return syntaxAppearance === "dark"
+        ? {
+            accent: "#ffc857",
+            hunkBackground: "#6f5f2e",
+            inlineBackground: "#8f5f1f",
+            rowBackground: "#463f20",
+        }
+        : {
+            accent: "#9a6400",
+            hunkBackground: "#fff0c2",
+            inlineBackground: "#ffffffd9",
+            rowBackground: "#fff8e5",
+        };
 }
-
-function getMergeSideColors(
-  changeType: DiffMergeSideChangeType | undefined,
-  isConflict: boolean,
-  side: "left" | "right",
-  mutedColor: string,
-  syntaxAppearance: "dark" | "light",
-) {
-  const palette = getDiffRowPalette(syntaxAppearance);
-  const conflictPalette = getMergeConflictPalette(syntaxAppearance);
-  const isDelete = changeType === "delete" || (side === "left" && changeType === "modify");
-  const isAdd = changeType === "add" || (side === "right" && changeType === "modify");
-  const backgroundColor = isConflict
-    ? conflictPalette.rowBackground
-    : isDelete
-      ? palette.removeBackground
-      : isAdd
-        ? palette.addBackground
-        : "transparent";
-  const lineNumberColor = isDelete
-    ? palette.removeAccent
-    : isAdd
-      ? palette.addAccent
-      : isConflict
-        ? conflictPalette.accent
-        : mutedColor;
-  return {
-    backgroundColor,
-    lineNumberColor,
-  };
-}
-
-function DiffMergeCodePane({
-  backgroundColor,
-  foregroundColor,
-  fontFamily,
-  fontSize,
-  horizontalConfigId,
-  inlineHighlightColor,
-  inlineHighlights,
-  lineNumber,
-  lineNumberWidth,
-  mutedColor,
-  nativeTokens,
-  rowHeight,
-  text,
-}: {
-  backgroundColor: string;
-  foregroundColor: string;
-  fontFamily: string;
-  fontSize: number;
-  horizontalConfigId: string;
-  inlineHighlightColor: string;
-  inlineHighlights: string;
-  lineNumber?: number;
-  lineNumberWidth: number;
-  mutedColor: string;
-  nativeTokens: string;
-  rowHeight: number;
-  text: string;
-}) {
-  return (
-    <DiffMergeNativePane
-      configVersion={hashDiffNativeRowConfigVersion([
-        fontFamily,
-        fontSize,
-        foregroundColor,
+function getMergeSideColors(changeType: DiffMergeSideChangeType | undefined, isConflict: boolean, side: "left" | "right", mutedColor: string, syntaxAppearance: "dark" | "light") {
+    const palette = getDiffRowPalette(syntaxAppearance);
+    const conflictPalette = getMergeConflictPalette(syntaxAppearance);
+    const isDelete = changeType === "delete" || (side === "left" && changeType === "modify");
+    const isAdd = changeType === "add" || (side === "right" && changeType === "modify");
+    const backgroundColor = isConflict
+        ? conflictPalette.rowBackground
+        : isDelete
+            ? palette.removeBackground
+            : isAdd
+                ? palette.addBackground
+                : "transparent";
+    const lineNumberColor = isDelete
+        ? palette.removeAccent
+        : isAdd
+            ? palette.addAccent
+            : isConflict
+                ? conflictPalette.accent
+                : mutedColor;
+    return {
         backgroundColor,
-        inlineHighlightColor,
-        inlineHighlights,
-        lineNumber,
-        mutedColor,
-        nativeTokens,
-        rowHeight,
-        text,
-      ])}
-      fontFamily={fontFamily}
-      fontSize={fontSize}
-      foregroundColor={foregroundColor}
-      horizontalConfigId={horizontalConfigId}
-      inlineHighlightColor={inlineHighlightColor}
-      inlineHighlights={inlineHighlights}
-      lineNumber={lineNumber ?? -1}
-      lineNumberWidth={lineNumberWidth}
-      mutedColor={mutedColor}
-      rowHeight={rowHeight}
-      style={[styles.mergeNativePane, { backgroundColor, height: rowHeight }]}
-      text={text}
-      tokens={nativeTokens}
-    />
-  );
+        lineNumberColor,
+    };
 }
-
-function DiffMergeCenterGutter({
-  block,
-  borderColor,
-  file,
-  mutedColor,
-  onResolveMergeConflict,
-  primaryColor,
-  resolvingMergeConflictKeys$,
-}: {
-  block: DiffMergeConflictBlock | null;
-  borderColor: string;
-  file: DiffMergeConflictFile;
-  mutedColor: string;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  primaryColor: string;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
+function DiffMergeCodePane({ backgroundColor, foregroundColor, fontFamily, fontSize, horizontalConfigId, inlineHighlightColor, inlineHighlights, lineNumber, lineNumberWidth, mutedColor, nativeTokens, rowHeight, text, }: {
+    backgroundColor: string;
+    foregroundColor: string;
+    fontFamily: string;
+    fontSize: number;
+    horizontalConfigId: string;
+    inlineHighlightColor: string;
+    inlineHighlights: string;
+    lineNumber?: number;
+    lineNumberWidth: number;
+    mutedColor: string;
+    nativeTokens: string;
+    rowHeight: number;
+    text: string;
 }) {
-  const conflictKey = block ? getMergeConflictKey(file, block) : null;
-  const resolvingState = useValue(() => {
-    const resolvingKeys = resolvingMergeConflictKeys$.get();
-    return (resolvingKeys.has(diffMergeSaveConflictKey) ? 1 : 0)
-      | (conflictKey && resolvingKeys.has(conflictKey) ? 2 : 0);
-  });
-  const controlsDisabled = resolvingState !== 0;
-  const isResolving = (resolvingState & 2) !== 0;
-  return (
-    <View style={[styles.mergeCommonMiddle, { borderColor }]}>
-      {block ? (
-        <View style={styles.mergeChoiceColumn}>
-          <DiffMergeActionButton
-            block={block}
-            borderColor={borderColor}
-            choice="ours"
-            disabled={controlsDisabled}
-            file={file}
-            label="A"
-            onResolveMergeConflict={onResolveMergeConflict}
-            primaryColor={primaryColor}
-          />
-          <DiffMergeActionButton
-            block={block}
-            borderColor={borderColor}
-            choice="theirs"
-            disabled={controlsDisabled}
-            file={file}
-            label="B"
-            onResolveMergeConflict={onResolveMergeConflict}
-            primaryColor={primaryColor}
-          />
-          <DiffMergeActionButton
-            block={block}
-            borderColor={borderColor}
-            choice="both"
-            disabled={controlsDisabled}
-            file={file}
-            label="Both"
-            onResolveMergeConflict={onResolveMergeConflict}
-            primaryColor={primaryColor}
-          />
-          {isResolving ? (
-            <Text numberOfLines={1} style={[styles.mergeResolvingText, { color: mutedColor }]}>
+    return (<DiffMergeNativePane configVersion={hashDiffNativeRowConfigVersion([
+            fontFamily,
+            fontSize,
+            foregroundColor,
+            backgroundColor,
+            inlineHighlightColor,
+            inlineHighlights,
+            lineNumber,
+            mutedColor,
+            nativeTokens,
+            rowHeight,
+            text,
+        ])} fontFamily={fontFamily} fontSize={fontSize} foregroundColor={foregroundColor} horizontalConfigId={horizontalConfigId} inlineHighlightColor={inlineHighlightColor} inlineHighlights={inlineHighlights} lineNumber={lineNumber ?? -1} lineNumberWidth={lineNumberWidth} mutedColor={mutedColor} rowHeight={rowHeight} style={[styles.mergeNativePane, { backgroundColor, height: rowHeight }]} text={text} tokens={nativeTokens}/>);
+}
+function DiffMergeCenterGutter({ block, borderColor, file, mutedColor, onResolveMergeConflict, primaryColor, resolvingMergeConflictKeys$, }: {
+    block: DiffMergeConflictBlock | null;
+    borderColor: string;
+    file: DiffMergeConflictFile;
+    mutedColor: string;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    primaryColor: string;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
+}) {
+    const conflictKey = block ? getMergeConflictKey(file, block) : null;
+    const resolvingState = useValue(() => {
+        const resolvingKeys = resolvingMergeConflictKeys$.get();
+        return (resolvingKeys.has(diffMergeSaveConflictKey) ? 1 : 0)
+            | (conflictKey && resolvingKeys.has(conflictKey) ? 2 : 0);
+    });
+    const controlsDisabled = resolvingState !== 0;
+    const isResolving = (resolvingState & 2) !== 0;
+    return (<View style={[styles.mergeCommonMiddle, { borderColor }]}>
+      {block ? (<View style={styles.mergeChoiceColumn}>
+          <DiffMergeActionButton block={block} borderColor={borderColor} choice="ours" disabled={controlsDisabled} file={file} label="A" onResolveMergeConflict={onResolveMergeConflict} primaryColor={primaryColor}/>
+          <DiffMergeActionButton block={block} borderColor={borderColor} choice="theirs" disabled={controlsDisabled} file={file} label="B" onResolveMergeConflict={onResolveMergeConflict} primaryColor={primaryColor}/>
+          <DiffMergeActionButton block={block} borderColor={borderColor} choice="both" disabled={controlsDisabled} file={file} label="Both" onResolveMergeConflict={onResolveMergeConflict} primaryColor={primaryColor}/>
+          {isResolving ? (<Text numberOfLines={1} style={[styles.mergeResolvingText, { color: mutedColor }]}>
               Applying
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
+            </Text>) : null}
+        </View>) : null}
+    </View>);
 }
-
-function DiffMergeLineRow({
-  controlBlock,
-  file,
-  horizontalConfigId,
-  mergeSyntaxByPath$,
-  mergeRender$,
-  onResolveMergeConflict,
-  resolvingMergeConflictKeys$,
-  row,
-  rowIndex,
-}: {
-  controlBlock: DiffMergeConflictBlock | null;
-  file: DiffMergeConflictFile;
-  horizontalConfigId: string;
-  mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
-  mergeRender$: Observable<DiffMergeRenderState>;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
-  row: DiffMergeDisplayRow | undefined;
-  rowIndex: number;
+function DiffMergeLineRow({ controlBlock, file, horizontalConfigId, mergeSyntaxByPath$, mergeRender$, onResolveMergeConflict, resolvingMergeConflictKeys$, row, rowIndex, }: {
+    controlBlock: DiffMergeConflictBlock | null;
+    file: DiffMergeConflictFile;
+    horizontalConfigId: string;
+    mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
+    mergeRender$: Observable<DiffMergeRenderState>;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
+    row: DiffMergeDisplayRow | undefined;
+    rowIndex: number;
 }) {
-  const borderColor = useValue(() => mergeRender$.borderColor.get());
-  const fileHeaderBackgroundColor = useValue(() => mergeRender$.fileHeaderBackgroundColor.get());
-  const fontFamily = useValue(() => mergeRender$.fontFamily.get());
-  const fontSize = useValue(() => mergeRender$.fontSize.get());
-  const foregroundColor = useValue(() => mergeRender$.foregroundColor.get());
-  const mutedColor = useValue(() => mergeRender$.mutedColor.get());
-  const primaryColor = useValue(() => mergeRender$.primaryColor.get());
-  const rowHeight = useValue(() => mergeRender$.rowHeight.get());
-  const syntaxAppearance = useValue(() => mergeRender$.syntaxAppearance.get());
-  const mergeSyntax = useValue(() => mergeSyntaxByPath$[file.path].get());
-  const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
-  const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, row?.leftText ?? "");
-  const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, rowIndex, row?.rightText ?? "");
-  const leftTokens = encodeMergeNativeTokens(leftSyntaxLine, tokenStyleById, foregroundColor);
-  const rightTokens = encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor);
-  const isConflictRow = row?.conflictBlock !== undefined;
-  const leftColors = getMergeSideColors(row?.leftChangeType, isConflictRow, "left", mutedColor, syntaxAppearance);
-  const rightColors = getMergeSideColors(row?.rightChangeType, isConflictRow, "right", mutedColor, syntaxAppearance);
-  const conflictPalette = getMergeConflictPalette(syntaxAppearance);
-
-  return (
-    <>
-      {row?.hunkHeader ? (
-        <DiffMergeHunkHeader
-          borderColor={borderColor}
-          fileHeaderBackgroundColor={fileHeaderBackgroundColor}
-          fontFamily={fontFamily}
-          fontSize={fontSize}
-          info={row.hunkHeader}
-          mutedColor={mutedColor}
-        />
-      ) : null}
+    const borderColor = useValue(() => mergeRender$.borderColor.get());
+    const fileHeaderBackgroundColor = useValue(() => mergeRender$.fileHeaderBackgroundColor.get());
+    const fontFamily = useValue(() => mergeRender$.fontFamily.get());
+    const fontSize = useValue(() => mergeRender$.fontSize.get());
+    const foregroundColor = useValue(() => mergeRender$.foregroundColor.get());
+    const mutedColor = useValue(() => mergeRender$.mutedColor.get());
+    const primaryColor = useValue(() => mergeRender$.primaryColor.get());
+    const rowHeight = useValue(() => mergeRender$.rowHeight.get());
+    const syntaxAppearance = useValue(() => mergeRender$.syntaxAppearance.get());
+    const mergeSyntax = useValue(() => mergeSyntaxByPath$[file.path].get());
+    const tokenStyleById = mergeSyntax?.tokenStyleById ?? new Map<number, SyntaxStyle>();
+    const leftSyntaxLine = getMergeSyntaxLine(mergeSyntax?.leftLines, rowIndex, row?.leftText ?? "");
+    const rightSyntaxLine = getMergeSyntaxLine(mergeSyntax?.rightLines, rowIndex, row?.rightText ?? "");
+    const leftTokens = encodeMergeNativeTokens(leftSyntaxLine, tokenStyleById, foregroundColor);
+    const rightTokens = encodeMergeNativeTokens(rightSyntaxLine, tokenStyleById, foregroundColor);
+    const isConflictRow = row?.conflictBlock !== undefined;
+    const leftColors = getMergeSideColors(row?.leftChangeType, isConflictRow, "left", mutedColor, syntaxAppearance);
+    const rightColors = getMergeSideColors(row?.rightChangeType, isConflictRow, "right", mutedColor, syntaxAppearance);
+    const conflictPalette = getMergeConflictPalette(syntaxAppearance);
+    return (<>
+      {row?.hunkHeader ? (<DiffMergeHunkHeader borderColor={borderColor} fileHeaderBackgroundColor={fileHeaderBackgroundColor} fontFamily={fontFamily} fontSize={fontSize} info={row.hunkHeader} mutedColor={mutedColor}/>) : null}
       <View style={[styles.mergeCommonRow, { height: rowHeight }]}>
         <View style={styles.mergeCommonPane}>
-          <DiffMergeCodePane
-            backgroundColor={leftColors.backgroundColor}
-            foregroundColor={foregroundColor}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            horizontalConfigId={horizontalConfigId}
-            inlineHighlightColor={conflictPalette.inlineBackground}
-            inlineHighlights={encodeMergeInlineHighlights(row?.leftInlineChangeRanges)}
-            lineNumber={row?.leftLineNumber}
-            lineNumberWidth={diffSideBySideLineNumberWidth}
-            mutedColor={leftColors.lineNumberColor}
-            nativeTokens={leftTokens}
-            rowHeight={rowHeight}
-            text={row?.leftText ?? ""}
-          />
+          <DiffMergeCodePane backgroundColor={leftColors.backgroundColor} foregroundColor={foregroundColor} fontFamily={fontFamily} fontSize={fontSize} horizontalConfigId={horizontalConfigId} inlineHighlightColor={conflictPalette.inlineBackground} inlineHighlights={encodeMergeInlineHighlights(row?.leftInlineChangeRanges)} lineNumber={row?.leftLineNumber} lineNumberWidth={diffSideBySideLineNumberWidth} mutedColor={leftColors.lineNumberColor} nativeTokens={leftTokens} rowHeight={rowHeight} text={row?.leftText ?? ""}/>
         </View>
-        <DiffMergeCenterGutter
-          block={controlBlock}
-          borderColor={borderColor}
-          file={file}
-          mutedColor={mutedColor}
-          onResolveMergeConflict={onResolveMergeConflict}
-          primaryColor={primaryColor}
-          resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-        />
+        <DiffMergeCenterGutter block={controlBlock} borderColor={borderColor} file={file} mutedColor={mutedColor} onResolveMergeConflict={onResolveMergeConflict} primaryColor={primaryColor} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>
         <View style={styles.mergeCommonPane}>
-          <DiffMergeCodePane
-            backgroundColor={rightColors.backgroundColor}
-            foregroundColor={foregroundColor}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            horizontalConfigId={horizontalConfigId}
-            inlineHighlightColor={conflictPalette.inlineBackground}
-            inlineHighlights={encodeMergeInlineHighlights(row?.rightInlineChangeRanges)}
-            lineNumber={row?.rightLineNumber}
-            lineNumberWidth={diffSideBySideLineNumberWidth}
-            mutedColor={rightColors.lineNumberColor}
-            nativeTokens={rightTokens}
-            rowHeight={rowHeight}
-            text={row?.rightText ?? ""}
-          />
+          <DiffMergeCodePane backgroundColor={rightColors.backgroundColor} foregroundColor={foregroundColor} fontFamily={fontFamily} fontSize={fontSize} horizontalConfigId={horizontalConfigId} inlineHighlightColor={conflictPalette.inlineBackground} inlineHighlights={encodeMergeInlineHighlights(row?.rightInlineChangeRanges)} lineNumber={row?.rightLineNumber} lineNumberWidth={diffSideBySideLineNumberWidth} mutedColor={rightColors.lineNumberColor} nativeTokens={rightTokens} rowHeight={rowHeight} text={row?.rightText ?? ""}/>
         </View>
       </View>
-    </>
-  );
+    </>);
 }
-
-function DiffMergePlaceholderRow({
-  mergeRender$,
-}: {
-  mergeRender$: Observable<DiffMergeRenderState>;
+function DiffMergePlaceholderRow({ mergeRender$, }: {
+    mergeRender$: Observable<DiffMergeRenderState>;
 }) {
-  const rowHeight = useValue(() => mergeRender$.rowHeight.get());
-  return <View style={{ height: rowHeight }} />;
+    const rowHeight = useValue(() => mergeRender$.rowHeight.get());
+    return <View style={{ height: rowHeight }}/>;
 }
-
-function DiffMergeObservableLineRow({
-  itemIndex,
-  mergeFileRenderByPath$,
-  mergeItemIndexAllocator,
-  mergeRender$,
-  mergeSyntaxByPath$,
-  onResolveMergeConflict,
-  resolvingMergeConflictKeys$,
-}: {
-  itemIndex: number;
-  mergeFileRenderByPath$: Observable<DiffMergeFileRenderByPath>;
-  mergeItemIndexAllocator: DiffInlineMergeItemIndexAllocator;
-  mergeRender$: Observable<DiffMergeRenderState>;
-  mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
+function DiffMergeObservableLineRow({ itemIndex, mergeFileRenderByPath$, mergeItemIndexAllocator, mergeRender$, mergeSyntaxByPath$, onResolveMergeConflict, resolvingMergeConflictKeys$, }: {
+    itemIndex: number;
+    mergeFileRenderByPath$: Observable<DiffMergeFileRenderByPath>;
+    mergeItemIndexAllocator: DiffInlineMergeItemIndexAllocator;
+    mergeRender$: Observable<DiffMergeRenderState>;
+    mergeSyntaxByPath$: Observable<DiffMergeSyntaxByPath>;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
 }) {
-  const location = mergeItemIndexAllocator.locationByItemIndex.get(itemIndex);
-  const renderFile = useValue(() => location ? mergeFileRenderByPath$[location.filePath].get() : undefined);
-
-  let content: ReactElement;
-  if (location && renderFile) {
-    const { controlRowByBlockKey, file, horizontalConfigId, model } = renderFile;
-    const displayRow = model.rows[location.rowIndex];
-    const controlBlock = displayRow?.conflictBlock
-      && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === location.rowIndex
-      ? displayRow.conflictBlock
-      : null;
-    content = (
-      <DiffMergeLineRow
-        controlBlock={controlBlock}
-        file={file}
-        horizontalConfigId={horizontalConfigId}
-        mergeRender$={mergeRender$}
-        mergeSyntaxByPath$={mergeSyntaxByPath$}
-        onResolveMergeConflict={onResolveMergeConflict}
-        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-        row={displayRow}
-        rowIndex={location.rowIndex}
-      />
-    );
-  } else {
-    content = <DiffMergePlaceholderRow mergeRender$={mergeRender$} />;
-  }
-  return content;
+    const location = mergeItemIndexAllocator.locationByItemIndex.get(itemIndex);
+    const renderFile = useValue(() => location ? mergeFileRenderByPath$[location.filePath].get() : undefined);
+    let content: ReactElement;
+    if (location && renderFile) {
+        const { controlRowByBlockKey, file, horizontalConfigId, model } = renderFile;
+        const displayRow = model.rows[location.rowIndex];
+        const controlBlock = displayRow?.conflictBlock
+            && controlRowByBlockKey.get(getMergeConflictKey(file, displayRow.conflictBlock)) === location.rowIndex
+            ? displayRow.conflictBlock
+            : null;
+        content = (<DiffMergeLineRow controlBlock={controlBlock} file={file} horizontalConfigId={horizontalConfigId} mergeRender$={mergeRender$} mergeSyntaxByPath$={mergeSyntaxByPath$} onResolveMergeConflict={onResolveMergeConflict} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$} row={displayRow} rowIndex={location.rowIndex}/>);
+    }
+    else {
+        content = <DiffMergePlaceholderRow mergeRender$={mergeRender$}/>;
+    }
+    return content;
 }
-
-function useDiffInlineMergeModel({
-  collapsedFileIndexes,
-  documentId,
-  files,
-  horizontalConfigId,
-  mergeState,
-  onResolveMergeConflict,
-  resolvingMergeConflictKeys$,
-  rowHeight,
-  showOnlyHunks,
-  sideBySideFileHeaderByListIndex,
-  sideBySideDataSource,
-  syntaxHighlightingEnabled,
-  syntaxThemeName,
-  unifiedItemIndexes,
-  viewMode,
-}: {
-  collapsedFileIndexes: ReadonlySet<number>;
-  documentId: number;
-  files: readonly DiffFileSummary[];
-  horizontalConfigId: string;
-  mergeState: DiffMergeState;
-  onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
-  resolvingMergeConflictKeys$: Observable<Set<string>>;
-  rowHeight: number;
-  showOnlyHunks: boolean;
-  sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
-  sideBySideDataSource: DiffSideBySideDataSource | null;
-  syntaxHighlightingEnabled: boolean;
-  syntaxThemeName: string;
-  unifiedItemIndexes: Array<number | undefined>;
-  viewMode: ReturnType<typeof getDiffViewModeSetting>;
+function useDiffInlineMergeModel({ collapsedFileIndexes, documentId, files, horizontalConfigId, mergeState, onResolveMergeConflict, resolvingMergeConflictKeys$, rowHeight, showOnlyHunks, sideBySideFileHeaderByListIndex, sideBySideDataSource, syntaxHighlightingEnabled, syntaxThemeName, unifiedItemIndexes, viewMode, }: {
+    collapsedFileIndexes: ReadonlySet<number>;
+    documentId: number;
+    files: readonly DiffFileSummary[];
+    horizontalConfigId: string;
+    mergeState: DiffMergeState;
+    onResolveMergeConflict: (file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => void;
+    resolvingMergeConflictKeys$: Observable<Set<string>>;
+    rowHeight: number;
+    showOnlyHunks: boolean;
+    sideBySideFileHeaderByListIndex: Map<number, DiffSideBySideFileHeader>;
+    sideBySideDataSource: DiffSideBySideDataSource | null;
+    syntaxHighlightingEnabled: boolean;
+    syntaxThemeName: string;
+    unifiedItemIndexes: Array<number | undefined>;
+    viewMode: ReturnType<typeof getDiffViewModeSetting>;
 }) {
-  const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
-  const mergeRenderInitialState = useMemo(() => createDiffMergeRenderState(), []);
-  const mergeRender$ = useObservable(mergeRenderInitialState) as unknown as Observable<DiffMergeRenderState>;
-  const mergeDisplayModelByPath = useMemo(() => {
-    const map = new Map<string, DiffMergeDisplayModel>();
-    if (mergeState.status === "ready") {
-      for (const file of mergeState.files) {
-        const fullModel = getFullMergeDisplayModel(file);
-        map.set(
-          file.path,
-          showOnlyHunks
-            ? createDiffMergeHunkDisplayModel(fullModel.rows, fullModel.conflictRanges)
-            : fullModel,
-        );
-      }
-    }
-    return map;
-  }, [mergeState, showOnlyHunks]);
-  const dataVersion = useMemo(() => {
-    if (mergeState.status !== "ready" || mergeState.files.length === 0) {
-      return "merge:none";
-    }
-    return `${horizontalConfigId}:` + mergeState.files.map((file) => {
-      const model = mergeDisplayModelByPath.get(file.path);
-      return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
-    }).join("|");
-  }, [horizontalConfigId, mergeDisplayModelByPath, mergeState]);
-  const mergeFileRenderByPath = useMemo(() => {
-    const map = new Map<string, DiffMergeFileRenderModel>();
-    if (mergeState.status === "ready") {
-      for (const file of mergeState.files) {
-        const model = mergeDisplayModelByPath.get(file.path);
-        if (model) {
-          map.set(file.path, {
-            controlRowByBlockKey: getMergeControlRowByBlockKey(model.conflictRanges, file),
-            file,
-            horizontalConfigId,
-            model,
-            showOnlyHunks,
-          });
+    const mergeSyntaxByPath$ = useObservable<DiffMergeSyntaxByPath>({});
+    const mergeRenderInitialState = useMemo(() => createDiffMergeRenderState(), []);
+    const mergeRender$ = useObservable(mergeRenderInitialState) as unknown as Observable<DiffMergeRenderState>;
+    const mergeDisplayModelByPath = useMemo(() => {
+        const map = new Map<string, DiffMergeDisplayModel>();
+        if (mergeState.status === "ready") {
+            for (const file of mergeState.files) {
+                const fullModel = getFullMergeDisplayModel(file);
+                map.set(file.path, showOnlyHunks
+                    ? createDiffMergeHunkDisplayModel(fullModel.rows, fullModel.conflictRanges)
+                    : fullModel);
+            }
         }
-      }
+        return map;
+    }, [mergeState, showOnlyHunks]);
+    const dataVersion = useMemo(() => {
+        if (mergeState.status !== "ready" || mergeState.files.length === 0) {
+            return "merge:none";
+        }
+        return `${horizontalConfigId}:` + mergeState.files.map((file) => {
+            const model = mergeDisplayModelByPath.get(file.path);
+            return `${file.path}:${file.displayRows.length}:${file.markerBlocks.length}:${file.hasUnsavedDraft ? "draft" : "saved"}:${model?.rows.length ?? 0}`;
+        }).join("|");
+    }, [horizontalConfigId, mergeDisplayModelByPath, mergeState]);
+    const mergeFileRenderByPath = useMemo(() => {
+        const map = new Map<string, DiffMergeFileRenderModel>();
+        if (mergeState.status === "ready") {
+            for (const file of mergeState.files) {
+                const model = mergeDisplayModelByPath.get(file.path);
+                if (model) {
+                    map.set(file.path, {
+                        controlRowByBlockKey: getMergeControlRowByBlockKey(model.conflictRanges, file),
+                        file,
+                        horizontalConfigId,
+                        model,
+                        showOnlyHunks,
+                    });
+                }
+            }
+        }
+        return map;
+    }, [horizontalConfigId, mergeDisplayModelByPath, mergeState, showOnlyHunks]);
+    // Allocation identity belongs to the document, including across edits and collapse changes.
+    let [mergeDocumentSession, setMergeDocumentSession] = useState(() => ({
+        allocator: createDiffInlineMergeItemIndexAllocator(),
+        documentId,
+    }));
+    if (mergeDocumentSession.documentId !== documentId) {
+        mergeDocumentSession = {
+            allocator: createDiffInlineMergeItemIndexAllocator(),
+            documentId,
+        };
+        setMergeDocumentSession(mergeDocumentSession);
     }
-    return map;
-  }, [horizontalConfigId, mergeDisplayModelByPath, mergeState, showOnlyHunks]);
-
-  // Allocation identity belongs to the document, including across edits and collapse changes.
-  let [mergeDocumentSession, setMergeDocumentSession] = useState(() => ({
-    allocator: createDiffInlineMergeItemIndexAllocator(),
-    documentId,
-  }));
-  if (mergeDocumentSession.documentId !== documentId) {
-    mergeDocumentSession = {
-      allocator: createDiffInlineMergeItemIndexAllocator(),
-      documentId,
+    const mergeItemIndexAllocator = mergeDocumentSession.allocator;
+    const getMergeItemIndex = mergeItemIndexAllocator.getItemIndex;
+    const emptyMergeFileByPath = useMemo(() => new Map<string, DiffMergeConflictFile>(), []);
+    const mergeFileByPath = mergeState.status === "ready" ? mergeState.fileByPath : emptyMergeFileByPath;
+    const sideBySideMergeItems = useMemo(() => {
+        const itemIndexesByFileIndex = new Map<number, readonly number[]>();
+        const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
+        if (viewMode !== "unified") {
+            for (const file of files) {
+                const mergeFile = getMergeFileForDiffFile(mergeFileByPath, file);
+                if (mergeFile) {
+                    itemIndexesByFileIndex.set(file.index, createInlineRowsForFile({
+                        file: mergeFile,
+                        getMergeItemIndex,
+                        model: mergeDisplayModelByPath.get(mergeFile.path),
+                        rowByItemIndex,
+                        sourceFileIndex: file.index,
+                        sourceRowIndex: file.rowStart,
+                    }));
+                }
+            }
+        }
+        return { itemIndexesByFileIndex, rowByItemIndex };
+    }, [files, getMergeItemIndex, mergeDisplayModelByPath, mergeFileByPath, viewMode]);
+    let [sideBySideSession, setSideBySideSession] = useState(() => ({
+        base: sideBySideDataSource,
+        source: sideBySideDataSource
+            ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
+            : null,
+    }));
+    if (sideBySideSession.base !== sideBySideDataSource) {
+        sideBySideSession = {
+            base: sideBySideDataSource,
+            source: sideBySideDataSource
+                ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
+                : null,
+        };
+        setSideBySideSession(sideBySideSession);
+    }
+    const sideBySideInlineDataSource = sideBySideSession.source;
+    useEffect(() => () => {
+        sideBySideInlineDataSource?.dispose();
+    }, [sideBySideInlineDataSource]);
+    useLayoutEffect(() => {
+        sideBySideInlineDataSource?.update(files, sideBySideMergeItems.itemIndexesByFileIndex);
+    }, [files, sideBySideInlineDataSource, sideBySideMergeItems.itemIndexesByFileIndex]);
+    const unifiedInlineList = useMemo(() => createDiffInlineMergeList({
+        collapsedFileIndexes,
+        files,
+        getMergeItemIndex,
+        mergeDisplayModelByPath,
+        mergeFileByPath,
+        sideBySideFileHeaderByListIndex,
+        sideBySideItemIndexes: emptyDiffItemIndexes,
+        unifiedItemIndexes,
+        viewMode: "unified",
+    }), [
+        collapsedFileIndexes,
+        files,
+        getMergeItemIndex,
+        mergeDisplayModelByPath,
+        mergeFileByPath,
+        sideBySideFileHeaderByListIndex,
+        unifiedItemIndexes,
+    ]);
+    let [unifiedSession, setUnifiedSession] = useState(() => ({
+        documentId,
+        source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
+    }));
+    if (unifiedSession.documentId !== documentId) {
+        unifiedSession = {
+            documentId,
+            source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
+        };
+        setUnifiedSession(unifiedSession);
+    }
+    const unifiedDataSource = unifiedSession.source;
+    useLayoutEffect(() => {
+        unifiedDataSource.update(unifiedInlineList.itemIndexes);
+    }, [unifiedDataSource, unifiedInlineList.itemIndexes]);
+    const inlineList = useMemo(() => viewMode === "unified"
+        ? unifiedInlineList
+        : {
+            itemIndexes: emptyDiffItemIndexes,
+            listIndexByFileIndex: new Map<number, number>(),
+            rowByItemIndex: new Map<number, DiffInlineMergeRow>(),
+            sourceRowByItemIndex: new Map<number, number>(),
+        }, [unifiedInlineList, viewMode]);
+    const listIndexByFileIndex = useMemo(() => {
+        if (!sideBySideDataSource || viewMode === "unified") {
+            return inlineList.listIndexByFileIndex;
+        }
+        const indexes = new Map<number, number>();
+        let outputOffset = 0;
+        for (let fileOrdinal = 0; fileOrdinal < files.length; fileOrdinal += 1) {
+            const file = files[fileOrdinal];
+            const location = sideBySideDataSource.getFileLocation(file.index);
+            if (location.listIndex >= 0) {
+                indexes.set(file.index, location.listIndex + outputOffset);
+                const mergeItems = sideBySideMergeItems.itemIndexesByFileIndex.get(file.index);
+                if (!location.collapsed && mergeItems) {
+                    const nextFile = files[fileOrdinal + 1];
+                    const nextLocation = nextFile ? sideBySideDataSource.getFileLocation(nextFile.index) : null;
+                    const baseCount = (nextLocation && nextLocation.listIndex >= 0 ? nextLocation.listIndex : sideBySideDataSource.getLength()) - location.listIndex;
+                    outputOffset += 1 + mergeItems.length - baseCount;
+                }
+            }
+        }
+        return indexes;
+    }, [
+        files,
+        inlineList.listIndexByFileIndex,
+        sideBySideDataSource,
+        sideBySideMergeItems.itemIndexesByFileIndex,
+        viewMode,
+    ]);
+    const mergeFileRenderByPath$ = useObservable<DiffMergeFileRenderByPath>(() => Object.fromEntries([...mergeFileRenderByPath].map(([path, model]) => [path, ObservableHint.opaque(model)])));
+    useLayoutEffect(() => {
+        const previous = mergeFileRenderByPath$.peek();
+        batch(() => {
+            for (const path of Object.keys(previous)) {
+                if (!mergeFileRenderByPath.has(path))
+                    mergeFileRenderByPath$[path].delete();
+            }
+            for (const [path, model] of mergeFileRenderByPath) {
+                const old = previous[path];
+                if (!old || old.file !== model.file || old.horizontalConfigId !== model.horizontalConfigId || old.showOnlyHunks !== model.showOnlyHunks) {
+                    mergeFileRenderByPath$[path].set(ObservableHint.opaque(model));
+                }
+            }
+        });
+    }, [mergeFileRenderByPath, mergeFileRenderByPath$]);
+    const activeRowByItemIndex = viewMode === "unified"
+        ? inlineList.rowByItemIndex
+        : sideBySideMergeItems.rowByItemIndex;
+    const getInlineMergeRow = useCallback((index: number) => activeRowByItemIndex.get(index), [activeRowByItemIndex]);
+    const getDocumentIndex = useCallback((index: number) => {
+        const mergeRow = activeRowByItemIndex.get(index);
+        return mergeRow?.sourceRowIndex ?? inlineList.sourceRowByItemIndex.get(index) ?? index;
+    }, [activeRowByItemIndex, inlineList.sourceRowByItemIndex]);
+    const getSideBySideDocumentIndex = useCallback((_index: number, listIndex: number) => (sideBySideInlineDataSource?.getBaseRange(listIndex, 1).start ?? listIndex), [sideBySideInlineDataSource]);
+    const getItemSize = useCallback((index: number, getNormalItemSize: (index: number) => number) => {
+        const mergeRow = activeRowByItemIndex.get(index);
+        return mergeRow
+            ? rowHeight + (mergeRow.row.hunkHeader ? diffHunkHeaderHeight : 0)
+            : getNormalItemSize(index);
+    }, [activeRowByItemIndex, rowHeight]);
+    const getItemType = useCallback((index: number, getNormalItemType: (index: number) => string) => (activeRowByItemIndex.has(index) ? "merge-line" : getNormalItemType(index)), [activeRowByItemIndex]);
+    const renderMergeRow = useCallback(({ index }: VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>) => {
+        return (<DiffMergeObservableLineRow itemIndex={index} mergeFileRenderByPath$={mergeFileRenderByPath$} mergeItemIndexAllocator={mergeItemIndexAllocator} mergeRender$={mergeRender$} mergeSyntaxByPath$={mergeSyntaxByPath$} onResolveMergeConflict={onResolveMergeConflict} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>);
+    }, [
+        mergeFileRenderByPath$,
+        mergeItemIndexAllocator,
+        mergeRender$,
+        mergeSyntaxByPath$,
+        onResolveMergeConflict,
+        resolvingMergeConflictKeys$,
+    ]);
+    useEffect(() => {
+        if (mergeState.status !== "ready" || !syntaxHighlightingEnabled || mergeState.files.length === 0) {
+            mergeSyntaxByPath$.set({});
+            return;
+        }
+        let cancelled = false;
+        const filesToHighlight = mergeState.files.filter((file) => (mergeDisplayModelByPath.get(file.path)?.rows.length ?? 0) > 0);
+        ensureTreeGrammarsForPaths(filesToHighlight.map((file) => file.path))
+            .then(() => Promise.all(filesToHighlight.map(async (file) => {
+            const model = mergeDisplayModelByPath.get(file.path);
+            const language = detectGrammar(file.path);
+            const leftSource = model?.rows.map((row) => row.leftText).join("\n") ?? "";
+            const rightSource = model?.rows.map((row) => row.rightText).join("\n") ?? "";
+            const [leftResult, rightResult] = await Promise.all([
+                highlightTreeString(leftSource, language, syntaxThemeName),
+                highlightTreeString(rightSource, language, syntaxThemeName),
+            ]);
+            return { file, leftResult, rightResult };
+        })))
+            .then((results) => {
+            if (!cancelled) {
+                const nextSyntaxByPath: DiffMergeSyntaxByPath = {};
+                results.forEach(({ file, leftResult, rightResult }) => {
+                    const styles = [...leftResult.styles, ...rightResult.styles];
+                    const syntaxKey = `${dataVersion}:${file.path}:${syntaxThemeName}`;
+                    nextSyntaxByPath[file.path] = {
+                        configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
+                        key: syntaxKey,
+                        leftLines: leftResult.lines,
+                        rightLines: rightResult.lines,
+                        tokenStyleById: createMergeSyntaxStyleMap(styles),
+                    };
+                });
+                mergeSyntaxByPath$.set(nextSyntaxByPath);
+            }
+        }).catch((error: unknown) => {
+            if (!cancelled) {
+                console.error(error instanceof Error ? error.message : String(error));
+                mergeSyntaxByPath$.set({});
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        dataVersion,
+        mergeDisplayModelByPath,
+        mergeState,
+        mergeSyntaxByPath$,
+        syntaxHighlightingEnabled,
+        syntaxThemeName,
+    ]);
+    const emptyMessage = mergeState.status === "loading"
+        ? "Checking merge conflicts..."
+        : mergeState.status === "error"
+            ? mergeState.message
+            : mergeState.status === "ready"
+                ? "No unresolved marker blocks in this file."
+                : mergeState.reason;
+    return {
+        dataVersion,
+        emptyMessage,
+        getDocumentIndex,
+        getInlineMergeRow,
+        getItemSize,
+        getItemType,
+        getSideBySideDocumentIndex,
+        sideBySideDataSource: sideBySideInlineDataSource,
+        unifiedDataSource,
+        listIndexByFileIndex,
+        renderMergeRow,
     };
-    setMergeDocumentSession(mergeDocumentSession);
-  }
-  const mergeItemIndexAllocator = mergeDocumentSession.allocator;
-  const getMergeItemIndex = mergeItemIndexAllocator.getItemIndex;
-
-  const emptyMergeFileByPath = useMemo(() => new Map<string, DiffMergeConflictFile>(), []);
-  const mergeFileByPath = mergeState.status === "ready" ? mergeState.fileByPath : emptyMergeFileByPath;
-  const sideBySideMergeItems = useMemo(() => {
-    const itemIndexesByFileIndex = new Map<number, readonly number[]>();
-    const rowByItemIndex = new Map<number, DiffInlineMergeRow>();
-    if (viewMode !== "unified") {
-      for (const file of files) {
-        const mergeFile = getMergeFileForDiffFile(mergeFileByPath, file);
-        if (mergeFile) {
-          itemIndexesByFileIndex.set(file.index, createInlineRowsForFile({
-            file: mergeFile,
-            getMergeItemIndex,
-            model: mergeDisplayModelByPath.get(mergeFile.path),
-            rowByItemIndex,
-            sourceFileIndex: file.index,
-            sourceRowIndex: file.rowStart,
-          }));
-        }
-      }
-    }
-    return { itemIndexesByFileIndex, rowByItemIndex };
-  }, [files, getMergeItemIndex, mergeDisplayModelByPath, mergeFileByPath, viewMode]);
-  let [sideBySideSession, setSideBySideSession] = useState(() => ({
-    base: sideBySideDataSource,
-    source: sideBySideDataSource
-      ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
-      : null,
-  }));
-  if (sideBySideSession.base !== sideBySideDataSource) {
-    sideBySideSession = {
-      base: sideBySideDataSource,
-      source: sideBySideDataSource
-        ? new DiffSideBySideInlineMergeDataSource(sideBySideDataSource, files, sideBySideMergeItems.itemIndexesByFileIndex)
-        : null,
-    };
-    setSideBySideSession(sideBySideSession);
-  }
-  const sideBySideInlineDataSource = sideBySideSession.source;
-  useEffect(() => () => {
-    sideBySideInlineDataSource?.dispose();
-  }, [sideBySideInlineDataSource]);
-  useLayoutEffect(() => {
-    sideBySideInlineDataSource?.update(files, sideBySideMergeItems.itemIndexesByFileIndex);
-  }, [files, sideBySideInlineDataSource, sideBySideMergeItems.itemIndexesByFileIndex]);
-  const unifiedInlineList = useMemo(
-    () => createDiffInlineMergeList({
-      collapsedFileIndexes,
-      files,
-      getMergeItemIndex,
-      mergeDisplayModelByPath,
-      mergeFileByPath,
-      sideBySideFileHeaderByListIndex,
-      sideBySideItemIndexes: emptyDiffItemIndexes,
-      unifiedItemIndexes,
-      viewMode: "unified",
-    }),
-    [
-      collapsedFileIndexes,
-      files,
-      getMergeItemIndex,
-      mergeDisplayModelByPath,
-      mergeFileByPath,
-      sideBySideFileHeaderByListIndex,
-      unifiedItemIndexes,
-    ],
-  );
-  let [unifiedSession, setUnifiedSession] = useState(() => ({
-    documentId,
-    source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
-  }));
-  if (unifiedSession.documentId !== documentId) {
-    unifiedSession = {
-      documentId,
-      source: new DiffUnifiedInlineMergeDataSource(unifiedInlineList.itemIndexes),
-    };
-    setUnifiedSession(unifiedSession);
-  }
-  const unifiedDataSource = unifiedSession.source;
-  useLayoutEffect(() => {
-    unifiedDataSource.update(unifiedInlineList.itemIndexes);
-  }, [unifiedDataSource, unifiedInlineList.itemIndexes]);
-  const inlineList = useMemo(
-    () => viewMode === "unified"
-      ? unifiedInlineList
-      : {
-          itemIndexes: emptyDiffItemIndexes,
-          listIndexByFileIndex: new Map<number, number>(),
-          rowByItemIndex: new Map<number, DiffInlineMergeRow>(),
-          sourceRowByItemIndex: new Map<number, number>(),
-        },
-    [unifiedInlineList, viewMode],
-  );
-  const listIndexByFileIndex = useMemo(() => {
-    if (!sideBySideDataSource || viewMode === "unified") {
-      return inlineList.listIndexByFileIndex;
-    }
-    const indexes = new Map<number, number>();
-    let outputOffset = 0;
-    for (let fileOrdinal = 0; fileOrdinal < files.length; fileOrdinal += 1) {
-      const file = files[fileOrdinal];
-      const location = sideBySideDataSource.getFileLocation(file.index);
-      if (location.listIndex >= 0) {
-        indexes.set(file.index, location.listIndex + outputOffset);
-        const mergeItems = sideBySideMergeItems.itemIndexesByFileIndex.get(file.index);
-        if (!location.collapsed && mergeItems) {
-          const nextFile = files[fileOrdinal + 1];
-          const nextLocation = nextFile ? sideBySideDataSource.getFileLocation(nextFile.index) : null;
-          const baseCount = (nextLocation && nextLocation.listIndex >= 0 ? nextLocation.listIndex : sideBySideDataSource.getLength()) - location.listIndex;
-          outputOffset += 1 + mergeItems.length - baseCount;
-        }
-      }
-    }
-    return indexes;
-  }, [
-    files,
-    inlineList.listIndexByFileIndex,
-    sideBySideDataSource,
-    sideBySideMergeItems.itemIndexesByFileIndex,
-    viewMode,
-  ]);
-
-  const mergeFileRenderByPath$ = useObservable<DiffMergeFileRenderByPath>(() =>
-    Object.fromEntries([...mergeFileRenderByPath].map(([path, model]) => [path, ObservableHint.opaque(model)])),
-  );
-  useLayoutEffect(() => {
-    const previous = mergeFileRenderByPath$.peek();
-    batch(() => {
-      for (const path of Object.keys(previous)) {
-        if (!mergeFileRenderByPath.has(path)) mergeFileRenderByPath$[path].delete();
-      }
-      for (const [path, model] of mergeFileRenderByPath) {
-        const old = previous[path];
-        if (!old || old.file !== model.file || old.horizontalConfigId !== model.horizontalConfigId || old.showOnlyHunks !== model.showOnlyHunks) {
-          mergeFileRenderByPath$[path].set(ObservableHint.opaque(model));
-        }
-      }
-    });
-  }, [mergeFileRenderByPath, mergeFileRenderByPath$]);
-
-  const activeRowByItemIndex = viewMode === "unified"
-    ? inlineList.rowByItemIndex
-    : sideBySideMergeItems.rowByItemIndex;
-  const getInlineMergeRow = useCallback((index: number) => activeRowByItemIndex.get(index), [activeRowByItemIndex]);
-  const getDocumentIndex = useCallback((index: number) => {
-    const mergeRow = activeRowByItemIndex.get(index);
-    return mergeRow?.sourceRowIndex ?? inlineList.sourceRowByItemIndex.get(index) ?? index;
-  }, [activeRowByItemIndex, inlineList.sourceRowByItemIndex]);
-  const getSideBySideDocumentIndex = useCallback((_index: number, listIndex: number) => (
-    sideBySideInlineDataSource?.getBaseRange(listIndex, 1).start ?? listIndex
-  ), [sideBySideInlineDataSource]);
-  const getItemSize = useCallback((index: number, getNormalItemSize: (index: number) => number) => {
-    const mergeRow = activeRowByItemIndex.get(index);
-    return mergeRow
-      ? rowHeight + (mergeRow.row.hunkHeader ? diffHunkHeaderHeight : 0)
-      : getNormalItemSize(index);
-  }, [activeRowByItemIndex, rowHeight]);
-  const getItemType = useCallback((index: number, getNormalItemType: (index: number) => string) => (
-    activeRowByItemIndex.has(index) ? "merge-line" : getNormalItemType(index)
-  ), [activeRowByItemIndex]);
-  const renderMergeRow = useCallback(
-    ({ index }: VirtualizedFixedDocumentListRenderRowProps<DiffInlineMergeRow>) => {
-      return (
-        <DiffMergeObservableLineRow
-          itemIndex={index}
-          mergeFileRenderByPath$={mergeFileRenderByPath$}
-          mergeItemIndexAllocator={mergeItemIndexAllocator}
-          mergeRender$={mergeRender$}
-          mergeSyntaxByPath$={mergeSyntaxByPath$}
-          onResolveMergeConflict={onResolveMergeConflict}
-          resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-        />
-      );
-    },
-    [
-      mergeFileRenderByPath$,
-      mergeItemIndexAllocator,
-      mergeRender$,
-      mergeSyntaxByPath$,
-      onResolveMergeConflict,
-      resolvingMergeConflictKeys$,
-    ],
-  );
-
-  useEffect(() => {
-    if (mergeState.status !== "ready" || !syntaxHighlightingEnabled || mergeState.files.length === 0) {
-      mergeSyntaxByPath$.set({});
-      return;
-    }
-
-    let cancelled = false;
-    const filesToHighlight = mergeState.files.filter((file) => (mergeDisplayModelByPath.get(file.path)?.rows.length ?? 0) > 0);
-    ensureTreeGrammarsForPaths(filesToHighlight.map((file) => file.path))
-      .then(() => Promise.all(filesToHighlight.map(async (file) => {
-        const model = mergeDisplayModelByPath.get(file.path);
-        const language = detectGrammar(file.path);
-        const leftSource = model?.rows.map((row) => row.leftText).join("\n") ?? "";
-        const rightSource = model?.rows.map((row) => row.rightText).join("\n") ?? "";
-        const [leftResult, rightResult] = await Promise.all([
-          highlightTreeString(leftSource, language, syntaxThemeName),
-          highlightTreeString(rightSource, language, syntaxThemeName),
-        ]);
-        return { file, leftResult, rightResult };
-      })))
-      .then((results) => {
-        if (!cancelled) {
-          const nextSyntaxByPath: DiffMergeSyntaxByPath = {};
-          results.forEach(({ file, leftResult, rightResult }) => {
-            const styles = [...leftResult.styles, ...rightResult.styles];
-            const syntaxKey = `${dataVersion}:${file.path}:${syntaxThemeName}`;
-            nextSyntaxByPath[file.path] = {
-              configVersion: hashDiffNativeRowConfigVersion([syntaxKey, styles.length]),
-              key: syntaxKey,
-              leftLines: leftResult.lines,
-              rightLines: rightResult.lines,
-              tokenStyleById: createMergeSyntaxStyleMap(styles),
-            };
-          });
-          mergeSyntaxByPath$.set(nextSyntaxByPath);
-        }
-      }).catch((error: unknown) => {
-        if (!cancelled) {
-          console.error(error instanceof Error ? error.message : String(error));
-          mergeSyntaxByPath$.set({});
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    dataVersion,
-    mergeDisplayModelByPath,
-    mergeState,
-    mergeSyntaxByPath$,
-    syntaxHighlightingEnabled,
-    syntaxThemeName,
-  ]);
-
-  const emptyMessage = mergeState.status === "loading"
-    ? "Checking merge conflicts..."
-    : mergeState.status === "error"
-      ? mergeState.message
-      : mergeState.status === "ready"
-        ? "No unresolved marker blocks in this file."
-        : mergeState.reason;
-
-  return {
-    dataVersion,
-    emptyMessage,
-    getDocumentIndex,
-    getInlineMergeRow,
-    getItemSize,
-    getItemType,
-    getSideBySideDocumentIndex,
-    sideBySideDataSource: sideBySideInlineDataSource,
-    unifiedDataSource,
-    listIndexByFileIndex,
-    renderMergeRow,
-  };
 }
-
-function DiffDropSurface({
-  backgroundColor,
-  borderColor,
-  children,
-  foregroundColor,
-  mutedColor,
-  onDropDiff,
-  syntaxAppearance,
-}: {
-  backgroundColor: string;
-  borderColor: string;
-  children: ReactNode;
-  foregroundColor: string;
-  mutedColor: string;
-  onDropDiff: (event: DragDropFileEvent) => void;
-  syntaxAppearance: "dark" | "light";
+function DiffDropSurface({ backgroundColor, borderColor, children, foregroundColor, mutedColor, onDropDiff, syntaxAppearance, }: {
+    backgroundColor: string;
+    borderColor: string;
+    children: ReactNode;
+    foregroundColor: string;
+    mutedColor: string;
+    onDropDiff: (event: DropEvent) => void;
+    syntaxAppearance: "dark" | "light";
 }) {
-  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
-  const handleDragEnter = useCallback(() => {
-    setIsDropTargetActive(true);
-  }, []);
-  const handleDragLeave = useCallback(() => {
-    setIsDropTargetActive(false);
-  }, []);
-  const handleDrop = useCallback(({ nativeEvent }: { nativeEvent: DragDropFileEvent }) => {
-    setIsDropTargetActive(false);
-    onDropDiff(nativeEvent);
-  }, [onDropDiff]);
-
-  return (
-    <DragDropView
-      allowedFileTypes={diffDropAllowedFileTypes}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      style={[styles.root, { backgroundColor }]}
-    >
+    const [isDropTargetActive, setIsDropTargetActive] = useState(false);
+    const handleDragEnter = useCallback(() => {
+        setIsDropTargetActive(true);
+    }, []);
+    const handleDragLeave = useCallback(() => {
+        setIsDropTargetActive(false);
+    }, []);
+    const handleDrop = useCallback((event: DropEvent) => {
+        setIsDropTargetActive(false);
+        onDropDiff(event);
+    }, [onDropDiff]);
+    return (<DragDropView acceptedTypes={["files", "urls", "text"]} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={handleDrop} style={[styles.root, { backgroundColor }]}>
       {children}
-      {isDropTargetActive ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.dropOverlay,
-            {
-              backgroundColor: syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.14)" : "rgba(9, 105, 218, 0.12)",
-              borderColor,
-            },
-          ]}
-        >
+      {isDropTargetActive ? (<View pointerEvents="none" style={[
+                styles.dropOverlay,
+                {
+                    backgroundColor: syntaxAppearance === "dark" ? "rgba(88, 166, 255, 0.14)" : "rgba(9, 105, 218, 0.12)",
+                    borderColor,
+                },
+            ]}>
           <Text style={[styles.dropOverlayTitle, { color: foregroundColor }]}>
             Open Diff
           </Text>
           <Text style={[styles.dropOverlayText, { color: mutedColor }]}>
             Drop a folder, .diff file, or two files
           </Text>
-        </View>
-      ) : null}
-    </DragDropView>
-  );
+        </View>) : null}
+    </DragDropView>);
 }
-
 function formatStatNumber(value: number) {
-  return diffStatNumberFormatter.format(Math.max(0, Math.floor(value)));
+    return diffStatNumberFormatter.format(Math.max(0, Math.floor(value)));
 }
-
 function formatStatTime(value: number) {
-  return `${Math.max(0, value).toFixed(1)} ms`;
+    return `${Math.max(0, value).toFixed(1)} ms`;
 }
-
-function DiffStatisticsPanel({
-  borderColor,
-  foregroundColor,
-  mutedColor,
-  syntaxAppearance,
-}: {
-  borderColor: string;
-  foregroundColor: string;
-  mutedColor: string;
-  syntaxAppearance: "dark" | "light";
+function DiffStatisticsPanel({ borderColor, foregroundColor, mutedColor, syntaxAppearance, }: {
+    borderColor: string;
+    foregroundColor: string;
+    mutedColor: string;
+    syntaxAppearance: "dark" | "light";
 }) {
-  const showStatisticsPanel = useDiffShowStatisticsPanelSetting();
-  const {
-    loadStatistics$,
-    state$,
-  } = useDiffViewerModel();
-  const state = useValue(state$);
-  const statistics = useValue(loadStatistics$);
-
-  if (!showStatisticsPanel || state.status !== "loaded" || !statistics) {
-    return null;
-  }
-
-  const rows = state.document.rowCount;
-  const files = state.files.length;
-  const loadComplete = state.loadComplete !== false;
-  const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.statisticsPanel,
-        {
-          backgroundColor: panelBackgroundColor,
-          borderColor,
-        },
-      ]}
-    >
+    const showStatisticsPanel = useDiffShowStatisticsPanelSetting();
+    const { loadStatistics$, state$, } = useDiffViewerModel();
+    const state = useValue(state$);
+    const statistics = useValue(loadStatistics$);
+    if (!showStatisticsPanel || state.status !== "loaded" || !statistics) {
+        return null;
+    }
+    const rows = state.document.rowCount;
+    const files = state.files.length;
+    const loadComplete = state.loadComplete !== false;
+    const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
+    return (<View pointerEvents="none" style={[
+            styles.statisticsPanel,
+            {
+                backgroundColor: panelBackgroundColor,
+                borderColor,
+            },
+        ]}>
       <Text style={[styles.statisticsTitle, { color: foregroundColor }]}>
         Statistics
       </Text>
       <View style={styles.statisticsRows}>
-        {statistics.downloadMs > 0 ? (
-          <View style={styles.statisticsRow}>
+        {statistics.downloadMs > 0 ? (<View style={styles.statisticsRow}>
             <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Download</Text>
             <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatTime(statistics.downloadMs)}</Text>
-          </View>
-        ) : null}
+          </View>) : null}
         <View style={styles.statisticsRow}>
           <Text style={[styles.statisticsLabel, { color: mutedColor }]}>Initial UI paint</Text>
           <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{formatStatTime(statistics.firstPaintMs)}</Text>
@@ -2779,87 +1764,55 @@ function DiffStatisticsPanel({
           <Text style={[styles.statisticsValue, { color: foregroundColor }]}>{loadComplete ? "Complete" : "Loading"}</Text>
         </View>
       </View>
-    </View>
-  );
+    </View>);
 }
-
-function DiffSearchStatusPanel({
-  borderColor,
-  foregroundColor,
-  mutedColor,
-  syntaxAppearance,
-}: {
-  borderColor: string;
-  foregroundColor: string;
-  mutedColor: string;
-  syntaxAppearance: "dark" | "light";
+function DiffSearchStatusPanel({ borderColor, foregroundColor, mutedColor, syntaxAppearance, }: {
+    borderColor: string;
+    foregroundColor: string;
+    mutedColor: string;
+    syntaxAppearance: "dark" | "light";
 }) {
-  const { searchQuery$, searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
-  const query = parseDiffSearchQuery(useValue(searchQuery$));
-  const resultCount = useValue(() => searchResults$.get().length);
-  const activeResultIndex = useValue(activeSearchResultIndex$);
-  if (!query.term) {
-    return null;
-  }
-
-  const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
-  const label = query.mode === "file" ? "Files" : "Matches";
-  const summary = resultCount > 0
-    ? `${Math.min(activeResultIndex + 1, resultCount)} of ${resultCount}`
-    : "No results";
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.searchStatusPanel,
-        {
-          backgroundColor: panelBackgroundColor,
-          borderColor,
-        },
-      ]}
-    >
+    const { searchQuery$, searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
+    const query = parseDiffSearchQuery(useValue(searchQuery$));
+    const resultCount = useValue(() => searchResults$.get().length);
+    const activeResultIndex = useValue(activeSearchResultIndex$);
+    if (!query.term) {
+        return null;
+    }
+    const panelBackgroundColor = syntaxAppearance === "dark" ? "rgba(16, 20, 26, 0.92)" : "rgba(255, 255, 255, 0.94)";
+    const label = query.mode === "file" ? "Files" : "Matches";
+    const summary = resultCount > 0
+        ? `${Math.min(activeResultIndex + 1, resultCount)} of ${resultCount}`
+        : "No results";
+    return (<View pointerEvents="none" style={[
+            styles.searchStatusPanel,
+            {
+                backgroundColor: panelBackgroundColor,
+                borderColor,
+            },
+        ]}>
       <Text style={[styles.searchStatusLabel, { color: mutedColor }]}>{label}</Text>
       <Text style={[styles.searchStatusValue, { color: foregroundColor }]}>{summary}</Text>
-    </View>
-  );
+    </View>);
 }
-
-function DiffCompareRefPrompt({
-  backgroundColor,
-  borderColor,
-  foregroundColor,
-  mutedColor,
-  onCancel,
-  onSubmit,
-}: {
-  backgroundColor: string;
-  borderColor: string;
-  foregroundColor: string;
-  mutedColor: string;
-  onCancel: () => void;
-  onSubmit: () => void;
+function DiffCompareRefPrompt({ backgroundColor, borderColor, foregroundColor, mutedColor, onCancel, onSubmit, }: {
+    backgroundColor: string;
+    borderColor: string;
+    foregroundColor: string;
+    mutedColor: string;
+    onCancel: () => void;
+    onSubmit: () => void;
 }) {
-  const { compareRefPromptVisible$, compareRefInput$ } = useDiffViewerModel();
-  const visible = useValue(compareRefPromptVisible$);
-  const value = useValue(compareRefInput$);
-  if (!visible) return null;
-  return (
-    <View style={styles.compareRefPromptOverlay}>
-      <Pressable accessibilityLabel="Cancel compare ref" onPress={onCancel} style={StyleSheet.absoluteFill} />
+    const { compareRefPromptVisible$, compareRefInput$ } = useDiffViewerModel();
+    const visible = useValue(compareRefPromptVisible$);
+    const value = useValue(compareRefInput$);
+    if (!visible)
+        return null;
+    return (<View style={styles.compareRefPromptOverlay}>
+      <Pressable accessibilityLabel="Cancel compare ref" onPress={onCancel} style={StyleSheet.absoluteFill}/>
       <View style={[styles.compareRefPrompt, { backgroundColor, borderColor }]}>
         <Text style={[styles.compareRefPromptTitle, { color: foregroundColor }]}>Compare Against</Text>
-        <TextInput
-          autoFocus
-          onChangeText={compareRefInput$.set}
-          onSubmitEditing={onSubmit}
-          placeholder="Branch, tag, commit, or ref"
-          placeholderTextColor={mutedColor}
-          returnKeyType="go"
-          selectionColor={foregroundColor}
-          style={[styles.compareRefPromptInput, { borderColor, color: foregroundColor }]}
-          value={value}
-        />
+        <TextInput autoFocus onChangeText={compareRefInput$.set} onSubmitEditing={onSubmit} placeholder="Branch, tag, commit, or ref" placeholderTextColor={mutedColor} returnKeyType="go" selectionColor={foregroundColor} style={[styles.compareRefPromptInput, { borderColor, color: foregroundColor }]} value={value}/>
         <View style={styles.compareRefPromptActions}>
           <Pressable accessibilityRole="button" onPress={onCancel} style={[styles.compareRefPromptButton, { borderColor }]}>
             <Text style={[styles.compareRefPromptButtonText, { color: foregroundColor }]}>Cancel</Text>
@@ -2869,2730 +1822,2227 @@ function DiffCompareRefPrompt({
           </Pressable>
         </View>
       </View>
-    </View>
-  );
+    </View>);
 }
-
 export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
-  const safeProps = props ?? {};
-
-  return (
-    <DiffViewerModelProvider initialSplitPaneMetrics={safeProps.initialSplitPaneMetrics}>
-      <DiffViewerWindowContent {...safeProps} />
-    </DiffViewerModelProvider>
-  );
+    const safeProps = props ?? {};
+    return (<DiffViewerModelProvider initialSplitPaneMetrics={safeProps.initialSplitPaneMetrics}>
+      <DiffViewerWindowContent {...safeProps}/>
+    </DiffViewerModelProvider>);
 }
-
 function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, source }: DiffViewerWindowProps) {
-  "use no memo";
-  // React Compiler does not yet support the async try/finally workflows in this controller.
-
-  const windowIdentifier = useWindowId();
-  const fontFamily = useDiffFontFamilySetting();
-  const fontSize = useDiffFontSizeSetting();
-  const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
-  const ignoreWhitespaceChanges = useDiffIgnoreWhitespaceChangesSetting();
-  const previousIgnoreWhitespaceChangesRef = useRef(ignoreWhitespaceChanges);
-  const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
-  const rowHeight = getDiffLineRowHeight(fontSize);
-  const showOnlyHunks = useDiffShowOnlyHunksSetting();
-  const showWhitespaceCharacters = useDiffShowWhitespaceCharactersSetting();
-  const sidebarWidth = useDiffSidebarWidthSetting();
-  const viewMode = useDiffViewModeSetting();
-  const syntaxTheme = useDiffSyntaxTheme();
-  const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
-  const nativeUnifiedRows = viewMode === "unified";
-  const nativeSideBySideRows = viewMode !== "unified";
-  const nativeDiffRows = true;
-  const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const model = useDiffViewerModel();
-  const {
-    compareRepoState$,
-    compareRefPromptVisible$,
-    compareRefInput$,
-    collapsedSidebarFolders$,
-    searchQuery$,
-    activeSearchResultIndex$,
-    searchResults$,
-    setSearchQuery,
-    activeFileIndex$,
-    collapsedFileIndexes$,
-    diffPaneHeight$,
-    documentError$,
-    loadingSource$,
-    mergeState$,
-    openError$,
-    setCollapsedFileIndexesValue,
-    setDiffPaneHeightValue,
-    setDocumentErrorValue,
-    setLoadProgressValue,
-    setLoadStatisticsValue,
-    setLoadingSourceValue,
-    setMergeStateValue,
-    setOpenErrorValue,
-    setSidebarCollapsedValue,
-    setSplitPaneMetricsValue,
-    setUrlInputErrorValue,
-    setUrlInputValue,
-    setViewerState,
-    sidebarCollapsed$,
-    splitPaneMetrics$,
-    state$,
-    urlInput$,
-    urlInputError$,
-  } = model;
-
-  const state = useValue(state$);
-  const documentError = useValue(documentError$);
-  const loadingSource = useValue(loadingSource$);
-  const mergeState = useValue(mergeState$);
-  const sidebarCollapsed = useValue(sidebarCollapsed$);
-  const collapsedFileIndexes = useValue(collapsedFileIndexes$);
-  const unsavedMergeDraftFiles = useMemo(() => getUnsavedDiffMergeDraftFiles(mergeState), [mergeState]);
-  const hasUnsavedMergeDrafts = unsavedMergeDraftFiles.length > 0;
-  const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
-  const inlineListIndexByFileIndexRef = useRef<ReadonlyMap<number, number>>(emptyDiffListIndexByFileIndex);
-  const urlInputRef = useRef<TextInput | null>(null);
-  const loadRequestIdRef = useRef(0);
-  const loadTraceRef = useRef<DiffLoadTrace | null>(null);
-  const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
-  const activeProgressiveSessionRef = useRef<DiffLoadSession | null>(null);
-  const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
-  const preserveActiveFilePathRef = useRef<string | null>(null);
-  const mergeDraftsRef = useRef(new Map<string, DiffMergeDraftFile>());
-  const mergeDraftsSourceKeyRef = useRef<string | null>(null);
-  const savingMergeDraftsRef = useRef(false);
-  const suppressFileWatcherReloadUntilRef = useRef(0);
-  const syntaxTokenizationState$ = useObservable({ ranges: "", version: 0 });
-  const resolvingMergeConflictKeys$ = useObservable<Set<string>>(new Set());
-  const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
-  const prepareMergeDraftsForTransitionRef = useRef<(reason: UnsavedDiffMergeDraftReason) => Promise<boolean>>(async () => true);
-  const sourceTransitionInFlightRef = useRef(false);
-  const setCompareRepoState = compareRepoState$.set;
-  const setCompareRefPromptVisible = compareRefPromptVisible$.set;
-  const setCompareRefInput = compareRefInput$.set;
-  const setCollapsedSidebarFolders = useCallback((next: Set<string> | ((current: Set<string>) => Set<string>)) => {
-    collapsedSidebarFolders$.set(typeof next === "function" ? next(collapsedSidebarFolders$.peek()) : next);
-  }, [collapsedSidebarFolders$]);
-  const setActiveSearchResultIndex = activeSearchResultIndex$.set;
-  const lastSubmittedSearchQueryRef = useRef("");
-
-  useEffect(() => () => {
-    loadRequestIdRef.current += 1;
-    activeProgressiveSessionRef.current?.cancel();
-    activeProgressiveSessionRef.current = null;
-
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      disposeDiffDocument(currentState.document, "viewer.unmount");
-    }
-    clearLoadedCache(loadedCacheRef.current, "viewer.unmount.cache");
-    loadTraceRef.current = null;
-    loggedTraceDocumentRef.current = null;
-    mergeDraftsRef.current = new Map();
-    mergeDraftsSourceKeyRef.current = null;
-    mergeResolveQueuesRef.current = new Map();
-    // This model belongs to the discarded window. Resetting its observables
-    // here wakes child chrome observers before their own unmount cleanup and
-    // sends toolbar updates to a native window that has already closed.
-  }, [state$]);
-
-  const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
-    const currentKeys = resolvingMergeConflictKeys$.peek();
-    if (currentKeys.has(key) !== active) {
-      const nextKeys = new Set(currentKeys);
-      if (active) {
-        nextKeys.add(key);
-      } else {
-        nextKeys.delete(key);
-      }
-      resolvingMergeConflictKeys$.set(nextKeys);
-    }
-  }, [resolvingMergeConflictKeys$]);
-
-  const waitForMergeResolveQueues = useCallback(async () => {
-    const queues = [...mergeResolveQueuesRef.current.values()];
-    if (queues.length > 0) {
-      await Promise.all(queues.map((queue) => queue.chain.catch(() => undefined)));
-    }
-  }, []);
-  const isLoading = loadingSource !== null;
-  const renderViewMode = viewMode;
-  const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
-  const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
-  const compareRepoPath = toolbarSource?.kind === "folder"
-    ? toolbarSource.value
-    : toolbarSource?.kind === "git"
-      ? toolbarSource.cwd
-      : null;
-  const compareRepoStateReady = compareRepoPath !== null &&
-    toolbarSource !== null &&
-    state.status === "loaded" &&
-    state.loadComplete !== false &&
-    sourcesMatch(state.source, toolbarSource);
-
-  useEffect(() => {
-    let cancelled = false;
-    let firstFrameId: number | null = null;
-    let secondFrameId: number | null = null;
-    if (!compareRepoPath || !compareRepoStateReady) {
-      setCompareRepoState(null);
-    } else {
-      firstFrameId = requestAnimationFrame(() => {
-        secondFrameId = requestAnimationFrame(() => {
-          if (!cancelled) {
-            const startedAt = nowMs();
-            loadDiffCompareRepoState(compareRepoPath)
-              .then((nextState) => {
-                if (!cancelled) {
-                  setCompareRepoState(nextState);
-                }
-              })
-              .catch((error: unknown) => {
-                if (!cancelled) {
-                  console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
-                  setCompareRepoState({
-                    currentBranch: null,
-                    defaultBranch: null,
-                    localBranches: [],
-                    remoteBranches: [],
-                    remoteNames: [],
-                    repoPath: compareRepoPath,
-                    upstreamBranch: null,
-                  });
-                }
-              });
-          }
-        });
-      });
-    }
-
-    return () => {
-      cancelled = true;
-      if (firstFrameId !== null) {
-        cancelAnimationFrame(firstFrameId);
-      }
-      if (secondFrameId !== null) {
-        cancelAnimationFrame(secondFrameId);
-      }
-    };
-  }, [compareRepoPath, compareRepoStateReady, setCompareRepoState]);
-
-  const diffPalette = useMemo(
-    () => getDiffPalette(syntaxTheme, displayTheme.colors),
-    [
-      displayTheme.colors.border,
-      displayTheme.colors.danger,
-      displayTheme.colors.muted,
-      displayTheme.colors.primary,
-      displayTheme.colors.surface,
-      displayTheme.colors.surfaceMuted,
-      syntaxTheme.appearance,
-      syntaxTheme.background,
-      syntaxTheme.foreground,
-    ],
-  );
-  const backgroundColor = diffPalette.background;
-  const foregroundColor = diffPalette.foreground;
-  const fileHeaderBackgroundColor = diffPalette.fileHeaderBackground;
-  const hunkHeaderBackgroundColor = diffPalette.hunkHeaderBackground;
-  const mutedColor = diffPalette.muted;
-  const sidebarFolderColor = diffPalette.sidebarFolder;
-  const selectedSidebarFileBackgroundColor = diffPalette.sidebarSelectedBackground;
-  const sidebarConflictBadgeBackgroundColor = diffPalette.sidebarConflictBadgeBackground;
-  const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
-  const loadedDocument = state.status === "loaded" ? state.document : null;
-  const loadedDocumentId = loadedDocument?.documentId ?? 0;
-  const loadedDocumentRowCount = loadedDocument ? Math.max(0, Math.floor(loadedDocument.rowCount)) : 0;
-  const [itemCountLimitState, setItemCountLimitState] = useState<DiffItemCountLimitState | null>(null);
-  const currentItemCountLimit = itemCountLimitState?.documentId === loadedDocumentId
-    ? itemCountLimitState.limit
-    : diffProgressiveInitialPaintRowCount;
-  const isProgressiveLoadIncomplete = state.status === "loaded" && state.loadComplete === false;
-  const initialItemCountLimit = loadedDocument !== null &&
-    isProgressiveLoadIncomplete &&
-    loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
-    ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
-    : null;
-
-  useEffect(() => {
-    setCollapsedSidebarFolders(new Set());
-  }, [loadedDocumentId, setCollapsedSidebarFolders]);
-
-  const {
-    collapsedFileIndexList,
-    diffRows,
-    fileHeaderRowIndexes,
-    getRow,
-    getVisibleListIndex,
-    sideBySideFileHeaderByListIndex,
-    sideBySideHunkHeaderIndexes,
-    sideBySideDataSource,
-    sideBySideListIndexByRowIndex,
-    sideBySideRowCount,
-    visibleItemIndexes,
-  } = useDiffLoadedModel({
-    collapsedFileIndexes,
-    fontFamily,
-    fontSize,
-    initialItemCountLimit,
-    nativeUnifiedRows,
-    rowHeight,
-    state,
-    viewMode: renderViewMode,
-  });
-  // Progressive documents append hunk indexes without changing identity, so row count invalidates this snapshot.
-  const unifiedHunkRowIndexSet = useMemo(
-    () => createDiffUnifiedHunkRowIndexSet(renderViewMode === "unified" ? loadedDocument : null),
-    [loadedDocument, loadedDocumentRowCount, renderViewMode],
-  );
-  const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
-  useEffect(() => {
-    if (loadedDocument) {
-      return () => {
-        const isCached = [...loadedCacheRef.current.values()].some((entry) => entry.loaded.document === loadedDocument);
+    "use no memo";
+    // React Compiler does not yet support the async try/finally workflows in this controller.
+    const windowIdentifier = useWindowId();
+    const fontFamily = useDiffFontFamilySetting();
+    const fontSize = useDiffFontSizeSetting();
+    const highlightChangedCharacters = useDiffHighlightChangedCharactersSetting();
+    const ignoreWhitespaceChanges = useDiffIgnoreWhitespaceChangesSetting();
+    const previousIgnoreWhitespaceChangesRef = useRef(ignoreWhitespaceChanges);
+    const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
+    const rowHeight = getDiffLineRowHeight(fontSize);
+    const showOnlyHunks = useDiffShowOnlyHunksSetting();
+    const showWhitespaceCharacters = useDiffShowWhitespaceCharactersSetting();
+    const sidebarWidth = useDiffSidebarWidthSetting();
+    const viewMode = useDiffViewModeSetting();
+    const syntaxTheme = useDiffSyntaxTheme();
+    const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
+    const nativeUnifiedRows = viewMode === "unified";
+    const nativeSideBySideRows = viewMode !== "unified";
+    const nativeDiffRows = true;
+    const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
+    const model = useDiffViewerModel();
+    const { compareRepoState$, compareRefPromptVisible$, compareRefInput$, collapsedSidebarFolders$, searchQuery$, activeSearchResultIndex$, searchResults$, setSearchQuery, activeFileIndex$, collapsedFileIndexes$, diffPaneHeight$, documentError$, loadingSource$, mergeState$, openError$, setCollapsedFileIndexesValue, setDiffPaneHeightValue, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setSidebarCollapsedValue, setSplitPaneMetricsValue, setUrlInputErrorValue, setUrlInputValue, setViewerState, sidebarCollapsed$, splitPaneMetrics$, state$, urlInput$, urlInputError$, } = model;
+    const state = useValue(state$);
+    const documentError = useValue(documentError$);
+    const loadingSource = useValue(loadingSource$);
+    const mergeState = useValue(mergeState$);
+    const sidebarCollapsed = useValue(sidebarCollapsed$);
+    const collapsedFileIndexes = useValue(collapsedFileIndexes$);
+    const unsavedMergeDraftFiles = useMemo(() => getUnsavedDiffMergeDraftFiles(mergeState), [mergeState]);
+    const hasUnsavedMergeDrafts = unsavedMergeDraftFiles.length > 0;
+    const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
+    const inlineListIndexByFileIndexRef = useRef<ReadonlyMap<number, number>>(emptyDiffListIndexByFileIndex);
+    const urlInputRef = useRef<TextInput | null>(null);
+    const loadRequestIdRef = useRef(0);
+    const loadTraceRef = useRef<DiffLoadTrace | null>(null);
+    const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
+    const activeProgressiveSessionRef = useRef<DiffLoadSession | null>(null);
+    const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
+    const preserveActiveFilePathRef = useRef<string | null>(null);
+    const mergeDraftsRef = useRef(new Map<string, DiffMergeDraftFile>());
+    const mergeDraftsSourceKeyRef = useRef<string | null>(null);
+    const savingMergeDraftsRef = useRef(false);
+    const suppressFileWatcherReloadUntilRef = useRef(0);
+    const syntaxTokenizationState$ = useObservable({ ranges: "", version: 0 });
+    const resolvingMergeConflictKeys$ = useObservable<Set<string>>(new Set());
+    const mergeResolveQueuesRef = useRef(new Map<string, DiffMergeFileResolveQueue>());
+    const prepareMergeDraftsForTransitionRef = useRef<(reason: UnsavedDiffMergeDraftReason) => Promise<boolean>>(async () => true);
+    const sourceTransitionInFlightRef = useRef(false);
+    const setCompareRepoState = compareRepoState$.set;
+    const setCompareRefPromptVisible = compareRefPromptVisible$.set;
+    const setCompareRefInput = compareRefInput$.set;
+    const setCollapsedSidebarFolders = useCallback((next: Set<string> | ((current: Set<string>) => Set<string>)) => {
+        collapsedSidebarFolders$.set(typeof next === "function" ? next(collapsedSidebarFolders$.peek()) : next);
+    }, [collapsedSidebarFolders$]);
+    const setActiveSearchResultIndex = activeSearchResultIndex$.set;
+    const lastSubmittedSearchQueryRef = useRef("");
+    useEffect(() => () => {
+        loadRequestIdRef.current += 1;
+        activeProgressiveSessionRef.current?.cancel();
+        activeProgressiveSessionRef.current = null;
         const currentState = state$.peek();
-        const isCurrent = currentState.status === "loaded" && currentState.document === loadedDocument;
-        if (isCached || isCurrent) {
-          loadedDocument.cancelTokenizationRequests("viewer.cleanup");
-        } else {
-          disposeDiffDocument(loadedDocument, "viewer.cleanup");
+        if (currentState.status === "loaded") {
+            disposeDiffDocument(currentState.document, "viewer.unmount");
         }
-      };
-    }
-    return undefined;
-  }, [loadedDocument, state$]);
-  const {
-    getSideBySideRow,
-    handleSideBySideTopItemChanged,
-    handleSideBySideVisibleRowsRequested,
-    requestSideBySideRange,
-    resetSideBySideRuntime,
-  } = useDiffSideBySideRuntime({
-    activeFileIndex$,
-    diffPaneHeight$,
-    nativeSideBySideRows,
-    rowHeight,
-    sideBySideDataSource,
-    sideBySideRowCount,
-    state$,
-    syntaxHighlightingEnabled,
-    viewMode: renderViewMode,
-  });
-
-  const expandItemCountLimit = useCallback((documentId: number, requestedMinimum: number, reason: string) => {
-    setItemCountLimitState((current) => {
-      let nextState = current;
-      if (loadedDocument !== null && loadedDocumentId === documentId && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount) {
-        const currentLimit = current?.documentId === documentId
-          ? current.limit
-          : diffProgressiveInitialPaintRowCount;
-        const nextLimit = Math.min(
-          loadedDocumentRowCount,
-          Math.max(
-            Math.ceil(requestedMinimum),
-            currentLimit + diffProgressiveItemCountExpandChunkRowCount,
-          ),
-        );
-
-        if (nextLimit > currentLimit) {
-          nextState = {
-            documentId,
-            limit: nextLimit,
-          };
+        clearLoadedCache(loadedCacheRef.current, "viewer.unmount.cache");
+        loadTraceRef.current = null;
+        loggedTraceDocumentRef.current = null;
+        mergeDraftsRef.current = new Map();
+        mergeDraftsSourceKeyRef.current = null;
+        mergeResolveQueuesRef.current = new Map();
+        // This model belongs to the discarded window. Resetting its observables
+        // here wakes child chrome observers before their own unmount cleanup and
+        // sends toolbar updates to a native window that has already closed.
+    }, [state$]);
+    const setResolvingMergeConflictKeyActive = useCallback((key: string, active: boolean) => {
+        const currentKeys = resolvingMergeConflictKeys$.peek();
+        if (currentKeys.has(key) !== active) {
+            const nextKeys = new Set(currentKeys);
+            if (active) {
+                nextKeys.add(key);
+            }
+            else {
+                nextKeys.delete(key);
+            }
+            resolvingMergeConflictKeys$.set(nextKeys);
         }
-      }
-      return nextState;
-    });
-  }, [loadedDocument, loadedDocumentId, loadedDocumentRowCount]);
-
-  const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo, viewKind: string) => {
-    const isDemandRequest = info.reason === "scroll" || info.reason === "highlight";
-    if (isDemandRequest && loadedDocument !== null && initialItemCountLimit !== null) {
-      const visibleEnd = Math.max(0, Math.floor(start)) + Math.max(0, Math.ceil(count));
-      const requestedMinimum = visibleEnd + diffProgressiveItemCountExpandThresholdRows;
-      if (requestedMinimum >= initialItemCountLimit) {
-        const reason = `${viewKind}:${info.reason}`;
-        expandItemCountLimit(loadedDocumentId, requestedMinimum, reason);
-      }
-    }
-  }, [expandItemCountLimit, initialItemCountLimit, loadedDocument, loadedDocumentId]);
-
-  useEffect(() => {
-    if (state.status === "loaded" && state.loadComplete !== false) {
-      const document = state.document;
-      if (syntaxHighlightingEnabled) {
+    }, [resolvingMergeConflictKeys$]);
+    const waitForMergeResolveQueues = useCallback(async () => {
+        const queues = [...mergeResolveQueuesRef.current.values()];
+        if (queues.length > 0) {
+            await Promise.all(queues.map((queue) => queue.chain.catch(() => undefined)));
+        }
+    }, []);
+    const isLoading = loadingSource !== null;
+    const renderViewMode = viewMode;
+    const visibleSourceModel = getDiffVisibleSourceModel(state, loadingSource);
+    const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
+    const compareRepoPath = toolbarSource?.kind === "folder"
+        ? toolbarSource.value
+        : toolbarSource?.kind === "git"
+            ? toolbarSource.cwd
+            : null;
+    const compareRepoStateReady = compareRepoPath !== null &&
+        toolbarSource !== null &&
+        state.status === "loaded" &&
+        state.loadComplete !== false &&
+        sourcesMatch(state.source, toolbarSource);
+    useEffect(() => {
         let cancelled = false;
-        let startTimeout: ReturnType<typeof setTimeout> | undefined;
-        const startedAt = nowMs();
-        startTimeout = setTimeout(() => {
-          const backgroundPlan = getBackgroundTokenizationPlan(state.files);
-          if (backgroundPlan.files.length > 0 && backgroundPlan.rowLimit > 0) {
-            const backgroundFiles = backgroundPlan.files;
-            const filePaths = backgroundFiles.map((file) => file.path);
-            ensureTreeGrammarsForPaths(filePaths)
-              .then(() => {
-                if (!cancelled) {
-                  document.startBackgroundTokenization(
-                    diffBackgroundTokenizeChunkRowCount,
-                    diffBackgroundTokenizeChunkBudgetMs,
-                    backgroundPlan.rowLimit,
-                    backgroundPlan.sourceLineCount,
-                  );
-                }
-              })
-              .catch((error: unknown) => {
-                console.error(getErrorMessage(error));
-              });
-          } else {
-          }
-        }, diffBackgroundTokenizeStartDelayMs);
-        return () => {
-          cancelled = true;
-          if (startTimeout) {
-            clearTimeout(startTimeout);
-          }
-          document.stopBackgroundTokenization();
-        };
-      }
-
-      document.stopBackgroundTokenization();
-    }
-    return undefined;
-  }, [
-    state.status === "loaded" ? state.document : null,
-    state.status === "loaded" ? state.loadComplete : true,
-    syntaxHighlightingEnabled,
-  ]);
-  useEffect(() => {
-    if (state.status === "loaded" && state.loadComplete !== false && syntaxHighlightingEnabled) {
-      const document = state.document;
-      const updateTokenizationVersion = () => {
-        const tokenizationVersion = document.getTokenizedRowVersion();
-        if (syntaxTokenizationState$.version.peek() !== tokenizationVersion) {
-          const ranges = document.consumeTokenizedRowRanges()
-            .map((range) => `${Math.floor(range.start)}:${Math.ceil(range.end)}`)
-            .join(",");
-          syntaxTokenizationState$.set({ ranges, version: tokenizationVersion });
+        let firstFrameId: number | null = null;
+        let secondFrameId: number | null = null;
+        if (!compareRepoPath || !compareRepoStateReady) {
+            setCompareRepoState(null);
         }
-      };
-
-      updateTokenizationVersion();
-      const intervalHandle = setInterval(updateTokenizationVersion, diffBackgroundTokenizePollMs);
-      return () => {
-        clearInterval(intervalHandle);
-      };
-    }
-
-    if (syntaxTokenizationState$.version.peek() !== 0) {
-      syntaxTokenizationState$.set({ ranges: "", version: 0 });
-    }
-    return undefined;
-  }, [
-    state.status === "loaded" ? state.document : null,
-    state.status === "loaded" ? state.loadComplete : true,
-    syntaxHighlightingEnabled,
-    syntaxTokenizationState$,
-  ]);
-  useEffect(() => {
-    resetSideBySideRuntime();
-    if (state.status === "loaded") {
-      const preserveActiveFilePath = preserveActiveFilePathRef.current;
-      preserveActiveFilePathRef.current = null;
-      if (preserveActiveFilePath) {
-        const preservedFile = state.files.find((file) => file.path === preserveActiveFilePath || file.oldPath === preserveActiveFilePath);
-        activeFileIndex$.set(preservedFile?.index ?? state.files[0]?.index ?? null);
-      } else {
-        activeFileIndex$.set(state.files[0]?.index ?? null);
-        setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
-      }
-    } else {
-      activeFileIndex$.set(null);
-    }
-  }, [
-    activeFileIndex$,
-    resetSideBySideRuntime,
-    setCollapsedFileIndexesValue,
-    state.status === "loaded" ? state.document : null,
-  ]);
-  const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-    maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
-    const currentState = state$.peek();
-    if (syntaxHighlightingEnabled && currentState.status === "loaded" && currentState.loadComplete !== false) {
-      const files = getFilesForSourceRowRange(currentState.files, start, count);
-      scheduleVisibleFileTokenization(currentState.document, files, info);
-    }
-  }, [maybeExpandItemCountLimitForVisibleRange, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
-
-  const handleLimitedSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-    maybeExpandItemCountLimitForVisibleRange(start, count, info, "side-by-side");
-    handleSideBySideVisibleRowsRequested(start, count, info);
-  }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
-
-  const handleTopItemChanged = useCallback((rowIndex: number) => {
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const nextFileIndex = findFileIndexForRow(currentState.files, rowIndex);
-      if (activeFileIndex$.peek() !== nextFileIndex) {
-        activeFileIndex$.set(nextFileIndex);
-      }
-    }
-  }, [activeFileIndex$, state$]);
-
-  const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
-    const stateBeforeTransition = state$.peek();
-    const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
-    const shouldPrepareMergeDrafts = shouldPrepareMergeDraftsForSourceChange(
-      stateBeforeTransition.source,
-      nextSource,
-      hasPendingMergeDraftWork,
-    );
-    if (shouldPrepareMergeDrafts) {
-      if (sourceTransitionInFlightRef.current) {
-        return;
-      }
-      sourceTransitionInFlightRef.current = true;
-      let canChangeSource = false;
-      try {
-        canChangeSource = await prepareMergeDraftsForTransitionRef.current("source");
-      } finally {
-        sourceTransitionInFlightRef.current = false;
-      }
-      if (!canChangeSource) {
-        return;
-      }
-    }
-
-    const requestId = loadRequestIdRef.current + 1;
-    loadRequestIdRef.current = requestId;
-    activeProgressiveSessionRef.current?.cancel();
-    activeProgressiveSessionRef.current = null;
-    const loadStartedAt = nowMs();
-    updateSavedDiffWindowSource(windowIdentifier, nextSource);
-    const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
-    const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
-    const loadIgnoreWhitespaceChanges = getDiffIgnoreWhitespaceChangesSetting();
-    const sourceCacheKey = getDiffSourceCacheKey(nextSource);
-    const loadedCacheKey = getDiffLoadedCacheKey(
-      nextSource,
-      loadShowOnlyHunks,
-      loadIgnoreWhitespaceChanges,
-    );
-    const stateBeforeLoad = state$.peek();
-    const isBackgroundWatchRefresh =
-      options?.reason === "watch" &&
-      stateBeforeLoad.status === "loaded" &&
-      sourcesMatch(stateBeforeLoad.source, nextSource);
-
-    if (mergeDraftsSourceKeyRef.current !== null && mergeDraftsSourceKeyRef.current !== sourceCacheKey) {
-      mergeDraftsRef.current = new Map();
-      mergeDraftsSourceKeyRef.current = null;
-    }
-
-    if (options?.force) {
-      deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force");
-    } else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
-      clearLoadedCache(loadedCacheRef.current, "viewer.load.sourceChange");
-    }
-
-    const cachedEntry = !options?.force && options?.reason === "mode-toggle"
-      ? loadedCacheRef.current.get(loadedCacheKey)
-      : undefined;
-    if (cachedEntry) {
-      const trace: DiffLoadTrace = {
-        cacheHit: true,
-        document: cachedEntry.loaded.document,
-        folderPath: nextSource.value,
-        loadStartedAt,
-        nativeResolvedAt: loadStartedAt,
-        requestId,
-        setStateAt: nowMs(),
-      };
-      loadTraceRef.current = trace;
-      setLoadProgressValue(emptyDiffLoadProgressState);
-      setLoadingSourceValue(null);
-      setLoadStatisticsValue(null);
-      setDocumentErrorValue(null);
-      setOpenErrorValue(null);
-      setViewerState({
-        status: "loaded",
-        folderPath: nextSource.value,
-        source: nextSource,
-        document: cachedEntry.loaded.document,
-        files: cachedEntry.loaded.files,
-        initialRows: cachedEntry.loaded.initialRows,
-        loadComplete: cachedEntry.loadComplete,
-        timing: cachedEntry.loaded.timing,
-      });
-      addRecentDiffSource(nextSource);
-      return;
-    }
-
-    const trace: DiffLoadTrace = {
-      cacheHit: false,
-      document: null,
-      folderPath: nextSource.value,
-      loadStartedAt,
-      nativeResolvedAt: loadStartedAt,
-      requestId,
-      setStateAt: loadStartedAt,
-    };
-    loadTraceRef.current = trace;
-    const shouldStartNativeBeforeLoadingState =
-      options?.reason === "launch" &&
-      !isBackgroundWatchRefresh &&
-      (nextSource.kind === "folder" || nextSource.kind === "github");
-    const publishLoadingState = () => {
-      setLoadProgressValue(nextSource.kind === "folder"
-        ? {
-            ...emptyDiffLoadProgressState,
-            requestId,
-            source: nextSource,
-            visible: true,
-          }
-        : emptyDiffLoadProgressState);
-      setLoadingSourceValue(nextSource);
-      setLoadStatisticsValue(null);
-      setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
-      if (stateBeforeLoad.status === "loaded") {
-        setDocumentErrorValue(null);
-      } else {
-        setOpenErrorValue(null);
-      }
-    };
-    if (!isBackgroundWatchRefresh && !shouldStartNativeBeforeLoadingState) {
-      publishLoadingState();
-    }
-
-    const schedulePostLoadSideEffects = (loaded: DiffLoadedPayload) => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (loadRequestIdRef.current === requestId) {
-            addRecentDiffSource(nextSource);
-            const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
-            if (recentDocumentPath) {
-              noteRecentDocument(recentDocumentPath);
-            }
-            if (nextSource.kind === "folder") {
-              loadDiffMergeState(nextSource.value)
-                .then((nextMergeState) => {
-                  const currentState = state$.peek();
-                  if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
-                    setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
-                  }
-                })
-                .catch((error: unknown) => {
-                  if (loadRequestIdRef.current === requestId) {
-                    setMergeStateValue({
-                      status: "error",
-                      message: getErrorMessage(error),
-                    });
-                  }
+        else {
+            firstFrameId = requestAnimationFrame(() => {
+                secondFrameId = requestAnimationFrame(() => {
+                    if (!cancelled) {
+                        const startedAt = nowMs();
+                        loadDiffCompareRepoState(compareRepoPath)
+                            .then((nextState) => {
+                            if (!cancelled) {
+                                setCompareRepoState(nextState);
+                            }
+                        })
+                            .catch((error: unknown) => {
+                            if (!cancelled) {
+                                console.error(`Unable to load diff compare targets: ${getErrorMessage(error)}`);
+                                setCompareRepoState({
+                                    currentBranch: null,
+                                    defaultBranch: null,
+                                    localBranches: [],
+                                    remoteBranches: [],
+                                    remoteNames: [],
+                                    repoPath: compareRepoPath,
+                                    upstreamBranch: null,
+                                });
+                            }
+                        });
+                    }
                 });
+            });
+        }
+        return () => {
+            cancelled = true;
+            if (firstFrameId !== null) {
+                cancelAnimationFrame(firstFrameId);
             }
-          }
-        }, 0);
-      });
-    };
-
-    const publishLoadedState = (loaded: DiffLoadedPayload, loadComplete: boolean, reason: string) => {
-      const statePayloadStartedAt = nowMs();
-      const nextLoadedState: DiffViewerState = {
-        status: "loaded",
-        folderPath: nextSource.value,
-        source: nextSource,
-        document: loaded.document,
-        files: loaded.files,
-        initialRows: loaded.initialRows,
-        loadComplete,
-        timing: loaded.timing,
-      };
-      const statePayloadFinishedAt = nowMs();
-      if (!trace.document) {
-        trace.document = loaded.document;
-        trace.setStateAt = statePayloadFinishedAt;
-      }
-      if (isBackgroundWatchRefresh) {
-        const currentLoadedState = state$.peek();
-        preserveActiveFilePathRef.current = currentLoadedState.status === "loaded"
-          ? getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null
-          : null;
-      }
-      setViewerState(nextLoadedState);
-      if (isBackgroundWatchRefresh) {
-        setDocumentErrorValue(null);
-      }
-      if (loadComplete) {
-        if (shouldCacheLoadedDiff(loaded)) {
-          disposeLoadedCacheEntry(loadedCacheRef.current.get(loadedCacheKey), "viewer.cache.replace");
-          loadedCacheRef.current.set(loadedCacheKey, {
-            loaded,
-            loadComplete,
-          });
-        } else {
-          deleteLoadedCacheEntry(loadedCacheRef.current, loadedCacheKey, "viewer.cache.skip");
+            if (secondFrameId !== null) {
+                cancelAnimationFrame(secondFrameId);
+            }
+        };
+    }, [compareRepoPath, compareRepoStateReady, setCompareRepoState]);
+    const diffPalette = useMemo(() => getDiffPalette(syntaxTheme, displayTheme.colors), [
+        displayTheme.colors.border,
+        displayTheme.colors.danger,
+        displayTheme.colors.muted,
+        displayTheme.colors.primary,
+        displayTheme.colors.surface,
+        displayTheme.colors.surfaceMuted,
+        syntaxTheme.appearance,
+        syntaxTheme.background,
+        syntaxTheme.foreground,
+    ]);
+    const backgroundColor = diffPalette.background;
+    const foregroundColor = diffPalette.foreground;
+    const fileHeaderBackgroundColor = diffPalette.fileHeaderBackground;
+    const hunkHeaderBackgroundColor = diffPalette.hunkHeaderBackground;
+    const mutedColor = diffPalette.muted;
+    const sidebarFolderColor = diffPalette.sidebarFolder;
+    const selectedSidebarFileBackgroundColor = diffPalette.sidebarSelectedBackground;
+    const sidebarConflictBadgeBackgroundColor = diffPalette.sidebarConflictBadgeBackground;
+    const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
+    const loadedDocument = state.status === "loaded" ? state.document : null;
+    const loadedDocumentId = loadedDocument?.documentId ?? 0;
+    const loadedDocumentRowCount = loadedDocument ? Math.max(0, Math.floor(loadedDocument.rowCount)) : 0;
+    const [itemCountLimitState, setItemCountLimitState] = useState<DiffItemCountLimitState | null>(null);
+    const currentItemCountLimit = itemCountLimitState?.documentId === loadedDocumentId
+        ? itemCountLimitState.limit
+        : diffProgressiveInitialPaintRowCount;
+    const isProgressiveLoadIncomplete = state.status === "loaded" && state.loadComplete === false;
+    const initialItemCountLimit = loadedDocument !== null &&
+        isProgressiveLoadIncomplete &&
+        loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
+        ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
+        : null;
+    useEffect(() => {
+        setCollapsedSidebarFolders(new Set());
+    }, [loadedDocumentId, setCollapsedSidebarFolders]);
+    const { collapsedFileIndexList, diffRows, fileHeaderRowIndexes, getRow, getVisibleListIndex, sideBySideFileHeaderByListIndex, sideBySideHunkHeaderIndexes, sideBySideDataSource, sideBySideListIndexByRowIndex, sideBySideRowCount, visibleItemIndexes, } = useDiffLoadedModel({
+        collapsedFileIndexes,
+        fontFamily,
+        fontSize,
+        initialItemCountLimit,
+        nativeUnifiedRows,
+        rowHeight,
+        state,
+        viewMode: renderViewMode,
+    });
+    // Progressive documents append hunk indexes without changing identity, so row count invalidates this snapshot.
+    const unifiedHunkRowIndexSet = useMemo(() => createDiffUnifiedHunkRowIndexSet(renderViewMode === "unified" ? loadedDocument : null), [loadedDocument, loadedDocumentRowCount, renderViewMode]);
+    const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
+    useEffect(() => {
+        if (loadedDocument) {
+            return () => {
+                const isCached = [...loadedCacheRef.current.values()].some((entry) => entry.loaded.document === loadedDocument);
+                const currentState = state$.peek();
+                const isCurrent = currentState.status === "loaded" && currentState.document === loadedDocument;
+                if (isCached || isCurrent) {
+                    loadedDocument.cancelTokenizationRequests("viewer.cleanup");
+                }
+                else {
+                    disposeDiffDocument(loadedDocument, "viewer.cleanup");
+                }
+            };
         }
-        setLoadProgressValue(emptyDiffLoadProgressState);
-      }
-    };
-
-    let loadError: unknown = null;
-    let progressiveSession: DiffLoadSession | null = null;
-    try {
-      const nativeStartedAt = nowMs();
-      let result: DiffLoadedPayload | null = null;
-      if (nextSource.kind === "github") {
-        if (loadIgnoreWhitespaceChanges) {
-          if (shouldStartNativeBeforeLoadingState) {
-            publishLoadingState();
-          }
-          result = await loadUnifiedDiffFromUrl(
-            nextSource.diffUrl,
-            nextSource.label,
-            initialRowCount,
-            true,
-          );
-        } else {
-          progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
-          activeProgressiveSessionRef.current = progressiveSession;
-          if (shouldStartNativeBeforeLoadingState) {
-            publishLoadingState();
-          }
-          let progressStatus = progressiveSession.getProgress();
-          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-          while (
-            loadRequestIdRef.current === requestId &&
-            !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)
-          ) {
-            await waitForDiffProgressPoll();
-            progressStatus = progressiveSession.getProgress();
-            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-          }
-          if (loadRequestIdRef.current !== requestId) {
-            progressiveSession.cancel();
-          } else if (progressStatus.error) {
-            loadError = new Error(progressStatus.error);
-          } else {
-            result = progressiveSession.consumeChanges(initialRowCount);
-          }
-        }
-      } else if (nextSource.kind === "git") {
-        const commandResult = await commandRunner.runCommand({
-          args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
-          command: "git",
-          cwd: nextSource.cwd,
-          timeoutMs: 60_000,
+        return undefined;
+    }, [loadedDocument, state$]);
+    const { getSideBySideRow, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, requestSideBySideRange, resetSideBySideRuntime, } = useDiffSideBySideRuntime({
+        activeFileIndex$,
+        diffPaneHeight$,
+        nativeSideBySideRows,
+        rowHeight,
+        sideBySideDataSource,
+        sideBySideRowCount,
+        state$,
+        syntaxHighlightingEnabled,
+        viewMode: renderViewMode,
+    });
+    const expandItemCountLimit = useCallback((documentId: number, requestedMinimum: number, reason: string) => {
+        setItemCountLimitState((current) => {
+            let nextState = current;
+            if (loadedDocument !== null && loadedDocumentId === documentId && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount) {
+                const currentLimit = current?.documentId === documentId
+                    ? current.limit
+                    : diffProgressiveInitialPaintRowCount;
+                const nextLimit = Math.min(loadedDocumentRowCount, Math.max(Math.ceil(requestedMinimum), currentLimit + diffProgressiveItemCountExpandChunkRowCount));
+                if (nextLimit > currentLimit) {
+                    nextState = {
+                        documentId,
+                        limit: nextLimit,
+                    };
+                }
+            }
+            return nextState;
         });
-        if (commandResult.exitCode !== 0) {
-          loadError = createGitDiffCommandError(commandResult);
-        } else {
-          result = await loadUnifiedDiff(
-            commandResult.stdout,
-            nextSource.label,
-            initialRowCount,
-            loadIgnoreWhitespaceChanges,
-          );
+    }, [loadedDocument, loadedDocumentId, loadedDocumentRowCount]);
+    const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo, viewKind: string) => {
+        const isDemandRequest = info.reason === "scroll" || info.reason === "highlight";
+        if (isDemandRequest && loadedDocument !== null && initialItemCountLimit !== null) {
+            const visibleEnd = Math.max(0, Math.floor(start)) + Math.max(0, Math.ceil(count));
+            const requestedMinimum = visibleEnd + diffProgressiveItemCountExpandThresholdRows;
+            if (requestedMinimum >= initialItemCountLimit) {
+                const reason = `${viewKind}:${info.reason}`;
+                expandItemCountLimit(loadedDocumentId, requestedMinimum, reason);
+            }
         }
-      } else if (nextSource.kind === "filePair") {
-        const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
-        const commandResult = await commandRunner.runCommand(diffCommand);
-        if (commandResult.timedOut) {
-          loadError = new Error("File comparison timed out. The files may be too large to compare.");
-        } else if (commandResult.exitCode !== 0 && commandResult.exitCode !== 1) {
-          loadError = new Error(commandResult.stderr || `diff exited with code ${commandResult.exitCode}.`);
-        } else {
-          result = await loadUnifiedDiff(
-            createFilePairUnifiedDiff(nextSource, commandResult),
-            nextSource.label,
-            initialRowCount,
-            loadIgnoreWhitespaceChanges,
-          );
+    }, [expandItemCountLimit, initialItemCountLimit, loadedDocument, loadedDocumentId]);
+    useEffect(() => {
+        if (state.status === "loaded" && state.loadComplete !== false) {
+            const document = state.document;
+            if (syntaxHighlightingEnabled) {
+                let cancelled = false;
+                let startTimeout: ReturnType<typeof setTimeout> | undefined;
+                const startedAt = nowMs();
+                startTimeout = setTimeout(() => {
+                    const backgroundPlan = getBackgroundTokenizationPlan(state.files);
+                    if (backgroundPlan.files.length > 0 && backgroundPlan.rowLimit > 0) {
+                        const backgroundFiles = backgroundPlan.files;
+                        const filePaths = backgroundFiles.map((file) => file.path);
+                        ensureTreeGrammarsForPaths(filePaths)
+                            .then(() => {
+                            if (!cancelled) {
+                                document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs, backgroundPlan.rowLimit, backgroundPlan.sourceLineCount);
+                            }
+                        })
+                            .catch((error: unknown) => {
+                            console.error(getErrorMessage(error));
+                        });
+                    }
+                    else {
+                    }
+                }, diffBackgroundTokenizeStartDelayMs);
+                return () => {
+                    cancelled = true;
+                    if (startTimeout) {
+                        clearTimeout(startTimeout);
+                    }
+                    document.stopBackgroundTokenization();
+                };
+            }
+            document.stopBackgroundTokenization();
         }
-      } else if (nextSource.kind === "diffFile") {
-        result = await loadUnifiedDiffFile(
-          nextSource.value,
-          nextSource.label,
-          initialRowCount,
-          loadIgnoreWhitespaceChanges,
-        );
-      } else {
-        progressiveSession = startGitFolderDiff(nextSource.value, {
-          ...getDiffGitFolderLoadCompareOptions(nextSource),
-          ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges,
-          showOnlyHunks: loadShowOnlyHunks,
-        });
-        activeProgressiveSessionRef.current = progressiveSession;
-        if (shouldStartNativeBeforeLoadingState) {
-          publishLoadingState();
+        return undefined;
+    }, [
+        state.status === "loaded" ? state.document : null,
+        state.status === "loaded" ? state.loadComplete : true,
+        syntaxHighlightingEnabled,
+    ]);
+    useEffect(() => {
+        if (state.status === "loaded" && state.loadComplete !== false && syntaxHighlightingEnabled) {
+            const document = state.document;
+            const updateTokenizationVersion = () => {
+                const tokenizationVersion = document.getTokenizedRowVersion();
+                if (syntaxTokenizationState$.version.peek() !== tokenizationVersion) {
+                    const ranges = document.consumeTokenizedRowRanges()
+                        .map((range) => `${Math.floor(range.start)}:${Math.ceil(range.end)}`)
+                        .join(",");
+                    syntaxTokenizationState$.set({ ranges, version: tokenizationVersion });
+                }
+            };
+            updateTokenizationVersion();
+            const intervalHandle = setInterval(updateTokenizationVersion, diffBackgroundTokenizePollMs);
+            return () => {
+                clearInterval(intervalHandle);
+            };
         }
-        let progressStatus = progressiveSession.getProgress();
-        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-        while (
-          loadRequestIdRef.current === requestId &&
-          !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)
-        ) {
-          await waitForDiffProgressPoll();
-          progressStatus = progressiveSession.getProgress();
-          setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+        if (syntaxTokenizationState$.version.peek() !== 0) {
+            syntaxTokenizationState$.set({ ranges: "", version: 0 });
         }
-        if (loadRequestIdRef.current !== requestId) {
-          progressiveSession.cancel();
-        } else if (progressStatus.error) {
-          loadError = new Error(progressStatus.error);
-        } else {
-          result = progressiveSession.consumeChanges(initialRowCount);
+        return undefined;
+    }, [
+        state.status === "loaded" ? state.document : null,
+        state.status === "loaded" ? state.loadComplete : true,
+        syntaxHighlightingEnabled,
+        syntaxTokenizationState$,
+    ]);
+    useEffect(() => {
+        resetSideBySideRuntime();
+        if (state.status === "loaded") {
+            const preserveActiveFilePath = preserveActiveFilePathRef.current;
+            preserveActiveFilePathRef.current = null;
+            if (preserveActiveFilePath) {
+                const preservedFile = state.files.find((file) => file.path === preserveActiveFilePath || file.oldPath === preserveActiveFilePath);
+                activeFileIndex$.set(preservedFile?.index ?? state.files[0]?.index ?? null);
+            }
+            else {
+                activeFileIndex$.set(state.files[0]?.index ?? null);
+                setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
+            }
         }
-      }
-
-      if (!loadError) {
-        if (result) {
-          const loadedResult = result;
-          result = null;
-          const nativeResolvedAt = nowMs();
-          trace.nativeResolvedAt = nativeResolvedAt;
-          if (loadRequestIdRef.current === requestId) {
-            const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
-            if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
-              let progressStatus: DiffLoadStatus = loadedResult;
-              setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-              while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
-                await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                progressStatus = progressiveSession.getProgress();
-                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-              }
-              if (loadRequestIdRef.current !== requestId) {
-                progressiveSession.cancel();
-              } else if (progressStatus.error) {
-                throw new Error(progressStatus.error);
-              } else {
-                const completedProgress = progressiveSession.consumeChanges(0);
-                publishLoadedState(completedProgress, completedProgress.complete, "complete");
-                schedulePostLoadSideEffects(completedProgress);
-              }
-            } else {
-              publishLoadedState(loadedResult, initialLoadComplete, "initial");
-              if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
-                let lastFileVersion = loadedResult.fileVersion;
-                let lastRowVersion = loadedResult.rowVersion;
-                let progressStatus: DiffLoadStatus = loadedResult;
-                await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
-                while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
-                  await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                  progressStatus = progressiveSession.getProgress();
-                  const hasChanges =
-                    progressStatus.rowVersion !== lastRowVersion ||
-                    progressStatus.fileVersion !== lastFileVersion ||
-                    progressStatus.complete ||
-                    !!progressStatus.error;
-                  if (hasChanges && loadRequestIdRef.current === requestId) {
+        else {
+            activeFileIndex$.set(null);
+        }
+    }, [
+        activeFileIndex$,
+        resetSideBySideRuntime,
+        setCollapsedFileIndexesValue,
+        state.status === "loaded" ? state.document : null,
+    ]);
+    const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
+        maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
+        const currentState = state$.peek();
+        if (syntaxHighlightingEnabled && currentState.status === "loaded" && currentState.loadComplete !== false) {
+            const files = getFilesForSourceRowRange(currentState.files, start, count);
+            scheduleVisibleFileTokenization(currentState.document, files, info);
+        }
+    }, [maybeExpandItemCountLimitForVisibleRange, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
+    const handleLimitedSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
+        maybeExpandItemCountLimitForVisibleRange(start, count, info, "side-by-side");
+        handleSideBySideVisibleRowsRequested(start, count, info);
+    }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
+    const handleTopItemChanged = useCallback((rowIndex: number) => {
+        const currentState = state$.peek();
+        if (currentState.status === "loaded") {
+            const nextFileIndex = findFileIndexForRow(currentState.files, rowIndex);
+            if (activeFileIndex$.peek() !== nextFileIndex) {
+                activeFileIndex$.set(nextFileIndex);
+            }
+        }
+    }, [activeFileIndex$, state$]);
+    const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
+        const stateBeforeTransition = state$.peek();
+        const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
+        const shouldPrepareMergeDrafts = shouldPrepareMergeDraftsForSourceChange(stateBeforeTransition.source, nextSource, hasPendingMergeDraftWork);
+        if (shouldPrepareMergeDrafts) {
+            if (sourceTransitionInFlightRef.current) {
+                return;
+            }
+            sourceTransitionInFlightRef.current = true;
+            let canChangeSource = false;
+            try {
+                canChangeSource = await prepareMergeDraftsForTransitionRef.current("source");
+            }
+            finally {
+                sourceTransitionInFlightRef.current = false;
+            }
+            if (!canChangeSource) {
+                return;
+            }
+        }
+        const requestId = loadRequestIdRef.current + 1;
+        loadRequestIdRef.current = requestId;
+        activeProgressiveSessionRef.current?.cancel();
+        activeProgressiveSessionRef.current = null;
+        const loadStartedAt = nowMs();
+        updateSavedDiffWindowSource(windowIdentifier, nextSource);
+        const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
+        const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
+        const loadIgnoreWhitespaceChanges = getDiffIgnoreWhitespaceChangesSetting();
+        const sourceCacheKey = getDiffSourceCacheKey(nextSource);
+        const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks, loadIgnoreWhitespaceChanges);
+        const stateBeforeLoad = state$.peek();
+        const isBackgroundWatchRefresh = options?.reason === "watch" &&
+            stateBeforeLoad.status === "loaded" &&
+            sourcesMatch(stateBeforeLoad.source, nextSource);
+        if (mergeDraftsSourceKeyRef.current !== null && mergeDraftsSourceKeyRef.current !== sourceCacheKey) {
+            mergeDraftsRef.current = new Map();
+            mergeDraftsSourceKeyRef.current = null;
+        }
+        if (options?.force) {
+            deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force");
+        }
+        else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
+            clearLoadedCache(loadedCacheRef.current, "viewer.load.sourceChange");
+        }
+        const cachedEntry = !options?.force && options?.reason === "mode-toggle"
+            ? loadedCacheRef.current.get(loadedCacheKey)
+            : undefined;
+        if (cachedEntry) {
+            const trace: DiffLoadTrace = {
+                cacheHit: true,
+                document: cachedEntry.loaded.document,
+                folderPath: nextSource.value,
+                loadStartedAt,
+                nativeResolvedAt: loadStartedAt,
+                requestId,
+                setStateAt: nowMs(),
+            };
+            loadTraceRef.current = trace;
+            setLoadProgressValue(emptyDiffLoadProgressState);
+            setLoadingSourceValue(null);
+            setLoadStatisticsValue(null);
+            setDocumentErrorValue(null);
+            setOpenErrorValue(null);
+            setViewerState({
+                status: "loaded",
+                folderPath: nextSource.value,
+                source: nextSource,
+                document: cachedEntry.loaded.document,
+                files: cachedEntry.loaded.files,
+                initialRows: cachedEntry.loaded.initialRows,
+                loadComplete: cachedEntry.loadComplete,
+                timing: cachedEntry.loaded.timing,
+            });
+            addRecentDiffSource(nextSource);
+            return;
+        }
+        const trace: DiffLoadTrace = {
+            cacheHit: false,
+            document: null,
+            folderPath: nextSource.value,
+            loadStartedAt,
+            nativeResolvedAt: loadStartedAt,
+            requestId,
+            setStateAt: loadStartedAt,
+        };
+        loadTraceRef.current = trace;
+        const shouldStartNativeBeforeLoadingState = options?.reason === "launch" &&
+            !isBackgroundWatchRefresh &&
+            (nextSource.kind === "folder" || nextSource.kind === "github");
+        const publishLoadingState = () => {
+            setLoadProgressValue(nextSource.kind === "folder"
+                ? {
+                    ...emptyDiffLoadProgressState,
+                    requestId,
+                    source: nextSource,
+                    visible: true,
+                }
+                : emptyDiffLoadProgressState);
+            setLoadingSourceValue(nextSource);
+            setLoadStatisticsValue(null);
+            setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
+            if (stateBeforeLoad.status === "loaded") {
+                setDocumentErrorValue(null);
+            }
+            else {
+                setOpenErrorValue(null);
+            }
+        };
+        if (!isBackgroundWatchRefresh && !shouldStartNativeBeforeLoadingState) {
+            publishLoadingState();
+        }
+        const schedulePostLoadSideEffects = (loaded: DiffLoadedPayload) => {
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (loadRequestIdRef.current === requestId) {
+                        addRecentDiffSource(nextSource);
+                        const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
+                        if (recentDocumentPath) {
+                            noteRecentDocument(recentDocumentPath);
+                        }
+                        if (nextSource.kind === "folder") {
+                            loadDiffMergeState(nextSource.value)
+                                .then((nextMergeState) => {
+                                const currentState = state$.peek();
+                                if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
+                                    setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
+                                }
+                            })
+                                .catch((error: unknown) => {
+                                if (loadRequestIdRef.current === requestId) {
+                                    setMergeStateValue({
+                                        status: "error",
+                                        message: getErrorMessage(error),
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }, 0);
+            });
+        };
+        const publishLoadedState = (loaded: DiffLoadedPayload, loadComplete: boolean, reason: string) => {
+            const statePayloadStartedAt = nowMs();
+            const nextLoadedState: DiffViewerState = {
+                status: "loaded",
+                folderPath: nextSource.value,
+                source: nextSource,
+                document: loaded.document,
+                files: loaded.files,
+                initialRows: loaded.initialRows,
+                loadComplete,
+                timing: loaded.timing,
+            };
+            const statePayloadFinishedAt = nowMs();
+            if (!trace.document) {
+                trace.document = loaded.document;
+                trace.setStateAt = statePayloadFinishedAt;
+            }
+            if (isBackgroundWatchRefresh) {
+                const currentLoadedState = state$.peek();
+                preserveActiveFilePathRef.current = currentLoadedState.status === "loaded"
+                    ? getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null
+                    : null;
+            }
+            setViewerState(nextLoadedState);
+            if (isBackgroundWatchRefresh) {
+                setDocumentErrorValue(null);
+            }
+            if (loadComplete) {
+                if (shouldCacheLoadedDiff(loaded)) {
+                    disposeLoadedCacheEntry(loadedCacheRef.current.get(loadedCacheKey), "viewer.cache.replace");
+                    loadedCacheRef.current.set(loadedCacheKey, {
+                        loaded,
+                        loadComplete,
+                    });
+                }
+                else {
+                    deleteLoadedCacheEntry(loadedCacheRef.current, loadedCacheKey, "viewer.cache.skip");
+                }
+                setLoadProgressValue(emptyDiffLoadProgressState);
+            }
+        };
+        let loadError: unknown = null;
+        let progressiveSession: DiffLoadSession | null = null;
+        try {
+            const nativeStartedAt = nowMs();
+            let result: DiffLoadedPayload | null = null;
+            if (nextSource.kind === "github") {
+                if (loadIgnoreWhitespaceChanges) {
+                    if (shouldStartNativeBeforeLoadingState) {
+                        publishLoadingState();
+                    }
+                    result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, initialRowCount, true);
+                }
+                else {
+                    progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
+                    activeProgressiveSessionRef.current = progressiveSession;
+                    if (shouldStartNativeBeforeLoadingState) {
+                        publishLoadingState();
+                    }
+                    let progressStatus = progressiveSession.getProgress();
                     setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                    lastFileVersion = progressStatus.fileVersion;
-                    lastRowVersion = progressStatus.rowVersion;
-                  }
+                    while (loadRequestIdRef.current === requestId &&
+                        !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)) {
+                        await waitForDiffProgressPoll();
+                        progressStatus = progressiveSession.getProgress();
+                        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                    }
+                    if (loadRequestIdRef.current !== requestId) {
+                        progressiveSession.cancel();
+                    }
+                    else if (progressStatus.error) {
+                        loadError = new Error(progressStatus.error);
+                    }
+                    else {
+                        result = progressiveSession.consumeChanges(initialRowCount);
+                    }
+                }
+            }
+            else if (nextSource.kind === "git") {
+                const commandResult = await runCommand({
+                    args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
+                    target: { type: "command", name: "git" },
+                    cwd: nextSource.cwd,
+                    timeoutMs: 60000,
+                });
+                if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 0) {
+                    loadError = createGitDiffCommandError(commandResult);
+                }
+                else {
+                    result = await loadUnifiedDiff(decodeProcessText(commandResult.stdout), nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
+                }
+            }
+            else if (nextSource.kind === "filePair") {
+                const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
+                const commandResult = await runCommand(diffCommand);
+                if (commandResult.timedOut) {
+                    loadError = new Error("File comparison timed out. The files may be too large to compare.");
+                }
+                else if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 0 && (commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 1) {
+                    loadError = new Error(decodeProcessText(commandResult.stderr) || `diff exited with code ${(commandResult.exit.type === "exited" ? commandResult.exit.code : -1)}.`);
+                }
+                else {
+                    result = await loadUnifiedDiff(createFilePairUnifiedDiff(nextSource, commandResult), nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
+                }
+            }
+            else if (nextSource.kind === "diffFile") {
+                result = await loadUnifiedDiffFile(nextSource.value, nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
+            }
+            else {
+                progressiveSession = startGitFolderDiff(nextSource.value, {
+                    ...getDiffGitFolderLoadCompareOptions(nextSource),
+                    ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges,
+                    showOnlyHunks: loadShowOnlyHunks,
+                });
+                activeProgressiveSessionRef.current = progressiveSession;
+                if (shouldStartNativeBeforeLoadingState) {
+                    publishLoadingState();
+                }
+                let progressStatus = progressiveSession.getProgress();
+                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                while (loadRequestIdRef.current === requestId &&
+                    !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)) {
+                    await waitForDiffProgressPoll();
+                    progressStatus = progressiveSession.getProgress();
+                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
                 }
                 if (loadRequestIdRef.current !== requestId) {
-                  progressiveSession.cancel();
-                } else if (progressStatus.error) {
-                  throw new Error(progressStatus.error);
-                } else {
-                  const completedProgress = progressiveSession.consumeChanges(0);
-                  publishLoadedState(completedProgress, true, "complete");
-                  schedulePostLoadSideEffects(completedProgress);
+                    progressiveSession.cancel();
                 }
-              } else {
-                schedulePostLoadSideEffects(loadedResult);
-              }
+                else if (progressStatus.error) {
+                    loadError = new Error(progressStatus.error);
+                }
+                else {
+                    result = progressiveSession.consumeChanges(initialRowCount);
+                }
             }
-          } else {
-            progressiveSession?.cancel();
-          }
-        }
-      }
-    } catch (error) {
-      loadError = error;
-    } finally {
-      if (loadRequestIdRef.current !== requestId) {
-        progressiveSession?.cancel();
-      }
-      if (activeProgressiveSessionRef.current === progressiveSession) {
-        activeProgressiveSessionRef.current = null;
-      }
-    }
-
-    if (loadError && loadRequestIdRef.current === requestId) {
-      if (!isBackgroundWatchRefresh) {
-        loadTraceRef.current = null;
-        setMergeStateValue(unavailableDiffMergeState);
-        setLoadProgressValue(emptyDiffLoadProgressState);
-        setLoadStatisticsValue(null);
-        setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
-      }
-      const message = getErrorMessage(loadError);
-      const currentState = state$.peek();
-      if (currentState.status === "loaded") {
-        const nextError = sourcesMatch(currentState.source, nextSource)
-          ? createRefreshError(nextSource, message)
-          : createOpenError(nextSource, message);
-        setDocumentErrorValue(nextError);
-      } else {
-        setOpenErrorValue(createOpenError(nextSource, message));
-        setViewerState(emptyDiffViewerState);
-      }
-    }
-  }, [
-    nativeDiffRows,
-    setDocumentErrorValue,
-    setLoadProgressValue,
-    setLoadStatisticsValue,
-    setLoadingSourceValue,
-    setMergeStateValue,
-    setOpenErrorValue,
-    setViewerState,
-    state$,
-    windowIdentifier,
-  ]);
-
-  useEffect(() => {
-    const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
-    previousIgnoreWhitespaceChangesRef.current = ignoreWhitespaceChanges;
-    if (changed) {
-      const currentState = state$.peek();
-      if (currentState.status === "loaded") {
-        loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
-          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        });
-      }
-    }
-  }, [ignoreWhitespaceChanges, loadSource, setDocumentErrorValue, state$]);
-
-  const saveMergeDrafts = useCallback(async () => {
-    if (savingMergeDraftsRef.current) {
-      return false;
-    }
-
-    await waitForMergeResolveQueues();
-
-    const currentState = state$.peek();
-    const draftEntries = [...mergeDraftsRef.current.entries()];
-    const sourceKey = currentState.source ? getDiffSourceCacheKey(currentState.source) : null;
-    if (
-      currentState.status !== "loaded" ||
-      currentState.source.kind !== "folder" ||
-      draftEntries.length === 0 ||
-      mergeDraftsSourceKeyRef.current !== sourceKey ||
-      resolvingMergeConflictKeys$.peek().size !== 0
-    ) {
-      return false;
-    }
-
-    savingMergeDraftsRef.current = true;
-    suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
-    setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, true);
-    setDocumentErrorValue(null);
-    try {
-      const draftPaths = new Set(draftEntries.map(([path]) => path));
-      for (const [path, draft] of draftEntries) {
-        await writeDiffMergeFileContent({
-          content: draft.content,
-          folderPath: currentState.source.value,
-          path,
-        });
-      }
-      suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
-      deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceKey}:`, "viewer.merge.save");
-      mergeDraftsRef.current = new Map();
-      mergeDraftsSourceKeyRef.current = null;
-      const currentMergeState = mergeState$.peek();
-      if (currentMergeState.status === "ready") {
-        setMergeStateValue(createReadyMergeState(
-          currentMergeState.files.map((file) => (
-            draftPaths.has(file.path) ? clearDiffMergeDraftFlag(file) : file
-          )),
-        ));
-      }
-      return true;
-    } catch (error: unknown) {
-      setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-      return false;
-    } finally {
-      savingMergeDraftsRef.current = false;
-      setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, false);
-    }
-  }, [
-    mergeState$,
-    setDocumentErrorValue,
-    setMergeStateValue,
-    setResolvingMergeConflictKeyActive,
-    state$,
-    waitForMergeResolveQueues,
-    resolvingMergeConflictKeys$,
-  ]);
-
-  const saveMergeDraftsFromCommand = useCallback(() => {
-    const hasSaveWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
-    if (hasSaveWork && !savingMergeDraftsRef.current) {
-      saveMergeDrafts().catch((error: unknown) => {
-        const currentState = state$.peek();
-        if (currentState.status === "loaded") {
-          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        }
-      });
-      return true;
-    }
-    return false;
-  }, [saveMergeDrafts, setDocumentErrorValue, state$]);
-
-  const openClipboardSourceFromStartScreen = useCallback(() => {
-    const currentState = state$.peek();
-    const focusedUrlInput = urlInputRef.current && "isFocused" in urlInputRef.current && typeof urlInputRef.current.isFocused === "function"
-      ? urlInputRef.current.isFocused()
-      : false;
-    const canOpenClipboardSource = currentState.status === "empty" && !focusedUrlInput && !loadingSource$.peek();
-    if (canOpenClipboardSource) {
-      commandRunner.runCommand({ command: "pbpaste", timeoutMs: 1000 })
-        .then((result) => {
-          if (result.exitCode !== 0) {
-            throw new Error(result.stderr || "Unable to read the clipboard.");
-          }
-          const nextSource = normalizeDiffOpenSource(result.stdout);
-          if (!nextSource) {
-            throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
-          }
-          return loadSource(nextSource);
-        })
-        .catch((error: unknown) => {
-          setOpenErrorValue({
-            message: getErrorMessage(error),
-            source: currentState.source,
-            title: "Couldn't open clipboard",
-          });
-        });
-    }
-    return canOpenClipboardSource;
-  }, [loadSource, loadingSource$, setOpenErrorValue, state$, urlInputRef]);
-
-  useEffect(() => addKeyDownListener((event) => {
-    let handled = false;
-    if (isSaveKeyEvent(event)) {
-      handled = saveMergeDraftsFromCommand();
-    } else if (isPasteKeyEvent(event)) {
-      handled = openClipboardSourceFromStartScreen();
-    }
-    return handled;
-  }), [openClipboardSourceFromStartScreen, saveMergeDraftsFromCommand]);
-
-  const getCurrentMergeFileForResolve = useCallback((path: string) => {
-    const existingDraft = mergeDraftsRef.current.get(path);
-    if (existingDraft) {
-      return existingDraft.file;
-    }
-    const currentMergeState = mergeState$.peek();
-    return currentMergeState.status === "ready" ? currentMergeState.fileByPath.get(path) ?? null : null;
-  }, [mergeState$]);
-
-  const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
-    const currentState = state$.peek();
-    const resolvingKeys = resolvingMergeConflictKeys$.peek();
-    const conflictKey = getMergeConflictKey(file, block);
-    if (
-      currentState.status === "loaded" &&
-      currentState.source.kind === "folder" &&
-      !savingMergeDraftsRef.current &&
-      !isDiffMergeSavePending(resolvingKeys) &&
-      !resolvingKeys.has(conflictKey)
-    ) {
-      setResolvingMergeConflictKeyActive(conflictKey, true);
-      setDocumentErrorValue(null);
-
-      const originalBlockIndex = Math.max(
-        0,
-        file.markerBlocks.findIndex((candidate) => candidate === block || candidate.startLine === block.startLine),
-      );
-      const queue = mergeResolveQueuesRef.current.get(file.path) ?? {
-        chain: Promise.resolve(),
-        completedOriginalBlockIndexes: [],
-      };
-      const runResolve = async () => {
-        try {
-          const existingDraft = mergeDraftsRef.current.get(file.path);
-          const currentFile = getCurrentMergeFileForResolve(file.path) ?? file;
-          const resolvedEarlierBlocks = queue.completedOriginalBlockIndexes.filter((index) => index < originalBlockIndex).length;
-          const currentBlockIndex = Math.max(0, originalBlockIndex - resolvedEarlierBlocks);
-          const currentBlock = currentFile.markerBlocks[currentBlockIndex] ?? currentFile.markerBlocks.find((candidate) => (
-            candidate.oursLines.length === block.oursLines.length &&
-            candidate.theirsLines.length === block.theirsLines.length &&
-            candidate.oursLines.every((line, index) => line === block.oursLines[index]) &&
-            candidate.theirsLines.every((line, index) => line === block.theirsLines[index])
-          ));
-          if (!currentBlock) {
-            throw new Error(`Unable to find conflict block in ${file.path}.`);
-          }
-
-          const currentContent = existingDraft?.content ?? await readDiffMergeFileContent({
-            folderPath: currentState.source.value,
-            path: file.path,
-          });
-          const resolvedContent = resolveDiffMergeConflictContent(currentContent, currentBlock.startLine, choice);
-          const nextFile = createDiffMergeDraftFileWithResolvedBlock({
-            block: currentBlock,
-            choice,
-            content: resolvedContent,
-            file: currentFile,
-          });
-          const nextDrafts = new Map(mergeDraftsRef.current);
-          nextDrafts.set(file.path, {
-            content: resolvedContent,
-            file: nextFile,
-          });
-          mergeDraftsRef.current = nextDrafts;
-          mergeDraftsSourceKeyRef.current = getDiffSourceCacheKey(currentState.source);
-
-          const currentMergeState = mergeState$.peek();
-          if (currentMergeState.status === "ready") {
-            setMergeStateValue(createReadyMergeState(
-              currentMergeState.files
-                .map((currentFile) => currentFile.path === file.path ? nextFile : currentFile)
-                .filter((currentFile) => currentFile.markerBlocks.length > 0 || currentFile.hasUnsavedDraft),
-            ));
-          }
-
-          queue.completedOriginalBlockIndexes.push(originalBlockIndex);
-        } catch (error: unknown) {
-          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        } finally {
-          setResolvingMergeConflictKeyActive(conflictKey, false);
-        }
-      };
-
-      const nextChain = queue.chain
-        .catch(() => undefined)
-        .then(runResolve);
-      queue.chain = nextChain;
-      mergeResolveQueuesRef.current.set(file.path, queue);
-      nextChain.finally(() => {
-        if (mergeResolveQueuesRef.current.get(file.path)?.chain === nextChain) {
-          mergeResolveQueuesRef.current.delete(file.path);
-        }
-      });
-    }
-  }, [
-    getCurrentMergeFileForResolve,
-    mergeState$,
-    setDocumentErrorValue,
-    setMergeStateValue,
-    setResolvingMergeConflictKeyActive,
-    state$,
-    resolvingMergeConflictKeys$,
-  ]);
-
-  const discardMergeDrafts = useCallback(async () => {
-    await waitForMergeResolveQueues();
-    const currentState = state$.peek();
-    if (currentState.status !== "loaded" || currentState.source.kind !== "folder") {
-      return false;
-    }
-
-    mergeDraftsRef.current = new Map();
-    mergeDraftsSourceKeyRef.current = null;
-    const nextMergeState = await loadDiffMergeState(currentState.source.value);
-    setMergeStateValue(nextMergeState);
-    return true;
-  }, [setMergeStateValue, state$, waitForMergeResolveQueues]);
-
-  const discardMergeDraftsFromCommand = useCallback(() => {
-    if (hasUnsavedMergeDrafts && !savingMergeDraftsRef.current) {
-      discardMergeDrafts().catch((error: unknown) => {
-        const currentState = state$.peek();
-        if (currentState.status === "loaded") {
-          setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        }
-      });
-    }
-  }, [discardMergeDrafts, hasUnsavedMergeDrafts, setDocumentErrorValue, state$]);
-
-  const prepareMergeDraftsForTransition = useCallback(async (reason: UnsavedDiffMergeDraftReason) => {
-    await waitForMergeResolveQueues();
-    const currentState = state$.peek();
-    const draftFiles = getUnsavedDiffMergeDraftFiles(mergeState$.peek());
-    if (currentState.status !== "loaded" || draftFiles.length === 0) {
-      return true;
-    }
-
-    const action = await confirmUnsavedDiffMergeDrafts({
-      fileCount: draftFiles.length,
-      reason,
-      sourceLabel: getDiffSourceLabel(currentState.source),
-    });
-
-    if (action === "discard") {
-      return true;
-    }
-
-    if (action === "save") {
-      return saveMergeDrafts();
-    }
-
-    return false;
-  }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
-  prepareMergeDraftsForTransitionRef.current = prepareMergeDraftsForTransition;
-
-  useEffect(() => registerDiffWindowExitPreparation(
-    windowIdentifier,
-    prepareMergeDraftsForTransition,
-  ), [prepareMergeDraftsForTransition, windowIdentifier]);
-
-  useEffect(() => {
-    let isCloseInFlight = false;
-    const subscription = addWindowCloseRequestedListener((event) => {
-      if (event.identifier === windowIdentifier && !isCloseInFlight) {
-        isCloseInFlight = true;
-        prepareMergeDraftsForTransition("close")
-          .then((canClose) => {
-            if (canClose) {
-              return closeDiffViewerWindow(windowIdentifier).then(() => {
-                onClose?.();
-              });
+            if (!loadError) {
+                if (result) {
+                    const loadedResult = result;
+                    result = null;
+                    const nativeResolvedAt = nowMs();
+                    trace.nativeResolvedAt = nativeResolvedAt;
+                    if (loadRequestIdRef.current === requestId) {
+                        const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
+                        if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
+                            let progressStatus: DiffLoadStatus = loadedResult;
+                            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                            while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
+                                await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
+                                progressStatus = progressiveSession.getProgress();
+                                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                            }
+                            if (loadRequestIdRef.current !== requestId) {
+                                progressiveSession.cancel();
+                            }
+                            else if (progressStatus.error) {
+                                throw new Error(progressStatus.error);
+                            }
+                            else {
+                                const completedProgress = progressiveSession.consumeChanges(0);
+                                publishLoadedState(completedProgress, completedProgress.complete, "complete");
+                                schedulePostLoadSideEffects(completedProgress);
+                            }
+                        }
+                        else {
+                            publishLoadedState(loadedResult, initialLoadComplete, "initial");
+                            if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
+                                let lastFileVersion = loadedResult.fileVersion;
+                                let lastRowVersion = loadedResult.rowVersion;
+                                let progressStatus: DiffLoadStatus = loadedResult;
+                                await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
+                                while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
+                                    await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
+                                    progressStatus = progressiveSession.getProgress();
+                                    const hasChanges = progressStatus.rowVersion !== lastRowVersion ||
+                                        progressStatus.fileVersion !== lastFileVersion ||
+                                        progressStatus.complete ||
+                                        !!progressStatus.error;
+                                    if (hasChanges && loadRequestIdRef.current === requestId) {
+                                        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
+                                        lastFileVersion = progressStatus.fileVersion;
+                                        lastRowVersion = progressStatus.rowVersion;
+                                    }
+                                }
+                                if (loadRequestIdRef.current !== requestId) {
+                                    progressiveSession.cancel();
+                                }
+                                else if (progressStatus.error) {
+                                    throw new Error(progressStatus.error);
+                                }
+                                else {
+                                    const completedProgress = progressiveSession.consumeChanges(0);
+                                    publishLoadedState(completedProgress, true, "complete");
+                                    schedulePostLoadSideEffects(completedProgress);
+                                }
+                            }
+                            else {
+                                schedulePostLoadSideEffects(loadedResult);
+                            }
+                        }
+                    }
+                    else {
+                        progressiveSession?.cancel();
+                    }
+                }
             }
-            return null;
-          })
-          .catch((error: unknown) => {
+        }
+        catch (error) {
+            loadError = error;
+        }
+        finally {
+            if (loadRequestIdRef.current !== requestId) {
+                progressiveSession?.cancel();
+            }
+            if (activeProgressiveSessionRef.current === progressiveSession) {
+                activeProgressiveSessionRef.current = null;
+            }
+        }
+        if (loadError && loadRequestIdRef.current === requestId) {
+            if (!isBackgroundWatchRefresh) {
+                loadTraceRef.current = null;
+                setMergeStateValue(unavailableDiffMergeState);
+                setLoadProgressValue(emptyDiffLoadProgressState);
+                setLoadStatisticsValue(null);
+                setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
+            }
+            const message = getErrorMessage(loadError);
             const currentState = state$.peek();
             if (currentState.status === "loaded") {
-              setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+                const nextError = sourcesMatch(currentState.source, nextSource)
+                    ? createRefreshError(nextSource, message)
+                    : createOpenError(nextSource, message);
+                setDocumentErrorValue(nextError);
             }
-            return null;
-          })
-          .finally(() => {
-            isCloseInFlight = false;
-          });
-      }
-    });
-    return () => {
-      subscription.remove();
-    };
-  }, [onClose, prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
-
-  const openFolder = useCallback(async () => {
-    if (!loadingSource$.peek()) {
-      const currentState = state$.peek();
-      try {
-        setOpenErrorValue(null);
-        setDocumentErrorValue(null);
-        const path = await openDiffFolderDialog();
-        if (path) {
-          const nextSource = normalizeDiffOpenSource(path);
-          if (nextSource) {
-            await loadSource(nextSource);
-          }
+            else {
+                setOpenErrorValue(createOpenError(nextSource, message));
+                setViewerState(emptyDiffViewerState);
+            }
         }
-      } catch (error) {
-        const nextError = {
-          message: getErrorMessage(error),
-          source: currentState.source,
-          title: "Couldn't choose folder",
-        };
-        if (currentState.status === "loaded") {
-          setDocumentErrorValue(nextError);
-        } else {
-          setOpenErrorValue(nextError);
-        }
-      }
-    }
-  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
-
-  const compareFiles = useCallback(async () => {
-    if (!loadingSource$.peek()) {
-      const currentState = state$.peek();
-      try {
-        setOpenErrorValue(null);
-        setDocumentErrorValue(null);
-        const nextSource = await openDiffFilePairDialog();
-        if (nextSource) {
-          await loadSource(nextSource);
-        }
-      } catch (error) {
-        const nextError = {
-          message: getErrorMessage(error),
-          source: currentState.source,
-          title: "Couldn't choose files",
-        };
-        if (currentState.status === "loaded") {
-          setDocumentErrorValue(nextError);
-        } else {
-          setOpenErrorValue(nextError);
-        }
-      }
-    }
-  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
-
-  const dismissDocumentError = useCallback(() => {
-    setDocumentErrorValue(null);
-  }, [setDocumentErrorValue]);
-
-  const openPermissionSettings = useCallback(() => {
-    Linking.openURL(macOSFilesAndFoldersSettingsUrl).catch((error: unknown) => {
-      console.error(`Unable to open System Settings: ${getErrorMessage(error)}`);
-    });
-  }, []);
-  const openExternalErrorUrl = useCallback((url: string) => {
-    Linking.openURL(url).catch((error: unknown) => {
-      console.error(`Unable to open URL: ${getErrorMessage(error)}`);
-    });
-  }, []);
-
-  const startScreenController = useDiffStartScreenController({
-    loadSource,
-    loadingSource$,
-    openError$,
-    setDocumentErrorValue,
-    setOpenErrorValue,
-    setUrlInputErrorValue,
-    setUrlInputValue,
-    urlInput$,
-    urlInputError$,
-  });
-
-  const handleDropDiff = useCallback((nativeEvent: DragDropFileEvent) => {
-    if (!loadingSource$.peek()) {
-      const nextSource = getDroppedDiffSource(nativeEvent);
-      if (nextSource) {
-        loadSource(nextSource);
-      } else {
-        const nextError = {
-          message: getUnsupportedDropMessage(nativeEvent),
-          source: null,
-          title: "Unsupported drop",
-        };
-        if (state$.peek().status === "loaded") {
-          setDocumentErrorValue(nextError);
-        } else {
-          setOpenErrorValue(nextError);
-        }
-      }
-    }
-  }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
-
-  const reloadCurrentSource = useCallback(() => {
-    const currentState = state$.peek();
-    if (currentState.status !== "loaded") {
-      return false;
-    }
-
-    loadSource(currentState.source, { force: true, reason: "reload" }).catch((error: unknown) => {
-      setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-    });
-    return true;
-  }, [loadSource, setDocumentErrorValue, state$]);
-
-  const compareCurrentSource = useCallback((selection: string) => {
-    const currentSource = loadingSource$.peek() ?? state$.peek().source;
-    const repoPath = currentSource?.kind === "folder"
-      ? currentSource.value
-      : currentSource?.kind === "git"
-        ? currentSource.cwd
-        : null;
-    const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState$.peek()) : null;
-    if (!nextSource || loadingSource$.peek()) {
-      return false;
-    }
-
-    loadSource(nextSource).catch((error: unknown) => {
-      setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
-    });
-    return true;
-  }, [compareRepoState$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
-
-  const openCompareRefPrompt = useCallback(() => {
-    const currentSource = loadingSource$.peek() ?? state$.peek().source;
-    const repoPath = currentSource?.kind === "folder"
-      ? currentSource.value
-      : currentSource?.kind === "git"
-        ? currentSource.cwd
-        : null;
-    if (!repoPath || loadingSource$.peek()) {
-      return false;
-    }
-
-    setCompareRefInput("");
-    setCompareRefPromptVisible(true);
-    return true;
-  }, [loadingSource$, state$, setCompareRefInput, setCompareRefPromptVisible]);
-
-  const closeCompareRefPrompt = useCallback(() => {
-    setCompareRefPromptVisible(false);
-    setCompareRefInput("");
-  }, [setCompareRefPromptVisible, setCompareRefInput]);
-
-  const submitCompareRefPrompt = useCallback(() => {
-    const ref = compareRefInput$.peek().trim();
-    const currentSource = loadingSource$.peek() ?? state$.peek().source;
-    const repoPath = currentSource?.kind === "folder"
-      ? currentSource.value
-      : currentSource?.kind === "git"
-        ? currentSource.cwd
-        : null;
-    if (ref && repoPath && !loadingSource$.peek()) {
-      const nextSource = createDiffCompareSourceForRef(repoPath, ref);
-      closeCompareRefPrompt();
-      loadSource(nextSource).catch((error: unknown) => {
-        setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
-      });
-    }
-  }, [closeCompareRefPrompt, compareRefInput$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
-
-  const toggleShowOnlyHunks = useCallback(() => {
-    const currentState = state$.peek();
-    let didToggle = false;
-    if (currentState.status === "loaded" && currentState.source.kind === "folder") {
-      const nextShowOnlyHunks = !getDiffShowOnlyHunksSetting();
-      setDiffShowOnlyHunksSetting(nextShowOnlyHunks);
-      loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
-        setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-      });
-      didToggle = true;
-    }
-    return didToggle;
-  }, [loadSource, setDocumentErrorValue, state$]);
-
-  const revealCurrentFolder = useCallback(() => {
-    const currentSource = state$.peek().source;
-    const currentVisibleFolderPath = currentSource?.kind === "folder" ? currentSource.value : null;
-    if (!currentVisibleFolderPath) {
-      return false;
-    }
-
-    revealInFinder(currentVisibleFolderPath)
-      .then((didReveal) => {
-        if (!didReveal) {
-          console.error("Unable to reveal folder in Finder.");
-        }
-      })
-      .catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    return true;
-  }, [state$]);
-
-  const copyText = useCallback((text: string) => {
-    commandRunner.runCommand({ command: "pbcopy", input: text })
-      .then((result) => {
-        if (result.exitCode !== 0) {
-          console.error(result.stderr || "Unable to copy to clipboard.");
-        }
-      })
-      .catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    return true;
-  }, []);
-
-  const copyCurrentSource = useCallback(() => {
-    let didCopy = false;
-    const currentVisibleSource = state$.peek().source;
-    if (currentVisibleSource) {
-      didCopy = copyText(currentVisibleSource.value);
-    }
-    return didCopy;
-  }, [copyText, state$]);
-
-  const copyCurrentFilePath = useCallback(() => {
-    let didCopy = false;
-    const currentState = state$.peek();
-    const currentVisibleFolderPath = currentState.source?.kind === "folder" ? currentState.source.value : null;
-    if (currentState.status === "loaded" && currentVisibleFolderPath) {
-      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
-      if (activeFile) {
-        didCopy = copyText(getJoinedPath(currentVisibleFolderPath, activeFile.path));
-      }
-    }
-    return didCopy;
-  }, [activeFileIndex$, copyText, state$]);
-
-  const copyCurrentRelativePath = useCallback(() => {
-    let didCopy = false;
-    const currentState = state$.peek();
-    if (currentState.status === "loaded") {
-      const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
-      if (activeFile) {
-        didCopy = copyText(activeFile.path);
-      }
-    }
-    return didCopy;
-  }, [activeFileIndex$, copyText, state$]);
-
-  const toggleSidebar = useCallback(() => {
-    const currentState = state$.peek();
-    const currentLoadingSource = loadingSource$.peek();
-    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-    if (!currentToolbarSource) {
-      return false;
-    }
-
-    setSidebarCollapsedValue((current) => !current);
-    return true;
-  }, [loadingSource$, setSidebarCollapsedValue, state$]);
-
-  const focusSearchWithValue = useCallback((value: string) => {
-    const currentState = state$.peek();
-    const currentLoadingSource = loadingSource$.peek();
-    const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-    const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-    if (!currentToolbarSource) {
-      return false;
-    }
-
-    setSearchQuery(value);
-    focusDiffSearchToolbarItem(windowIdentifier, value).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
-    });
-    return true;
-  }, [loadingSource$, state$, windowIdentifier, setSearchQuery]);
-
-  const focusSearch = useCallback(() => {
-    return focusSearchWithValue(searchQuery$.peek());
-  }, [focusSearchWithValue, searchQuery$]);
-
-  const focusFileSearch = useCallback(() => {
-    return focusSearchWithValue("@");
-  }, [focusSearchWithValue]);
-
-  const toggleFileCollapsed = useCallback((fileIndex: number) => {
-    setCollapsedFileIndexesValue((current) => {
-      const next = new Set(current);
-      const collapsed = !next.has(fileIndex);
-      if (next.has(fileIndex)) {
-        next.delete(fileIndex);
-      } else {
-        next.add(fileIndex);
-      }
-      if (renderViewMode !== "unified") {
-        sideBySideDataSource?.setFileCollapsed(fileIndex, collapsed);
-      }
-      return next;
-    });
-  }, [renderViewMode, setCollapsedFileIndexesValue, sideBySideDataSource]);
-  const listSyntaxTheme = syntaxTheme.name;
-  const rowConfig = useMemo<DiffRowConfig>(
-    () => ({
-      borderColor: diffPalette.border,
-      collapsedFileIndexes,
-      fileHeaderBackgroundColor,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      mutedColor,
-      showOnlyHunks,
-      syntaxHighlightingEnabled,
-      syntaxTheme: listSyntaxTheme,
-    }),
-    [
-      collapsedFileIndexes,
-      diffPalette.border,
-      fileHeaderBackgroundColor,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      listSyntaxTheme,
-      mutedColor,
-      showOnlyHunks,
-      syntaxHighlightingEnabled,
-    ],
-  );
-  const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
-    const palette = getDiffRowPalette(syntaxTheme.appearance);
-    const configId = `diff:${loadedDocumentId}:unified`;
-    const configVersion = hashDiffNativeRowConfigVersion([
-      configId,
-      diffUnifiedChangeBarWidth,
-      diffUnifiedLineNumberWidth,
-      diffUnifiedMarkerWidth,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      highlightChangedCharacters,
-      mutedColor,
-      palette.addAccent,
-      palette.addBackground,
-      palette.removeAccent,
-      palette.removeBackground,
-      rowHeight,
-      showWhitespaceCharacters,
-      syntaxHighlightingEnabled,
-      listSyntaxTheme,
+    }, [
+        nativeDiffRows,
+        setDocumentErrorValue,
+        setLoadProgressValue,
+        setLoadStatisticsValue,
+        setLoadingSourceValue,
+        setMergeStateValue,
+        setOpenErrorValue,
+        setViewerState,
+        state$,
+        windowIdentifier,
     ]);
-    return {
-      addAccentColor: palette.addAccent,
-      addBackgroundColor: palette.addBackground,
-      activeSearchHighlightColor: diffActiveSearchHighlightColor,
-      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
-      changeBarWidth: diffUnifiedChangeBarWidth,
-      collapsedFileIndexes: "",
-      configId,
-      configVersion,
-      dividerColor: "transparent",
-      documentId: loadedDocumentId,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      highlightChangedCharacters,
-      lineNumberWidth: diffUnifiedLineNumberWidth,
-      markerWidth: diffUnifiedMarkerWidth,
-      mutedColor,
-      presentation: "unified",
-      projectionId: 0,
-      removeAccentColor: palette.removeAccent,
-      removeBackgroundColor: palette.removeBackground,
-      rowHeight,
-      searchHighlightColor: diffSearchHighlightColor,
-      showWhitespaceCharacters,
-      syntaxHighlightingEnabled,
-      themeName: listSyntaxTheme,
-    };
-  }, [
-    fontFamily,
-    fontSize,
-    foregroundColor,
-    highlightChangedCharacters,
-    listSyntaxTheme,
-    loadedDocumentId,
-    mutedColor,
-    rowHeight,
-    showWhitespaceCharacters,
-    syntaxHighlightingEnabled,
-    syntaxTheme.appearance,
-  ]);
-  const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
-    const palette = getDiffRowPalette(syntaxTheme.appearance);
-    const dividerColor = getSideBySideDividerColor(syntaxTheme.appearance);
-    const configId = `diff:${loadedDocumentId}:blocks`;
-    const projectionId = sideBySideDataSource?.getProjectionId() ?? 0;
-    const configVersion = hashDiffNativeRowConfigVersion([
-      configId,
-      projectionId,
-      dividerColor,
-      diffSideBySideLineNumberWidth,
-      diffSideBySideMarkerWidth,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      highlightChangedCharacters,
-      mutedColor,
-      palette.addAccent,
-      palette.addBackground,
-      palette.removeAccent,
-      palette.removeBackground,
-      rowHeight,
-      showWhitespaceCharacters,
-      syntaxHighlightingEnabled,
-      listSyntaxTheme,
-    ]);
-    return {
-      addAccentColor: palette.addAccent,
-      addBackgroundColor: palette.addBackground,
-      activeSearchHighlightColor: diffActiveSearchHighlightColor,
-      activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
-      changeBarWidth: 0,
-      collapsedFileIndexes: "",
-      configId,
-      configVersion,
-      dividerColor,
-      documentId: loadedDocumentId,
-      fontFamily,
-      fontSize,
-      foregroundColor,
-      highlightChangedCharacters,
-      lineNumberWidth: diffSideBySideLineNumberWidth,
-      markerWidth: diffSideBySideMarkerWidth,
-      mutedColor,
-      presentation: "blocks",
-      projectionId,
-      removeAccentColor: palette.removeAccent,
-      removeBackgroundColor: palette.removeBackground,
-      rowHeight,
-      searchHighlightColor: diffSearchHighlightColor,
-      showWhitespaceCharacters,
-      syntaxHighlightingEnabled,
-      themeName: listSyntaxTheme,
-    };
-  }, [
-    fontFamily,
-    fontSize,
-    foregroundColor,
-    highlightChangedCharacters,
-    listSyntaxTheme,
-    loadedDocumentId,
-    mutedColor,
-    rowHeight,
-    sideBySideDataSource,
-    showWhitespaceCharacters,
-    syntaxHighlightingEnabled,
-    syntaxTheme.appearance,
-  ]);
-  const rowRenderInitialState = useMemo(
-    () => createDiffRowRenderState(state$, collapsedFileIndexes$),
-    [collapsedFileIndexes$, state$],
-  );
-  const rowRender$ = useObservable(rowRenderInitialState) as unknown as Observable<DiffRowRenderState>;
-
-  const hunkListIndexes = useMemo(() => {
-    let indexes: number[] = [];
-    if (loadedDocument) {
-      if (viewMode === "unified") {
-        indexes = [...unifiedHunkRowIndexSet]
-          .map((rowIndex) => getVisibleListIndex(rowIndex))
-          .filter((index): index is number => index !== undefined);
-      } else {
-        indexes = [...sideBySideHunkHeaderIndexes].sort((left, right) => left - right);
-      }
-    }
-    return indexes;
-  }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, unifiedHunkRowIndexSet, viewMode]);
-
-  const navigateToHunk = useCallback((direction: -1 | 1) => {
-    const list = listRef.current;
-    const listState = list?.getState();
-    const currentPosition = listState
-      ? listState.scroll + (documentError ? diffTitlebarTopInset : 0)
-      : 0;
-    const targetIndex = getAdjacentDiffHunkIndex(
-      hunkListIndexes,
-      currentPosition,
-      direction,
-      listState?.positionAtIndex,
-    );
-    let didNavigate = false;
-
-    if (list && targetIndex !== null) {
-      list.scrollToIndex({
-        animated: true,
-        index: targetIndex,
-        viewOffset: diffTitlebarTopInset,
-        viewPosition: 0,
-      }).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-      didNavigate = true;
-    }
-
-    return didNavigate;
-  }, [documentError, hunkListIndexes]);
-  const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
-  const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
-
-  const scrollToFile = useCallback((file: DiffFileSummary) => {
-    const rowStart = Math.max(0, Math.floor(file.rowStart));
-    const sourceListIndex = viewMode === "unified"
-      ? getVisibleListIndex(rowStart)
-      : sideBySideListIndexByRowIndex.get(rowStart);
-    const listIndex = inlineListIndexByFileIndexRef.current.get(file.index) ?? sourceListIndex;
-    if (listIndex !== undefined) {
-      listRef.current?.scrollToIndex({
-        animated: false,
-        index: listIndex,
-        viewOffset: diffTitlebarTopInset,
-        viewPosition: 0,
-      }).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
-      });
-    }
-  }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
-  const handleInlineListIndexesChanged = useCallback((indexes: ReadonlyMap<number, number>) => {
-    inlineListIndexByFileIndexRef.current = indexes;
-  }, []);
-
-  const scrollToSearchListIndex = useCallback((listIndex: number) => {
-    listRef.current?.scrollToIndex({
-      animated: true,
-      index: listIndex,
-      viewOffset: diffTitlebarTopInset,
-      viewPosition: 0.5,
-    }).catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
-    });
-  }, []);
-
-  const getSearchResultListIndex = useCallback((result: DiffSearchResult) => {
-    if (viewMode === "unified") {
-      return getVisibleListIndex(result.rowIndex);
-    }
-
-    if (!loadedDocument) {
-      return undefined;
-    }
-
-    const collapsedIndexes = [...collapsedFileIndexList];
-    const startIndex = sideBySideListIndexByRowIndex.get(result.rowIndex) ?? 0;
-    for (let listIndex = startIndex; listIndex < sideBySideRowCount; listIndex += 1) {
-      const row = loadedDocument.getPlainSideBySideRow(listIndex, collapsedIndexes);
-      if (row.kind === "file-header") {
-        if (row.sourceStart > result.rowIndex) {
-          break;
+    useEffect(() => {
+        const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
+        previousIgnoreWhitespaceChangesRef.current = ignoreWhitespaceChanges;
+        if (changed) {
+            const currentState = state$.peek();
+            if (currentState.status === "loaded") {
+                loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
+                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+                });
+            }
         }
-      } else if (row.sourceStart <= result.rowIndex && result.rowIndex < row.sourceEnd) {
-        return listIndex;
-      }
-    }
-    return undefined;
-  }, [
-    collapsedFileIndexList,
-    getVisibleListIndex,
-    loadedDocument,
-    sideBySideListIndexByRowIndex,
-    sideBySideRowCount,
-    viewMode,
-  ]);
-
-  const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
-    const currentState = state$.peek();
-    if (currentState.status !== "loaded") {
-      return;
-    }
-
-    const file = currentState.files.find((candidate) => candidate.index === result.fileIndex);
-    if (!file) {
-      return;
-    }
-
-    activeFileIndex$.set(result.fileIndex);
-    if (result.kind === "file") {
-      scrollToFile(file);
-      return;
-    }
-
-    setCollapsedFileIndexesValue((currentIndexes) => {
-      if (!currentIndexes.has(result.fileIndex)) {
-        return currentIndexes;
-      }
-      const nextIndexes = new Set(currentIndexes);
-      nextIndexes.delete(result.fileIndex);
-      return nextIndexes;
+    }, [ignoreWhitespaceChanges, loadSource, setDocumentErrorValue, state$]);
+    const saveMergeDrafts = useCallback(async () => {
+        if (savingMergeDraftsRef.current) {
+            return false;
+        }
+        await waitForMergeResolveQueues();
+        const currentState = state$.peek();
+        const draftEntries = [...mergeDraftsRef.current.entries()];
+        const sourceKey = currentState.source ? getDiffSourceCacheKey(currentState.source) : null;
+        if (currentState.status !== "loaded" ||
+            currentState.source.kind !== "folder" ||
+            draftEntries.length === 0 ||
+            mergeDraftsSourceKeyRef.current !== sourceKey ||
+            resolvingMergeConflictKeys$.peek().size !== 0) {
+            return false;
+        }
+        savingMergeDraftsRef.current = true;
+        suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
+        setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, true);
+        setDocumentErrorValue(null);
+        try {
+            const draftPaths = new Set(draftEntries.map(([path]) => path));
+            for (const [path, draft] of draftEntries) {
+                await writeDiffMergeFileContent({
+                    content: draft.content,
+                    folderPath: currentState.source.value,
+                    path,
+                });
+            }
+            suppressFileWatcherReloadUntilRef.current = Date.now() + diffMergeSaveWatchSuppressMs;
+            deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceKey}:`, "viewer.merge.save");
+            mergeDraftsRef.current = new Map();
+            mergeDraftsSourceKeyRef.current = null;
+            const currentMergeState = mergeState$.peek();
+            if (currentMergeState.status === "ready") {
+                setMergeStateValue(createReadyMergeState(currentMergeState.files.map((file) => (draftPaths.has(file.path) ? clearDiffMergeDraftFlag(file) : file))));
+            }
+            return true;
+        }
+        catch (error: unknown) {
+            setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+            return false;
+        }
+        finally {
+            savingMergeDraftsRef.current = false;
+            setResolvingMergeConflictKeyActive(diffMergeSaveConflictKey, false);
+        }
+    }, [
+        mergeState$,
+        setDocumentErrorValue,
+        setMergeStateValue,
+        setResolvingMergeConflictKeyActive,
+        state$,
+        waitForMergeResolveQueues,
+        resolvingMergeConflictKeys$,
+    ]);
+    const saveMergeDraftsFromCommand = useCallback(() => {
+        const hasSaveWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
+        if (hasSaveWork && !savingMergeDraftsRef.current) {
+            saveMergeDrafts().catch((error: unknown) => {
+                const currentState = state$.peek();
+                if (currentState.status === "loaded") {
+                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+                }
+            });
+            return true;
+        }
+        return false;
+    }, [saveMergeDrafts, setDocumentErrorValue, state$]);
+    const openClipboardSourceFromStartScreen = useCallback(() => {
+        const currentState = state$.peek();
+        const focusedUrlInput = urlInputRef.current && "isFocused" in urlInputRef.current && typeof urlInputRef.current.isFocused === "function"
+            ? urlInputRef.current.isFocused()
+            : false;
+        const canOpenClipboardSource = currentState.status === "empty" && !focusedUrlInput && !loadingSource$.peek();
+        if (canOpenClipboardSource) {
+            runCommand({ target: { type: "command", name: "pbpaste" }, timeoutMs: 1000 })
+                .then((result) => {
+                if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+                    throw new Error(decodeProcessText(result.stderr) || "Unable to read the clipboard.");
+                }
+                const nextSource = normalizeDiffOpenSource(decodeProcessText(result.stdout));
+                if (!nextSource) {
+                    throw new Error("Clipboard does not contain a folder path, GitHub URL, .diff file, or two file paths.");
+                }
+                return loadSource(nextSource);
+            })
+                .catch((error: unknown) => {
+                setOpenErrorValue({
+                    message: getErrorMessage(error),
+                    source: currentState.source,
+                    title: "Couldn't open clipboard",
+                });
+            });
+        }
+        return canOpenClipboardSource;
+    }, [loadSource, loadingSource$, setOpenErrorValue, state$, urlInputRef]);
+    useEffect(() => { const registration = ownRegistration(addKeyboardListener("down", (event) => {
+        let handled = false;
+        if (isSaveKeyEvent(event)) {
+            handled = saveMergeDraftsFromCommand();
+        }
+        else if (isPasteKeyEvent(event)) {
+            handled = openClipboardSourceFromStartScreen();
+        }
+        return handled;
+    }, { windowIds: [windowIdentifier] })); return () => { void registration.remove().catch(console.error); }; }, [openClipboardSourceFromStartScreen, saveMergeDraftsFromCommand, windowIdentifier]);
+    const getCurrentMergeFileForResolve = useCallback((path: string) => {
+        const existingDraft = mergeDraftsRef.current.get(path);
+        if (existingDraft) {
+            return existingDraft.file;
+        }
+        const currentMergeState = mergeState$.peek();
+        return currentMergeState.status === "ready" ? currentMergeState.fileByPath.get(path) ?? null : null;
+    }, [mergeState$]);
+    const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
+        const currentState = state$.peek();
+        const resolvingKeys = resolvingMergeConflictKeys$.peek();
+        const conflictKey = getMergeConflictKey(file, block);
+        if (currentState.status === "loaded" &&
+            currentState.source.kind === "folder" &&
+            !savingMergeDraftsRef.current &&
+            !isDiffMergeSavePending(resolvingKeys) &&
+            !resolvingKeys.has(conflictKey)) {
+            setResolvingMergeConflictKeyActive(conflictKey, true);
+            setDocumentErrorValue(null);
+            const originalBlockIndex = Math.max(0, file.markerBlocks.findIndex((candidate) => candidate === block || candidate.startLine === block.startLine));
+            const queue = mergeResolveQueuesRef.current.get(file.path) ?? {
+                chain: Promise.resolve(),
+                completedOriginalBlockIndexes: [],
+            };
+            const runResolve = async () => {
+                try {
+                    const existingDraft = mergeDraftsRef.current.get(file.path);
+                    const currentFile = getCurrentMergeFileForResolve(file.path) ?? file;
+                    const resolvedEarlierBlocks = queue.completedOriginalBlockIndexes.filter((index) => index < originalBlockIndex).length;
+                    const currentBlockIndex = Math.max(0, originalBlockIndex - resolvedEarlierBlocks);
+                    const currentBlock = currentFile.markerBlocks[currentBlockIndex] ?? currentFile.markerBlocks.find((candidate) => (candidate.oursLines.length === block.oursLines.length &&
+                        candidate.theirsLines.length === block.theirsLines.length &&
+                        candidate.oursLines.every((line, index) => line === block.oursLines[index]) &&
+                        candidate.theirsLines.every((line, index) => line === block.theirsLines[index])));
+                    if (!currentBlock) {
+                        throw new Error(`Unable to find conflict block in ${file.path}.`);
+                    }
+                    const currentContent = existingDraft?.content ?? await readDiffMergeFileContent({
+                        folderPath: currentState.source.value,
+                        path: file.path,
+                    });
+                    const resolvedContent = resolveDiffMergeConflictContent(currentContent, currentBlock.startLine, choice);
+                    const nextFile = createDiffMergeDraftFileWithResolvedBlock({
+                        block: currentBlock,
+                        choice,
+                        content: resolvedContent,
+                        file: currentFile,
+                    });
+                    const nextDrafts = new Map(mergeDraftsRef.current);
+                    nextDrafts.set(file.path, {
+                        content: resolvedContent,
+                        file: nextFile,
+                    });
+                    mergeDraftsRef.current = nextDrafts;
+                    mergeDraftsSourceKeyRef.current = getDiffSourceCacheKey(currentState.source);
+                    const currentMergeState = mergeState$.peek();
+                    if (currentMergeState.status === "ready") {
+                        setMergeStateValue(createReadyMergeState(currentMergeState.files
+                            .map((currentFile) => currentFile.path === file.path ? nextFile : currentFile)
+                            .filter((currentFile) => currentFile.markerBlocks.length > 0 || currentFile.hasUnsavedDraft)));
+                    }
+                    queue.completedOriginalBlockIndexes.push(originalBlockIndex);
+                }
+                catch (error: unknown) {
+                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+                }
+                finally {
+                    setResolvingMergeConflictKeyActive(conflictKey, false);
+                }
+            };
+            const nextChain = queue.chain
+                .catch(() => undefined)
+                .then(runResolve);
+            queue.chain = nextChain;
+            mergeResolveQueuesRef.current.set(file.path, queue);
+            nextChain.finally(() => {
+                if (mergeResolveQueuesRef.current.get(file.path)?.chain === nextChain) {
+                    mergeResolveQueuesRef.current.delete(file.path);
+                }
+            });
+        }
+    }, [
+        getCurrentMergeFileForResolve,
+        mergeState$,
+        setDocumentErrorValue,
+        setMergeStateValue,
+        setResolvingMergeConflictKeyActive,
+        state$,
+        resolvingMergeConflictKeys$,
+    ]);
+    const discardMergeDrafts = useCallback(async () => {
+        await waitForMergeResolveQueues();
+        const currentState = state$.peek();
+        if (currentState.status !== "loaded" || currentState.source.kind !== "folder") {
+            return false;
+        }
+        mergeDraftsRef.current = new Map();
+        mergeDraftsSourceKeyRef.current = null;
+        const nextMergeState = await loadDiffMergeState(currentState.source.value);
+        setMergeStateValue(nextMergeState);
+        return true;
+    }, [setMergeStateValue, state$, waitForMergeResolveQueues]);
+    const discardMergeDraftsFromCommand = useCallback(() => {
+        if (hasUnsavedMergeDrafts && !savingMergeDraftsRef.current) {
+            discardMergeDrafts().catch((error: unknown) => {
+                const currentState = state$.peek();
+                if (currentState.status === "loaded") {
+                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+                }
+            });
+        }
+    }, [discardMergeDrafts, hasUnsavedMergeDrafts, setDocumentErrorValue, state$]);
+    const prepareMergeDraftsForTransition = useCallback(async (reason: UnsavedDiffMergeDraftReason) => {
+        await waitForMergeResolveQueues();
+        const currentState = state$.peek();
+        const draftFiles = getUnsavedDiffMergeDraftFiles(mergeState$.peek());
+        if (currentState.status !== "loaded" || draftFiles.length === 0) {
+            return true;
+        }
+        const action = await confirmUnsavedDiffMergeDrafts({
+            fileCount: draftFiles.length,
+            reason,
+            sourceLabel: getDiffSourceLabel(currentState.source),
+        });
+        if (action === "discard") {
+            return true;
+        }
+        if (action === "save") {
+            return saveMergeDrafts();
+        }
+        return false;
+    }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
+    prepareMergeDraftsForTransitionRef.current = prepareMergeDraftsForTransition;
+    useEffect(() => registerDiffWindowExitPreparation(windowIdentifier, prepareMergeDraftsForTransition), [prepareMergeDraftsForTransition, windowIdentifier]);
+    useEffect(() => {
+        let active = true;
+        const subscription = ownRegistration(beforeWindowClose(windowIdentifier, async () => {
+            if (!active) return false;
+            try { return await prepareMergeDraftsForTransition("close"); }
+            catch (error) { const currentState = state$.peek(); if (currentState.status === "loaded") setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error))); return false; }
+        }));
+        const closed = ownRegistration(addWindowListener(windowIdentifier, "closed", () => { if (active) onClose?.(); }));
+        return () => { active = false; void subscription.remove().catch(console.error); void closed.remove().catch(console.error); };
+    }, [onClose, prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
+    const openFolder = useCallback(async () => {
+        if (!loadingSource$.peek()) {
+            const currentState = state$.peek();
+            try {
+                setOpenErrorValue(null);
+                setDocumentErrorValue(null);
+                const path = await openDiffFolderDialog();
+                if (path) {
+                    const nextSource = normalizeDiffOpenSource(path);
+                    if (nextSource) {
+                        await loadSource(nextSource);
+                    }
+                }
+            }
+            catch (error) {
+                const nextError = {
+                    message: getErrorMessage(error),
+                    source: currentState.source,
+                    title: "Couldn't choose folder",
+                };
+                if (currentState.status === "loaded") {
+                    setDocumentErrorValue(nextError);
+                }
+                else {
+                    setOpenErrorValue(nextError);
+                }
+            }
+        }
+    }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
+    const compareFiles = useCallback(async () => {
+        if (!loadingSource$.peek()) {
+            const currentState = state$.peek();
+            try {
+                setOpenErrorValue(null);
+                setDocumentErrorValue(null);
+                const nextSource = await openDiffFilePairDialog();
+                if (nextSource) {
+                    await loadSource(nextSource);
+                }
+            }
+            catch (error) {
+                const nextError = {
+                    message: getErrorMessage(error),
+                    source: currentState.source,
+                    title: "Couldn't choose files",
+                };
+                if (currentState.status === "loaded") {
+                    setDocumentErrorValue(nextError);
+                }
+                else {
+                    setOpenErrorValue(nextError);
+                }
+            }
+        }
+    }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
+    const dismissDocumentError = useCallback(() => {
+        setDocumentErrorValue(null);
+    }, [setDocumentErrorValue]);
+    const openPermissionSettings = useCallback(() => {
+        Linking.openURL(macOSFilesAndFoldersSettingsUrl).catch((error: unknown) => {
+            console.error(`Unable to open System Settings: ${getErrorMessage(error)}`);
+        });
+    }, []);
+    const openExternalErrorUrl = useCallback((url: string) => {
+        Linking.openURL(url).catch((error: unknown) => {
+            console.error(`Unable to open URL: ${getErrorMessage(error)}`);
+        });
+    }, []);
+    const startScreenController = useDiffStartScreenController({
+        loadSource,
+        loadingSource$,
+        openError$,
+        setDocumentErrorValue,
+        setOpenErrorValue,
+        setUrlInputErrorValue,
+        setUrlInputValue,
+        urlInput$,
+        urlInputError$,
     });
+    const handleDropDiff = useCallback((nativeEvent: DropEvent) => {
+      void (async () => {
+        if (!loadingSource$.peek()) {
+            const nextSource = await getDroppedDiffSource(nativeEvent);
+            if (nextSource) {
+                await loadSource(nextSource);
+            }
+            else {
+                const nextError = {
+                    message: getUnsupportedDropMessage(nativeEvent),
+                    source: null,
+                    title: "Unsupported drop",
+                };
+                if (state$.peek().status === "loaded") {
+                    setDocumentErrorValue(nextError);
+                }
+                else {
+                    setOpenErrorValue(nextError);
+                }
+            }
+        }
+      })().catch(console.error);
+    }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
+    const reloadCurrentSource = useCallback(() => {
+        const currentState = state$.peek();
+        if (currentState.status !== "loaded") {
+            return false;
+        }
+        loadSource(currentState.source, { force: true, reason: "reload" }).catch((error: unknown) => {
+            setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+        });
+        return true;
+    }, [loadSource, setDocumentErrorValue, state$]);
+    const compareCurrentSource = useCallback((selection: string) => {
+        const currentSource = loadingSource$.peek() ?? state$.peek().source;
+        const repoPath = currentSource?.kind === "folder"
+            ? currentSource.value
+            : currentSource?.kind === "git"
+                ? currentSource.cwd
+                : null;
+        const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState$.peek()) : null;
+        if (!nextSource || loadingSource$.peek()) {
+            return false;
+        }
+        loadSource(nextSource).catch((error: unknown) => {
+            setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
+        });
+        return true;
+    }, [compareRepoState$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
+    const openCompareRefPrompt = useCallback(() => {
+        const currentSource = loadingSource$.peek() ?? state$.peek().source;
+        const repoPath = currentSource?.kind === "folder"
+            ? currentSource.value
+            : currentSource?.kind === "git"
+                ? currentSource.cwd
+                : null;
+        if (!repoPath || loadingSource$.peek()) {
+            return false;
+        }
+        setCompareRefInput("");
+        setCompareRefPromptVisible(true);
+        return true;
+    }, [loadingSource$, state$, setCompareRefInput, setCompareRefPromptVisible]);
+    const closeCompareRefPrompt = useCallback(() => {
+        setCompareRefPromptVisible(false);
+        setCompareRefInput("");
+    }, [setCompareRefPromptVisible, setCompareRefInput]);
+    const submitCompareRefPrompt = useCallback(() => {
+        const ref = compareRefInput$.peek().trim();
+        const currentSource = loadingSource$.peek() ?? state$.peek().source;
+        const repoPath = currentSource?.kind === "folder"
+            ? currentSource.value
+            : currentSource?.kind === "git"
+                ? currentSource.cwd
+                : null;
+        if (ref && repoPath && !loadingSource$.peek()) {
+            const nextSource = createDiffCompareSourceForRef(repoPath, ref);
+            closeCompareRefPrompt();
+            loadSource(nextSource).catch((error: unknown) => {
+                setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
+            });
+        }
+    }, [closeCompareRefPrompt, compareRefInput$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
+    const toggleShowOnlyHunks = useCallback(() => {
+        const currentState = state$.peek();
+        let didToggle = false;
+        if (currentState.status === "loaded" && currentState.source.kind === "folder") {
+            const nextShowOnlyHunks = !getDiffShowOnlyHunksSetting();
+            setDiffShowOnlyHunksSetting(nextShowOnlyHunks);
+            loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
+                setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
+            });
+            didToggle = true;
+        }
+        return didToggle;
+    }, [loadSource, setDocumentErrorValue, state$]);
+    const revealCurrentFolder = useCallback(() => {
+        const currentSource = state$.peek().source;
+        const currentVisibleFolderPath = currentSource?.kind === "folder" ? currentSource.value : null;
+        if (!currentVisibleFolderPath) {
+            return false;
+        }
+        revealInFileManager(currentVisibleFolderPath)
+            .catch((error: unknown) => {
+            console.error(error instanceof Error ? error.message : String(error));
+        });
+        return true;
+    }, [state$]);
+    const copyText = useCallback((text: string) => {
+        runCommand({ target: { type: "command", name: "pbcopy" }, input: text })
+            .then((result) => {
+            if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
+                console.error(decodeProcessText(result.stderr) || "Unable to copy to clipboard.");
+            }
+        })
+            .catch((error: unknown) => {
+            console.error(error instanceof Error ? error.message : String(error));
+        });
+        return true;
+    }, []);
+    const copyCurrentSource = useCallback(() => {
+        let didCopy = false;
+        const currentVisibleSource = state$.peek().source;
+        if (currentVisibleSource) {
+            didCopy = copyText(currentVisibleSource.value);
+        }
+        return didCopy;
+    }, [copyText, state$]);
+    const copyCurrentFilePath = useCallback(() => {
+        let didCopy = false;
+        const currentState = state$.peek();
+        const currentVisibleFolderPath = currentState.source?.kind === "folder" ? currentState.source.value : null;
+        if (currentState.status === "loaded" && currentVisibleFolderPath) {
+            const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
+            if (activeFile) {
+                didCopy = copyText(getJoinedPath(currentVisibleFolderPath, activeFile.path));
+            }
+        }
+        return didCopy;
+    }, [activeFileIndex$, copyText, state$]);
+    const copyCurrentRelativePath = useCallback(() => {
+        let didCopy = false;
+        const currentState = state$.peek();
+        if (currentState.status === "loaded") {
+            const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
+            if (activeFile) {
+                didCopy = copyText(activeFile.path);
+            }
+        }
+        return didCopy;
+    }, [activeFileIndex$, copyText, state$]);
+    const toggleSidebar = useCallback(() => {
+        const currentState = state$.peek();
+        const currentLoadingSource = loadingSource$.peek();
+        const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+        const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+        if (!currentToolbarSource) {
+            return false;
+        }
+        setSidebarCollapsedValue((current) => !current);
+        return true;
+    }, [loadingSource$, setSidebarCollapsedValue, state$]);
+    const focusSearchWithValue = useCallback((value: string) => {
+        const currentState = state$.peek();
+        const currentLoadingSource = loadingSource$.peek();
+        const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
+        const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
+        if (!currentToolbarSource) {
+            return false;
+        }
+        setSearchQuery(value);
+        focusDiffSearchToolbarItem(windowIdentifier, value).catch((error: unknown) => {
+            console.error(error instanceof Error ? error.message : String(error));
+        });
+        return true;
+    }, [loadingSource$, state$, windowIdentifier, setSearchQuery]);
+    const focusSearch = useCallback(() => {
+        return focusSearchWithValue(searchQuery$.peek());
+    }, [focusSearchWithValue, searchQuery$]);
+    const focusFileSearch = useCallback(() => {
+        return focusSearchWithValue("@");
+    }, [focusSearchWithValue]);
+    const toggleFileCollapsed = useCallback((fileIndex: number) => {
+        setCollapsedFileIndexesValue((current) => {
+            const next = new Set(current);
+            const collapsed = !next.has(fileIndex);
+            if (next.has(fileIndex)) {
+                next.delete(fileIndex);
+            }
+            else {
+                next.add(fileIndex);
+            }
+            if (renderViewMode !== "unified") {
+                sideBySideDataSource?.setFileCollapsed(fileIndex, collapsed);
+            }
+            return next;
+        });
+    }, [renderViewMode, setCollapsedFileIndexesValue, sideBySideDataSource]);
+    const listSyntaxTheme = syntaxTheme.name;
+    const rowConfig = useMemo<DiffRowConfig>(() => ({
+        borderColor: diffPalette.border,
+        collapsedFileIndexes,
+        fileHeaderBackgroundColor,
+        fontFamily,
+        fontSize,
+        foregroundColor,
+        mutedColor,
+        showOnlyHunks,
+        syntaxHighlightingEnabled,
+        syntaxTheme: listSyntaxTheme,
+    }), [
+        collapsedFileIndexes,
+        diffPalette.border,
+        fileHeaderBackgroundColor,
+        fontFamily,
+        fontSize,
+        foregroundColor,
+        listSyntaxTheme,
+        mutedColor,
+        showOnlyHunks,
+        syntaxHighlightingEnabled,
+    ]);
+    const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
+        const palette = getDiffRowPalette(syntaxTheme.appearance);
+        const configId = `diff:${loadedDocumentId}:unified`;
+        const configVersion = hashDiffNativeRowConfigVersion([
+            configId,
+            diffUnifiedChangeBarWidth,
+            diffUnifiedLineNumberWidth,
+            diffUnifiedMarkerWidth,
+            fontFamily,
+            fontSize,
+            foregroundColor,
+            highlightChangedCharacters,
+            mutedColor,
+            palette.addAccent,
+            palette.addBackground,
+            palette.removeAccent,
+            palette.removeBackground,
+            rowHeight,
+            showWhitespaceCharacters,
+            syntaxHighlightingEnabled,
+            listSyntaxTheme,
+        ]);
+        return {
+            addAccentColor: palette.addAccent,
+            addBackgroundColor: palette.addBackground,
+            activeSearchHighlightColor: diffActiveSearchHighlightColor,
+            activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
+            changeBarWidth: diffUnifiedChangeBarWidth,
+            collapsedFileIndexes: "",
+            configId,
+            configVersion,
+            dividerColor: "transparent",
+            documentId: loadedDocumentId,
+            fontFamily,
+            fontSize,
+            foregroundColor,
+            highlightChangedCharacters,
+            lineNumberWidth: diffUnifiedLineNumberWidth,
+            markerWidth: diffUnifiedMarkerWidth,
+            mutedColor,
+            presentation: "unified",
+            projectionId: 0,
+            removeAccentColor: palette.removeAccent,
+            removeBackgroundColor: palette.removeBackground,
+            rowHeight,
+            searchHighlightColor: diffSearchHighlightColor,
+            showWhitespaceCharacters,
+            syntaxHighlightingEnabled,
+            themeName: listSyntaxTheme,
+        };
+    }, [
+        fontFamily,
+        fontSize,
+        foregroundColor,
+        highlightChangedCharacters,
+        listSyntaxTheme,
+        loadedDocumentId,
+        mutedColor,
+        rowHeight,
+        showWhitespaceCharacters,
+        syntaxHighlightingEnabled,
+        syntaxTheme.appearance,
+    ]);
+    const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
+        const palette = getDiffRowPalette(syntaxTheme.appearance);
+        const dividerColor = getSideBySideDividerColor(syntaxTheme.appearance);
+        const configId = `diff:${loadedDocumentId}:blocks`;
+        const projectionId = sideBySideDataSource?.getProjectionId() ?? 0;
+        const configVersion = hashDiffNativeRowConfigVersion([
+            configId,
+            projectionId,
+            dividerColor,
+            diffSideBySideLineNumberWidth,
+            diffSideBySideMarkerWidth,
+            fontFamily,
+            fontSize,
+            foregroundColor,
+            highlightChangedCharacters,
+            mutedColor,
+            palette.addAccent,
+            palette.addBackground,
+            palette.removeAccent,
+            palette.removeBackground,
+            rowHeight,
+            showWhitespaceCharacters,
+            syntaxHighlightingEnabled,
+            listSyntaxTheme,
+        ]);
+        return {
+            addAccentColor: palette.addAccent,
+            addBackgroundColor: palette.addBackground,
+            activeSearchHighlightColor: diffActiveSearchHighlightColor,
+            activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
+            changeBarWidth: 0,
+            collapsedFileIndexes: "",
+            configId,
+            configVersion,
+            dividerColor,
+            documentId: loadedDocumentId,
+            fontFamily,
+            fontSize,
+            foregroundColor,
+            highlightChangedCharacters,
+            lineNumberWidth: diffSideBySideLineNumberWidth,
+            markerWidth: diffSideBySideMarkerWidth,
+            mutedColor,
+            presentation: "blocks",
+            projectionId,
+            removeAccentColor: palette.removeAccent,
+            removeBackgroundColor: palette.removeBackground,
+            rowHeight,
+            searchHighlightColor: diffSearchHighlightColor,
+            showWhitespaceCharacters,
+            syntaxHighlightingEnabled,
+            themeName: listSyntaxTheme,
+        };
+    }, [
+        fontFamily,
+        fontSize,
+        foregroundColor,
+        highlightChangedCharacters,
+        listSyntaxTheme,
+        loadedDocumentId,
+        mutedColor,
+        rowHeight,
+        sideBySideDataSource,
+        showWhitespaceCharacters,
+        syntaxHighlightingEnabled,
+        syntaxTheme.appearance,
+    ]);
+    const rowRenderInitialState = useMemo(() => createDiffRowRenderState(state$, collapsedFileIndexes$), [collapsedFileIndexes$, state$]);
+    const rowRender$ = useObservable(rowRenderInitialState) as unknown as Observable<DiffRowRenderState>;
+    const hunkListIndexes = useMemo(() => {
+        let indexes: number[] = [];
+        if (loadedDocument) {
+            if (viewMode === "unified") {
+                indexes = [...unifiedHunkRowIndexSet]
+                    .map((rowIndex) => getVisibleListIndex(rowIndex))
+                    .filter((index): index is number => index !== undefined);
+            }
+            else {
+                indexes = [...sideBySideHunkHeaderIndexes].sort((left, right) => left - right);
+            }
+        }
+        return indexes;
+    }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, unifiedHunkRowIndexSet, viewMode]);
+    const navigateToHunk = useCallback((direction: -1 | 1) => {
+        const list = listRef.current;
+        const listState = list?.getState();
+        const currentPosition = listState
+            ? listState.scroll + (documentError ? diffTitlebarTopInset : 0)
+            : 0;
+        const targetIndex = getAdjacentDiffHunkIndex(hunkListIndexes, currentPosition, direction, listState?.positionAtIndex);
+        let didNavigate = false;
+        if (list && targetIndex !== null) {
+            list.scrollToIndex({
+                animated: true,
+                index: targetIndex,
+                viewOffset: diffTitlebarTopInset,
+                viewPosition: 0,
+            }).catch((error: unknown) => {
+                console.error(error instanceof Error ? error.message : String(error));
+            });
+            didNavigate = true;
+        }
+        return didNavigate;
+    }, [documentError, hunkListIndexes]);
+    const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
+    const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
+    const scrollToFile = useCallback((file: DiffFileSummary) => {
+        const rowStart = Math.max(0, Math.floor(file.rowStart));
+        const sourceListIndex = viewMode === "unified"
+            ? getVisibleListIndex(rowStart)
+            : sideBySideListIndexByRowIndex.get(rowStart);
+        const listIndex = inlineListIndexByFileIndexRef.current.get(file.index) ?? sourceListIndex;
+        if (listIndex !== undefined) {
+            listRef.current?.scrollToIndex({
+                animated: false,
+                index: listIndex,
+                viewOffset: diffTitlebarTopInset,
+                viewPosition: 0,
+            }).catch((error: unknown) => {
+                console.error(error instanceof Error ? error.message : String(error));
+            });
+        }
+    }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
+    const handleInlineListIndexesChanged = useCallback((indexes: ReadonlyMap<number, number>) => {
+        inlineListIndexByFileIndexRef.current = indexes;
+    }, []);
+    const scrollToSearchListIndex = useCallback((listIndex: number) => {
+        listRef.current?.scrollToIndex({
+            animated: true,
+            index: listIndex,
+            viewOffset: diffTitlebarTopInset,
+            viewPosition: 0.5,
+        }).catch((error: unknown) => {
+            console.error(error instanceof Error ? error.message : String(error));
+        });
+    }, []);
+    const getSearchResultListIndex = useCallback((result: DiffSearchResult) => {
+        if (viewMode === "unified") {
+            return getVisibleListIndex(result.rowIndex);
+        }
+        if (!loadedDocument) {
+            return undefined;
+        }
+        const collapsedIndexes = [...collapsedFileIndexList];
+        const startIndex = sideBySideListIndexByRowIndex.get(result.rowIndex) ?? 0;
+        for (let listIndex = startIndex; listIndex < sideBySideRowCount; listIndex += 1) {
+            const row = loadedDocument.getPlainSideBySideRow(listIndex, collapsedIndexes);
+            if (row.kind === "file-header") {
+                if (row.sourceStart > result.rowIndex) {
+                    break;
+                }
+            }
+            else if (row.sourceStart <= result.rowIndex && result.rowIndex < row.sourceEnd) {
+                return listIndex;
+            }
+        }
+        return undefined;
+    }, [
+        collapsedFileIndexList,
+        getVisibleListIndex,
+        loadedDocument,
+        sideBySideListIndexByRowIndex,
+        sideBySideRowCount,
+        viewMode,
+    ]);
+    const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
+        const currentState = state$.peek();
+        if (currentState.status !== "loaded") {
+            return;
+        }
+        const file = currentState.files.find((candidate) => candidate.index === result.fileIndex);
+        if (!file) {
+            return;
+        }
+        activeFileIndex$.set(result.fileIndex);
+        if (result.kind === "file") {
+            scrollToFile(file);
+            return;
+        }
+        setCollapsedFileIndexesValue((currentIndexes) => {
+            if (!currentIndexes.has(result.fileIndex)) {
+                return currentIndexes;
+            }
+            const nextIndexes = new Set(currentIndexes);
+            nextIndexes.delete(result.fileIndex);
+            return nextIndexes;
+        });
+        const listIndex = getSearchResultListIndex(result);
+        if (listIndex !== undefined) {
+            scrollToSearchListIndex(listIndex);
+        }
+    }, [
+        activeFileIndex$,
+        getSearchResultListIndex,
+        scrollToFile,
+        scrollToSearchListIndex,
+        setCollapsedFileIndexesValue,
+        state$,
+    ]);
+    const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResults$.peek()) => {
+        const resultCount = results.length;
+        if (resultCount === 0) {
+            return false;
+        }
+        const nextIndex = ((index % resultCount) + resultCount) % resultCount;
+        setActiveSearchResultIndex(nextIndex);
+        const result = results[nextIndex];
+        if (result) {
+            scrollToSearchResult(result);
+        }
+        return true;
+    }, [scrollToSearchResult, searchResults$, setActiveSearchResultIndex]);
+    const advanceSearchResult = useCallback((delta: number) => {
+        return activateSearchResult(Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)) + delta);
+    }, [activateSearchResult, activeSearchResultIndex$, searchResults$]);
+    const handleSearchChange = useCallback((value: string) => {
+        if (value !== searchQuery$.peek()) {
+            lastSubmittedSearchQueryRef.current = "";
+        }
+        setSearchQuery(value);
+    }, [searchQuery$, setSearchQuery]);
+    const handleSearchSubmit = useCallback((value: string, direction: 1 | -1) => {
+        const existingQuery = value === lastSubmittedSearchQueryRef.current;
+        lastSubmittedSearchQueryRef.current = value;
+        setSearchQuery(value);
+        const results = searchResults$.peek();
+        const nextIndex = getDiffSearchSubmitIndex({
+            activeIndex: Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)),
+            direction,
+            repeatedQuery: existingQuery,
+            resultCount: results.length,
+        });
+        return activateSearchResult(nextIndex, results);
+    }, [activateSearchResult, setSearchQuery, searchResults$, activeSearchResultIndex$]);
+    useEffect(() => { const registration = ownRegistration(addKeyboardListener("down", (event) => {
+        let handled = false;
+        if (isSearchKeyEvent(event)) {
+            handled = focusSearch();
+        }
+        else if (isFileJumpKeyEvent(event)) {
+            handled = focusFileSearch();
+        }
+        else if (isSearchPreviousKeyEvent(event)) {
+            handled = advanceSearchResult(-1);
+        }
+        else if (isSearchNextKeyEvent(event)) {
+            handled = advanceSearchResult(1);
+        }
+        return handled;
+    }, { windowIds: [windowIdentifier] })); return () => { void registration.remove().catch(console.error); }; }, [advanceSearchResult, focusFileSearch, focusSearch, windowIdentifier]);
+    const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
+        activeFileIndex$.set(file.index);
+        scrollToFile(file);
+    }, [activeFileIndex$, scrollToFile]);
+    const toggleSidebarFolder = useCallback((title: string) => {
+        setCollapsedSidebarFolders((currentFolders) => {
+            const nextFolders = new Set(currentFolders);
+            if (nextFolders.has(title)) {
+                nextFolders.delete(title);
+            }
+            else {
+                nextFolders.add(title);
+            }
+            return nextFolders;
+        });
+    }, [setCollapsedSidebarFolders]);
+    const sidebarRenderInitialState = useMemo(createDiffSidebarRenderState, []);
+    const sidebarRender$ = useObservable(sidebarRenderInitialState) as unknown as Observable<DiffSidebarRenderState>;
+    const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
+        let row: ReactElement;
+        if (item.type === "folder") {
+            row = (<DiffSidebarFolderRow collapsed={item.collapsed} onToggleFolder={toggleSidebarFolder} sidebarRender$={sidebarRender$} title={item.title}/>);
+        }
+        else {
+            const file = item.file;
+            row = (<DiffSidebarFileRow activeFileIndex$={activeFileIndex$} file={file} mergeState$={mergeState$} onPressFile={handleSidebarFilePress} sidebarRender$={sidebarRender$}/>);
+        }
+        return row;
+    }, [activeFileIndex$, handleSidebarFilePress, mergeState$, sidebarRender$, toggleSidebarFolder]);
+    const handleSplitViewResize = useCallback((event: SidebarSplitViewResizeEvent) => {
+        const nextMetrics = {
+            contentHeight: Math.round(event.contentHeight || event.height),
+            contentWidth: Math.round(event.contentWidth),
+            contentX: Math.round(event.contentX),
+            sidebarHeight: Math.round(event.sidebarHeight || event.height),
+            sidebarWidth: Math.round(event.sidebarWidth),
+        };
+        const previousDiffPaneHeight = diffPaneHeight$.peek();
+        setSplitPaneMetricsValue(nextMetrics);
+        const isSidebarCollapsed = sidebarCollapsed$.peek();
+        const shouldSaveSidebarWidth = nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&
+            !isSidebarCollapsed &&
+            (nextMetrics.sidebarWidth >= sidebarWidth || nextMetrics.contentWidth > diffContentMinWidth);
+        if (shouldSaveSidebarWidth) {
+            setDiffSidebarWidthSetting(nextMetrics.sidebarWidth);
+        }
+        if (nextMetrics.contentHeight > 0 && previousDiffPaneHeight !== nextMetrics.contentHeight) {
+            setDiffPaneHeightValue(nextMetrics.contentHeight);
+        }
+    }, [
+        diffPaneHeight$,
+        setDiffPaneHeightValue,
+        setSplitPaneMetricsValue,
+        sidebarCollapsed$,
+        sidebarWidth,
+        splitPaneMetrics$,
+    ]);
+    const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
+        const nextHeight = Math.round(event.nativeEvent.layout.height);
+        const previousHeight = diffPaneHeight$.peek();
+        if (nextHeight > 0 || previousHeight === 0) {
+            setDiffPaneHeightValue(nextHeight);
+        }
+    }, [diffPaneHeight$, setDiffPaneHeightValue]);
+    const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
+        const currentState = state$.peek();
+    }, [state$]);
+    const getItemType = useCallback((index: number) => (fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"), [fileHeaderRowIndexes]);
+    const getItemSize = useCallback((index: number) => {
+        if (getItemType(index) === "file-header") {
+            return diffFileHeaderRowHeight;
+        }
+        if (!showOnlyHunks) {
+            return rowHeight;
+        }
+        return rowHeight + (unifiedHunkRowIndexSet.has(index) ? diffHunkHeaderHeight : 0);
+    }, [getItemType, rowHeight, showOnlyHunks, unifiedHunkRowIndexSet]);
+    const renderRow = useCallback(({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
+        return (<DiffUnifiedRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} hasHunkHeader={showOnlyHunks && unifiedHunkRowIndexSet.has(index)} index={index} isFileHeader={getItemType(index) === "file-header"} nativeConfigId={nativeUnifiedRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row}/>);
+    }, [collapsedFileIndexes$, getItemType, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed, unifiedHunkRowIndexSet]);
+    const getSideBySideItemType = useCallback((index: number) => {
+        return sideBySideDataSource?.getItemMetadata(index).kind === "file-header"
+            ? "file-header"
+            : "side-by-side-line";
+    }, [sideBySideDataSource]);
+    const getSideBySideItemSize = useCallback((index: number) => {
+        const item = sideBySideDataSource?.getItemMetadata(index);
+        if (item?.kind === "file-header") {
+            return diffFileHeaderRowHeight;
+        }
+        return rowHeight + (showOnlyHunks && item?.hunkStart ? diffHunkHeaderHeight : 0);
+    }, [rowHeight, showOnlyHunks, sideBySideDataSource]);
+    const renderSideBySideRow = useCallback(({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
+        const itemMetadata = sideBySideDataSource?.getItemMetadata(index);
+        const sourceListIndex = sideBySideDataSource?.getItemLocation(index).listIndex ?? index;
+        return (<DiffSideBySideRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} index={index} itemMetadata={itemMetadata} listIndex={sourceListIndex} nativeConfigId={nativeSideBySideRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row}/>);
+    }, [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, sideBySideDataSource, toggleFileCollapsed]);
+    const documentErrorHeight = documentError
+        ? documentError.kind === "permission"
+            ? diffDocumentPermissionErrorHeight
+            : diffDocumentErrorHeight
+        : 0;
+    const diffTopChromeContentHeight = documentErrorHeight;
+    const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
+    const activeItemCount = renderViewMode === "unified"
+        ? visibleItemIndexes.length
+        : sideBySideRowCount;
+    const documentErrorBody = (<DiffDocumentErrorBody borderColor={diffPalette.border} documentError={documentError} foregroundColor={foregroundColor} mutedColor={mutedColor} onDismiss={dismissDocumentError} onOpenExternalUrl={openExternalErrorUrl} onOpenSystemSettings={openPermissionSettings} onRetry={reloadCurrentSource} surfaceColor={diffPalette.surface}/>);
+    const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (<DiffUnsavedMergeDraftBannerWithSavingState dangerColor={diffPalette.danger} fileCount={unsavedMergeDraftFiles.length} onDiscard={discardMergeDraftsFromCommand} onSave={saveMergeDraftsFromCommand} primaryColor={diffPalette.primary} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>) : null;
+    const startScreenOpenErrorBody = startScreenController.openError ? (<DiffErrorPanel borderColor={diffPalette.border} chooseFolderLabel={startScreenController.openError.kind === "permission" ? "Choose Another Folder" : undefined} error={startScreenController.openError} foregroundColor={foregroundColor} mutedColor={mutedColor} onChooseFolder={openFolder} onDismiss={startScreenController.dismissOpenError} onOpenExternalUrl={openExternalErrorUrl} onOpenSystemSettings={startScreenController.openError.kind === "permission" ? openPermissionSettings : undefined} onRetry={startScreenController.openError.kind !== "permission" && startScreenController.openError.source ? startScreenController.retryOpenError : undefined} surfaceColor={diffPalette.surface}/>) : null;
+    const initialLoadingSource = startScreenController.openError ? null : source ?? null;
+    const emptyLoadingSource = state.status === "empty" ? loadingSource ?? initialLoadingSource : null;
+    const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
+    const hasSplitBody = state.status === "loaded" || (state.status !== "fatal" && emptyLoadingSource !== null);
+    useEffect(() => {
+        // Match the actual body, including fatal and welcome screens which never
+        // emit a split-view mount event. Save chrome for native window restoration.
+        setDiffViewerStartupSplitView(windowIdentifier, hasSplitBody ? createDiffStartupSplitView({
+            appearance: syntaxTheme.appearance,
+            backgroundColor,
+            sidebarBackgroundColor: diffPalette.sidebarBackground,
+            sidebarWidth,
 
-    const listIndex = getSearchResultListIndex(result);
-    if (listIndex !== undefined) {
-      scrollToSearchListIndex(listIndex);
+        }) : null).catch((error: unknown) => console.error("Failed to update Diff startup chrome:", error));
+    }, [
+        backgroundColor,
+        diffPalette.sidebarBackground,
+        hasSplitBody,
+        restoreWindowsOnStartup,
+        sidebarWidth,
+        syntaxTheme.appearance,
+        windowIdentifier,
+    ]);
+    let body: ReactNode;
+    if (state.status === "fatal") {
+        body = (<DiffFatalBody borderColor={diffPalette.border} error={state.error} foregroundColor={foregroundColor} mutedColor={mutedColor} onChooseFolder={openFolder} surfaceColor={diffPalette.surface}/>);
     }
-  }, [
-    activeFileIndex$,
-    getSearchResultListIndex,
-    scrollToFile,
-    scrollToSearchListIndex,
-    setCollapsedFileIndexesValue,
-    state$,
-  ]);
-
-  const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResults$.peek()) => {
-    const resultCount = results.length;
-    if (resultCount === 0) {
-      return false;
+    else if (state.status === "loaded") {
+        body = (<DiffSplitBody backgroundColor={backgroundColor} content={(<DiffLoadedContentPane activeFileIndex$={activeFileIndex$} activeItemCount={activeItemCount} adaptiveLightModeEnabled={adaptiveLightModeEnabled} diffPaneHeight$={diffPaneHeight$} diffTopChromeHeight={diffTopChromeHeight} diffRows={diffRows} documentErrorBody={documentErrorBody} floatingDocumentBanner={unsavedMergeDraftBanner} getItemSize={getItemSize} getItemType={getItemType} getRow={getRow} getSideBySideItemSize={getSideBySideItemSize} getSideBySideItemType={getSideBySideItemType} getSideBySideRow={getSideBySideRow} handleDiffPaneLayout={handleDiffPaneLayout} handleSideBySideTopItemChanged={handleSideBySideTopItemChanged} handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested} handleTopItemChanged={handleTopItemChanged} handleVisibleRowsRequested={handleVisibleRowsRequested} rowConfig={rowConfig} listRef={listRef} mergeState={mergeState} mergeState$={mergeState$} nativeSideBySideRowConfig={nativeSideBySideRowConfig} nativeUnifiedRowConfig={nativeUnifiedRowConfig} noChangesBody={(<DiffNoChangesBody foregroundColor={foregroundColor} mutedColor={mutedColor} visibleSourceLabel={visibleSourceLabel}/>)} onInlineListIndexesChanged={handleInlineListIndexesChanged} renderRow={renderRow} renderSideBySideRow={renderSideBySideRow} requestSideBySideRange={requestSideBySideRange} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$} onResolveMergeConflict={resolveMergeConflict} rowHeight={rowHeight} sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex} sideBySideDataSource={sideBySideDataSource} splitPaneMetrics$={splitPaneMetrics$} state={state} syntaxTokenizationState$={syntaxTokenizationState$} viewMode={renderViewMode} visibleItemIndexes={visibleItemIndexes}/>)} debugPayload={{
+                activeItemCount,
+                rows: state.document.rowCount,
+                viewMode: renderViewMode,
+            }} handleSplitViewResize={handleSplitViewResize} sidebar={(<DiffLoadedSidebarPane backgroundColor={diffPalette.sidebarBackground} collapsedSidebarFolders$={collapsedSidebarFolders$} handleSidebarListLayout={handleSidebarListLayout} mutedColor={mutedColor} renderSidebarEntry={renderSidebarEntry} sidebarCollapsed={sidebarCollapsed} splitPaneMetrics$={splitPaneMetrics$} state={state}/>)} sidebarBackgroundColor={diffPalette.sidebarBackground} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} splitPaneMetrics$={splitPaneMetrics$} syntaxAppearance={syntaxTheme.appearance}/>);
     }
-
-    const nextIndex = ((index % resultCount) + resultCount) % resultCount;
-    setActiveSearchResultIndex(nextIndex);
-    const result = results[nextIndex];
-    if (result) {
-      scrollToSearchResult(result);
-    }
-    return true;
-  }, [scrollToSearchResult, searchResults$, setActiveSearchResultIndex]);
-
-  const advanceSearchResult = useCallback((delta: number) => {
-    return activateSearchResult(Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)) + delta);
-  }, [activateSearchResult, activeSearchResultIndex$, searchResults$]);
-
-  const handleSearchChange = useCallback((value: string) => {
-    if (value !== searchQuery$.peek()) {
-      lastSubmittedSearchQueryRef.current = "";
-    }
-    setSearchQuery(value);
-  }, [searchQuery$, setSearchQuery]);
-
-  const handleSearchSubmit = useCallback((value: string, direction: 1 | -1) => {
-    const existingQuery = value === lastSubmittedSearchQueryRef.current;
-    lastSubmittedSearchQueryRef.current = value;
-    setSearchQuery(value);
-    const results = searchResults$.peek();
-    const nextIndex = getDiffSearchSubmitIndex({
-      activeIndex: Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)),
-      direction,
-      repeatedQuery: existingQuery,
-      resultCount: results.length,
-    });
-    return activateSearchResult(nextIndex, results);
-  }, [activateSearchResult, setSearchQuery, searchResults$, activeSearchResultIndex$]);
-
-  useEffect(() => addKeyDownListener((event) => {
-    let handled = false;
-    if (isSearchKeyEvent(event)) {
-      handled = focusSearch();
-    } else if (isFileJumpKeyEvent(event)) {
-      handled = focusFileSearch();
-    } else if (isSearchPreviousKeyEvent(event)) {
-      handled = advanceSearchResult(-1);
-    } else if (isSearchNextKeyEvent(event)) {
-      handled = advanceSearchResult(1);
-    }
-    return handled;
-  }), [advanceSearchResult, focusFileSearch, focusSearch]);
-
-  const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
-    activeFileIndex$.set(file.index);
-    scrollToFile(file);
-  }, [activeFileIndex$, scrollToFile]);
-
-  const toggleSidebarFolder = useCallback((title: string) => {
-    setCollapsedSidebarFolders((currentFolders) => {
-      const nextFolders = new Set(currentFolders);
-      if (nextFolders.has(title)) {
-        nextFolders.delete(title);
-      } else {
-        nextFolders.add(title);
-      }
-      return nextFolders;
-    });
-  }, [setCollapsedSidebarFolders]);
-  const sidebarRenderInitialState = useMemo(createDiffSidebarRenderState, []);
-  const sidebarRender$ = useObservable(sidebarRenderInitialState) as unknown as Observable<DiffSidebarRenderState>;
-
-  const renderSidebarEntry = useCallback(({ item }: LegendListRenderItemProps<DiffSidebarEntry>) => {
-    let row: ReactElement;
-    if (item.type === "folder") {
-      row = (
-        <DiffSidebarFolderRow
-          collapsed={item.collapsed}
-          onToggleFolder={toggleSidebarFolder}
-          sidebarRender$={sidebarRender$}
-          title={item.title}
-        />
-      );
-    } else {
-      const file = item.file;
-      row = (
-        <DiffSidebarFileRow
-          activeFileIndex$={activeFileIndex$}
-          file={file}
-          mergeState$={mergeState$}
-          onPressFile={handleSidebarFilePress}
-          sidebarRender$={sidebarRender$}
-        />
-      );
-    }
-
-    return row;
-  }, [activeFileIndex$, handleSidebarFilePress, mergeState$, sidebarRender$, toggleSidebarFolder]);
-
-  const handleSplitViewResize = useCallback((event: NativeSyntheticEvent<SidebarSplitViewResizeEvent>) => {
-    const nextMetrics = {
-      contentHeight: Math.round(event.nativeEvent.contentHeight || event.nativeEvent.height),
-      contentWidth: Math.round(event.nativeEvent.contentWidth),
-      contentX: Math.round(event.nativeEvent.contentX),
-      sidebarHeight: Math.round(event.nativeEvent.sidebarHeight || event.nativeEvent.height),
-      sidebarWidth: Math.round(event.nativeEvent.sidebarWidth),
-    };
-    const previousDiffPaneHeight = diffPaneHeight$.peek();
-    setSplitPaneMetricsValue(nextMetrics);
-    const isSidebarCollapsed = sidebarCollapsed$.peek();
-    const shouldSaveSidebarWidth =
-      nextMetrics.sidebarWidth >= defaultDiffSidebarWidth &&
-      !isSidebarCollapsed &&
-      (nextMetrics.sidebarWidth >= sidebarWidth || nextMetrics.contentWidth > diffContentMinWidth);
-    if (shouldSaveSidebarWidth) {
-      setDiffSidebarWidthSetting(nextMetrics.sidebarWidth);
-    }
-    if (nextMetrics.contentHeight > 0 && previousDiffPaneHeight !== nextMetrics.contentHeight) {
-      setDiffPaneHeightValue(nextMetrics.contentHeight);
-    }
-  }, [
-    diffPaneHeight$,
-    setDiffPaneHeightValue,
-    setSplitPaneMetricsValue,
-    sidebarCollapsed$,
-    sidebarWidth,
-    splitPaneMetrics$,
-  ]);
-
-  const handleDiffPaneLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = Math.round(event.nativeEvent.layout.height);
-    const previousHeight = diffPaneHeight$.peek();
-    if (nextHeight > 0 || previousHeight === 0) {
-      setDiffPaneHeightValue(nextHeight);
-    }
-  }, [diffPaneHeight$, setDiffPaneHeightValue]);
-
-  const handleSidebarListLayout = useCallback((event: LayoutChangeEvent) => {
-    const currentState = state$.peek();
-  }, [state$]);
-
-  const getItemType = useCallback((index: number) => (
-    fileHeaderRowIndexes.has(index) ? "file-header" : "diff-line"
-  ), [fileHeaderRowIndexes]);
-
-  const getItemSize = useCallback((index: number) => {
-    if (getItemType(index) === "file-header") {
-      return diffFileHeaderRowHeight;
-    }
-
-    if (!showOnlyHunks) {
-      return rowHeight;
-    }
-
-    return rowHeight + (unifiedHunkRowIndexSet.has(index) ? diffHunkHeaderHeight : 0);
-  }, [getItemType, rowHeight, showOnlyHunks, unifiedHunkRowIndexSet]);
-
-  const renderRow = useCallback(
-    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
-      return (
-        <DiffUnifiedRow
-          adaptiveRender={adaptiveRender}
-          collapsedFileIndexes$={collapsedFileIndexes$}
-          hasHunkHeader={showOnlyHunks && unifiedHunkRowIndexSet.has(index)}
-          index={index}
-          isFileHeader={getItemType(index) === "file-header"}
-          nativeConfigId={nativeUnifiedRowConfig.configId}
-          nativeRowHeight={rowHeight}
-          onToggleFileCollapsed={toggleFileCollapsed}
-          rowRender$={rowRender$}
-          row={row}
-        />
-      );
-    },
-    [collapsedFileIndexes$, getItemType, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed, unifiedHunkRowIndexSet],
-  );
-
-  const getSideBySideItemType = useCallback((index: number) => {
-    return sideBySideDataSource?.getItemMetadata(index).kind === "file-header"
-      ? "file-header"
-      : "side-by-side-line";
-  }, [sideBySideDataSource]);
-
-  const getSideBySideItemSize = useCallback((index: number) => {
-    const item = sideBySideDataSource?.getItemMetadata(index);
-    if (item?.kind === "file-header") {
-      return diffFileHeaderRowHeight;
-    }
-
-    return rowHeight + (showOnlyHunks && item?.hunkStart ? diffHunkHeaderHeight : 0);
-  }, [rowHeight, showOnlyHunks, sideBySideDataSource]);
-
-  const renderSideBySideRow = useCallback(
-    ({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
-      const itemMetadata = sideBySideDataSource?.getItemMetadata(index);
-      const sourceListIndex = sideBySideDataSource?.getItemLocation(index).listIndex ?? index;
-      return (
-        <DiffSideBySideRow
-          adaptiveRender={adaptiveRender}
-          collapsedFileIndexes$={collapsedFileIndexes$}
-          index={index}
-          itemMetadata={itemMetadata}
-          listIndex={sourceListIndex}
-          nativeConfigId={nativeSideBySideRowConfig.configId}
-          nativeRowHeight={rowHeight}
-          onToggleFileCollapsed={toggleFileCollapsed}
-          rowRender$={rowRender$}
-          row={row}
-        />
-      );
-    },
-    [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, sideBySideDataSource, toggleFileCollapsed],
-  );
-
-  const documentErrorHeight = documentError
-    ? documentError.kind === "permission"
-      ? diffDocumentPermissionErrorHeight
-      : diffDocumentErrorHeight
-    : 0;
-  const diffTopChromeContentHeight = documentErrorHeight;
-  const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
-  const activeItemCount = renderViewMode === "unified"
-    ? visibleItemIndexes.length
-    : sideBySideRowCount;
-  const documentErrorBody = (
-    <DiffDocumentErrorBody
-      borderColor={diffPalette.border}
-      documentError={documentError}
-      foregroundColor={foregroundColor}
-      mutedColor={mutedColor}
-      onDismiss={dismissDocumentError}
-      onOpenExternalUrl={openExternalErrorUrl}
-      onOpenSystemSettings={openPermissionSettings}
-      onRetry={reloadCurrentSource}
-      surfaceColor={diffPalette.surface}
-    />
-  );
-  const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (
-    <DiffUnsavedMergeDraftBannerWithSavingState
-      dangerColor={diffPalette.danger}
-      fileCount={unsavedMergeDraftFiles.length}
-      onDiscard={discardMergeDraftsFromCommand}
-      onSave={saveMergeDraftsFromCommand}
-      primaryColor={diffPalette.primary}
-      resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-    />
-  ) : null;
-  const startScreenOpenErrorBody = startScreenController.openError ? (
-    <DiffErrorPanel
-      borderColor={diffPalette.border}
-      chooseFolderLabel={startScreenController.openError.kind === "permission" ? "Choose Another Folder" : undefined}
-      error={startScreenController.openError}
-      foregroundColor={foregroundColor}
-      mutedColor={mutedColor}
-      onChooseFolder={openFolder}
-      onDismiss={startScreenController.dismissOpenError}
-      onOpenExternalUrl={openExternalErrorUrl}
-      onOpenSystemSettings={startScreenController.openError.kind === "permission" ? openPermissionSettings : undefined}
-      onRetry={startScreenController.openError.kind !== "permission" && startScreenController.openError.source ? startScreenController.retryOpenError : undefined}
-      surfaceColor={diffPalette.surface}
-    />
-  ) : null;
-  const initialLoadingSource = startScreenController.openError ? null : source ?? null;
-  const emptyLoadingSource = state.status === "empty" ? loadingSource ?? initialLoadingSource : null;
-  const restoreWindowsOnStartup = useDiffRestoreWindowsOnStartupSetting();
-  const hasSplitBody = state.status === "loaded" || (state.status !== "fatal" && emptyLoadingSource !== null);
-  useEffect(() => {
-    // Match the actual body, including fatal and welcome screens which never
-    // emit a split-view mount event. Save chrome for native window restoration.
-    setDiffViewerStartupSplitView(windowIdentifier, hasSplitBody ? createDiffStartupSplitView({
-      restoreOnLaunch: restoreWindowsOnStartup,
-      appearance: syntaxTheme.appearance,
-      backgroundColor,
-      sidebarBackgroundColor: diffPalette.sidebarBackground,
-      sidebarWidth,
-    }) : null).catch((error: unknown) => console.error("Failed to update Diff startup chrome:", error));
-  }, [
-    backgroundColor,
-    diffPalette.sidebarBackground,
-    hasSplitBody,
-    restoreWindowsOnStartup,
-    sidebarWidth,
-    syntaxTheme.appearance,
-    windowIdentifier,
-  ]);
-
-  let body: ReactNode;
-  if (state.status === "fatal") {
-    body = (
-      <DiffFatalBody
-        borderColor={diffPalette.border}
-        error={state.error}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onChooseFolder={openFolder}
-        surfaceColor={diffPalette.surface}
-      />
-    );
-  } else if (state.status === "loaded") {
-    body = (
-      <DiffSplitBody
-        backgroundColor={backgroundColor}
-        content={(
-          <DiffLoadedContentPane
-            activeFileIndex$={activeFileIndex$}
-            activeItemCount={activeItemCount}
-            adaptiveLightModeEnabled={adaptiveLightModeEnabled}
-            diffPaneHeight$={diffPaneHeight$}
-            diffTopChromeHeight={diffTopChromeHeight}
-            diffRows={diffRows}
-            documentErrorBody={documentErrorBody}
-            floatingDocumentBanner={unsavedMergeDraftBanner}
-            getItemSize={getItemSize}
-            getItemType={getItemType}
-            getRow={getRow}
-            getSideBySideItemSize={getSideBySideItemSize}
-            getSideBySideItemType={getSideBySideItemType}
-            getSideBySideRow={getSideBySideRow}
-            handleDiffPaneLayout={handleDiffPaneLayout}
-            handleSideBySideTopItemChanged={handleSideBySideTopItemChanged}
-            handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested}
-            handleTopItemChanged={handleTopItemChanged}
-            handleVisibleRowsRequested={handleVisibleRowsRequested}
-            rowConfig={rowConfig}
-            listRef={listRef}
-            mergeState={mergeState}
-            mergeState$={mergeState$}
-            nativeSideBySideRowConfig={nativeSideBySideRowConfig}
-            nativeUnifiedRowConfig={nativeUnifiedRowConfig}
-            noChangesBody={(
-              <DiffNoChangesBody
-                foregroundColor={foregroundColor}
-                mutedColor={mutedColor}
-                visibleSourceLabel={visibleSourceLabel}
-              />
-            )}
-            onInlineListIndexesChanged={handleInlineListIndexesChanged}
-            renderRow={renderRow}
-            renderSideBySideRow={renderSideBySideRow}
-            requestSideBySideRange={requestSideBySideRange}
-            resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-            onResolveMergeConflict={resolveMergeConflict}
-            rowHeight={rowHeight}
-            sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex}
-            sideBySideDataSource={sideBySideDataSource}
-            splitPaneMetrics$={splitPaneMetrics$}
-            state={state}
-            syntaxTokenizationState$={syntaxTokenizationState$}
-            viewMode={renderViewMode}
-            visibleItemIndexes={visibleItemIndexes}
-          />
-        )}
-        debugPayload={{
-          activeItemCount,
-          rows: state.document.rowCount,
-          viewMode: renderViewMode,
-        }}
-        handleSplitViewResize={handleSplitViewResize}
-        sidebar={(
-          <DiffLoadedSidebarPane
-            backgroundColor={diffPalette.sidebarBackground}
-            collapsedSidebarFolders$={collapsedSidebarFolders$}
-            handleSidebarListLayout={handleSidebarListLayout}
-            mutedColor={mutedColor}
-            renderSidebarEntry={renderSidebarEntry}
-            sidebarCollapsed={sidebarCollapsed}
-            splitPaneMetrics$={splitPaneMetrics$}
-            state={state}
-          />
-        )}
-        sidebarBackgroundColor={diffPalette.sidebarBackground}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarWidth={sidebarWidth}
-        splitPaneMetrics$={splitPaneMetrics$}
-        syntaxAppearance={syntaxTheme.appearance}
-      />
-    );
-  } else if (emptyLoadingSource) {
-    body = (
-      <DiffSplitBody
-        backgroundColor={backgroundColor}
-        content={(
-          <View style={styles.diffPane}>
+    else if (emptyLoadingSource) {
+        body = (<DiffSplitBody backgroundColor={backgroundColor} content={(<View style={styles.diffPane}>
             <View style={styles.diffPaneContent}>
-              <View style={styles.diffTitlebarSpacer} />
-              <DiffDownloadingBody
-                foregroundColor={foregroundColor}
-                mutedColor={mutedColor}
-                source={emptyLoadingSource}
-              />
+              <View style={styles.diffTitlebarSpacer}/>
+              <DiffDownloadingBody foregroundColor={foregroundColor} mutedColor={mutedColor} source={emptyLoadingSource}/>
             </View>
-          </View>
-        )}
-        debugPayload={{
-          loadingSource: emptyLoadingSource,
-          viewMode: renderViewMode,
-        }}
-        handleSplitViewResize={handleSplitViewResize}
-        sidebar={(
-          <View style={[styles.sidebar, { backgroundColor: Platform.OS === "macos" ? "transparent" : diffPalette.sidebarBackground }]}>
-            <View style={styles.sidebarList} />
-          </View>
-        )}
-        sidebarBackgroundColor={diffPalette.sidebarBackground}
-        sidebarCollapsed={sidebarCollapsed}
-        sidebarWidth={sidebarWidth}
-        splitPaneMetrics$={splitPaneMetrics$}
-        syntaxAppearance={syntaxTheme.appearance}
-      />
-    );
-  } else {
-    body = (
-      <DiffStartScreen
-        backgroundColor={backgroundColor}
-        borderColor={diffPalette.border}
-        dangerColor={diffPalette.danger}
-        foregroundColor={foregroundColor}
-        isLoading={isLoading}
-        loadingSource={loadingSource}
-        mutedColor={mutedColor}
-        onChangeUrlInput={startScreenController.onChangeUrlInput}
-        onChooseFolder={openFolder}
-        onCompareFiles={compareFiles}
-        onOpenRecentSource={startScreenController.onOpenRecentSource}
-        onOpenUrl={startScreenController.onOpenUrl}
-        openErrorBody={startScreenOpenErrorBody}
-        recentFilter={startScreenController.recentFilter}
-        recentSources={startScreenController.recentSources}
-        setRecentFilter={startScreenController.setRecentFilter}
-        sidebarBackgroundColor={diffPalette.sidebarBackground}
-        urlInput={startScreenController.urlInput}
-        urlInputError={startScreenController.urlInputError}
-        urlInputRef={urlInputRef}
-      />
-    );
-  }
-
-  return (
-    <>
-      <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} />
-      <DiffNativeMenuSavingStateController
-        hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}
-        resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}
-      />
-      <DiffWindowToolbarItemController
-        compareCurrentSource={compareCurrentSource}
-        onSearchChange={handleSearchChange}
-        onSearchSubmit={handleSearchSubmit}
-        openCompareRefPrompt={openCompareRefPrompt}
-        toggleSidebar={toggleSidebar}
-      />
-      <DiffLaunchController
-        focusUrlInputRequestId={focusUrlInputRequestId}
-        folderPath={folderPath}
-        loadRequestIdRef={loadRequestIdRef}
-        loadSource={loadSource}
-        loadTraceRef={loadTraceRef}
-        source={source}
-        urlInputRef={urlInputRef}
-      />
-      <DiffLoadCompletionController
-        loadTraceRef={loadTraceRef}
-        loggedTraceDocumentRef={loggedTraceDocumentRef}
-      />
-      <DiffFileWatcherController loadSource={loadSource} suppressReloadUntilRef={suppressFileWatcherReloadUntilRef} />
-      <DiffActionHandlersController
-        copyCurrentFilePath={copyCurrentFilePath}
-        copyCurrentRelativePath={copyCurrentRelativePath}
-        copyCurrentSource={copyCurrentSource}
-        focusSearch={focusSearch}
-        navigateToNextHunk={navigateToNextHunk}
-        navigateToPreviousHunk={navigateToPreviousHunk}
-        reloadCurrentSource={reloadCurrentSource}
-        revealCurrentFolder={revealCurrentFolder}
-        saveMergeDrafts={saveMergeDraftsFromCommand}
-        toggleShowOnlyHunks={toggleShowOnlyHunks}
-        toggleSidebar={toggleSidebar}
-      />
-      <DiffDropSurface
-        backgroundColor={backgroundColor}
-        borderColor={diffPalette.primary}
-        foregroundColor={foregroundColor}
-        mutedColor={mutedColor}
-        onDropDiff={handleDropDiff}
-        syntaxAppearance={syntaxTheme.appearance}
-      >
+          </View>)} debugPayload={{
+                loadingSource: emptyLoadingSource,
+                viewMode: renderViewMode,
+            }} handleSplitViewResize={handleSplitViewResize} sidebar={(<View style={[styles.sidebar, { backgroundColor: Platform.OS === "macos" ? "transparent" : diffPalette.sidebarBackground }]}>
+            <View style={styles.sidebarList}/>
+          </View>)} sidebarBackgroundColor={diffPalette.sidebarBackground} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} splitPaneMetrics$={splitPaneMetrics$} syntaxAppearance={syntaxTheme.appearance}/>);
+    }
+    else {
+        body = (<DiffStartScreen backgroundColor={backgroundColor} borderColor={diffPalette.border} dangerColor={diffPalette.danger} foregroundColor={foregroundColor} isLoading={isLoading} loadingSource={loadingSource} mutedColor={mutedColor} onChangeUrlInput={startScreenController.onChangeUrlInput} onChooseFolder={openFolder} onCompareFiles={compareFiles} onOpenRecentSource={startScreenController.onOpenRecentSource} onOpenUrl={startScreenController.onOpenUrl} openErrorBody={startScreenOpenErrorBody} recentFilter={startScreenController.recentFilter} recentSources={startScreenController.recentSources} setRecentFilter={startScreenController.setRecentFilter} sidebarBackgroundColor={diffPalette.sidebarBackground} urlInput={startScreenController.urlInput} urlInputError={startScreenController.urlInputError} urlInputRef={urlInputRef}/>);
+    }
+    return (<>
+      <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}/>
+      <DiffNativeMenuSavingStateController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>
+      <DiffWindowToolbarItemController compareCurrentSource={compareCurrentSource} onSearchChange={handleSearchChange} onSearchSubmit={handleSearchSubmit} openCompareRefPrompt={openCompareRefPrompt} toggleSidebar={toggleSidebar}/>
+      <DiffLaunchController focusUrlInputRequestId={focusUrlInputRequestId} folderPath={folderPath} loadRequestIdRef={loadRequestIdRef} loadSource={loadSource} loadTraceRef={loadTraceRef} source={source} urlInputRef={urlInputRef}/>
+      <DiffLoadCompletionController loadTraceRef={loadTraceRef} loggedTraceDocumentRef={loggedTraceDocumentRef}/>
+      <DiffFileWatcherController loadSource={loadSource} suppressReloadUntilRef={suppressFileWatcherReloadUntilRef}/>
+      <DiffActionHandlersController copyCurrentFilePath={copyCurrentFilePath} copyCurrentRelativePath={copyCurrentRelativePath} copyCurrentSource={copyCurrentSource} focusSearch={focusSearch} navigateToNextHunk={navigateToNextHunk} navigateToPreviousHunk={navigateToPreviousHunk} reloadCurrentSource={reloadCurrentSource} revealCurrentFolder={revealCurrentFolder} saveMergeDrafts={saveMergeDraftsFromCommand} toggleShowOnlyHunks={toggleShowOnlyHunks} toggleSidebar={toggleSidebar}/>
+      <DiffDropSurface backgroundColor={backgroundColor} borderColor={diffPalette.primary} foregroundColor={foregroundColor} mutedColor={mutedColor} onDropDiff={handleDropDiff} syntaxAppearance={syntaxTheme.appearance}>
         {body}
-        <DiffStatisticsPanel
-          borderColor={diffPalette.border}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          syntaxAppearance={syntaxTheme.appearance}
-        />
-        <DiffSearchStatusPanel
-          borderColor={diffPalette.border}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          syntaxAppearance={syntaxTheme.appearance}
-        />
-        <DiffCompareRefPrompt
-          backgroundColor={diffPalette.surface}
-          borderColor={diffPalette.border}
-          foregroundColor={foregroundColor}
-          mutedColor={mutedColor}
-          onCancel={closeCompareRefPrompt}
-          onSubmit={submitCompareRefPrompt}
-        />
+        <DiffStatisticsPanel borderColor={diffPalette.border} foregroundColor={foregroundColor} mutedColor={mutedColor} syntaxAppearance={syntaxTheme.appearance}/>
+        <DiffSearchStatusPanel borderColor={diffPalette.border} foregroundColor={foregroundColor} mutedColor={mutedColor} syntaxAppearance={syntaxTheme.appearance}/>
+        <DiffCompareRefPrompt backgroundColor={diffPalette.surface} borderColor={diffPalette.border} foregroundColor={foregroundColor} mutedColor={mutedColor} onCancel={closeCompareRefPrompt} onSubmit={submitCompareRefPrompt}/>
       </DiffDropSurface>
-    </>
-  );
+    </>);
 }
-
 export default DiffViewerWindow;
-
 const styles = StyleSheet.create({
-  empty: {
-    alignItems: "center",
-    flex: 1,
-    gap: 12,
-    justifyContent: "center",
-    paddingHorizontal: 40,
-    paddingVertical: 36,
-  },
-  emptyText: {
-    fontSize: 15,
-    lineHeight: 23,
-    maxWidth: 520,
-    textAlign: "center",
-  },
-  emptyTitle: {
-    fontSize: 36,
-    fontWeight: "700",
-    lineHeight: 44,
-  },
-  content: {
-    flex: 1,
-    minHeight: 0,
-  },
-  compareRefPrompt: {
-    borderRadius: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    width: 360,
-  },
-  compareRefPromptActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end",
-  },
-  compareRefPromptButton: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 26,
-    justifyContent: "center",
-    minWidth: 74,
-    paddingHorizontal: 10,
-  },
-  compareRefPromptButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 16,
-  },
-  compareRefPromptInput: {
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    fontSize: 13,
-    height: 30,
-    lineHeight: 18,
-    paddingHorizontal: 9,
-  },
-  compareRefPromptOverlay: {
-    alignItems: "center",
-    bottom: 0,
-    justifyContent: "flex-start",
-    left: 0,
-    paddingTop: diffTitlebarTopInset + 54,
-    position: "absolute",
-    right: 0,
-    top: 0,
-    zIndex: 60,
-  },
-  compareRefPromptTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-  },
-  loadedRoot: {
-    flex: 1,
-    minHeight: 0,
-  },
-  documentError: {
-    height: diffDocumentErrorHeight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  errorPanel: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: 560,
-    shadowColor: "#000000",
-    shadowOffset: { height: 8, width: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    width: "100%",
-  },
-  errorPanelActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    justifyContent: "flex-end",
-    paddingTop: 10,
-  },
-  errorPanelBody: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  errorPanelButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  errorPanelButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 16,
-  },
-  errorPanelMessage: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  errorPanelStep: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  errorPanelSteps: {
-    gap: 2,
-    paddingTop: 6,
-  },
-  errorPanelTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
-  },
-  diffPane: {
-    flex: 1,
-  },
-  diffHorizontalScroller: {
-    bottom: 0,
-    height: 16,
-    left: 0,
-    position: "absolute",
-    right: 0,
-    zIndex: 30,
-  },
-  diffPaneContent: {
-    flex: 1,
-    minHeight: 0,
-  },
-  diffPaneTopChrome: {
-    paddingTop: diffTitlebarTopInset,
-  },
-  diffWorkspace: {
-    flex: 1,
-    flexDirection: "row",
-    minHeight: 0,
-    minWidth: 0,
-  },
-  nativeDiffRowConfig: {
-    height: 0,
-    overflow: "hidden",
-    width: 0,
-  },
-  diffTitlebarSpacer: {
-    height: diffTitlebarTopInset,
-  },
-  downloadingBody: {
-    alignItems: "center",
-    flex: 1,
-    gap: 8,
-    justifyContent: "center",
-    paddingBottom: diffTitlebarTopInset,
-    paddingHorizontal: 24,
-  },
-  loadingDetail: {
-    fontSize: 12,
-    fontVariant: ["tabular-nums"],
-    lineHeight: 16,
-  },
-  loadingTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-  progressiveLoadingBanner: {
-    alignItems: "center",
-    left: 0,
-    paddingHorizontal: 20,
-    position: "absolute",
-    right: 0,
-    top: diffTitlebarTopInset + 10,
-    zIndex: 35,
-  },
-  progressiveLoadingSurface: {
-    alignItems: "center",
-    borderColor: diffLoadingAccentColor,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 11,
-    minHeight: 48,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    shadowColor: diffLoadingAccentColor,
-    shadowOffset: { height: 0, width: 0 },
-    shadowOpacity: 0.24,
-    shadowRadius: 12,
-  },
-  progressiveLoadingText: {
-    gap: 1,
-  },
-  dropOverlay: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: 2,
-    bottom: 16,
-    justifyContent: "center",
-    left: 16,
-    position: "absolute",
-    right: 16,
-    top: 16,
-  },
-  dropOverlayText: {
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 20,
-  },
-  dropOverlayTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 32,
-    marginBottom: 4,
-  },
-  list: {
-    flex: 1,
-  },
-  root: {
-    flex: 1,
-  },
-  sidebar: {
-    flex: 1,
-  },
-  sidebarContent: {
-    paddingBottom: 8,
-  },
-  sidebarFile: {
-    borderColor: "transparent",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    height: diffSidebarFileRowHeight,
-  },
-  sidebarFolder: {
-    height: diffSidebarFileRowHeight,
-  },
-  sidebarFolderCollapseButton: {
-    alignItems: "center",
-    height: 20,
-    justifyContent: "center",
-    width: 20,
-  },
-  sidebarEmpty: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sidebarEmptyText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  sidebarList: {
-    flex: 1,
-  },
-  statisticsLabel: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  searchStatusLabel: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  searchStatusPanel: {
-    alignItems: "center",
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    position: "absolute",
-    right: 14,
-    top: diffTitlebarTopInset + 10,
-    zIndex: 40,
-  },
-  searchStatusValue: {
-    fontSize: 11,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "600",
-    lineHeight: 15,
-  },
-  statisticsPanel: {
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    bottom: 14,
-    minWidth: 190,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    position: "absolute",
-    right: 14,
-    zIndex: 40,
-  },
-  statisticsRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 16,
-    justifyContent: "space-between",
-  },
-  statisticsRows: {
-    gap: 2,
-  },
-  statisticsTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  statisticsValue: {
-    fontSize: 11,
-    fontVariant: ["tabular-nums"],
-    fontWeight: "600",
-    lineHeight: 15,
-  },
-  unsavedMergeBanner: {
-    alignItems: "center",
-    left: 0,
-    paddingHorizontal: 20,
-    position: "absolute",
-    right: 0,
-    top: diffTitlebarTopInset + 10,
-    zIndex: 35,
-  },
-  mergeChoiceButton: {
-    alignItems: "center",
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 22,
-    justifyContent: "center",
-    width: 54,
-  },
-  mergeChoiceBothIcons: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 2,
-    justifyContent: "center",
-  },
-  mergeChoiceColumn: {
-    alignItems: "center",
-    gap: 5,
-    justifyContent: "center",
-    position: "absolute",
-    top: -31,
-    width: 82,
-  },
-  mergeCommonMiddle: {
-    alignItems: "center",
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    justifyContent: "center",
-    overflow: "visible",
-    position: "relative",
-    width: 82,
-  },
-  mergeCommonPane: {
-    flex: 1,
-    minWidth: 0,
-  },
-  mergeCommonRow: {
-    flexDirection: "row",
-    overflow: "visible",
-  },
-  mergeHunkHeader: {
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    height: diffHunkHeaderHeight,
-    paddingLeft: 10,
-    paddingRight: 10,
-  },
-  mergeHunkHeaderTitle: {
-    fontSize: 11,
-    fontWeight: "400",
-    lineHeight: 14,
-  },
-  mergeNativePane: {
-    flex: 1,
-  },
-  mergeResolvingText: {
-    fontSize: 10,
-    fontWeight: "600",
-    lineHeight: 12,
-  },
+    empty: {
+        alignItems: "center",
+        flex: 1,
+        gap: 12,
+        justifyContent: "center",
+        paddingHorizontal: 40,
+        paddingVertical: 36,
+    },
+    emptyText: {
+        fontSize: 15,
+        lineHeight: 23,
+        maxWidth: 520,
+        textAlign: "center",
+    },
+    emptyTitle: {
+        fontSize: 36,
+        fontWeight: "700",
+        lineHeight: 44,
+    },
+    content: {
+        flex: 1,
+        minHeight: 0
+    },
+    compareRefPrompt: {
+        borderRadius: 7,
+        borderWidth: StyleSheet.hairlineWidth,
+        gap: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        width: 360,
+    },
+    compareRefPromptActions: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        justifyContent: "flex-end",
+    },
+    compareRefPromptButton: {
+        alignItems: "center",
+        borderRadius: 5,
+        borderWidth: StyleSheet.hairlineWidth,
+        justifyContent: "center",
+        paddingHorizontal: 10,
+        height: 26,
+        minWidth: 74
+    },
+    compareRefPromptButtonText: {
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 16,
+    },
+    compareRefPromptInput: {
+        borderRadius: 5,
+        borderWidth: StyleSheet.hairlineWidth,
+        fontSize: 13,
+        height: 30,
+        lineHeight: 18,
+        paddingHorizontal: 9,
+    },
+    compareRefPromptOverlay: {
+        alignItems: "center",
+        bottom: 0,
+        justifyContent: "flex-start",
+        left: 0,
+        paddingTop: diffTitlebarTopInset + 54,
+        position: "absolute",
+        right: 0,
+        top: 0,
+        zIndex: 60,
+    },
+    compareRefPromptTitle: {
+        fontSize: 13,
+        fontWeight: "700",
+        lineHeight: 18,
+    },
+    loadedRoot: {
+        flex: 1,
+        minHeight: 0
+    },
+    documentError: {
+        height: diffDocumentErrorHeight,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    errorPanel: {
+        borderRadius: 10,
+        borderWidth: StyleSheet.hairlineWidth,
+        maxWidth: 560,
+        shadowColor: "#000000",
+        shadowOffset: { height: 8, width: 0 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        width: "100%",
+    },
+    errorPanelActions: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 8,
+        justifyContent: "flex-end",
+        paddingTop: 10,
+    },
+    errorPanelBody: {
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    errorPanelButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    errorPanelButtonText: {
+        fontSize: 12,
+        fontWeight: "600",
+        lineHeight: 16,
+    },
+    errorPanelMessage: {
+        fontSize: 12,
+        lineHeight: 18,
+    },
+    errorPanelStep: {
+        fontSize: 12,
+        lineHeight: 17,
+    },
+    errorPanelSteps: {
+        gap: 2,
+        paddingTop: 6,
+    },
+    errorPanelTitle: {
+        fontSize: 14,
+        fontWeight: "700",
+        lineHeight: 20,
+    },
+    diffPane: {
+        flex: 1,
+    },
+    diffHorizontalScroller: {
+        bottom: 0,
+        height: 16,
+        left: 0,
+        position: "absolute",
+        right: 0,
+        zIndex: 30,
+    },
+    diffPaneContent: {
+        flex: 1,
+        minHeight: 0
+    },
+    diffPaneTopChrome: {
+        paddingTop: diffTitlebarTopInset,
+    },
+    diffWorkspace: {
+        flex: 1,
+        flexDirection: "row",
+        minHeight: 0, minWidth: 0
+    },
+    nativeDiffRowConfig: {
+        height: 0,
+        overflow: "hidden",
+        width: 0,
+    },
+    diffTitlebarSpacer: {
+        height: diffTitlebarTopInset,
+    },
+    downloadingBody: {
+        alignItems: "center",
+        flex: 1,
+        gap: 8,
+        justifyContent: "center",
+        paddingBottom: diffTitlebarTopInset,
+        paddingHorizontal: 24,
+    },
+    loadingDetail: {
+        fontSize: 12,
+        fontVariant: ["tabular-nums"],
+        lineHeight: 16,
+    },
+    loadingTitle: {
+        fontSize: 13,
+        fontWeight: "600",
+        lineHeight: 18,
+    },
+    progressiveLoadingBanner: {
+        alignItems: "center",
+        left: 0,
+        paddingHorizontal: 20,
+        position: "absolute",
+        right: 0,
+        top: diffTitlebarTopInset + 10,
+        zIndex: 35,
+    },
+    progressiveLoadingSurface: {
+        alignItems: "center",
+        borderColor: diffLoadingAccentColor,
+        borderRadius: 10,
+        borderWidth: 1,
+        flexDirection: "row",
+        gap: 11,
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        shadowColor: diffLoadingAccentColor,
+        shadowOffset: { height: 0, width: 0 },
+        shadowOpacity: 0.24,
+        shadowRadius: 12,
+        minHeight: 48
+    },
+    progressiveLoadingText: {
+        gap: 1,
+    },
+    dropOverlay: {
+        alignItems: "center",
+        borderRadius: 8,
+        borderWidth: 2,
+        bottom: 16,
+        justifyContent: "center",
+        left: 16,
+        position: "absolute",
+        right: 16,
+        top: 16,
+    },
+    dropOverlayText: {
+        fontSize: 14,
+        fontWeight: "500",
+        lineHeight: 20,
+    },
+    dropOverlayTitle: {
+        fontSize: 24,
+        fontWeight: "700",
+        lineHeight: 32,
+        marginBottom: 4,
+    },
+    list: {
+        flex: 1,
+    },
+    root: {
+        flex: 1,
+    },
+    sidebar: {
+        flex: 1,
+    },
+    sidebarContent: {
+        paddingBottom: 8,
+    },
+    sidebarFile: {
+        borderColor: "transparent",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        height: diffSidebarFileRowHeight,
+    },
+    sidebarFolder: {
+        height: diffSidebarFileRowHeight,
+    },
+    sidebarFolderCollapseButton: {
+        alignItems: "center",
+        height: 20,
+        justifyContent: "center",
+        width: 20,
+    },
+    sidebarEmpty: {
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    sidebarEmptyText: {
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    sidebarList: {
+        flex: 1,
+    },
+    statisticsLabel: {
+        fontSize: 11,
+        lineHeight: 15,
+    },
+    searchStatusLabel: {
+        fontSize: 11,
+        lineHeight: 15,
+    },
+    searchStatusPanel: {
+        alignItems: "center",
+        borderRadius: 6,
+        borderWidth: StyleSheet.hairlineWidth,
+        flexDirection: "row",
+        gap: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        position: "absolute",
+        right: 14,
+        top: diffTitlebarTopInset + 10,
+        zIndex: 40,
+    },
+    searchStatusValue: {
+        fontSize: 11,
+        fontVariant: ["tabular-nums"],
+        fontWeight: "600",
+        lineHeight: 15,
+    },
+    statisticsPanel: {
+        borderRadius: 6,
+        borderWidth: StyleSheet.hairlineWidth,
+        bottom: 14,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        position: "absolute",
+        right: 14,
+        zIndex: 40,
+        minWidth: 190
+    },
+    statisticsRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 16,
+        justifyContent: "space-between",
+    },
+    statisticsRows: {
+        gap: 2,
+    },
+    statisticsTitle: {
+        fontSize: 12,
+        fontWeight: "700",
+        lineHeight: 16,
+        marginBottom: 4,
+    },
+    statisticsValue: {
+        fontSize: 11,
+        fontVariant: ["tabular-nums"],
+        fontWeight: "600",
+        lineHeight: 15,
+    },
+    unsavedMergeBanner: {
+        alignItems: "center",
+        left: 0,
+        paddingHorizontal: 20,
+        position: "absolute",
+        right: 0,
+        top: diffTitlebarTopInset + 10,
+        zIndex: 35,
+    },
+    mergeChoiceButton: {
+        alignItems: "center",
+        borderRadius: 5,
+        borderWidth: StyleSheet.hairlineWidth,
+        height: 22,
+        justifyContent: "center",
+        width: 54,
+    },
+    mergeChoiceBothIcons: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 2,
+        justifyContent: "center",
+    },
+    mergeChoiceColumn: {
+        alignItems: "center",
+        gap: 5,
+        justifyContent: "center",
+        position: "absolute",
+        top: -31,
+        width: 82,
+    },
+    mergeCommonMiddle: {
+        alignItems: "center",
+        borderLeftWidth: StyleSheet.hairlineWidth,
+        borderRightWidth: StyleSheet.hairlineWidth,
+        justifyContent: "center",
+        overflow: "visible",
+        position: "relative",
+        width: 82,
+    },
+    mergeCommonPane: {
+        flex: 1,
+        minWidth: 0
+    },
+    mergeCommonRow: {
+        flexDirection: "row",
+        overflow: "visible",
+    },
+    mergeHunkHeader: {
+        alignItems: "center",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        flexDirection: "row",
+        height: diffHunkHeaderHeight,
+        paddingLeft: 10,
+        paddingRight: 10,
+    },
+    mergeHunkHeaderTitle: {
+        fontSize: 11,
+        fontWeight: "400",
+        lineHeight: 14,
+    },
+    mergeNativePane: {
+        flex: 1,
+    },
+    mergeResolvingText: {
+        fontSize: 10,
+        fontWeight: "600",
+        lineHeight: 12,
+    },
 });

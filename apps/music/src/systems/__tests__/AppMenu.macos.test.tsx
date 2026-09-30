@@ -1,12 +1,7 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { AutoUpdater } from "@legendapp/spark/updates";
-import {
-    clearMenus,
-    configureMenus,
-    type NativeMenuAction,
-    updateMenuItems,
-} from "@legendapp/spark/menus";
+import { checkForUpdates } from "@legendapp/spark/updates";
+import { useMenu, type MenuItem } from "@legendapp/spark/menus";
 
 import { localAudioControls, localPlayerState$, queue$ } from "../../components/LocalAudioPlayer";
 import { savePlaylistUI$ } from "../../state/savePlaylistUIState";
@@ -17,10 +12,9 @@ import { hotkeys$ } from "../hotkeys";
 import { KeyCodes } from "../keyboard/KeyboardManager";
 import type { LocalTrack } from "../LocalMusicState";
 
-const menuOwnerId = "music";
-const { __emitNativeMenuAction } = require("@legendapp/spark/menus") as {
-    __emitNativeMenuAction(action: NativeMenuAction): void;
-};
+function menu() { return jest.mocked(useMenu).mock.calls.at(-1)![0]; }
+function items(): MenuItem[] { return menu().items.flatMap(item => item.type === "submenu" ? item.items : [item]); }
+function click(itemId: string) { menu().onAction?.({ type: "action", itemId }); }
 
 function createQueuedTrack(id: string): LocalTrack & { queueEntryId: string } {
     return {
@@ -54,7 +48,7 @@ describe("AppMenuController", () => {
         stateSaved$.libraryIsOpen.set(false);
         hotkeys$.set({
             ...hotkeys$.peek(),
-            ToggleShuffle: [`${KeyCodes.MODIFIER_COMMAND}+${KeyCodes.KEY_S}`],
+            ToggleShuffle: ["Cmd+S"],
         });
     });
 
@@ -71,32 +65,14 @@ describe("AppMenuController", () => {
     it("configures the migrated music menus", () => {
         const renderer = renderController();
 
-        expect(configureMenus).toHaveBeenCalledTimes(1);
-        const [ownerId, menus] = jest.mocked(configureMenus).mock.calls[0];
-        const menuIds = menus.map((menu) => menu.id);
-        const itemIds = menus.flatMap((menu) => menu.items.map((item) => item.id));
-
-        expect(ownerId).toBe(menuOwnerId);
-        expect(menuIds).toEqual(["app", "file", "view", "playback"]);
-        expect(itemIds).toEqual([
-            "settings",
-            "checkForUpdates",
-            "savePlaylist",
-            "jump",
-            "toggleLibrary",
-            "playbackPrevious",
-            "playbackPlayPause",
-            "playbackNext",
-            "playbackSeparator",
-            "playbackToggleShuffle",
-            "playbackToggleRepeat",
+        expect(menu().id).toBe("music");
+        expect(menu().items.map(item => item.type === "separator" ? undefined : item.id)).toEqual(["app", "file", "view", "playback"]);
+        expect(items().filter(item => item.type !== "separator").map(item => item.id)).toEqual([
+            "settings", "checkForUpdates", "savePlaylist", "jump", "toggleLibrary",
+            "playbackPrevious", "playbackPlayPause", "playbackNext", "playbackToggleShuffle", "playbackToggleRepeat",
         ]);
-        expect(menus.find((menu) => menu.id === "playback")?.placement).toEqual({ before: "Window" });
-
-        act(() => {
-            renderer?.unmount();
-        });
-        expect(clearMenus).toHaveBeenCalledWith(menuOwnerId);
+        expect(menu().items[3]).toMatchObject({ placement: { before: { menu: "window" } } });
+        act(() => renderer?.unmount());
     });
 
     it("handles native menu actions for app, file, view, playback, and updater commands", async () => {
@@ -108,15 +84,15 @@ describe("AppMenuController", () => {
         queue$.tracks.set([createQueuedTrack("a")]);
 
         await act(async () => {
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "app", itemId: "settings" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "file", itemId: "savePlaylist" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "view", itemId: "toggleLibrary" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "playback", itemId: "playbackPrevious" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "playback", itemId: "playbackPlayPause" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "playback", itemId: "playbackNext" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "playback", itemId: "playbackToggleShuffle" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "playback", itemId: "playbackToggleRepeat" });
-            __emitNativeMenuAction({ ownerId: menuOwnerId, menuId: "app", itemId: "checkForUpdates" });
+            click("settings");
+            click("savePlaylist");
+            click("toggleLibrary");
+            click("playbackPrevious");
+            click("playbackPlayPause");
+            click("playbackNext");
+            click("playbackToggleShuffle");
+            click("playbackToggleRepeat");
+            click("checkForUpdates");
         });
 
         expect(state$.showSettings.get()).toBe(true);
@@ -127,7 +103,7 @@ describe("AppMenuController", () => {
         expect(playNext).toHaveBeenCalledTimes(1);
         expect(settings$.playback.shuffle.get()).toBe(true);
         expect(settings$.playback.repeatMode.get()).toBe("all");
-        expect(AutoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+        expect(checkForUpdates).toHaveBeenCalledTimes(1);
 
         act(() => {
             renderer?.unmount();
@@ -145,23 +121,13 @@ describe("AppMenuController", () => {
             queue$.tracks.set([createQueuedTrack("a")]);
         });
 
-        const patches = jest.mocked(updateMenuItems).mock.calls.flatMap(([, items]) => items);
-
-        expect(patches).toEqual(expect.arrayContaining([{ id: "playbackPlayPause", title: "Pause" }]));
-        expect(patches).toEqual(expect.arrayContaining([{ id: "playbackToggleShuffle", checked: true }]));
-        expect(patches).toEqual(
-            expect.arrayContaining([{ id: "playbackToggleRepeat", checked: true, title: "Repeat One" }]),
-        );
-        expect(patches).toEqual(expect.arrayContaining([{ id: "toggleLibrary", checked: true }]));
-        expect(patches).toEqual(expect.arrayContaining([{ id: "savePlaylist", enabled: true }]));
-        expect(patches).toEqual(
-            expect.arrayContaining([
-                {
-                    id: "playbackToggleShuffle",
-                    shortcut: { key: "s", modifiers: KeyCodes.MODIFIER_COMMAND },
-                },
-            ]),
-        );
+        expect(items()).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: "playbackPlayPause", label: "Pause" }),
+            expect.objectContaining({ id: "playbackToggleShuffle", checked: true, shortcut: "Cmd+S" }),
+            expect.objectContaining({ id: "playbackToggleRepeat", checked: true, label: "Repeat One" }),
+            expect.objectContaining({ id: "toggleLibrary", checked: true }),
+            expect.objectContaining({ id: "savePlaylist", disabled: false }),
+        ]));
 
         act(() => {
             renderer?.unmount();

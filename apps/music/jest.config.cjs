@@ -8,8 +8,9 @@ module.exports = require("../../scripts/jest/spark.cjs")({
         "<rootDir>/apps/music/src/**/*.test.tsx",
     ],
     moduleNameMapper: {
+        "^@legend-apps/crypto$": "<rootDir>/apps/music/jest/mocks/cryptoMock.cjs",
         "^@legend-apps/apple-music$": "<rootDir>/apps/music/jest/mocks/appleMusicMock.cjs",
-        "^@legend-apps/codex$": "<rootDir>/apps/music/jest/mocks/codexMock.cjs",
+        "^@legendapp/spark/ai/codex$": "<rootDir>/apps/music/jest/mocks/codexMock.cjs",
         "^@legend-apps/markdown-document$": "<rootDir>/apps/music/jest/mocks/markdownDocumentMock.cjs",
         "^@legend-apps/oauth-loopback$": "<rootDir>/apps/music/jest/mocks/oauthLoopbackMock.cjs",
         "^@legendapp/spark/secure-storage$": "<rootDir>/apps/music/jest/mocks/secureStorageMock.cjs",

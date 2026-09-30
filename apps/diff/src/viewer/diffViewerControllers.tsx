@@ -1,10 +1,13 @@
 import type { DiffDocument } from "@legend-apps/diff-parser";
-import { watchDirectories } from "@legendapp/spark/files/watchers";
+import { watch } from "@legendapp/spark/files";
 import { useRoutedHotkeys, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
-import { updateMenuItems, type NativeMenuItemPatch } from "@legendapp/spark/menus";
+import { ownRegistration, type MenuState } from "@legend-apps/runtime-utils";
+import { diffMenuState$, diffActiveMenuWindow$ } from "../diffMenuState";
+type MenuItemState = MenuState & { id: string };
 import { elapsedMs, measureAfterEffect, nowMs } from "@legend-apps/source-viewer";
-import { addWindowToolbarItemSelectedListener, addWindowToolbarSearchListener } from "@legendapp/spark/windows/managed";
-import { useWindowId } from "@legendapp/spark/windows/react";
+import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
+import { addWindowListener } from "@legendapp/spark/windows";
+import { useWindowId } from "@legendapp/spark/windows";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { TextInput } from "react-native";
@@ -50,17 +53,17 @@ import {
 } from "./diffViewerSupport";
 
 function nativeMenuPatchesEqual(
-  previous: readonly NativeMenuItemPatch[] | null,
-  next: readonly NativeMenuItemPatch[],
+  previous: readonly MenuItemState[] | null,
+  next: readonly MenuItemState[],
 ) {
   return previous !== null &&
     previous.length === next.length &&
     previous.every((previousPatch, index) => {
       const nextPatch = next[index];
       return previousPatch.id === nextPatch.id &&
-        previousPatch.enabled === nextPatch.enabled &&
+        previousPatch.disabled === nextPatch.disabled &&
         previousPatch.checked === nextPatch.checked &&
-        previousPatch.title === nextPatch.title;
+        previousPatch.label === nextPatch.label && previousPatch.hidden === nextPatch.hidden;
     });
 }
 
@@ -102,7 +105,8 @@ export function DiffNativeMenuController({
     sidebarCollapsed$,
     state$,
   } = useDiffViewerModel();
-  const lastMenuPatchesRef = useRef<NativeMenuItemPatch[] | null>(null);
+  const windowIdentifier = useWindowId();
+  const lastMenuPatchesRef = useRef<MenuItemState[] | null>(null);
 
   const updateDiffNativeMenuItems = useCallback((observe: boolean) => {
     const currentState = observe ? state$.get() : state$.peek();
@@ -117,72 +121,74 @@ export function DiffNativeMenuController({
     const currentShowViewModeToolbar = currentToolbarSource !== null;
     const currentShowSidebarControl = currentShowViewModeToolbar;
     const hasLoadedFiles = currentLoadedFileCount > 0;
-    const patches: NativeMenuItemPatch[] = [
+    const patches: MenuItemState[] = [
       {
-        enabled: currentState.status === "loaded",
+        disabled: !(currentState.status === "loaded"),
         id: "reload",
       },
       {
-        enabled: hasUnsavedMergeDrafts && !isSavingMergeDrafts,
+        disabled: !(hasUnsavedMergeDrafts && !isSavingMergeDrafts),
         hidden: !hasUnsavedMergeDrafts,
         id: "save",
       },
       {
-        enabled: currentVisibleFolderPath !== null,
+        disabled: !(currentVisibleFolderPath !== null),
         id: "revealInFinder",
       },
       {
-        enabled: currentVisibleSource !== null,
+        disabled: !(currentVisibleSource !== null),
         id: "copySource",
-        title: getCopySourceMenuTitle(currentVisibleSource),
+        label: getCopySourceMenuTitle(currentVisibleSource),
       },
       {
-        enabled: currentVisibleFolderPath !== null && hasLoadedFiles,
+        disabled: !(currentVisibleFolderPath !== null && hasLoadedFiles),
         id: "copyFilePath",
       },
       {
-        enabled: hasLoadedFiles,
+        disabled: !(hasLoadedFiles),
         id: "copyRelativePath",
       },
       {
         checked: currentShowSidebarControl && !currentSidebarCollapsed,
-        enabled: currentShowSidebarControl,
+        disabled: !(currentShowSidebarControl),
         id: "toggleSidebar",
-        title: currentSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+        label: currentSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
       },
       {
-        enabled: currentShowSidebarControl,
+        disabled: !(currentShowSidebarControl),
         id: "filterFiles",
       },
       {
-        enabled: hasLoadedFiles,
+        disabled: !(hasLoadedFiles),
         id: "previousHunk",
       },
       {
-        enabled: hasLoadedFiles,
+        disabled: !(hasLoadedFiles),
         id: "nextHunk",
       },
       {
         checked: currentViewMode === "unified",
-        enabled: currentShowViewModeToolbar,
+        disabled: !(currentShowViewModeToolbar),
         id: "viewUnified",
       },
       {
         checked: currentViewMode === "blocks",
-        enabled: currentShowViewModeToolbar,
+        disabled: !(currentShowViewModeToolbar),
         id: "viewBlocks",
       },
       {
         checked: currentShowOnlyHunks,
-        enabled: currentVisibleFolderPath !== null,
+        disabled: !(currentVisibleFolderPath !== null),
         id: "showOnlyHunks",
       },
     ];
     if (!nativeMenuPatchesEqual(lastMenuPatchesRef.current, patches)) {
       lastMenuPatchesRef.current = patches;
-      updateMenuItems(diffMenuOwnerId, patches);
+      diffMenuState$[windowIdentifier].set(Object.fromEntries(patches.map(({ id, ...state }) => [id, state])));
     }
-  }, [hasUnsavedMergeDrafts, isSavingMergeDrafts, loadingSource$, sidebarCollapsed$, state$]);
+  }, [hasUnsavedMergeDrafts, isSavingMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
+
+  useEffect(() => () => { diffMenuState$[windowIdentifier].delete(); }, [windowIdentifier]);
 
   useObserveEffect(() => {
     updateDiffNativeMenuItems(true);
@@ -211,33 +217,20 @@ export function DiffWindowToolbarItemController({
   const windowIdentifier = useWindowId();
 
   useEffect(() => {
-    const subscription = addWindowToolbarItemSelectedListener((event) => {
-      if (event.identifier === windowIdentifier) {
-        if (event.itemId === diffSidebarToolbarItemId) {
-          toggleSidebar();
-        } else if (event.itemId === diffCompareToolbarItemId && event.value === diffCompareToolbarTargetChooseRef) {
-          openCompareRefPrompt();
-        } else if (event.itemId === diffCompareToolbarItemId && event.value) {
-          compareCurrentSource(event.value);
-        } else if (event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) {
-          setDiffViewModeSetting(event.value);
-        }
+    const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
+      if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
+      if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
+        if (event.action.itemId === diffCompareToolbarTargetChooseRef) openCompareRefPrompt();
+        else compareCurrentSource(event.action.itemId);
       }
-    });
-    return () => subscription.remove();
-  }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier]);
-
-  useEffect(() => {
-    const subscription = addWindowToolbarSearchListener((event) => {
-      if (event.identifier === windowIdentifier && event.itemId === diffSearchToolbarItemId) {
+      if (event.type === "toolbarSelectionChanged" && event.itemId === diffViewModeToolbarItemId && isDiffViewMode(event.value)) setDiffViewModeSetting(event.value);
+      if ((event.type === "toolbarSearchChanged" || event.type === "toolbarSearchSubmitted") && event.itemId === diffSearchToolbarItemId) {
         onSearchChange(event.value);
-        if (event.submitted) {
-          onSearchSubmit(event.value, event.shiftKey ? -1 : 1);
-        }
+        if (event.type === "toolbarSearchSubmitted") onSearchSubmit(event.value, event.shiftKey ? -1 : 1);
       }
-    });
-    return () => subscription.remove();
-  }, [onSearchChange, onSearchSubmit, windowIdentifier]);
+    }));
+    return () => { void subscription.remove().catch(console.error); };
+  }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
 
   return null;
 }
@@ -356,6 +349,7 @@ export function DiffActionHandlersController({
     navigateToPreviousHunk,
     reloadCurrentSource,
     toggleSidebar,
+    windowIdentifier,
   ]);
 
   useRoutedHotkeys({
@@ -368,9 +362,14 @@ export function DiffActionHandlersController({
 
   useEffect(() => {
     diffHotkeyRouter.setActiveWindowId(windowIdentifier);
+    diffActiveMenuWindow$.set(windowIdentifier);
+    const subscription = ownRegistration(addWindowListener(windowIdentifier, "focusChanged", event => {
+      if (event.focused) { diffHotkeyRouter.setActiveWindowId(windowIdentifier); diffActiveMenuWindow$.set(windowIdentifier); }
+    }));
+    return () => { void subscription.remove().catch(console.error); };
   }, [windowIdentifier]);
 
-  useEffect(() => registerDiffViewerActionHandlers({
+  useEffect(() => registerDiffViewerActionHandlers(windowIdentifier, {
     copyFilePath: copyCurrentFilePath,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
@@ -394,6 +393,7 @@ export function DiffActionHandlersController({
     saveMergeDrafts,
     toggleShowOnlyHunks,
     toggleSidebar,
+    windowIdentifier,
   ]);
 
   return null;
@@ -557,7 +557,7 @@ export function DiffFileWatcherController({
     }
 
     let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = watchDirectories([currentVisibleFolderSource.value], () => {
+    const subscription = ownRegistration(watch(currentVisibleFolderSource.value, () => {
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
       }
@@ -576,13 +576,13 @@ export function DiffFileWatcherController({
           });
         }
       }, 250);
-    });
+    }, { recursive: true }));
 
     return () => {
       if (reloadTimeout) {
         clearTimeout(reloadTimeout);
       }
-      subscription.remove();
+      void subscription.remove().catch(console.error);
     };
   });
 

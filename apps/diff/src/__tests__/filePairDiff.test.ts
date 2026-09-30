@@ -1,20 +1,10 @@
-import type { CommandRunnerResult } from "@legendapp/spark/processes/commands";
+import { processResult as commandResult } from "./processFixtures";
 import { createDiffFilePairSource } from "../diffFiles";
 import {
   createFilePairDiffCommand,
   createFilePairUnifiedDiff,
   getFilePairDiffDisplayPath,
 } from "../filePairDiff";
-
-function commandResult(result: Partial<CommandRunnerResult>): CommandRunnerResult {
-  return {
-    exitCode: 0,
-    stderr: "",
-    stdout: "",
-    timedOut: false,
-    ...result,
-  };
-}
 
 describe("filePairDiff", () => {
   it("creates a macOS diff command with explicit labels", () => {
@@ -29,7 +19,7 @@ describe("filePairDiff", () => {
         "/tmp/old/App.tsx",
         "/tmp/new/App.tsx",
       ],
-      command: "/usr/bin/diff",
+      target: { type: "executable", path: "/usr/bin/diff" },
       timeoutMs: 60_000,
     });
   });

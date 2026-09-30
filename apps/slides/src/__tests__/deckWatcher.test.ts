@@ -11,23 +11,24 @@ test("failed replacement opens retain the visible deck watcher until a successfu
   const watchers = [], commands = [];
   let fail = false;
   const mocks = {
+    "@legend-apps/runtime-utils": { ownRegistration: (promise) => ({ remove: async () => { (await promise).remove(); } }), decodeProcessText: bytes => new TextDecoder().decode(bytes) },
     "./deckReloadQueue": { createDeckReloadQueue: reload => ({ changed: reload, dispose() {} }) },
-    "./compilerCommand": { compilerCommand: async () => ({ command: "bun", prefix: [] }) },
+    "./compilerCommand": { compilerCommand: async () => ({ target: { type: "executable", path: "/bun" }, prefix: [] }) },
     "./transitionLibrary": { transitionDirectoryPath: () => "/transitions" },
     "./slidesPreferences": { rememberDeckPath() {} },
     "./slidesStore": { getSlidesState: () => state, setSlidesState: update => Object.assign(state, update) },
     "./deckBuildPolicy": { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate },
-    "@legendapp/spark/processes/commands": { commandRunner: { runCommand: async ({ args }) => {
+    "@legendapp/spark/processes": { runCommand: async ({ args }) => {
       commands.push(args[0]);
-      return { stdout: JSON.stringify(fail ? { success: false, errors: ["broken"], warnings: [] } : {
+      return { exit: { type: "exited", code: 0 }, stdout: new TextEncoder().encode(JSON.stringify(fail ? { success: false, errors: ["broken"], warnings: [] } : {
         success: true, code: "module.exports.default = function Deck() {};", uniwindCode: "{}", warnings: [],
-      }) };
-    } } },
-    "@legendapp/spark/files/watchers": { watchDirectories: (paths, changed) => {
-      const watcher = { paths, changed, removed: false, remove() { this.removed = true; } };
+      })), stderr: new Uint8Array() };
+    } },
+    "@legendapp/spark/files": { watch: async (path, changed) => {
+      const watcher = { paths: [path], changed, removed: false, remove() { this.removed = true; } };
       watchers.push(watcher); return watcher;
     } },
-    "@legendapp/spark/app/recent-documents": { noteRecentDocument() {} },
+    "@legendapp/spark/app/documents": { noteRecentDocument() {} },
     uniwind: { Uniwind: { __reinit() {} } },
   };
   const module = { exports: {} };
@@ -44,7 +45,8 @@ test("failed replacement opens retain the visible deck watcher until a successfu
   expect(commands.at(-1)).toBe("/a/deck.mdx");
   fail = false;
   await loadDeck("/b/deck.mdx");
+  await Promise.resolve();
   expect(original.removed).toBe(true);
-  expect(watchers.at(-1).paths[0]).toBe("/b");
+  expect(watchers.at(-2).paths[0]).toBe("/b");
   expect(state.deckPath).toBe("/b/deck.mdx");
 });

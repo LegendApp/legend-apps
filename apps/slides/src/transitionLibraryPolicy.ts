@@ -1,5 +1,5 @@
 import { builtinTransitionSources } from "../../../packages/presentation/src/transitions";
-import type { Storage } from "@legendapp/spark/settings/observable";
+import type { Storage } from "@legend-apps/storage";
 
 export function syncTransitionLibrary(storage: Storage) {
   const directory = storage.ensureDirectory("transitions");

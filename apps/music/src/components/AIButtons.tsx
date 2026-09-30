@@ -1,4 +1,4 @@
-import { getCodexAvailability } from "@legend-apps/codex";
+import { getCodexAvailability } from "@legendapp/spark/ai/codex";
 import { useCallback, useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 

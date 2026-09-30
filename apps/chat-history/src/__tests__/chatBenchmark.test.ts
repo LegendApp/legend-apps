@@ -1,9 +1,9 @@
-import { writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
-import { getReactNativeStartupTiming } from "@legendapp/spark/windows/managed";
+jest.mock("@legend-apps/storage", () => { const storage = { read: jest.fn(), write: jest.fn() }; return { createStorage: () => storage, __storage: storage }; });
+const { read: mockRead, write: mockWrite } = jest.requireMock("@legend-apps/storage").__storage;
+import { getStartupTiming } from "@legendapp/spark/diagnostics";
 import { emitChatBenchmarkEvent, getChatBenchmarkConfig, type ChatBenchmarkConfig } from "../chatBenchmark";
 
-jest.mock("@legendapp/spark/settings/paths", () => ({ writeApplicationSupportJson: jest.fn() }));
-jest.mock("@legendapp/spark/windows/managed", () => ({ getReactNativeStartupTiming: jest.fn() }));
+jest.mock("@legendapp/spark/diagnostics", () => ({ getStartupTiming: jest.fn() }));
 
 function benchmarkArgument(config: object) {
   return `--chat-history-benchmark=${encodeURIComponent(JSON.stringify(config))}`;
@@ -40,26 +40,26 @@ describe("benchmark window timestamp", () => {
   afterEach(() => jest.useRealTimers());
 
   it("reports native presentation rather than React layout, with all diagnostics deferred", () => {
-    jest.mocked(getReactNativeStartupTiming).mockReturnValue({ mainWindowFirstVisibleTime: 250, clockOffsetMs: 9_000 });
+    jest.mocked(getStartupTiming).mockReturnValue({ mainWindowFirstVisibleTime: 250, clockOffsetMs: 9_000 });
     const config = { eventFileName: "native-window-test.json" } as ChatBenchmarkConfig;
     emitChatBenchmarkEvent(config, { name: "windowShown" });
-    expect(getReactNativeStartupTiming).not.toHaveBeenCalled();
-    expect(writeApplicationSupportJson).not.toHaveBeenCalled();
+    expect(getStartupTiming).not.toHaveBeenCalled();
+    expect(mockWrite).not.toHaveBeenCalled();
     jest.runAllTimers();
-    expect(writeApplicationSupportJson).toHaveBeenCalledWith(
+    expect(mockWrite).toHaveBeenCalledWith(
       "chat-history-benchmark/native-window-test.json",
-      [expect.objectContaining({ name: "windowShown", timestampMs: 9_250 })],
+      [expect.objectContaining({ name: "windowShown", timestampMs: 9_250 })], { format: "json" },
     );
   });
 
   it("falls back to the captured layout time if native timing is unavailable", () => {
-    jest.mocked(getReactNativeStartupTiming).mockReturnValue({});
+    jest.mocked(getStartupTiming).mockReturnValue({});
     emitChatBenchmarkEvent({ eventFileName: "missing-window-test.json" } as ChatBenchmarkConfig, { name: "windowShown" });
     jest.setSystemTime(11_000);
     jest.runAllTimers();
-    expect(writeApplicationSupportJson).toHaveBeenCalledWith(
+    expect(mockWrite).toHaveBeenCalledWith(
       "chat-history-benchmark/missing-window-test.json",
-      [expect.objectContaining({ timestampMs: 10_000 })],
+      [expect.objectContaining({ timestampMs: 10_000 })], { format: "json" },
     );
   });
 });

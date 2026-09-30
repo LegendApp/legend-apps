@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { createAudienceSession } from "../audienceSession";
 
-const projector = { id: "projector", frame: { x: 1920, y: 0, width: 1920, height: 1080 } };
+const projector = { id: "projector", size: { width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1080 } };
 function setup(open = async () => {}) {
   const calls = [];
   let state = {};
@@ -34,7 +34,7 @@ describe("audience display recovery", () => {
     await session.open(projector);
     await session.displaysChanged([{ ...projector }]);
     expect(calls.length).toBe(1);
-    const resized = { ...projector, frame: { x: -1280, y: 200, width: 1280, height: 720 } };
+    const resized = { ...projector, size: { width: 1280, height: 720 }, workArea: { x: -1280, y: 200, width: 1280, height: 720 } };
     await session.displaysChanged([resized]);
     expect(calls).toEqual([["open", projector], ["open", resized]]);
   });

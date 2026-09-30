@@ -1,4 +1,4 @@
-import { GlassSurface } from "@legendapp/spark/ui/glass";
+import { GlassView } from "@legendapp/spark/ui/glass";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useResolveClassNames, useUniwind } from "uniwind";
@@ -44,7 +44,7 @@ export function ChatComposer({
       pointerEvents="box-none"
     >
       <View className="mx-auto w-full max-w-[860px]" style={styles.shadow}>
-        <GlassSurface
+        <GlassView
           className="rounded-[26px] border border-border"
           glassStyle="regular"
           tintColor={glassTintColor}
@@ -81,7 +81,7 @@ export function ChatComposer({
               <Text className="text-lg font-semibold text-primary-foreground" style={styles.sendIcon}>↑</Text>
             </Pressable>
           </View>
-        </GlassSurface>
+        </GlassView>
       </View>
     </View>
   );

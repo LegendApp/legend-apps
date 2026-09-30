@@ -25,7 +25,8 @@ jest.mock("../confirmDirtyDocumentTransition", () => ({
   confirmDirtyDocumentTransition: jest.fn(),
 }));
 
-jest.mock("@legendapp/spark/app/recent-documents", () => ({
+jest.mock("@legendapp/spark/app/documents", () => ({
+  ...jest.requireActual("@legendapp/spark/app/documents"),
   noteRecentDocument: jest.fn(),
 }));
 
@@ -65,21 +66,21 @@ describe("useMarkdownDocumentSession", () => {
   });
 
   it("filters the open dialog to Markdown files", async () => {
-    mockOpenFileDialog.mockResolvedValue(null);
+    mockOpenFileDialog.mockResolvedValue({ canceled: true });
 
     await render(<SessionHarness onState={() => undefined} />);
 
     await waitFor(() => {
       expect(mockOpenFileDialog).toHaveBeenCalledWith({
-        allowedFileTypes: markdownFileTypes,
-        canChooseFiles: true,
+        filters: [{ extensions: markdownFileTypes }],
+        selection: "files",
       });
     });
   });
 
   it("reports unsupported files if the dialog returns a non-Markdown path", async () => {
     let state$: MarkdownDocumentSessionState$ | undefined;
-    mockOpenFileDialog.mockResolvedValue(["/tmp/notes.txt"]);
+    mockOpenFileDialog.mockResolvedValue({ canceled: false, paths: ["/tmp/notes.txt"] });
 
     const view = await render(<SessionHarness onState={(nextState$) => {
       state$ = nextState$;
@@ -153,13 +154,13 @@ describe("useMarkdownDocumentSession", () => {
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
     session.sessionState$.assign({ documentSource: "file", filename: "/tmp/notes.md", isDirty: true, conflict: "changed" });
     const dialog = saveFileDialog as jest.MockedFunction<typeof saveFileDialog>;
-    dialog.mockResolvedValueOnce(null).mockResolvedValueOnce("/tmp/notes.md");
+    dialog.mockResolvedValueOnce({ canceled: true }).mockResolvedValueOnce({ canceled: false, path: "/tmp/notes.md" });
     expect(await session.saveCurrentDocumentAs(true)).toBe(false);
     expect(await session.saveCurrentDocumentAs(true)).toBe(false);
     expect(saveAs).not.toHaveBeenCalled();
     expect(session.sessionState$.conflict.peek()).toBe("changed");
     expect(session.sessionState$.isDirty.peek()).toBe(true);
-    dialog.mockResolvedValueOnce("/tmp/notes copy.md");
+    dialog.mockResolvedValueOnce({ canceled: false, path: "/tmp/notes copy.md" });
     expect(await session.saveCurrentDocumentAs(true)).toBe(true);
     expect(saveAs).toHaveBeenCalledWith("/tmp/notes copy.md");
     expect(session.sessionState$.filename.peek()).toBe("/tmp/notes copy.md");
@@ -179,7 +180,7 @@ describe("useMarkdownDocumentSession", () => {
 
   it("allows editor commands to refresh while the Save As dialog is open", async () => {
     let session!: MarkdownDocumentSession;
-    let resolveDialog!: (path: string) => void;
+    let resolveDialog!: (result: import("@legendapp/spark/dialogs").SaveFileDialogResult) => void;
     const view = await render(<SessionApiHarness onSession={(value) => { session = value; }} />);
     const saveAs = jest.fn(async () => {});
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
@@ -187,7 +188,7 @@ describe("useMarkdownDocumentSession", () => {
     (saveFileDialog as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { resolveDialog = resolve; }));
     const save = session.saveCurrentDocumentAs(true);
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
-    resolveDialog("/tmp/copy.md");
+    resolveDialog({ canceled: false, path: "/tmp/copy.md" });
     expect(await save).toBe(true);
     expect(saveAs).toHaveBeenCalledWith("/tmp/copy.md");
     await view.unmount();
@@ -195,7 +196,7 @@ describe("useMarkdownDocumentSession", () => {
 
   it("does not save a newly opened document into a stale Save As dialog's destination", async () => {
     let session!: MarkdownDocumentSession;
-    let resolveDialog!: (path: string) => void;
+    let resolveDialog!: (result: import("@legendapp/spark/dialogs").SaveFileDialogResult) => void;
     const view = await render(<SessionApiHarness onSession={(value) => { session = value; }} />);
     const saveAs = jest.fn(async () => {});
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
@@ -203,7 +204,7 @@ describe("useMarkdownDocumentSession", () => {
     (saveFileDialog as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { resolveDialog = resolve; }));
     const save = session.saveCurrentDocumentAs(true);
     session.sessionState$.filename.set("/tmp/second.md");
-    resolveDialog("/tmp/copy.md");
+    resolveDialog({ canceled: false, path: "/tmp/copy.md" });
     expect(await save).toBe(false);
     expect(saveAs).not.toHaveBeenCalled();
     await view.unmount();
@@ -218,7 +219,7 @@ describe("useMarkdownDocumentSession", () => {
       finish = () => fail ? reject(new Error("Old write failed")) : resolve();
     }));
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
-    (saveFileDialog as jest.Mock).mockResolvedValue("/tmp/copy.md");
+    (saveFileDialog as jest.Mock).mockResolvedValue({ canceled: false, path: "/tmp/copy.md" });
     const saving = session.saveCurrentDocumentAs();
     await waitFor(() => expect(saveAs).toHaveBeenCalled());
     session.openSelectedFile("/tmp/second.md");
@@ -244,7 +245,7 @@ describe("useMarkdownDocumentSession", () => {
     const save = jest.fn(async () => {});
     session.documentCommandsRef.current = { save } as unknown as MarkdownDocumentCommands;
     mockConfirmDirtyDocumentTransition.mockResolvedValue("cancel");
-    mockOpenFileDialog.mockResolvedValue(["/tmp/next.md"]);
+    mockOpenFileDialog.mockResolvedValue({ canceled: false, paths: ["/tmp/next.md"] });
     if (transition === "new") await session.newMarkdownDocument();
     else if (transition === "open") await session.openMarkdownDialog();
     else expect(await session.prepareCurrentDocumentForClose({ autosaveEnabled: false, reason: transition })).toBe(false);
@@ -258,7 +259,7 @@ describe("useMarkdownDocumentSession", () => {
     const save = jest.fn().mockRejectedValueOnce(new Error("Disk full")).mockResolvedValue(undefined);
     session.documentCommandsRef.current = { save } as unknown as MarkdownDocumentCommands;
     mockConfirmDirtyDocumentTransition.mockResolvedValue("save");
-    mockOpenFileDialog.mockResolvedValue(["/tmp/next.md"]);
+    mockOpenFileDialog.mockResolvedValue({ canceled: false, paths: ["/tmp/next.md"] });
     const run = () => transition === "new" ? session.newMarkdownDocument()
       : transition === "open" ? session.openMarkdownDialog()
       : session.prepareCurrentDocumentForClose({ autosaveEnabled: true, reason: transition });
@@ -289,7 +290,7 @@ describe("useMarkdownDocumentSession", () => {
     const session = await openSession();
     const saveAs = jest.fn().mockRejectedValueOnce(new Error("Permission denied")).mockResolvedValue(undefined);
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
-    (saveFileDialog as jest.Mock).mockResolvedValue("/tmp/copy.md");
+    (saveFileDialog as jest.Mock).mockResolvedValue({ canceled: false, path: "/tmp/copy.md" });
     expect(await session.saveCurrentDocumentAs()).toBe(false);
     expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
     expect(session.sessionState$.isDirty.peek()).toBe(true);
@@ -305,7 +306,7 @@ describe("useMarkdownDocumentSession", () => {
     session.setIsDirty(true);
     const save = jest.fn(), saveAs = jest.fn(async () => {});
     session.documentCommandsRef.current = { save, saveAs } as unknown as MarkdownDocumentCommands;
-    (saveFileDialog as jest.Mock).mockResolvedValueOnce(null).mockResolvedValueOnce("/tmp/new.md");
+    (saveFileDialog as jest.Mock).mockResolvedValueOnce({ canceled: true }).mockResolvedValueOnce({ canceled: false, path: "/tmp/new.md" });
     expect(await session.saveCurrentDocument()).toBe(false);
     expect(session.sessionState$.documentSource.peek()).toBe("untitled");
     expect(session.sessionState$.isDirty.peek()).toBe(true);
@@ -324,7 +325,7 @@ describe("useMarkdownDocumentSession", () => {
     rejectDialog(new Error("Dialog unavailable"));
     await pending;
     expect(session.sessionState$.filename.peek()).toBe("/tmp/original.md");
-    mockOpenFileDialog.mockResolvedValue(["/tmp/retry.md"]);
+    mockOpenFileDialog.mockResolvedValue({ canceled: false, paths: ["/tmp/retry.md"] });
     mockConfirmDirtyDocumentTransition.mockResolvedValue("discard");
     await session.openMarkdownDialog();
     expect(session.sessionState$.filename.peek()).toBe("/tmp/retry.md");

@@ -7,7 +7,7 @@ import {
   SettingsRow,
   SettingsSection,
   VirtualizedSettingsWindow,
-  type VirtualizedSettingsWindowPage,
+  type SettingsWindowPage,
 } from "@legendapp/spark/settings/window";
 import {
   SourceSyntaxToggleSettingsRows,
@@ -414,30 +414,30 @@ function CommandLineSettingsContent() {
   );
 }
 
-const pages: VirtualizedSettingsWindowPage<DiffSettingsPage>[] = [
+const pages: SettingsWindowPage<DiffSettingsPage>[] = [
   {
     id: "appearance",
-    renderContent: () => <AppearanceSettingsContent />,
+    render: () => <AppearanceSettingsContent />,
     title: "Appearance",
   },
   {
     id: "syntax",
-    renderContent: () => <SyntaxSettingsContent />,
+    render: () => <SyntaxSettingsContent />,
     title: "Syntax",
   },
   {
     id: "hotkeys",
-    renderContent: () => <HotkeysSettingsContent />,
+    render: () => <HotkeysSettingsContent />,
     title: "Hotkeys",
   },
   {
     id: "debugging",
-    renderContent: () => <DebuggingSettingsContent />,
+    render: () => <DebuggingSettingsContent />,
     title: "Debugging",
   },
   {
     id: "commandLine",
-    renderContent: () => <CommandLineSettingsContent />,
+    render: () => <CommandLineSettingsContent />,
     title: "Command Line",
   },
 ];
@@ -450,7 +450,7 @@ export function SettingsWindow() {
       appearance={syntaxTheme.appearance}
       estimatedItemSize={360}
       pages={pages}
-      windowIdentifier={diffSettingsWindowIdentifier}
+      windowId={diffSettingsWindowIdentifier}
     />
   );
 }

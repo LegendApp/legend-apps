@@ -29,14 +29,13 @@ test("keyboard highlighting updates only the affected search rows and submits th
     let keyDown;
     const removeDown = jest.fn(), removeUp = jest.fn();
     const keyboard = {
-        addKeyDownListener: jest.fn((fn) => { keyDown = fn; return removeDown; }),
-        addKeyUpListener: jest.fn(() => removeUp),
+        addKeyboardListener: jest.fn(async (type, fn) => { if (type === "down") keyDown = fn; return { remove: type === "down" ? removeDown : removeUp }; }),
         hasModifier: () => false,
     };
     const actions = { getQueueAction: () => "play-now" };
     const { useDropdownKeyboardNavigation } = compiled("../hooks.ts", {
         "../../state/playlistNavigationState": {},
-        "../../systems/keyboard/KeyboardManager": { default: keyboard, __esModule: true, KeyCodes: keys },
+        "../../systems/keyboard/KeyboardManager": { ...keyboard, KeyCodes: keys },
         "../../utils/queueActions": actions,
     });
     let results = Array.from({ length: 8 }, (_, i) => ({ type: "track", item: { id: String(i), title: `Track ${i}` } }));
@@ -66,14 +65,14 @@ test("keyboard highlighting updates only the affected search rows and submits th
     const press = async (keyCode) => { await act(() => { expect(keyDown({ keyCode, modifiers: 0 })).toBe(true); }); };
     const highlighted = () => tree.root.findAllByType("item").findIndex((item) => item.props.className.includes("bg-white/20"));
     try {
-        await act(() => { tree = create(<JumpSearchMenuDropdown tracks={[]} playlists={[]} onSelectTrack={select} />); });
+        await act(async () => { tree = create(<JumpSearchMenuDropdown tracks={[]} playlists={[]} onSelectTrack={select} />); });
         expect(highlighted()).toBe(0);
         listRenders.mockClear(); trackRenders.mockClear();
-        const listenerRegistrations = keyboard.addKeyDownListener.mock.calls.length;
+        const listenerRegistrations = keyboard.addKeyboardListener.mock.calls.length;
         for (let index = 1; index <= 5; index++) { await press(keys.KEY_DOWN); expect(highlighted()).toBe(index); }
         expect(listRenders).not.toHaveBeenCalled();
         expect(trackRenders).not.toHaveBeenCalled();
-        expect(keyboard.addKeyDownListener).toHaveBeenCalledTimes(listenerRegistrations);
+        expect(keyboard.addKeyboardListener).toHaveBeenCalledTimes(listenerRegistrations);
         await press(keys.KEY_RETURN);
         expect(select).toHaveBeenLastCalledWith(results[5].item, "play-now");
         expect(handleOpenChange).toHaveBeenCalledWith(false);

@@ -129,3 +129,11 @@ export const runAfterInteractionsWithLabel = (callback: () => void, label: strin
     callback();
   });
 };
+
+export { ownRegistration } from "./ownRegistration";
+
+export { withMenuState, type MenuState } from "./menuState";
+
+export { createFolderWatcher } from "./folderWatcher";
+
+export { decodeProcessText } from "./decodeProcessText";

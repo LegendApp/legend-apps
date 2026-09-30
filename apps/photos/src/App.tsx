@@ -1,7 +1,8 @@
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useEffect } from "react";
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { beforeQuit } from "@legendapp/spark/app";
 import { flushPhotoSettings } from "./utils/JSONManager";
-import { WindowProvider } from "@legendapp/spark/windows/react";
+import { WindowProvider } from "@legendapp/spark/windows";
 import { HookWindowFullscreen } from "./hooks/HookWindowFullscreen";
 import { FullscreenPhoto } from './features/FullscreenPhoto';
 import { HotkeyHelp } from './features/HotkeyHelp';
@@ -22,16 +23,15 @@ import type React from 'react';
 import { View } from 'react-native';
 
 registerDefaultPlugins();
-initializeUpdater();
-initializeMenuManager();
+
 
 
 function App(): React.JSX.Element {
   useEffect(() => {
-    const subscription = addAppExitListener(() => {
-      void flushPhotoSettings().then(() => completeAppExit(true), error => { console.error(error); completeAppExit(false); });
-    });
-    return () => subscription.remove();
+    const subscription = ownRegistration(beforeQuit(async () => { await flushPhotoSettings(); return true; }));
+    const menus = ownRegistration(initializeMenuManager());
+    const updater = initializeUpdater();
+    return () => { void subscription.remove().catch(console.error); void menus.remove().catch(console.error); void updater.remove().catch(console.error); };
   }, []);
   const settingsLoaded = useValue(isSettingsLoaded$);
 

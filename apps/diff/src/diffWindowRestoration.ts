@@ -1,65 +1,50 @@
-import {
-  addWindowClosedListener,
-  setWindowOptions,
-} from "@legendapp/spark/windows/managed";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { addAppListener } from "@legendapp/spark/app";
+import { setWindowOptions, } from "@legendapp/spark/windows";
 import { diffPrimaryWindowIdentifier, diffViewerWindowIdentifier } from "./appConstants";
-import {
-  getSavedDiffWindows,
-  removeSavedDiffWindow,
-  type SavedDiffWindow,
-} from "./diffAppMetadata";
+import { getSavedDiffWindows, removeSavedDiffWindow, type SavedDiffWindow, } from "./diffAppMetadata";
 import { openDiffViewerWindow } from "./diffWindows";
-
 function isDiffViewerWindowIdentifier(identifier: string) {
-  return identifier === diffPrimaryWindowIdentifier ||
-    identifier === diffViewerWindowIdentifier ||
-    identifier.startsWith(`${diffViewerWindowIdentifier}-`);
+    return identifier === diffPrimaryWindowIdentifier ||
+        identifier === diffViewerWindowIdentifier ||
+        identifier.startsWith(`${diffViewerWindowIdentifier}-`);
 }
-
 export function installDiffWindowRestoration() {
-  // AppKit owns every window frame so restoration can happen before React starts.
-  const closedSubscription = addWindowClosedListener(({ identifier }) => {
-    if (isDiffViewerWindowIdentifier(identifier)) {
-      removeSavedDiffWindow(identifier);
-    }
-  });
-
-  return {
-    remove() {
-      closedSubscription.remove();
-    },
-  };
+    // AppKit owns every window frame so restoration can happen before React starts.
+    return ownRegistration(addAppListener("windowClosed", ({ windowId: identifier }) => {
+        if (isDiffViewerWindowIdentifier(identifier)) {
+            removeSavedDiffWindow(identifier);
+        }
+    }));
 }
-
 export async function setDiffManagedWindowRestorationEnabled(enabled: boolean) {
-  const identifiers = getSavedDiffWindows()
-    .map((window) => window.id)
-    .filter((identifier) => identifier !== diffPrimaryWindowIdentifier);
-  await Promise.all(identifiers.map((identifier) =>
-    setWindowOptions(identifier, { restoreOnLaunch: enabled }).catch(() => undefined)));
+    const identifiers = getSavedDiffWindows()
+        .map((window) => window.id)
+        .filter((identifier) => identifier !== diffPrimaryWindowIdentifier);
+    await Promise.all(identifiers.map((identifier) => setWindowOptions(identifier, {
+        macos: {
+            restoreOnLaunch: enabled
+        }
+    }).catch(() => undefined)));
 }
-
 function restoreSavedWindow(savedWindow: SavedDiffWindow) {
-  return openDiffViewerWindow(savedWindow.source ?? null, {
-    frame: savedWindow.frame,
-    freshWindow: savedWindow.source === undefined,
-    windowIdentifier: savedWindow.id,
-  });
+    return openDiffViewerWindow(savedWindow.source ?? null, {
+        frame: savedWindow.frame,
+        freshWindow: savedWindow.source === undefined,
+        windowIdentifier: savedWindow.id,
+    });
 }
-
-export async function restoreSavedDiffWindows(
-  openPrimaryWindow?: (source: SavedDiffWindow["source"]) => Promise<void>,
-) {
-  const savedWindows = getSavedDiffWindows();
-  const primarySavedWindow = savedWindows.find((window) => window.id === diffPrimaryWindowIdentifier) ?? savedWindows[0];
-  if (primarySavedWindow && openPrimaryWindow) {
-    await openPrimaryWindow(primarySavedWindow.source);
-  }
-  const secondarySavedWindows = openPrimaryWindow
-    ? savedWindows.filter((window) => window !== primarySavedWindow)
-    : savedWindows;
-  for (const savedWindow of secondarySavedWindows.slice().reverse()) {
-    await restoreSavedWindow(savedWindow);
-  }
-  return savedWindows.length;
+export async function restoreSavedDiffWindows(openPrimaryWindow?: (source: SavedDiffWindow["source"]) => Promise<void>) {
+    const savedWindows = getSavedDiffWindows();
+    const primarySavedWindow = savedWindows.find((window) => window.id === diffPrimaryWindowIdentifier) ?? savedWindows[0];
+    if (primarySavedWindow && openPrimaryWindow) {
+        await openPrimaryWindow(primarySavedWindow.source);
+    }
+    const secondarySavedWindows = openPrimaryWindow
+        ? savedWindows.filter((window) => window !== primarySavedWindow)
+        : savedWindows;
+    for (const savedWindow of secondarySavedWindows.slice().reverse()) {
+        await restoreSavedWindow(savedWindow);
+    }
+    return savedWindows.length;
 }

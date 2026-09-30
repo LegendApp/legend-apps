@@ -14,8 +14,8 @@ test("roles stay exclusive and use hardware identity rather than screen order/se
 });
 
 test("restores local and external setups independently across reconnects and restarts", () => {
-  const laptop = { id: "1", persistentId: "mac", isMain: true };
-  const ipad = { id: "2", persistentId: "ipad", isMain: false };
+  const laptop = { id: "1", persistentId: "mac", primary: true };
+  const ipad = { id: "2", persistentId: "ipad", primary: false };
   const local = { audience: "mac", notes: null };
   let history = rememberDisplayRoles({}, [laptop], local);
   const external = resolveDisplayRoles([laptop, ipad], [laptop], local, history);
@@ -26,8 +26,8 @@ test("restores local and external setups independently across reconnects and res
     .toEqual({ audience: "ipad", notes: "mac" });
 });
 test("new setups default to newly attached displays and history retains manual choices", () => {
-  const laptop = { id: "mac", isMain: true };
-  const external = { id: "projector", isMain: false };
+  const laptop = { id: "mac", primary: true };
+  const external = { id: "projector", primary: false };
   const roles = { audience: "mac", notes: null };
   expect(resolveDisplayRoles([laptop, external], [laptop], roles, {})).toEqual({ audience: "projector", notes: null });
   const history = rememberDisplayRoles({}, [laptop, external], roles);

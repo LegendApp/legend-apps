@@ -1,4 +1,4 @@
-import { createMockCommandRunner } from "@legendapp/spark/processes/commands";
+import { createTestProcesses } from "./processFixtures";
 import {
   createDiffMergeConflictFileFromContent,
   createDiffMergeDraftFileWithResolvedBlock,
@@ -578,12 +578,12 @@ describe("diffMerge", () => {
 
   it("writes drafted merge content to a worktree file", async () => {
     const commands: Array<{ command: string; args: string[]; input?: string }> = [];
-    const runner = createMockCommandRunner({
+    const runner = createTestProcesses({
       run: (params) => {
         commands.push({
-          args: params.args ?? [],
-          command: params.command,
-          input: params.input,
+          args: [...(params.args ?? [])],
+          command: (params.target.type === "executable" ? params.target.path : params.target.name),
+          input: typeof params.input === "string" ? params.input : undefined,
         });
         return {
           exitCode: 0,
@@ -612,10 +612,10 @@ describe("diffMerge", () => {
 
   it("loads conflict state from git index and worktree files", async () => {
     const commands: string[] = [];
-    const runner = createMockCommandRunner({
+    const runner = createTestProcesses({
       run: (params) => {
-        commands.push([params.command, ...(params.args ?? [])].join(" "));
-        if (params.command === "git" && params.args?.[0] === "ls-files") {
+        commands.push([(params.target.type === "executable" ? params.target.path : params.target.name), ...(params.args ?? [])].join(" "));
+        if ((params.target.type === "executable" ? params.target.path : params.target.name) === "git" && params.args?.[0] === "ls-files") {
           return {
             exitCode: 0,
             stderr: "",
@@ -666,7 +666,7 @@ describe("diffMerge", () => {
   });
 
   it("returns an empty ready state when Git has no unmerged entries", async () => {
-    const runner = createMockCommandRunner({
+    const runner = createTestProcesses({
       run: () => ({
         exitCode: 0,
         stderr: "",

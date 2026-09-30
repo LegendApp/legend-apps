@@ -1,8 +1,8 @@
 import { displayKey } from "./displayRoles";
-import type { Display } from "@legendapp/spark/windows/managed";
+import type { DisplayInfo } from "@legendapp/spark/windows";
 
 type AudiencePlatform = {
-  open(display: Display): Promise<void>;
+  open(display: DisplayInfo): Promise<void>;
   close(): Promise<void>;
   focusPresenter(): Promise<void>;
   update(state: { audienceOpen?: boolean; blackout?: boolean; displayMessage?: string; deckLocked?: boolean }): void;
@@ -11,7 +11,7 @@ type AudiencePlatform = {
 // Serialize opens, closes and display changes so an unplug during an async
 // window open cannot leave an orphaned audience window on the laptop display.
 export function createAudienceSession(platform: AudiencePlatform) {
-  let active: Display | null = null;
+  let active: DisplayInfo | null = null;
   let rehearsing = false;
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void>) => {
@@ -24,7 +24,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
   };
 
   return {
-    open(display: Display, rehearsal = false) {
+    open(display: DisplayInfo, rehearsal = false) {
       return enqueue(async () => {
         // Apply the lock in queue order; an earlier close must not clear it.
         platform.update({ deckLocked: !rehearsal });
@@ -47,7 +47,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
       active = null;
       platform.update({ audienceOpen: false, deckLocked: false, blackout: false });
     },
-    displaysChanged(displays: Display[]) {
+    displaysChanged(displays: DisplayInfo[]) {
       return enqueue(async () => {
         if (!active) return;
         const next = displays.find((display) => active && displayKey(display) === displayKey(active));
@@ -57,7 +57,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
           active = null;
           platform.update({ audienceOpen: false, deckLocked: false });
           await platform.focusPresenter();
-        } else if (Object.keys(next.frame).some((key) => next.frame[key as keyof Display["frame"]] !== active?.frame[key as keyof Display["frame"]])) {
+        } else if (JSON.stringify([next.id, next.size, next.workArea]) !== JSON.stringify([active.id, active.size, active.workArea])) {
           await platform.open(next);
           active = next;
           if (!rehearsing) await platform.focusPresenter();

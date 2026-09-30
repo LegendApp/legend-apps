@@ -1,18 +1,16 @@
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
+import { beforeQuit } from "@legendapp/spark/app";
 import {
   installDiffAppExitHandler,
   prepareDiffWindowsForAppExit,
   registerDiffWindowExitPreparation,
 } from "../diffAppExit";
 
-const mockAddAppExitListener = addAppExitListener as jest.MockedFunction<typeof addAppExitListener>;
-const mockCompleteAppExit = completeAppExit as jest.MockedFunction<typeof completeAppExit>;
+const mockBeforeQuit = jest.mocked(beforeQuit);
 
 describe("diffAppExit", () => {
   beforeEach(() => {
-    mockAddAppExitListener.mockReset();
-    mockCompleteAppExit.mockReset();
-    mockAddAppExitListener.mockReturnValue({ remove: jest.fn() });
+    mockBeforeQuit.mockReset();
+    mockBeforeQuit.mockResolvedValue({ remove: jest.fn(async () => {}) });
   });
 
   it("prepares every registered window before allowing app exit", async () => {
@@ -50,11 +48,11 @@ describe("diffAppExit", () => {
     const reportError = jest.fn();
     installDiffAppExitHandler(reportError);
 
-    mockAddAppExitListener.mock.calls[0][0]({ reason: "requested" });
+    const allowed = await mockBeforeQuit.mock.calls[0][0]();
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(mockCompleteAppExit).toHaveBeenCalledWith(true);
+    expect(allowed).toBe(true);
     expect(reportError).not.toHaveBeenCalled();
     unregister();
   });

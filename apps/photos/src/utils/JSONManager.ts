@@ -1,5 +1,5 @@
 import { getPhotosStorageSubfolder, getPhotosStorageRoot } from "../systems/launch";
-import { createObservableFile, getPersistPlugin } from "@legendapp/spark/settings/observable";
+import { createObservableFile, getPersistPlugin } from "@legend-apps/storage";
 import type { Observable } from "@legendapp/state";
 import type { SyncTransform } from "@legendapp/state/sync";
 const flushers: (() => Promise<void> | undefined)[] = [];

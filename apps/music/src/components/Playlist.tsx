@@ -1,3 +1,4 @@
+import { useWindowId } from "@legendapp/spark/windows";
 import { LegendList } from "@legendapp/list/react-native";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { type ElementRef, memo, useCallback, useMemo, useRef, useState } from "react";
@@ -9,13 +10,9 @@ import { showToast } from "./Toast";
 import { type TrackData, TrackItem } from "./TrackItem";
 import { usePlaylistSelection } from "../hooks/usePlaylistSelection";
 import { showContextMenu } from "@legendapp/spark/context-menu";
-import {
-    DragDropView,
-    type NativeDragTrack,
-    type TrackDragEnterEvent,
-    type TrackDragEvent,
-    TrackDragSource,
-} from "@legendapp/spark/drag-drop/views";
+import { DragDropView, type DropEvent, type DragOverEvent } from "@legendapp/spark/drag-drop";
+import { MusicTrackDragSource, droppedMusicTracks, musicTrackMime, type MusicDragTrack } from "../utils/musicDrag";
+import { stat } from "@legendapp/spark/files";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "../systems/audioFormats";
 import { DEBUG_PLAYLIST_LOGS } from "../systems/constants";
@@ -81,6 +78,7 @@ const normalizeTrackPath = (path: string): string => {
 
 export function Playlist() {
     perfCount("Playlist.render");
+    const windowId = useWindowId();
     const localTracks = useValue(localMusicState$.tracks);
     const hasLibraryTracks = localTracks.length > 0;
     const isDefaultPlaylistSelected = useValue(localMusicState$.isLocalFilesSelected);
@@ -123,7 +121,7 @@ export function Playlist() {
     const skipBackgroundClearRef = useRef(false);
     const activeNativePlaylistDragRef = useRef<string | null>(null);
     const listRef = useRef<LegendListHandle>(null);
-    const dropAreaRef = useRef<ElementRef<typeof DragDropView>>(null);
+    const dropAreaRef = useRef<View>(null);
     const dropAreaWindowRectRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
     const lastDropIndexRef = useRef<number>(queueLength);
     const previousScrolledTrackRef = useRef<{ index: number; queueEntryId: string | null }>({
@@ -218,10 +216,10 @@ export function Playlist() {
             const x = event.pageX ?? event.x ?? 0;
             const y = event.pageY ?? event.y ?? 0;
 
-            const selection = await showContextMenu(playlistContextMenuItems, { x, y });
+            const selection = await showContextMenu({ items: playlistContextMenuItems, windowId, position: { x, y } });
 
             await handleTrackContextMenuSelection({
-                selection,
+                selection: selection.canceled ? null : selection.itemId,
                 filePath: playlist[index]?.filePath,
             });
         },
@@ -506,9 +504,9 @@ export function Playlist() {
     );
 
     const handleTrackDragEnter = useCallback(
-        (event: { nativeEvent: TrackDragEnterEvent }) => {
+        (event: DropEvent) => {
             activeDropZone$.set(null);
-            const nativeTracks = event.nativeEvent.tracks ?? [];
+            const nativeTracks = droppedMusicTracks(event);
             const playlistQueueEntryId =
                 nativeTracks.find((track) => track.queueEntryId)?.queueEntryId ?? activeNativePlaylistDragRef.current;
             if (playlistQueueEntryId) {
@@ -557,8 +555,8 @@ export function Playlist() {
     }, [activeDropZone$, draggedItem$, queueLength]);
 
     const handleTrackDragHover = useCallback(
-        (event: { nativeEvent: TrackDragEvent }) => {
-            const { x, y } = toWindowCoordinates(event.nativeEvent.location);
+        (event: DragOverEvent) => {
+            const { x, y } = toWindowCoordinates(event);
             checkDropZones(x, y);
             const activeDropZoneId = activeDropZone$.get();
             const dropIndexFromZone = parseDropZonePosition(activeDropZoneId);
@@ -570,8 +568,9 @@ export function Playlist() {
     );
 
     const handleTrackDrop = useCallback(
-        (event: { nativeEvent: TrackDragEvent }) => {
-            const { tracks = [], location } = event.nativeEvent;
+        (event: DropEvent) => {
+            const tracks = droppedMusicTracks(event);
+            const location = event;
             const playlistQueueEntryId =
                 tracks.find((track) => track.queueEntryId)?.queueEntryId ?? activeNativePlaylistDragRef.current;
             const { x, y } = toWindowCoordinates(location);
@@ -797,15 +796,13 @@ export function Playlist() {
     }, []);
 
     const handleDrop = useCallback(
-        (event: { nativeEvent: { files: string[]; directories?: string[] } }) => {
+        async (event: DropEvent) => {
             setIsDragOver(false);
-            const { files = [], directories = [] } = event.nativeEvent;
-            if (directories.length > 0) {
-                void handleDirectoryDrop(directories);
-            }
-            if (files.length > 0) {
-                handleFileDrop(files);
-            }
+            const paths = await Promise.all((event.files ?? []).map(async path => ({ path, info: await stat(path) })));
+            const directories = paths.filter(value => value.info.type === "directory").map(value => value.path);
+            const files = paths.filter(value => value.info.type === "file").map(value => value.path);
+            if (directories.length) await handleDirectoryDrop(directories);
+            if (files.length) await handleFileDrop(files);
         },
         [handleDirectoryDrop, handleFileDrop],
     );
@@ -881,21 +878,17 @@ export function Playlist() {
                 return false;
             }}
         >
-            <DragDropView
-                ref={dropAreaRef}
+            <View ref={dropAreaRef} style={{ flex: 1 }}><DragDropView
                 className={cn("flex-1", overlayClassName)}
                 style={styles.flex}
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onTrackDragEnter={handleTrackDragEnter}
-                onTrackDragLeave={handleTrackDragLeave}
-                onTrackDragHover={handleTrackDragHover}
-                onTrackDrop={handleTrackDrop}
+                onDragEnter={event => { if (event.data?.[musicTrackMime]) handleTrackDragEnter(event); else handleDragEnter(); }}
+                onDragLeave={() => { handleDragLeave(); handleTrackDragLeave(); }}
+                onDrop={event => { if (event.data?.[musicTrackMime]) handleTrackDrop(event); else void handleDrop(event).catch(console.error); }}
+                onDragOver={handleTrackDragHover}
                 onLayout={() => {
                     requestAnimationFrame(updateDropAreaWindowRect);
                 }}
-                allowedFileTypes={[...SUPPORTED_AUDIO_EXTENSIONS]}
+                acceptedTypes={["files", musicTrackMime]}
             >
                 {emptyStateContent ? (
                     <View className="flex-1 items-center justify-center px-8 text-center">{emptyStateContent}</View>
@@ -927,7 +920,7 @@ export function Playlist() {
                         />
                     </>
                 )}
-            </DragDropView>
+            </DragDropView></View>
             <AIButtons
                 canUseAI
                 libraryTracks={localTracks}
@@ -958,10 +951,10 @@ const QueuePlaylistRow = memo(function QueuePlaylistRow({ queueEntryId, index, i
     const trackContent = <TrackItem {...itemProps} index={index} track={track} disableHover artistMaxWidth="50%" />;
     return <View>
         {Platform.OS === "macos" ? (
-            <TrackDragSource tracks={[convertTrackToNativeDrag(track)]}
+            <MusicTrackDragSource tracks={[convertTrackToNativeDrag(track)]}
                 onDragStart={() => onNativeDragStart(queueEntryId)} className="w-full">
                 {trackContent}
-            </TrackDragSource>
+            </MusicTrackDragSource>
         ) : (
             <DraggableItem id={queueEntryId} zoneId={PLAYLIST_DRAG_ZONE_ID}
                 data={{ type: "playlist-track", queueEntryId } satisfies PlaylistDragData}
@@ -1028,7 +1021,7 @@ function formatFolderCount(count: number): string {
     return `${count} folder${count === 1 ? "" : "s"}`;
 }
 
-function convertNativeTracksToLocal(tracks: NativeDragTrack[] = []): LocalTrack[] {
+function convertNativeTracksToLocal(tracks: MusicDragTrack[] = []): LocalTrack[] {
     return tracks.map((track) => ({
         id: track.id,
         title: track.title,
@@ -1041,7 +1034,7 @@ function convertNativeTracksToLocal(tracks: NativeDragTrack[] = []): LocalTrack[
     }));
 }
 
-function convertTrackToNativeDrag(track: TrackData): NativeDragTrack {
+function convertTrackToNativeDrag(track: TrackData): MusicDragTrack {
     return {
         id: track.id,
         title: track.title,

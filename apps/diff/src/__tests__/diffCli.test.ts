@@ -1,10 +1,8 @@
-jest.mock("@legendapp/spark/processes/commands", () => ({
-  commandRunner: {
-    runCommand: jest.fn(),
-  },
+jest.mock("@legendapp/spark/processes", () => ({
+  runCommand: jest.fn(),
 }));
 
-jest.mock("@legendapp/spark/settings/observable", () => ({
+jest.mock("@legend-apps/storage", () => ({
   createStorage: jest.fn(),
 }));
 

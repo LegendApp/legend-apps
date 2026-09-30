@@ -1,9 +1,10 @@
-import type { DragDropFileEvent } from "@legendapp/spark/drag-drop/views";
+jest.mock("@legendapp/spark/files", () => ({ stat: jest.fn(async path => ({ type: path === "/tmp/repo" ? "directory" : "file", size: 0, modifiedAt: 0 })) }));
+import type { DropEvent } from "@legendapp/spark/drag-drop";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "../diffDrop";
 
-function drop(event: Partial<DragDropFileEvent>): DragDropFileEvent {
+function drop(event: Partial<DropEvent>): DropEvent {
   return {
-    directories: [],
+    x: 0, y: 0, operation: "copy",
     files: [],
     urls: [],
     ...event,
@@ -11,24 +12,24 @@ function drop(event: Partial<DragDropFileEvent>): DragDropFileEvent {
 }
 
 describe("diffDrop", () => {
-  it("opens dropped folders", () => {
-    expect(getDroppedDiffSource(drop({ directories: ["/tmp/repo"] }))).toEqual({
+  it("opens dropped folders", async () => {
+    expect(await getDroppedDiffSource(drop({ files: ["/tmp/repo"] }))).toEqual({
       kind: "folder",
       label: "repo",
       value: "/tmp/repo",
     });
   });
 
-  it("opens dropped local diff files", () => {
-    expect(getDroppedDiffSource(drop({ files: ["/tmp/change.diff"] }))).toEqual({
+  it("opens dropped local diff files", async () => {
+    expect(await getDroppedDiffSource(drop({ files: ["/tmp/change.diff"] }))).toEqual({
       kind: "diffFile",
       label: "change.diff",
       value: "/tmp/change.diff",
     });
   });
 
-  it("opens dropped two-file comparisons", () => {
-    expect(getDroppedDiffSource(drop({ files: ["/tmp/old.ts", "/tmp/new.ts"] }))).toEqual({
+  it("opens dropped two-file comparisons", async () => {
+    expect(await getDroppedDiffSource(drop({ files: ["/tmp/old.ts", "/tmp/new.ts"] }))).toEqual({
       kind: "filePair",
       label: "old.ts vs new.ts",
       newPath: "/tmp/new.ts",
@@ -37,8 +38,8 @@ describe("diffDrop", () => {
     });
   });
 
-  it("opens dropped GitHub URLs", () => {
-    expect(getDroppedDiffSource(drop({ urls: ["https://github.com/owner/repo/pull/7"] }))).toEqual({
+  it("opens dropped GitHub URLs", async () => {
+    expect(await getDroppedDiffSource(drop({ urls: ["https://github.com/owner/repo/pull/7"] }))).toEqual({
       diffUrl: "https://github.com/owner/repo/pull/7.diff",
       kind: "github",
       label: "owner/repo#7",

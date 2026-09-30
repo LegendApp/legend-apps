@@ -73,19 +73,19 @@ jest.mock("@legendapp/spark/ui/glass", () => {
 
   return {
     __esModule: true,
-    GlassEffectView: (props) => React.createElement(View, props, props.children),
-    NativeGlassEffectView: View,
+    GlassView: (props) => React.createElement(View, props, props.children),
+    NativeGlassView: View,
   };
 });
 
-jest.mock("@legendapp/spark/ui/select-controls", () => {
+jest.mock("@legendapp/spark/ui", () => {
   const React = require("react");
   const { View } = require("react-native");
 
   return {
     __esModule: true,
-    NativeSelect: (props) => React.createElement(View, props),
-    NativeSegmentedControl: (props) => React.createElement(View, props),
+    Select: (props) => React.createElement(View, props),
+    SegmentedControl: (props) => React.createElement(View, props),
   };
 });
 
@@ -107,3 +107,6 @@ jest.mock("uniwind", () => ({
   __esModule: true,
   useResolveClassNames: () => ({}),
 }), { virtual: true });
+
+jest.mock("@legendapp/spark/files", () => ({ watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })), stat: jest.fn(async () => ({ type: "file", size: 0, modifiedAt: 0 })), revealInFileManager: jest.fn(async () => {}) }));
+jest.mock("@legendapp/spark/windows/macos", () => ({ addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })), focusToolbarSearch: jest.fn(async () => {}), setWindowBounds: jest.fn(async () => {}) }));

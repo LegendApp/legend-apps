@@ -3,7 +3,7 @@ import { observable } from "@legendapp/state";
 const settings$ = observable({library: {paths: []}, state: {openFolder: null}});
 mock.module("../src/settings/SettingsFile", () => ({settings$}));
 mock.module("../src/native-modules/FileSystemWatcher", () => ({
-  addChangeListener: () => () => {}, setWatchedDirectories: () => {},
+  createFolderWatcher: () => ({ setPaths: async () => {}, remove: async () => {} }),
 }));
 let finishSlowScan;
 import { photoKitAlbumPath, photoKitAlbumIdentifier, photoKitAlbumTitle } from "../src/utils/photoKitPaths";
@@ -14,7 +14,7 @@ mock.module("@legend-apps/photo-library", () => ({default: {
   getPhotosInAlbum: async (id) => { requests.push(id); return [{identifier: "asset/L0/001", uri: "/tmp/photo.jpg", filename: "photo.jpg", creationDate: "2024-01-01", modificationDate: "2024-01-02"}]; },
 }}));
 mock.module("@legendapp/spark/files", () => ({
-  list: async (path) => path === "/slow" ? new Promise(resolve => { finishSlowScan = resolve; }) : path === "/changing" ? ["kept.jpg", "removed.jpg", "folder.jpg"] : path === "/photos" ? ["b.HEIC", "a.jpg", "notes.txt", "nested"] : ["c.png"],
+  list: async (path) => { const names = path === "/slow" ? new Promise(resolve => { finishSlowScan = resolve; }) : path === "/changing" ? ["kept.jpg", "removed.jpg", "folder.jpg"] : path === "/photos" ? ["b.HEIC", "a.jpg", "notes.txt", "nested"] : ["c.png"]; return (await names).map(name => ({ name, path: `${path}/${name}` })); },
   stat: async (path) => {
     if (path.endsWith("removed.jpg")) throw new Error("File no longer exists");
     return {type: path.endsWith("nested") || path.endsWith("folder.jpg") ? "directory" : "file", size: 10, modifiedAt: 1000};

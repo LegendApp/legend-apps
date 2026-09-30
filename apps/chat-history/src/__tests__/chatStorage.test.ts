@@ -1,10 +1,7 @@
-import { readApplicationSupportJson, writeApplicationSupportJson } from "@legendapp/spark/settings/paths";
+jest.mock("@legend-apps/storage", () => { const storage = { read: jest.fn(), write: jest.fn() }; return { createStorage: () => storage, __storage: storage }; });
+const { read: mockRead, write: mockWrite } = jest.requireMock("@legend-apps/storage").__storage;
 import { flushSelectedChatWrite, readSavedChatSelection, writeSelectedChat } from "../chatStorage";
 
-jest.mock("@legendapp/spark/settings/paths", () => ({
-  readApplicationSupportJson: jest.fn(),
-  writeApplicationSupportJson: jest.fn(),
-}));
 
 const summary = {
   id: "codex:one",
@@ -25,35 +22,35 @@ describe("chatStorage", () => {
   });
 
   it("restores a valid selected chat", () => {
-    jest.mocked(readApplicationSupportJson).mockReturnValue({ selectedChat: summary, selectedId: summary.id });
+    mockRead.mockReturnValue({ selectedChat: summary, selectedId: summary.id });
     expect(readSavedChatSelection()).toEqual({ selectedChat: summary, selectedId: summary.id });
   });
 
   it("keeps a legacy selected id and ignores malformed summaries", () => {
-    jest.mocked(readApplicationSupportJson).mockReturnValue({ selectedChat: { id: "broken" }, selectedId: "legacy" });
+    mockRead.mockReturnValue({ selectedChat: { id: "broken" }, selectedId: "legacy" });
     expect(readSavedChatSelection()).toEqual({ selectedChat: undefined, selectedId: "legacy" });
   });
 
   it("persists enough metadata to open before catalog discovery", () => {
     writeSelectedChat(summary);
-    expect(writeApplicationSupportJson).not.toHaveBeenCalled();
+    expect(mockWrite).not.toHaveBeenCalled();
     jest.advanceTimersByTime(100);
-    expect(writeApplicationSupportJson).toHaveBeenCalledWith("chat-history/settings.json", {
+    expect(mockWrite).toHaveBeenCalledWith("chat-history/settings.json", {
       selectedChat: summary,
       selectedId: summary.id,
-    });
+    }, { format: "json" });
   });
   it("coalesces selections and flushes the latest full summary on shutdown", () => {
     writeSelectedChat(summary);
     const latest = { ...summary, id: "codex:two", path: "/two.jsonl" };
     writeSelectedChat(latest);
     flushSelectedChatWrite();
-    expect(writeApplicationSupportJson).toHaveBeenCalledTimes(1);
-    expect(writeApplicationSupportJson).toHaveBeenCalledWith("chat-history/settings.json", {
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+    expect(mockWrite).toHaveBeenCalledWith("chat-history/settings.json", {
       selectedChat: latest,
       selectedId: latest.id,
-    });
+    }, { format: "json" });
     jest.runAllTimers();
-    expect(writeApplicationSupportJson).toHaveBeenCalledTimes(1);
+    expect(mockWrite).toHaveBeenCalledTimes(1);
   });
 });

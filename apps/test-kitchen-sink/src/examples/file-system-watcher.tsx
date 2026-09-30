@@ -1,46 +1,27 @@
-import {
-  addDirectoryChangeListener,
-  isWatchingDirectory,
-  setWatchedDirectories,
-} from "@legendapp/spark/files/watchers";
+import { watch } from "@legendapp/spark/files";
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
 
 export function FileSystemWatcherExample() {
-  const directory = "/tmp";
-  const [status, setStatus] = useState(`Not watching ${directory}.`);
-
+  const [enabled, setEnabled] = useState(false);
+  const [status, setStatus] = useState("Not watching /tmp.");
   useEffect(() => {
-    const subscription = addDirectoryChangeListener((event) => {
-      setStatus(`${event.type}: ${event.filePath}`);
+    if (!enabled) return;
+    let active = true;
+    const owned = ownRegistration(watch("/tmp", path => {
+      if (active) setStatus(`Changed: ${path}`);
+    }, { recursive: true }));
+    void owned.ready.then(() => { if (active) setStatus("Watching /tmp."); }, error => {
+      if (active) { setStatus(String(error)); setEnabled(false); }
     });
-    return () => {
-      subscription.remove();
-      setWatchedDirectories([]);
-    };
-  }, []);
-
-  return (
-    <ExamplePanel title="File System Watcher">
-      <Text style={styles.bodyText}>{status}</Text>
-      <ExampleButton
-        onPress={() => {
-          setWatchedDirectories([directory]);
-          setStatus(`Watching ${directory}.`);
-        }}
-      >
-        Watch /tmp
-      </ExampleButton>
-      <ExampleButton
-        onPress={() => {
-          void isWatchingDirectory(directory).then((value) => {
-            setStatus(`${directory} watched: ${value ? "Yes" : "No"}`);
-          });
-        }}
-      >
-        Check Watch
-      </ExampleButton>
-    </ExamplePanel>
-  );
+    return () => { active = false; void owned.remove().catch(console.error); };
+  }, [enabled]);
+  return <ExamplePanel title="File System Watcher">
+    <Text style={styles.bodyText}>{status}</Text>
+    <ExampleButton disabled={enabled} onPress={() => setEnabled(true)}>Watch /tmp</ExampleButton>
+    <ExampleButton onPress={() => setStatus(enabled ? "/tmp watch owned by this example" : "No active watch")}>Check Watch</ExampleButton>
+    <ExampleButton disabled={!enabled} onPress={() => { setEnabled(false); setStatus("Stopped watching /tmp."); }}>Stop Watch</ExampleButton>
+  </ExamplePanel>;
 }

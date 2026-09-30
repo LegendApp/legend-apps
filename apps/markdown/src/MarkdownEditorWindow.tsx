@@ -244,7 +244,7 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
   const checkDocument = useCallback(() => {
     session.documentCommandsRef.current?.checkForExternalChanges().catch(session.handleError);
   }, [session.documentCommandsRef, session.handleError]);
-  useWatchedDocumentReload({ onReload: checkDocument, path: watchedFilePath });
+  useWatchedDocumentReload({ onError: console.error, onReload: checkDocument, path: watchedFilePath });
 
   return null;
 }

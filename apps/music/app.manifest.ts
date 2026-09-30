@@ -22,11 +22,12 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/storage",
       "@legendapp/spark-desktop-app",
       "@legend-apps/apple-music",
       "@legend-apps/audio-player",
       "@legendapp/spark-updates",
-      "@legend-apps/codex",
+      "@legendapp/spark-codex",
       "@legendapp/spark-context-menu",
       "@legendapp/spark-drag-drop",
       "@legendapp/spark-file-dialog",
@@ -40,6 +41,7 @@ const manifest = {
       "@legendapp/spark-native-menu",
       "@legend-apps/oauth-loopback",
       "@legendapp/spark-secure-storage",
+      "@legend-apps/crypto",
       "@legendapp/spark-settings",
       "@legendapp/spark-desktop-windows",
       "react-native-webview",

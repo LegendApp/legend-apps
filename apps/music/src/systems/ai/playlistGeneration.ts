@@ -4,7 +4,7 @@ import {
     type CodexAvailability,
     type CodexRunOptions,
     type CodexRunResult,
-} from "@legend-apps/codex";
+} from "@legendapp/spark/ai/codex";
 import type { LocalTrack } from "../LocalMusicState";
 import { buildPlaylistAICatalog } from "./libraryCatalog";
 import { parsePlaylistAISuggestions } from "./parser";

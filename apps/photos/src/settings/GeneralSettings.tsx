@@ -1,7 +1,7 @@
 import { observer, useValue } from '@legendapp/state/react';
 import React from 'react';
 import { Switch, Text, TextInput, View } from 'react-native';
-import { AutoUpdaterModule } from '../native-modules/AutoUpdater';
+import { checkForUpdates } from "@legendapp/spark/updates";
 import { settings$ } from './SettingsFile';
 
 export const GeneralSettings = observer(function GeneralSettings() {
@@ -50,7 +50,7 @@ export const GeneralSettings = observer(function GeneralSettings() {
         <View className="mt-2">
           <Text
             className="text-blue-400 underline"
-            onPress={() => AutoUpdaterModule.checkForUpdates()}
+            onPress={() => void checkForUpdates().catch(console.error)}
           >
             Check for updates now
           </Text>

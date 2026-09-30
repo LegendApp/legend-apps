@@ -4,7 +4,6 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
-    "@legend-apps/ai": "0.0.0",
     "@legend-apps/audio-player": "0.0.0",
     "@legend-apps/document-scanner": "0.0.0",
     "@legend-apps/markdown-block-editor": "0.0.0",
@@ -13,6 +12,8 @@
     "@legend-apps/media-tags": "0.0.0",
     "@legendapp/list": "catalog:",
     "react-native-enriched-markdown": "^1.0.2",
-    "@legendapp/spark": "0.0.1-next.2"
+    "@legendapp/spark": "0.0.1-next.2",
+    "@legend-apps/runtime-utils": "0.0.0",
+    "buffer": "5.7.1"
   }
 }

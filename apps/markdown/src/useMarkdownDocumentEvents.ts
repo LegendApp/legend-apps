@@ -1,11 +1,11 @@
-import { addAppExitListener, completeAppExit } from "@legendapp/spark/app/exit";
-import { addWindowCloseRequestedListener } from "@legendapp/spark/windows/managed";
+import { beforeQuit } from "@legendapp/spark/app";
+import { beforeWindowClose } from "@legendapp/spark/windows";
 import { useEffect, useRef } from "react";
 import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";
 import { getLaunchMarkdownFile, isMarkdownPath, shouldLaunchNewMarkdownDocument } from "./markdownFiles";
 import { registerMarkdownEditorRecentDocumentHandler } from "./markdownEditorActions";
-import { closeMarkdownEditorWindow } from "./markdownWindows";
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import {
   getLastMarkdownDocumentPath,
   getMarkdownStartupBehaviorSetting,
@@ -83,75 +83,18 @@ export function useRecentMarkdownDocumentOpener({
   }, [flushCurrentDocumentBeforeTransition, openSelectedFile]);
 }
 
-export function useMarkdownAppExit({
-  autosaveEnabled,
-  handleError,
-  prepareCurrentDocumentForClose,
-}: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & {
-  autosaveEnabled: boolean;
-}) {
+export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
   useEffect(() => {
-    async function completeRequestedExit() {
-      try {
-        const didFlush = await prepareCurrentDocumentForClose({ autosaveEnabled, reason: "quit" });
-        completeAppExit(didFlush);
-      } catch (error) {
-        handleError(error);
-        completeAppExit(false);
-      }
-    }
-
-    const subscription = addAppExitListener((event) => {
-      if (event.reason === "requested") {
-        completeRequestedExit().catch(handleError);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    let active = true;
+    const subscription = ownRegistration(beforeQuit(() => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "quit" }) : false, { onError: handleError }), handleError);
+    return () => { active = false; void subscription.remove().catch(handleError); };
   }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
 }
 
-export function useMarkdownWindowCloseRequest({
-  autosaveEnabled,
-  handleError,
-  prepareCurrentDocumentForClose,
-}: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & {
-  autosaveEnabled: boolean;
-}) {
-  const closeInFlightRef = useRef(false);
-
+export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
   useEffect(() => {
-    async function closeRequestedWindow() {
-      if (closeInFlightRef.current) {
-        return;
-      }
-
-      closeInFlightRef.current = true;
-
-      try {
-        const canClose = await prepareCurrentDocumentForClose({ autosaveEnabled });
-        if (canClose) {
-          await closeMarkdownEditorWindow();
-        }
-      } catch (error) {
-        closeInFlightRef.current = false;
-        handleError(error);
-        return;
-      }
-
-      closeInFlightRef.current = false;
-    }
-
-    const subscription = addWindowCloseRequestedListener((event) => {
-      if (event.identifier === editorWindowIdentifier) {
-        closeRequestedWindow().catch(handleError);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    let active = true;
+    const subscription = ownRegistration(beforeWindowClose(editorWindowIdentifier, () => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "close" }) : false, { onError: handleError }), handleError);
+    return () => { active = false; void subscription.remove().catch(handleError); };
   }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
 }

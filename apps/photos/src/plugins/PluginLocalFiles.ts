@@ -13,6 +13,7 @@ import { event, observable, observe } from '@legendapp/state';
 // Event for folder changes detected by file system watcher
 const eventFolderChange = event();
 
+let initialized = false;
 const folders$ = observable<string[] | null>(null);
 
 export const PluginLocalFiles: SourcePlugin = {
@@ -24,6 +25,8 @@ export const PluginLocalFiles: SourcePlugin = {
   type: 'source',
   isLoaded: () => folders$.get() !== null,
   initialize: async () => {
+    if (initialized) return;
+    initialized = true;
     folders$.get();
     let scanVersion = 0;
     observe(async () => {
@@ -47,17 +50,13 @@ export const PluginLocalFiles: SourcePlugin = {
       return [];
     });
 
-    // Initialize file system watcher
-    FileSystemWatcher.addChangeListener(() => {
+    const watcher = FileSystemWatcher.createFolderWatcher(() => {
       timeoutOnce('updateFolders', () => eventFolderChange.fire(), 100);
     });
-    FileSystemWatcher.setWatchedDirectories(settings$.library.paths.get());
+    const updatePaths = (paths: string[]) => { void watcher.setPaths(paths).catch(console.error); };
+    updatePaths(settings$.library.paths.get());
+    settings$.library.paths.onChange(({ value }) => updatePaths(value));
 
-    // Listen for changes to library paths
-    settings$.library.paths.onChange(({ value }) => {
-      // Update the watched directories
-      FileSystemWatcher.setWatchedDirectories(value);
-    });
   },
 
   // Get a list of all folders with photos

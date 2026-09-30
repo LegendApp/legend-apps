@@ -7,14 +7,16 @@ const { transformSync } = require("esbuild");
 function setup() {
   const calls = [];
   const roles = { audience: "audience", notes: "notes" };
-  const display = { id: "current-id", persistentId: "notes", frame: { x: 1920, y: 0, width: 1920, height: 1080 } };
+  const display = { id: "current-id", persistentId: "notes", size: { width: 1920, height: 1080 } };
   const modules = {
     "@legendapp/state": { observable: values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { peek: () => value, set: next => { value = next; } }])) },
-    "@legendapp/spark/windows/managed": {
-      closeWindow: async id => { calls.push(["close", id]); return { success: true }; },
-      getDisplays: async () => [{ isMain: true, visibleFrame: { x: 0, y: 0, width: 1440, height: 900 } }],
+    "@legendapp/spark/windows": {
+      closeWindow: async id => { calls.push(["close", id]); return { closed: true }; },
+      getDisplays: async () => [{ id: "main", primary: true, workArea: { x: 0, y: 0, width: 1440, height: 900 } }],
       WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },
     },
+    "react-native": { AppRegistry: {} },
+    "@legendapp/spark/windows/macos": { setWindowBounds: async () => {} },
     "./slidesWindows": { slidesWindows: { open: async (id, options) => { calls.push(["open", id, options]); } } },
     "./displayRoles": { displayKey: display => display.persistentId || display.id },
     "./slidesSettings": { displayRolesSetting: { get: () => roles } },
@@ -27,7 +29,7 @@ function setup() {
 test("notes open only on their assigned display, close on unplug, and restore on reconnect", async () => {
   const app = setup();
   await app.syncNotesOutput([app.display], true);
-  assert.equal(app.calls[0][2].x, 1920);
+  assert.equal(app.calls[0][2].options.position.displayId, "current-id");
   await app.syncNotesOutput([app.display], true);
   assert.equal(app.calls.length, 1);
   await app.syncNotesOutput([], true);
@@ -42,7 +44,7 @@ test("preview uses the laptop frame without changing roles, timer, or requiring 
   app.notesOutput$.elapsed.set(1234);
   await app.previewNotesOutput();
   assert.equal(app.notesOutput$.preview.peek(), true);
-  assert.equal(app.calls[0][2].x, 220);
+  assert.equal(app.calls[0][2].options.position.x, 220);
   assert.equal(app.notesOutput$.elapsed.peek(), 1234);
   assert.deepEqual(app.roles, { audience: "audience", notes: "notes" });
   await app.syncNotesOutput([], false);

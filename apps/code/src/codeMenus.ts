@@ -1,43 +1,41 @@
-import { commandModifier, openTargetTitles, saveTargetTitles, saveAsTargetTitles, settingsTargetTitles, type NativeMenuConfig } from "@legendapp/spark/menus";
+import { type MenuItem } from "@legendapp/spark/menus";
 
-export const codeMenuConfig: NativeMenuConfig[] = [
-  {
-    id: "editor", title: "Editor", placement: { before: "Window" }, items: [
-      { id: "automaticPairs", title: "Automatic Bracket and Quote Pairs", enabled: true, checked: true },
-      { id: "goToLine", title: "Go to Line…", enabled: true, shortcut: { key: "l", modifiers: commandModifier } },
-      { id: "indent", title: "Indent Lines", enabled: true, shortcut: { key: "]", modifiers: commandModifier } },
-      { id: "outdent", title: "Outdent Lines", enabled: true, shortcut: { key: "[", modifiers: commandModifier } },
-      { id: "toggleComment", title: "Toggle Line Comments", enabled: true, shortcut: { key: "/", modifiers: commandModifier } },
-      { id: "duplicateLine", title: "Duplicate Lines", enabled: true, shortcut: { key: "d", modifiers: commandModifier | (1 << 17) } },
-      { id: "moveLineUp", title: "Move Lines Up", enabled: true, shortcut: { key: "\uF700", modifiers: 1 << 19 } },
-      { id: "moveLineDown", title: "Move Lines Down", enabled: true, shortcut: { key: "\uF701", modifiers: 1 << 19 } },
+export const codeMenuConfig: MenuItem[] = [
+  { type: "submenu",
+    id: "editor", label: "Editor", placement: { before: { menu: "window" } }, items: [
+      { type: "checkbox", id: "automaticPairs", label: "Automatic Bracket and Quote Pairs", checked: true },
+      { type: "action", id: "goToLine", label: "Go to Line…", shortcut: "Cmd+l" },
+      { type: "action", id: "indent", label: "Indent Lines", shortcut: "Cmd+]" },
+      { type: "action", id: "outdent", label: "Outdent Lines", shortcut: "Cmd+[" },
+      { type: "action", id: "toggleComment", label: "Toggle Line Comments", shortcut: "Cmd+/" },
+      { type: "action", id: "duplicateLine", label: "Duplicate Lines", shortcut: "Cmd+Shift+d" },
+      { type: "action", id: "moveLineUp", label: "Move Lines Up", shortcut: "Alt+Up" },
+      { type: "action", id: "moveLineDown", label: "Move Lines Down", shortcut: "Alt+Down" },
     ],
   },
-  {
+  { type: "submenu",
     id: "app",
-    title: "Application",
-    systemMenu: "app",
+    label: "Application",
+    target: { menu: "app" },
     items: [
-      {
+      { type: "action",
         id: "settings",
-        targetTitles: settingsTargetTitles,
-        enabled: true,
-      },
+        target: { role: "settings" }, label: "Settings…",
+        },
     ],
   },
-  {
+  { type: "submenu",
     id: "file",
-    title: "File",
-    placement: { before: "Window" },
+    label: "File",
+    placement: { before: { menu: "window" } },
     items: [
-      {
+      { type: "action",
         id: "open",
-        targetTitles: openTargetTitles,
-        enabled: true,
-        shortcut: { key: "o", modifiers: commandModifier },
+        target: { role: "open" }, label: "Open…",
+        shortcut: "Cmd+o",
       },
-      { id: "save", targetTitles: saveTargetTitles, enabled: true, shortcut: { key: "s", modifiers: commandModifier } },
-      { id: "saveAs", targetTitles: saveAsTargetTitles, enabled: true, shortcut: { key: "s", modifiers: commandModifier | (1 << 17) } },
+      { type: "action", id: "save", target: { role: "save" }, label: "Save", shortcut: "Cmd+s" },
+      { type: "action", id: "saveAs", target: { role: "saveAs" }, label: "Save As…", shortcut: "Cmd+Shift+s" },
     ],
   },
 ];

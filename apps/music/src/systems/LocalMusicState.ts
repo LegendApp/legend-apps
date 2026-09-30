@@ -1,6 +1,6 @@
 import { batch, observable } from "@legendapp/state";
 import { Directory, File } from "../utils/fileSystem";
-import { addDirectoryChangeListener, setWatchedDirectories } from "@legendapp/spark/files/watchers";
+import { createFolderWatcher } from "@legend-apps/runtime-utils";
 import {
     addMediaLibraryScannerListener,
     scanMediaLibrary,
@@ -94,7 +94,6 @@ export const localMusicState$ = observable<LocalMusicState>({
 const FILE_WATCH_DEBOUNCE_MS = 2000;
 let pendingUserInitiatedLibraryChange = false;
 
-let removeLibraryWatcher: { remove(): void } | undefined;
 let libraryWatcherTimeout: ReturnType<typeof setTimeout> | undefined;
 let hasSubscribedToLibraryPathChanges = false;
 let lastLibraryPaths: string[] = [];
@@ -174,27 +173,9 @@ function scheduleScanAfterFileChange(delayMs = FILE_WATCH_DEBOUNCE_MS): void {
     );
 }
 
+const libraryFolderWatcher = createFolderWatcher(() => scheduleScanAfterFileChange());
 function configureLibraryPathWatcher(paths: string[]): void {
-    try {
-        setWatchedDirectories(paths);
-    } catch (error) {
-        console.error("Failed to configure filesystem watcher for local music:", error);
-        return;
-    }
-
-    if (paths.length === 0) {
-        if (removeLibraryWatcher) {
-            removeLibraryWatcher.remove();
-            removeLibraryWatcher = undefined;
-        }
-        return;
-    }
-
-    if (!removeLibraryWatcher) {
-        removeLibraryWatcher = addDirectoryChangeListener(() => {
-            scheduleScanAfterFileChange();
-        });
-    }
+    void libraryFolderWatcher.setPaths(paths).catch(error => console.error("Failed to watch the music library:", error));
 }
 
 function fileNameFromPath(path: string): string {

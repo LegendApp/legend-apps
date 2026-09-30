@@ -2,10 +2,6 @@ import type React from 'react';
 import { Button, type ButtonProps } from './Button';
 
 import { openFileDialog } from "@legendapp/spark/dialogs";
-const NativeFilePicker = {
-  async pickFolder() { return (await openFileDialog({canChooseFiles: false, canChooseDirectories: true}))?.[0] ?? null; },
-  async pickFileWithFilenameExtension(allowedFileTypes: string[], prompt: string) { return (await openFileDialog({allowedFileTypes, prompt}))?.[0] ?? null; },
-};
 
 interface FilePickerProps extends Pick<ButtonProps, 'bezelStyle' | 'controlSize'> {
   onFileSelected?: (path: string) => void;
@@ -26,13 +22,8 @@ export const FilePicker: React.FC<FilePickerProps> = ({
 }) => {
   const handlePress = async () => {
     try {
-      let selectedPath: string | null;
-
-      if (pickFolder) {
-        selectedPath = await NativeFilePicker.pickFolder();
-      } else {
-        selectedPath = await NativeFilePicker.pickFileWithFilenameExtension(fileTypes, prompt);
-      }
+      const result = await openFileDialog({ selection: pickFolder ? "directories" : "files", filters: [{ extensions: fileTypes }], prompt });
+      const selectedPath = result.canceled ? null : result.paths[0];
 
       if (selectedPath) {
         onFileSelected?.(selectedPath);

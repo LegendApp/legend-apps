@@ -1,12 +1,14 @@
+import { Buffer } from "buffer";
+import { decodeProcessText } from "@legend-apps/runtime-utils";
 import {
   buildAIInvocation,
   formatAIErrorOutput,
   getAICommandAvailability,
   runAITool,
   type AIToolId,
-} from "@legend-apps/ai";
-import { commandRunner, createMockCommandRunner } from "@legendapp/spark/processes/commands";
-import { useMemo, useState } from "react";
+} from "@legendapp/spark/ai";
+import { runCommand, type ProcessResult } from "@legendapp/spark/processes";
+import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
 
@@ -14,9 +16,28 @@ type AIExampleProps = {
   testId: string;
 };
 
+function mockResult(text: string): ProcessResult {
+  return { stdout: Buffer.from(text, "utf8"), stderr: new Uint8Array(), exit: { type: "exited", code: 0 }, timedOut: false, aborted: false, outputTruncated: false };
+}
 const defaultPrompt = "Return one concise sentence describing what this tester verifies.";
 const testTools = ["mock", "claude", "codex"] as const;
 type TestTool = (typeof testTools)[number];
+
+async function runExampleCommand(tool: TestTool): Promise<ProcessResult> {
+  if (tool === "mock") return mockResult("Legend command runner");
+  return runCommand({ target: { type: "command", name: "echo" }, args: ["Legend command runner"], timeoutMs: 5000 });
+}
+async function runExampleAITool(selectedTool: TestTool, tool: AIToolId, prompt: string) {
+  if (selectedTool === "mock") {
+    const invocation = buildAIInvocation(tool, prompt);
+    return { ...mockResult(`mock:${invocation.command} ${invocation.args.join(" ")}`), tool, output: "Mock AI output" };
+  }
+  return runAITool({ prompt, timeoutMs: 60000, tool });
+}
+
+function processSucceeded(result: ProcessResult): boolean {
+  return result.exit.type === "exited" && result.exit.code === 0;
+}
 
 function formatUnknownError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -55,31 +76,15 @@ export function AIExample({ testId }: AIExampleProps) {
   const [status, setStatus] = useState("Ready");
   const [result, setResult] = useState("No result yet.");
 
-  const mockRunner = useMemo(
-    () =>
-      createMockCommandRunner({
-        availability: {
-          claude: true,
-          codex: true,
-          echo: true,
-        },
-        run: (params) => ({
-          stdout: `mock:${params.command} ${params.args?.join(" ") ?? ""}`.trim(),
-          stderr: "",
-          exitCode: 0,
-          timedOut: false,
-        }),
-      }),
-    [],
-  );
-
-  const activeRunner = selectedTool === "mock" ? mockRunner : commandRunner;
   const activeTool: AIToolId = selectedTool === "codex" ? "codex" : "claude";
 
   const refreshAvailability = async () => {
     setStatus("Checking availability...");
+    const request = selectedTool === "mock"
+      ? Promise.resolve({ claude: true, codex: true, preferredTool: "claude" })
+      : getAICommandAvailability();
     try {
-      const availability = await getAICommandAvailability(activeRunner);
+      const availability = await request;
       setResult(formatJson(availability));
       setStatus("Availability refreshed.");
     } catch (error) {
@@ -91,19 +96,9 @@ export function AIExample({ testId }: AIExampleProps) {
   const runCommandRunnerTest = async () => {
     setStatus("Running command...");
     try {
-      let runner = commandRunner;
-      let command = "/bin/echo";
-      if (selectedTool === "mock") {
-        runner = mockRunner;
-        command = "echo";
-      }
-      const commandResult = await runner.runCommand({
-        command,
-        args: ["Legend command runner"],
-        timeoutMs: 5000,
-      });
+      const commandResult = await runExampleCommand(selectedTool);
       setResult(formatJson(commandResult));
-      if (commandResult.exitCode === 0) {
+      if (processSucceeded(commandResult)) {
         setStatus("Command completed.");
       } else {
         setStatus("Command exited with an error.");
@@ -118,22 +113,17 @@ export function AIExample({ testId }: AIExampleProps) {
     setStatus("Running AI tool...");
     try {
       const invocation = buildAIInvocation(activeTool, prompt);
-      const runResult = await runAITool({
-        prompt,
-        runner: activeRunner,
-        timeoutMs: 60000,
-        tool: activeTool,
-      });
+      const runResult = await runExampleAITool(selectedTool, activeTool, prompt);
       let errorPreview = "";
-      if (runResult.exitCode !== 0) {
-        let errorOutput = runResult.stderr;
+      if (!processSucceeded(runResult)) {
+        let errorOutput = decodeProcessText(runResult.stderr);
         if (!errorOutput) {
-          errorOutput = runResult.stdout;
+          errorOutput = decodeProcessText(runResult.stdout);
         }
         errorPreview = formatAIErrorOutput(errorOutput);
       }
       setResult(formatJson({ invocation, runResult, errorPreview }));
-      if (runResult.exitCode === 0) {
+      if (processSucceeded(runResult)) {
         setStatus("AI tool completed.");
       } else {
         setStatus("AI tool exited with an error.");

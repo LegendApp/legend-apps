@@ -1,6 +1,6 @@
 import { KeyCodes, KeyText as SparkKeyText } from "@legendapp/spark/shortcuts/keyboard";
 import { createKeyText } from "./keyText";
-export { keyboardManager as default, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+export { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 export type { KeyboardEvent } from "@legendapp/spark/shortcuts/keyboard";
 export const KeyText = createKeyText(KeyCodes);
 export function keyCodeFromText(text: string) {

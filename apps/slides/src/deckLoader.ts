@@ -1,6 +1,7 @@
+import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
 import { compilerCommand } from "./compilerCommand";
-import { writeTextFileIfUnchanged } from "@legendapp/spark/dialogs";
+import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
 import * as Motion from "@legendapp/motion";
 import * as LegendState from "@legendapp/state";
@@ -10,9 +11,10 @@ import * as Presentation from "@legend-apps/presentation";
 import * as ReactNativeSkia from "@shopify/react-native-skia";
 import * as TypeGPUNoise from "@typegpu/noise";
 import * as TypeGPUReact from "@typegpu/react";
-import { commandRunner } from "@legendapp/spark/processes/commands";
-import { watchDirectories } from "@legendapp/spark/files/watchers";
-import { noteRecentDocument } from "@legendapp/spark/app/recent-documents";
+import { runCommand } from "@legendapp/spark/processes";
+import { watch } from "@legendapp/spark/files";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import * as React from "react";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
@@ -32,7 +34,7 @@ import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from ".
 import { getLastDeckPath, rememberDeckPath } from "./slidesPreferences";
 import { getSlidesState, setSlidesState } from "./slidesStore";
 
-let watcher: { remove(): void } | undefined;
+let watchers: ReturnType<typeof ownRegistration>[] = [];
 let watchedDirectory: string | undefined;
 let watchedDeckPath: string | undefined;
 let reloadQueue: ReturnType<typeof createDeckReloadQueue> | undefined;
@@ -124,7 +126,8 @@ function watchDeckDirectory(path: string) {
   if (watchedDirectory === directory && watchedDeckPath === path) {
     return;
   }
-  watcher?.remove();
+  for (const watcher of watchers) void watcher.remove().catch(console.error);
+  watchers = [];
   reloadQueue?.dispose();
   watchedDirectory = directory;
   watchedDeckPath = path;
@@ -135,7 +138,7 @@ function watchDeckDirectory(path: string) {
     setSlidesState({ buildErrors: [String(error)], status: "error" });
   });
   reloadQueue = queue;
-  watcher = watchDirectories([directory, transitionDirectoryPath()], queue.changed);
+  watchers = [directory, transitionDirectoryPath()].map(path => ownRegistration(watch(path, () => queue.changed({ contentChanged: true }), { recursive: true })));
 }
 
 function decodeBase64(value: string) {
@@ -182,8 +185,8 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
   const compiler = await compilerCommand();
   if (sequence !== buildSequence) return;
 
-  const commandResult = await commandRunner.runCommand({
-    command: compiler.command,
+  const commandResult = await runCommand({
+    target: compiler.target,
     args: [...compiler.prefix, path, "--transitions", transitionDirectoryPath(), ...(draftSource === undefined ? [] : ["--draft"])],
     input: draftSource,
     timeoutMs: 60_000,
@@ -197,13 +200,13 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
     if (commandResult.timedOut) {
       throw new Error("Deck compilation exceeded 60 seconds.");
     }
-    result = parseCompilerResult(commandResult.stdout);
+    result = parseCompilerResult(decodeProcessText(commandResult.stdout));
   } catch (error) {
     result = {
       success: false,
       errors: [commandResult.timedOut
         ? "Deck compilation exceeded 60 seconds."
-        : commandResult.stderr || (error instanceof Error ? error.message : "The slides compiler returned an invalid response.")],
+        : decodeProcessText(commandResult.stderr) || (error instanceof Error ? error.message : "The slides compiler returned an invalid response.")],
       warnings: [],
     };
   }
@@ -252,13 +255,13 @@ export async function copyLibraryTransitionToDeck(name: string) {
   const deckPath = getSlidesState().deckPath;
   if (!deckPath) throw new Error("Open a deck first.");
   const compiler = await compilerCommand();
-  const result = await commandRunner.runCommand({ command: compiler.command,
+  const result = await runCommand({ target: compiler.target,
     args: [...compiler.prefix, deckPath, "--transitions", transitionDirectoryPath(), "--copy-transition", name], timeoutMs: 60000 });
-  if (result.exitCode !== 0 || result.timedOut) throw new Error(result.stderr || "Transition export failed.");
-  const exported = parseCompilerResult(result.stdout) as unknown as { success: boolean; errors?: string[]; copy: { original: string; updated: string; filename: string } };
+  if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0 || result.timedOut) throw new Error(decodeProcessText(result.stderr) || "Transition export failed.");
+  const exported = parseCompilerResult(decodeProcessText(result.stdout)) as unknown as { success: boolean; errors?: string[]; copy: { original: string; updated: string; filename: string } };
   if (!exported.success) throw new Error(exported.errors?.join("\n") ?? "Transition export failed.");
-  const written = await writeTextFileIfUnchanged(deckPath, exported.copy.original, exported.copy.updated);
-  if (!written) throw new Error(`The deck changed during export. ${exported.copy.filename} was saved, but the deck was not overwritten.`);
+  const written = await writeTextIfUnchanged(deckPath, exported.copy.original, exported.copy.updated);
+  if (!written.written) throw new Error(`The deck changed during export. ${exported.copy.filename} was saved, but the deck was not overwritten.`);
   await loadDeck(deckPath, false);
   return exported.copy.filename;
 }

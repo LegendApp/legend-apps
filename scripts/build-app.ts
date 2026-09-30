@@ -138,9 +138,10 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     });
     const appPath = JSON.parse(fs.readFileSync(path.join(sparkWorkspace(appId), ".spark/release-build.json"), "utf8")).app as string;
     if (appId === "slides") {
-      const compilerDirectory = path.join(appPath, "Contents/Resources/slides-compiler");
+      const compilerDirectory = path.join(appPath, "Contents/Helpers/slides-compiler.helper");
       fs.rmSync(compilerDirectory, { recursive: true, force: true });
       packageSlidesCompiler(compilerDirectory);
+      fs.writeFileSync(path.join(compilerDirectory, ".spark-entry"), "run");
       signSlidesCompiler(compilerDirectory, getExistingCodeSignIdentity(appPath));
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
     }

@@ -306,36 +306,33 @@ export function getLaunchDiffFolder(launchArguments: string[] | undefined) {
 
 export async function openDiffFolderDialog() {
   const paths = await openFileDialog({
-    allowsMultipleSelection: false,
-    canChooseDirectories: true,
-    canChooseFiles: false,
+    multiple: false,
+    selection: "directories",
   });
 
-  return paths?.[0] ?? null;
+  return (paths.canceled ? null : paths.paths[0] ?? null);
 }
 
 export async function openDiffFilePairDialog() {
   const oldPaths = await openFileDialog({
-    allowsMultipleSelection: false,
-    canChooseDirectories: false,
-    canChooseFiles: true,
+    multiple: false,
+    selection: "files",
     message: "Select the earlier version to show on the left side of the comparison.",
     prompt: "Choose Original",
     title: "Choose Original File",
   });
-  const oldPath = oldPaths?.[0] ?? null;
+  const oldPath = (oldPaths.canceled ? null : oldPaths.paths[0] ?? null);
   let source: DiffOpenSource | null = null;
   if (oldPath) {
     const newPaths = await openFileDialog({
-      allowsMultipleSelection: false,
-      canChooseDirectories: false,
-      canChooseFiles: true,
-      directoryURL: getParentDirectory(oldPath),
+      multiple: false,
+      selection: "files",
+      directory: getParentDirectory(oldPath) ?? undefined,
       message: "Select the modified version to show on the right side of the comparison.",
       prompt: "Choose Modified",
       title: "Choose Modified File",
     });
-    const newPath = newPaths?.[0] ?? null;
+    const newPath = (newPaths.canceled ? null : newPaths.paths[0] ?? null);
     source = newPath ? createDiffFilePairSource(oldPath, newPath) : null;
   }
   return source;

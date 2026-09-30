@@ -47,13 +47,13 @@ describe("presenter toolbar", () => {
     ]);
     expect(items.filter((item) => item.placement === "trailing").at(-1)?.id).toBe(presenterStartToolbarItemId);
     expect(items.every((item) => item.placement === "trailing")).toBe(true);
-    expect(items[2]).toMatchObject({ placement: "trailing", type: "menuButton" });
-    expect(items[2].menuItems[0]).toMatchObject({ value: "background-intensity", slider: { min: 0, max: 100, value: 17, suffix: "%" } });
-    expect(items[0]).toMatchObject({ enabled: false, label: "1:05", monospacedDigits: true, type: "menuButton", width: 76 });
-    expect(items[3]).toMatchObject({ label: "", width: 36, systemImageName: "play.rectangle" });
-    expect(items[4]).toMatchObject({ enabled: true, label: "", type: "menuButton" });
-    expect(items[5]).toMatchObject({ enabled: true, label: "Start Presentation", type: "button" });
-    expect(items[1]).toMatchObject({ enabled: true, systemImageName: "square.and.pencil", tooltip: "Edit Source" });
+    expect(items[2]).toMatchObject({ placement: "trailing", type: "menu" });
+    expect(items[2].items[0]).toMatchObject({ id: "background-intensity", type: "slider", min: 0, max: 100, value: 17, suffix: "%" });
+    expect(items[0]).toMatchObject({ disabled: true, label: "1:05", type: "menu", width: 76 });
+    expect(items[3]).toMatchObject({ width: 36, symbol: "play.rectangle" });
+    expect(items[4]).toMatchObject({ type: "menu" });
+    expect(items[5]).toMatchObject({ disabled: false, label: "Start Presentation", type: "button" });
+    expect(items[1]).toMatchObject({ disabled: false, symbol: "square.and.pencil", tooltip: "Edit Source" });
   });
 
   it("puts active timer controls in the elapsed-time menu", () => {
@@ -67,19 +67,19 @@ describe("presenter toolbar", () => {
       selectedDisplayId: "stage",
       timerRunning: true,
     });
-    expect(items[2].enabled).not.toBe(false);
-    expect(items[2].menuItems[0].slider.value).toBe(100);
+    expect(items[2].disabled).not.toBe(true);
+    expect(items[2].items[0].value).toBe(100);
     const timerItem = items[0];
 
-    expect(timerItem).toMatchObject({ enabled: true, label: "0:02", type: "menuButton" });
-    expect("menuItems" in timerItem && timerItem.menuItems).toMatchObject([
-      { value: presenterTimerPauseValue },
-      { value: presenterTimerRestartValue },
+    expect(timerItem).toMatchObject({ disabled: false, label: "0:02", type: "menu" });
+    expect("items" in timerItem && timerItem.items).toMatchObject([
+      { id: presenterTimerPauseValue },
+      { id: presenterTimerRestartValue },
     ]);
-    expect(items[3]).toMatchObject({ enabled: false });
-    expect(items[4]).toMatchObject({ enabled: true });
-    expect(items[5]).toMatchObject({ label: "Stop", value: presenterStopValue });
-    expect(items[1]).toMatchObject({ enabled: false });
+    expect(items[3]).toMatchObject({ disabled: true });
+    expect(items[4]).toMatchObject({ type: "menu" });
+    expect(items[5]).toMatchObject({ label: "Stop" });
+    expect(items[1]).toMatchObject({ disabled: true });
   });
 
   it("keeps start disabled until a deck and output target are available", () => {
@@ -93,21 +93,21 @@ describe("presenter toolbar", () => {
       timerRunning: false,
     });
 
-    expect(items[0]).toMatchObject({ enabled: false });
-    expect(items[4]).toMatchObject({ enabled: true });
-    expect(items[5]).toMatchObject({ enabled: false });
-    expect(items[1]).toMatchObject({ enabled: false });
+    expect(items[0]).toMatchObject({ disabled: true });
+    expect(items[4]).toMatchObject({ type: "menu" });
+    expect(items[5]).toMatchObject({ disabled: true });
+    expect(items[1]).toMatchObject({ disabled: true });
   });
 });
 
 
 it("offers window actions instead of display roles on a single screen", () => {
   const options = { displays: displays.slice(0, 1), elapsed: 0, hasDeck: true, rehearsalEnabled: false, selectedDisplayId: null, timerRunning: false };
-  const menu = (audienceOpen: boolean) => createPresenterToolbarItems({ ...options, audienceOpen }).find(item => item.id === presenterDisplayToolbarItemId).menuItems;
+  const menu = (audienceOpen: boolean) => createPresenterToolbarItems({ ...options, audienceOpen }).find(item => item.id === presenterDisplayToolbarItemId).items;
   expect(menu(false).map(item => item.label)).toEqual(["Open Audience Window", "Preview Notes Screen"]);
-  expect(menu(false)[0].enabled).toBe(true);
-  expect(menu(true)[0].value).toBe("close-audience");
-  const multiple = createPresenterToolbarItems({ ...options, displays, audienceOpen: false }).find(item => item.id === presenterDisplayToolbarItemId).menuItems;
+  expect(menu(false)[0].disabled).toBe(false);
+  expect(menu(true)[0].id).toBe("close-audience");
+  const multiple = createPresenterToolbarItems({ ...options, displays, audienceOpen: false }).find(item => item.id === presenterDisplayToolbarItemId).items;
   expect(multiple.some(item => item.label.includes("Built-in Display"))).toBe(true);
-  expect(multiple.some(item => item.value === "identify-displays")).toBe(true);
+  expect(multiple.some(item => item.id === "identify-displays")).toBe(true);
 });
