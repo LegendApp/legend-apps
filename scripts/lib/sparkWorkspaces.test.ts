@@ -5,7 +5,7 @@ import fs from "node:fs";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
-import { sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { prepareSparkWorkspace, sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 
@@ -38,6 +38,16 @@ test("Metro excludes sibling consumer installs while retaining its dependencies 
   assert.equal(blocked(path.join(sparkWorkspace("code"), ".spark/products/app")), true);
   assert.equal(blocked(path.resolve("packages/source-editor/src/index.tsx")), false);
   assert.equal(blocked(path.resolve("apps/code/src/App.tsx")), false);
+});
+
+test("generated native config loads the current Spark native API", async () => {
+  const manifest = await loadAppManifest("hello-world");
+  const project = prepareSparkWorkspace(manifest);
+  const config = require(path.join(project, "react-native.config.js"));
+  for (const name of sparkConfig(manifest).expo.autolinking.exclude) {
+    assert.equal(config.dependencies[name]?.platforms?.macos, null, name);
+  }
+  assert.equal(typeof config.dependencies["@legendapp/spark-desktop-app"].root, "string");
 });
 
 for (const appId of appIds) {
