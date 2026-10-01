@@ -12,12 +12,12 @@ export const nativePackages: NativePackage[] = [
   {name: "@legend-apps/photo-library", root: path.join(packagesDir, "photo-library"), platforms: ["macos"]},
   {
     name: "@legendapp/spark-message-dialog",
-    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/message-dialog"),
+    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/message-dialog"),
     platforms: ["macos"],
   },
   ...Array.from(new Map(Object.values(sparkCapabilities).map(capability => [capability.package, capability])).values()).map(capability => ({
     name: capability.package,
-    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages", capability.directory),
+    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages", capability.directory),
     platforms: ["macos"] as Platform[],
   })).filter(pkg => fs.readdirSync(pkg.root).some(file => file.endsWith(".podspec"))),
   {
@@ -42,12 +42,12 @@ export const nativePackages: NativePackage[] = [
   },
   {
     name: "@legendapp/spark-codex",
-    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/codex"),
+    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/codex"),
     platforms: ["macos"],
   },
   {
     name: "@legendapp/spark-secure-storage",
-    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/secure-storage"),
+    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/secure-storage"),
     platforms: ["macos"],
   },
   {

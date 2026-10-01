@@ -6,7 +6,7 @@ import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModu
 import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import type { AppManifest } from "./types";
 
-export const sparkCheckout = path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"));
+export const sparkCheckout = path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"));
 export const sparkWorkspace = (appId: string) => path.join(shellDir, ".legend", "spark", appId);
 
 export function sparkMetroBlockList(appId: string) {

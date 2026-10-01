@@ -41,7 +41,7 @@ media, authentication and other second-tier libraries remain in legend-apps.
   notarization and appcast generation remain in the app scripts. Update feeds
   and keys are translated to Spark's release configuration.
 
-Pack the sibling SDK with `npm run pack:local` in legend-framework when changing
+Pack the sibling SDK with `npm run pack:local` in legend-spark when changing
 Spark. The root consumer uses the immutable local archive named in package.json;
 regenerate its lockfile when changing archives if Bun retains a stale file
 archive override. Generated app consumers use the SDK package manifest.

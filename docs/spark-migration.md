@@ -1,6 +1,6 @@
 # Spark host migration
 
-The default macOS app commands use Spark from the sibling `../legend-framework`
+The default macOS app commands use Spark from the sibling `../legend-spark`
 checkout (or `LEGEND_SPARK_ROOT`) and generate consumers under
 `shell/.legend/spark/<app>`. The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
