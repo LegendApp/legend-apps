@@ -31,7 +31,6 @@ const manifest = {
       "@legend-apps/markdown-block-editor",
       "@legend-apps/markdown-parser",
       "@legendapp/spark-native-menu",
-      "@legendapp/spark-settings",
       "@legendapp/spark-desktop-windows",
       "react-native-enriched-markdown",
     ],

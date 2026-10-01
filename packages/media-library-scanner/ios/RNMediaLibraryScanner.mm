@@ -137,7 +137,11 @@ RCT_EXPORT_MODULE(NativeMediaLibraryScanner)
                                @"totalRoots": @(totalRoots),
                              }];
         });
-      });
+      }
+#if TARGET_OS_OSX
+      , nil
+#endif
+    );
 
     NSDictionary *result = @{
       @"totalTracks": fileResult[@"totalFiles"] ?: @0,

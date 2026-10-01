@@ -26,7 +26,6 @@ const manifest = {
       "@legendapp/spark-desktop-shortcuts",
       "@legendapp/spark-native-menu",
       "@legend-apps/scaled-view",
-      "@legendapp/spark-settings",
       "@legend-apps/source-editor",
       "@legend-apps/syntax-parser",
       "@legendapp/spark-desktop-windows",

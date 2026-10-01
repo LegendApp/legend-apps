@@ -28,7 +28,6 @@ const manifest = {
       "@legendapp/spark-message-dialog",
       "@legendapp/spark-file-system",
       "@legendapp/spark-native-menu",
-      "@legendapp/spark-settings",
       "@legend-apps/syntax-parser",
       "@legend-apps/source-editor",
       "@legendapp/spark-desktop-windows",

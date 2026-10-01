@@ -42,7 +42,6 @@ const manifest = {
       "@legendapp/spark-file-system",
       "@legendapp/spark-desktop-shortcuts",
       "@legendapp/spark-native-menu",
-      "@legendapp/spark-settings",
       "@legend-apps/syntax-parser",
       "@legendapp/spark-desktop-windows",
     ],

@@ -42,7 +42,6 @@ const manifest = {
       "@legend-apps/oauth-loopback",
       "@legendapp/spark-secure-storage",
       "@legend-apps/crypto",
-      "@legendapp/spark-settings",
       "@legendapp/spark-desktop-windows",
       "react-native-webview",
     ],

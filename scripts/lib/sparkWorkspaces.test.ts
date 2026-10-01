@@ -8,10 +8,32 @@ import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { prepareSparkWorkspace, sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
+import { codeMenuConfig } from "../../apps/code/src/codeMenus";
+import { diffMenuConfig } from "../../apps/diff/src/diffMenus";
+import { markdownMenuConfig } from "../../apps/markdown/src/markdownMenus";
 
 const require = createRequire(import.meta.url);
 const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
 const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
+
+for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenuConfig, markdown: markdownMenuConfig })) {
+  test(`${app} menus bind native commands without depending on display labels`, () => {
+    const { menuItems } = require(path.join(sparkCheckout, "packages/desktop-app/src/contracts/menu.ts"));
+    const { composeWindowsMenus } = require(path.join(sparkCheckout, "packages/native-menu/src/windows-menus.ts"));
+    const native = [
+      { id: "native-app", target: { menu: "app" }, items: [{ role: "about" }, { role: "settings" }] },
+      { id: "native-file", target: { menu: "file" }, items: ["new", "open", "close", "save", "saveAs"].map(role => ({ role })) },
+      { id: "native-edit", target: { menu: "edit" }, items: [{ role: "undo" }, { role: "redo" }] },
+      { id: "native-view", target: { menu: "view" }, items: [{ role: "toggleFullscreen" }] },
+      { id: "native-window", target: { menu: "window" }, items: [] },
+    ];
+    const contribution = menuItems(items, { types: ["action", "checkbox", "separator", "submenu", "role"], shortcuts: true, targeting: true }, "macos");
+    const result = composeWindowsMenus(new Map([["native", native], [app, contribution]]));
+    assert.equal(result.filter((item: any) => item.target?.menu === "file").length, 1);
+    const file = result.find((item: any) => item.target?.menu === "file");
+    assert.equal(file.items.filter((item: any) => item.role === "saveAs" || item.target?.role === "saveAs").length, 1);
+  });
+}
 
 test("all workspace consumers resolve the catalog's current Spark SDK", () => {
   const root = path.resolve(import.meta.dirname, "../..");
@@ -48,6 +70,12 @@ test("generated native config loads the current Spark native API", async () => {
     assert.equal(config.dependencies[name]?.platforms?.macos, null, name);
   }
   assert.equal(typeof config.dependencies["@legendapp/spark-desktop-app"].root, "string");
+});
+
+test("unknown declared native modules cannot be silently excluded", async () => {
+  const manifest = await loadAppManifest("hello-world");
+  const invalid = { ...manifest, nativeModules: { ...manifest.nativeModules, macos: ["@legend-apps/missing-native-module"] } };
+  assert.throws(() => getActiveNativePackages(invalid, "macos"), /unregistered native package/);
 });
 
 for (const appId of appIds) {

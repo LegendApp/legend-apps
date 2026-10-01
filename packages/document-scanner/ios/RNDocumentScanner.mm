@@ -89,7 +89,11 @@ RCT_EXPORT_MODULE(NativeDocumentScanner)
                                @"totalRoots": @(totalRoots),
                              }];
         });
-      });
+      }
+#if TARGET_OS_OSX
+      , nil
+#endif
+    );
 
     NSDictionary *result = @{
       @"totalDocuments": fileResult[@"totalFiles"] ?: @0,

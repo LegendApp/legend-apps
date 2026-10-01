@@ -46,6 +46,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "@legendapp/spark-secure-storage",
+    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-framework"), "packages/secure-storage"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/chat-history",
     root: path.join(packagesDir, "chat-history"),
     platforms: ["macos"],
@@ -239,7 +244,12 @@ export const nativePackages: NativePackage[] = [
 
 export function getActiveNativePackages(manifest: AppManifest, platform: Platform) {
   const selected = new Set(manifest.nativeModules[platform] ?? []);
-  return nativePackages.filter((pkg) => pkg.platforms.includes(platform) && selected.has(pkg.name));
+  const available = nativePackages.filter((pkg) => pkg.platforms.includes(platform));
+  const names = new Set(available.map(pkg => pkg.name));
+  for (const name of selected) {
+    if (!names.has(name)) throw new Error(`${manifest.id}/${platform} declares unregistered native package ${name}`);
+  }
+  return available.filter(pkg => selected.has(pkg.name));
 }
 
 export function getExcludedNativePackages(manifest: AppManifest, platform: Platform) {

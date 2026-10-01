@@ -39,6 +39,7 @@ const MENU_CONFIG: MenuItem[] = [
     { type: "submenu",
         id: FILE_MENU_ID,
         label: "File",
+        target: { menu: "file" },
         items: [
             { type: "action",
                 id: "savePlaylist",
@@ -55,6 +56,7 @@ const MENU_CONFIG: MenuItem[] = [
     { type: "submenu",
         id: VIEW_MENU_ID,
         label: "View",
+        target: { menu: "view" },
         items: [
             { type: "action",
                 id: "toggleLibrary",

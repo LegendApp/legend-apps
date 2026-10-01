@@ -9,6 +9,7 @@ export const markdownMenuConfig: MenuItem[] = [
   { type: "submenu",
     id: "file",
     label: "File",
+    target: { menu: "file" },
     placement: { before: { menu: "window" } },
     items: [
       {
@@ -26,6 +27,7 @@ export const markdownMenuConfig: MenuItem[] = [
       },
       { type: "action",
         id: "saveAs",
+        target: { role: "saveAs" },
         label: "Save As...",
         disabled: true,
         shortcut: "Cmd+Shift+s",
@@ -52,6 +54,7 @@ export const markdownMenuConfig: MenuItem[] = [
   { type: "submenu",
     id: "edit",
     label: "Edit",
+    target: { menu: "edit" },
     placement: { before: { menu: "window" } },
     items: [
       {

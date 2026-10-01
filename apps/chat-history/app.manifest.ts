@@ -28,7 +28,6 @@ const manifest = {
       "@legendapp/spark-updates",
       "@legend-apps/chat-history",
       "@legendapp/spark-native-menu",
-      "@legendapp/spark-settings",
       "@legendapp/spark-desktop-windows",
       "react-native-enriched-markdown",
     ],

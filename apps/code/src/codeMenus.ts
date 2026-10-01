@@ -27,6 +27,7 @@ export const codeMenuConfig: MenuItem[] = [
   { type: "submenu",
     id: "file",
     label: "File",
+    target: { menu: "file" },
     placement: { before: { menu: "window" } },
     items: [
       { type: "action",
