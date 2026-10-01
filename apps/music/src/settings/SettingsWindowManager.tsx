@@ -1,6 +1,6 @@
 import { addAppListener } from "@legendapp/spark/app";
 import { useMount } from "@legendapp/state/react";
-import { getWindow, getDisplays } from "@legendapp/spark/windows";
+import { listWindows } from "@legendapp/spark/windows";
 import { state$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
@@ -31,7 +31,9 @@ export const SettingsWindowManager = () => {
             }
             else {
                 try {
-                    await WindowsNavigator.close(SETTINGS_WINDOW_KEY);
+                    if ((await listWindows()).some(window => window.id === SETTINGS_WINDOW_ID)) {
+                        await WindowsNavigator.close(SETTINGS_WINDOW_KEY);
+                    }
                 }
                 catch (error) {
                     console.error("Failed to close settings window:", error);

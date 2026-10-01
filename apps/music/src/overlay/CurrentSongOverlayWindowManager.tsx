@@ -3,7 +3,7 @@ import { addAppListener } from "@legendapp/spark/app";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { useRef } from "react";
 import { Dimensions } from "react-native";
-import { getWindow, getDisplays } from "@legendapp/spark/windows";
+import { getWindow, listWindows, getDisplays } from "@legendapp/spark/windows";
 import { settings$ } from "../systems/Settings";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
@@ -49,7 +49,9 @@ export const CurrentSongOverlayWindowManager = () => {
         if (!isWindowOpen) {
             try {
                 perfLog("CurrentSongOverlayWindowManager.closeWindow.start");
-                await WindowsNavigator.close(OVERLAY_WINDOW_KEY);
+                if ((await listWindows()).some(window => window.id === OVERLAY_WINDOW_ID)) {
+                    await WindowsNavigator.close(OVERLAY_WINDOW_KEY);
+                }
             }
             catch (error) {
                 console.error("Failed to close current song overlay window:", error);
@@ -88,7 +90,7 @@ export const CurrentSongOverlayWindowManager = () => {
             if (shouldAnimateFrameChange) {
                 frameAnimationDurationMs = OVERLAY_WINDOW_ANIMATION_DURATION_MS;
             }
-            const current = await getWindow(OVERLAY_WINDOW_ID);
+            const current = (await listWindows()).find(window => window.id === OVERLAY_WINDOW_ID);
             if (current) await setWindowBounds(OVERLAY_WINDOW_ID, { displayId: display.id, x, y, width: windowWidth, height: windowHeight }, { durationMs: frameAnimationDurationMs });
             else {
             await WindowsNavigator.open(OVERLAY_WINDOW_KEY, {

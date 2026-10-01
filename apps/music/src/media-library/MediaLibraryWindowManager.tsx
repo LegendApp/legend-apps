@@ -2,7 +2,7 @@ import { addAppListener } from "@legendapp/spark/app";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { useCallback } from "react";
 import { Dimensions } from "react-native";
-import { getWindow, getDisplays } from "@legendapp/spark/windows";
+import { getWindow, listWindows, getDisplays } from "@legendapp/spark/windows";
 import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { stateSaved$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
@@ -107,7 +107,9 @@ export const MediaLibraryWindowManager = () => {
         else {
             try {
                 perfLog("MediaLibraryWindowManager.closeWindow.start");
-                await WindowsNavigator.close(MEDIA_LIBRARY_WINDOW_KEY);
+                if ((await listWindows()).some(window => window.id === MEDIA_LIBRARY_WINDOW_ID)) {
+                    await WindowsNavigator.close(MEDIA_LIBRARY_WINDOW_KEY);
+                }
             }
             catch (error) {
                 console.error("Failed to close media library window:", error);
