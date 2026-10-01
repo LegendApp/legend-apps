@@ -28,34 +28,39 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         }
     };
 }
-const markdownWindowsConfig = {
-    [editorWindowModuleName]: {
-        loadComponent: () => import("./MarkdownEditorWindow"),
-        id: editorWindowIdentifier,
-        options: {
-            title: "Untitled",
-            ...createMarkdownEditorWindowStyle({ includeFrame: true }),
-            macos: {
-                restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
-            }
+function createMarkdownWindowsNavigator() {
+    // Register synchronously after this module has loaded, so editor hooks can
+    // import its window operations without an initialization cycle.
+    const { MarkdownEditorWindow } = require("./MarkdownEditorWindow") as typeof import("./MarkdownEditorWindow");
+    const markdownWindowsConfig = {
+        [editorWindowModuleName]: {
+            component: MarkdownEditorWindow,
+            id: editorWindowIdentifier,
+            options: {
+                title: "Untitled",
+                ...createMarkdownEditorWindowStyle({ includeFrame: true }),
+                macos: {
+                    restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
+                }
+            },
         },
-    },
-    [settingsWindowModuleName]: {
-        component: SettingsWindow,
-        id: settingsWindowIdentifier,
-        options: createSettingsWindowOptions(),
-    },
-} satisfies WindowsConfig;
-const MarkdownWindowsNavigator = createWindowsNavigator(markdownWindowsConfig);
-type MarkdownWindow = keyof typeof markdownWindowsConfig;
+        [settingsWindowModuleName]: {
+            component: SettingsWindow,
+            id: settingsWindowIdentifier,
+            options: createSettingsWindowOptions(),
+        },
+    } satisfies WindowsConfig;
+    return createWindowsNavigator(markdownWindowsConfig);
+}
+let MarkdownWindowsNavigator: ReturnType<typeof createMarkdownWindowsNavigator>;
 export function registerMarkdownWindows() {
-    // Importing this module registers the windows above.
+    MarkdownWindowsNavigator ??= createMarkdownWindowsNavigator();
 }
 export function openMarkdownSettingsWindow() {
-    return MarkdownWindowsNavigator.open(settingsWindowModuleName as MarkdownWindow);
+    return MarkdownWindowsNavigator.open(settingsWindowModuleName);
 }
 export function openMarkdownEditorWindow(launchArguments?: string[]) {
-    return MarkdownWindowsNavigator.open(editorWindowModuleName as MarkdownWindow, {
+    return MarkdownWindowsNavigator.open(editorWindowModuleName, {
         props: launchArguments ? { launchArguments } : undefined,
         options: {
             ...createMarkdownEditorWindowStyle({ includeFrame: true })
