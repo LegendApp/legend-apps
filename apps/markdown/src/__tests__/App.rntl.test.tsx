@@ -7,7 +7,7 @@ import { editorWindowIdentifier } from "../appConstants";
 import { App } from "../App";
 import { registerMarkdownEditorMenuHandlers, registerMarkdownEditorRecentDocumentHandler } from "../markdownEditorActions";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
-import { openMarkdownEditorWindow } from "../markdownWindows";
+import { openMarkdownEditorWindow, showMarkdownEditorWindow } from "../markdownWindows";
 const mockAddRecentDocumentOpenListener = subscribeToOpenRequests as jest.MockedFunction<typeof subscribeToOpenRequests>;
 const mockAddWindowClosedListener = addAppListener as jest.MockedFunction<typeof addAppListener>;
 const mockUseNativeMenu = createMenu as jest.MockedFunction<typeof createMenu>;
@@ -36,6 +36,7 @@ jest.mock("../markdownWindows", () => ({
     openMarkdownEditorWindow: jest.fn(async () => undefined),
     openMarkdownSettingsWindow: jest.fn(async () => undefined),
     registerMarkdownWindows: jest.fn(),
+    showMarkdownEditorWindow: jest.fn(async () => undefined),
 }));
 jest.mock("../userThemes", () => ({
     loadMarkdownUserThemesSync: jest.fn(),
@@ -44,11 +45,19 @@ describe("App markdown shell actions", () => {
     beforeEach(() => {
         mockAddRecentDocumentOpenListener.mockReset();
         mockAddWindowClosedListener.mockReset();
-        mockOpenMarkdownEditorWindow.mockClear();
+        mockOpenMarkdownEditorWindow.mockReset();
+        mockOpenMarkdownEditorWindow.mockResolvedValue(undefined as any);
+        (showMarkdownEditorWindow as jest.Mock).mockClear();
         mockUseNativeMenu.mockReset();
         mockUseNativeMenu.mockResolvedValue({ id: "markdown", update: jest.fn(async () => {}), remove: jest.fn(async () => {}) });
         mockAddRecentDocumentOpenListener.mockResolvedValue({ remove: jest.fn() });
         mockAddWindowClosedListener.mockReturnValue({ remove: jest.fn() });
+    });
+    it("reuses an editor window retained across a host reload", async () => {
+        mockOpenMarkdownEditorWindow.mockRejectedValueOnce({ code: "E_ALREADY_EXISTS" });
+        await render(<App />);
+        await waitFor(() => expect(showMarkdownEditorWindow).toHaveBeenCalledTimes(1));
+        expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(1);
     });
     it("opens a fresh untitled editor window for New when no editor is registered", async () => {
         await render(<App />);

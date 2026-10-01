@@ -20,6 +20,7 @@ import {
   openMarkdownEditorWindow,
   openMarkdownSettingsWindow,
   registerMarkdownWindows,
+  showMarkdownEditorWindow,
 } from "./markdownWindows";
 
 loadMarkdownUserThemesSync();
@@ -115,6 +116,11 @@ async function openInitialMarkdownEditor(launchArguments: string[] | undefined, 
     await openMarkdownEditorWindow(launchArguments);
     controller.setDocumentWindowOpen(true);
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "E_ALREADY_EXISTS") {
+      await showMarkdownEditorWindow();
+      controller.setDocumentWindowOpen(true);
+      return;
+    }
     throw error instanceof Error ? new Error(`Unable to open editor window: ${error.message}`) : error;
   }
 }

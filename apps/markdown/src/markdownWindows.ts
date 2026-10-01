@@ -65,6 +65,9 @@ export function openMarkdownEditorWindow(launchArguments?: string[]) {
 export function closeMarkdownEditorWindow() {
     return closeWindow(editorWindowIdentifier);
 }
+export function showMarkdownEditorWindow() {
+    return MarkdownWindowsNavigator.show(editorWindowModuleName);
+}
 export function setMarkdownEditorWindowOptions({ appearance, backgroundColor, filename, isDirty, isUntitledDocument, saveState, }: {
     appearance: "dark" | "light";
     backgroundColor: string;
