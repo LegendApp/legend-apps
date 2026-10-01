@@ -1,6 +1,7 @@
 import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
 import { createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows";
 import { createPresenterToolbarItems } from "./presenterToolbar";
+import { openOrShowWindow } from "@legend-apps/runtime-utils";
 export const slidesSettingsWindowIdentifier = "slides-settings";
 const windows = {
     SlidesPresenterWindow: {
@@ -106,5 +107,8 @@ const windows = {
 } satisfies WindowsConfig;
 export const slidesWindows = createWindowsNavigator(windows);
 export function openSlidesSettingsWindow() {
-    return slidesWindows.open("SlidesSettingsWindow");
+    return openOrShowWindow(slidesSettingsWindowIdentifier, () => slidesWindows.open("SlidesSettingsWindow"));
+}
+export function openSlidesPresenterWindow() {
+    return openOrShowWindow(windows.SlidesPresenterWindow.id, () => slidesWindows.open("SlidesPresenterWindow"));
 }

@@ -55,10 +55,11 @@ describe("diffFiles", () => {
   });
 
   it("uses proxy document URLs only for real diff files", () => {
-    expect(getDiffRepresentedUrl(createDiffFileSource("/tmp/change.diff"))).toBe("/tmp/change.diff");
+    expect(getDiffRepresentedUrl(createDiffFileSource("/tmp/change.diff"))).toBe("file:///tmp/change.diff");
     expect(getDiffRepresentedUrl(normalizeDiffOpenSource("/tmp/repository"))).toBeNull();
     expect(getDiffRepresentedUrl(createDiffFilePairSource("/tmp/old.ts", "/tmp/new.ts"))).toBeNull();
     expect(getDiffRepresentedUrl(null)).toBeNull();
+    expect(getDiffRepresentedUrl(createDiffFileSource("/tmp/My #1?.patch"))).toBe("file:///tmp/My%20%231%3F.patch");
   });
 
   it("normalizes supported GitHub pull and commit URLs", () => {

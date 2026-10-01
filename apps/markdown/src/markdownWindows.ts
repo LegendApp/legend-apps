@@ -8,6 +8,7 @@ import { getMarkdownDisplayThemeSetting } from "./markdownSettings";
 import { markdownEditorWindowTitle } from "./markdownWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 import { loadMarkdownUserThemesSync } from "./userThemes";
+import { openOrShowWindow } from "@legend-apps/runtime-utils";
 loadMarkdownUserThemesSync();
 function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame, }: {
     appearance?: "dark" | "light";
@@ -57,7 +58,7 @@ export function registerMarkdownWindows() {
     MarkdownWindowsNavigator ??= createMarkdownWindowsNavigator();
 }
 export function openMarkdownSettingsWindow() {
-    return MarkdownWindowsNavigator.open(settingsWindowModuleName);
+    return openOrShowWindow(settingsWindowIdentifier, () => MarkdownWindowsNavigator.open(settingsWindowModuleName));
 }
 export function openMarkdownEditorWindow(launchArguments?: string[]) {
     return MarkdownWindowsNavigator.open(editorWindowModuleName, {

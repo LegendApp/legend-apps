@@ -23,7 +23,6 @@ export const diffMenuConfig: MenuItem[] = [
     id: "file",
     label: "File",
     target: { menu: "file" },
-    placement: { before: { menu: "window" } },
     items: [
       { type: "action",
         id: "startWindow",
@@ -40,7 +39,7 @@ export const diffMenuConfig: MenuItem[] = [
       { type: "action",
         id: "compareFiles",
         label: "Compare Files...",
-        placement: { after: { id: "openFolder" } },
+        placement: { after: { role: "open" } },
         shortcut: "Cmd+Alt+o",
       },
       { type: "action",
@@ -119,7 +118,6 @@ export const diffMenuConfig: MenuItem[] = [
     id: "view",
     label: "View",
     target: { menu: "view" },
-    placement: { before: { menu: "window" } },
     items: [
       { type: "action",
         id: "hideCustomizeToolbar",

@@ -7,7 +7,7 @@ import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document"
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
 import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
-import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "../codeFiles";
+import { getCodeLanguage, getCodeRepresentedUri, getLaunchCodeFile, isCodePath } from "../codeFiles";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
 import { dispatchCodeViewerMenu } from "../codeViewerRequests";
@@ -106,6 +106,10 @@ describe("Code default editor", () => {
         expect(noteRecentDocument).not.toHaveBeenCalled();
         await act(async () => editor().props.onLoad());
         expect(noteRecentDocument).toHaveBeenCalledWith("/one.ts");
+    });
+    it("encodes the native document proxy URI", () => {
+        expect(getCodeRepresentedUri("/tmp/My #1?.ts")).toBe("file:///tmp/My%20%231%3F.ts");
+        expect(getCodeRepresentedUri(null)).toBeNull();
     });
     it("opens launch files directly in the editor", async () => {
         jest.mocked(getLaunchDocumentPath).mockReturnValue("/launch.tsx");

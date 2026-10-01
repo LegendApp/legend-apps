@@ -87,7 +87,13 @@ async function openRecentCodeDocument(path: string, controller: DocumentAppContr
 
 async function openInitialCodeViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
   const launchFile = getLaunchCodeFile(launchArguments);
-  await openCodeViewerWindow(launchFile ? [launchFile] : launchArguments);
+  try {
+    await openCodeViewerWindow(launchFile ? [launchFile] : launchArguments);
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "E_ALREADY_EXISTS") throw error;
+    if (launchFile) requestCodeViewerFile(launchFile);
+    await focusCodeViewerWindow();
+  }
   controller.setDocumentWindowOpen(true);
 }
 

@@ -82,7 +82,7 @@ export function createDiffFilePairSource(oldPath: string, newPath: string): Diff
 }
 
 export function getDiffRepresentedUrl(source: DiffOpenSource | null | undefined) {
-  return source?.kind === "diffFile" ? source.value : null;
+  return source?.kind === "diffFile" ? `file://${source.value.split("/").map(encodeURIComponent).join("/")}` : null;
 }
 
 export function isDiffFilePath(path: string) {

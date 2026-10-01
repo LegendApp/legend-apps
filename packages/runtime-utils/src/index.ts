@@ -137,3 +137,5 @@ export { withMenuState, type MenuState } from "./menuState";
 export { createFolderWatcher } from "./folderWatcher";
 
 export { decodeProcessText } from "./decodeProcessText";
+
+export { openOrShowWindow } from "./openOrShowWindow";

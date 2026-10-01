@@ -9,7 +9,7 @@ import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { Alert } from "react-native";
 import { installSlidesExitHandler, registerSlidesExitPreparation } from "./slidesExit";
 import { useEffect, useRef } from "react";
-import { slidesWindows } from "./slidesWindows";
+import { openSlidesPresenterWindow } from "./slidesWindows";
 import { getLastDeckPath, loadDeck } from "./deckLoader";
 import { getSlidesState } from "./slidesStore";
 
@@ -39,7 +39,7 @@ export function App({ launchArguments }: SlidesAppProps) {
       }
     });
     const exitSubscription = installSlidesExitHandler();
-    const openPresenter = () => slidesWindows.open("SlidesPresenterWindow");
+    const openPresenter = openSlidesPresenterWindow;
     const reportOpenError = (error: unknown) => Alert.alert("Could not open presenter", String(error));
     void openPresenter().catch(reportOpenError);
     // Deck opening is part of launch, not a reaction to presenter renders.

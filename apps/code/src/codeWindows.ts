@@ -4,8 +4,9 @@ import { showWindow, setWindowOptions } from "@legendapp/spark/windows";
 import { cancelPreparedDocument, prepareDocument } from "@legend-apps/source-editor/preload";
 import { codeSettingsWindowIdentifier, codeSettingsWindowModuleName, codeViewerWindowIdentifier, codeViewerWindowModuleName, } from "./appConstants";
 import { getCodeSyntaxTheme } from "./codeSettings";
-import { getFilename, getLaunchCodeFile } from "./codeFiles";
+import { getFilename, getLaunchCodeFile, getCodeRepresentedUri } from "./codeFiles";
 import { SettingsWindow } from "./SettingsWindow";
+import { openOrShowWindow } from "@legend-apps/runtime-utils";
 function createCodeViewerWindowStyle({ appearance, backgroundColor, includeFrame, }: {
     appearance?: "dark" | "light";
     backgroundColor?: string;
@@ -24,37 +25,40 @@ function createCodeViewerWindowStyle({ appearance, backgroundColor, includeFrame
         }
     };
 }
-const codeWindowsConfig = {
-    [codeViewerWindowModuleName]: {
-        loadComponent: () => import("./CodeViewerWindow"),
-        id: codeViewerWindowIdentifier,
-        options: {
-            title: "Legend Code",
-            ...createCodeViewerWindowStyle({ includeFrame: true }),
-            macos: {
-                restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
-            }
+function createCodeWindowsNavigator() {
+    const { CodeViewerWindow } = require("./CodeViewerWindow") as typeof import("./CodeViewerWindow");
+    const codeWindowsConfig = {
+        [codeViewerWindowModuleName]: {
+            component: CodeViewerWindow,
+            id: codeViewerWindowIdentifier,
+            options: {
+                title: "Legend Code",
+                ...createCodeViewerWindowStyle({ includeFrame: true }),
+                macos: {
+                    restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
+                }
+            },
         },
-    },
-    [codeSettingsWindowModuleName]: {
-        component: SettingsWindow,
-        id: codeSettingsWindowIdentifier,
-        options: createSettingsWindowOptions(),
-    },
-} satisfies WindowsConfig;
-const CodeWindowsNavigator = createWindowsNavigator(codeWindowsConfig);
-type CodeWindow = keyof typeof codeWindowsConfig;
+        [codeSettingsWindowModuleName]: {
+            component: SettingsWindow,
+            id: codeSettingsWindowIdentifier,
+            options: createSettingsWindowOptions(),
+        },
+    } satisfies WindowsConfig;
+    return createWindowsNavigator(codeWindowsConfig);
+}
+let CodeWindowsNavigator: ReturnType<typeof createCodeWindowsNavigator>;
 export function registerCodeWindows() {
-    // Importing this module registers the windows above.
+    CodeWindowsNavigator ??= createCodeWindowsNavigator();
 }
 export function openCodeSettingsWindow() {
-    return CodeWindowsNavigator.open(codeSettingsWindowModuleName as CodeWindow);
+    return openOrShowWindow(codeSettingsWindowIdentifier, () => CodeWindowsNavigator.open(codeSettingsWindowModuleName));
 }
 export async function openCodeViewerWindow(launchArguments?: string[]) {
     const path = getLaunchCodeFile(launchArguments);
     const preparedDocumentId = path ? prepareDocument(path) : undefined;
     try {
-        return await CodeWindowsNavigator.open(codeViewerWindowModuleName as CodeWindow, {
+        return await CodeWindowsNavigator.open(codeViewerWindowModuleName, {
             props: { launchArguments, preparedDocumentId },
             options: {
                 ...createCodeViewerWindowStyle({ includeFrame: true })
@@ -82,7 +86,7 @@ export function setCodeViewerWindowOptions({ appearance, backgroundColor, filePa
             includeFrame: false,
         }),
         macos: {
-            representedUri: filePath ?? undefined
+            representedUri: getCodeRepresentedUri(filePath)
         }
     });
 }

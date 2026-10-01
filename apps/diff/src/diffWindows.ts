@@ -3,6 +3,7 @@ import { createElement, type ComponentType } from "react";
 import type { DiffViewerWindowProps } from "./DiffViewerWindow";
 import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
 import { createWindowsNavigator, openWindow, WindowProvider, type WindowsConfig } from "@legendapp/spark/windows";
+import { openOrShowWindow } from "@legend-apps/runtime-utils";
 import type { WindowBounds } from "@legendapp/spark/windows";
 import { diffSettingsWindowIdentifier, diffSettingsWindowModuleName, diffViewerWindowIdentifier, diffViewerWindowModuleName, } from "./appConstants";
 import { upsertSavedDiffWindow } from "./diffAppMetadata";
@@ -12,15 +13,7 @@ import { getDiffRestoreWindowsOnStartupSetting } from "./diffSettings";
 import { diffViewerWindowTitle } from "./diffWindowTitle";
 let diffViewerUntitledWindowId = 0;
 let diffViewerUrlFocusRequestId = 0;
-const diffWindowsConfig = {
-    [diffSettingsWindowModuleName]: {
-        id: diffSettingsWindowIdentifier,
-        loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),
-        options: createSettingsWindowOptions({ title: "Settings" }),
-    },
-} satisfies WindowsConfig;
-const DiffWindowsNavigator = createWindowsNavigator(diffWindowsConfig);
-type DiffWindow = keyof typeof diffWindowsConfig;
+let DiffWindowsNavigator: ReturnType<typeof createDiffWindowsNavigator>;
 export type DiffViewerWindowOpenOptions = {
     focusUrlInput?: boolean;
     /** One-time migration input; AppKit owns subsequent frame persistence. */
@@ -28,16 +21,22 @@ export type DiffViewerWindowOpenOptions = {
     freshWindow?: boolean;
     windowIdentifier?: string;
 };
-let viewer: ComponentType<DiffViewerWindowProps> | undefined;
-let loading: Promise<void> | undefined;
-AppRegistry.registerComponent(diffViewerWindowModuleName, () => (props: DiffViewerWindowProps) => {
-    if (!viewer) throw new Error("Diff viewer has not loaded");
-    return createElement(WindowProvider, { id: props.windowIdentifier ?? diffViewerWindowIdentifier, children: createElement(viewer, props) });
-});
-export function registerDiffWindows() {}
-async function loadViewer() {
-    loading ??= import("./DiffViewerWindowShell").then(module => { viewer = module.DiffViewerWindowShell; }).catch(error => { loading = undefined; throw error; });
-    await loading;
+function createDiffWindowsNavigator() {
+    const { SettingsWindow } = require("./SettingsWindow") as typeof import("./SettingsWindow");
+    return createWindowsNavigator({
+        [diffSettingsWindowModuleName]: {
+            id: diffSettingsWindowIdentifier,
+            component: SettingsWindow,
+            options: createSettingsWindowOptions({ title: "Settings" }),
+        },
+    } satisfies WindowsConfig);
+}
+export function registerDiffWindows() {
+    if (DiffWindowsNavigator) return;
+    const viewer: ComponentType<DiffViewerWindowProps> = (require("./DiffViewerWindowShell") as typeof import("./DiffViewerWindowShell")).DiffViewerWindowShell;
+    AppRegistry.registerComponent(diffViewerWindowModuleName, () => (props: DiffViewerWindowProps) =>
+        createElement(WindowProvider, { id: props.windowIdentifier ?? diffViewerWindowIdentifier, children: createElement(viewer, props) }));
+    DiffWindowsNavigator = createDiffWindowsNavigator();
 }
 
 function hashString(value: string) {
@@ -76,8 +75,8 @@ export async function openDiffViewerWindow(sourceInput?: DiffOpenSource | string
         showViewModeToolbar: shouldShowSourceToolbar,
         source,
     });
-    await loadViewer();
-    return openWindow({
+    registerDiffWindows();
+    return openOrShowWindow(windowIdentifier, () => openWindow({
         ...windowStyle,
         id: windowIdentifier,
         component: diffViewerWindowModuleName,
@@ -86,7 +85,7 @@ export async function openDiffViewerWindow(sourceInput?: DiffOpenSource | string
         transparent: true,
         ...(options.frame ? { size: { width: options.frame.width, height: options.frame.height }, position: { displayId: options.frame.displayId, x: options.frame.x, y: options.frame.y } } : {}),
         macos: { ...windowStyle.macos, representedUri: getDiffRepresentedUrl(source), restoreOnLaunch: getDiffRestoreWindowsOnStartupSetting() },
-    }).then((result) => {
+    })).then((result) => {
         upsertSavedDiffWindow({
             id: windowIdentifier,
             ...(source ? { source } : {}),
@@ -95,5 +94,5 @@ export async function openDiffViewerWindow(sourceInput?: DiffOpenSource | string
     });
 }
 export function openDiffSettingsWindow() {
-    return DiffWindowsNavigator.open(diffSettingsWindowModuleName as DiffWindow);
+    return openOrShowWindow(diffSettingsWindowIdentifier, () => DiffWindowsNavigator.open(diffSettingsWindowModuleName));
 }

@@ -21,3 +21,7 @@ export function getCodeLanguage(path: string) {
 }
 
 export { getFilename };
+
+export function getCodeRepresentedUri(path: string | null) {
+  return path ? `file://${path.split("/").map(encodeURIComponent).join("/")}` : null;
+}
