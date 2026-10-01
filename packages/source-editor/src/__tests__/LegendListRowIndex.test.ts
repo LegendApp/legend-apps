@@ -26,7 +26,7 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
       createElement: () => null,
     };
     const signals = new Map<string, unknown>([
-      ["containerItemIndex0", 3], ["containerItemData0", { id: "four" }],
+      ["containerItemIndex0", 3], ["containerItemData0", { id: "four" }], ["containerDataVersion0", 0],
     ]);
     const subscriptions = new Set<string>();
     const context = {
@@ -47,11 +47,14 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
     draw();
     draw();
     expect(getRenderedItem).toHaveBeenCalledTimes(1);
-    expect(subscriptions.has("containerItemIndex0")).toBe(true);
+    expect(subscriptions.has("containerDataVersion0")).toBe(true);
     signals.set("containerItemIndex0", 4); // insert a line before the retained row
+    // The current list publishes moved retained rows through its data revision.
+    signals.set("containerDataVersion0", 1);
     draw();
     expect(getRenderedItem).toHaveBeenCalledTimes(2);
     signals.set("containerItemIndex0", 3); // undo the insertion
+    signals.set("containerDataVersion0", 2);
     draw();
     expect(getRenderedItem).toHaveBeenCalledTimes(3);
   },
