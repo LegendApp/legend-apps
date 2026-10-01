@@ -6,7 +6,7 @@
       "name": "legend-apps",
       "dependencies": {
         "@legend-apps/storage": "0.0.0",
-        "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-335ebf5f6f86.tgz",
+        "@legendapp/spark": "catalog:",
       },
       "devDependencies": {
         "@babel/core": "^7.29.0",
@@ -36,7 +36,7 @@
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/theme": "workspace:*",
         "@legendapp/list": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "^1.0.2",
         "uniwind": "^1.6.3",
@@ -56,7 +56,7 @@
         "@legend-apps/theme": "workspace:*",
         "@legend-apps/virtualized-document": "workspace:*",
         "@legendapp/list": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
       },
     },
@@ -74,7 +74,7 @@
         "@legend-apps/theme": "workspace:*",
         "@legend-apps/virtualized-document": "workspace:*",
         "@legendapp/list": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
       },
     },
@@ -101,7 +101,7 @@
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/theme": "workspace:*",
         "@legendapp/list": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "react-native-enriched-markdown": "1.0.2",
         "uniwind": "^1.6.3",
@@ -124,7 +124,7 @@
         "@legend-apps/theme": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/motion": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "expo-file-system": "~19.0.21",
         "react-native-webview": "16.0.0",
@@ -141,7 +141,7 @@
         "@legend-apps/storage": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/motion": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "clsx": "^2.1.1",
         "react": "catalog:",
@@ -163,7 +163,7 @@
         "@legend-apps/syntax-parser": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/motion": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "@shopify/react-native-skia": "^2.11.1",
         "@typegpu/noise": "^0.12.0",
@@ -194,7 +194,7 @@
         "@legend-apps/media-tags": "0.0.0",
         "@legend-apps/runtime-utils": "0.0.0",
         "@legendapp/list": "catalog:",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "buffer": "5.7.1",
         "react-native-enriched-markdown": "^1.0.2",
       },
@@ -213,7 +213,7 @@
       "dependencies": {
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/theme": "workspace:*",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -319,7 +319,7 @@
       "name": "@legend-apps/design-system",
       "version": "0.0.0",
       "dependencies": {
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
@@ -354,7 +354,7 @@
       "name": "@legend-apps/document-scanner",
       "version": "0.0.0",
       "dependencies": {
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -509,7 +509,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-apps/media-tags": "0.0.0",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -603,7 +603,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@gorhom/portal": "^1.0.14",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
       },
       "peerDependencies": {
@@ -615,7 +615,7 @@
       "name": "@legend-apps/runtime-utils",
       "version": "0.0.0",
       "dependencies": {
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
         "buffer": "5.7.1",
       },
@@ -704,7 +704,7 @@
       "dependencies": {
         "@legend-apps/native-text-source": "workspace:*",
         "@legend-apps/storage": "0.0.0",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
       },
       "devDependencies": {
         "nitrogen": "0.35.6",
@@ -721,7 +721,7 @@
       "dependencies": {
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/syntax-parser": "workspace:*",
-        "@legendapp/spark": "0.0.1-next.2",
+        "@legendapp/spark": "catalog:",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -830,12 +830,10 @@
     "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
   },
-  "overrides": {
-    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-335ebf5f6f86.tgz",
-  },
   "catalog": {
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
+    "@legendapp/spark": "file:../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-0ca99cce84ad.tgz",
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.1.4",
     "react-native": "0.81.6",
@@ -1337,7 +1335,7 @@
 
     "@legendapp/motion": ["@legendapp/motion@2.5.3", "", { "dependencies": { "@legendapp/tools": "2.0.1" }, "peerDependencies": { "nativewind": ">=4.0.0", "react": ">=16", "react-native": "*" } }, "sha512-IcNiStiK3qG5LaIPLC8fVV0BHIrkf7EY5HfOv3xbuMH0z4D945yaaEDafP5bboHf/uj9XRjTQHVTtZgwpMNlHw=="],
 
-    "@legendapp/spark": ["@legendapp/spark@../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-335ebf5f6f86.tgz", { "dependencies": { "@expo/config-plugins": "54.0.5", "@expo/config-types": "54.0.10", "@legendapp/state": "^3.0.0-beta.42", "@op-engineering/op-sqlite": "18.2.1", "@react-native-community/cli-types": "20.1.3", "@react-native-runtimes/core": "0.1.0-alpha.2", "base64-js": "1.5.1", "clsx": "^2.1.1", "cross-spawn": "7.0.6", "expo": "54.0.37", "expo-desktop": "1.0.0-beta.6", "expo-desktop-config-plugins": "1.2.0-beta.1", "npm": "11.11.0", "react": "19.1.4", "react-dom": "19.1.4", "react-native": "0.81.6", "react-native-nitro-modules": "0.35.7", "react-native-webview": "16.0.0", "tailwind-merge": "^3.4.0", "typescript": "5.9.3", "ws": "8.18.3" }, "peerDependencies": { "@expo/ui": "0.2.0-beta.9", "@legendapp/list": ">=3.3.0", "expo": "54.0.37", "expo-audio": "1.1.1", "expo-clipboard": "~8.0.8", "expo-crypto": "~15.0.8", "expo-linking": "~8.0.12", "expo-secure-store": "~15.0.8", "expo-web-browser": "~15.0.10", "react": "19.1.4", "react-dom": "19.1.4", "react-native": "0.81.6", "react-native-windows": "0.81.35", "uniwind": "^1.6.3" }, "optionalPeers": ["@expo/ui", "expo-audio", "expo-clipboard", "expo-crypto", "expo-linking", "expo-secure-store", "expo-web-browser", "react-dom", "react-native-windows", "uniwind"], "bin": { "spark": "bin/spark.cjs" } }, "sha512-7jQgXRhe+Z8n6zpORxgUBx8L5cbAP2MpCZJ9MjC58Pwe4bGOGMyDeCFK6eUC3oDz3b/ya/IzRWntAb4J31g3jw=="],
+    "@legendapp/spark": ["@legendapp/spark@../legend-framework/artifacts/packages/legendapp-spark-0.0.1-next.2-0ca99cce84ad.tgz", { "dependencies": { "@expo/config-plugins": "54.0.5", "@expo/config-types": "54.0.10", "@legendapp/state": "^3.0.0-beta.42", "@op-engineering/op-sqlite": "18.2.1", "@react-native-community/cli-types": "20.1.3", "@react-native-runtimes/core": "0.1.0-alpha.2", "base64-js": "1.5.1", "clsx": "^2.1.1", "cross-spawn": "7.0.6", "expo": "54.0.37", "expo-desktop": "1.0.0-beta.6", "expo-desktop-config-plugins": "1.2.0-beta.1", "npm": "11.11.0", "react": "19.1.4", "react-dom": "19.1.4", "react-native": "0.81.6", "react-native-nitro-modules": "0.35.7", "react-native-webview": "16.0.0", "tailwind-merge": "^3.4.0", "typescript": "5.9.3", "ws": "8.18.3" }, "peerDependencies": { "@expo/ui": "0.2.0-beta.9", "@legendapp/list": ">=3.3.0", "expo": "54.0.37", "expo-audio": "1.1.1", "expo-clipboard": "~8.0.8", "expo-crypto": "~15.0.8", "expo-linking": "~8.0.12", "expo-secure-store": "~15.0.8", "expo-web-browser": "~15.0.10", "react": "19.1.4", "react-dom": "19.1.4", "react-native": "0.81.6", "react-native-windows": "0.81.35", "uniwind": "^1.6.3" }, "optionalPeers": ["@expo/ui", "expo-audio", "expo-clipboard", "expo-crypto", "expo-linking", "expo-secure-store", "expo-web-browser", "react-dom", "react-native-windows", "uniwind"], "bin": { "spark": "bin/spark.cjs" } }, "sha512-+SNc5mySxE1oB0tuRmhY5y19qNN30TYmg0BVFSQi0MgMxDDbFzJWXF5zHQhHzpm88C5ZERsyuX5VnBczwn+2IA=="],
 
     "@legendapp/state": ["@legendapp/state@3.0.0-beta.47", "", { "dependencies": { "use-sync-external-store": "^1.2.2" }, "peerDependencies": { "expo-sqlite": "^15.0.0" }, "optionalPeers": ["expo-sqlite"] }, "sha512-MPgPacXXSoAazAv7ulW/o0ZAtK4YHk3twvXZ241l2HqAHciHozb7tg5SMbEAc2HKUUfC3JBh+9+DXfMsYokLpQ=="],
 

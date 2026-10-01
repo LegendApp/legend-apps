@@ -1,7 +1,6 @@
 import { getOpenFolder } from '../plugin-system/FileSources';
 import type { DisplayPlugin } from '../plugin-system/PluginTypes';
 import { state$ } from '../systems/State';
-import { KeyCodes } from '../systems/keyboard/KeyboardManager';
 import React from 'react';
 import { Alert, Text, View } from 'react-native';
 
@@ -79,7 +78,7 @@ export const PluginDelete: DisplayPlugin = {
     'Delete Photo': {
       action: deleteCurrentPhoto,
       description: 'Delete the currently selected photo',
-      defaultKeyCode: KeyCodes.KEY_DELETE,
+      defaultBinding: "Backspace",
     },
   },
 };

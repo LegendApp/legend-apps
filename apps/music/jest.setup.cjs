@@ -143,7 +143,6 @@ jest.mock("@legendapp/spark/windows", () => ({
     addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
-    addKeyboardListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
     hasModifier: (event, modifier) => (event.modifiers & modifier) === modifier,
     KeyCodes,
 }));

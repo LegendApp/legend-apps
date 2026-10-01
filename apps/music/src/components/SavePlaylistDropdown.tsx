@@ -1,4 +1,4 @@
-import { ownRegistration } from "@legend-apps/runtime-utils";
+import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -7,7 +7,9 @@ import { Button } from "./Button";
 import { DropdownMenu } from "./DropdownMenu";
 import { TextInputSearch, type TextInputSearchRef } from "./TextInputSearch";
 import { savePlaylistUI$ } from "../state/savePlaylistUIState";
-import { addKeyboardListener, hasModifier, KeyCodes } from "../systems/keyboard/KeyboardManager";
+const savePlaylistHotkeyRouter = createHotkeyRouter();
+const closeDefinitions = [{ id: "close", title: "Close Playlist Dialog", defaultBindings: ["Escape"], allowExtraModifiers: true }];
+const saveDefinitions = [{ id: "save", title: "Save Playlist", defaultBindings: ["Enter"], allowExtraModifiers: true }];
 
 type SavePlaylistDropdownProps = {
     disabled?: boolean;
@@ -65,28 +67,18 @@ export function SavePlaylistDropdown({ disabled = false, onSave }: SavePlaylistD
         }, 0);
     }, [isOpen, playlistName$]);
 
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-            const registration = ownRegistration(addKeyboardListener("down", (event) => {
-                if (event.keyCode === KeyCodes.KEY_ESCAPE) {
-                    close();
-                    return true;
-                }
-
-                if (event.keyCode === KeyCodes.KEY_RETURN) {
-                    if (canSave()) {
-                        void handleSave();
-                        return true;
-                    }
-                }
-
-                return false;
-            }));
-        return () => { void registration.remove().catch(console.error); };
-    }, [canSave, close, handleSave, isOpen]);
+    const playlistName = useValue(playlistName$);
+    useRoutedHotkeys({
+        router: savePlaylistHotkeyRouter, definitions: closeDefinitions,
+        scope: { kind: "window", windowId: "main" }, enabled: isOpen,
+        handlers: { close }, onError: console.error,
+    });
+    useRoutedHotkeys({
+        router: savePlaylistHotkeyRouter, definitions: saveDefinitions,
+        scope: { kind: "window", windowId: "main" },
+        enabled: isOpen && !disabled && !isSaving && playlistName.trim().length > 0,
+        handlers: { save: () => { void handleSave(); } }, onError: console.error,
+    });
 
     return (
         <DropdownMenu.Root isOpen$={isOpen$}>

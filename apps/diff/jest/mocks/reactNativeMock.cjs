@@ -29,11 +29,15 @@ module.exports = {
   Text: createComponent("Text"),
   TextInput: createComponent("TextInput"),
   TurboModuleRegistry: {
-    get: jest.fn(() => null),
+    get: jest.fn(name => name === "NativeKeyboardManager" ? {
+      addListener: jest.fn(), removeListeners: jest.fn(),
+      setConsumption: jest.fn(async () => true),
+      startMonitoringKeyboard: jest.fn(async () => true), stopMonitoringKeyboard: jest.fn(async () => true),
+    } : null),
     getEnforcing: jest.fn(() => ({
       addListener: jest.fn(),
       removeListeners: jest.fn(),
-      respondToKeyEvent: jest.fn(),
+      setConsumption: jest.fn(async () => true),
       startMonitoringKeyboard: jest.fn(async () => true),
       stopMonitoringKeyboard: jest.fn(async () => true),
     })),

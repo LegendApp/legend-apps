@@ -1,25 +1,31 @@
-import { ownRegistration } from "@legend-apps/runtime-utils";
-import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
-import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
-import { useEffect, useMemo, type RefObject } from "react";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { useValue } from "@legendapp/state/react";
+import { useMemo, type RefObject } from "react";
 import { Platform } from "react-native";
 import { markdownHotkeyDefinitions, markdownHotkeyRouter } from "./markdownHotkeys";
+import type { MarkdownDocumentSessionState$ } from "./useMarkdownDocumentSession";
 import {
   toggleMarkdownFormattingToolbarModeSetting,
   useMarkdownHotkeySettings,
 } from "./markdownSettings";
 
+const commitDefinitions = [{ id: "commit", title: "Finish Editing Block", defaultBindings: ["Escape"] }];
+
 type MarkdownKeyboardShortcutsOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
+  sessionState$: MarkdownDocumentSessionState$;
 };
 
-export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKeyboardShortcutsOptions) {
+export function useMarkdownKeyboardShortcuts({ documentCommandsRef, sessionState$ }: MarkdownKeyboardShortcutsOptions) {
   const hotkeys = useMarkdownHotkeySettings();
+  const canCommitAndBlur = useValue(sessionState$.commandState.canCommitAndBlur);
   const hotkeyHandlers = useMemo(() => ({
     // AppKit owns visual-line selection, including the handoff between blocks.
-    extendBlockSelectionDown: () => Platform.OS !== "macos" && (documentCommandsRef.current?.extendBlockSelectionDown() ?? false),
-    extendBlockSelectionUp: () => Platform.OS !== "macos" && (documentCommandsRef.current?.extendBlockSelectionUp() ?? false),
+    ...(Platform.OS !== "macos" ? {
+      extendBlockSelectionDown: () => documentCommandsRef.current?.extendBlockSelectionDown(),
+      extendBlockSelectionUp: () => documentCommandsRef.current?.extendBlockSelectionUp(),
+    } : {}),
     focusFirstBlock: () => documentCommandsRef.current?.focusFirstBlock(),
     focusLastBlock: () => documentCommandsRef.current?.focusLastBlock(),
     moveBlockDown: () => documentCommandsRef.current?.moveActiveBlockDown(),
@@ -36,14 +42,12 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef }: MarkdownKe
     onError: console.error,
   });
 
-  useEffect(() => {
-    const registration = ownRegistration(addKeyboardListener("down", (event) => {
-      if (event.keyCode === KeyCodes.KEY_ESCAPE) {
-        return documentCommandsRef.current?.commitAndBlurActiveBlock() === true;
-      }
-
-      return false;
-    }));
-    return () => { void registration.remove().catch(console.error); };
-  }, [documentCommandsRef]);
+  useRoutedHotkeys({
+    definitions: commitDefinitions,
+    enabled: canCommitAndBlur,
+    handlers: { commit: () => documentCommandsRef.current?.commitAndBlurActiveBlock() },
+    router: markdownHotkeyRouter,
+    scope: { kind: "window", windowId: "markdown-editor" },
+    onError: console.error,
+  });
 }

@@ -522,7 +522,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const fileCheckRequestRef = useRef(0);
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
-    const commandStateRef = useRef<MarkdownDocumentCommandState>({ canRedo: false, canUndo: false });
+    const commandStateRef = useRef<MarkdownDocumentCommandState>({ canCommitAndBlur: false, canRedo: false, canUndo: false });
     const suppressHistoryRef = useRef(false);
     const typingHistoryGroupRef = useRef<{
       entry: UpdateBlockHistoryEntry;
@@ -771,16 +771,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [bumpBlockRowRenderRevision, documentRenderState$]);
 
     const publishCommandState = useCallback(() => {
-      const nextState: MarkdownDocumentCommandState = {
-        canRedo: redoStackRef.current.length > 0,
-        canUndo: undoStackRef.current.length > 0,
-      };
+      const canCommitAndBlur = Boolean(activeEditor$.blockId.peek() && !documentRenderState$.blockSelection.peek()?.textSelection);
+      const canRedo = redoStackRef.current.length > 0;
+      const canUndo = undoStackRef.current.length > 0;
       const currentState = commandStateRef.current;
-      if (nextState.canRedo !== currentState.canRedo || nextState.canUndo !== currentState.canUndo) {
+      if (canCommitAndBlur !== currentState.canCommitAndBlur || canRedo !== currentState.canRedo || canUndo !== currentState.canUndo) {
+        const nextState = { canCommitAndBlur, canRedo, canUndo };
         commandStateRef.current = nextState;
         onCommandStateChangeRef.current?.(nextState);
       }
-    }, [onCommandStateChangeRef]);
+    }, [activeEditor$, documentRenderState$, onCommandStateChangeRef]);
+    useObserveEffect(
+      () => Boolean(activeEditor$.blockId.get() && !documentRenderState$.blockSelection.get()?.textSelection),
+      publishCommandState,
+    );
 
     const clearTypingHistoryGroup = useCallback(() => {
       typingHistoryGroupRef.current = undefined;

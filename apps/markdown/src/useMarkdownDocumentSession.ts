@@ -37,7 +37,7 @@ type OpenUntitledDocumentOptions = {
 export function useMarkdownDocumentSession() {
   const sessionState$ = useObservable<MarkdownDocumentSessionState>({
     conflict: null,
-    commandState: { canRedo: false, canUndo: false },
+    commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
     documentSource: "untitled",
     filename: null,
     isDirty: false,

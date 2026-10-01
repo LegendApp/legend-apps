@@ -19,7 +19,7 @@
     "expo-file-system": "~19.0.21",
     "react-native-webview": "16.0.0",
     "sf-symbols-typescript": "^2.2.0",
-    "@legendapp/spark": "0.0.1-next.2",
+    "@legendapp/spark": "catalog:",
     "@legend-apps/storage": "0.0.0",
     "@legend-apps/crypto": "0.0.0"
   }

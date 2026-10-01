@@ -1,5 +1,5 @@
 import { ownRegistration } from "@legend-apps/runtime-utils";
-import { addKeyboardListener, KeyCodes, KeyText } from "@legendapp/spark/shortcuts/keyboard";
+import { addKeyboardListener, KeyText } from "@legendapp/spark/shortcuts/keyboard";
 import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { ExampleButton, ExamplePanel, styles } from "./shared";
@@ -18,9 +18,7 @@ export function KeyboardManagerExample() {
     }
 
     const removeDown = ownRegistration(addKeyboardListener("down", (event) => {
-      const handled = event.keyCode === KeyCodes.KEY_ESCAPE;
-      setStatus(`Down: ${describeKey(event.keyCode)} modifiers=${event.modifiers}${handled ? " handled" : ""}`);
-      return handled;
+      setStatus(`Down: ${describeKey(event.keyCode)} modifiers=${event.modifiers}${event.consumed ? " consumed natively" : " observed"}`);
     }));
     const removeUp = ownRegistration(addKeyboardListener("up", (event) => {
       setStatus(`Up: ${describeKey(event.keyCode)} modifiers=${event.modifiers}`);

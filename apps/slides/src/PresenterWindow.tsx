@@ -6,7 +6,7 @@ import { resumeNotesOutput, identifyDisplays, previewNotesOutput, notesOutput$, 
 import type { Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legendapp/spark/dialogs";
-import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { registerDocumentOpenGuard } from "./documentOpen";
 import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, setWindowFullscreen, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
 import { addAppListener } from "@legendapp/spark/app";
@@ -31,20 +31,45 @@ import { presenterAppearanceToolbarItemId, createPresenterToolbarItems, formatPr
 import { initialPresenterTimerState, transitionPresenterTimer, type PresenterMode, type PresenterTimerEvent, } from "./presenterTimer";
 import { persistSlideSpeakerNotes } from "./speakerNotesPersistence";
 import { usePresentationNotesFontSizeSetting, usePresentationNotesWidthSetting, useBackgroundIntensitySetting, setBackgroundIntensitySetting, usePresentationTimerStartsOnSecondSlideSetting, useRehearsalTimerPausesWhileEditingSetting, } from "./slidesSettings";
-const nextKeyCodes = new Set<number>([KeyCodes.KEY_RIGHT, KeyCodes.KEY_DOWN, KeyCodes.KEY_PAGE_DOWN, KeyCodes.KEY_SPACE]);
-const previousKeyCodes = new Set<number>([KeyCodes.KEY_LEFT, KeyCodes.KEY_UP, KeyCodes.KEY_PAGE_UP]);
-const digitKeyCodes = new Map<number, string>([
-    [KeyCodes.KEY_0, "0"],
-    [KeyCodes.KEY_1, "1"],
-    [KeyCodes.KEY_2, "2"],
-    [KeyCodes.KEY_3, "3"],
-    [KeyCodes.KEY_4, "4"],
-    [KeyCodes.KEY_5, "5"],
-    [KeyCodes.KEY_6, "6"],
-    [KeyCodes.KEY_7, "7"],
-    [KeyCodes.KEY_8, "8"],
-    [KeyCodes.KEY_9, "9"],
-]);
+const presenterHotkeyRouter = createHotkeyRouter();
+const pageDefinitions = [
+    { id: "next", title: "Next Slide", defaultBindings: ["PageDown"], allowExtraModifiers: true, repeat: true },
+    { id: "previous", title: "Previous Slide", defaultBindings: ["PageUp"], allowExtraModifiers: true, repeat: true },
+];
+const navigationDefinitions = [
+    { id: "next", title: "Next Slide", defaultBindings: ["Right", "Down", "Space"], allowExtraModifiers: true, repeat: true },
+    { id: "previous", title: "Previous Slide", defaultBindings: ["Left", "Up"], allowExtraModifiers: true, repeat: true },
+    { id: "first", title: "First Slide", defaultBindings: ["Home"], allowExtraModifiers: true, repeat: true },
+    { id: "last", title: "Last Slide", defaultBindings: ["End"], allowExtraModifiers: true, repeat: true },
+    { id: "digit", title: "Jump to Slide", defaultBindings: Array.from({ length: 10 }, (_, i) => String(i)), allowExtraModifiers: true, repeat: true },
+];
+const jumpDefinitions = [
+    { id: "jump", title: "Confirm Slide Number", defaultBindings: ["Enter"], allowExtraModifiers: true },
+    { id: "delete", title: "Delete Slide Number", defaultBindings: ["Backspace"], allowExtraModifiers: true, repeat: true },
+];
+const escapeDefinitions = [{ id: "close", title: "Close Audience", defaultBindings: ["Escape"], allowExtraModifiers: true }];
+function PresenterKeyboard({ windowId, editingDeck, presenter$, keyboardJump$, audienceOpen, closeAudience, jumpTimeout }: {
+    windowId: string; editingDeck: boolean; presenter$: Observable<PresenterSession>;
+    keyboardJump$: Observable<string>; audienceOpen: boolean; closeAudience(): Promise<unknown>; jumpTimeout: { current: ReturnType<typeof setTimeout> | undefined };
+}) {
+    const notesEditing = useValue(presenter$.notesEditing);
+    const hasJump = useValue(() => Boolean(keyboardJump$.get()));
+    useEffect(() => () => clearTimeout(jumpTimeout.current), [jumpTimeout]);
+    const scope = { kind: "window" as const, windowId };
+    const handlers = { next: nextSlide, previous: previousSlide };
+    useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: pageDefinitions, scope, enabled: !editingDeck, handlers, onError: console.error });
+    useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: navigationDefinitions, scope, enabled: !editingDeck && !notesEditing,
+        handlers: { ...handlers, first: () => setCurrentSlide(0), last: () => setCurrentSlide(Number.MAX_SAFE_INTEGER), digit: ({ event }) => {
+            keyboardJump$.set(`${keyboardJump$.peek()}${event.key}`.replace(/^0+/, "").slice(0, 4));
+            clearTimeout(jumpTimeout.current);
+            jumpTimeout.current = setTimeout(() => keyboardJump$.set(""), 2500);
+        } }, onError: console.error });
+    useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: jumpDefinitions, scope, enabled: !editingDeck && !notesEditing && hasJump,
+        handlers: { jump: () => { setCurrentSlide(Number(keyboardJump$.peek()) - 1); keyboardJump$.set(""); }, delete: () => keyboardJump$.set(keyboardJump$.peek().slice(0, -1)) }, onError: console.error });
+    useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: escapeDefinitions, scope, enabled: !editingDeck && !notesEditing && audienceOpen,
+        handlers: { close: () => { void closeAudience(); } }, onError: console.error });
+    return null;
+}
 function Button({ disabled, label, onPress }: {
     disabled?: boolean;
     label: string;
@@ -368,7 +393,7 @@ export function PresenterWindow() {
         setPresenterLayoutResetVersion: presenter$.presenterLayoutResetVersion.set,
     }));
     const keyboardJump$ = useObservable("");
-    const keyboardJumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const jumpTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const audienceOpen = useValue(slidesState$.audienceOpen);
     const blackout = useValue(slidesState$.blackout);
     const [audience] = useState(() => createAudienceSession({
@@ -460,64 +485,6 @@ export function PresenterWindow() {
         };
     }, [audience, refreshDisplays, setActiveMode, canOpenDeck]);
     useEffect(() => {
-        const removeKeys = ownRegistration(addKeyboardListener("down", (event) => {
-            if (editingDeckRef.current)
-                return false;
-            if (presenter$.notesEditing.peek() && event.keyCode !== KeyCodes.KEY_PAGE_DOWN && event.keyCode !== KeyCodes.KEY_PAGE_UP) {
-                return false;
-            }
-            if (nextKeyCodes.has(event.keyCode)) {
-                nextSlide();
-                return true;
-            }
-            if (previousKeyCodes.has(event.keyCode)) {
-                previousSlide();
-                return true;
-            }
-            if (event.keyCode === KeyCodes.KEY_HOME) {
-                setCurrentSlide(0);
-                return true;
-            }
-            if (event.keyCode === KeyCodes.KEY_END) {
-                setCurrentSlide(Number.MAX_SAFE_INTEGER);
-                return true;
-            }
-            if (event.keyCode === KeyCodes.KEY_ESCAPE && audienceOpen) {
-                void closeAudience();
-                return true;
-            }
-            const digit = digitKeyCodes.get(event.keyCode);
-            if (digit !== undefined) {
-                const nextJump = `${keyboardJump$.peek()}${digit}`.replace(/^0+/, "").slice(0, 4);
-                keyboardJump$.set(nextJump);
-                if (keyboardJumpTimeout.current) {
-                    clearTimeout(keyboardJumpTimeout.current);
-                }
-                keyboardJumpTimeout.current = setTimeout(() => {
-                    keyboardJump$.set("");
-                }, 2500);
-                return true;
-            }
-            if (event.keyCode === KeyCodes.KEY_RETURN && keyboardJump$.peek()) {
-                setCurrentSlide(Number(keyboardJump$.peek()) - 1);
-                keyboardJump$.set("");
-                return true;
-            }
-            if (event.keyCode === KeyCodes.KEY_DELETE && keyboardJump$.peek()) {
-                const nextJump = keyboardJump$.peek().slice(0, -1);
-                keyboardJump$.set(nextJump);
-                return true;
-            }
-            return false;
-        }, { windowIds: ["slides-presenter", "slides-audience", "slides-notes"] }));
-        return () => {
-            void removeKeys.remove().catch(console.error);
-            if (keyboardJumpTimeout.current) {
-                clearTimeout(keyboardJumpTimeout.current);
-            }
-        };
-    }, [closeAudience, keyboardJump$, presenter$, audienceOpen]);
-    useEffect(() => {
         if (!audienceOpen) return;
         const registration = ownRegistration(preventSleep({ reason: "Presenting a slide deck", kind: "display" }));
         return () => { void registration.remove().catch(console.error); };
@@ -591,6 +558,7 @@ export function PresenterWindow() {
         }
     }, []);
     return (<NotesEditingBoundary style={styles.root}>
+      {["slides-presenter", "slides-audience", "slides-notes"].map(windowId => <PresenterKeyboard key={windowId} windowId={windowId} editingDeck={editingDeck} presenter$={presenter$} keyboardJump$={keyboardJump$} audienceOpen={audienceOpen} closeAudience={closeAudience} jumpTimeout={jumpTimeout}/>) }
       {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={finishEditing}/> : <>
       <ConnectedPresenterToolbar presenter$={presenter$} audienceOpen={audienceOpen} canEditDeck={Boolean(deckPath)} onEditDeck={() => setEditingDeck(true)} onDisplayChange={selectDisplay} onModeChange={selectMode} onStart={startAudience} onStop={stopAudience}/>
       <PresenterDeckContent keyboardJump$={keyboardJump$} presenter$={presenter$} onNotesEditingChange={setNotesEditing} onSaveNotes={saveSpeakerNotes}/>

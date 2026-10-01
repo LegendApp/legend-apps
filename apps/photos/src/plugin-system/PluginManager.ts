@@ -53,13 +53,11 @@ export function registerPlugin(plugin: DisplayPlugin | SourcePlugin): void {
           }
           HotkeyMetadata[hotkeyName as HotkeyName] = metadata;
 
-          // Set default key code if provided and not already set by user
-          if (hotkeyValue.defaultKeyCode !== undefined) {
-            const currentKeyCode = hotkeys$[hotkeyName as HotkeyName].get();
-
-            // Only set the default if the hotkey doesn't exist or has been reset to default
-            if (currentKeyCode === undefined) {
-              hotkeys$[hotkeyName as HotkeyName].set(hotkeyValue.defaultKeyCode);
+          // Preserve explicitly unassigned bindings as well as user edits.
+          if (hotkeyValue.defaultBinding !== undefined) {
+            const currentBinding = hotkeys$[hotkeyName as HotkeyName].get();
+            if (currentBinding === undefined) {
+              hotkeys$[hotkeyName as HotkeyName].set(hotkeyValue.defaultBinding);
             }
           }
         }
@@ -125,7 +123,11 @@ export function setPluginEnabled(pluginId: string, enabled: boolean): void {
     if (plugin.type === 'display') {
       const displayDisplayPlugin = plugin as DisplayPlugin;
       if (displayDisplayPlugin.hotkeys) {
-        const unsub = onHotkeys(displayDisplayPlugin.hotkeys);
+        unregisterPluginHotkeys(pluginId);
+        const handlers = Object.fromEntries(Object.entries(displayDisplayPlugin.hotkeys).map(([name, value]) => (
+          [name, typeof value === "function" ? value : value.action]
+        )));
+        const unsub = onHotkeys(handlers);
         hotkeyUnsubscribers.set(pluginId, unsub);
       }
     }

@@ -217,11 +217,12 @@ function FullscreenSession({ photo }: { photo: PhotoInfo }) {
     onDoubleClick: closeFullscreen,
   });
 
+  const shortcutsEnabled = useValue(isOpenOrClosing$);
   useOnHotkeys({
     'Close Photo': closeFullscreen,
     'Close Photo-2': closeFullscreen,
     'Toggle Filmstrip': () => settings$.state.showFilmstrip.toggle(),
-  });
+  }, shortcutsEnabled);
 
   return (
     <AnimatedView

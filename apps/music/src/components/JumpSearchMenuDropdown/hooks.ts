@@ -1,13 +1,21 @@
-import { ownRegistration } from "@legend-apps/runtime-utils";
+import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { playlistNavigationState$ } from "../../state/playlistNavigationState";
-import { addKeyboardListener, hasModifier, type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
+import { hasModifier, type KeyboardEvent, KeyCodes } from "../../systems/keyboard/KeyboardManager";
 import type { LibraryItem } from "../../systems/LibraryState";
 import type { LocalPlaylist, LocalTrack } from "../../systems/LocalMusicState";
 import { getQueueAction, type QueueAction } from "../../utils/queueActions";
+
+const dropdownHotkeyRouter = createHotkeyRouter();
+const dropdownEscapeDefinitions = [{ id: "escape", title: "Close Search", defaultBindings: ["Escape"], allowExtraModifiers: true }];
+const dropdownNavigationDefinitions = [
+    { id: "down", title: "Next Result", defaultBindings: ["Down"], allowExtraModifiers: true, repeat: true },
+    { id: "up", title: "Previous Result", defaultBindings: ["Up"], allowExtraModifiers: true, repeat: true },
+    { id: "submit", title: "Open Result", defaultBindings: ["Enter"], allowExtraModifiers: true },
+];
 
 export type SearchResult =
     | { type: "track"; item: LocalTrack }
@@ -182,67 +190,24 @@ export function useDropdownKeyboardNavigation({
         });
     }, [highlightedIndex$, isOpen, resultsLength]);
 
-    useEffect(() => {
-        const down = ownRegistration(addKeyboardListener("down", (event) => {
-            updateModifierState(event);
-
-            if (!isOpen || resultsLength === 0) {
-                return false;
-            }
-
-            if (event.keyCode === KeyCodes.KEY_ESCAPE) {
-                onEscape?.();
+    useRoutedHotkeys({
+        router: dropdownHotkeyRouter, definitions: dropdownEscapeDefinitions,
+        scope: { kind: "window", windowId: "main" }, enabled: isOpen,
+        handlers: { escape: () => { onEscape?.(); resetModifiers(); } }, onError: console.error,
+    });
+    useRoutedHotkeys({
+        router: dropdownHotkeyRouter, definitions: dropdownNavigationDefinitions,
+        scope: { kind: "window", windowId: "main" }, enabled: isOpen && resultsLength > 0,
+        handlers: {
+            down: () => highlightedIndex$.set(prev => prev < 0 ? 0 : (prev + 1) % resultsLength),
+            up: () => highlightedIndex$.set(prev => prev < 0 ? resultsLength - 1 : (prev - 1 + resultsLength) % resultsLength),
+            submit: ({ event }) => {
+                updateModifierState(event);
+                onSubmit(Math.max(0, highlightedIndex$.peek()), getQueueAction({ modifierState: modifierStateRef.current }));
                 resetModifiers();
-                return true;
-            }
-
-            if (event.keyCode === KeyCodes.KEY_DOWN) {
-                highlightedIndex$.set((prev) => {
-                    if (prev < 0) {
-                        return 0;
-                    }
-                    return (prev + 1) % resultsLength;
-                });
-                return true;
-            }
-
-            if (event.keyCode === KeyCodes.KEY_UP) {
-                highlightedIndex$.set((prev) => {
-                    if (prev < 0) {
-                        return resultsLength - 1;
-                    }
-                    return (prev - 1 + resultsLength) % resultsLength;
-                });
-                return true;
-            }
-
-            if (event.keyCode === KeyCodes.KEY_RETURN && resultsLength > 0) {
-                const action = getQueueAction({
-                    modifierState: modifierStateRef.current,
-                });
-                const highlightedIndex = highlightedIndex$.peek();
-                const index = highlightedIndex >= 0 ? highlightedIndex : 0;
-                onSubmit(index, action);
-                resetModifiers();
-                return true;
-            }
-
-            return false;
-        }));
-
-        const up = ownRegistration(addKeyboardListener("up", (event) => {
-            updateModifierState(event);
-            if (event.modifiers === 0) {
-                resetModifiers();
-            }
-            return false;
-        }));
-
-        return () => {
-            void down.remove().catch(console.error);
-            void up.remove().catch(console.error);
-        };
-    }, [highlightedIndex$, isOpen, onEscape, onSubmit, resetModifiers, resultsLength, updateModifierState]);
+            },
+        }, onError: console.error,
+    });
 
     return {
         highlightedIndex$,

@@ -1,3 +1,4 @@
+import { diffHotkeyRouter } from "./diffHotkeys";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { SidebarSplitView, type SidebarSplitViewResizeEvent, } from "@legendapp/spark/ui/split-view";
@@ -5,7 +6,7 @@ import { runCommand } from "@legendapp/spark/processes";
 import { DiffHorizontalScroller, DiffMergeNativePane, DiffNativeRowConfig, loadUnifiedDiff, loadUnifiedDiffFile, loadUnifiedDiffFromUrl, startGitFolderDiff, startUnifiedDiffFromUrl, type DiffDocument, type DiffFileSummary, type DiffLoadProgress, type DiffLoadResult, type DiffLoadSession, type DiffLoadStatus, type DiffLoadTiming, type DiffRenderRow, type DiffSideBySideFileHeader, type DiffSideBySideRenderRow, type DiffSyntaxStyle, } from "@legend-apps/diff-parser";
 import { DragDropView, type DropEvent } from "@legendapp/spark/drag-drop";
 import { revealInFileManager } from "@legendapp/spark/files";
-import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { nowMs, type SyntaxStyleMap } from "@legend-apps/source-viewer";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
@@ -238,72 +239,13 @@ function clearDiffMergeDraftFlag(file: DiffMergeConflictFile) {
 function getUnsavedDiffMergeDraftFiles(mergeState: DiffMergeState) {
     return mergeState.status === "ready" ? mergeState.files.filter((file) => file.hasUnsavedDraft) : [];
 }
-function isSaveKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const saveModifiers = KeyCodes.MODIFIER_COMMAND;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_S && (event.modifiers & relevantModifiers) === saveModifiers;
-}
-function isPasteKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const pasteModifiers = KeyCodes.MODIFIER_COMMAND;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_V && (event.modifiers & relevantModifiers) === pasteModifiers;
-}
-function isSearchKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const searchModifiers = KeyCodes.MODIFIER_COMMAND;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_F && (event.modifiers & relevantModifiers) === searchModifiers;
-}
-function isFileJumpKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const jumpModifiers = KeyCodes.MODIFIER_COMMAND;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_P && (event.modifiers & relevantModifiers) === jumpModifiers;
-}
-function isSearchNextKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const nextModifiers = KeyCodes.MODIFIER_COMMAND;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === nextModifiers;
-}
-function isSearchPreviousKeyEvent(event: {
-    keyCode: number;
-    modifiers: number;
-}) {
-    const previousModifiers = KeyCodes.MODIFIER_COMMAND | KeyCodes.MODIFIER_SHIFT;
-    const relevantModifiers = KeyCodes.MODIFIER_COMMAND |
-        KeyCodes.MODIFIER_OPTION |
-        KeyCodes.MODIFIER_CONTROL |
-        KeyCodes.MODIFIER_SHIFT;
-    return event.keyCode === KeyCodes.KEY_G && (event.modifiers & relevantModifiers) === previousModifiers;
-}
+const saveDraftDefinitions = [{ id: "saveDraft", title: "Save Merge Drafts", defaultBindings: ["Cmd+S"] }];
+const pasteSourceDefinitions = [{ id: "pasteSource", title: "Open Clipboard Source", defaultBindings: ["Cmd+V"] }];
+const fileJumpDefinitions = [{ id: "fileJump", title: "Jump to File", defaultBindings: ["Cmd+P"] }];
+const searchNavigationDefinitions = [
+    { id: "previousSearch", title: "Previous Search Result", defaultBindings: ["Cmd+Shift+G"] },
+    { id: "nextSearch", title: "Next Search Result", defaultBindings: ["Cmd+G"] },
+];
 type DiffSidebarFileRowProps = {
     activeFileIndex$: Observable<number | null>;
     file: DiffFileSummary;
@@ -1864,6 +1806,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     const listRef = useRef<VirtualizedFixedDocumentListRef | null>(null);
     const inlineListIndexByFileIndexRef = useRef<ReadonlyMap<number, number>>(emptyDiffListIndexByFileIndex);
     const urlInputRef = useRef<TextInput | null>(null);
+    const [urlInputFocused, setUrlInputFocused] = useState(false);
     const loadRequestIdRef = useRef(0);
     const loadTraceRef = useRef<DiffLoadTrace | null>(null);
     const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
@@ -2703,16 +2646,15 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         }
         return canOpenClipboardSource;
     }, [loadSource, loadingSource$, setOpenErrorValue, state$, urlInputRef]);
-    useEffect(() => { const registration = ownRegistration(addKeyboardListener("down", (event) => {
-        let handled = false;
-        if (isSaveKeyEvent(event)) {
-            handled = saveMergeDraftsFromCommand();
-        }
-        else if (isPasteKeyEvent(event)) {
-            handled = openClipboardSourceFromStartScreen();
-        }
-        return handled;
-    }, { windowIds: [windowIdentifier] })); return () => { void registration.remove().catch(console.error); }; }, [openClipboardSourceFromStartScreen, saveMergeDraftsFromCommand, windowIdentifier]);
+    useRoutedHotkeys({
+        router: diffHotkeyRouter, definitions: saveDraftDefinitions, scope: { kind: "window", windowId: windowIdentifier },
+        enabled: hasUnsavedMergeDrafts, handlers: { saveDraft: saveMergeDraftsFromCommand }, onError: console.error,
+    });
+    useRoutedHotkeys({
+        router: diffHotkeyRouter, definitions: pasteSourceDefinitions, scope: { kind: "window", windowId: windowIdentifier },
+        enabled: state.status === "empty" && !isLoading && !urlInputFocused,
+        handlers: { pasteSource: openClipboardSourceFromStartScreen }, onError: console.error,
+    });
     const getCurrentMergeFileForResolve = useCallback((path: string) => {
         const existingDraft = mergeDraftsRef.current.get(path);
         if (existingDraft) {
@@ -3455,22 +3397,16 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
         });
         return activateSearchResult(nextIndex, results);
     }, [activateSearchResult, setSearchQuery, searchResults$, activeSearchResultIndex$]);
-    useEffect(() => { const registration = ownRegistration(addKeyboardListener("down", (event) => {
-        let handled = false;
-        if (isSearchKeyEvent(event)) {
-            handled = focusSearch();
-        }
-        else if (isFileJumpKeyEvent(event)) {
-            handled = focusFileSearch();
-        }
-        else if (isSearchPreviousKeyEvent(event)) {
-            handled = advanceSearchResult(-1);
-        }
-        else if (isSearchNextKeyEvent(event)) {
-            handled = advanceSearchResult(1);
-        }
-        return handled;
-    }, { windowIds: [windowIdentifier] })); return () => { void registration.remove().catch(console.error); }; }, [advanceSearchResult, focusFileSearch, focusSearch, windowIdentifier]);
+    useRoutedHotkeys({
+        router: diffHotkeyRouter, definitions: fileJumpDefinitions, scope: { kind: "window", windowId: windowIdentifier },
+        enabled: Boolean(loadingSource || (state.status === "loaded" && state.files.length)),
+        handlers: { fileJump: focusFileSearch }, onError: console.error,
+    });
+    const hasSearchResults = useValue(() => searchResults$.get().length > 0);
+    useRoutedHotkeys({
+        router: diffHotkeyRouter, definitions: searchNavigationDefinitions, scope: { kind: "window", windowId: windowIdentifier },
+        enabled: hasSearchResults, handlers: { previousSearch: () => advanceSearchResult(-1), nextSearch: () => advanceSearchResult(1) }, onError: console.error,
+    });
     const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
         activeFileIndex$.set(file.index);
         scrollToFile(file);
@@ -3629,7 +3565,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
           </View>)} sidebarBackgroundColor={diffPalette.sidebarBackground} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} splitPaneMetrics$={splitPaneMetrics$} syntaxAppearance={syntaxTheme.appearance}/>);
     }
     else {
-        body = (<DiffStartScreen backgroundColor={backgroundColor} borderColor={diffPalette.border} dangerColor={diffPalette.danger} foregroundColor={foregroundColor} isLoading={isLoading} loadingSource={loadingSource} mutedColor={mutedColor} onChangeUrlInput={startScreenController.onChangeUrlInput} onChooseFolder={openFolder} onCompareFiles={compareFiles} onOpenRecentSource={startScreenController.onOpenRecentSource} onOpenUrl={startScreenController.onOpenUrl} openErrorBody={startScreenOpenErrorBody} recentFilter={startScreenController.recentFilter} recentSources={startScreenController.recentSources} setRecentFilter={startScreenController.setRecentFilter} sidebarBackgroundColor={diffPalette.sidebarBackground} urlInput={startScreenController.urlInput} urlInputError={startScreenController.urlInputError} urlInputRef={urlInputRef}/>);
+        body = (<DiffStartScreen backgroundColor={backgroundColor} borderColor={diffPalette.border} dangerColor={diffPalette.danger} foregroundColor={foregroundColor} isLoading={isLoading} loadingSource={loadingSource} mutedColor={mutedColor} onChangeUrlInput={startScreenController.onChangeUrlInput} onChooseFolder={openFolder} onCompareFiles={compareFiles} onOpenRecentSource={startScreenController.onOpenRecentSource} onOpenUrl={startScreenController.onOpenUrl} openErrorBody={startScreenOpenErrorBody} recentFilter={startScreenController.recentFilter} recentSources={startScreenController.recentSources} setRecentFilter={startScreenController.setRecentFilter} sidebarBackgroundColor={diffPalette.sidebarBackground} urlInput={startScreenController.urlInput} urlInputError={startScreenController.urlInputError} urlInputRef={urlInputRef} onUrlInputFocusChange={setUrlInputFocused}/>);
     }
     return (<>
       <DiffWindowChromeController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}/>

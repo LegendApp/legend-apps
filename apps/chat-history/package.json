@@ -10,7 +10,7 @@
     "react-native-enriched-markdown": "^1.0.2",
     "uniwind": "^1.6.3",
     "@legendapp/state": "catalog:",
-    "@legendapp/spark": "0.0.1-next.2",
+    "@legendapp/spark": "catalog:",
     "@legend-apps/storage": "0.0.0"
   },
   "enriched-markdown": {

@@ -3,8 +3,8 @@ import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { act, fireEvent, render } from "@testing-library/react-native";
 
-const mockKeyDownListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string }) => boolean | void>();
-const mockKeyUpListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string }) => boolean | void>();
+const mockKeyDownListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string; captured?: boolean }) => boolean | void>();
+const mockKeyUpListeners = new Set<(event: { keyCode: number; modifiers: number ; key?: string; captured?: boolean }) => boolean | void>();
 
 jest.mock("@legendapp/spark/shortcuts/keyboard", () => {
   const actual = jest.requireActual("@legendapp/spark/shortcuts/keyboard");
@@ -67,7 +67,7 @@ describe("Diff hotkey settings", () => {
     expect(transitions).toEqual(["0:true", "0:false", "1:true"]);
     await act(() => {
       for (const listener of mockKeyDownListeners) {
-        listener({ keyCode: KeyCodes.KEY_ESCAPE, modifiers: 0, key: "\u001b" } as any);
+        listener({ keyCode: KeyCodes.KEY_ESCAPE, modifiers: 0, key: "\u001b", captured: true } as any);
       }
     });
     expect(transitions.at(-1)).toBe("1:false");
@@ -97,7 +97,7 @@ describe("Diff hotkey settings", () => {
       await act(() => {
         for (const listener of mockKeyDownListeners) {
           listener({
-            key: "k",
+            key: "k", captured: true,
             keyCode: KeyCodes.KEY_K,
             modifiers: KeyCodes.MODIFIER_COMMAND,
           });
@@ -106,7 +106,7 @@ describe("Diff hotkey settings", () => {
       await act(() => {
         for (const listener of mockKeyUpListeners) {
           listener({
-            key: "k",
+            key: "k", captured: true,
             keyCode: KeyCodes.KEY_K,
             modifiers: KeyCodes.MODIFIER_COMMAND,
           });

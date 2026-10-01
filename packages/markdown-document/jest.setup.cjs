@@ -179,6 +179,7 @@ jest.mock("react-native-enriched-markdown", () => {
     EnrichedMarkdownTextInput: React.forwardRef((props, ref) => {
       increment(inputRenderCounts, props.defaultValue);
       const inputInstance = React.useMemo(() => ({
+        blur: jest.fn(),
         focus: jest.fn(),
         getCaretRect: jest.fn(async () => ({ height: 18, width: 1, x: 0, y: 0 })),
         insertLink: jest.fn(),

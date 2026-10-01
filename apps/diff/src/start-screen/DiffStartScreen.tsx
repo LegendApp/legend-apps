@@ -1,6 +1,6 @@
 import { SegmentedControl } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
-import type { RefObject, ReactNode } from "react";
+import { useEffect, type RefObject, type ReactNode } from "react";
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { RecentDiffSource } from "../diffAppMetadata";
 import { getDiffFolderCompareBaseKey, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
@@ -37,6 +37,7 @@ export type DiffStartScreenProps = {
   loadingSource: DiffOpenSource | null;
   mutedColor: string;
   onChangeUrlInput: (text: string) => void;
+  onUrlInputFocusChange?: (focused: boolean) => void;
   onChooseFolder: () => void;
   onCompareFiles: () => void;
   onOpenRecentSource: (source: DiffOpenSource) => void;
@@ -236,6 +237,7 @@ export function DiffStartScreen({
   loadingSource,
   mutedColor,
   onChangeUrlInput,
+  onUrlInputFocusChange,
   onChooseFolder,
   onCompareFiles,
   onOpenRecentSource,
@@ -248,6 +250,7 @@ export function DiffStartScreen({
   urlInputError,
   urlInputRef,
 }: DiffStartScreenProps) {
+  useEffect(() => () => onUrlInputFocusChange?.(false), [onUrlInputFocusChange]);
   const filteredRecentSources = getFilteredRecentDiffSources(recentSources, recentFilter);
   const urlInputSource = urlInput.trim() ? normalizeDiffOpenSource(urlInput) : null;
   const isUrlLoading = sourcesMatch(loadingSource, urlInputSource);
@@ -323,6 +326,8 @@ export function DiffStartScreen({
                     autoCapitalize="none"
                     autoCorrect={false}
                     onChangeText={onChangeUrlInput}
+                    onFocus={() => onUrlInputFocusChange?.(true)}
+                    onBlur={() => onUrlInputFocusChange?.(false)}
                     onSubmitEditing={onOpenUrl}
                     placeholder="Paste GitHub URL or path"
                     placeholderTextColor={mutedColor}

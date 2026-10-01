@@ -24,7 +24,7 @@
     "react-native-worklets": "0.8.3",
     "typegpu": "^0.12.4",
     "uniwind": "^1.6.3",
-    "@legendapp/spark": "0.0.1-next.2",
+    "@legendapp/spark": "catalog:",
     "@legend-apps/storage": "0.0.0",
     "@legend-apps/runtime-utils": "0.0.0"
   },

@@ -1,6 +1,4 @@
-import { loadHotkeys } from "../systems/keyboard/hotkeySerialization";
-import type { KeyboardEventCodeHotkey } from '../systems/keyboard/Keyboard';
-import { KeyCodes, KeyText, keyCodeFromText } from '../systems/keyboard/KeyboardManager';
+import type { HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import { createJSONManager } from '../utils/JSONManager';
 import { syncState } from '@legendapp/state';
 import { observable } from '@legendapp/state';
@@ -8,25 +6,25 @@ import { observable } from '@legendapp/state';
 // Default hotkey settings
 const DEFAULT_HOTKEYS = {
   // Photo navigation
-  Left: KeyCodes.KEY_LEFT,
-  Right: KeyCodes.KEY_RIGHT,
-  Up: KeyCodes.KEY_UP,
-  Down: KeyCodes.KEY_DOWN,
+  Left: 'Left',
+  Right: 'Right',
+  Up: 'Up',
+  Down: 'Down',
 
   // Column adjustments
-  'Decrease Columns': KeyCodes.KEY_MINUS,
-  'Increase Columns': KeyCodes.KEY_EQUALS,
+  'Decrease Columns': '-',
+  'Increase Columns': '=',
 
   // Photo actions
-  'Open Photo': KeyCodes.KEY_RETURN,
-  'Close Photo': KeyCodes.KEY_ESCAPE,
-  'Close Photo-2': KeyCodes.KEY_RETURN,
-  'Toggle Filmstrip': KeyCodes.KEY_F,
+  'Open Photo': 'Enter',
+  'Close Photo': 'Escape',
+  'Close Photo-2': 'Enter',
+  'Toggle Filmstrip': 'F',
 
   // UI controls
-  Sidebar: KeyCodes.KEY_S,
-  Settings: KeyCodes.KEY_COMMA,
-  Help: KeyCodes.KEY_SLASH,
+  Sidebar: 'S',
+  Settings: ',',
+  Help: '/',
 } as const;
 
 export type HotkeyName = keyof typeof DEFAULT_HOTKEYS;
@@ -85,35 +83,16 @@ export const HotkeyMetadata: Record<HotkeyName, { description: string; repeat?: 
 };
 
 // Create the hotkeys manager
-export const hotkeys$ = createJSONManager<Record<HotkeyName, KeyboardEventCodeHotkey>>({
+export const hotkeys$ = createJSONManager<Record<HotkeyName, HotkeyValue>>({
   filename: 'hotkeys.json',
   initialValue: DEFAULT_HOTKEYS,
   saveDefaultToFile: true,
-  transform: {
-    load: (value: Record<string, string | number>) => loadHotkeys(value, keyCodeFromText),
-    save: (value: Record<string, string>) => {
-      return Object.fromEntries(
-        Object.entries(value).map(([key, val]) => {
-          const vals = `${val}`.split('+');
-          // Add the main key text
-          const parts = vals.map((v) => {
-            if (KeyText[+v]) {
-              return KeyText[+v];
-            }
-            return +v;
-          });
 
-          // Join with + or return empty string if no parts
-          return [key, parts.join('+')];
-        })
-      );
-    },
-  },
 });
 
 export const isHotkeysLoaded$ = observable(() => !!syncState(hotkeys$).isPersistLoaded.get());
 
-export function getHotkey(name: HotkeyName): KeyboardEventCodeHotkey {
+export function getHotkey(name: HotkeyName): HotkeyValue {
   return hotkeys$[name].get();
 }
 

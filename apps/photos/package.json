@@ -8,7 +8,7 @@
     "@legendapp/list": "catalog:",
     "@legendapp/motion": "catalog:",
     "@legendapp/state": "catalog:",
-    "@legendapp/spark": "0.0.1-next.2",
+    "@legendapp/spark": "catalog:",
     "react": "catalog:",
     "react-native": "catalog:",
     "uniwind": "^1.6.3",

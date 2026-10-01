@@ -130,6 +130,7 @@ export type MarkdownDocumentCommands = {
 };
 
 export type MarkdownDocumentCommandState = {
+  canCommitAndBlur: boolean;
   canRedo: boolean;
   canUndo: boolean;
 };

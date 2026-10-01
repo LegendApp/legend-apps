@@ -1830,10 +1830,16 @@ describe("MarkdownDocument native row editor", () => {
 it("updates native selection offsets without rendering the document owner", async () => {
   const renderSpy = jest.spyOn(MarkdownDocument as unknown as { render: (...args: unknown[]) => unknown }, "render");
   const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "alpha"), block("b", 1, "bravo")]));
+  const onCommandStateChange = jest.fn();
+  const commands = React.createRef<MarkdownDocumentCommands>();
   let renderer!: TestRenderer.ReactTestRenderer;
   try {
-    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />); });
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" onCommandStateChange={onCommandStateChange} savePolicy={{ autosave: false }} />); });
     await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "b", markdown: "bravo", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    expect(onCommandStateChange.mock.calls.at(-1)?.[0].canCommitAndBlur).toBe(true);
     const send = async (offset: number) => {
       const selection = {
         anchor: { blockId: "a", index: 0, offset: 1, beforeMarkdown: "a", afterMarkdown: "lpha" },
@@ -1843,12 +1849,17 @@ it("updates native selection offsets without rendering the document owner", asyn
       await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: JSON.stringify(selection), dragging: true } }));
     };
     await send(0);
+    expect(onCommandStateChange.mock.calls.at(-1)?.[0].canCommitAndBlur).toBe(false);
+    expect(commands.current!.commitAndBlurActiveBlock()).toBe(false);
+    onCommandStateChange.mockClear();
     renderSpy.mockClear();
     for (const offset of [1, 2, 3, 4, 5]) await send(offset);
     expect(JSON.parse(nativeHost(renderer).props.textSelectionJson).focus.offset).toBe(5);
     expect(renderSpy).not.toHaveBeenCalled();
+    expect(onCommandStateChange).not.toHaveBeenCalled();
     await act(async () => nativeHost(renderer).props.onTextSelectionChange({ nativeEvent: { json: "", dragging: false } }));
     expect(nativeHost(renderer).props.textSelectionJson).toBe("");
+    expect(onCommandStateChange.mock.calls.at(-1)?.[0].canCommitAndBlur).toBe(true);
     expect(renderSpy).toHaveBeenCalled();
   } finally {
     if (renderer) await act(async () => renderer.unmount());

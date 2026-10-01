@@ -27,7 +27,7 @@ const mockReloadDocument = jest.fn();
 const mockCheckForExternalChanges = jest.fn(async () => {});
 const mockSessionState$ = observable<MarkdownDocumentSessionState>({
   conflict: null,
-  commandState: { canRedo: false, canUndo: false },
+  commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
   documentSource: "untitled",
   filename: "test.md",
   isDirty: false,
@@ -157,7 +157,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockUseMarkdownWindowCloseRequest.mockClear();
     mockSessionState$.assign({
       conflict: null,
-      commandState: { canRedo: false, canUndo: false },
+      commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
       documentSource: "untitled",
       filename: "test.md",
       isDirty: false,

@@ -59,7 +59,6 @@ jest.mock("@legend-apps/storage", () => {
 
 jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
   ...jest.requireActual("@legendapp/spark/shortcuts/keyboard"),
-  addKeyboardListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
   createModifierMask: (...modifiers) => modifiers.reduce((mask, modifier) => mask | modifier, 0),
   hasModifier: (event, modifier) => (event.modifiers & modifier) === modifier,
   KeyCodes: {

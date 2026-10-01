@@ -4,7 +4,6 @@ import type { DisplayPlugin, PhotoPluginProps } from '../plugin-system/PluginTyp
 import type { PhotoInfo } from '../systems/FileManager';
 import { type PhotoMetadataItem, photoMetadatas$, updateMetadata } from '../systems/PhotoMetadata';
 import { state$ } from '../systems/State';
-import { KeyCodes } from '../systems/keyboard/KeyboardManager';
 import type { Observable } from '@legendapp/state';
 import { useValue } from '@legendapp/state/react';
 import React from 'react';
@@ -97,17 +96,17 @@ export const PluginFlagReject: DisplayPlugin = {
     'Toggle Flag': {
       action: toggleFlagCurrentPhoto,
       description: 'Toggle flag on the selected photo',
-      defaultKeyCode: KeyCodes.KEY_SPACE,
+      defaultBinding: "Space",
     },
     'Toggle Flag-2': {
       action: toggleFlagCurrentPhoto,
       description: 'Toggle flag on the selected photo',
-      defaultKeyCode: KeyCodes.KEY_P,
+      defaultBinding: "P",
     },
     'Toggle Reject': {
       action: toggleRejectCurrentPhoto,
       description: 'Toggle reject status on the selected photo',
-      defaultKeyCode: KeyCodes.KEY_X,
+      defaultBinding: "X",
     },
   },
 };

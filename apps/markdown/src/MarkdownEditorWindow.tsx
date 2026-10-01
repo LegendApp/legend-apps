@@ -169,6 +169,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
 
   useMarkdownKeyboardShortcuts({
     documentCommandsRef: session.documentCommandsRef,
+    sessionState$: session.sessionState$,
   });
 
   useMarkdownMenus({

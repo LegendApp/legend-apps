@@ -4608,6 +4608,22 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("publishes Escape ownership only while a block can commit and blur", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const onCommandStateChange = jest.fn();
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter, onCommandStateChange });
+    expect(onCommandStateChange.mock.calls.at(-1)?.[0].canCommitAndBlur).toBe(true);
+    await act(async () => {
+      expect(commandsRef.current?.commitAndBlurActiveBlock()).toBe(true);
+    });
+    await flushPromises();
+    expect(onCommandStateChange.mock.calls.at(-1)?.[0].canCommitAndBlur).toBe(false);
+    expect(editorInputs(renderer)).toHaveLength(0);
+    expect(commandsRef.current?.commitAndBlurActiveBlock()).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
   it("publishes command state changes for undo and redo availability", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const onCommandStateChange = jest.fn();
@@ -4620,8 +4636,8 @@ describe("MarkdownDocument mounted editing", () => {
     });
     await flushPromises();
 
-    expect(onCommandStateChange).toHaveBeenCalledWith({ canRedo: false, canUndo: true });
-    expect(onCommandStateChange).toHaveBeenCalledWith({ canRedo: true, canUndo: false });
+    expect(onCommandStateChange).toHaveBeenCalledWith(expect.objectContaining({ canRedo: false, canUndo: true }));
+    expect(onCommandStateChange).toHaveBeenCalledWith(expect.objectContaining({ canRedo: true, canUndo: false }));
   });
 
   it("replaces a dragged block selection with typed text", async () => {

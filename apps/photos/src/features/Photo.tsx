@@ -47,7 +47,7 @@ export const Photo = ({ photo, index }: PhotoProps) => {
         openFullscreen();
       }
     },
-  });
+  }, isSelected);
 
   return (
     <View ref={photoRef} collapsable={false} className="aspect-square rounded-lg overflow-hidden">

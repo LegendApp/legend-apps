@@ -26,14 +26,17 @@ test("keyboard highlighting updates only the affected search rows and submits th
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const log = jest.spyOn(console, "error").mockImplementation(() => {});
     const keys = { KEY_ESCAPE: 1, KEY_DOWN: 2, KEY_UP: 3, KEY_RETURN: 4 };
-    let keyDown;
-    const removeDown = jest.fn(), removeUp = jest.fn();
-    const keyboard = {
-        addKeyboardListener: jest.fn(async (type, fn) => { if (type === "down") keyDown = fn; return { remove: type === "down" ? removeDown : removeUp }; }),
-        hasModifier: () => false,
-    };
+    const registrations = new Set();
+    const remove = jest.fn(async () => {});
+    const router = { register: jest.fn(async options => {
+        const entry = { ...options }; registrations.add(entry);
+        return { setEnabled: async enabled => { entry.enabled = enabled; }, remove: async () => { registrations.delete(entry); await remove(); } };
+    }) };
+    const commands = { ...jest.requireActual("@legendapp/spark/shortcuts/commands"), createHotkeyRouter: () => router };
+    const keyboard = { hasModifier: (event, bit) => Boolean(event.modifiers & bit) };
     const actions = { getQueueAction: () => "play-now" };
     const { useDropdownKeyboardNavigation } = compiled("../hooks.ts", {
+        "@legendapp/spark/shortcuts/commands": commands,
         "../../state/playlistNavigationState": {},
         "../../systems/keyboard/KeyboardManager": { ...keyboard, KeyCodes: keys },
         "../../utils/queueActions": actions,
@@ -62,17 +65,21 @@ test("keyboard highlighting updates only the affected search rows and submits th
     });
     const select = jest.fn();
     let tree;
-    const press = async (keyCode) => { await act(() => { expect(keyDown({ keyCode, modifiers: 0 })).toBe(true); }); };
+    const press = async (keyCode) => { await act(() => {
+        const id = ({ [keys.KEY_DOWN]: "down", [keys.KEY_UP]: "up", [keys.KEY_RETURN]: "submit", [keys.KEY_ESCAPE]: "escape" })[keyCode];
+        const entry = [...registrations].find(entry => entry.enabled && entry.handlers[id]);
+        expect(entry).toBeDefined(); entry.handlers[id]({ event: { keyCode, modifiers: 0 } });
+    }); };
     const highlighted = () => tree.root.findAllByType("item").findIndex((item) => item.props.className.includes("bg-white/20"));
     try {
         await act(async () => { tree = create(<JumpSearchMenuDropdown tracks={[]} playlists={[]} onSelectTrack={select} />); });
         expect(highlighted()).toBe(0);
         listRenders.mockClear(); trackRenders.mockClear();
-        const listenerRegistrations = keyboard.addKeyboardListener.mock.calls.length;
+        const listenerRegistrations = router.register.mock.calls.length;
         for (let index = 1; index <= 5; index++) { await press(keys.KEY_DOWN); expect(highlighted()).toBe(index); }
         expect(listRenders).not.toHaveBeenCalled();
         expect(trackRenders).not.toHaveBeenCalled();
-        expect(keyboard.addKeyboardListener).toHaveBeenCalledTimes(listenerRegistrations);
+        expect(router.register).toHaveBeenCalledTimes(listenerRegistrations);
         await press(keys.KEY_RETURN);
         expect(select).toHaveBeenLastCalledWith(results[5].item, "play-now");
         expect(handleOpenChange).toHaveBeenCalledWith(false);
@@ -90,6 +97,6 @@ test("keyboard highlighting updates only the affected search rows and submits th
         if (tree) await act(() => tree.unmount());
         log.mockRestore();
     }
-    expect(removeDown).toHaveBeenCalled();
-    expect(removeUp).toHaveBeenCalled();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(registrations.size).toBe(0);
 });

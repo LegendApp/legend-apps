@@ -6,6 +6,19 @@ checkout (or `LEGEND_SPARK_ROOT`) and generate consumers under
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
+The root and every app/package resolve Spark through the workspace catalog. Update
+its archive path after packing the sibling SDK, then run `bun install`. Do not add a relative file override: Bun resolves those
+incorrectly for workspace consumers. All consumers must use the same SDK.
+
+Local keyboard listeners are observational. Commands that consume keys use native
+registrations through `useRoutedHotkeys` or `router.register`, scoped to their window
+and explicitly enabled only while the UI owns the keys. Handler return values
+control Spark routing only. Photos stores portable bindings and uses Spark capture;
+Markdown leaves AppKit's Shift+Arrow selection unregistered and only claims Escape
+while its active block can commit and blur. Native document selections keep Escape
+to collapse the selection. Rebuild native hosts
+after the SDK update; Metro reload alone cannot load the new keyboard contract.
+
 After changing Spark's native SDK, run `npm run pack:local` there, then:
 
 ```sh

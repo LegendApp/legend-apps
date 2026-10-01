@@ -28,7 +28,7 @@ export interface EnhancedKeyInfo {
   action: () => void;
   description?: string;
   repeat?: boolean;
-  defaultKeyCode?: number; // Default key code to use for this hotkey
+  defaultBinding?: string; // Portable Spark accelerator
 }
 
 // SimpleKeyInfo is now just a function type or an EnhancedKeyInfo object

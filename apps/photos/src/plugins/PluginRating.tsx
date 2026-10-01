@@ -2,7 +2,6 @@ import { getOpenFolder } from '../plugin-system/FileSources';
 import type { DisplayPlugin, PhotoPluginProps } from '../plugin-system/PluginTypes';
 import { getMetadata, photoMetadatas$, updateMetadata } from '../systems/PhotoMetadata';
 import { state$ } from '../systems/State';
-import { KeyCodes } from '../systems/keyboard/KeyboardManager';
 import { useValue } from '@legendapp/state/react';
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -79,32 +78,32 @@ export const PluginRating: DisplayPlugin = {
     'Rate 0': {
       action: () => rateCurrentPhoto(0),
       description: 'Remove rating from current photo',
-      defaultKeyCode: KeyCodes.KEY_0,
+      defaultBinding: "0",
     },
     'Rate 1': {
       action: () => rateCurrentPhoto(1),
       description: 'Rate current photo 1 star',
-      defaultKeyCode: KeyCodes.KEY_1,
+      defaultBinding: "1",
     },
     'Rate 2': {
       action: () => rateCurrentPhoto(2),
       description: 'Rate current photo 2 stars',
-      defaultKeyCode: KeyCodes.KEY_2,
+      defaultBinding: "2",
     },
     'Rate 3': {
       action: () => rateCurrentPhoto(3),
       description: 'Rate current photo 3 stars',
-      defaultKeyCode: KeyCodes.KEY_3,
+      defaultBinding: "3",
     },
     'Rate 4': {
       action: () => rateCurrentPhoto(4),
       description: 'Rate current photo 4 stars',
-      defaultKeyCode: KeyCodes.KEY_4,
+      defaultBinding: "4",
     },
     'Rate 5': {
       action: () => rateCurrentPhoto(5),
       description: 'Rate current photo 5 stars',
-      defaultKeyCode: KeyCodes.KEY_5,
+      defaultBinding: "5",
     },
   },
 };

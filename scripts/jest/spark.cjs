@@ -27,7 +27,7 @@ module.exports = function withSpark(config) {
   for (const [subpath, entry] of Object.entries(manifest.exports)) {
     if (typeof entry !== "string" || !entry.endsWith(".ts")) continue;
     const source = fs.readFileSync(path.join(root, entry), "utf8");
-    const match = /^export \* from "([^"]+)";/.exec(source);
+    const match = /^export (?:\*|(?:type )?\{[^}]*\}) from "([^"]+)";/.exec(source);
     if (!match) continue;
     const target = resolveEntry(match[1]);
     const publicName = "@legendapp/spark" + subpath.slice(1);

@@ -13,6 +13,21 @@ const require = createRequire(import.meta.url);
 const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
 const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
 
+test("all workspace consumers resolve the catalog's current Spark SDK", () => {
+  const root = path.resolve(import.meta.dirname, "../..");
+  const repo = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
+  assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
+  const archives = JSON.parse(fs.readFileSync(path.join(sparkCheckout, "artifacts/packages/manifest.json"), "utf8"));
+  assert.ok(repo.catalog["@legendapp/spark"].endsWith(archives["@legendapp/spark"]));
+  for (const folder of ["apps", "packages"]) for (const name of fs.readdirSync(path.join(root, folder))) {
+    const file = path.join(root, folder, name, "package.json");
+    if (!fs.existsSync(file)) continue;
+    const dependency = JSON.parse(fs.readFileSync(file, "utf8")).dependencies?.["@legendapp/spark"];
+    if (dependency) assert.equal(dependency, "catalog:", `${folder}/${name} must share the current SDK`);
+  }
+});
+
 test("Metro excludes sibling consumer installs while retaining its dependencies and shared source", () => {
   const patterns = sparkMetroBlockList("code").map(pattern => new RegExp(pattern));
   const blocked = (file: string) => patterns.some(pattern => pattern.test(file));

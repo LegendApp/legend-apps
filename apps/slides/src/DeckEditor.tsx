@@ -6,7 +6,7 @@ import { saveFileDialog } from "@legendapp/spark/dialogs";
 import { readText, writeTextIfUnchanged, writeText } from "@legendapp/spark/files";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
-import { addKeyboardListener, KeyCodes } from "@legendapp/spark/shortcuts/keyboard";
+import { createHotkeyRouter } from "@legendapp/spark/shortcuts/commands";
 import { SourceDocumentEditor } from "@legend-apps/source-editor";
 import { setWindowOptions } from "@legendapp/spark/windows";
 import { useValue } from "@legendapp/state/react";
@@ -16,6 +16,8 @@ import { createDeckEditorSession, type DeckEditorSession, type DeckEditorSnapsho
 import { invalidateDeckBuild, previewDeckSource, setDraftReloadHandler } from "./deckLoader";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { slidesState$ } from "./slidesStore";
+const editorHotkeyRouter = createHotkeyRouter();
+const saveDefinitions = [{ id: "save", title: "Save Deck", defaultBindings: ["Cmd+S"], allowExtraModifiers: true }];
 function useEditorSession<T>(session: DeckEditorSession, select: (state: DeckEditorSnapshot) => T) {
     return useSyncExternalStore(session.subscribe, () => select(session.getSnapshot()), () => select(session.getSnapshot()));
 }
@@ -131,13 +133,10 @@ export function DeckEditor({ path, onExit }: {
                 ]);
             }));
         });
-        const removeKeys = ownRegistration(addKeyboardListener("down", (event) => {
-            if (event.keyCode === KeyCodes.KEY_S && (event.modifiers & KeyCodes.MODIFIER_COMMAND)) {
-                void autosave.flush();
-                return true;
-            }
-            return false;
-        }, { windowIds: ["slides-presenter"] }));
+        const removeKeys = ownRegistration(editorHotkeyRouter.register({
+            definitions: saveDefinitions, scope: { kind: "window", windowId: "slides-presenter" },
+            handlers: { save: () => { void autosave.flush(); } },
+        }));
         return () => {
             unregisterExit();
             void toolbar.remove().catch(console.error);
