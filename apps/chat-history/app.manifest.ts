@@ -24,11 +24,11 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-apps/storage",
-      "@legendapp/spark-ui",
-      "@legendapp/spark-updates",
+      "@legendapp/spark/ui",
+      "@legendapp/spark/updates",
       "@legend-apps/chat-history",
-      "@legendapp/spark-native-menu",
-      "@legendapp/spark-desktop-windows",
+      "@legendapp/spark/menus",
+      "@legendapp/spark/windows",
       "react-native-enriched-markdown",
     ],
     ios: [],

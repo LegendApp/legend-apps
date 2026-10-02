@@ -5,6 +5,7 @@ import fs from "node:fs";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
+import { expandSparkSubpath } from "./sparkSubpaths";
 import { prepareSparkWorkspace, sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
@@ -76,6 +77,17 @@ test("unknown declared native modules cannot be silently excluded", async () => 
   const manifest = await loadAppManifest("hello-world");
   const invalid = { ...manifest, nativeModules: { ...manifest.nativeModules, macos: ["@legend-apps/missing-native-module"] } };
   assert.throws(() => getActiveNativePackages(invalid, "macos"), /unregistered native package/);
+});
+
+test("manifests declare Spark modules by import subpath", async () => {
+  assert.deepEqual(expandSparkSubpath("@legendapp/spark/dialogs"), ["@legendapp/spark-file-dialog", "@legendapp/spark-message-dialog"]);
+  assert.equal(expandSparkSubpath("@legendapp/spark/system")[0], "@legendapp/spark-system");
+  assert.throws(() => expandSparkSubpath("@legendapp/spark/nope"), /Unknown Spark native module subpath/);
+  assert.deepEqual(expandSparkSubpath("react-native-webview"), ["react-native-webview"]);
+  for (const appId of appIds) {
+    const source = fs.readFileSync(path.resolve("apps", appId, "app.manifest.ts"), "utf8");
+    assert.doesNotMatch(source, /"@legendapp\/spark-[a-z-]+"/, `${appId} must declare Spark modules as @legendapp/spark/<subpath>`);
+  }
 });
 
 for (const appId of appIds) {

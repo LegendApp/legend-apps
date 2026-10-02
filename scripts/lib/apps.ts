@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { expandSparkSubpath } from "./sparkSubpaths";
 import type { AppManifest, AppPackageMetadata, Platform } from "./types";
 
 export const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -36,7 +37,16 @@ export async function loadAppManifest(appId: string): Promise<AppManifest> {
 
   const manifestPath = path.join(appsDir, appId, "app.manifest.ts");
   const mod = await import(manifestPath);
-  return mod.default as AppManifest;
+  const manifest = mod.default as AppManifest;
+  for (const name of Object.values(manifest.nativeModules).flat()) {
+    if (name.startsWith("@legendapp/spark-")) {
+      throw new Error(`${appId} declares the vendored package ${name}; use its import subpath, e.g. @legendapp/spark/system.`);
+    }
+  }
+  return {
+    ...manifest,
+    nativeModules: Object.fromEntries(platforms.map(platform => [platform, [...new Set((manifest.nativeModules[platform] ?? []).flatMap(expandSparkSubpath))]])) as AppManifest["nativeModules"],
+  };
 }
 
 export function loadAppPackageMetadata(appId: string): AppPackageMetadata {
