@@ -19,6 +19,8 @@ if (action === "prepare") console.log(project);
 else if (action === "install") runCommand("bun", ["install", "--linker", "hoisted"], { cwd: project, env });
 else {
   const cli = path.join(sparkCheckout, "scripts/spark.mjs");
+  // Required every run: `file:` links snapshot the package's file list, so new
+  // files under apps/ and packages/ only become resolvable after this install.
   if (["build", "build-release", "run", "start"].includes(action)) runCommand("bun", ["install", "--linker", "hoisted"], { cwd: project, env });
   if (action === "run") {
     runCommand("node", [cli, "build", "--dev"], { cwd: project, env });

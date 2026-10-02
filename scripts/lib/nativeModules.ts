@@ -1,11 +1,26 @@
 import fs from "node:fs";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import path from "node:path";
-import { loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
+import { appIds, appsDir, loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
 import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./types";
 
 export type NativeGraphMode = "dev" | "release";
+
+/**
+ * Registry native modules are installed per consuming app, so resolve their
+ * installed copy instead of pinning one app's `node_modules`. App copies run
+ * the package's install hooks; the root copy can be an unvendored extract.
+ */
+function installedNativePackage(name: string) {
+  for (const app of appIds) {
+    const root = path.join(appsDir, app, "node_modules", name);
+    if (fs.existsSync(path.join(root, "package.json"))) return path.resolve(root);
+  }
+  const root = path.join(rootDir, "node_modules", name);
+  if (fs.existsSync(path.join(root, "package.json"))) return path.resolve(root);
+  throw new Error(`${name} is not installed. Run bun install before building a native app.`);
+}
 
 export const nativePackages: NativePackage[] = [
   {name: "@legend-apps/color-picker", root: path.join(packagesDir, "color-picker"), platforms: ["macos"]},
@@ -212,32 +227,32 @@ export const nativePackages: NativePackage[] = [
   },
   {
     name: "react-native-enriched-markdown",
-    root: path.join(rootDir, "apps", "test-kitchen-sink", "node_modules", "react-native-enriched-markdown"),
+    root: installedNativePackage("react-native-enriched-markdown"),
     platforms: ["macos", "ios", "android"],
   },
   {
     name: "react-native-webview",
-    root: path.join(rootDir, "apps", "music", "node_modules", "react-native-webview"),
+    root: installedNativePackage("react-native-webview"),
     platforms: ["macos", "ios", "android"],
   },
   {
     name: "@shopify/react-native-skia",
-    root: path.join(rootDir, "apps", "slides", "node_modules", "@shopify", "react-native-skia"),
+    root: installedNativePackage("@shopify/react-native-skia"),
     platforms: ["macos"],
   },
   {
     name: "lottie-react-native",
-    root: path.join(rootDir, "apps", "slides", "node_modules", "lottie-react-native"),
+    root: installedNativePackage("lottie-react-native"),
     platforms: ["macos"],
   },
   ...["react-native-reanimated", "react-native-worklets"].map((name) => ({
     name,
-    root: path.join(rootDir, "apps", "slides", "node_modules", name),
+    root: installedNativePackage(name),
     platforms: ["macos"] as Platform[],
   })),
   {
     name: "react-native-webgpu",
-    root: path.join(rootDir, "apps", "slides", "node_modules", "react-native-webgpu"),
+    root: installedNativePackage("react-native-webgpu"),
     platforms: ["macos"],
   },
 ];
