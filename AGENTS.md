@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a Bun workspace for React Native desktop/mobile experiments. App entrypoints live in `apps/<app>/src`, and each app has an `app.manifest.ts` that declares bundle IDs, supported platforms, and native module links. Shared native modules live in `packages/<module>` with TypeScript specs in `src/`, plus platform implementations in `ios/`, `android/`, and sometimes `macos/`. The reusable host app is under `shell/`; generated native projects live in `shell/ios`, `shell/android`, and `shell/macos`. Build orchestration scripts are in `scripts/`.
+This is a Bun workspace for React Native desktop/mobile experiments. App entrypoints live in `apps/<app>/src`, and each app has an `app.manifest.ts` that declares bundle IDs, supported platforms, and native module links. Spark capabilities are declared with their import subpath (`@legendapp/spark/system`, not `@legendapp/spark-system`); `loadAppManifest` expands subpaths to the vendored packages autolinking needs. Shared native modules live in `packages/<module>` with TypeScript specs in `src/`, plus platform implementations in `ios/`, `android/`, and sometimes `macos/`. The reusable host app is under `shell/`; generated native projects live in `shell/ios`, `shell/android`, and `shell/macos`. Build orchestration scripts are in `scripts/`.
 
 ## Build, Test, and Development Commands
 
