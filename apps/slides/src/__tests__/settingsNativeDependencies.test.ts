@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import manifest from "../../app.manifest";
 import appPackage from "../../package.json";
+import { loadAppManifest } from "../../../../scripts/lib/apps";
 import { getActiveNativePackages } from "../../../../scripts/lib/nativeModules";
 
-test("Slides release includes the native dependencies used by shared settings", () => {
+test("Slides release includes the native dependencies used by shared settings", async () => {
+  const manifest = await loadAppManifest("slides");
   const releasePackages = getActiveNativePackages(manifest, "macos").map((pkg) => pkg.name);
   for (const dependency of [
     "@legendapp/spark-ui",
