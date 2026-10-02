@@ -92,7 +92,9 @@ function evaluateDeck(code: string) {
     }
     return hostModules[name];
   };
-  Function("require", "module", "exports", code)(deckRequire, module, module.exports);
+  // Worklet-compiled deck code references `global` (injected stack probes);
+  // window contexts only define `globalThis`, so bind it explicitly.
+  Function("require", "module", "exports", "global", code)(deckRequire, module, module.exports, globalThis);
   const component = module.exports.default;
   if (typeof component !== "function") {
     throw new Error("The compiled deck did not export an MDX component.");
