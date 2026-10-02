@@ -1,4 +1,3 @@
-import { getFilename } from "@legendapp/spark/app/documents";
 import { getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
 
 export function isCodePath(path: string) {
@@ -20,7 +19,10 @@ export function getCodeLanguage(path: string) {
   return getSyntaxLanguageForPath(path);
 }
 
-export { getFilename };
+export function getFilename(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+}
 
 export function getCodeRepresentedUri(path: string | null) {
   return path ? `file://${path.split("/").map(encodeURIComponent).join("/")}` : null;

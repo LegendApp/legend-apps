@@ -131,7 +131,7 @@
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark": "file:../legend-spark/artifacts/packages/legendapp-spark-0.0.1-next.2-b05ee47958d7.tgz"
+    "@legendapp/spark": "file:../legend-spark/artifacts/packages/legendapp-spark-0.0.1-next.2-4859b4dfaf17.tgz"
   },
   "dependencies": {
     "@legendapp/spark": "catalog:",

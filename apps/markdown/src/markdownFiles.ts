@@ -1,10 +1,11 @@
-import { getDirectory, getFilename, getLaunchDocumentPath, pathMatchesExtensions } from "@legendapp/spark/app/documents";
+import { getLaunchDocumentPath } from "@legendapp/spark/app/documents";
 import { markdownFileTypes } from "./appConstants";
 
 export const newMarkdownDocumentLaunchArgument = "--markdown-new-document";
 
 export function isMarkdownPath(path: string) {
-  return pathMatchesExtensions(path, markdownFileTypes);
+  const extension = path.split(".").pop()?.toLowerCase();
+  return extension !== undefined && markdownFileTypes.includes(extension);
 }
 
 export function shouldLaunchNewMarkdownDocument(launchArguments: string[] | undefined) {
@@ -18,4 +19,12 @@ export function getLaunchMarkdownFile(launchArguments: string[] | undefined) {
   });
 }
 
-export { getDirectory, getFilename };
+export function getDirectory(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex > 0 ? path.slice(0, separatorIndex) : undefined;
+}
+
+export function getFilename(path: string) {
+  const separatorIndex = path.lastIndexOf("/");
+  return separatorIndex >= 0 ? path.slice(separatorIndex + 1) : path;
+}

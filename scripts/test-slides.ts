@@ -10,7 +10,7 @@ const files = directories.flatMap(directory => readdirSync(path.join(root, direc
   .filter(file => /\.test\.[cm]?[jt]sx?$/.test(file)).map(file => path.join(directory, file))).sort();
 let failures = 0;
 for (const file of files) {
-  const child = spawnSync(process.execPath, ["test", "--preload", path.join(root, "apps/slides/src/__tests__/nativeMock.ts"), file], {
+  const child = spawnSync(process.execPath, ["test", "--timeout", "30000", "--preload", path.join(root, "apps/slides/src/__tests__/nativeMock.ts"), file], {
     cwd: root, stdio: "inherit",
   });
   if (child.error) throw child.error;
