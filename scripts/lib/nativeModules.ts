@@ -66,6 +66,11 @@ export const nativePackages: NativePackage[] = [
     platforms: ["macos"],
   },
   {
+    name: "@legendapp/spark-system",
+    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/system"),
+    platforms: ["macos"],
+  },
+  {
     name: "@legend-apps/chat-history",
     root: path.join(packagesDir, "chat-history"),
     platforms: ["macos"],

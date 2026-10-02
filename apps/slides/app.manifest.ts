@@ -29,6 +29,7 @@ const manifest = {
       "@legend-apps/source-editor",
       "@legend-apps/syntax-parser",
       "@legendapp/spark-desktop-windows",
+      "@legendapp/spark-system",
       "@shopify/react-native-skia",
       "react-native-reanimated",
       "react-native-worklets",
