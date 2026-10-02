@@ -1,7 +1,6 @@
 import type { HostComponent, ViewProps } from "react-native";
 import type { DirectEventHandler, Double } from "react-native/Libraries/Types/CodegenTypes";
-import { codegenNativeComponent } from "react-native";
-import codegenNativeCommands from "react-native/Libraries/Utilities/codegenNativeCommands";
+import { codegenNativeCommands, codegenNativeComponent } from "react-native";
 
 type EditorFrameEvent = Readonly<{
   blockId: string;

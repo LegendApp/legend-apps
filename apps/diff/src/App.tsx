@@ -43,7 +43,6 @@ import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows, type
 LogBox.ignoreLogs([
   "Open debugger to view warnings.",
   "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Text/TextNativeComponent')",
-  "Deep imports from the 'react-native' package are deprecated ('react-native/Libraries/Utilities/codegenNativeCommands')",
 ]);
 
 registerDiffWindows();
