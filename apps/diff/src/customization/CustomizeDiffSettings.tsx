@@ -31,10 +31,17 @@ export function CustomizeDiffSettings() {
   useEffect(() => {
     void diffCustomization.initialize();
     let active = true;
+    setAvailability(undefined);
     setAvailabilityError(undefined);
     getAICommandAvailability().then(value => { if (active) setAvailability(value); }).catch(error => { if (active) setAvailabilityError(String(error)); });
     return () => { active = false; };
   }, [availabilityRequest]);
+
+  useEffect(() => {
+    if (!availability || busy || availability[state.history.tool]) return;
+    const tool = availability.codex ? "codex" : availability.claude ? "claude" : undefined;
+    if (tool) diffCustomization.setPreferences({ tool });
+  }, [availability, busy, state.history.tool]);
 
   async function generate() {
     await diffCustomization.generate(prompt, editingId);
@@ -45,14 +52,17 @@ export function CustomizeDiffSettings() {
     <SettingsSection first title={null}>
       <Text style={settingsTextStyle} className={`mx-4 my-3 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Describe a change to Diff’s viewer, start screen, or Customize App text color. Try it with sample data, then keep or revert it.</Text>
       <SettingsRow title="AI tool" description="Uses your installed, signed-in command-line tool." control={
-        <View className="flex-row gap-2">{(["codex", "claude"] as const).map(tool => <Action key={tool} title={`${state.history.tool === tool ? "✓ " : ""}${tool === "codex" ? "Codex" : "Claude"}`}
-          disabled={busy} onPress={() => diffCustomization.setPreferences({ tool })} />)}</View>
+        <View className="flex-row gap-2">{(["codex", "claude"] as const).map(tool => <Action key={tool} title={`${state.history.tool === tool && availability?.[tool] ? "✓ " : ""}${tool === "codex" ? "Codex" : "Claude"}`}
+          disabled={busy || !availability?.[tool]} onPress={() => diffCustomization.setPreferences({ tool })} />)}</View>
       } />
       {availability && !availability[state.history.tool] ? <View className="mx-4 my-2 flex-row items-center gap-3">
-        <Text style={settingsTextStyle} className={`flex-1 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Install {state.history.tool === "codex" ? "Codex" : "Claude"} and sign in to generate changes.</Text>
+        <Text style={settingsTextStyle} className={`flex-1 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Install Codex or Claude and sign in to generate changes.</Text>
         <Action title="Check Again" disabled={busy} onPress={() => setAvailabilityRequest(value => value + 1)} />
       </View> : null}
-      {availabilityError ? <Text className="mx-4 my-2 text-sm text-danger">{availabilityError}</Text> : null}
+      {availabilityError ? <View className="mx-4 my-2 flex-row items-center gap-3">
+        <Text className="flex-1 text-sm text-danger">{availabilityError}</Text>
+        <Action title="Check Again" disabled={busy} onPress={() => setAvailabilityRequest(value => value + 1)} />
+      </View> : null}
       {editingId ? <View className="mx-4 my-2 flex-row items-center justify-between gap-3">
         <Text style={settingsTextStyle} className={`flex-1 text-sm font-semibold${settingsTextColor ? "" : " text-text-primary"}`}>Editing {active?.changes.find(change => change.id === editingId)?.title}</Text>
         <Action title="Cancel Edit" disabled={busy} onPress={() => { setEditingId(undefined); setPrompt(""); }} />

@@ -9,9 +9,50 @@ const mockController = createDiffCustomizationController({
   validate: () => {}, openPreview: async () => {}, closePreview: async () => {}, prepareActivation: async () => true,
 });
 jest.mock("../diffCustomizationRuntime", () => ({ diffCustomization: mockController, getDiffCustomizationSettingsTextColor: () => "#58D6C7" }));
-jest.mock("@legendapp/spark/ai", () => ({ getAICommandAvailability: async () => ({ codex: true, claude: false, preferredTool: "codex" }) }));
+const mockGetAvailability = jest.fn();
+jest.mock("@legendapp/spark/ai", () => ({ getAICommandAvailability: () => mockGetAvailability() }));
 
 const { CustomizeDiffSettings } = require("../CustomizeDiffSettings") as typeof import("../CustomizeDiffSettings");
+
+beforeEach(async () => {
+  await mockController.initialize();
+  mockController.setPreferences({ tool: "codex" });
+  mockGetAvailability.mockReset().mockResolvedValue({ codex: true, claude: false });
+});
+
+it.each([
+  { codex: true, claude: false, selected: "claude", expected: "codex" },
+  { codex: false, claude: true, selected: "codex", expected: "claude" },
+  { codex: true, claude: true, selected: "claude", expected: "claude" },
+  { codex: false, claude: false, selected: "codex", expected: "codex" },
+] as const)("selects an available tool and disables unavailable choices: %j", async ({ codex, claude, selected, expected }) => {
+  mockController.setPreferences({ tool: selected });
+  mockGetAvailability.mockResolvedValue({ codex, claude });
+  const view = await render(<CustomizeDiffSettings />);
+  await act(async () => {});
+  expect(mockController.state$.history.tool.peek()).toBe(expected);
+  expect(view.getByLabelText(/Codex$/).props.disabled).toBe(!codex);
+  expect(view.getByLabelText(/Claude$/).props.disabled).toBe(!claude);
+  if (!codex && !claude) expect(view.getByText("Install Codex or Claude and sign in to generate changes.")).toBeTruthy();
+  await view.unmount();
+});
+
+it("disables choices while checking and selects the first available tool after a retry", async () => {
+  mockGetAvailability.mockRejectedValueOnce(new Error("Availability check failed"));
+  const view = await render(<CustomizeDiffSettings />);
+  await act(async () => {});
+  expect(view.getByLabelText(/Codex$/).props.disabled).toBe(true);
+  expect(view.getByLabelText(/Claude$/).props.disabled).toBe(true);
+  let resolveAvailability!: (value: { codex: boolean; claude: boolean }) => void;
+  mockGetAvailability.mockImplementationOnce(() => new Promise(resolve => { resolveAvailability = resolve; }));
+  await fireEvent.press(view.getByLabelText("Check Again"));
+  expect(view.getByLabelText(/Codex$/).props.disabled).toBe(true);
+  expect(view.getByLabelText(/Claude$/).props.disabled).toBe(true);
+  await act(async () => resolveAvailability({ codex: false, claude: true }));
+  expect(mockController.state$.history.tool.peek()).toBe("claude");
+  expect(view.getByLabelText(/Claude$/).props.disabled).toBe(false);
+  await view.unmount();
+});
 
 it("supports prompting, keeping, editing, inspecting and deleting a change through settings", async () => {
   const view = await render(<CustomizeDiffSettings />);
