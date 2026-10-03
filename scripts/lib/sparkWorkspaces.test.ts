@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import path from "node:path";
+import os from "node:os";
 import fs from "node:fs";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
@@ -14,11 +15,12 @@ import { diffMenuConfig } from "../../apps/diff/src/diffMenus";
 import { markdownMenuConfig } from "../../apps/markdown/src/markdownMenus";
 
 const require = createRequire(import.meta.url);
-const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
-const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
+const sdkRoot = fs.realpathSync(path.resolve("node_modules/@legendapp/spark"));
+const { toExpo } = require("@legendapp/spark/config");
+const { identity } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-desktop-config/identity.cjs"));
 
 for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenuConfig, markdown: markdownMenuConfig })) {
-  test(`${app} menus bind native commands without depending on display labels`, () => {
+  test(`${app} menus bind native commands without depending on display labels`, async () => {
     const { menuItems } = require(path.join(sparkCheckout, "packages/desktop-app/src/contracts/menu.ts"));
     const { composeWindowsMenus } = require(path.join(sparkCheckout, "packages/native-menu/src/windows-menus.ts"));
     const native = [
@@ -30,19 +32,25 @@ for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenu
     ];
     const contribution = menuItems(items, { types: ["action", "checkbox", "separator", "submenu", "role"], shortcuts: true, targeting: true }, "macos");
     const result = composeWindowsMenus(new Map([["native", native], [app, contribution]]));
+    const manifest = await loadAppManifest(app);
+    assert.equal(result.find((item: any) => item.target?.menu === "app").title, manifest.displayName);
     assert.equal(result.filter((item: any) => item.target?.menu === "file").length, 1);
     const file = result.find((item: any) => item.target?.menu === "file");
     assert.equal(file.items.filter((item: any) => item.role === "saveAs" || item.target?.role === "saveAs").length, 1);
   });
 }
 
-test("all workspace consumers resolve the catalog's current Spark SDK", () => {
+test("all workspace consumers resolve the catalog's selected Spark SDK", async () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const repo = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
   assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
-  const archives = JSON.parse(fs.readFileSync(path.join(sparkCheckout, "artifacts/packages/manifest.json"), "utf8"));
-  assert.ok(repo.catalog["@legendapp/spark"].endsWith(archives["@legendapp/spark"]));
+  const selectedSdk = path.resolve(root, repo.catalog["@legendapp/spark"].slice(5));
+  assert.ok(fs.existsSync(selectedSdk));
+  const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
+  const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
+  assert.equal(generated.dependencies["@legendapp/spark"], `file:${selectedSdk}`);
+  assert.equal(generated.overrides["@legendapp/spark"], `file:${selectedSdk}`);
   for (const folder of ["apps", "packages"]) for (const name of fs.readdirSync(path.join(root, folder))) {
     const file = path.join(root, folder, name, "package.json");
     if (!fs.existsSync(file)) continue;
@@ -94,7 +102,12 @@ for (const appId of appIds) {
   test(`Spark preserves ${appId} identity and explicit native graph`, async () => {
     const manifest = await loadAppManifest(appId);
     const config = sparkConfig(manifest);
-    const nativeIdentity = identity(toExpo(config).expo);
+    const expo = toExpo(config).expo;
+    const nativeIdentity = identity(expo);
+    assert.equal(expo.macos.infoPlist.CFBundleName, manifest.displayName);
+    for (const [key, value] of Object.entries(manifest.infoPlist?.macos ?? {})) {
+      assert.deepEqual(expo.macos.infoPlist[key], value);
+    }
     assert.deepEqual(nativeIdentity.SparkLifecycleConfiguration, config.macos.lifecycle);
     assert.equal(nativeIdentity.SparkProjectIdentifier, manifest.bundleIds.macos);
     assert.equal(config.projectId, manifest.bundleIds.macos);
@@ -110,6 +123,9 @@ for (const appId of appIds) {
     for (const [index, type] of (manifest.documentTypes?.macos ?? []).entries()) {
       assert.deepEqual(documents?.[index]?.CFBundleTypeExtensions, type.extensions);
       assert.equal(documents?.[index]?.LSHandlerRank, type.handlerRank ?? "Owner");
+      assert.deepEqual(documents?.[index]?.LSItemContentTypes, type.contentTypes);
+      assert.equal(documents?.[index]?.CFBundleTypeRole, type.role ?? "Editor");
+      assert.equal(documents?.[index]?.CFBundleTypeIconFile, type.iconFile);
     }
   });
 }
@@ -117,7 +133,7 @@ test("Spark uses native policy without replacing its application delegate", asyn
   const code = sparkConfig(await loadAppManifest("code"));
   assert.equal(code.macos.lifecycle.mainWindow.hidden, true);
   assert.deepEqual(code.macos.lifecycle.plugins, ["RNWindowManagerStartup", "RNRecentDocumentsStartup"]);
-  assert.equal("plugins" in code.expo, false);
+  assert.ok(code.expo.plugins!.every(plugin => Array.isArray(plugin) && plugin[0].endsWith("macosAppIcon.cjs")));
   const hello = sparkConfig(await loadAppManifest("hello-world"));
   assert.deepEqual(hello.macos.lifecycle.plugins, []);
   assert.equal(hello.macos.lifecycle.mainWindow.hidden, false);
@@ -126,7 +142,7 @@ test("Spark uses native policy without replacing its application delegate", asyn
   const diff = sparkConfig(await loadAppManifest("diff"));
   assert.equal(diff.macos.lifecycle.mainWindow.closeBehavior, "request");
   assert.equal(diff.expo.autolinking.exclude.includes("@legendapp/spark-desktop-links"), false);
-  assert.deepEqual(diff.expo.plugins, [path.resolve("packages/diff-parser/app.plugin.cjs")]);
+  assert.equal(diff.expo.plugins!.at(-1), path.resolve("packages/diff-parser/app.plugin.cjs"));
   assert.equal("plugins" in hello.expo, false);
 });
 
@@ -183,3 +199,30 @@ test("Photos native packages expose podspecs to the Apple autolinker", () => {
     assert.ok(fs.existsSync(path.join(root, config.dependency.platforms.ios.podspecPath)));
   }
 });
+
+for (const appId of ["slides", "code", "diff", "markdown", "chat-history", "photos"]) {
+  test(`Spark copies ${appId}'s original app icon through native generation`, async () => {
+    const config = sparkConfig(await loadAppManifest(appId));
+    const [pluginPath, options] = config.expo.plugins!.find(plugin => Array.isArray(plugin)) as [string, { source: string; hash: string }];
+    assert.match(options.hash, /^[a-f0-9]{64}$/);
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "legend-app-icon-"));
+    try {
+      const target = path.join(temporary, "macos/GeneratedApp/Assets.xcassets/AppIcon.appiconset");
+      fs.mkdirSync(target, { recursive: true });
+      fs.writeFileSync(path.join(target, "Contents.json"), '{"images":[]}');
+      const plugin = require(pluginPath);
+      const mod = plugin({ _internal: { projectRoot: sparkWorkspace("slides") } }, options);
+      const request = { platformProjectRoot: path.join(temporary, "macos") };
+      await mod.mods.macos.xcodeproj({ ...mod, modRequest: request });
+      await mod.mods.macos.xcodeproj({ ...mod, modRequest: request });
+      const catalog = JSON.parse(fs.readFileSync(path.join(target, "Contents.json"), "utf8"));
+      assert.ok(catalog.images.length > 0);
+      for (const image of catalog.images) {
+        assert.ok(image.filename);
+        assert.deepEqual(fs.readFileSync(path.join(target, image.filename)), fs.readFileSync(path.join(options.source, image.filename)));
+      }
+    } finally {
+      fs.rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+}

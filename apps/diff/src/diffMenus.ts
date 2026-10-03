@@ -5,7 +5,7 @@ import {
 export const diffMenuConfig: MenuItem[] = [
   { type: "submenu",
     id: "app",
-    label: "Application",
+    label: "Legend Diff",
     target: { menu: "app" },
     items: [
       { type: "action",

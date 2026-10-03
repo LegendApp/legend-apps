@@ -15,7 +15,7 @@ export const codeMenuConfig: MenuItem[] = [
   },
   { type: "submenu",
     id: "app",
-    label: "Application",
+    label: "Legend Code",
     target: { menu: "app" },
     items: [
       { type: "action",

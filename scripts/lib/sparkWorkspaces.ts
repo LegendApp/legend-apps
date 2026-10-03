@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import type { SparkApplicationConfig } from "@legendapp/spark/config";
 import path from "node:path";
 import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
@@ -31,6 +32,16 @@ function write(file: string, value: string | object) {
 
 /** Translate app identity and the explicit native module graph into Spark config. */
 export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "dev") {
+  const icon = [
+    path.join(appsDir, manifest.id, "macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset"),
+    path.join(appsDir, manifest.id, "AppIcon.appiconset"),
+  ].find(directory => fs.existsSync(directory));
+  const iconPlugin = icon ? [[path.join(rootDir, "scripts/lib/macosAppIcon.cjs"), {
+    source: icon,
+    // Include the asset contents in Spark's native preparation and build cache keys.
+    hash: createHash("sha256").update(fs.readdirSync(icon).sort().map(file =>
+      `${file}:${createHash("sha256").update(fs.readFileSync(path.join(icon, file))).digest("hex")}`).join("\n")).digest("hex"),
+  }] as [string, { source: string; hash: string }]] : [];
   const active = getActiveNativePackages(manifest, "macos");
   const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name).filter(name => name !== "@legendapp/spark-desktop-app" && !(name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length));
   // Keep unused Spark features
@@ -106,9 +117,11 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     include: active.map(pkg => pkg.name),
     expo: {
       slug: manifest.id,
-      ...(manifest.id === "photos" ? { plugins: [path.join(rootDir, "apps/photos/app.plugin.cjs")] } : {}),
-      ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? {
-        plugins: [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")],
+      ...((iconPlugin.length || manifest.nativeModules.macos.includes("@legend-apps/diff-parser")) ? {
+        plugins: [
+          ...iconPlugin,
+          ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")] : []),
+        ],
       } : {}),
       autolinking: { exclude: excluded },
     },
@@ -120,9 +133,13 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   const sdkManifest = path.join(sparkCheckout, "artifacts/packages/manifest.json");
   if (!fs.existsSync(sdkManifest)) throw new Error(`Pack the local Spark SDK first: cd ${sparkCheckout} && npm run pack:local`);
   const archives = json(sdkManifest) as Record<string, string>;
-  if (!archives["@legendapp/spark"]) throw new Error("The local SDK has no @legendapp/spark archive; repack Spark.");
-  const template = json(path.join(sparkCheckout, "packages/cli/templates/blank-typescript/package.json"));
   const repo = json(path.join(rootDir, "package.json"));
+  const sdk = repo.catalog["@legendapp/spark"];
+  if (typeof sdk !== "string" || !sdk.startsWith("file:")) throw new Error("Select a local Spark SDK archive in the workspace catalog.");
+  const selectedSdk = path.resolve(rootDir, sdk.slice(5));
+  if (!fs.existsSync(selectedSdk)) throw new Error(`The selected Spark SDK archive is missing: ${selectedSdk}`);
+  archives["@legendapp/spark"] = path.relative(path.dirname(sdkManifest), selectedSdk);
+  const template = json(path.join(rootDir, "node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
   const app = json(path.join(appsDir, manifest.id, "package.json"));
   const active = getActiveNativePackages(manifest, "macos");
   const excluded = new Set(getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name));

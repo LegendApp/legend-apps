@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
-import { sparkConfig, sparkCheckout } from "./lib/sparkWorkspaces";
+import { sparkConfig } from "./lib/sparkWorkspaces";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -78,12 +78,12 @@ async function verifyManifestUniqueness() {
 function verifySpark(manifest: AppManifest) {
   const config = sparkConfig(manifest);
   const require = createRequire(import.meta.url);
-  const { toExpo } = require(path.join(sparkCheckout, "packages/config-plugin/config.cjs"));
-  const { identity } = require(path.join(sparkCheckout, "packages/config-plugin/identity.cjs"));
+  const { toExpo } = require("@legendapp/spark/config");
+  const sdkRoot = fs.realpathSync(path.join(rootDir, "node_modules/@legendapp/spark"));
+  const { identity } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-desktop-config/identity.cjs"));
   const nativeIdentity = identity(toExpo(config).expo);
   assert.equal(nativeIdentity.SparkProjectIdentifier, manifest.bundleIds.macos);
   assert.deepEqual(nativeIdentity.SparkLifecycleConfiguration, config.macos.lifecycle);
-  const sdkRoot = fs.realpathSync(path.join(rootDir, "node_modules/@legendapp/spark"));
   const modules = new Map<string, string>();
   for (const pkg of getActiveNativePackages(manifest, "macos")) {
     assert.ok(!config.expo.autolinking.exclude.includes(pkg.name), `${pkg.name} is both included and excluded`);

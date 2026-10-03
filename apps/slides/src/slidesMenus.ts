@@ -4,7 +4,7 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
  useMenu({ id: "slides-presenter", items: [
       { type: "submenu",
         id: "app",
-        label: "Application",
+        label: "Legend Slides",
         target: { menu: "app" },
         items: [{ type: "action", id: "settings", target: { role: "settings" }, label: "Settings…", }],
       },

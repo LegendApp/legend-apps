@@ -1,7 +1,7 @@
 # Spark host migration
 
-The default macOS app commands use Spark from the sibling `../legend-spark`
-checkout (or `LEGEND_SPARK_ROOT`) and generate consumers under
+The default macOS app commands use the Spark SDK selected in the workspace
+catalog and generate consumers under
 `shell/.legend/spark/<app>`. The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
@@ -9,6 +9,15 @@ for the current API mapping and validation scope.
 The root and every app/package resolve Spark through the workspace catalog. Update
 its archive path after packing the sibling SDK, then run `bun install`. Do not add a relative file override: Bun resolves those
 incorrectly for workspace consumers. All consumers must use the same SDK.
+Generated consumers use the archive selected in the root catalog, its bundled
+CLI, and its template. Packing another SDK
+does not change that selection. Verification uses the installed SDK as well.
+
+App icon catalogs under `apps/<app>/macos/legendapp-shell-macos/Assets.xcassets`
+or `apps/<app>/AppIcon.appiconset` are copied into Spark's generated native
+project during prebuild. Their contents participate in the native build cache key.
+Application-menu contributions use the app's display name because publishing
+a label on the native app root replaces the host's initial title.
 
 Local keyboard listeners are observational. Commands that consume keys use native
 registrations through `useRoutedHotkeys` or `router.register`, scoped to their window
@@ -167,3 +176,27 @@ Diff additionally exposed the desktop backend's broken handling of URL scheme
 arrays. Spark now materializes its native URL associations before backend mods.
 The analyzer passes an absolute entry path so production exports also resolve
 correctly when Metro uses the containing workspace as its server root.
+
+## Identity audit — October 3, 2026
+
+Restored icon catalogs for Slides, Code, Diff, Markdown, and Chat History.
+Photos keeps its existing icon through the same prebuild plugin. Code, Diff,
+Markdown, and Slides publish their app display names on the native menu root.
+Generated hosts, the launcher CLI, templates, and configuration verification
+use the workspace-selected Spark SDK.
+
+The audit compared legacy host setup with migrated window/lifecycle policies,
+document and URL registrations, permission strings, update feeds, and release
+helper packaging. No additional confirmed omission was found in those settings.
+
+Validation: 30 Spark/launch tests, all declared app/platform configuration graphs,
+TypeScript, all 92 Slides test files, 22 Code viewer tests, 9 Diff CLI/restoration
+tests, and 92 Markdown app tests passed. Apple's asset compiler produced valid
+icons and bundle metadata for all six app catalogs.
+
+Slides was rebuilt as an arm64 macOS development app. Its bundle contains
+`AppIcon.icns`, `Assets.car`, and both icon plist keys. The running app loaded
+`showcase.mdx`, and its accessibility menu tree showed `Legend Slides`. Other
+apps were checked through source, configuration, tests, and icon compilation;
+their existing native binaries still need rebuilding to acquire these changes.
+This pass does not cover signed releases, Intel builds, or mobile UI acceptance.

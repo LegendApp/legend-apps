@@ -42,7 +42,7 @@ export const markdownMenuConfig: MenuItem[] = [
   },
   { type: "submenu",
     id: "app",
-    label: "Application",
+    label: "Legend Markdown",
     target: { menu: "app" },
     items: [
       { type: "action",

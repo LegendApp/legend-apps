@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import path from "node:path";
+import { createRequire } from "node:module";
 import { assertSupportedPlatform, resolveDevServerPort, withDefaultPortArg, loadAppManifest } from "./lib/apps";
-import { prepareSparkWorkspace, sparkCheckout } from "./lib/sparkWorkspaces";
+import { prepareSparkWorkspace } from "./lib/sparkWorkspaces";
 import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 
 const [appId, action = "prepare", ...extra] = process.argv.slice(2);
@@ -19,10 +20,10 @@ const env = {
 if (action === "prepare") console.log(project);
 else if (action === "install") runCommand("bun", ["install", "--linker", "hoisted"], { cwd: project, env });
 else {
-  const cli = path.join(sparkCheckout, "scripts/spark.mjs");
   // Required every run: `file:` links snapshot the package's file list, so new
   // files under apps/ and packages/ only become resolvable after this install.
   if (["build", "build-release", "run", "start"].includes(action)) runCommand("bun", ["install", "--linker", "hoisted"], { cwd: project, env });
+  const cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
   if (action === "run") {
     runCommand("node", [cli, "build", "--dev"], { cwd: project, env });
     const separator = extra.indexOf("--");
