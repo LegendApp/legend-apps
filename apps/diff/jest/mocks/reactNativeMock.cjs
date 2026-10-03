@@ -28,6 +28,7 @@ module.exports = {
   },
   Text: createComponent("Text"),
   TextInput: createComponent("TextInput"),
+  Switch: createComponent("Switch"),
   TurboModuleRegistry: {
     get: jest.fn(name => name === "NativeKeyboardManager" ? {
       addListener: jest.fn(), removeListeners: jest.fn(),

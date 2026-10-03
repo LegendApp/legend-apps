@@ -4,3 +4,4 @@ export const diffSettingsWindowIdentifier = "diff-settings";
 export const diffViewerWindowModuleName = "DiffViewerWindow";
 export const diffViewerWindowIdentifier = "diff-viewer";
 export const diffPrimaryWindowIdentifier = "main";
+export const diffCustomizationPreviewWindowIdentifier = "diff-customization-preview";

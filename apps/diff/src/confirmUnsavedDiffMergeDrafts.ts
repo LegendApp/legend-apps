@@ -1,7 +1,7 @@
 import { Alert } from "react-native";
 
 export type UnsavedDiffMergeDraftAction = "save" | "discard" | "cancel";
-export type UnsavedDiffMergeDraftReason = "close" | "quit" | "source";
+export type UnsavedDiffMergeDraftReason = "close" | "quit" | "source" | "customization";
 
 type ConfirmUnsavedDiffMergeDraftsOptions = {
   fileCount: number;
@@ -10,6 +10,7 @@ type ConfirmUnsavedDiffMergeDraftsOptions = {
 };
 
 export function getUnsavedDiffMergeDraftPrompt(reason: UnsavedDiffMergeDraftReason) {
+  if (reason === "customization") return "before applying app customizations?";
   if (reason === "quit") {
     return "before quitting Legend Diff?";
   }

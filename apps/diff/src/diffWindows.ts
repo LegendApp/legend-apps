@@ -33,6 +33,8 @@ function createDiffWindowsNavigator() {
 }
 export function registerDiffWindows() {
     if (DiffWindowsNavigator) return;
+    const { DiffCustomizationPreviewWindow } = require("./customization/DiffCustomizationViewer") as typeof import("./customization/DiffCustomizationViewer");
+    AppRegistry.registerComponent("DiffCustomizationPreview", () => DiffCustomizationPreviewWindow);
     const viewer: ComponentType<DiffViewerWindowProps> = (require("./DiffViewerWindowShell") as typeof import("./DiffViewerWindowShell")).DiffViewerWindowShell;
     AppRegistry.registerComponent(diffViewerWindowModuleName, () => (props: DiffViewerWindowProps) =>
         createElement(WindowProvider, { id: props.windowIdentifier ?? diffViewerWindowIdentifier, children: createElement(viewer, props) }));

@@ -1,6 +1,7 @@
 import { createObservableFile } from "@legend-apps/storage";
 import type { WindowBounds } from "@legendapp/spark/windows";
 import type { DiffOpenSource } from "./diffFiles";
+import { diffCustomizationPreviewWindowIdentifier } from "./appConstants";
 
 const maxRecentSources = 12;
 const maxSavedWindows = 20;
@@ -84,7 +85,7 @@ function normalizeSavedDiffWindow(window: SavedDiffWindow): SavedDiffWindow {
 export function getSavedDiffWindows() {
   const savedWindows = diffAppMetadata$.savedWindows.peek() ?? [];
   return savedWindows
-    .filter((window): window is SavedDiffWindow => Boolean(window?.id))
+    .filter((window): window is SavedDiffWindow => Boolean(window?.id) && window.id !== diffCustomizationPreviewWindowIdentifier)
     .map(normalizeSavedDiffWindow)
     .slice(0, maxSavedWindows);
 }
@@ -94,6 +95,7 @@ function setSavedDiffWindows(savedWindows: readonly SavedDiffWindow[]) {
 }
 
 export function upsertSavedDiffWindow(window: { id: string; source?: DiffOpenSource }) {
+  if (window.id === diffCustomizationPreviewWindowIdentifier) return;
   const existing = getSavedDiffWindows().filter((item) => item.id !== window.id);
   setSavedDiffWindows([
     normalizeSavedDiffWindow({

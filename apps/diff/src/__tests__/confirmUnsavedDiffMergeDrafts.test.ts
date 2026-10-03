@@ -5,5 +5,6 @@ describe("confirmUnsavedDiffMergeDrafts", () => {
     expect(getUnsavedDiffMergeDraftPrompt("close")).toBe("before closing?");
     expect(getUnsavedDiffMergeDraftPrompt("quit")).toBe("before quitting Legend Diff?");
     expect(getUnsavedDiffMergeDraftPrompt("source")).toBe("before opening another comparison?");
+    expect(getUnsavedDiffMergeDraftPrompt("customization")).toBe("before applying app customizations?");
   });
 });

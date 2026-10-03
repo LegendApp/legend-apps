@@ -2,9 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 module.exports = function (api) {
+  const publicPaths = ["EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE", "EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH", "EXPO_PUBLIC_LEGEND_DIFF_CUSTOMIZER_PATH"];
   api.cache.using(() => [
     process.env.LEGEND_APP || "",
-    process.env.EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE || "",
+    ...publicPaths.map(name => process.env[name] || ""),
   ].join("|"));
 
   const inlineLegendPublicPaths = ({ types: t }) => ({
@@ -17,7 +18,7 @@ module.exports = function (api) {
           && t.isIdentifier(node.object.object, { name: "process" })
           && t.isIdentifier(node.object.property, { name: "env" })
           && t.isIdentifier(node.property)
-          && node.property.name === "EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE"
+          && publicPaths.includes(node.property.name)
         ) {
           path.replaceWith(t.valueToNode(process.env[node.property.name]));
         }

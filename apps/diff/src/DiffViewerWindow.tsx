@@ -1,6 +1,5 @@
 import { diffHotkeyRouter } from "./diffHotkeys";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { ownRegistration } from "@legend-apps/runtime-utils";
 import { SidebarSplitView, type SidebarSplitViewResizeEvent, } from "@legendapp/spark/ui/split-view";
 import { runCommand } from "@legendapp/spark/processes";
 import { DiffHorizontalScroller, DiffMergeNativePane, DiffNativeRowConfig, loadUnifiedDiff, loadUnifiedDiffFile, loadUnifiedDiffFromUrl, startGitFolderDiff, startUnifiedDiffFromUrl, type DiffDocument, type DiffFileSummary, type DiffLoadProgress, type DiffLoadResult, type DiffLoadSession, type DiffLoadStatus, type DiffLoadTiming, type DiffRenderRow, type DiffSideBySideFileHeader, type DiffSideBySideRenderRow, type DiffSyntaxStyle, } from "@legend-apps/diff-parser";
@@ -13,7 +12,6 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { ensureTreeGrammarsForPaths, detectGrammar, getSyntaxTheme, highlightTreeString, type SyntaxRenderLine, type SyntaxStyle } from "@legend-apps/syntax-parser";
 import { DiffGrammarProgress } from "./viewer/DiffGrammarProgress";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { beforeWindowClose, addWindowListener } from "@legendapp/spark/windows";
 import { useWindowId } from "@legendapp/spark/windows";
 import { VirtualizedFixedDocumentList, type VirtualizedDocumentRowsState, type VirtualizedDocumentRequestOptions, type VirtualizedDocumentRequestReason, type VirtualizedDocumentVisibleRangeInfo, type VirtualizedFixedDocumentListRef, type VirtualizedFixedDocumentListRenderRowProps, } from "@legend-apps/virtualized-document";
 import { LegendList, type LegendListRenderItemProps, } from "@legendapp/list/react-native";
@@ -1772,7 +1770,7 @@ export function DiffViewerWindow(props?: DiffViewerWindowProps | null) {
       <DiffViewerWindowContent {...safeProps}/>
     </DiffViewerModelProvider>);
 }
-function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, source }: DiffViewerWindowProps) {
+function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }: DiffViewerWindowProps) {
     "use no memo";
     // React Compiler does not yet support the async try/finally workflows in this controller.
     const windowIdentifier = useWindowId();
@@ -2789,16 +2787,6 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, onClose, 
     }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
     prepareMergeDraftsForTransitionRef.current = prepareMergeDraftsForTransition;
     useEffect(() => registerDiffWindowExitPreparation(windowIdentifier, prepareMergeDraftsForTransition), [prepareMergeDraftsForTransition, windowIdentifier]);
-    useEffect(() => {
-        let active = true;
-        const subscription = ownRegistration(beforeWindowClose(windowIdentifier, async () => {
-            if (!active) return false;
-            try { return await prepareMergeDraftsForTransition("close"); }
-            catch (error) { const currentState = state$.peek(); if (currentState.status === "loaded") setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error))); return false; }
-        }));
-        const closed = ownRegistration(addWindowListener(windowIdentifier, "closed", () => { if (active) onClose?.(); }));
-        return () => { active = false; void subscription.remove().catch(console.error); void closed.remove().catch(console.error); };
-    }, [onClose, prepareMergeDraftsForTransition, setDocumentErrorValue, state$, windowIdentifier]);
     const openFolder = useCallback(async () => {
         if (!loadingSource$.peek()) {
             const currentState = state$.peek();

@@ -18,13 +18,21 @@ export function registerDiffWindowExitPreparation(
   };
 }
 
-export async function prepareDiffWindowsForAppExit() {
+export async function prepareDiffWindowsForTransition(reason: UnsavedDiffMergeDraftReason) {
   for (const prepareForExit of [...windowExitPreparations.values()]) {
-    if (!await prepareForExit("quit")) {
+    if (!await prepareForExit(reason)) {
       return false;
     }
   }
   return true;
+}
+
+export async function prepareDiffWindowForTransition(windowIdentifier: string, reason: UnsavedDiffMergeDraftReason) {
+  return await windowExitPreparations.get(windowIdentifier)?.(reason) ?? true;
+}
+
+export function prepareDiffWindowsForAppExit() {
+  return prepareDiffWindowsForTransition("quit");
 }
 
 export function installDiffAppExitHandler(reportError: (error: unknown) => void) {

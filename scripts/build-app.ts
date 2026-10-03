@@ -137,6 +137,12 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
       env: { SPARK_MACOS_ARCH: arch === "arm" ? "arm64" : "x64" },
     });
     const appPath = JSON.parse(fs.readFileSync(path.join(sparkWorkspace(appId), ".spark/release-build.json"), "utf8")).app as string;
+    if (appId === "diff") {
+      const helper = path.join(appPath, "Contents/Helpers/diff-customizer.helper");
+      runCommand("bun", ["scripts/package-diff-customizer.mjs", helper, arch === "arm" ? "arm64" : "x64"], { cwd: rootDir });
+      signSlidesCompiler(helper, getExistingCodeSignIdentity(appPath));
+      signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
+    }
     if (appId === "slides") {
       const compilerDirectory = path.join(appPath, "Contents/Helpers/slides-compiler.helper");
       fs.rmSync(compilerDirectory, { recursive: true, force: true });

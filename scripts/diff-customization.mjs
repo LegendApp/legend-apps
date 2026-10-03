@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { transformSync } from "@babel/core";
+import reactNativePreset from "@react-native/babel-preset";
 import { editableDiffFiles } from "../apps/diff/src/customization/diffCustomizationModel.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,7 +53,8 @@ export async function compileDiffCustomization(baseline, files) {
     entrypoints: ["/DiffViewerWindow.tsx"],
     target: "browser",
     format: "cjs",
-    define: { __DEV__: "false" },
+    jsx: { runtime: "automatic", development: false },
+    define: { __DEV__: "false", "process.env.NODE_ENV": '"production"' },
     plugins: [{ name: "diff-customization", setup(build) {
       build.onResolve({ filter: /.*/ }, (args) => {
         const relative = !args.importer ? args.path.slice(1) : args.path.startsWith(".") ? resolveImport(args.importer, args.path) : null;
@@ -75,7 +78,9 @@ export async function compileDiffCustomization(baseline, files) {
     } }],
   }).catch(error => { throw new Error(errors.join("\n") || String(error)); });
   if (!output.success) throw new Error(output.logs.map(String).join("\n"));
-  const code = await output.outputs[0].text();
+  const bundled = await output.outputs[0].text();
+  const code = transformSync(bundled, { filename: "diff-customization.js", babelrc: false, configFile: false,
+    presets: [[reactNativePreset, { enableBabelRuntime: false, unstable_transformProfile: "hermes-canary" }]], compact: false }).code;
   if (code.length > 2_000_000) throw new Error("The customization is too large.");
   return { baseId: baseline.baseId, code };
 }

@@ -38,6 +38,7 @@ import {
   setDiffManagedWindowRestorationEnabled,
 } from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows, type DiffViewerWindowOpenOptions } from "./diffWindows";
+import { diffCustomization } from "./customization/diffCustomizationRuntime";
 
 
 LogBox.ignoreLogs([
@@ -46,6 +47,7 @@ LogBox.ignoreLogs([
 ]);
 
 registerDiffWindows();
+void diffCustomization.initialize();
 const initialUrlPromise = Linking.getInitialURL().catch((error: unknown) => {
   reportDiffAppControllerError(error);
   return null;

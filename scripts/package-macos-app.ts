@@ -134,6 +134,7 @@ function signApp(appPath: string, entitlementsPath: string, options: PackageOpti
   }
 
   signSlidesCompiler(path.join(appPath, "Contents/Helpers/slides-compiler.helper"), identity);
+  signSlidesCompiler(path.join(appPath, "Contents/Helpers/diff-customizer.helper"), identity);
   runCommand("codesign", [...args, appPath]);
 }
 

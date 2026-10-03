@@ -16,8 +16,24 @@ Legend Diff is a macOS diff viewer built around native parsing and virtualized r
 - detect merge-conflict files, choose ours/theirs/both per conflict, preserve drafts, and save resolved files
 - install an `ldiff` shell command from Settings for opening Git diff arguments in the installed app
 - update release builds through the shared Sparkle updater
+- customize the viewer and start screen with prompts, reversible previews, and saved change stacks
 
 Legend Diff currently supports macOS only. Local repository comparisons require Git, and GitHub URL loading requires network access to the public `.diff` endpoint.
+
+## Customize App
+
+Settings → Customize App uses an installed, signed-in Codex or Claude CLI to turn a prompt into changes to the viewer and start screen. Generation produces a separate preview window with a sample diff. Keep activates the exact compiled preview; Revert leaves the current app unchanged. The optional automatic keep setting activates a preview after it renders successfully.
+
+Each kept version records the prompts, ordered edits, and compiled code. Add prompts to stack changes, or edit, disable, and delete an earlier change. Later edits replay against the revised stack; a dependency conflict stops the preview and leaves the current version intact. Saved versions can be previewed and restored without calling AI again. Restore Original App clears the active stack while retaining saved versions.
+
+Settings and the Keep/Revert controls remain outside customized code. Activation checks unsaved merge drafts, and render failures return to the original viewer. Preview file operations use the sample diff and block host mutation APIs, but generated JavaScript is trusted customization code rather than a security sandbox. Customizations use existing JavaScript and native capabilities; adding a native module requires a normal app build. Versions from an incompatible source baseline remain in history but cannot be activated.
+
+Development uses `scripts/diff-customization.mjs`; macOS packaging embeds the baseline and compiler in a signed helper. When adding imports to editable source files, regenerate the shared host map:
+
+```sh
+bun scripts/diff-customization.mjs --hosts
+bun test scripts/diff-customization.test.mjs
+```
 
 ## Run
 
@@ -82,3 +98,4 @@ Release notes come from `CHANGELOG.md`. Packaging is credentialed release work a
 - `src/DiffViewerWindow.tsx` is the main loaded-document, search, merge, and rendering surface.
 - `src/viewer/` contains loaded-document models, rows, search, and controller helpers.
 - `src/diffFiles.ts`, `src/diffCompareTargets.ts`, and `src/diffMerge.ts` define the supported source and merge workflows.
+- `src/customization/` owns prompt generation, strict stack replay, compiled snapshots, preview recovery, and settings.

@@ -49,8 +49,9 @@ import {
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
 import { setDiffManagedWindowRestorationEnabled } from "./diffWindowRestoration";
+import { CustomizeDiffSettings } from "./customization/CustomizeDiffSettings";
 
-type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine";
+type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine" | "customize";
 
 function AppearanceSettingsPage() {
   return (
@@ -415,6 +416,11 @@ function CommandLineSettingsContent() {
 }
 
 const pages: SettingsWindowPage<DiffSettingsPage>[] = [
+  {
+    id: "customize",
+    render: () => <CustomizeDiffSettings />,
+    title: "Customize App",
+  },
   {
     id: "appearance",
     render: () => <AppearanceSettingsContent />,

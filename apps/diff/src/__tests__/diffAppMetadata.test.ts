@@ -9,11 +9,22 @@ import {
   upsertSavedDiffWindow,
 } from "../diffAppMetadata";
 import { createDiffFilePairSource, createDiffFileSource, normalizeDiffOpenSource } from "../diffFiles";
+import { diffCustomizationPreviewWindowIdentifier } from "../appConstants";
 
 describe("diffAppMetadata", () => {
   beforeEach(() => {
     diffAppMetadata$.recentSources.set([]);
     diffAppMetadata$.savedWindows.set([]);
+  });
+
+  it("never restores a temporary customization preview as a regular viewer", () => {
+    const source = createDiffFileSource("/tmp/preview.diff");
+    upsertSavedDiffWindow({ id: diffCustomizationPreviewWindowIdentifier, source });
+    expect(getSavedDiffWindows()).toEqual([]);
+    diffAppMetadata$.savedWindows.set([{ id: diffCustomizationPreviewWindowIdentifier, source, lastOpenedAt: 1 }]);
+    expect(getSavedDiffWindows()).toEqual([]);
+    updateSavedDiffWindowSource(diffCustomizationPreviewWindowIdentifier, source);
+    expect(getSavedDiffWindows()).toEqual([]);
   });
 
   it("stores recent folders and remote sources with newest first", () => {
