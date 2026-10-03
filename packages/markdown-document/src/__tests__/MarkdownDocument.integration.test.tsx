@@ -835,6 +835,22 @@ async function replaceActiveMarkdown(
 }
 
 describe("MarkdownDocument mounted editing", () => {
+  it("keeps the native caret while typing changes the active row's selection", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { renderer, commandsRef } = await renderDocument({ adapter });
+    await flushPromises();
+    await act(async () => jest.runOnlyPendingTimers());
+    const input = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    input.setSelection.mockClear();
+    await act(async () => editorInput(renderer).props.onChangeSelection({ start: 8, end: 8 }));
+    await changeText(editorInput(renderer), "Original text");
+    await flushPromises();
+    await act(async () => jest.runOnlyPendingTimers());
+    expect(input.setSelection).not.toHaveBeenCalled();
+    await act(async () => commandsRef.current!.save());
+    expect(adapter.sourceMarkdown).toBe("Original text");
+  });
+
   let consoleErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {

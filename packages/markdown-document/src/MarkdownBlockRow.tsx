@@ -63,15 +63,17 @@ export const MarkdownEditorInput = memo(
     rowWidth$: Observable<number>;
   }) {
     const rowWidth = useValue(rowWidth$);
+    const initialSelectionRef = useLatestRef(initialSelection);
 
     useEffect(() => {
       const timeout = setTimeout(() => {
         activeInputRef.current?.focus();
-        activeInputRef.current?.setSelection(initialSelection, initialSelection);
+        const selection = initialSelectionRef.current;
+        activeInputRef.current?.setSelection(selection, selection);
       }, 0);
 
       return () => clearTimeout(timeout);
-    }, [activeInputRef, initialSelection]);
+    }, [activeInputRef, block.id, initialSelectionRef]);
 
     return (
       <EnrichedMarkdownTextInput
