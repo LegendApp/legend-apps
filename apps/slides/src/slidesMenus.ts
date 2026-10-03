@@ -19,11 +19,12 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
         id: "presentation",
         label: "Presentation",
         placement: { before: { menu: "window" } },
+        // The checkmark carries the state, so the label stays constant instead of
+        // reading as a different command once a blackout is active.
         items: [{ type: "checkbox", checked: blackout,
           id: "blackout",
-          label: blackout ? "Restore Audience" : "Blackout Audience",
+          label: "Blackout Audience",
           disabled: !audienceOpen,
-          shortcut: "Cmd+b",
         }, { type: "action",
           id: "reset-presenter-layout",
           label: "Reset Presenter Layout",

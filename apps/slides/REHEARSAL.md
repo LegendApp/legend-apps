@@ -13,7 +13,7 @@ starting. A successful build is not a successful rehearsal.
   intended aspect ratio and black letterboxing.
 - Check current/next previews and each slide's notes. Notes must never appear in
   the audience window.
-- Test arrows, Space, Page Up/Down, Home/End, number + Return, ⌘B, and Escape from
+- Test arrows, Space, Page Up/Down, Home/End, number + Return, and Escape from
   both windows. Confirm bare B has no effect, and test the actual clicker too.
 - Open the audience window and confirm the deck locks. On a disposable copy,
   save a visible edit: the stage must stay unchanged until **Apply Update Now**.
@@ -28,7 +28,9 @@ starting. A successful build is not a successful rehearsal.
   in the presenter. Reconnect, select it, and press **Present** to resume at the
   same slide. Change resolution/position and check the window fits again.
 - Test blackout/restore, Stop, audience close/reopen, and restarting the app.
-  Verify the display stays awake while presenting.
+  During blackout the presenter must show the bottom restore banner, and
+  Presentation → Blackout Audience must stay checked. Restore from the banner
+  button and from the menu. Verify the display stays awake while presenting.
 - Run the complete talk for its expected duration. Do not install dependencies,
   edit the app, or rebuild between the successful rehearsal and the talk.
 

@@ -563,7 +563,22 @@ export function PresenterWindow() {
       <ConnectedPresenterToolbar presenter$={presenter$} audienceOpen={audienceOpen} canEditDeck={Boolean(deckPath)} onEditDeck={() => setEditingDeck(true)} onDisplayChange={selectDisplay} onModeChange={selectMode} onStart={startAudience} onStop={stopAudience}/>
       <PresenterDeckContent keyboardJump$={keyboardJump$} presenter$={presenter$} onNotesEditingChange={setNotesEditing} onSaveNotes={saveSpeakerNotes}/>
       </>}
+      <BlackoutBanner/>
     </NotesEditingBoundary>);
+}
+// The audience sees only black while this is on, so it spans the presenter's
+// bottom edge over the workspace rather than sitting inline where it can scroll
+// out of view or be mistaken for one status line among many.
+function BlackoutBanner() {
+    const blackout = useValue(slidesState$.blackout);
+    if (!blackout)
+        return null;
+    return (<View className="absolute bottom-0 left-0 right-0 z-50" pointerEvents="box-none">
+      <View className="flex-row items-center justify-center gap-4 border-t border-amber-400/40 bg-amber-950/95 px-6 py-4">
+        <Text className="flex-1 text-base font-bold text-amber-100">Audience is blacked out</Text>
+        <Button label="Restore Audience" onPress={() => setSlidesState({ blackout: false })}/>
+      </View>
+    </View>);
 }
 type PresenterSession = {
     displays: DisplayInfo[];
@@ -628,7 +643,6 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
     </>);
 }
 function PresenterStatus() {
-    const blackout = useValue(slidesState$.blackout);
     const state = {
         displayMessage: useValue(slidesState$.displayMessage),
         status: useValue(slidesState$.status),
@@ -642,7 +656,6 @@ function PresenterStatus() {
             applyPendingDeck();
     });
     return (<>
-      {blackout && <Text style={styles.blackoutWarning}>Audience blacked out · press ⌘B to restore</Text>}
       {!!state.displayMessage && <Text style={styles.errorText}>{state.displayMessage}</Text>}
       {state.status === "building" && (<View pointerEvents="none" style={styles.compilingOverlay}>
           <Text style={styles.statusMessage}>Compiling changes…</Text>
@@ -671,7 +684,6 @@ function EmptyPresenter() {
     </View>);
 }
 const styles = StyleSheet.create({
-    blackoutWarning: { backgroundColor: "#3f3006", borderRadius: 8, color: "#fde68a", marginTop: 12, padding: 10, textAlign: "center" },
     button: { backgroundColor: "#30323a", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
     buttonText: { color: "#f4f4f5", fontSize: 13, fontWeight: "600" },
     compilingOverlay: { position: "absolute", bottom: 14, right: 14, zIndex: 1, backgroundColor: "#272c3b", borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
