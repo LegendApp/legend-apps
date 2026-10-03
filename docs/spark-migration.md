@@ -40,6 +40,12 @@ bun run spark code start
 without a native release build. `install` uses Bun's hoisted linker. The wrapper
 runs Spark's source CLI; repack and reinstall after native SDK changes.
 
+On a machine that pulls the framework from another machine's `dev` remote,
+`bun run spark:sync [app]` (default `slides`) does the whole refresh: fast-forward
+both checkouts from `dev`, run `pack:local` when Spark's commit moved, re-point the
+workspace catalog at the packed archive, and launch the app. Pass `--skip-pull` to
+work from the current checkouts or `--no-run` to prepare the SDK without launching.
+
 ## Lifecycle ownership
 
 All generated consumers use Spark's ordinary AppDelegate. No legacy AppDelegate

@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "spark": "bun scripts/spark-app.ts",
+    "spark:sync": "bun scripts/sync-spark-sdk.ts",
     "test:spark": "bun test scripts/lib/sparkWorkspaces.test.ts shell/src/launchArguments.test.ts",
     "grammars:update": "bun grammars/scripts/update.ts",
     "grammars:fetch": "bun grammars/scripts/fetch.ts",
