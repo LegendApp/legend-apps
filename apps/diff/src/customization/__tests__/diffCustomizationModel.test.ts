@@ -1,4 +1,18 @@
-import { emptyCustomizationHistory, keepCustomizationVersion, readCustomizationHistory, replayCustomizationChanges, type DiffCustomizationChange } from "../diffCustomizationModel";
+import { emptyCustomizationHistory, keepCustomizationVersion, parseCustomizationSettingsTextColor, readCustomizationHistory, replayCustomizationChanges, selectCustomizationSettingsTextColor, type DiffCustomizationChange } from "../diffCustomizationModel";
+
+it("accepts only six-digit hex for the constrained Settings text appearance", () => {
+  expect(parseCustomizationSettingsTextColor("#58D6C7")).toBe("#58D6C7");
+  expect(parseCustomizationSettingsTextColor("red; color: red")).toBeUndefined();
+  expect(parseCustomizationSettingsTextColor("#fff")).toBeUndefined();
+});
+
+it("selects only validated appearance metadata for the preview or ready active version", () => {
+  const colors = new Map([["active", "#58D6C7"], ["preview", "#AABBCC"]]);
+  expect(selectCustomizationSettingsTextColor(true, "preview", "active", colors)).toBe("#AABBCC");
+  expect(selectCustomizationSettingsTextColor(true, null, "active", colors)).toBe("#58D6C7");
+  expect(selectCustomizationSettingsTextColor(false, null, "active", colors)).toBeUndefined();
+  expect(selectCustomizationSettingsTextColor(true, "incompatible", "active", colors)).toBeUndefined();
+});
 
 const baseline = { baseId: "v1", files: { "diffPalette.ts": "red small" } };
 const change = (id: string, before: string, after: string): DiffCustomizationChange => ({

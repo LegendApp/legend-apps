@@ -9,6 +9,7 @@ test("compiles the actual Diff viewer with shared host imports", async () => {
   expect(result.baseId).toBe(baseline.baseId);
   expect(result.code).toContain("diff-host/diffSettings");
   expect(result.code).toContain("DiffViewerWindow");
+  expect(result.code).toContain("customizationSettingsTextColor");
   expect(result.code).not.toContain("react.production");
   expect(/\basync\s+(?:function|\()/.test(result.code)).toBe(false);
   expect(/function\s*\*/.test(result.code)).toBe(false);

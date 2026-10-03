@@ -4,7 +4,7 @@ import { getAICommandAvailability } from "@legendapp/spark/ai";
 import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { diffCustomization } from "./diffCustomizationRuntime";
+import { diffCustomization, getDiffCustomizationSettingsTextColor } from "./diffCustomizationRuntime";
 
 function Action({ title, label, onPress, disabled = false }: { title: string; label?: string; onPress(): void; disabled?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={title} disabled={disabled} onPress={onPress}
@@ -25,6 +25,8 @@ export function CustomizeDiffSettings() {
   const active = state.history.versions.find(version => version.id === state.history.activeId);
   const busy = state.status !== "idle";
   const stackLocked = busy || Boolean(state.preview) || !state.ready;
+  const settingsTextColor = getDiffCustomizationSettingsTextColor(state.ready, state.preview?.id ?? null, state.history.activeId);
+  const settingsTextStyle = settingsTextColor ? { color: settingsTextColor } : undefined;
 
   useEffect(() => {
     void diffCustomization.initialize();
@@ -41,18 +43,18 @@ export function CustomizeDiffSettings() {
 
   return <>
     <SettingsSection first title={null}>
-      <Text className="mx-4 my-3 text-sm text-text-secondary">Describe a change to Diff’s viewer or start screen. Try it with sample data, then keep or revert it.</Text>
+      <Text style={settingsTextStyle} className={`mx-4 my-3 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Describe a change to Diff’s viewer, start screen, or Customize App text color. Try it with sample data, then keep or revert it.</Text>
       <SettingsRow title="AI tool" description="Uses your installed, signed-in command-line tool." control={
         <View className="flex-row gap-2">{(["codex", "claude"] as const).map(tool => <Action key={tool} title={`${state.history.tool === tool ? "✓ " : ""}${tool === "codex" ? "Codex" : "Claude"}`}
           disabled={busy} onPress={() => diffCustomization.setPreferences({ tool })} />)}</View>
       } />
       {availability && !availability[state.history.tool] ? <View className="mx-4 my-2 flex-row items-center gap-3">
-        <Text className="flex-1 text-sm text-text-secondary">Install {state.history.tool === "codex" ? "Codex" : "Claude"} and sign in to generate changes.</Text>
+        <Text style={settingsTextStyle} className={`flex-1 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Install {state.history.tool === "codex" ? "Codex" : "Claude"} and sign in to generate changes.</Text>
         <Action title="Check Again" disabled={busy} onPress={() => setAvailabilityRequest(value => value + 1)} />
       </View> : null}
       {availabilityError ? <Text className="mx-4 my-2 text-sm text-danger">{availabilityError}</Text> : null}
       {editingId ? <View className="mx-4 my-2 flex-row items-center justify-between gap-3">
-        <Text className="flex-1 text-sm font-semibold text-text-primary">Editing {active?.changes.find(change => change.id === editingId)?.title}</Text>
+        <Text style={settingsTextStyle} className={`flex-1 text-sm font-semibold${settingsTextColor ? "" : " text-text-primary"}`}>Editing {active?.changes.find(change => change.id === editingId)?.title}</Text>
         <Action title="Cancel Edit" disabled={busy} onPress={() => { setEditingId(undefined); setPrompt(""); }} />
       </View> : null}
       <TextInput accessibilityLabel="Describe an app change" placeholder="For example, make the sidebar easier to read…" multiline
@@ -78,10 +80,10 @@ export function CustomizeDiffSettings() {
     </SettingsSection>
     <SettingsSection title="Changes">
       <View className="gap-3 p-4">
-      {!active?.changes.length ? <Text className="text-sm text-text-secondary">No saved changes yet.</Text> : active.changes.map((change, index) => <View key={change.id} className="mb-3 gap-2 rounded-lg border border-border-primary p-3">
-        <Text className="text-sm font-semibold text-text-primary">{index + 1}. {change.title}{change.enabled ? "" : " · Disabled"}</Text>
-        <Text className="text-sm text-text-secondary">{change.summary}</Text>
-        <Text className="text-xs text-text-secondary">{new Date(change.createdAt).toLocaleString()}</Text>
+      {!active?.changes.length ? <Text style={settingsTextStyle} className={`text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>No saved changes yet.</Text> : active.changes.map((change, index) => <View key={change.id} className="mb-3 gap-2 rounded-lg border border-border-primary p-3">
+        <Text style={settingsTextStyle} className={`text-sm font-semibold${settingsTextColor ? "" : " text-text-primary"}`}>{index + 1}. {change.title}{change.enabled ? "" : " · Disabled"}</Text>
+        <Text style={settingsTextStyle} className={`text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>{change.summary}</Text>
+        <Text style={settingsTextStyle} className={`text-xs${settingsTextColor ? "" : " text-text-secondary"}`}>{new Date(change.createdAt).toLocaleString()}</Text>
         <View className="flex-row flex-wrap gap-2">
           <Action title={`Edit ${change.title}`} label="Edit" disabled={stackLocked} onPress={() => { setPrompt(change.prompt); setEditingId(change.id); }} />
           <Action title={`${change.enabled ? "Disable" : "Enable"} ${change.title}`} label={change.enabled ? "Disable" : "Enable"} disabled={stackLocked} onPress={() => { void diffCustomization.change(change.id, "toggle"); }} />
@@ -89,34 +91,34 @@ export function CustomizeDiffSettings() {
           <Action title={expandedId === change.id ? "Hide Code Changes" : "Show Code Changes"} onPress={() => setExpandedId(expandedId === change.id ? undefined : change.id)} />
         </View>
         {expandedId === change.id ? <View className="mt-2 gap-2">
-          <Text selectable className="text-sm text-text-primary">Prompt: {change.prompt}</Text>
+          <Text selectable style={settingsTextStyle} className={`text-sm${settingsTextColor ? "" : " text-text-primary"}`}>Prompt: {change.prompt}</Text>
           {change.edits.map((edit, editIndex) => <View key={editIndex} className="gap-1">
-            <Text className="text-xs font-semibold text-text-secondary">{edit.path}</Text>
+            <Text style={settingsTextStyle} className={`text-xs font-semibold${settingsTextColor ? "" : " text-text-secondary"}`}>{edit.path}</Text>
             <Text selectable className="font-mono text-xs text-danger">− {edit.before}</Text>
-            <Text selectable className="font-mono text-xs text-text-primary">+ {edit.after}</Text>
+            <Text selectable style={settingsTextStyle} className={`font-mono text-xs${settingsTextColor ? "" : " text-text-primary"}`}>+ {edit.after}</Text>
           </View>)}
         </View> : null}
       </View>)}
       <Action title="Restore Original App" disabled={busy || (!active && !state.error && !state.preview)} onPress={() => { void diffCustomization.reset(); }} />
-      <Text className="mt-2 text-xs text-text-secondary">Restoring the original app preserves your saved versions.</Text>
+      <Text style={settingsTextStyle} className={`mt-2 text-xs${settingsTextColor ? "" : " text-text-secondary"}`}>Restoring the original app preserves your saved versions.</Text>
       </View>
     </SettingsSection>
     {state.history.versions.length ? <SettingsSection title="Saved Versions">
       <View className="gap-3 p-4">
       {[...state.history.versions].reverse().map(version => <View key={version.id} className="gap-2">
         <View className="flex-row items-center justify-between gap-3">
-        <View className="flex-1"><Text className="text-sm text-text-primary">{version.title}{version.id === state.history.activeId ? " · Active" : ""}</Text>
-          <Text className="text-xs text-text-secondary">{new Date(version.createdAt).toLocaleString()} · {version.changes.filter(change => change.enabled).length} changes</Text></View>
+        <View className="flex-1"><Text style={settingsTextStyle} className={`text-sm${settingsTextColor ? "" : " text-text-primary"}`}>{version.title}{version.id === state.history.activeId ? " · Active" : ""}</Text>
+          <Text style={settingsTextStyle} className={`text-xs${settingsTextColor ? "" : " text-text-secondary"}`}>{new Date(version.createdAt).toLocaleString()} · {version.changes.filter(change => change.enabled).length} changes</Text></View>
         <Action title={`Inspect ${version.title}`} label={inspectedVersionId === version.id ? "Hide" : "Details"} onPress={() => setInspectedVersionId(inspectedVersionId === version.id ? undefined : version.id)} />
         <Action title={`Try ${version.title}`} label="Try" disabled={stackLocked || version.id === state.history.activeId} onPress={() => { void diffCustomization.restore(version.id); }} />
         </View>
         {inspectedVersionId === version.id ? version.changes.map(change => <View key={change.id} className="gap-1 rounded-lg border border-border-primary p-3">
           <Text className="text-sm font-semibold text-text-primary">{change.title}{change.enabled ? "" : " · Disabled"}</Text>
-          <Text selectable className="text-sm text-text-secondary">{change.prompt}</Text>
-          <Text className="text-xs text-text-secondary">{change.summary}</Text>
+          <Text selectable style={settingsTextStyle} className={`text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>{change.prompt}</Text>
+          <Text style={settingsTextStyle} className={`text-xs${settingsTextColor ? "" : " text-text-secondary"}`}>{change.summary}</Text>
         </View>) : null}
       </View>)}
-      <Text className="text-xs text-text-secondary">The 30 most recently kept versions are saved.</Text>
+      <Text style={settingsTextStyle} className={`text-xs${settingsTextColor ? "" : " text-text-secondary"}`}>The 30 most recently kept versions are saved.</Text>
       </View>
     </SettingsSection> : null}
   </>;

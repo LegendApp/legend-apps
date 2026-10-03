@@ -8,7 +8,7 @@ import { diffCustomizationPreviewWindowIdentifier } from "../appConstants";
 import { prepareDiffWindowsForTransition } from "../diffAppExit";
 import { createDiffCustomizationController } from "./diffCustomizationController";
 import { diffCustomizationHosts } from "./diffCustomizationHosts.generated";
-import type { DiffCustomizationBaseline, DiffCustomizationVersion } from "./diffCustomizationModel";
+import { parseCustomizationSettingsTextColor, selectCustomizationSettingsTextColor, type DiffCustomizationBaseline, type DiffCustomizationVersion } from "./diffCustomizationModel";
 import { createDiffCustomizationPreviewHosts } from "./diffCustomizationPreviewHosts";
 import { runDiffCustomizationAI } from "./diffCustomizationAI";
 
@@ -17,13 +17,20 @@ export const diffCustomizationPreviewModuleName = "DiffCustomizationPreview";
 let storage: Storage;
 function customizationStorage() { return storage ??= createStorage({ subfolder: "customizations" }); }
 
-const components = new Map<string, ComponentType<DiffViewerWindowProps>>();
+const components = new Map<string, { component: ComponentType<DiffViewerWindowProps>; settingsTextColor?: string }>();
+const validatedSettingsTextColors = new Map<string, string | undefined>();
 export function getDiffCustomizationComponent(version: DiffCustomizationVersion | null, preview = false) {
   if (!version?.code) return null;
   const cacheId = `${version.id}:${preview}`;
   const cached = components.get(cacheId);
-  if (cached) return cached;
-  const module = { exports: {} as { default?: unknown } };
+  if (cached) {
+    if (preview) {
+      validatedSettingsTextColors.delete(version.id);
+      validatedSettingsTextColors.set(version.id, cached.settingsTextColor);
+    }
+    return cached.component;
+  }
+  const module = { exports: {} as { default?: unknown; customizationSettingsTextColor?: unknown } };
   const hosts = preview ? createDiffCustomizationPreviewHosts(diffCustomizationHosts, getDiffCustomizationSampleSource().value) : diffCustomizationHosts;
   Function("require", "module", "exports", "global", version.code)((name: string) => {
     if (!Object.hasOwn(hosts, name)) throw new Error(`Unavailable customization module: ${name}`);
@@ -31,9 +38,26 @@ export function getDiffCustomizationComponent(version: DiffCustomizationVersion 
   }, module, module.exports, globalThis);
   if (typeof module.exports.default !== "function") throw new Error("The customization did not export a Diff viewer.");
   const component = module.exports.default as ComponentType<DiffViewerWindowProps>;
-  components.set(cacheId, component);
+  const color = module.exports.customizationSettingsTextColor;
+  const settingsTextColor = parseCustomizationSettingsTextColor(color);
+  components.set(cacheId, { component, settingsTextColor });
+  if (preview) {
+    validatedSettingsTextColors.delete(version.id);
+    validatedSettingsTextColors.set(version.id, settingsTextColor);
+    if (validatedSettingsTextColors.size > 64) validatedSettingsTextColors.delete(validatedSettingsTextColors.keys().next().value!);
+  }
   if (components.size > 32) components.delete(components.keys().next().value!);
   return component;
+}
+
+export function getDiffCustomizationSettingsTextColor(ready: boolean, previewId: string | null, activeId: string | null) {
+  const versionId = previewId ?? (ready ? activeId : null);
+  if (versionId && validatedSettingsTextColors.has(versionId)) {
+    const color = validatedSettingsTextColors.get(versionId);
+    validatedSettingsTextColors.delete(versionId);
+    validatedSettingsTextColors.set(versionId, color);
+  }
+  return selectCustomizationSettingsTextColor(ready, previewId, activeId, validatedSettingsTextColors);
 }
 
 async function compiler() : Promise<{ target: ProcessTarget; prefix: string[] }> {

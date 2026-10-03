@@ -8,7 +8,7 @@ const mockController = createDiffCustomizationController({
   generate: async () => ({ title: "Blue colors", summary: "Make the colors blue", edits: [{ path: "diffPalette.ts", before: "red", after: "blue" }] }),
   validate: () => {}, openPreview: async () => {}, closePreview: async () => {}, prepareActivation: async () => true,
 });
-jest.mock("../diffCustomizationRuntime", () => ({ diffCustomization: mockController }));
+jest.mock("../diffCustomizationRuntime", () => ({ diffCustomization: mockController, getDiffCustomizationSettingsTextColor: () => "#58D6C7" }));
 jest.mock("@legendapp/spark/ai", () => ({ getAICommandAvailability: async () => ({ codex: true, claude: false, preferredTool: "codex" }) }));
 
 const { CustomizeDiffSettings } = require("../CustomizeDiffSettings") as typeof import("../CustomizeDiffSettings");
@@ -16,10 +16,14 @@ const { CustomizeDiffSettings } = require("../CustomizeDiffSettings") as typeof 
 it("supports prompting, keeping, editing, inspecting and deleting a change through settings", async () => {
   const view = await render(<CustomizeDiffSettings />);
   await act(() => mockController.initialize());
+  const description = view.getByText(/Describe a change to Diff’s viewer/);
+  expect(description.props.style).toEqual({ color: "#58D6C7" });
+  expect(description.props.className).not.toContain("text-text-secondary");
   await fireEvent.changeText(view.getByLabelText("Describe an app change"), "Make colors blue");
   await fireEvent.press(view.getByLabelText("Generate & Preview"));
   await act(async () => {});
   expect(view.getByText("Preview: Blue colors")).toBeTruthy();
+  expect(view.getByLabelText("Keep").props.children.props.className).toContain("text-text-primary");
   expect(mockController.activeVersion()).toBeNull();
   await fireEvent.press(view.getByLabelText("Keep"));
   await act(async () => {});

@@ -1,5 +1,6 @@
 export const editableDiffFiles = [
   "DiffViewerWindow.tsx",
+  "customization/diffCustomizationAppearance.ts",
   "viewer/DiffRows.tsx",
   "viewer/DiffGrammarProgress.tsx",
   "viewer/diffViewerConstants.ts",
@@ -35,6 +36,16 @@ export type DiffCustomizationHistory = {
   versions: DiffCustomizationVersion[];
 };
 export type DiffCustomizationBaseline = { baseId: string; files: Record<string, string> };
+
+export function parseCustomizationSettingsTextColor(value: unknown): string | undefined {
+  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : undefined;
+}
+
+export function selectCustomizationSettingsTextColor(ready: boolean, previewId: string | null, activeId: string | null,
+  validatedColors: ReadonlyMap<string, string | undefined>): string | undefined {
+  const versionId = previewId ?? (ready ? activeId : null);
+  return versionId ? validatedColors.get(versionId) : undefined;
+}
 
 export function emptyCustomizationHistory(): DiffCustomizationHistory {
   return { schema: 1, tool: "codex", autoKeep: false, activeId: null, versions: [] };

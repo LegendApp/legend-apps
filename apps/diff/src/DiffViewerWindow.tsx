@@ -3572,6 +3572,7 @@ function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, source }:
     </>);
 }
 export default DiffViewerWindow;
+export { customizationSettingsTextColor } from "./customization/diffCustomizationAppearance";
 const styles = StyleSheet.create({
     empty: {
         alignItems: "center",
