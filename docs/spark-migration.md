@@ -42,9 +42,18 @@ runs Spark's source CLI; repack and reinstall after native SDK changes.
 
 On a machine that pulls the framework from another machine's `dev` remote,
 `bun run spark:sync [app]` (default `slides`) does the whole refresh: fast-forward
-both checkouts from `dev`, run `pack:local` when Spark's commit moved, re-point the
-workspace catalog at the packed archive, and launch the app. Pass `--skip-pull` to
-work from the current checkouts or `--no-run` to prepare the SDK without launching.
+both checkouts from `dev`, install Spark dependencies with `npm ci` and run
+`pack:local` when its commit moved or archives are missing, re-point the workspace
+catalog, install the root SDK, and launch a native dev build. The successful pack
+commit is recorded in Spark's ignored `.spark/sync-sdk.json`, so retries recover
+from failed packs and unchanged sources skip packing.
+
+The local catalog pin is carried across pulls; other `package.json` edits must be
+committed or stashed first. Spark must have a clean checkout. The root install uses
+`--no-save` to keep the machine-local archive out of the tracked lockfile.
+`LEGEND_SPARK_ROOT` overrides the sibling checkout and `LEGEND_SYNC_REMOTE`
+overrides `dev`. Pass `--skip-pull` to work from the current checkouts or `--no-run`
+to prepare the SDK without installing root dependencies or launching.
 
 ## Lifecycle ownership
 
