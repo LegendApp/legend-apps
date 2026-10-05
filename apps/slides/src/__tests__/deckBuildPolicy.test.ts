@@ -16,6 +16,7 @@ function readyState() {
     component: LastGoodDeck,
     config: { title: "Last good" },
     currentSlide: 4,
+    currentStep: 2,
     deckPath: "/deck/deck.mdx",
     revision: 7,
     slides: [],
@@ -39,6 +40,14 @@ describe("deck build policy", () => {
     expect(applied.deckLocked).toBe(true);
     expect(applied.pendingDeck).toBeNull();
     expect(applied.currentSlide).toBe(4);
+    expect(applied.currentStep).toBe(2);
+  });
+  test("opening a different deck resets the slide and reveal step", () => {
+    const current = readyState();
+    const applied = { ...current, ...successfulDeckUpdate(current, RebuiltDeck, {}, "/other/deck.mdx", []) };
+    expect(applied.currentSlide).toBe(0);
+    expect(applied.currentStep).toBe(0);
+    expect(applied.deckPath).toBe("/other/deck.mdx");
   });
   test("keeps the last successful deck and slide visible after a failed rebuild", () => {
     const current = readyState();
