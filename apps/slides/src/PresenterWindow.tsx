@@ -12,7 +12,7 @@ import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, setWindo
 import { addAppListener } from "@legendapp/spark/app";
 import { onSystemEvent, preventSleep } from "@legendapp/spark/system";
 import { addMacOSWindowListener, setToolbarItemText, setWindowBounds } from "@legendapp/spark/windows/macos";
-import { ownRegistration } from "@legend-apps/runtime-utils";
+import { openOrShowWindow, ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -398,7 +398,7 @@ export function PresenterWindow() {
     const blackout = useValue(slidesState$.blackout);
     const [audience] = useState(() => createAudienceSession({
         async open(display) {
-            await slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } });
+            await openOrShowWindow("slides-audience", () => slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } }));
             await setWindowBounds("slides-audience", { displayId: display.id, x: 0, y: 0, ...display.size });
             await setWindowFullscreen("slides-audience", true);
         },

@@ -16,7 +16,7 @@ export function createAudienceSession(platform: AudiencePlatform) {
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void>) => {
     const result = queue.then(operation).then(() => true).catch((error) => {
-      platform.update({ deckLocked: active !== null && !rehearsing, blackout: true, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
+      platform.update({ deckLocked: active !== null && !rehearsing, displayMessage: `Audience window: ${error instanceof Error ? error.message : String(error)}` });
       return false;
     });
     queue = result.then(() => {});
@@ -52,10 +52,10 @@ export function createAudienceSession(platform: AudiencePlatform) {
         if (!active) return;
         const next = displays.find((display) => active && displayKey(display) === displayKey(active));
         if (!next) {
-          platform.update({ blackout: true, displayMessage: "Presentation display disconnected. Reconnect it, select a display, then press Present to resume." });
+          platform.update({ displayMessage: "Presentation display disconnected. Reconnect it, select a display, then press Present to resume." });
           await platform.close();
           active = null;
-          platform.update({ audienceOpen: false, deckLocked: false });
+          platform.update({ audienceOpen: false, deckLocked: false, blackout: false });
           await platform.focusPresenter();
         } else if (JSON.stringify([next.id, next.size, next.workArea]) !== JSON.stringify([active.id, active.size, active.workArea])) {
           await platform.open(next);

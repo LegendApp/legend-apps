@@ -55,11 +55,14 @@ enabled after applying an update or stopping the audience window. Use **Unlock
 Live Updates** to resume automatic updates; an already queued build still needs
 to be applied explicitly. Opening another deck while locked queues it too.
 
-If the presentation display disconnects, the audience output is blacked out and
-closed. Reconnect it, select the display, and press **Present** to resume at the
+If the presentation display disconnects, the audience output is closed.
+Reconnect it, select the display, and press **Present** to resume at the
 same slide. It never automatically moves the talk onto your laptop screen.
 Resolution and display-position changes resize the active audience window;
 windowed rehearsal is left alone.
+
+Blackout is enabled only through the presenter menu. Window errors report a
+message without enabling blackout.
 
 Slide render failures are isolated from the presenter controls. Details appear
 under **Slide errors**; the audience sees a neutral fallback. **Retry Slide

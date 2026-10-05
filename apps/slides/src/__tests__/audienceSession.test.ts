@@ -5,7 +5,7 @@ import { createAudienceSession } from "../audienceSession";
 const projector = { id: "projector", size: { width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1080 } };
 function setup(open = async () => {}) {
   const calls = [];
-  let state = {};
+  let state = { blackout: false };
   const session = createAudienceSession({
     open: async (display) => { calls.push(["open", display]); await open(); },
     close: async () => { calls.push(["close"]); },
@@ -22,6 +22,7 @@ describe("audience display recovery", () => {
     await session.displaysChanged([]);
     expect(state().audienceOpen).toBe(false);
     expect(state().deckLocked).toBe(false);
+    expect(state().blackout).toBe(false);
     expect(state().displayMessage).toContain("disconnected");
     await session.displaysChanged([projector]);
     expect(calls).toEqual([["open", projector], ["close"]]);
@@ -60,11 +61,15 @@ describe("audience display recovery", () => {
     expect(state().deckLocked).toBe(false);
   });
   test("contains native failures and keeps subsequent commands usable", async () => {
-    const { session, state } = setup(async () => { throw new Error("native failure"); });
-    await session.open(projector);
-    expect(state().blackout).toBe(true);
+    let failOpen = true;
+    const { session, state } = setup(async () => { if (failOpen) throw new Error("native failure"); });
+    expect(await session.open(projector)).toBe(false);
+    expect(state().blackout).toBe(false);
     expect(state().deckLocked).toBe(false);
     expect(state().displayMessage).toContain("native failure");
+    failOpen = false;
+    expect(await session.open(projector)).toBe(true);
+    expect(state()).toMatchObject({ audienceOpen: true, blackout: false, displayMessage: "" });
     await session.close();
     expect(state().audienceOpen).toBe(false);
     expect(state().deckLocked).toBe(false);
@@ -116,8 +121,43 @@ describe("audience display recovery", () => {
   });
   expect(await session.open(projector)).toBe(true);
   expect(await session.close()).toBe(false);
-  expect(state).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: true });
+  expect(state).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: false });
   failClose = false;
   expect(await session.close()).toBe(true);
   expect(state).toMatchObject({ audienceOpen: false, deckLocked: false });
+});
+
+test("failed display reposition preserves output and allows retry without blackout", async () => {
+  let failOpen = false;
+  const { session, state } = setup(async () => { if (failOpen) throw new Error("Reposition failed"); });
+  await session.open(projector);
+  const resized = { ...projector, size: { width: 1280, height: 720 } };
+  failOpen = true;
+  expect(await session.displaysChanged([resized])).toBe(false);
+  expect(state()).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: false });
+  failOpen = false;
+  expect(await session.displaysChanged([resized])).toBe(true);
+  expect(state().blackout).toBe(false);
+});
+
+test("window failures preserve a manually selected blackout", async () => {
+  let state = { blackout: false };
+  const session = createAudienceSession({
+    open: async () => {}, close: async () => { throw new Error("Close failed"); },
+    focusPresenter: async () => {}, update: patch => { state = { ...state, ...patch }; },
+  });
+  await session.open(projector);
+  state.blackout = true;
+  expect(await session.close()).toBe(false);
+  expect(state.blackout).toBe(true);
+});
+
+test("presenter focus failures do not enable blackout after a successful open", async () => {
+  let state = { blackout: false };
+  const session = createAudienceSession({
+    open: async () => {}, close: async () => {},
+    focusPresenter: async () => { throw new Error("Focus failed"); }, update: patch => { state = { ...state, ...patch }; },
+  });
+  expect(await session.open(projector)).toBe(false);
+  expect(state).toMatchObject({ audienceOpen: true, deckLocked: true, blackout: false });
 });
