@@ -36,10 +36,10 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     path.join(appsDir, manifest.id, "macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset"),
     path.join(appsDir, manifest.id, "AppIcon.appiconset"),
   ].find(directory => fs.existsSync(directory));
-  const iconPlugin = icon ? [[path.join(rootDir, "scripts/lib/macosAppIcon.cjs"), {
+  const iconPluginPath = path.join(rootDir, "scripts/lib/macosAppIcon.cjs");
+  const iconPlugin = icon ? [[iconPluginPath, {
     source: icon,
-    // Include the asset contents in Spark's native preparation and build cache keys.
-    hash: createHash("sha256").update(fs.readdirSync(icon).sort().map(file =>
+    hash: createHash("sha256").update(fs.readFileSync(iconPluginPath)).update(fs.readdirSync(icon).sort().map(file =>
       `${file}:${createHash("sha256").update(fs.readFileSync(path.join(icon, file))).digest("hex")}`).join("\n")).digest("hex"),
   }] as [string, { source: string; hash: string }]] : [];
   const active = getActiveNativePackages(manifest, "macos");

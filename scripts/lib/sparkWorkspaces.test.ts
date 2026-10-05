@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
@@ -201,25 +202,87 @@ test("Photos native packages expose podspecs to the Apple autolinker", () => {
 });
 
 for (const appId of ["slides", "code", "diff", "markdown", "chat-history", "photos"]) {
-  test(`Spark copies ${appId}'s original app icon through native generation`, async () => {
+  test(`Spark compiles ${appId}'s icon with a mask and preserves its artwork`, { timeout: 60_000 }, async () => {
     const config = sparkConfig(await loadAppManifest(appId));
     const [pluginPath, options] = config.expo.plugins!.find(plugin => Array.isArray(plugin)) as [string, { source: string; hash: string }];
     assert.match(options.hash, /^[a-f0-9]{64}$/);
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "legend-app-icon-"));
     try {
-      const target = path.join(temporary, "macos/GeneratedApp/Assets.xcassets/AppIcon.appiconset");
+      const appRoot = path.join(temporary, "macos/legendapp-shell-macos");
+      const target = path.join(appRoot, "Assets.xcassets/AppIcon.appiconset");
       fs.mkdirSync(target, { recursive: true });
       fs.writeFileSync(path.join(target, "Contents.json"), '{"images":[]}');
+      fs.writeFileSync(path.join(path.dirname(target), "Contents.json"), '{"info":{"author":"xcode","version":1}}');
       const plugin = require(pluginPath);
       const mod = plugin({ _internal: { projectRoot: sparkWorkspace("slides") } }, options);
       const request = { platformProjectRoot: path.join(temporary, "macos") };
-      await mod.mods.macos.xcodeproj({ ...mod, modRequest: request });
-      await mod.mods.macos.xcodeproj({ ...mod, modRequest: request });
-      const catalog = JSON.parse(fs.readFileSync(path.join(target, "Contents.json"), "utf8"));
-      assert.ok(catalog.images.length > 0);
-      for (const image of catalog.images) {
-        assert.ok(image.filename);
-        assert.deepEqual(fs.readFileSync(path.join(target, image.filename)), fs.readFileSync(path.join(options.source, image.filename)));
+      const xcode = require(require.resolve("xcode", { paths: [sparkWorkspace("slides")] }));
+      const project = xcode.project(path.resolve("shell/macos/legendapp-shell-macos.xcodeproj/project.pbxproj"));
+      project.parseSync();
+      const input = { ...mod, modRequest: request, modResults: project };
+      await mod.mods.macos.xcodeproj(input);
+      const first = project.writeSync();
+      await mod.mods.macos.xcodeproj(input);
+      assert.equal(project.writeSync(), first, "regeneration must not duplicate Xcode resources");
+      const icon = path.join(appRoot, "AppIcon.icon");
+      if (appId === "photos") {
+        assert.equal(fs.existsSync(icon), false);
+        const catalog = JSON.parse(fs.readFileSync(path.join(target, "Contents.json"), "utf8"));
+        for (const image of catalog.images) {
+          assert.deepEqual(fs.readFileSync(path.join(target, image.filename)), fs.readFileSync(path.join(options.source, image.filename)));
+        }
+      } else {
+        assert.equal(fs.existsSync(target), false);
+        const reference = project.hasFile("AppIcon.icon");
+        assert.equal(reference.lastKnownFileType, "folder.iconcomposer.icon");
+        const macTarget = project.findTargetKey('"legendapp-shell-macos"');
+        const phase = project.pbxResourcesBuildPhaseObj(macTarget);
+        assert.equal(phase.files.filter((file: any) => file.comment.includes("AppIcon.icon")).length, 1);
+        const iosPhase = project.pbxResourcesBuildPhaseObj(project.findTargetKey('"legendapp-shell-ios"'));
+        assert.ok(!iosPhase.files.some((file: any) => file.comment.includes("AppIcon.icon")));
+        const images = JSON.parse(fs.readFileSync(path.join(options.source, "Contents.json"), "utf8")).images;
+        const artwork = images.find((image: any) => image.size === "512x512" && image.scale === "2x");
+        assert.deepEqual(fs.readFileSync(path.join(icon, "Assets/Artwork.png")), fs.readFileSync(path.join(options.source, artwork.filename)));
+        if (process.platform === "darwin") {
+          const output = path.join(temporary, "compiled");
+          fs.mkdirSync(output);
+          execFileSync("xcrun", ["actool", path.dirname(target), icon, "--compile", output, "--app-icon", "AppIcon", "--platform", "macosx",
+            "--minimum-deployment-target", "14.0", "--output-partial-info-plist", path.join(output, "icon-info.plist")]);
+          const assets = JSON.parse(execFileSync("xcrun", ["assetutil", "--info", path.join(output, "Assets.car")], { encoding: "utf8" }));
+          assert.ok(assets.some((asset: any) => asset.Name === "AppIcon" && asset.AssetType === "IconImageStack"));
+          assert.ok(assets.some((asset: any) => asset.Name === "AppIcon" && asset.AssetType === "MultiSized Image"));
+          const samples = JSON.parse(execFileSync("osascript", ["-l", "JavaScript", "-e", `
+            ObjC.import("AppKit");
+            var image = $.NSImage.alloc.initWithContentsOfFile(${JSON.stringify(path.join(output, "AppIcon.icns"))});
+            var result = [];
+            for (var i = 0; i < image.representations.count; i++) {
+              var rep = image.representations.objectAtIndex(i), size = Number(rep.pixelsWide);
+              result.push({ size: size, corner: Number(rep.colorAtXY(0, 0).alphaComponent),
+                innerCorner: Number(rep.colorAtXY(Math.floor(size * .1), Math.floor(size * .1)).alphaComponent),
+                center: Number(rep.colorAtXY(Math.floor(size / 2), Math.floor(size / 2)).alphaComponent) });
+            }
+            JSON.stringify(result);
+          `], { encoding: "utf8" }));
+          assert.ok(samples.some((sample: any) => sample.size >= 256));
+          for (const sample of samples) {
+            assert.equal(sample.corner, 0);
+            assert.equal(sample.innerCorner, 0);
+            assert.equal(sample.center, 1);
+          }
+        }
+        if (appId === "slides") {
+          const photos = sparkConfig(await loadAppManifest("photos"));
+          const [, photoOptions] = photos.expo.plugins![0] as [string, { source: string; hash: string }];
+          const photoMod = plugin({ _internal: { projectRoot: sparkWorkspace("slides") } }, photoOptions);
+          await photoMod.mods.macos.xcodeproj({ ...photoMod, modRequest: request, modResults: project });
+          assert.equal(fs.existsSync(icon), false);
+          assert.equal(project.hasFile("AppIcon.icon"), false);
+          assert.ok(fs.existsSync(target));
+          assert.ok(!phase.files.some((file: any) => file.comment.includes("AppIcon.icon")));
+          await mod.mods.macos.xcodeproj(input);
+          assert.equal(fs.existsSync(target), false);
+          assert.ok(project.hasFile("AppIcon.icon"));
+        }
       }
     } finally {
       fs.rmSync(temporary, { recursive: true, force: true });
