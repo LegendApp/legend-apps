@@ -188,7 +188,7 @@ const { withUniwindConfig } = require("uniwind/metro");
 const config = makeMetroConfig(__dirname);
 config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
-config.server.unstable_serverRoot = ${JSON.stringify(rootDir)};
+config.server.unstable_serverRoot = ${mode === "release" ? "__dirname" : JSON.stringify(rootDir)};
 config.resolver.useWatchman = false;
 const existingBlockList = config.resolver.blockList;
 config.resolver.blockList = [
