@@ -26,6 +26,8 @@ test("failed saves survive view removal and restart, then retry", async () => {
   expect(await drafts.flushAll()).toBe(false);
   const restored = createNotesDrafts(persistence);
   expect(restored.get("slide", "old")).toBe("unsaved");
+  expect(await restored.flushAll()).toBe(true);
+  restored.bind("slide", async () => { throw new Error("read only"); });
   expect(await restored.flushAll()).toBe(false);
   restored.bind("slide", async () => {});
   expect(await restored.flushAll()).toBe(true);

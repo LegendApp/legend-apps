@@ -6,8 +6,10 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
   const drafts = new Map<string, NotesDraft>(Object.entries(persistence?.read() ?? {}).map(([key, value]) =>
     [key, typeof value === "string" ? { text: value } : value]));
   const saves = new Map<string, Save>();
+  const sessionKeys = new Set<string>();
   const pending = new Map<string, Promise<boolean>>();
   const persist = () => persistence?.write(Object.fromEntries(drafts));
+  const sessionEntries = () => [...drafts.entries()].filter(([key]) => sessionKeys.has(key));
   const flush = (key: string): Promise<boolean> => {
     const running = pending.get(key);
     if (running) return running;
@@ -30,19 +32,22 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
   return {
     key: (prefix: string, target: string) => [...drafts.keys()].find(key => key.startsWith(prefix)) ?? prefix + target,
     get: (key: string, fallback: string) => drafts.get(key)?.text ?? fallback,
-    bind(key: string, save: Save) { saves.set(key, save); },
+    bind(key: string, save: Save) { saves.set(key, save); sessionKeys.add(key); },
     update(key: string, text: string, base?: string) {
+      sessionKeys.add(key);
       drafts.set(key, { text, base: drafts.has(key) ? drafts.get(key)!.base : base });
       persist();
     },
     flush,
     entries: () => [...drafts.entries()],
+    sessionEntries,
     persist,
     async flushAll() {
       // A user can edit another slide while an earlier write is pending.
       // Re-snapshot after each batch, and report failure rather than retrying forever.
-      while (drafts.size > 0) {
-        if (!(await Promise.all([...drafts.keys()].map(flush))).every(Boolean)) return false;
+      // Unopened drafts from earlier sessions are already durable recovery copies.
+      while (sessionEntries().length > 0) {
+        if (!(await Promise.all(sessionEntries().map(([key]) => flush(key)))).every(Boolean)) return false;
       }
       return true;
     },

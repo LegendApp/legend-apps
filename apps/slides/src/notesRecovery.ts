@@ -12,10 +12,10 @@ export function describeNoteDraft(key: string) {
 export async function prepareNotesExit(drafts: NotesDrafts, choose: (affected: string[]) => Promise<"cancel" | "keep" | "export">,
   exportDrafts: (contents: string) => Promise<boolean>) {
   if (await drafts.flushAll()) return true;
-  const choice = await choose(drafts.entries().map(([key]) => describeNoteDraft(key)));
+  const choice = await choose(drafts.sessionEntries().map(([key]) => describeNoteDraft(key)));
   if (choice === "cancel") return false;
   if (choice === "export") {
-    const contents = drafts.entries().map(([key, draft]) => `# ${describeNoteDraft(key)}\n\n${draft.text}`).join("\n\n---\n\n");
+    const contents = drafts.sessionEntries().map(([key, draft]) => `# ${describeNoteDraft(key)}\n\n${draft.text}`).join("\n\n---\n\n");
     if (!await exportDrafts(contents)) return false;
   }
   // Include edits made while the choice or export dialog was open. If local
