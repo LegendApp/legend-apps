@@ -12,7 +12,7 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
         id: "file",
         label: "File",
         target: { menu: "file" },
-        placement: { before: { menu: "window" } },
+        placement: { before: { menu: "edit" } },
         items: [{ type: "action", id: "open", target: { role: "open" }, label: "Open…", }],
       },
       { type: "submenu",
