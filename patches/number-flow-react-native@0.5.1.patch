@@ -1,0 +1,188 @@
+diff --git a/apps/slides/node_modules/number-flow-react-native/.bun-tag-fd9a1f5d37bb6d46 b/.bun-tag-fd9a1f5d37bb6d46
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/lib/module/core/useAnimatedX.js b/lib/module/core/useAnimatedX.js
+index 78c19e10a202deaa41ac6978dcaa9ad8027a2ef3..d9c949892f5d120d4df46ae6db53ffc9a1d0fd5f 100644
+--- a/lib/module/core/useAnimatedX.js
++++ b/lib/module/core/useAnimatedX.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ 
+ import { useLayoutEffect, useRef, useState } from "react";
+-import { makeMutable, withTiming } from "react-native-reanimated";
++import { makeMutable, withTiming as defaultWithTiming } from "react-native-reanimated";
+ /** Dev-only trace: set globalThis.__NF_TRACE = [] in a debugger to record */
+ function trace(msg) {
+   if (__DEV__ && globalThis.__NF_TRACE) {
+@@ -17,6 +17,7 @@ function trace(msg) {
+  * useSharedValue's cleanup calls cancelAnimation.
+  */
+ export function useAnimatedX(targetX, exiting, transformTiming) {
++  const withTiming = transformTiming.animation ?? defaultWithTiming;
+   const [animatedX] = useState(() => makeMutable(targetX));
+   const prevXRef = useRef(targetX);
+ 
+diff --git a/lib/module/core/useDigitAnimation.js b/lib/module/core/useDigitAnimation.js
+index 1b17aa814ca3887d931119fed980592607086d76..dea3dfe442ef57201880dc1d09b8b0ddcedb11b8 100644
+--- a/lib/module/core/useDigitAnimation.js
++++ b/lib/module/core/useDigitAnimation.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ 
+ import { useCallback, useLayoutEffect, useRef, useState } from "react";
+-import { makeMutable, runOnJS, useAnimatedReaction, withTiming } from "react-native-reanimated";
++import { makeMutable, runOnJS, useAnimatedReaction, withTiming as defaultWithTiming } from "react-native-reanimated";
+ import { DIGIT_COUNT } from "./constants.js";
+ import { useSlotOpacity } from "./useSlotOpacity.js";
+ import { computeRollDelta } from "./utils.js";
+@@ -33,6 +33,7 @@ export function useDigitAnimation({
+   digitCount,
+   continuousSpinGeneration
+ }) {
++  const withTiming = spinTiming.animation ?? defaultWithTiming;
+   const resolvedDigitCount = digitCount ?? DIGIT_COUNT;
+   const initialDigit = entering ? 0 : digitValue;
+   const prevDigitRef = useRef(initialDigit);
+@@ -49,7 +50,7 @@ export function useDigitAnimation({
+       const delta = computeRollDelta(prevDigitRef.current, 0, trendRef.current, resolvedDigitCount);
+       prevDigitRef.current = 0;
+       currentDigitSV.value = 0;
+-      animDelta.value = delta;
++      animDelta.value = (spinTiming.animation ? animDelta.value : 0) + delta;
+       animDelta.value = withTiming(0, {
+         duration: spinTiming.duration,
+         easing: spinTiming.easing
+@@ -70,7 +71,7 @@ export function useDigitAnimation({
+       const delta = computeRollDelta(prevDigitRef.current, digitValue, trendRef.current, resolvedDigitCount);
+       prevDigitRef.current = digitValue;
+       currentDigitSV.value = digitValue;
+-      animDelta.value = delta;
++      animDelta.value = (spinTiming.animation ? animDelta.value : 0) + delta;
+       animDelta.value = withTiming(0, {
+         duration: spinTiming.duration,
+         easing: spinTiming.easing
+diff --git a/lib/module/core/useSlotOpacity.js b/lib/module/core/useSlotOpacity.js
+index 35348db576c2550b2ff35486f3f9479fc9a8a558..913dd5171cacf6aad04e4059e0b0e246ff96adf7 100644
+--- a/lib/module/core/useSlotOpacity.js
++++ b/lib/module/core/useSlotOpacity.js
+@@ -1,7 +1,7 @@
+ "use strict";
+ 
+ import { useLayoutEffect, useRef, useState } from "react";
+-import { makeMutable, runOnJS, withTiming } from "react-native-reanimated";
++import { makeMutable, runOnJS, withTiming as defaultWithTiming } from "react-native-reanimated";
+ 
+ /**
+  * We use makeMutable (via useState) instead of useSharedValue because
+@@ -17,6 +17,7 @@ export function useSlotOpacity({
+   onExitComplete,
+   onExitingStart
+ }) {
++  const withTiming = opacityTiming.animation ?? defaultWithTiming;
+   const [slotOpacity] = useState(() => makeMutable(entering ? 0 : 1));
+   const prevStateRef = useRef(null);
+   const currentState = entering ? "entering" : exiting ? "exiting" : "active";
+diff --git a/lib/typescript/core/types.d.ts b/lib/typescript/core/types.d.ts
+index d22dfe6eb97c7445f2273f11b37feb34c57e9396..6653e80914bda6f5edad7368df2115ed274c1c3a 100644
+--- a/lib/typescript/core/types.d.ts
++++ b/lib/typescript/core/types.d.ts
+@@ -1,5 +1,7 @@
+-import type { EasingFunction } from "react-native-reanimated";
++import type { EasingFunction, withTiming } from "react-native-reanimated";
+ export interface TimingConfig {
++  /** Optional UI-thread timing driver for an externally controlled clock. */
++  animation?: typeof withTiming;
+     /** Duration in milliseconds */
+     duration: number;
+     /** Easing function (t: 0→1) => 0→1 */
+diff --git a/src/core/types.ts b/src/core/types.ts
+index af9ca9efc68e7e6656fad9f6a24a68aa011783b7..46bf6ecf61a3c206df6c165b909aa31599294e67 100644
+--- a/src/core/types.ts
++++ b/src/core/types.ts
+@@ -1,6 +1,8 @@
+-import type { EasingFunction } from "react-native-reanimated";
++import type { EasingFunction, withTiming } from "react-native-reanimated";
+ 
+ export interface TimingConfig {
++  /** Optional UI-thread timing driver for an externally controlled clock. */
++  animation?: typeof withTiming;
+   /** Duration in milliseconds */
+   duration: number;
+   /** Easing function (t: 0→1) => 0→1 */
+diff --git a/src/core/useAnimatedX.ts b/src/core/useAnimatedX.ts
+index c1a115492e0acefc253f2dd9d8db92ccdff33b91..701f77838b4c8b1ce43385cc9b48c843f5299b90 100644
+--- a/src/core/useAnimatedX.ts
++++ b/src/core/useAnimatedX.ts
+@@ -1,5 +1,5 @@
+ import { useLayoutEffect, useRef, useState } from "react";
+-import { makeMutable, type SharedValue, withTiming } from "react-native-reanimated";
++import { makeMutable, type SharedValue, withTiming as defaultWithTiming } from "react-native-reanimated";
+ import type { TimingConfig } from "./types";
+ 
+ declare global {
+@@ -22,6 +22,7 @@ export function useAnimatedX(
+   exiting: boolean,
+   transformTiming: TimingConfig,
+ ): SharedValue<number> {
++  const withTiming = transformTiming.animation ?? defaultWithTiming;
+   const [animatedX] = useState(() => makeMutable(targetX));
+   const prevXRef = useRef(targetX);
+ 
+diff --git a/src/core/useDigitAnimation.ts b/src/core/useDigitAnimation.ts
+index 4db4b5b8fcea0f95c33298070bb10edcd13249d9..07949c1aa874b91337b9b4b0e489c3527b2c7be4 100644
+--- a/src/core/useDigitAnimation.ts
++++ b/src/core/useDigitAnimation.ts
+@@ -4,7 +4,7 @@ import {
+   runOnJS,
+   type SharedValue,
+   useAnimatedReaction,
+-  withTiming,
++  withTiming as defaultWithTiming,
+ } from "react-native-reanimated";
+ import { DIGIT_COUNT } from "./constants";
+ import type { TimingConfig, Trend, TrendRef } from "./types";
+@@ -68,6 +68,7 @@ export function useDigitAnimation({
+   digitCount,
+   continuousSpinGeneration,
+ }: UseDigitAnimationParams): UseDigitAnimationResult {
++  const withTiming = spinTiming.animation ?? defaultWithTiming;
+   const resolvedDigitCount = digitCount ?? DIGIT_COUNT;
+   const initialDigit = entering ? 0 : digitValue;
+   const prevDigitRef = useRef(initialDigit);
+@@ -85,7 +86,7 @@ export function useDigitAnimation({
+       const delta = computeRollDelta(prevDigitRef.current, 0, trendRef.current, resolvedDigitCount);
+       prevDigitRef.current = 0;
+       currentDigitSV.value = 0;
+-      animDelta.value = delta;
++      animDelta.value = (spinTiming.animation ? animDelta.value : 0) + delta;
+       animDelta.value = withTiming(0, {
+         duration: spinTiming.duration,
+         easing: spinTiming.easing,
+@@ -113,7 +114,7 @@ export function useDigitAnimation({
+       );
+       prevDigitRef.current = digitValue;
+       currentDigitSV.value = digitValue;
+-      animDelta.value = delta;
++      animDelta.value = (spinTiming.animation ? animDelta.value : 0) + delta;
+       animDelta.value = withTiming(0, {
+         duration: spinTiming.duration,
+         easing: spinTiming.easing,
+diff --git a/src/core/useSlotOpacity.ts b/src/core/useSlotOpacity.ts
+index 0a1b515418d51d3657c815f409f5800c8dd28b3a..5594f0175de5ab6c3f1ebd9d0ca3a6d994b63028 100644
+--- a/src/core/useSlotOpacity.ts
++++ b/src/core/useSlotOpacity.ts
+@@ -1,5 +1,5 @@
+ import { useLayoutEffect, useRef, useState } from "react";
+-import { makeMutable, runOnJS, type SharedValue, withTiming } from "react-native-reanimated";
++import { makeMutable, runOnJS, type SharedValue, withTiming as defaultWithTiming } from "react-native-reanimated";
+ import type { TimingConfig } from "./types";
+ 
+ /**
+@@ -25,6 +25,7 @@ export function useSlotOpacity({
+   onExitComplete,
+   onExitingStart,
+ }: UseSlotOpacityParams): SharedValue<number> {
++  const withTiming = opacityTiming.animation ?? defaultWithTiming;
+   const [slotOpacity] = useState(() => makeMutable(entering ? 0 : 1));
+   const prevStateRef = useRef<"entering" | "exiting" | "active" | null>(null);
+   const currentState = entering ? "entering" : exiting ? "exiting" : "active";

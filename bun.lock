@@ -170,6 +170,7 @@
         "@typegpu/react": "^0.12.0",
         "fflate": "^0.8.3",
         "lottie-react-native": "7.3.8",
+        "number-flow-react-native": "0.5.1",
         "react-native-enriched-markdown": "1.0.2",
         "react-native-reanimated": "4.3.4",
         "react-native-webgpu": "^0.8.5",
@@ -825,6 +826,7 @@
   "patchedDependencies": {
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
     "react-native-worklets@0.8.3": "patches/react-native-worklets@0.8.3.patch",
+    "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch",
     "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
@@ -2450,6 +2452,8 @@
     "npm-run-path": ["npm-run-path@4.0.1", "", { "dependencies": { "path-key": "^3.0.0" } }, "sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw=="],
 
     "nullthrows": ["nullthrows@1.1.1", "", {}, "sha512-2vPPEi+Z7WqML2jZYddDIfy5Dqb0r2fze2zTxNNknZaFpVHU3mFB3R+DWeJWGVx0ecvttSGlJTI+WG+8Z4cDWw=="],
+
+    "number-flow-react-native": ["number-flow-react-native@0.5.1", "", { "peerDependencies": { "react": ">=18", "react-native": ">=0.73", "react-native-reanimated": ">=3.0.0" } }, "sha512-/H1WqXHhruaD+roLuQE/L5Iqy/eLPZerQBq5arTBX8V34+5iMxQ/GhBPUdfFpDyRWo1hRqX7w55wgXDRJwqk8g=="],
 
     "ob1": ["ob1@0.83.6", "", { "dependencies": { "flow-enums-runtime": "^0.0.6" } }, "sha512-m/xZYkwcjo6UqLMrUICEB3iHk7Bjt3RSR7KXMi6Y1MO/kGkPhoRmfUDF6KAan3rLAZ7ABRqnQyKUTwaqZgUV4w=="],
 

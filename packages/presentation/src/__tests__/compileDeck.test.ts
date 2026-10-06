@@ -475,6 +475,18 @@ describe("compileDeck", () => {
     expect(result.uniwindCode).toContain("bg-slate-800");
   });
 
+  test("makes the Skia number-flow renderer available to local deck components", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": 'import { Numbers } from "./Numbers"\n\n---\nsteps: 2\n---\n<Numbers />',
+      "Numbers.tsx": 'import { SkiaNumberFlow } from "number-flow-react-native/skia"; export function Numbers() { return <SkiaNumberFlow value={15.4} font={null} />; }',
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code).toContain('require("number-flow-react-native/skia")');
+    expect(result.code).toContain('"steps":2');
+  });
+
   test("prefers macOS local modules and leaves comments in fenced code alone", async () => {
     const deckPath = createDeck({
       "deck.mdx": `import { value } from "./value"\n\n{value}\n\n\`\`\`html\n<!-- example, not a note -->\n\`\`\``,

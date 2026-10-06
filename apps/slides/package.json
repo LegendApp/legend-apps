@@ -17,6 +17,7 @@
     "@typegpu/react": "^0.12.0",
     "fflate": "^0.8.3",
     "lottie-react-native": "7.3.8",
+    "number-flow-react-native": "0.5.1",
     "react-native-enriched-markdown": "1.0.2",
     "react-native-reanimated": "4.3.4",
     "react-native-webgpu": "^0.8.5",

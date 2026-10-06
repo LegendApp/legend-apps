@@ -8,7 +8,7 @@ const numeric = (value) => typeof value === "number" ? value : value.__getValue(
 
 mock.module("react-native", () => ({
   Platform: { OS: "macos" },
-  View: "view", Text: "text", TextInput: "input", Pressable: "pressable", PixelRatio: { get: () => 2 },
+  View: "view", Text: "text", Image: "image", TextInput: "input", Pressable: "pressable", PixelRatio: { get: () => 2 },
   StyleSheet: { flatten: value => Array.isArray(value) ? Object.assign({}, ...value) : value, create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
   Easing: { linear: (value) => value, inOut: (easing) => easing, cubic: (value) => value, out: (easing) => easing },
   Animated: {
@@ -55,10 +55,11 @@ mock.module("react-native-reanimated", () => ({
   makeMutable: value => { const progress = { value }; transitionProgresses.push(progress); return progress; },
   Easing: { linear: value => value, cubic: value => value ** 3, inOut: fn => fn, out: fn => fn },
   cancelAnimation: () => {},
+  defineAnimation: (_, factory) => factory(),
   withTiming: (value, _, done) => { if (done) { transitions.push(({ finished }) => done(finished)); return 0; } return value; },
 }));
 mock.module("@shopify/react-native-skia", () => ({
-  Canvas: "canvas", Image: "image", useImage: () => null,
+  Canvas: "canvas", Image: "image", useImage: () => null, matchFont: () => ({}),
   Blur: "blur", Group: "group", Paint: "paint", Fill: "fill", Shader: "shader", RuntimeShader: "shader",
   Skia: { RuntimeEffect: { Make: () => ({}) } },
   makeImageFromView: async () => null,

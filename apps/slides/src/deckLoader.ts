@@ -9,6 +9,7 @@ import * as LegendStateReact from "@legendapp/state/react";
 import * as LegendStateSync from "@legendapp/state/sync";
 import * as Presentation from "@legend-apps/presentation";
 import * as ReactNativeSkia from "@shopify/react-native-skia";
+import * as NumberFlowSkia from "number-flow-react-native/skia";
 import * as TypeGPUNoise from "@typegpu/noise";
 import * as TypeGPUReact from "@typegpu/react";
 import { runCommand } from "@legendapp/spark/processes";
@@ -73,6 +74,7 @@ const hostModules: Record<string, unknown> = {
   "@legendapp/motion": Motion,
   "@legend-apps/presentation": Presentation,
   "@shopify/react-native-skia": ReactNativeSkia,
+  "number-flow-react-native/skia": NumberFlowSkia,
   "lottie-react-native": LottieReactNative,
   "@typegpu/noise": TypeGPUNoise,
   "@typegpu/react": TypeGPUReact,

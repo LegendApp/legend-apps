@@ -33,6 +33,7 @@ const hostModules = new Set([
   "@legendapp/motion",
   "@legend-apps/presentation",
   "@shopify/react-native-skia",
+  "number-flow-react-native/skia",
   "lottie-react-native",
   "@typegpu/noise",
   "@typegpu/react",
