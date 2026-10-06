@@ -1,5 +1,5 @@
 import { getUpdateStatus, configureUpdates, startUpdates, checkForUpdates } from "@legendapp/spark/updates";
-import { useMenu, type MenuItem } from "@legendapp/spark/menus";
+import { useMenu, type MenuRootItem } from "@legendapp/spark/menus";
 import { useEffect, useMemo, useState } from "react";
 function reportUpdateError(error: unknown) { console.error(`[ChatHistoryUpdater] ${String(error)}`); }
 export function ChatHistoryAppMenu() {
@@ -15,7 +15,7 @@ export function ChatHistoryAppMenu() {
     }).catch(reportUpdateError);
     return () => { active = false; };
   }, []);
-  const items = useMemo<MenuItem[]>(() => [{ type: "submenu", id: "app", label: "Legend Chat History", target: { menu: "app" },
+  const items = useMemo<MenuRootItem[]>(() => [{ type: "submenu", id: "app", label: "Legend Chat History", target: { menu: "app" },
     items: [{ type: "action", id: "checkForUpdates", label: "Check for Updates…", disabled: !updatesAvailable, placement: { after: { role: "about" } } }],
   }], [updatesAvailable]);
   useMenu({ id: "chat-history", items, onError: reportUpdateError, onAction: action => {

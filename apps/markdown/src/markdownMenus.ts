@@ -2,10 +2,10 @@ import { observable } from "@legendapp/state";
 import type { MenuState } from "@legend-apps/runtime-utils";
 export const markdownMenuState$ = observable<Record<string, MenuState>>({});
 import {
-  type MenuItem,
+  type MenuRootItem,
 } from "@legendapp/spark/menus";
 
-export const markdownMenuConfig: MenuItem[] = [
+export const markdownMenuConfig: MenuRootItem[] = [
   { type: "submenu",
     id: "file",
     label: "File",

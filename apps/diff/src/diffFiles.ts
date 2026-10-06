@@ -327,7 +327,7 @@ export async function openDiffFilePairDialog() {
     const newPaths = await openFileDialog({
       multiple: false,
       selection: "files",
-      directory: getParentDirectory(oldPath) ?? undefined,
+      defaultPath: getParentDirectory(oldPath) ?? undefined,
       message: "Select the modified version to show on the right side of the comparison.",
       prompt: "Choose Modified",
       title: "Choose Modified File",

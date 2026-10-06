@@ -175,7 +175,7 @@ export function useMarkdownDocumentSession() {
       const result = await saveFileDialog({
         filters: [{ extensions: markdownFileTypes }],
         defaultName,
-        directory,
+        defaultPath: directory,
       });
 
       const path = result.canceled ? null : result.path;

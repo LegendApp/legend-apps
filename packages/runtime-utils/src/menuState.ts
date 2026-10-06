@@ -1,6 +1,8 @@
-import type { MenuItem } from "@legendapp/spark/menus";
+import type { MenuItem, MenuRootItem } from "@legendapp/spark/menus";
 export type MenuState = { disabled?: boolean; hidden?: boolean; checked?: boolean; label?: string; shortcut?: string };
 /** Derive a complete menu tree from application state. */
+export function withMenuState(items: readonly MenuRootItem[], state: Readonly<Record<string, MenuState>>): MenuRootItem[];
+export function withMenuState(items: readonly MenuItem[], state: Readonly<Record<string, MenuState>>): MenuItem[];
 export function withMenuState(items: readonly MenuItem[], state: Readonly<Record<string, MenuState>>): MenuItem[] {
   return items.map(item => {
     if (item.type === "separator") return item;

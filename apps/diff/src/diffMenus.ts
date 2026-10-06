@@ -1,8 +1,8 @@
 import {
-  type MenuItem,
+  type MenuRootItem,
 } from "@legendapp/spark/menus";
 
-export const diffMenuConfig: MenuItem[] = [
+export const diffMenuConfig: MenuRootItem[] = [
   { type: "submenu",
     id: "app",
     label: "Legend Diff",

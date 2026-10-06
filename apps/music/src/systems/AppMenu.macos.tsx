@@ -4,6 +4,7 @@ import { useValue } from "@legendapp/state/react";
 import {
     type MenuAction,
     type MenuItem,
+    type MenuRootItem,
     useMenu,
 } from "@legendapp/spark/menus";
 import { localAudioControls, localPlayerState$, queue$ } from "../components/LocalAudioPlayer";
@@ -20,7 +21,7 @@ const FILE_MENU_ID = "file";
 const PLAYBACK_MENU_ID = "playback";
 const VIEW_MENU_ID = "view";
 
-const MENU_CONFIG: MenuItem[] = [
+const MENU_CONFIG: MenuRootItem[] = [
     { type: "submenu",
         id: APP_MENU_ID,
         label: "Legend Music",

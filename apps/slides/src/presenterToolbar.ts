@@ -26,23 +26,23 @@ export function formatPresenterElapsed(milliseconds: number) {
     : `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-import type { MenuItem } from "@legendapp/spark/menus";
+type ToolbarMenuItem = Extract<MacOSToolbarItem, { type: "menu" }>["items"][number];
 export function createPresenterToolbarItems({ audienceOpen, displayRoles, displays, elapsed, hasDeck, canEditDeck = hasDeck,
  backgroundIntensity = 1, rehearsalEnabled, selectedDisplayId, timerRunning }: {
  audienceOpen: boolean; displayRoles?: DisplayRoles; displays: readonly Pick<DisplayInfo, "id" | "name" | "persistentId">[];
  elapsed: number; hasDeck: boolean; canEditDeck?: boolean; backgroundIntensity?: number; rehearsalEnabled: boolean;
  selectedDisplayId: string | null; timerRunning: boolean;
 }): MacOSToolbarItem[] {
- const action = (id: string, label: string, disabled = false): MenuItem => ({ type: "action", id, label, disabled });
- const displayItems: MenuItem[] = displays.length <= 1 ? [
+ const action = (id: string, label: string, disabled = false): ToolbarMenuItem => ({ type: "action", id, label, disabled });
+ const displayItems: ToolbarMenuItem[] = displays.length <= 1 ? [
   action(audienceOpen ? "close-audience" : "open-audience", audienceOpen ? "Close Audience Window" : "Open Audience Window", !(audienceOpen || (hasDeck && displays.length === 1))),
   action("preview-notes", "Preview Notes Screen", !hasDeck),
  ] : [
-  ...displays.flatMap((display, index): MenuItem[] => {
+  ...displays.flatMap((display, index): ToolbarMenuItem[] => {
    const key = displayKey(display), roles = displayRoles ?? { audience: selectedDisplayId, notes: null };
    const role = roles.audience === key || roles.audience === display.id ? "audience" : roles.notes === key || roles.notes === display.id ? "notes" : "unused";
    return [action(`display:${display.id}`, `${index + 1}. ${display.name} — ${role === "unused" ? "Unused" : role === "audience" ? "Audience" : "Notes"}`, true),
-    ...(["audience", "notes", "unused"] as const).map((value): MenuItem => ({ type: "checkbox", id: `role:${value}:${display.id}`, label: value === "audience" ? "Use for Audience" : value === "notes" ? "Use for Notes" : "Unused", checked: role === value })), { type: "separator" }];
+    ...(["audience", "notes", "unused"] as const).map((value): ToolbarMenuItem => ({ type: "checkbox", id: `role:${value}:${display.id}`, label: value === "audience" ? "Use for Audience" : value === "notes" ? "Use for Notes" : "Unused", checked: role === value })), { type: "separator" }];
   }), action("identify-displays", "Identify Displays"), action("preview-notes", "Preview Notes Screen")
  ];
  return [

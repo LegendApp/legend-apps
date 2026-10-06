@@ -1,6 +1,6 @@
-import { type MenuItem } from "@legendapp/spark/menus";
+import { type MenuRootItem } from "@legendapp/spark/menus";
 
-export const codeMenuConfig: MenuItem[] = [
+export const codeMenuConfig: MenuRootItem[] = [
   { type: "submenu",
     id: "editor", label: "Editor", placement: { before: { menu: "window" } }, items: [
       { type: "checkbox", id: "automaticPairs", label: "Automatic Bracket and Quote Pairs", checked: true },

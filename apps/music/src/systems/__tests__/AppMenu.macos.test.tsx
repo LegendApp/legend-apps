@@ -66,7 +66,7 @@ describe("AppMenuController", () => {
         const renderer = renderController();
 
         expect(menu().id).toBe("music");
-        expect(menu().items.map(item => item.type === "separator" ? undefined : item.id)).toEqual(["app", "file", "view", "playback"]);
+        expect(menu().items.map(item => item.id)).toEqual(["app", "file", "view", "playback"]);
         expect(items().filter(item => item.type !== "separator").map(item => item.id)).toEqual([
             "settings", "checkForUpdates", "savePlaylist", "jump", "toggleLibrary",
             "playbackPrevious", "playbackPlayPause", "playbackNext", "playbackToggleShuffle", "playbackToggleRepeat",
