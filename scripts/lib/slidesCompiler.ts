@@ -67,6 +67,7 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
   for (const name of ["uniwind", "tailwindcss"]) link(install(name, path.join(rootDir, "shell")), path.join(destination, "shell/node_modules", name));
   fs.copyFileSync(bunExecutable, path.join(destination, "bun"));
   fs.chmodSync(path.join(destination, "bun"), 0o755);
+  fs.writeFileSync(path.join(destination, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>bun</string><key>CFBundleIdentifier</key><string>so.legend.slides.compiler</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
   fs.writeFileSync(path.join(destination, "run"), '#!/bin/sh\ncompiler_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$compiler_dir/bun" "$compiler_dir/scripts/compile-slides.ts" "$@"\n', { mode: 0o755 });
   return destination;
 }
@@ -76,6 +77,10 @@ export function signSlidesCompiler(directory: string, identity: string) {
   if (fs.existsSync(directory)) {
     const entitlement = path.join(directory, "bun.entitlements.plist");
     fs.writeFileSync(entitlement, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>');
+    function sign(file: string, jit = false) {
+      const result = spawnSync("codesign", ["--force", "--sign", identity, "--options", identity === "-" ? "0" : "runtime", ...(jit ? ["--entitlements", entitlement] : []), file], { encoding: "utf8" });
+      if (result.status !== 0) throw new Error(`Compiler signing failed: ${result.stderr}`);
+    }
     function visit(at: string) {
       for (const entry of fs.readdirSync(at, { withFileTypes: true })) {
         const file = path.join(at, entry.name);
@@ -86,12 +91,12 @@ export function signSlidesCompiler(directory: string, identity: string) {
           fs.readSync(fd, header, 0, 4, 0);
           fs.closeSync(fd);
           if (["cffaedfe", "cefaedfe", "cafebabe", "bebafeca", "cafebabf", "bfbafeca"].includes(header.toString("hex"))) {
-            const result = spawnSync("codesign", ["--force", "--sign", identity, "--options", identity === "-" ? "0" : "runtime", ...(entry.name === "bun" ? ["--entitlements", entitlement] : []), file], { encoding: "utf8" });
-            if (result.status !== 0) throw new Error(`Compiler signing failed: ${result.stderr}`);
+            sign(file, entry.name === "bun");
           }
         }
       }
     }
     visit(directory);
+    if (fs.existsSync(path.join(directory, "Info.plist"))) sign(directory, true);
   }
 }

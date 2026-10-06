@@ -11,7 +11,7 @@ test("compiler packaging omits maps and declarations while retaining runtime Typ
   }
 });
 
-test("packaged compiler compiles local worklets and Webview components without shipping presentation UI or tests", async () => {
+test("packaged compiler signs as a helper bundle and compiles local worklets and Webview components", async () => {
   const fs = await import("node:fs");
   const os = await import("node:os");
   const path = await import("node:path");
@@ -19,7 +19,25 @@ test("packaged compiler compiles local worklets and Webview components without s
   const { packageSlidesCompiler } = await import("./slidesCompiler");
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "slides-package-test-"));
   try {
-    const compiler = packageSlidesCompiler(path.join(temp, "compiler"));
+    const app = path.join(temp, "Slides.app");
+    const compiler = packageSlidesCompiler(path.join(app, "Contents/Helpers/slides-compiler.helper"));
+    fs.writeFileSync(path.join(compiler, ".spark-entry"), "run");
+    if (process.platform === "darwin") {
+      const { spawnSync } = await import("node:child_process");
+      const { signSlidesCompiler } = await import("./slidesCompiler");
+      fs.mkdirSync(path.join(app, "Contents/MacOS"), { recursive: true });
+      fs.copyFileSync("/usr/bin/true", path.join(app, "Contents/MacOS/Slides"));
+      fs.writeFileSync(path.join(app, "Contents/Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Slides</string><key>CFBundleIdentifier</key><string>so.legend.slides.signing-test</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
+      signSlidesCompiler(compiler, "-");
+      for (const args of [["--force", "--sign", "-", app], ["--verify", "--deep", "--strict", app]]) {
+        const result = spawnSync("codesign", args, { encoding: "utf8" });
+        expect(result.stderr).not.toContain("bundle format unrecognized");
+        expect(result.status).toBe(0);
+      }
+      const entitlement = spawnSync("codesign", ["-d", "--entitlements", ":-", compiler], { encoding: "utf8" });
+      expect(entitlement.status).toBe(0);
+      expect(entitlement.stdout).toContain("com.apple.security.cs.allow-jit");
+    }
     const sources = path.join(compiler, "packages/presentation/src");
     expect(fs.readdirSync(sources).sort()).toEqual(["compiler", "layout.ts", "speakerNotesSource.ts", "transitions"]);
     expect(fs.readdirSync(sources, { recursive: true }).some(file => /__tests__|\.test\./.test(String(file)))).toBe(false);
@@ -35,6 +53,11 @@ test("packaged compiler compiles local worklets and Webview components without s
     expect(result).toMatchObject({ success: true });
     expect(result.code).toContain("__workletHash");
     expect(result.uniwindCode).toContain("stylesheet");
+    if (process.platform === "darwin") {
+      const { spawnSync } = await import("node:child_process");
+      const verified = spawnSync("codesign", ["--verify", "--deep", "--strict", app], { encoding: "utf8" });
+      expect(verified.status).toBe(0);
+    }
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
