@@ -19,7 +19,8 @@
   "scripts": {
     "spark": "bun scripts/spark-app.ts",
     "spark:sync": "bun scripts/sync-spark-sdk.ts",
-    "test:spark": "bun test scripts/sync-spark-sdk.test.ts scripts/lib/sparkWorkspaces.test.ts scripts/lib/sparkDevServer.test.ts scripts/lib/slidesCompiler.test.ts shell/src/launchArguments.test.ts",
+    "verify:spark-dependency": "bun scripts/verify-spark-dependency.ts",
+    "test:spark": "bun test scripts/verify-spark-dependency.test.ts scripts/sync-spark-sdk.test.ts scripts/lib/sparkSdk.test.ts scripts/lib/sparkWorkspaces.test.ts scripts/lib/sparkDevServer.test.ts scripts/lib/slidesCompiler.test.ts shell/src/launchArguments.test.ts",
     "grammars:update": "bun grammars/scripts/update.ts",
     "grammars:fetch": "bun grammars/scripts/fetch.ts",
     "grammars:test": "bun test grammars/tests && bun grammars/scripts/test-packs.ts",
@@ -133,7 +134,7 @@
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark": "file:../legend-spark/artifacts/packages/legendapp-spark-0.0.1-next.2-21c3f4cb17a2.tgz"
+    "@legendapp/spark": "0.0.1-next.2"
   },
   "dependencies": {
     "@legendapp/spark": "catalog:",

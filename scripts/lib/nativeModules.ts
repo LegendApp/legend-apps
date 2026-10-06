@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import path from "node:path";
 import { appIds, appsDir, loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
 import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./types";
+import { sparkSdkPackages } from "./sparkSdk";
 
 export type NativeGraphMode = "dev" | "release";
 
@@ -25,16 +25,11 @@ function installedNativePackage(name: string) {
 export const nativePackages: NativePackage[] = [
   {name: "@legend-apps/color-picker", root: path.join(packagesDir, "color-picker"), platforms: ["macos"]},
   {name: "@legend-apps/photo-library", root: path.join(packagesDir, "photo-library"), platforms: ["macos"]},
-  {
-    name: "@legendapp/spark-message-dialog",
-    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/message-dialog"),
-    platforms: ["macos"],
-  },
-  ...Array.from(new Map(Object.values(sparkCapabilities).map(capability => [capability.package, capability])).values()).map(capability => ({
-    name: capability.package,
-    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages", capability.directory),
+  ...sparkSdkPackages.filter(pkg => pkg.native).map(pkg => ({
+    name: pkg.name,
+    root: pkg.root,
     platforms: ["macos"] as Platform[],
-  })).filter(pkg => fs.readdirSync(pkg.root).some(file => file.endsWith(".podspec"))),
+  })),
   {
     name: "@legend-apps/source-editor",
     root: path.join(packagesDir, "source-editor"),
@@ -53,21 +48,6 @@ export const nativePackages: NativePackage[] = [
   {
     name: "@legend-apps/crypto",
     root: path.join(packagesDir, "crypto"),
-    platforms: ["macos"],
-  },
-  {
-    name: "@legendapp/spark-codex",
-    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/codex"),
-    platforms: ["macos"],
-  },
-  {
-    name: "@legendapp/spark-secure-storage",
-    root: path.join(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/secure-storage"),
-    platforms: ["macos"],
-  },
-  {
-    name: "@legendapp/spark-system",
-    root: path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"), "packages/system"),
     platforms: ["macos"],
   },
   {

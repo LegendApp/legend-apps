@@ -223,6 +223,16 @@ bun run test:markdown-e2e
 Generated per-app native workspaces and configuration live under
 `shell/.legend/` and are build output rather than app source.
 
+The committed Spark catalog and lockfile select the published npm SDK. Native
+workspace preparation reads that installed SDK and does not need a sibling
+`legend-spark` checkout. For SDK development, `bun run spark:sync` can temporarily
+select a local archive; keep those `package.json` and `bun.lock` changes
+uncommitted and restore the published dependency before committing them.
+
+Enable the staged dependency check with `git config core.hooksPath .githooks`.
+It permits local test overrides in the working tree and rejects staging them.
+`bun run verify:spark-dependency` checks the working tree directly.
+
 ### Release builds
 
 Release builds are opt-in and are not part of the normal iteration loop:

@@ -52,7 +52,7 @@ function withPin(source: string, pin: string) {
 
 function currentPin() {
   const pin = readJson(packageFile).catalog?.["@legendapp/spark"];
-  if (typeof pin !== "string" || !pin.startsWith("file:")) throw new Error("Select a local Spark SDK archive in the workspace catalog.");
+  if (typeof pin !== "string") throw new Error("Select a Spark SDK version in the workspace catalog.");
   return pin;
 }
 

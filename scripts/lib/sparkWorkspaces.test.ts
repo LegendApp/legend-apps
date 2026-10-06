@@ -8,7 +8,8 @@ import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { expandSparkSubpath } from "./sparkSubpaths";
-import { prepareSparkWorkspace, sparkCheckout, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { prepareSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { sparkSdkPackages } from "./sparkSdk";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import { codeMenuConfig } from "../../apps/code/src/codeMenus";
@@ -22,8 +23,8 @@ const { identity } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/
 
 for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenuConfig, markdown: markdownMenuConfig })) {
   test(`${app} menus bind native commands without depending on display labels`, async () => {
-    const { menuItems } = require(path.join(sparkCheckout, "packages/desktop-app/src/contracts/menu.ts"));
-    const { composeWindowsMenus } = require(path.join(sparkCheckout, "packages/native-menu/src/windows-menus.ts"));
+    const { menuItems } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-desktop-app/src/contracts/menu.ts"));
+    const { composeWindowsMenus } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-native-menu/src/windows-menus.ts"));
     const native = [
       { id: "native-app", target: { menu: "app" }, items: [{ role: "about" }, { role: "settings" }] },
       { id: "native-file", target: { menu: "file" }, items: ["new", "open", "close", "save", "saveAs"].map(role => ({ role })) },
@@ -46,12 +47,16 @@ test("all workspace consumers resolve the catalog's selected Spark SDK", async (
   const repo = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
   assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
-  const selectedSdk = path.resolve(root, repo.catalog["@legendapp/spark"].slice(5));
-  assert.ok(fs.existsSync(selectedSdk));
+  const sdk = repo.catalog["@legendapp/spark"];
+  const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(root, sdk.slice(5))}` : sdk;
   const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
   const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
-  assert.equal(generated.dependencies["@legendapp/spark"], `file:${selectedSdk}`);
-  assert.equal(generated.overrides["@legendapp/spark"], `file:${selectedSdk}`);
+  assert.equal(generated.dependencies["@legendapp/spark"], selectedSdk);
+  assert.equal(generated.overrides["@legendapp/spark"], selectedSdk);
+  if (!sdk.startsWith("file:")) {
+    assert.ok(Object.values(generated.overrides).every(value => typeof value !== "string" || !value.includes("legend-spark/artifacts")));
+  }
+  for (const pkg of sparkSdkPackages) assert.ok(pkg.root.startsWith(sdkRoot));
   for (const folder of ["apps", "packages"]) for (const name of fs.readdirSync(path.join(root, folder))) {
     const file = path.join(root, folder, name, "package.json");
     if (!fs.existsSync(file)) continue;

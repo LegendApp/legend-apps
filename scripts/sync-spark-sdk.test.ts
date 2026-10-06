@@ -33,7 +33,7 @@ function fixture(customSpark = false) {
     git(repo, "config", "user.email", "sync@example.invalid");
   }
   write(path.join(devApps, "scripts/sync-spark-sdk.ts"), fs.readFileSync(path.join(import.meta.dirname, "sync-spark-sdk.ts"), "utf8"));
-  write(path.join(devApps, "package.json"), JSON.stringify({ name: "apps", version: "1", catalog: { "@legendapp/spark": "file:initial.tgz" } }, null, 2) + "\n");
+  write(path.join(devApps, "package.json"), JSON.stringify({ name: "apps", version: "1", catalog: { "@legendapp/spark": "0.0.1-next.2" } }, null, 2) + "\n");
   write(path.join(devSpark, "source.txt"), "first");
   write(path.join(devSpark, ".gitignore"), ".spark/\nartifacts/\nnode_modules/\n");
   for (const [repo, dev] of [[apps, devApps], [spark, devSpark]]) {
@@ -89,7 +89,7 @@ test("pulls dev, installs the selected SDK before launch, and carries a local pi
   f.commit(f.devSpark);
   const updated = JSON.parse(fs.readFileSync(path.join(f.devApps, "package.json"), "utf8"));
   updated.version = "2";
-  updated.catalog["@legendapp/spark"] = "file:remote-second.tgz";
+  updated.catalog["@legendapp/spark"] = "0.0.1-next.3";
   f.write(path.join(f.devApps, "package.json"), JSON.stringify(updated, null, 2) + "\n");
   f.commit(f.devApps);
   f.ok(["diff"]);

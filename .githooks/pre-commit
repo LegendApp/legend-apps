@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+bun scripts/verify-spark-dependency.ts --staged

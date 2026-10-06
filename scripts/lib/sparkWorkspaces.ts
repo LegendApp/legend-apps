@@ -6,8 +6,8 @@ import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import type { AppManifest } from "./types";
+import { sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
 
-export const sparkCheckout = path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark"));
 export const sparkWorkspace = (appId: string) => path.join(shellDir, ".legend", "spark", appId);
 
 export function sparkMetroBlockList(appId: string) {
@@ -46,13 +46,8 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
   const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name).filter(name => name !== "@legendapp/spark-desktop-app" && !(name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length));
   // Keep unused Spark features
   // out of custom development builds too, rather than waiting for release pruning.
-  const frameworkPackages = path.join(sparkCheckout, "packages");
-  for (const entry of fs.readdirSync(frameworkPackages)) {
-    const dir = path.join(frameworkPackages, entry);
-    const file = path.join(dir, "package.json");
-    if (!fs.existsSync(file)) continue;
-    const pkg = json(file);
-    if (!active.some(activePackage => activePackage.name === pkg.name) && pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links") && (pkg.codegenConfig || pkg.spark?.nativeModules || fs.readdirSync(dir).some(name => name.endsWith(".podspec")))) excluded.push(pkg.name);
+  for (const pkg of sparkSdkPackages) {
+    if (pkg.native && !active.some(activePackage => activePackage.name === pkg.name) && pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links")) excluded.push(pkg.name);
   }
   excluded.push("@react-native-runtimes/core", "@op-engineering/op-sqlite");
   if (!manifest.nativeModules.macos.includes("react-native-webview")) excluded.push("react-native-webview");
@@ -130,16 +125,11 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
 
 export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
   const project = sparkWorkspace(manifest.id);
-  const sdkManifest = path.join(sparkCheckout, "artifacts/packages/manifest.json");
-  if (!fs.existsSync(sdkManifest)) throw new Error(`Pack the local Spark SDK first: cd ${sparkCheckout} && npm run pack:local`);
-  const archives = json(sdkManifest) as Record<string, string>;
   const repo = json(path.join(rootDir, "package.json"));
   const sdk = repo.catalog["@legendapp/spark"];
-  if (typeof sdk !== "string" || !sdk.startsWith("file:")) throw new Error("Select a local Spark SDK archive in the workspace catalog.");
-  const selectedSdk = path.resolve(rootDir, sdk.slice(5));
-  if (!fs.existsSync(selectedSdk)) throw new Error(`The selected Spark SDK archive is missing: ${selectedSdk}`);
-  archives["@legendapp/spark"] = path.relative(path.dirname(sdkManifest), selectedSdk);
-  const template = json(path.join(rootDir, "node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
+  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in the workspace catalog.");
+  const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(rootDir, sdk.slice(5))}` : sdk;
+  const template = json(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
   const app = json(path.join(appsDir, manifest.id, "package.json"));
   const active = getActiveNativePackages(manifest, "macos");
   const excluded = new Set(getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name));
@@ -151,12 +141,20 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
     if (version === "catalog:") dependencies[name] = repo.catalog[name];
   }
   const overrides: Record<string, string> = { ...repo.catalog, ...template.overrides, uniwind: "1.6.3", tailwindcss: "4.2.4" };
-  for (const [name, archive] of Object.entries(archives)) {
-    if (name.startsWith("@legendapp/spark-") && !name.includes("native-greeting")) continue;
-    const location = `file:${path.resolve(path.dirname(sdkManifest), archive)}`;
-    overrides[name] = location;
-    if (name in dependencies) dependencies[name] = location;
+  if (sdk.startsWith("file:")) {
+    const archive = path.resolve(rootDir, sdk.slice(5));
+    if (!fs.existsSync(archive)) throw new Error(`The selected Spark SDK archive is missing: ${archive}`);
+    const sdkManifest = path.join(path.dirname(archive), "manifest.json");
+    const archives: Record<string, string> = fs.existsSync(sdkManifest) ? json(sdkManifest) : {};
+    for (const [name, file] of Object.entries(archives)) {
+      if (name.startsWith("@legendapp/spark-")) continue;
+      const location = `file:${path.resolve(path.dirname(sdkManifest), file)}`;
+      overrides[name] = location;
+      if (name in dependencies) dependencies[name] = location;
+    }
   }
+  overrides["@legendapp/spark"] = selectedSdk;
+  dependencies["@legendapp/spark"] = selectedSdk;
   // Keep app libraries as source dependencies while Spark owns the host.
   for (const entry of fs.readdirSync(path.join(rootDir, "packages"))) {
     const dir = path.join(rootDir, "packages", entry);
@@ -172,6 +170,7 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
     name: `legend-spark-${manifest.id}`, version: app.version, private: true,
     main: "index.ts", packageManager: "bun@1.3.14", catalog: repo.catalog,
     dependencies, overrides,
+    patchedDependencies: Object.fromEntries(Object.entries(repo.patchedDependencies ?? {}).map(([name, file]) => [name, path.relative(project, path.resolve(rootDir, file as string))])),
     ...(active.some(pkg => pkg.name === "react-native-enriched-markdown")
       ? { "enriched-markdown": repo["enriched-markdown"] } : {}),
   });
