@@ -93,8 +93,8 @@ const packed = readCache(markerFile);
 let manifest = readCache(manifestFile);
 if (!archivesPresent(manifest) || packed?.sparkHead !== head || packed?.archive !== manifest["@legendapp/spark"]) {
   console.log(`Packing the local Spark SDK at ${head.slice(0, 7)}…`);
-  run(sparkRoot, "npm", ["ci"]);
-  run(sparkRoot, "npm", ["run", "pack:local"]);
+  run(sparkRoot, "bun", ["install", "--frozen-lockfile"]);
+  run(sparkRoot, "bun", ["run", "pack:local"]);
   manifest = readJson(manifestFile);
   if (!archivesPresent(manifest)) throw new Error("Packing did not produce the SDK archives listed in manifest.json.");
   if (git(sparkRoot, ["rev-parse", "HEAD"]) !== head || git(sparkRoot, ["status", "--porcelain"])) {
