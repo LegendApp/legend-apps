@@ -1,6 +1,5 @@
 import { observable } from "@legendapp/state";
-import { closeWindow, getDisplays, openWindow, type DisplayInfo } from "@legendapp/spark/windows";
-import { setWindowBounds } from "@legendapp/spark/windows/macos";
+import { closeWindow, getDisplays, openWindow, setWindowBounds, type DisplayInfo } from "@legendapp/spark/windows";
 import { AppRegistry } from "react-native";
 import { createElement } from "react";
 import { WindowProvider } from "@legendapp/spark/windows";

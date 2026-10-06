@@ -6,11 +6,12 @@ let notesDisplay = null;
 mock.module("@legendapp/spark/windows", () => ({
   closeWindow: async () => { calls.push("close"); return { closed: !failClose }; },
   getDisplays: async () => [], WindowProvider: () => null, openWindow: async () => {},
+  setWindowBounds: async () => { calls.push("bounds"); },
 }));
 mock.module("../slidesWindows", () => ({ slidesWindows: { open: async () => { calls.push("open"); } } }));
 mock.module("../slidesSettings", () => ({ displayRolesSetting: { get: () => ({ notes: notesDisplay }) } }));
 mock.module("react-native", () => ({ AppRegistry: {} }));
-mock.module("@legendapp/spark/windows/macos", () => ({ setWindowBounds: async () => { calls.push("bounds"); } }));
+mock.module("@legendapp/spark/windows/macos", () => ({}));
 const { previewNotesOutput, notesOutput$, syncNotesOutput, notesOutputClosed } = await import("../notesOutput");
 
 test("preview is closed when presenting without a notes display", async () => {

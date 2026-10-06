@@ -1,9 +1,8 @@
-import { setWindowBounds } from "@legendapp/spark/windows/macos";
 import { addAppListener } from "@legendapp/spark/app";
 import { useMount, useObserveEffect } from "@legendapp/state/react";
 import { useRef } from "react";
 import { Dimensions } from "react-native";
-import { getWindow, listWindows, getDisplays } from "@legendapp/spark/windows";
+import { getWindow, listWindows, getDisplays, setWindowBounds } from "@legendapp/spark/windows";
 import { settings$ } from "../systems/Settings";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
@@ -91,7 +90,7 @@ export const CurrentSongOverlayWindowManager = () => {
                 frameAnimationDurationMs = OVERLAY_WINDOW_ANIMATION_DURATION_MS;
             }
             const current = (await listWindows()).find(window => window.id === OVERLAY_WINDOW_ID);
-            if (current) await setWindowBounds(OVERLAY_WINDOW_ID, { displayId: display.id, x, y, width: windowWidth, height: windowHeight }, { durationMs: frameAnimationDurationMs });
+            if (current) await setWindowBounds(OVERLAY_WINDOW_ID, { displayId: display.id, x, y, width: windowWidth, height: windowHeight }, { macos: { durationMs: frameAnimationDurationMs } });
             else {
             await WindowsNavigator.open(OVERLAY_WINDOW_KEY, {
                 options: {

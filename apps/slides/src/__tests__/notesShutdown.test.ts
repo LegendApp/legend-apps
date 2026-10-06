@@ -7,12 +7,13 @@ let failClose = false;
 mock.module("@legendapp/spark/windows", () => ({
   closeWindow: async () => { calls.push("close"); return { closed: !failClose }; },
   getDisplays: async () => [], WindowProvider: () => null, openWindow: async () => {},
+  setWindowBounds: async () => {},
 }));
 mock.module("../slidesWindows", () => ({ slidesWindows: { open: async () => {
   calls.push("opening"); await new Promise(resolve => { finishOpen = resolve; }); calls.push("opened");
 } } }));
 mock.module("../slidesSettings", () => ({ displayRolesSetting: { get: () => ({}) } }));
-mock.module("@legendapp/spark/windows/macos", () => ({ setWindowBounds: async () => {} }));
+mock.module("@legendapp/spark/windows/macos", () => ({}));
 const { previewNotesOutput, closeNotesOutput, resumeNotesOutput, syncNotesOutput, notesOutput$ } = await import("../notesOutput");
 
 test("shutdown waits for preview creation and retains state when native close fails", async () => {

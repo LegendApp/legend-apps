@@ -8,10 +8,10 @@ import { useObservable, useObserveEffect, useValue } from "@legendapp/state/reac
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { registerDocumentOpenGuard } from "./documentOpen";
-import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, setWindowFullscreen, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
+import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, setWindowBounds, setWindowFullscreen, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
 import { addAppListener } from "@legendapp/spark/app";
 import { onSystemEvent, preventSleep } from "@legendapp/spark/system";
-import { addMacOSWindowListener, setToolbarItemText, setWindowBounds } from "@legendapp/spark/windows/macos";
+import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
 import { openOrShowWindow, ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
