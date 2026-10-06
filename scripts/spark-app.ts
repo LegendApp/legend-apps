@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import path from "node:path";
 import { createRequire } from "node:module";
-import { assertSupportedPlatform, resolveDevServerPort, withDefaultPortArg, loadAppManifest } from "./lib/apps";
+import { assertSupportedPlatform, loadAppManifest } from "./lib/apps";
+import { runSparkDevServer } from "./lib/sparkDevServer";
 import { prepareSparkWorkspace } from "./lib/sparkWorkspaces";
 import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 
@@ -29,11 +30,11 @@ else {
     const separator = extra.indexOf("--");
     const runnerArgs = separator < 0 ? extra : extra.slice(0, separator);
     const appArgs = separator < 0 ? [] : extra.slice(separator + 1);
-    runCommand("node", [cli, "dev", ...withDefaultPortArg(runnerArgs, resolveDevServerPort(appId, runnerArgs)), ...appArgs.map(arg => `--app-arg=${arg}`)], { cwd: project, env });
+    await runSparkDevServer({ appId, project, cli, runnerArgs, appArgs, env });
   }
   else if (action === "build-release") runCommand("node", [cli, "build", "--release", ...extra], { cwd: project, env });
   else if (action === "build") runCommand("node", [cli, "build", "--dev", ...extra], { cwd: project, env });
-  else if (action === "start") runCommand("node", [cli, "dev", "--no-open", ...withDefaultPortArg(extra, resolveDevServerPort(appId, extra))], { cwd: project, env });
+  else if (action === "start") await runSparkDevServer({ appId, project, cli, runnerArgs: extra, noOpen: true, env });
   else if (action === "analyze") runCommand("node", [cli, "analyze", ...extra], { cwd: project, env });
   else throw new Error(`Unknown Spark action: ${action}`);
 }

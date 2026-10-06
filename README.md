@@ -162,6 +162,10 @@ Only use actions and platforms supported by the selected app. Running
 Metro ports in `scripts/lib/apps.ts` allow multiple app servers to run without
 colliding.
 
+On macOS, `run` and `start` reuse a healthy Metro server for the same app and
+port. `run` opens the development app against that server; its original terminal
+keeps ownership of Metro. A server for another project requires a different `--port`.
+
 When an app manifest or native package link changes, refresh CocoaPods before
 rebuilding macOS:
 

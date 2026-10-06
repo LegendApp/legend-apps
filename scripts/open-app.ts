@@ -13,6 +13,9 @@ const openOptionSpecs: OptionSpecs = {
   "--mode": "value",
   "--print": "boolean",
   "--port": "value",
+  "--https": "boolean",
+  "--no-dev": "boolean",
+  "--minify": "boolean",
   "--release": "boolean",
   "--arch": "value",
 };
@@ -71,7 +74,8 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   }
   if (shouldPrintOnly(runnerArgs)) { console.log(appPath); return; }
   const port = resolveDevServerPort(appId, runnerArgs);
-  const envArgs = mode === "Debug" ? ["--env", `SPARK_BUNDLE_URL=http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`] : [];
+  const protocol = runnerArgs.includes("--https") ? "https" : "http";
+  const envArgs = mode === "Debug" ? ["--env", `SPARK_BUNDLE_URL=${protocol}://127.0.0.1:${port}/index.bundle?platform=macos&dev=${!runnerArgs.includes("--no-dev")}&minify=${runnerArgs.includes("--minify")}`] : [];
   const runtimeArgs = mode === "Debug" ? ["-RCT_jsLocation", `127.0.0.1:${port}`] : [];
   runCommand("open", [...(launchArgs.length ? ["-n"] : []), ...envArgs, appPath, ...((runtimeArgs.length || launchArgs.length) ? ["--args", ...runtimeArgs, ...launchArgs] : [])]);
 
