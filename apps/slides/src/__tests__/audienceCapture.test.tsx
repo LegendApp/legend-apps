@@ -3,10 +3,16 @@ import { expect, mock, spyOn, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
 
-import { BackgroundHost } from "@legend-apps/presentation";
+import { BackgroundHost, FocusSurfaceContext } from "@legend-apps/presentation";
 import { transitions, transitionProgresses, idleCallbacks, flushIdleCallbacks } from "./nativeMock";
 mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
-mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
+let configureMountedSurface;
+function Deck(props) {
+  const context = React.useContext(FocusSurfaceContext);
+  React.useLayoutEffect(() => { configureMountedSurface?.(props.targetIndex, context.surface); }, [context.surface]);
+  return <deck {...props} />;
+}
+mock.module("../DeckRenderer", () => ({ DeckRenderer: Deck, SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
 const { AudienceWindow } = await import("../AudienceWindow");
 const { getSlidesState, setCurrentSlide, setSlidesState } = await import("../slidesStore");
 
@@ -48,7 +54,7 @@ test("crossfade keeps identical backgrounds fully opaque throughout forward and 
   }
 });
 
-test("audience retains two slides on each side at full capture scale", async () => {
+test("audience retains immediate neighbors at full capture scale", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState();
   const log = spyOn(console, "error").mockImplementation(() => {});
@@ -66,9 +72,9 @@ test("audience retains two slides on each side at full capture scale", async () 
       while (idleCallbacks.size) await act(flushIdleCallbacks);
       const canvases = renderer.root.findAllByType("canvas");
       expect(canvases.map((canvas) => canvas.findByType("deck").props.targetIndex).sort((a, b) => a - b))
-        .toEqual(Array.from({ length: Math.min(6, index + 2) - Math.max(0, index - 2) + 1 },
-          (_, offset) => Math.max(0, index - 2) + offset));
-      const active = canvases.filter((canvas) => !canvas.findByType("deck").props.isPreview);
+        .toEqual(Array.from({ length: Math.min(6, index + 1) - Math.max(0, index - 1) + 1 },
+          (_, offset) => Math.max(0, index - 1) + offset));
+      const active = canvases.filter((canvas) => !canvas.findByType("deck").props.isPreview && !canvas.findByType("deck").props.isOutgoing);
       expect(active).toHaveLength(1);
       expect(active[0].findByType("deck").props.targetIndex).toBe(index);
       expect(active[0].props.captureEnabled).not.toBe(false);
@@ -154,7 +160,8 @@ test("focus prepares live geometry before moving and reverses the destination sl
       expect(detail.elements.get("diagram")).toBeDefined();
       expect(transitions).toHaveLength(1);
       await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-      expect(layers().every((layer) => layer.props.motion === undefined)).toBe(true);
+      expect(layers().find(layer => layer.props.index === index).props.motion).toBeUndefined();
+      expect(layers().find(layer => layer.props.index !== index).props.motion).toBeDefined();
     }
     // Missing target falls back to a normal fade, with no moving shared layer.
     layers()[0].props.surfaces.get(0).entries.clear();
@@ -182,13 +189,12 @@ test("shared markers animate with every slide transition, backward and across ju
   try {
     for (const transition of [undefined, "none", "fade", "slide", { type: "focus", from: "missing" }]) {
       setSlidesState({ currentSlide: 0, config: { transition }, slides: Array.from({ length: 3 }, () => ({ metadata: {}, notes: "" })) });
-      await act(() => { tree = create(<AudienceWindow />); });
-      for (const layer of layers()) {
-        const surface = layer.props.surfaces.get(layer.props.index);
+      configureMountedSurface = (index, surface) => {
         Object.assign(surface, { root: {}, width: 1920, height: 1080, scale: 0.5 });
-        const rect = [200 + layer.props.index * 100, 100, 300, 80];
+        const rect = [200 + index * 100, 100, 300, 80];
         surface.entries.add({ id: "title", kind: "element", view: { measureLayout: (_root, done) => done(...rect) } });
-      }
+      };
+      await act(() => { tree = create(<AudienceWindow />); });
       for (const index of [1, 0, 2]) {
         const previous = getSlidesState().currentSlide;
         await act(() => setCurrentSlide(index));
@@ -206,12 +212,13 @@ test("shared markers animate with every slide transition, backward and across ju
         }
         expect(transitions).toHaveLength(1);
         await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-        expect(layers().every((layer) => layer.props.motion === undefined)).toBe(true);
+        expect(layers().find(layer => layer.props.index === index).props.motion).toBeUndefined();
       }
       await act(() => tree.unmount());
       tree = undefined;
     }
   } finally {
+    configureMountedSurface = undefined;
     if (tree) await act(() => tree.unmount());
     transitions.splice(0);
     setSlidesState(initial);
@@ -265,7 +272,7 @@ test("user transitions receive progress and options, finish visibly, and recover
     await act(() => setCurrentSlide(2));
     expect(getSlidesState().runtimeErrors.some((error) => error.includes("broken transition"))).toBe(true);
     await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-    const active = renderer.root.findAllByType("deck").filter((deck) => !deck.props.isPreview);
+    const active = renderer.root.findAllByType("deck").filter((deck) => !deck.props.isPreview && !deck.props.isOutgoing);
     expect(active).toHaveLength(1);
     expect(active[0].props.targetIndex).toBe(2);
   } finally {
@@ -274,7 +281,7 @@ test("user transitions receive progress and options, finish visibly, and recover
   }
 });
 
-test("outgoing media keeps its live surface and final step until the crossfade completes", async () => {
+test("retained outgoing media keeps its live surface and final step after the crossfade completes", async () => {
   const initial = getSlidesState();
   const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
@@ -292,9 +299,10 @@ test("outgoing media keeps its live surface and final step until the crossfade c
       expect(outgoing.props.isPreparing).toBe(false);
       await act(() => transitions.splice(0).forEach(done => done({ finished: true })));
       const prepared = tree.root.findAllByType("deck").find(deck => deck.props.targetIndex === source);
-      expect(prepared.props.isOutgoing).toBe(false);
-      expect(prepared.props.isPreview).toBe(true);
-      expect(prepared.props.isPreparing).toBe(true);
+      expect(prepared.props.isOutgoing).toBe(true);
+      expect(prepared.props.isPreview).toBe(false);
+      expect(prepared.props.isPreparing).toBe(false);
+      expect(prepared.props.targetStep).toBe(step);
     }
   } finally {
     if (tree) await act(() => tree.unmount());

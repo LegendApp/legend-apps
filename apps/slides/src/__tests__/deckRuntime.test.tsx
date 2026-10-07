@@ -135,6 +135,42 @@ test("fixed previews stay idle while the audience advances slides and steps", as
   }
 });
 
+test("retained outgoing content ignores navigation until it returns to playback", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  let renders = 0;
+  function Probe() { renders++; return <runtime value={usePresentation()} />; }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}">{[0, 1, 2].map(index =>
+      <Slide key={index} metadataJson='{"steps":3}' notes=""><Probe /></Slide>)}</Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 2, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer targetIndex={0} />); });
+    await act(() => setCurrentSlide(1));
+    await act(() => tree.update(<DeckRenderer isOutgoing targetIndex={0} targetStep={2} />));
+    const frozen = tree.root.findByType("runtime").props.value;
+    expect(frozen).toMatchObject({ playbackPhase: "outgoing", isActive: false, isPreview: false, stepIndex: 2 });
+    renders = 0;
+    for (const index of [2, 1, 2]) {
+      await act(() => setCurrentSlide(index));
+      await act(() => setSlidesState({ currentStep: 1, stepStartedAt: performance.now() }));
+    }
+    expect(renders).toBe(0);
+    expect(tree.root.findByType("runtime").props.value).toBe(frozen);
+    await act(() => setCurrentSlide(0));
+    await act(() => tree.update(<DeckRenderer targetIndex={0} />));
+    expect(tree.root.findByType("runtime").props.value).toMatchObject({ playbackPhase: "playing", isActive: true, stepIndex: 0 });
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
 test("Markdown classes override defaults and theme without recoloring nested emphasis", async () => {
   const initial = getSlidesState();
   const DeckRenderer = compiledRenderer();

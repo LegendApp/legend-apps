@@ -97,22 +97,22 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     const count = slidesState$.slides.length;
     const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
     const stepCount = normalizeStepCount(slidesState$.slides[slideIndex].metadata.steps.get());
-    // Fixed previews do not subscribe to live navigation or animation epochs.
-    const currentSlide = isPreview ? slideIndex : slidesState$.currentSlide.get();
-    const currentStep = isPreview ? targetStep ?? 0 : slidesState$.currentStep.get();
+    // Fixed previews and retained outgoing surfaces ignore later navigation.
+    const currentSlide = isPreview ? slideIndex : isOutgoing ? slidesState$.currentSlide.peek() : slidesState$.currentSlide.get();
+    const currentStep = isPreview || isOutgoing ? targetStep ?? 0 : slidesState$.currentStep.get();
     return {
       currentSlide, currentStep, goTo: setCurrentSlide,
       titleAnimationSpeed: titleAnimationSpeedSetting.get(),
-      isActive: !isPreview && slideIndex === currentSlide,
+      isActive: !isPreview && !isOutgoing && slideIndex === currentSlide,
       isPreview: Boolean(isPreview), isPreparing,
       playbackPhase: isPreparing ? "preparing" : isOutgoing ? "outgoing" : isPreview ? "preview" : slideIndex === currentSlide ? "playing" : "paused",
       next: nextSlide, previous: previousSlide,
       slideCount: count, slideIndex, stepCount,
       stepIndex: Math.max(0, Math.min(targetStep ?? (slideIndex === currentSlide ? currentStep : 0), stepCount - 1)),
-      startedAt: isPreview ? undefined : slidesState$.slideStartedAt.get(),
-      stepStartedAt: isPreview ? undefined : slidesState$.stepStartedAt.get(),
-      stepEpochs: isPreview ? undefined : slidesState$.stepEpochs.get(),
-      direction: isPreview ? undefined : slidesState$.direction.get(),
+      startedAt: isPreview || isOutgoing ? undefined : slidesState$.slideStartedAt.get(),
+      stepStartedAt: isPreview || isOutgoing ? undefined : slidesState$.stepStartedAt.get(),
+      stepEpochs: isPreview || isOutgoing ? undefined : slidesState$.stepEpochs.get(),
+      direction: isPreview || isOutgoing ? undefined : slidesState$.direction.get(),
     };
   }, [isPreview, isPreparing, isOutgoing, targetIndex, targetStep]);
   const selected = elements[selectedIndex];
@@ -357,7 +357,10 @@ function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children
   const renderedWidth = width * scale;
   const renderedHeight = height * scale;
   const backgroundColor = color;
-  const handleLayout = (event: LayoutChangeEvent) => setSize(event.nativeEvent.layout);
+  const handleLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setSize(current => current.width === width && current.height === height ? current : { width, height });
+  };
   return (
     <View onLayout={handleLayout} style={styles.canvas}>
       <ScaledView

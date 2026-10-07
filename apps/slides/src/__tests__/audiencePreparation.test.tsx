@@ -1,13 +1,15 @@
 // @ts-nocheck Native windows, clocks, and the idle scheduler are mocked.
 import { expect, mock, spyOn, test } from "bun:test";
-import React, { useEffect } from "react";
+import React, { useContext, useEffect } from "react";
 import { act, create } from "react-test-renderer";
-import { BackgroundHost } from "@legend-apps/presentation";
+import { BackgroundHost, NavigationTransitionContext } from "@legend-apps/presentation";
 import { transitions } from "./nativeMock";
 const mounts: number[] = [], unmounts: number[] = [];
+const renders = new Map<number, number>();
 function Deck(props) {
+  renders.set(props.targetIndex, (renders.get(props.targetIndex) ?? 0) + 1);
   useEffect(() => { mounts.push(props.targetIndex); return () => { unmounts.push(props.targetIndex); }; }, []);
-  return <deck {...props} />;
+  return <deck {...props} navigation={useContext(NavigationTransitionContext)} />;
 }
 mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
 mock.module("../DeckRenderer", () => ({ DeckRenderer: Deck, SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
@@ -25,14 +27,16 @@ async function harness(run) {
   const log = spyOn(console, "error").mockImplementation(() => {});
   let renderer;
   mounts.length = unmounts.length = 0;
+  renders.clear();
   const indexes = () => renderer.root.findAllByType("deck").map(view => view.props.targetIndex).sort((a,b) => a-b);
   const finish = () => act(() => { transitions.splice(0).forEach(done => done({ finished: true })); });
   const idle = () => act(() => { const [id, callback] = jobs.entries().next().value; jobs.delete(id); callback({ didTimeout: false, timeRemaining: () => 50 }); });
   const drain = async () => { for (let i=0;jobs.size;i++) { if (i>20) throw Error("Preparation did not converge"); await idle(); } };
   try {
-    setSlidesState({ currentSlide: 9, currentStep: 0, config: { transition: "fade" }, slides: Array.from({length:20},()=>({metadata:{},notes:""})) });
+    setSlidesState({ currentSlide: 9, currentStep: 0, config: { transition: "fade" }, slides: Array.from({length:20},()=>({metadata:{steps:4},notes:""})) });
     await act(() => { renderer = create(<AudienceWindow />); });
-    await run({ indexes, finish, idle, drain, jobs, unmount: () => act(() => renderer.unmount()) });
+    await run({ indexes, finish, idle, drain, jobs, decks: () => renderer.root.findAllByType("deck"),
+      unmount: () => act(() => renderer.unmount()) });
   } finally {
     if (renderer) await act(() => renderer.unmount());
     transitions.splice(0);
@@ -44,18 +48,42 @@ async function harness(run) {
 }
 
 test("completion adds no neighbors; idle preparation mounts one nearest neighbor per commit", () => harness(async h => {
-  expect(h.indexes()).toEqual([7,8,9,10,11]);
+  expect(h.indexes()).toEqual([8,9,10]);
   await act(() => setCurrentSlide(7));
   await h.finish();
-  expect(h.indexes()).toEqual([7,8,9]);
-  expect(mounts).toEqual([7,8,10,11,9]);
+  expect(h.indexes()).toEqual([7,8]);
+  expect(mounts).toEqual([8,10,9,7]);
   await h.idle();
-  expect(h.indexes()).toEqual([6,7,8,9]);
+  expect(h.indexes()).toEqual([6,7,8]);
   expect(mounts.at(-1)).toBe(6);
-  await h.idle();
-  expect(h.indexes()).toEqual([5,6,7,8,9]);
-  expect(mounts.at(-1)).toBe(5);
   expect(h.jobs.size).toBe(0);
+}));
+
+test("completion freezes the retained outgoing tree without rebuilding either deck", () => harness(async h => {
+  await act(() => setSlidesState({ currentStep: 3 }));
+  await act(() => setCurrentSlide(8));
+  const before = [...renders];
+  const source = h.decks().find(deck => deck.props.targetIndex === 9);
+  expect(source.props).toMatchObject({ isOutgoing: true, isPreparing: false, isPreview: false, targetStep: 3 });
+  const navigation = source.props.navigation;
+  await h.finish();
+  expect([...renders]).toEqual(before);
+  const retained = h.decks().find(deck => deck.props.targetIndex === 9);
+  expect(retained.props.navigation).toBe(navigation);
+  expect(retained.props).toMatchObject({ isOutgoing: true, isPreparing: false, isPreview: false, targetStep: 3 });
+  await act(() => setCurrentSlide(9));
+  const returning = h.decks().find(deck => deck.props.targetIndex === 9);
+  expect(returning.props).toMatchObject({ isOutgoing: false, isPreparing: false, isPreview: false });
+  expect(returning.props.targetStep).toBeUndefined();
+  expect(returning.props.navigation).not.toBe(navigation);
+}));
+
+test("navigation leaves unrelated prepared deck content and context untouched", () => harness(async h => {
+  const prepared = h.decks().find(deck => deck.props.targetIndex === 10);
+  const before = renders.get(10);
+  await act(() => setCurrentSlide(8));
+  expect(renders.get(10)).toBe(before);
+  expect(h.decks().find(deck => deck.props.targetIndex === 10).props.navigation).toBe(prepared.props.navigation);
 }));
 
 test("interruption and reversal discard stale idle work and preserve promoted instances", () => harness(async h => {
@@ -69,26 +97,26 @@ test("interruption and reversal discard stale idle work and preserve promoted in
   expect(h.indexes()).not.toContain(5);
   expect(mounts.filter(index=>index===6)).toHaveLength(before);
   await act(() => setCurrentSlide(7)); await h.finish(); await h.drain();
-  expect(h.indexes()).toEqual([5,6,7,8,9]);
+  expect(h.indexes()).toEqual([6,7,8]);
   expect(mounts.filter(index=>index===6)).toHaveLength(before);
 }));
 
 test("rapid interrupted jumps retain a bounded neighborhood plus the two visible slides", () => harness(async h => {
   for (const index of [17,2,14,1,18]) {
     await act(() => setCurrentSlide(index));
-    expect(h.indexes().length).toBeLessThanOrEqual(7);
+    expect(h.indexes().length).toBeLessThanOrEqual(5);
     expect(h.indexes()).toContain(index);
     expect(h.jobs.size).toBe(0);
   }
   await h.finish(); await h.drain();
-  expect(h.indexes()).toEqual([16,17,18,19]);
+  expect(h.indexes()).toEqual([17,18,19]);
 }));
 
 test("far jumps skip intermediate slides and cuts, revisions, and unmount cancel pending preparation", () => harness(async h => {
   await act(() => setCurrentSlide(17)); await h.finish();
   expect(h.indexes()).toEqual([17]);
   await h.drain();
-  expect(h.indexes()).toEqual([15,16,17,18,19]);
+  expect(h.indexes()).toEqual([16,17,18]);
   expect(mounts.some(index=>index>=12 && index<=14)).toBe(false);
   await act(() => setSlidesState({config:{transition:"none"},currentSlide:2}));
   expect(h.indexes()).toEqual([2]);
@@ -96,7 +124,7 @@ test("far jumps skip intermediate slides and cuts, revisions, and unmount cancel
   await act(() => setSlidesState({revision:getSlidesState().revision+1,currentSlide:3}));
   await act(() => stale());
   await h.drain();
-  expect(h.indexes()).toEqual([1,2,3,4,5]);
+  expect(h.indexes()).toEqual([2,3,4]);
   await act(() => setCurrentSlide(10));
   expect(h.jobs.size).toBe(1);
   const cancelled = h.jobs.values().next().value;
