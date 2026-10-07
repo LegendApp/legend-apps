@@ -52,6 +52,7 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     const result = JSON.parse(gunzipSync(Buffer.from(JSON.parse(stdout).data, "base64")).toString());
     expect(result).toMatchObject({ success: true });
     expect(result.code).toContain("__workletHash");
+    expect(result.code).toContain('require("react/compiler-runtime")');
     expect(result.uniwindCode).toContain("stylesheet");
     if (process.platform === "darwin") {
       const { spawnSync } = await import("node:child_process");

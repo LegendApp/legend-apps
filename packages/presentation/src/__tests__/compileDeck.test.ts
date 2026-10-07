@@ -85,6 +85,87 @@ describe("compileDeck", () => {
     expect(restore(callback)()).toEqual({ x: 42 });
   });
 
+  test("compiles local React boundaries while preserving state updates and worklet closures", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": 'export { Demo, counts } from "./Demo"\n\n# Compiled',
+      "Demo.tsx": `import { useState } from "react";
+        import { useDerivedValue } from "react-native-reanimated";
+        import { sample } from "@legend-apps/presentation";
+        export const counts = { heavy: 0 };
+        function Heavy({ label }) { counts.heavy++; return <heavy label={label} />; }
+        export function Demo({ label, position }) {
+          const [count, setCount] = useState(0);
+          const samplePosition = sample;
+          const pose = useDerivedValue(() => { "worklet"; return samplePosition(position.value); });
+          return <container pose={pose}><button onPress={() => setCount(count + 1)} count={count} /><Heavy label={label} /></container>;
+        }`,
+    });
+    const result = await compileDeck(deckPath);
+    expect(result).toMatchObject({ success: true });
+    if (!result.success) return;
+    expect(result.code).toContain('require("react/compiler-runtime")');
+    const { default: TestRenderer, act } = await import("react-test-renderer");
+    const runtime = await import("react/compiler-runtime");
+    const jsx = await import("react/jsx-runtime");
+    const callbacks = [];
+    const presentation = { sample: value => value * 2 };
+    presentation.self = presentation;
+    const module = { exports: {} };
+    Function("require", "module", "exports", result.code)(name => {
+      if (name === "react") return React;
+      if (name === "react/compiler-runtime") return runtime;
+      if (name === "react/jsx-runtime") return jsx;
+      if (name === "react-native-reanimated") return { useDerivedValue: fn => { callbacks.push(fn); return fn; } };
+      if (name === "@legend-apps/presentation") return presentation;
+      return {};
+    }, module, module.exports);
+    const position = { value: 21 };
+    let renderer;
+    try {
+      await act(() => { renderer = TestRenderer.create(React.createElement(module.exports.Demo, { label: "First", position })); });
+      expect(module.exports.counts.heavy).toBe(1);
+      await act(() => renderer.root.findByType("button").props.onPress());
+      expect(renderer.root.findByType("button").props.count).toBe(1);
+      expect(module.exports.counts.heavy).toBe(1);
+      await act(() => renderer.update(React.createElement(module.exports.Demo, { label: "Second", position })));
+      expect(renderer.root.findByType("heavy").props.label).toBe("Second");
+      expect(module.exports.counts.heavy).toBe(2);
+      const callback = callbacks.at(-1);
+      expect(callback.__workletHash).toBeNumber();
+      expect(Object.values(callback.__closure)).not.toContain(presentation);
+      expect(Object.values(callback.__closure)).toContain(presentation.sample);
+      const restored = Function(`return (${callback.__initData.code});`)().bind({ __closure: callback.__closure });
+      expect(restored()).toBe(42);
+      position.value = 7;
+      expect(restored()).toBe(14);
+    } finally {
+      await act(() => renderer?.unmount());
+    }
+  });
+
+  test("retains TypeGPU function metadata through the React Compiler prepass", async () => {
+    const result = await compileDeck(createDeck({
+      "deck.mdx": 'export { doubled } from "./shader"\n\n# GPU',
+      "shader.ts": 'import tgpu from "typegpu"; import * as d from "typegpu/data"; export const doubled = tgpu.fn([d.f32], d.f32)((value) => { "use gpu"; return value * 2; });',
+    }));
+    expect(result).toMatchObject({ success: true });
+    if (!result.success) return;
+    const tgpu = await import("typegpu");
+    const data = await import("typegpu/data");
+    const runtime = await import("react/compiler-runtime");
+    const module = { exports: {} };
+    Function("require", "module", "exports", result.code)(name => {
+      if (name === "typegpu") return { ...tgpu, __esModule: true };
+      if (name === "typegpu/data") return data;
+      if (name === "react/compiler-runtime") return runtime;
+      return {};
+    }, module, module.exports);
+    expect(module.exports.doubled(21)).toBe(42);
+    const wgsl = tgpu.default.resolve([module.exports.doubled]);
+    expect(wgsl).toContain("-> f32");
+    expect(wgsl).toMatch(/return\s*\(?value \* 2f\)?;/);
+  });
+
   test("returns draft slide offsets from the compiler process without writing the draft", async () => {
     const deckPath = createDeck({ "deck.mdx": "# On disk" });
     const source = "---\ntitle: Draft\n---\n# First\n\n```ts\nconst divider = '---';\n```\n\n---\n\n# Second";
@@ -352,6 +433,7 @@ describe("compileDeck", () => {
     const module = { exports: {} };
     new Function("module", "exports", "require", code)(module, module.exports, (name) => {
       if (name === "react/jsx-runtime") return { jsx() {}, jsxs() {} };
+      if (name === "react/compiler-runtime") return {};
       throw new Error(`Unexpected import: ${name}`);
     });
     expect(await module.exports.answer()).toBe(42);

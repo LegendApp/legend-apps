@@ -11,7 +11,7 @@ import { compile } from "@mdx-js/mdx";
 import { build, type BuildResult, type Loader, type Message, type Plugin } from "esbuild";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
-import typegpuPlugin from "unplugin-typegpu/esbuild";
+import typegpuPlugin from "unplugin-typegpu/babel";
 import { remarkSlideAttributes } from "./remarkSlideAttributes";
 import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { remarkSlides } from "./remarkSlides";
@@ -19,9 +19,11 @@ import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 
 const workletsPlugin = createRequire(import.meta.url).resolve("react-native-worklets/plugin");
+const reactCompilerPlugin = createRequire(import.meta.url).resolve("babel-plugin-react-compiler");
 const blockScopingPlugin = createRequire(import.meta.url).resolve("@babel/plugin-transform-block-scoping");
 const hostModules = new Set([
   "react",
+  "react/compiler-runtime",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
   "react-native",
@@ -61,6 +63,19 @@ const sourceExtensions = [
   ".json",
 ];
 const assetExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".html"]);
+
+function compileReactSource(source: string, filename: string) {
+  // Preserve component and Hook imports until React Compiler has analyzed them.
+  // Serialize worklets before bundling turns imported functions into namespace
+  // member reads, which would capture their entire host module on the UI thread.
+  return transformSync(source, {
+    babelrc: false,
+    configFile: false,
+    filename,
+    parserOpts: { plugins: ["jsx", "typescript"] },
+    plugins: [[reactCompilerPlugin, { target: "19" }], typegpuPlugin, [workletsPlugin, { disableSourceMaps: true }]],
+  })?.code ?? source;
+}
 
 function isWithin(root: string, candidate: string) {
   const relative = path.relative(root, candidate);
@@ -129,7 +144,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
         const transitionImports = refs.map((ref, i) => `import __Transition${i} from ${JSON.stringify("legend-transition:" + ref)};`);
         const transitionExport = `export const __legendSlidesTransitions = {${refs.map((ref, i) => `${JSON.stringify(ref)}: __Transition${i}`).join(",")}};`;
         return {
-          contents: [...templateImports, ...transitionImports, String(compiled), templateExport, transitionExport].join("\n"),
+          contents: compileReactSource([...templateImports, ...transitionImports, String(compiled), templateExport, transitionExport].join("\n"), `${args.path}.jsx`),
           loader: "jsx" as Loader,
         };
       });
@@ -142,6 +157,10 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string)
   return {
     name: "legend-slides-local-deck",
     setup(buildApi) {
+      buildApi.onLoad({ filter: /\.[cm]?[jt]sx?$/i, namespace: "file" }, (args) => ({
+        contents: compileReactSource(fs.readFileSync(args.path, "utf8"), args.path),
+        loader: /\.[cm]?tsx?$/i.test(args.path) ? "tsx" : "jsx",
+      }));
       const transitionRoots = new Map<string, string>();
       buildApi.onResolve({ filter: /^legend-transition:/ }, (args) => {
         const reference = args.path.slice("legend-transition:".length);
@@ -260,7 +279,6 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       plugins: [
         localDeckPlugin(absoluteDeckPath, options.transitionDirectory),
         mdxDeckPlugin(absoluteDeckPath, extraDependencies, source, options.transitionDirectory),
-        typegpuPlugin(),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
       sourcemap: "inline",
@@ -273,9 +291,8 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     if (!output) {
       return { success: false, errors: ["The compiler did not produce a deck bundle."], warnings: [] };
     }
-    // Explicit deck-local "worklet" directives are compiled after bundling so local
-    // helper closures are self-contained. Hook imports have been renamed by esbuild,
-    // so deck callbacks must carry the directive rather than rely on auto-detection.
+    // Built-in transition sources enter through a separate loader, so serialize
+    // their worklets here too. Imported deck source was serialized before bundling.
     // Hermes shares captured loop bindings without Babel's block-scope transform.
     // Run it after bundling so esbuild's generated export getters are lowered too.
     const code = transformSync(output.text, {

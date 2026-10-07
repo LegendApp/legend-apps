@@ -56,7 +56,7 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
   fs.writeFileSync(path.join(destination, "shell/src/host-classes.txt"), collectSlidesHostClasses(rootDir));
   fs.writeFileSync(path.join(destination, "shell/src/global.css"),
     fs.readFileSync(path.join(rootDir, "shell/src/global.css"), "utf8") + '\n@source "./host-classes.txt";\n');
-  const compilerDependencies = ["react", "react-dom", "@legendapp/state", "@babel/core", "@babel/plugin-transform-block-scoping", "react-native-worklets", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
+  const compilerDependencies = ["react", "react-dom", "@legendapp/state", "@babel/core", "babel-plugin-react-compiler", "@babel/plugin-transform-block-scoping", "react-native-worklets", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
   for (const name of compilerDependencies) link(install(name, path.join(rootDir, "packages/presentation")), path.join(destination, "node_modules", name));
   // The worklets plugin imports Babel internals supplied by the host Babel install.
   // Its package manifest does not declare these as runtime dependencies.

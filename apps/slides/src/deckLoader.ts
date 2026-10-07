@@ -17,6 +17,7 @@ import { watch } from "@legendapp/spark/files";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import * as React from "react";
+import * as ReactCompilerRuntime from "react/compiler-runtime";
 import * as JsxRuntime from "react/jsx-runtime";
 import * as ReactNative from "react-native";
 import * as Reanimated from "react-native-reanimated";
@@ -63,6 +64,7 @@ const webGPUHostModule = {
 
 const hostModules: Record<string, unknown> = {
   react: React,
+  "react/compiler-runtime": ReactCompilerRuntime,
   "react/jsx-runtime": JsxRuntime,
   "react/jsx-dev-runtime": JsxRuntime,
   "react-native": ReactNative,
