@@ -51,7 +51,7 @@ mock.module("react-native-reanimated", () => ({
   createWorkletRuntime: () => ({}),
   runOnRuntime: (_runtime, fn) => fn,
   default: { View: "animated-view", Text: "animated-text", createAnimatedComponent: component => component },
-  useSharedValue: value => useRef({ value }).current,
+  useSharedValue: value => useRef({ value, set(next) { this.value = typeof next === "function" ? next(this.value) : next; } }).current,
   useDerivedValue: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   useAnimatedStyle: read => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   useAnimatedProps: read => ({ get value() { return read(); } }),

@@ -15,7 +15,7 @@ mock.module("react-native-reanimated", () => ({
   default: { View: "animated-view" },
   useAnimatedStyle: (read) => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   runOnUI: (callback) => (...args) => transactions.push(() => callback(...args)),
-  useSharedValue: (value) => useRef({ value }).current,
+  useSharedValue: (value) => useRef({ value, set(next) { this.value = typeof next === "function" ? next(this.value) : next; } }).current,
   useDerivedValue: (read) => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   useAnimatedReaction: (prepare, react) => {
     const reaction = useRef(() => {});
