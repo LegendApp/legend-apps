@@ -22,8 +22,9 @@ export function App({ launchArguments }: SlidesAppProps) {
     const unregisterNotes = registerSlidesExitPreparation(async () => {
       try {
         return await prepareNotesExit(speakerNotesDrafts, affected => new Promise(resolve => {
-          Alert.alert("Speaker notes need recovery", `These notes could not be saved to their decks:\n\n${affected.join("\n")}\n\nYou can continue with drafts saved locally, or export a copy to recover them in another deck.`, [
+          Alert.alert("Speaker notes need recovery", `These notes could not be saved to their decks:\n\n${affected.join("\n")}\n\nRetry Saving tries again. Keep Drafts and Continue keeps a local recovery copy. Export Drafts saves the notes to a separate file.`, [
             { text: "Cancel", style: "cancel", onPress: () => resolve("cancel") },
+            { text: "Retry Saving", onPress: () => resolve("retry") },
             { text: "Keep Drafts and Continue", onPress: () => resolve("keep") },
             { text: "Export Drafts…", onPress: () => resolve("export") },
           ]);

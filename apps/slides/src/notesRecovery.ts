@@ -9,17 +9,20 @@ export function describeNoteDraft(key: string) {
 }
 
 /** Failed deck writes need not trap the user when a durable recovery copy exists. */
-export async function prepareNotesExit(drafts: NotesDrafts, choose: (affected: string[]) => Promise<"cancel" | "keep" | "export">,
+export async function prepareNotesExit(drafts: NotesDrafts, choose: (affected: string[]) => Promise<"cancel" | "retry" | "keep" | "export">,
   exportDrafts: (contents: string) => Promise<boolean>) {
-  if (await drafts.flushAll()) return true;
-  const choice = await choose(drafts.sessionEntries().map(([key]) => describeNoteDraft(key)));
-  if (choice === "cancel") return false;
-  if (choice === "export") {
-    const contents = drafts.sessionEntries().map(([key, draft]) => `# ${describeNoteDraft(key)}\n\n${draft.text}`).join("\n\n---\n\n");
-    if (!await exportDrafts(contents)) return false;
+  while (!await drafts.flushAll()) {
+    const choice = await choose(drafts.sessionEntries().map(([key]) => describeNoteDraft(key)));
+    if (choice === "retry") continue;
+    if (choice === "cancel") return false;
+    if (choice === "export") {
+      const contents = drafts.sessionEntries().map(([key, draft]) => `# ${describeNoteDraft(key)}\n\n${draft.text}`).join("\n\n---\n\n");
+      if (!await exportDrafts(contents)) return false;
+    }
+    // Include edits made while the choice or export dialog was open. If local
+    // storage fails, refuse to quit even if an older export succeeded.
+    drafts.persist();
+    return true;
   }
-  // Include edits made while the choice or export dialog was open. If local
-  // storage fails, refuse to quit even if an older export succeeded.
-  drafts.persist();
   return true;
 }

@@ -73,3 +73,49 @@ test("failure to persist recovery prevents exit", async () => {
   drafts.bind(key, async () => { throw new Error("Deck missing"); });
   await expect(prepareNotesExit(drafts, async () => "keep", async () => true)).rejects.toThrow("Disk unavailable");
 });
+
+test("retry saves the latest draft after a temporary failure before allowing exit", async () => {
+  let disk = {};
+  const drafts = createNotesDrafts({ read: () => disk, write: value => { disk = value; } });
+  const writes = [];
+  drafts.bind(key, async (text, base) => {
+    writes.push([text, base]);
+    if (writes.length === 1) throw new Error("Temporarily unavailable");
+  });
+  drafts.update(key, "first edit", "original");
+  let prompts = 0;
+  expect(await prepareNotesExit(drafts, async affected => {
+    prompts++;
+    expect(affected).toEqual(["/deleted/deck.mdx — Slide 3"]);
+    drafts.update(key, "latest edit", "original");
+    return "retry";
+  }, async () => { throw new Error("Retry must not export notes"); })).toBe(true);
+  expect(writes).toEqual([["first edit", "original"], ["latest edit", "original"]]);
+  expect(prompts).toBe(1);
+  expect(drafts.sessionEntries()).toEqual([]);
+  expect(disk).toEqual({});
+});
+
+test("a failed retry prompts for only remaining drafts and cancel keeps the app open", async () => {
+  const drafts = createNotesDrafts();
+  const otherKey = `${JSON.stringify(["/other/deck.mdx", 0])}:# Other slide`;
+  let firstAvailable = false;
+  drafts.bind(key, async () => { if (!firstAvailable) throw new Error("Unavailable"); });
+  drafts.bind(otherKey, async () => { throw new Error("Read only"); });
+  drafts.update(key, "first notes", "original");
+  drafts.update(otherKey, "remaining notes", "original");
+  let prompts = 0;
+  expect(await prepareNotesExit(drafts, async affected => {
+    prompts++;
+    if (prompts === 1) {
+      expect(affected).toEqual(["/deleted/deck.mdx — Slide 3", "/other/deck.mdx — Slide 1"]);
+      firstAvailable = true;
+      return "retry";
+    }
+    expect(affected).toEqual(["/other/deck.mdx — Slide 1"]);
+    return "cancel";
+  }, async () => false)).toBe(false);
+  expect(prompts).toBe(2);
+  expect(drafts.get(key, "saved")).toBe("saved");
+  expect(drafts.get(otherKey, "")).toBe("remaining notes");
+});
