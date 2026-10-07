@@ -8,6 +8,7 @@ import {
   FocusRegion,
   SharedElement,
   FocusStage,
+  PresentationCanvasScaleContext,
   normalizeTransition,
   BackgroundHost,
   useBackgroundHost,
@@ -365,7 +366,9 @@ function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children
         style={[styles.stage, { backgroundColor, height: renderedHeight, width: renderedWidth }]}
       >
         <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
-          <FocusStage scale={scale}><LayoutStage width={width} height={height} warn={warnLayout}>{children}</LayoutStage></FocusStage>
+          <PresentationCanvasScaleContext.Provider value={scale}>
+            <FocusStage scale={scale}><LayoutStage width={width} height={height} warn={warnLayout}>{children}</LayoutStage></FocusStage>
+          </PresentationCanvasScaleContext.Provider>
         </SlideCaptureContext.Provider>
       </ScaledView>
     </View>

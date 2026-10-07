@@ -1,4 +1,5 @@
 export { useRuntimeProjection } from "./useRuntimeProjection";
+export { PresentationCanvas, PresentationCanvasScaleContext } from "./PresentationCanvas";
 export { Background, BackgroundHost, useBackgroundIntensity, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
 export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
