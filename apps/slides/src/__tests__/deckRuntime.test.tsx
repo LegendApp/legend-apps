@@ -12,6 +12,8 @@ import { act, create } from "react-test-renderer";
 import { usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
+const titleSpeed$ = state.observable(1);
+
 function compiledRenderer() {
   const filename = fileURLToPath(new URL("../DeckRenderer.tsx", import.meta.url));
   const require = createRequire(filename);
@@ -37,7 +39,7 @@ function compiledRenderer() {
     "./Effect": { Effect: "effect" },
     "./TypeGPU": { TypeGPU: "gpu" },
     "./TypeGPUShader": { TypeGPUShader: "gpu-shader" },
-    "./slidesSettings": { useBackgroundIntensitySetting: () => 1 },
+    "./slidesSettings": { useBackgroundIntensitySetting: () => 1, titleAnimationSpeedSetting: { get: () => titleSpeed$.get() } },
     "./Webview": { Webview: "webview" },
   };
   const module = { exports: {} };
@@ -308,4 +310,32 @@ test("Markdown images, tables, task lists and strike render native views", async
     expect(renderer.root.findAll(node => node.type === "text" && node.props.accessibilityRole === "checkbox")).toHaveLength(1);
     expect(log.mock.calls.some(args => args.join(" ").includes("Slide unavailable"))).toBe(false);
   } finally { if (renderer) await act(() => renderer.unmount()); setSlidesState(initial); log.mockRestore(); }
+});
+
+
+test("title speed setting reaches live and preview runtimes without changing navigation", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  function Probe() { return <runtime value={usePresentation()} />; }
+  function Document({ components: { Deck, Slide } }) {
+    return <Deck configJson="{}"><Slide metadataJson="{}" notes=""><Probe /></Slide></Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer />); });
+    for (const speed of [0.25, 2, 1]) {
+      await act(() => titleSpeed$.set(speed));
+      expect(tree.root.findByType("runtime").props.value).toMatchObject({ titleAnimationSpeed: speed, currentSlide: 0, currentStep: 0 });
+    }
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={0} />));
+    await act(() => titleSpeed$.set(3));
+    expect(tree.root.findByType("runtime").props.value).toMatchObject({ titleAnimationSpeed: 3, isPreview: true });
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    titleSpeed$.set(1);
+    setSlidesState(initial);
+    log.mockRestore();
+  }
 });

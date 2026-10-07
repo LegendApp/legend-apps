@@ -1,4 +1,4 @@
-import { useBackgroundIntensitySetting } from "./slidesSettings";
+import { titleAnimationSpeedSetting, useBackgroundIntensitySetting } from "./slidesSettings";
 import { useResolveClassNames } from "uniwind";
 import { useValue } from "@legendapp/state/react";
 import {
@@ -101,6 +101,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     const currentStep = isPreview ? targetStep ?? 0 : slidesState$.currentStep.get();
     return {
       currentSlide, currentStep, goTo: setCurrentSlide,
+      titleAnimationSpeed: titleAnimationSpeedSetting.get(),
       isActive: !isPreview && slideIndex === currentSlide,
       isPreview: Boolean(isPreview), isPreparing,
       playbackPhase: isPreparing ? "preparing" : isOutgoing ? "outgoing" : isPreview ? "preview" : slideIndex === currentSlide ? "playing" : "paused",

@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 const require = createRequire(new URL("../PresenterWindow.tsx", import.meta.url));
 const { transformSync } = require("@babel/core");
-for (const [file, hook] of [["PresenterWindow", "useDisplayRolesSetting"], ["NotesWindow", "useNotesPreviewRatioSetting"]]) {
+for (const [file, hook] of [["PresenterWindow", "useDisplayRolesSetting"], ["NotesWindow", "useNotesPreviewRatioSetting"], ["TransitionSettingsPage", "useTitleAnimationSpeedSetting"]]) {
   test(`${file} settings hook remains unconditional after React compilation`, () => {
     const filename = fileURLToPath(new URL(`../${file}.tsx`, import.meta.url));
     const source = readFileSync(filename, "utf8");

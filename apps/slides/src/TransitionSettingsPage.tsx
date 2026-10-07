@@ -1,3 +1,5 @@
+import { SelectControl } from "@legend-apps/design-system";
+import { setTitleAnimationSpeedSetting, useTitleAnimationSpeedSetting } from "./slidesSettings";
 import { builtinTransitionSources } from "@legend-apps/presentation";
 import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import { useEffect, useState } from "react";
@@ -10,6 +12,13 @@ import { duplicateTransition, getTransitionDirectory, listTransitions, restoreTr
 function Action({ title, run }: { title: string; run(): void }) {
   return <Pressable accessibilityRole="button" onPress={run} className="rounded-md bg-neutral-700 px-3 py-2"><Text className="text-white">{title}</Text></Pressable>;
 }
+function TitleAnimationSpeedRow() {
+  const speed = useTitleAnimationSpeedSetting();
+  return <SettingsRow title="Title Animation Speed" description="Playback speed for animated title entrances."
+    control={<SelectControl accessibilityLabel="Title animation speed" value={speed} onChange={setTitleAnimationSpeedSetting}
+      options={[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3].map(value => ({ value, label: `${value}×` }))} />} />;
+}
+
 export function TransitionSettingsPage() {
   const [names, setNames] = useState(listTransitions);
   const [message, setMessage] = useState("");
@@ -21,7 +30,10 @@ export function TransitionSettingsPage() {
     void Promise.resolve().then(action).then((result) => { setNames(listTransitions()); setMessage(result ?? "Done"); }).catch((error) => setMessage(String(error)));
   };
   return <>
-    <SettingsSection first title="Transitions">
+    <SettingsSection first title="Title Animations">
+      <TitleAnimationSpeedRow />
+    </SettingsSection>
+    <SettingsSection title="Transitions">
       <SettingsRow title="Your transition library" description="Edit TypeScript files or add new ones. Changes rebuild open decks; updates wait until the presentation ends."
         control={<Action title="Open Folder" run={() => run(() => Linking.openURL(getTransitionDirectory().uri))} />} />
       {names.map((name) => <SettingsRow key={name} title={name} controlWrapperClassName="max-w-80" control={<View className="flex-row flex-wrap justify-end gap-2">

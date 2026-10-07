@@ -69,3 +69,35 @@ test("preferences preserve recent.json fields, normalize legacy layout, and flus
   expect(empty.getLastDeckPath()).toBeUndefined();
   expect(empty.getPresenterLayout()).toEqual(defaultPresenterLayout);
 });
+
+test("title animation speed defaults, normalizes, and persists across settings reloads", async () => {
+  const files = new Map([["settings.json", { presentationNotesFontSize: 21, extra: "keep" }]]);
+  const storage = {
+    read: (name) => files.get(name),
+    write: (name, value) => files.set(name, JSON.parse(JSON.stringify(value))),
+    delete: (name) => files.delete(name),
+  };
+  const storageModule = compileModule(fileURLToPath(new URL("../../../../packages/storage/src/index.ts", import.meta.url)), {
+    "./NativeStorage": { default: {}, __esModule: true },
+  });
+  let settings$;
+  const load = () => compileModule(fileURLToPath(new URL("../slidesSettings.ts", import.meta.url)), {
+    "@legend-apps/storage": {
+      createObservableSettings: options => {
+        const settings = storageModule.createObservableSettings({ ...options, storage });
+        settings$ = settings.settings$;
+        return settings;
+      },
+    },
+  });
+  const settings = load();
+  expect(settings.titleAnimationSpeedSetting.get()).toBe(1);
+  for (const [input, expected] of [[0, 0.25], [100, 3], [NaN, 1], [Infinity, 1], [0.5, 0.5], [2, 2]]) {
+    settings.setTitleAnimationSpeedSetting(input);
+    expect(settings.titleAnimationSpeedSetting.get()).toBe(expected);
+  }
+  await storageModule.getPersistPlugin(settings$).flush();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(files.get("settings.json")).toMatchObject({ titleAnimationSpeed: 2, presentationNotesFontSize: 21, extra: "keep" });
+  expect(load().titleAnimationSpeedSetting.get()).toBe(2);
+});

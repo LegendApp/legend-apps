@@ -45,6 +45,8 @@ export type PresentationRuntime = {
   /** Explicit surface lifecycle; outgoing is distinct from a thumbnail preview. */
   playbackPhase?: import("./playbackState").PlaybackPhase;
   playbackScope?: "slide" | "background";
+  /** Playback multiplier for title entrances; defaults to 1. */
+  titleAnimationSpeed?: number;
   currentSlide: number;
   currentStep: number;
   goTo(slideIndex: number): void;

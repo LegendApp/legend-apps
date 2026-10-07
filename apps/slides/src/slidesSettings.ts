@@ -25,6 +25,10 @@ const slidesSettings = createObservableSettings({
       defaultValue: 1,
       normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(6, value)) : 1,
     },
+    titleAnimationSpeed: {
+      defaultValue: 1,
+      normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0.25, Math.min(3, value)) : 1,
+    },
     presentationTimerStartsOnSecondSlide: {
       defaultValue: defaultPresentationTimerStartsOnSecondSlide,
       normalize: (value) => normalizeBoolean(value, defaultPresentationTimerStartsOnSecondSlide),
@@ -86,3 +90,7 @@ export const usePresentationNotesFontSizeSetting = presentationNotesFontSizeSett
 export const setPresentationNotesFontSizeSetting = presentationNotesFontSizeSetting.set;
 
 export const displayRoleHistorySetting = slidesSettings.field("displayRoleHistory");
+
+export const titleAnimationSpeedSetting = slidesSettings.field("titleAnimationSpeed");
+export const useTitleAnimationSpeedSetting = titleAnimationSpeedSetting.use;
+export const setTitleAnimationSpeedSetting = titleAnimationSpeedSetting.set;
