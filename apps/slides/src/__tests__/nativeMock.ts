@@ -4,6 +4,15 @@ import { useRef } from "react";
 
 export const transitions = [];
 export const transitionProgresses = [];
+export const idleCallbacks = new Map();
+let idleId = 0;
+globalThis.requestIdleCallback = callback => { idleCallbacks.set(++idleId, callback); return idleId; };
+globalThis.cancelIdleCallback = id => idleCallbacks.delete(id);
+export function flushIdleCallbacks() {
+  const callbacks = [...idleCallbacks.values()];
+  idleCallbacks.clear();
+  callbacks.forEach(callback => callback({ didTimeout: false, timeRemaining: () => 50 }));
+}
 const numeric = (value) => typeof value === "number" ? value : value.__getValue();
 
 mock.module("react-native", () => ({

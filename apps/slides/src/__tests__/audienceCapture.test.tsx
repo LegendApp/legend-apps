@@ -4,7 +4,7 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 
 import { BackgroundHost } from "@legend-apps/presentation";
-import { transitions, transitionProgresses } from "./nativeMock";
+import { transitions, transitionProgresses, idleCallbacks, flushIdleCallbacks } from "./nativeMock";
 mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
 mock.module("../DeckRenderer", () => ({ DeckRenderer: "deck", SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost }));
 const { AudienceWindow } = await import("../AudienceWindow");
@@ -63,6 +63,7 @@ test("audience retains two slides on each side at full capture scale", async () 
     for (const index of [1, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0, 1]) {
       await act(() => setCurrentSlide(index));
       await act(() => { transitions.splice(0).forEach((done) => done({ finished: true })); });
+      while (idleCallbacks.size) await act(flushIdleCallbacks);
       const canvases = renderer.root.findAllByType("canvas");
       expect(canvases.map((canvas) => canvas.findByType("deck").props.targetIndex).sort((a, b) => a - b))
         .toEqual(Array.from({ length: Math.min(6, index + 2) - Math.max(0, index - 2) + 1 },
