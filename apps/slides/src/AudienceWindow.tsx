@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import { SnapshotCaptureBoundary, NavigationTransitionContext, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, withTiming } from "react-native-reanimated";
 import { createTransitionProgress, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "@legend-apps/presentation";
@@ -79,7 +79,6 @@ function AudienceContent() {
   }
   const transition = transitionState.kind;
   const { progress, outgoing: previousSlide } = transitionState;
-  const nativeReady = useNativeTransitionReady(progress, previousSlide !== null);
 
   useEffect(() => {
     setSlidesState({ audienceOpen: true });
@@ -201,22 +200,17 @@ function AudienceContent() {
         // Measurements being ready does not mean Fabric has applied the graph.
         // Reveal only after its first native progress event, keeping the live
         // content measurable behind the background until then.
-        const behindBackground = isPreload || layer.index === currentSlide && (!transitionState.ready || !nativeReady);
+        const incoming = layer.index === currentSlide;
+        const behindBackground = isPreload || incoming && !transitionState.ready;
         return (
-          <AudienceLayer key={layer.index} preparing={isPreload} behindBackground={behindBackground} style={isPreload ? visibleStyle : layer.style}>
-            <AudienceFocusSurface layoutKey={`${revision}:${layer.index === currentSlide ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`} index={layer.index} surfaces={surfaces} motion={transitionState.motions.get(layer.index)}>
-              <SlideCanvas>
-                <UserTransitionLayer definition={isPreload ? undefined : transitionState.definition}
-                  reference={transitionState.reference} progress={progress} incoming={layer.index === currentSlide}
-                  preparing={isPreload} settled={previousSlide === null} reverse={transitionState.reverse} hasBackground={hasBackground} shared={transitionState.motions.size > 0}>
-                  <NavigationTransitionContext.Provider value={{ progress, outgoing: !isPreload && layer.index !== currentSlide }}>
-                    <DeckRenderer isPreparing={isPreload} isOutgoing={!isPreload && layer.index !== currentSlide} isPreview={layer.index !== currentSlide} targetIndex={layer.index}
-                      targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
-                  </NavigationTransitionContext.Provider>
-                </UserTransitionLayer>
-              </SlideCanvas>
-            </AudienceFocusSurface>
-          </AudienceLayer>
+          <AudienceSlide key={layer.index} index={layer.index} preparing={isPreload} incoming={incoming}
+            transitioning={incoming && previousSlide !== null} behindBackground={behindBackground}
+            style={isPreload ? visibleStyle : layer.style} progress={progress} surfaces={surfaces}
+            layoutKey={`${revision}:${incoming ? currentStep : layer.index === outgoingSlide ? transitionState.outgoingStep : 0}`}
+            motion={transitionState.motions.get(layer.index)} definition={isPreload ? undefined : transitionState.definition}
+            reference={transitionState.reference} settled={previousSlide === null} reverse={transitionState.reverse}
+            hasBackground={hasBackground} shared={transitionState.motions.size > 0}
+            targetStep={layer.index === outgoingSlide ? transitionState.outgoingStep : undefined} />
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
@@ -224,14 +218,39 @@ function AudienceContent() {
   );
 }
 
-function AudienceLayer({ children, style, preparing, behindBackground }: {
-  children: ReactNode; style: TransitionStyle;
-  preparing: boolean; behindBackground: boolean;
+function AudienceSlide({ index, preparing, incoming, transitioning, behindBackground, style, progress, surfaces,
+  layoutKey, motion, definition, reference, settled, reverse, hasBackground, shared, targetStep }: {
+  index: number; preparing: boolean; incoming: boolean; transitioning: boolean; behindBackground: boolean;
+  style: TransitionStyle; progress: TransitionProgress; surfaces: Map<number, FocusSurface>; layoutKey: string;
+  motion?: FocusMotion; definition?: TransitionDefinition; reference: SlideTransition; settled: boolean;
+  reverse: boolean; hasBackground: boolean; shared: boolean; targetStep?: number;
 }) {
+  const outgoing = !preparing && !incoming;
+  return <AudienceLayer preparing={preparing} behindBackground={behindBackground} style={style}
+    progress={progress} transitioning={transitioning}>
+    <AudienceFocusSurface layoutKey={layoutKey} index={index} surfaces={surfaces} motion={motion}>
+      <SlideCanvas targetIndex={index}>
+        <UserTransitionLayer definition={definition} reference={reference} progress={progress} incoming={incoming}
+          preparing={preparing} settled={settled} reverse={reverse} hasBackground={hasBackground} shared={shared}>
+          <NavigationTransitionContext.Provider value={{ progress, outgoing }}>
+            <DeckRenderer isPreparing={preparing} isOutgoing={outgoing} isPreview={!incoming}
+              targetIndex={index} targetStep={targetStep} />
+          </NavigationTransitionContext.Provider>
+        </UserTransitionLayer>
+      </SlideCanvas>
+    </AudienceFocusSurface>
+  </AudienceLayer>;
+}
+
+function AudienceLayer({ children, style, preparing, behindBackground, progress, transitioning }: {
+  children: ReactNode; style: TransitionStyle;
+  preparing: boolean; behindBackground: boolean; progress: TransitionProgress; transitioning: boolean;
+}) {
+  const nativeReady = useNativeTransitionReady(progress, transitioning);
   const retainedStyle = useRetainedTransitionStyle(style, preparing);
   const animatedStyle = useTransitionStyle({ opacity: 1, transform: [], ...retainedStyle });
   return <Animated.View accessibilityElementsHidden={preparing} importantForAccessibility={preparing ? "no-hide-descendants" : "auto"}
-    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, animatedStyle, { zIndex: behindBackground ? -1 : 1 }]}>{children}</Animated.View>;
+    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, animatedStyle, { zIndex: behindBackground || !nativeReady ? -1 : 1 }]}>{children}</Animated.View>;
 }
 
 function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled, preparing }: {
@@ -261,7 +280,8 @@ function UserTransitionLayer({ children, definition, reference, progress, incomi
     }
   }, [failure, progress]);
   const retainedStyle = useRetainedTransitionStyle(style, preparing);
-  const animatedStyle = useTransitionStyle({ opacity: 1, transform: [], ...retainedStyle });
+  const normalizedStyle = useMemo(() => ({ opacity: 1, transform: [], ...retainedStyle }), [retainedStyle]);
+  const animatedStyle = useTransitionStyle(normalizedStyle);
   return <Animated.View style={[{ flex: 1 }, animatedStyle]}>{children}</Animated.View>;
 }
 
