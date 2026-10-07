@@ -16,6 +16,7 @@ import { openOrShowWindow, ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
+import { DeferredPresenterPreview } from "./DeferredPresenterPreview";
 import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
@@ -187,12 +188,15 @@ function PresenterWorkspace({ currentIndex, currentStep, deckPath, nextIndex, ne
     }, [layout$]);
     const persistLayout = useCallback(() => rememberPresenterLayout(layout$.peek()), [layout$]);
     const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
+    const nextPreview = <Preview index={nextIndex} stepIndex={nextStep}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
         <Preview index={currentIndex} current animate={!audienceOpen} stepIndex={currentStep} weight={showNext ? layout.currentPreviewRatio : 1}/>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
-            <Preview index={nextIndex} stepIndex={nextStep} weight={1 - layout.currentPreviewRatio}/>
+            <DeferredPresenterPreview weight={1 - layout.currentPreviewRatio}>
+              {nextPreview}
+            </DeferredPresenterPreview>
           </>)}
       </View>
       {showNotes && (<>
