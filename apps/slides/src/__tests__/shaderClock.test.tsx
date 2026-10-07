@@ -114,9 +114,14 @@ test("native motion and delayed particles sample the same preview, step, and out
 
 test("carousel retargets from its displayed position and freezes for navigation-owned exit", async () => {
   const { FilmstripMotionView } = await import("../../decks/react-native-desktop/FilmstripMotionView");
+  const { usePlaybackTween } = await import("../../../../packages/presentation/src/usePlaybackTween");
+  function Carousel({ position }) {
+    const progress = usePlaybackTween({ position }, 500);
+    return <FilmstripMotionView index={0} enabled progress={progress}>card</FilmstripMotionView>;
+  }
   const render = (phase, position) => <PresentationProvider value={observable({
     playbackPhase: phase, slideIndex: 0, stepIndex: position,
-  })}><FilmstripMotionView index={0} count={9} enabled position={position}>card</FilmstripMotionView></PresentationProvider>;
+  })}><Carousel position={position} /></PresentationProvider>;
   let tree;
   try {
     await act(() => { tree = create(render("playing", 0)); });
