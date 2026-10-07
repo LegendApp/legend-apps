@@ -273,3 +273,33 @@ test("user transitions receive progress and options, finish visibly, and recover
     transitions.splice(0); setSlidesState(initial); log.mockRestore();
   }
 });
+
+test("outgoing media keeps its live surface and final step until the crossfade completes", async () => {
+  const initial = getSlidesState();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ currentSlide: 0, currentStep: 21, config: { transition: "fade" },
+      slides: [{ metadata: { steps: 22 }, notes: "" }, { metadata: { steps: 3 }, notes: "" }] });
+    await act(() => { tree = create(<AudienceWindow />); });
+    for (const [source, target, step] of [[0, 1, 21], [1, 0, 2]]) {
+      await act(() => setSlidesState({ currentStep: step }));
+      await act(() => setCurrentSlide(target));
+      const outgoing = tree.root.findAllByType("deck").find(deck => deck.props.targetIndex === source);
+      expect(outgoing.props.isOutgoing).toBe(true);
+      expect(outgoing.props.targetStep).toBe(step);
+      expect(outgoing.props.isPreview).toBe(false);
+      expect(outgoing.props.isPreparing).toBe(false);
+      await act(() => transitions.splice(0).forEach(done => done({ finished: true })));
+      const prepared = tree.root.findAllByType("deck").find(deck => deck.props.targetIndex === source);
+      expect(prepared.props.isOutgoing).toBe(false);
+      expect(prepared.props.isPreview).toBe(true);
+      expect(prepared.props.isPreparing).toBe(true);
+    }
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    transitions.splice(0);
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});

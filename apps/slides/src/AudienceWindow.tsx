@@ -257,7 +257,7 @@ function AudienceSlide({ index, preparing, incoming, transitioning, behindBackgr
         <UserTransitionLayer definition={definition} reference={reference} progress={progress} incoming={incoming}
           preparing={preparing} settled={settled} reverse={reverse} hasBackground={hasBackground} shared={shared}>
           <NavigationTransitionContext.Provider value={{ progress, outgoing }}>
-            <DeckRenderer isPreparing={preparing} isOutgoing={outgoing} isPreview={!incoming}
+            <DeckRenderer isPreparing={preparing} isOutgoing={outgoing} isPreview={preparing}
               targetIndex={index} targetStep={targetStep} />
           </NavigationTransitionContext.Provider>
         </UserTransitionLayer>
