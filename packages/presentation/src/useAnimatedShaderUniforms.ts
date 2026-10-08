@@ -4,11 +4,11 @@ import { usePresentationValue } from "./runtime";
 import { samplePlayback, usePlayback } from "./playback";
 import type { PlaybackState } from "./playbackState";
 
-type ShaderMotion = { active?: boolean; inactivityDelay?: number; persistentBackground?: boolean | "read"; clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
+type ShaderMotion = { active?: boolean; inactivityDelay?: number; persistentBackground?: boolean | "read"; clocks?: Record<string, number>; clock?: "slide" | "step" | number; maxTime?: number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
 
 /** Retire a previously live effect after its exit, without a JS timer or frame subscription once idle. */
-function useShaderPlayback(active: boolean, delay: number, playback: SharedValue<PlaybackState>, activation: string, phase?: PlaybackState["phase"]) {
-  const activity = useSharedValue({ requested: active, active, activation, until: 0, retained: null as PlaybackState | null });
+function useShaderPlayback(active: boolean, delay: number, playback: SharedValue<PlaybackState>, activation: string, phase: PlaybackState["phase"] | undefined, selectedClock: "slide" | "step" | number, maxTime: number | undefined) {
+  const activity = useSharedValue({ requested: active, active, activation, until: 0, frozen: false, retained: null as PlaybackState | null });
   useAnimatedReaction(() => {
     const old = activity.value;
     const reset = phase === "preview" || phase === "preparing" || phase === "playing" && old.activation !== activation;
@@ -17,44 +17,55 @@ function useShaderPlayback(active: boolean, delay: number, playback: SharedValue
     if (!clock) return;
     const old = activity.value;
     if (active) {
+      const elapsed = samplePlayback(clock, 0, selectedClock);
+      const finite = maxTime !== undefined && clock.phase !== "preview" && clock.phase !== "preparing";
+      const finished = finite && elapsed >= maxTime!;
+      const frozen = finished || finite && typeof selectedClock === "number" && clock.stepIndex < selectedClock;
       if (!old.requested || !old.retained || old.retained.slideKey !== clock.slideKey ||
           old.retained.stepKey !== clock.stepKey || old.retained.stepPending !== clock.stepPending ||
-          old.retained.phase !== clock.phase || old.activation !== activation) {
-        activity.value = { requested: true, active: true, activation, until: 0, retained: clock };
+          old.retained.phase !== clock.phase || old.activation !== activation || frozen !== old.frozen) {
+        const overrun = finished ? elapsed - maxTime! : 0;
+        const retained = finished ? { ...clock, slideTime: Math.max(0, clock.slideTime - overrun),
+          stepTime: Math.max(0, clock.stepTime - overrun) } : clock;
+        activity.value = { requested: true, active: !frozen, activation, until: 0, frozen, retained };
       }
     } else if (clock.phase === "preview" || clock.phase === "preparing" || phase === "playing" && old.activation !== activation) {
-      activity.value = { requested: false, active: false, activation, until: 0, retained: null };
+      activity.value = { requested: false, active: false, activation, until: 0, frozen: false, retained: null };
     } else if (old.requested) {
-      activity.value = { requested: false, active: delay > 0, activation, until: clock.slideTime + delay / 1000, retained: old.retained };
+      activity.value = { requested: false, active: !old.frozen && delay > 0, activation, until: clock.slideTime + delay / 1000, frozen: old.frozen, retained: old.retained };
     } else if (old.retained?.slideKey !== clock.slideKey) {
-      activity.value = { requested: false, active: false, activation, until: 0, retained: null };
+      activity.value = { requested: false, active: false, activation, until: 0, frozen: false, retained: null };
     } else if (clock.slideTime >= old.until) {
       activity.value = { ...old, active: false };
     }
-  }, [active, delay, playback, activation, phase]);
+  }, [active, delay, playback, activation, phase, selectedClock, maxTime]);
   return useDerivedValue(() => {
-    if (active) return playback.value;
     const old = activity.value;
+    const live = active ? playback.value : null;
+    if (old.frozen && (!live || old.activation === activation && old.retained?.slideKey === live.slideKey &&
+        old.retained.stepKey === live.stepKey && old.retained.phase === live.phase)) return old.retained;
+    if (live) return live;
     if (!old.retained) return null;
     const current = old.active ? playback.value : null;
     const slideTime = current ? Math.min(current.slideTime, old.until) : old.until;
     return { ...old.retained, phase: current?.phase ?? "paused",
       slideTime, stepTime: old.retained.stepTime + Math.max(0, slideTime - old.retained.slideTime) };
-  }, [active, playback]);
+  }, [active, playback, activation]);
 }
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
 export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>, previewTime = 0,
-  { active = true, inactivityDelay = 1000, persistentBackground = false, clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
+  { active = true, inactivityDelay = 1000, persistentBackground = false, clocks, clock = "slide", maxTime, speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
   const playback = usePlayback();
   const brightnessScale=useBackgroundBrightnessScale();
   const slideIndex = usePresentationValue("slideIndex");
   const startedAt = usePresentationValue("startedAt");
   const phase = usePresentationValue("playbackPhase");
+  const endTime = maxTime !== undefined && Number.isFinite(maxTime) ? Math.max(0, maxTime) : undefined;
   const shaderPlayback = useShaderPlayback(active, Number.isFinite(inactivityDelay) ? Math.max(0, inactivityDelay) : 1000,
-    playback, `${slideIndex}:${startedAt ?? 0}`, phase);
+    playback, `${slideIndex}:${startedAt ?? 0}:${clock}:${endTime ?? "live"}`, phase, clock, endTime);
   const rate = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
   const duration = Math.max(0.001, Number.isFinite(slideChangeDuration) ? slideChangeDuration : 2);

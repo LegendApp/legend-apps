@@ -311,3 +311,54 @@ test("glass blur and refraction form and clear on one playback tween", async () 
     if (tree) await act(() => tree.unmount());
   }
 });
+
+
+test("finite shaders stop at their final pose and replay on reversed steps without changing other clocks", async () => {
+  const runtime$ = observable({ playbackPhase: "playing", slideIndex: 0, stepIndex: 0, startedAt: 1 });
+  let finite, ambient, tree;
+  function Probe({ active }) {
+    finite = useAnimatedShaderUniforms({}, 6, { active, clock: 1, maxTime: 4.5 });
+    ambient = useAnimatedShaderUniforms({}, 8);
+    return null;
+  }
+  const render = active => <PresentationProvider value={runtime$}><Probe active={active} /></PresentationProvider>;
+  try {
+    await act(() => { tree = create(render(true)); }); flushUI();
+    const frame = frames.at(-1);
+    frame.tick(1000);
+    const unstarted = { ...finite.value };
+    frame.tick(9000);
+    expect(finite.value).toEqual(unstarted, "an untriggered effect does not update invisible shader uniforms");
+    expect(finite.value.time).toBe(0);
+    expect(ambient.value.time).toBe(8);
+    await act(() => runtime$.stepIndex.set(1)); flushUI();
+    frame.tick(9500); frame.tick(11500);
+    expect(finite.value.time).toBe(2);
+    frame.tick(16000);
+    expect(finite.value.time).toBe(4.5, "a slow frame still lands at the exact final pose");
+    const settled = { ...finite.value };
+    frame.tick(22000);
+    expect(finite.value).toEqual(settled);
+    expect(ambient.value.time).toBe(21, "one completed effect does not freeze the slide");
+    await act(() => { tree.update(render(false)); }); flushUI();
+    frame.tick(25000);
+    expect(finite.value).toEqual(settled, "retirement cannot restart a completed effect");
+    await act(() => { tree.update(render(true)); runtime$.stepIndex.set(2); }); flushUI();
+    frame.tick(26000); frame.tick(30000);
+    expect(finite.value.time).toBe(4.5, "an anchored effect stays complete in later steps");
+    await act(() => runtime$.stepIndex.set(1));
+    expect(finite.value.time).toBe(0, "navigation projects the reset before the queued UI transaction");
+    flushUI(); frame.tick(31000); frame.tick(32000);
+    expect(finite.value.time).toBe(1);
+    await act(() => runtime$.playbackPhase.set("outgoing")); flushUI();
+    frame.tick(40000);
+    expect(finite.value.time).toBe(1, "an unfinished outgoing effect keeps its displayed pose");
+    await act(() => runtime$.playbackPhase.set("preview")); flushUI();
+    expect(finite.value.time).toBe(6);
+    await act(() => runtime$.playbackPhase.set("preparing")); flushUI();
+    expect(finite.value.time).toBe(0);
+    await act(() => runtime$.assign({ playbackPhase: "playing", startedAt: 2 })); flushUI();
+    frame.tick(41000); frame.tick(42000);
+    expect(finite.value.time).toBe(1, "a new visit replays the effect");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
