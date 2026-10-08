@@ -96,3 +96,42 @@
 +    if (retainedState->video) {
 +      retainedState->video->onDisplayLink();
 +    }
+--- a/apple/MetalWindowContext.mm
++++ b/apple/MetalWindowContext.mm
+@@ -22,11 +22,19 @@
+ #if !TARGET_OS_OSX
+   _layer.contentsScale = [UIScreen mainScreen].scale;
+ #else
+-  _layer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
++  // Pictures and drawables use the renderer's cached density, which can
++  // differ from the screen hosting another window in the same app.
++  _layer.contentsScale = _layer.bounds.size.width > 0
++                             ? width / _layer.bounds.size.width
++                             : 1;
+ #endif // !TARGET_OS_OSX
+   _layer.pixelFormat =
+       _highBitDepth ? MTLPixelFormatRGBA16Float : MTLPixelFormatBGRA8Unorm;
++#if TARGET_OS_OSX
++  _layer.contentsGravity = kCAGravityResize;
++#else
+   _layer.contentsGravity = kCAGravityBottomLeft;
++#endif
+   _layer.drawableSize = CGSizeMake(width, height);
+   BOOL supportsWideColor = NO;
+   if (useP3ColorSpace) {
+--- a/apple/MetalWindowContext.h
++++ b/apple/MetalWindowContext.h
+@@ -19,11 +19,11 @@
+   void present() override;
+ 
+   int getWidth() override {
+-    return _layer.frame.size.width * _layer.contentsScale;
++    return _layer.drawableSize.width;
+   };
+ 
+   int getHeight() override {
+-    return _layer.frame.size.height * _layer.contentsScale;
++    return _layer.drawableSize.height;
+   };
+ 
+   void resize(int width, int height) override { _skSurface = nullptr; }

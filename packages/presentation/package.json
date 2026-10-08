@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "main": "src/index.ts",
+  "scripts": {
+    "test:native": "bash tests/run-native.sh"
+  },
   "dependencies": {
     "@babel/core": "^7.29.0",
     "@babel/plugin-transform-block-scoping": "^7.28.6",
