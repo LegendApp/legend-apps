@@ -8495,7 +8495,7 @@ index 1488126f..c54c7a31 100644
  
  } // namespace facebook::react
 diff --git a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
-index bf1992c2..cc2ef066 100644
+index bf1992c2..5e0886f5 100644
 --- a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
 +++ b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
 @@ -3,6 +3,9 @@
@@ -8508,7 +8508,18 @@ index bf1992c2..cc2ef066 100644
  
  namespace facebook::react {
  
-@@ -33,6 +36,7 @@
+@@ -17,7 +20,9 @@
+ 
+ EnrichedMarkdownTextInputShadowNode::EnrichedMarkdownTextInputShadowNode(const ShadowNode &sourceShadowNode,
+                                                                          const ShadowNodeFragment &fragment)
+-    : ConcreteViewShadowNode(sourceShadowNode, fragment)
++    : ConcreteViewShadowNode(sourceShadowNode, fragment),
++      localHeightRecalculationCounter_(static_cast<const EnrichedMarkdownTextInputShadowNode &>(sourceShadowNode)
++                                          .localHeightRecalculationCounter_)
+ {
+   dirtyLayoutIfNeeded();
+ }
+@@ -33,6 +38,7 @@
    }
  }
  
@@ -8516,7 +8527,7 @@ index bf1992c2..cc2ef066 100644
  id EnrichedMarkdownTextInputShadowNode::setupMockInputView_(CGFloat width) const
  {
    EnrichedMarkdownTextInput *mockView =
-@@ -46,23 +50,37 @@
+@@ -46,23 +52,37 @@
    return mockView;
  }
  
@@ -8558,7 +8569,7 @@ index bf1992c2..cc2ef066 100644
      }
    };
  
-@@ -72,6 +90,9 @@
+@@ -72,6 +92,9 @@
      dispatch_sync(dispatch_get_main_queue(), measureBlock);
    }
  
