@@ -55,6 +55,7 @@ export { useLiquidGlassPlayback } from "./useLiquidGlassPlayback";
 
 export { SnapshotCaptureBoundary } from "./SnapshotCaptureBoundary";
 export { snapshotCaptureQueue } from "./snapshotCaptureQueue";
+export { createSnapshotImageCache } from "./snapshotImageCache";
 export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
 
 export { useNativeVideo } from "./useNativeVideo";
