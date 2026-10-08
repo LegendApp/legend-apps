@@ -74,7 +74,7 @@ test("audience retains immediate neighbors at full capture scale", async () => {
       expect(canvases.map((canvas) => canvas.findByType("deck").props.targetIndex).sort((a, b) => a - b))
         .toEqual(Array.from({ length: Math.min(6, index + 1) - Math.max(0, index - 1) + 1 },
           (_, offset) => Math.max(0, index - 1) + offset));
-      const active = canvases.filter((canvas) => !canvas.findByType("deck").props.isPreview && !canvas.findByType("deck").props.isOutgoing);
+      const active = canvases.filter((canvas) => !canvas.findByType("deck").props.isPreparing && !canvas.findByType("deck").props.isOutgoing);
       expect(active).toHaveLength(1);
       expect(active[0].findByType("deck").props.targetIndex).toBe(index);
       expect(active[0].props.captureEnabled).not.toBe(false);
