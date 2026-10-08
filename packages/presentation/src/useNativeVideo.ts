@@ -1,18 +1,19 @@
 import { Skia, useVideo, type SkImage, type Video } from "@shopify/react-native-skia";
 import { Platform } from "react-native";
 import { useEffect, useMemo, useState } from "react";
-import { createWorkletRuntime, runOnJS, runOnRuntime, runOnUI, useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
+import { createWorkletRuntime, runOnJS, runOnRuntime, runOnUI, useDerivedValue, useFrameCallback, useSharedValue, useAnimatedReaction, type SharedValue } from "react-native-reanimated";
 
 let loadingRuntime: ReturnType<typeof createWorkletRuntime> | undefined;
 
 /** Retain the player and last decoded frame, but stop polling while paused. */
-function useMacNativeVideo(source: string | null, playing: boolean) {
+function useMacNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>) {
   const [loaded, setLoaded] = useState<{ source: string; video: Video } | null>(null);
   const [failure, setFailure] = useState<{ source: string; message: string } | null>(null);
   const [readyVideo, setReadyVideo] = useState<Video | null>(null);
   const video = loaded?.source === source ? loaded.video : null;
   const currentFrame = useSharedValue<SkImage | null>(null);
   const currentTime = useSharedValue(0);
+  const seeking = useSharedValue<number | null>(null);
   const metadata = useMemo(() => ({ duration: video?.duration() ?? 0,
     framerate: video?.framerate() ?? 0, rotation: video?.rotation() ?? 0,
     size: video?.size() ?? { width: 0, height: 0 } }), [video]);
@@ -21,8 +22,13 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
     "worklet";
     if (!video || (!playing && hasFrame.value)) return;
     currentTime.value = video.currentTime();
+    if (seeking.value !== null) {
+      if (Math.abs(currentTime.value - seeking.value) > 250) return;
+      seeking.value = null;
+    }
     const image = video.nextImage();
     if (image) {
+      if (position) position.value = currentTime.value;
       currentFrame.value = image;
       if (!hasFrame.value) {
         hasFrame.value = true;
@@ -71,10 +77,21 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
         currentFrame.value = null;
         currentTime.value = 0;
         hasFrame.value = false;
+        seeking.value = null;
         previous?.dispose();
       })();
     };
-  }, [source, frame, currentFrame, currentTime, hasFrame]);
+  }, [source, frame, currentFrame, currentTime, hasFrame, seeking]);
+
+  useEffect(() => {
+    if (!video || !position) return;
+    runOnUI(() => {
+      "worklet";
+      const time = Math.min(video.duration(), Math.max(0, position.value));
+      seeking.value = time;
+      video.seek(time);
+    })();
+  }, [video, position, seeking]);
 
   useEffect(() => {
     if (!video) return;
@@ -94,8 +111,18 @@ function useMacNativeVideo(source: string | null, playing: boolean) {
 }
 
 // Other platforms retain Skia's platform-specific texture and loading handling.
-function useStandardNativeVideo(source: string | null, playing: boolean) {
+function useStandardNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>) {
   const paused = useDerivedValue(() => !playing, [playing]);
-  return { ...useVideo(source, { paused, looping: true, volume: 0 }), error: null };
+  const seek = useSharedValue<number | null>(null);
+  const video = useVideo(source, { paused, looping: true, volume: 0, seek });
+  useEffect(() => {
+    if (!position || !video.duration) return;
+    runOnUI(() => { "worklet"; seek.value = Math.max(0, position.value); })();
+  }, [video.duration, position, seek]);
+  useAnimatedReaction(() => video.currentTime.value, time => {
+    "worklet";
+    if (position && time > 0) position.value = time;
+  }, [video.currentTime, position]);
+  return { ...video, error: null };
 }
 export const useNativeVideo = Platform.OS === "macos" ? useMacNativeVideo : useStandardNativeVideo;

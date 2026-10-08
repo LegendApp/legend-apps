@@ -10,15 +10,15 @@ function player(source) {
   const image = {};
   const result = { polls: 0, disposed: 0, available: false, playing: false,
     nextImage() { this.polls++; return this.available ? image : null; },
-    currentTime: () => 12, duration() { if (this.disposed) throw new Error("disposed player"); return 100; }, framerate: () => 60,
+    currentTime() { return this.time ?? 12; }, duration() { if (this.disposed) throw new Error("disposed player"); return 10000; }, framerate: () => 60,
     rotation: () => 0, size: () => ({ width: 100, height: 100 }),
-    setLooping() {}, setVolume() {}, play() { this.playing = true; }, pause() { this.playing = false; },
+    seek(time) { this.seekTime = time; this.time = time; }, setLooping() {}, setVolume() {}, play() { this.playing = true; }, pause() { this.playing = false; },
     dispose() { this.disposed++; } };
   players.push(result); return result;
 }
 mock.module("@shopify/react-native-skia", () => ({ Skia: { Video: player }, useVideo: () => {} }));
 mock.module("react-native-reanimated", () => ({
-  useDerivedValue: fn => ({ get value() { return fn(); } }),
+  useAnimatedReaction: () => {}, useDerivedValue: fn => ({ get value() { return fn(); } }),
   createWorkletRuntime: () => ({}), runOnJS: fn => fn, runOnUI: fn => fn,
   runOnRuntime: (_, fn) => (...args) => loads.push(() => fn(...args)),
   useSharedValue: value => useRef({ value }).current,
@@ -88,6 +88,47 @@ test("video loader failures are contained and cleared by the next source", async
   await act(() => tree.update(<Probe source="valid" />));
   expect(value.error).toBeNull();
   await act(() => loads.shift()());
-  expect(value.duration).toBe(100);
+  expect(value.duration).toBe(10000);
+  await act(() => tree.unmount());
+});
+
+
+test("virtualized players restore the retained playback time and release native resources on unmount", async () => {
+  const position = { value: 1234 };
+  let tree;
+  function Probe() { useNativeVideo("resume", true, position); return null; }
+  await act(() => { tree = create(<Probe />); });
+  await act(() => loads.shift()());
+  const first = players.at(-1);
+  expect(first.seekTime).toBe(1234);
+  first.available = true;
+  first.time = 1300;
+  await act(() => frames.at(-1).tick());
+  expect(position.value).toBe(1300);
+  await act(() => tree.unmount());
+  expect(first.disposed).toBe(1);
+  expect(position.value).toBe(1300);
+  await act(() => { tree = create(<Probe />); });
+  await act(() => loads.shift()());
+  expect(players.at(-1).seekTime).toBe(1300);
+  await act(() => tree.unmount());
+});
+
+test("an asynchronous restore cannot publish an initial zero-time frame over the saved position", async () => {
+  const position = { value: 9000 };
+  let tree;
+  function Probe() { useNativeVideo("seek", false, position); return null; }
+  await act(() => { tree = create(<Probe />); });
+  await act(() => loads.shift()());
+  const native = players.at(-1), frame = frames.at(-1);
+  native.time = 0; native.available = true;
+  await act(() => frame.tick());
+  expect(position.value).toBe(9000);
+  expect(native.polls).toBe(0);
+  expect(frame.active).toBe(true);
+  native.time = 9000;
+  await act(() => frame.tick());
+  expect(native.polls).toBe(1);
+  expect(frame.active).toBe(false);
   await act(() => tree.unmount());
 });

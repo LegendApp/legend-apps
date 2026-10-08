@@ -1,14 +1,14 @@
 import { Canvas, Image as SkiaImage, useImage } from "@shopify/react-native-skia";
 import { useState } from "react";
 import { Text, View, type LayoutChangeEvent } from "react-native";
-import { useDerivedValue } from "react-native-reanimated";
+import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { useNativeVideo } from "./useNativeVideo";
 
 /** A native decoded frame and its poster share one canvas; no WebView or snapshot. */
-export function NativeVideoView({ source, poster, playing }: {
-  source: string; poster: string; playing: boolean;
+export function NativeVideoView({ source, poster, playing, position }: {
+  source: string; poster: string; playing: boolean; position?: SharedValue<number>;
 }) {
-  const video = useNativeVideo(source, playing);
+  const video = useNativeVideo(source, playing, position);
   const preview = useImage(poster);
   const image = useDerivedValue(() => video.currentFrame.value ?? preview, [preview]);
   const [size, setSize] = useState({ width: 0, height: 0 });
