@@ -6,7 +6,7 @@ import { createWorkletRuntime, runOnJS, runOnRuntime, runOnUI, useDerivedValue, 
 let loadingRuntime: ReturnType<typeof createWorkletRuntime> | undefined;
 
 /** Retain the player and last decoded frame, but stop polling while paused. */
-function useMacNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>) {
+function useMacNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>, looping = true) {
   const [loaded, setLoaded] = useState<{ source: string; video: Video } | null>(null);
   const [failure, setFailure] = useState<{ source: string; message: string } | null>(null);
   const [readyVideo, setReadyVideo] = useState<Video | null>(null);
@@ -97,7 +97,7 @@ function useMacNativeVideo(source: string | null, playing: boolean, position?: S
     if (!video) return;
     runOnUI(() => {
       "worklet";
-      video.setLooping(true);
+      video.setLooping(looping);
       video.setVolume(0);
       if (playing) video.play(); else video.pause();
     })();
@@ -105,16 +105,17 @@ function useMacNativeVideo(source: string | null, playing: boolean, position?: S
     // repeatedly creating native image wrappers or invalidating its canvas.
     frame.setActive(playing || readyVideo !== video);
     return () => frame.setActive(false);
-  }, [video, playing, readyVideo, frame]);
+  }, [video, playing, readyVideo, frame, looping]);
 
   return { currentFrame, currentTime, ...metadata, error: failure?.source === source ? failure.message : null };
 }
 
 // Other platforms retain Skia's platform-specific texture and loading handling.
-function useStandardNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>) {
+function useStandardNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>, looping = true) {
   const paused = useDerivedValue(() => !playing, [playing]);
+  const repeat = useDerivedValue(() => looping, [looping]);
   const seek = useSharedValue<number | null>(null);
-  const video = useVideo(source, { paused, looping: true, volume: 0, seek });
+  const video = useVideo(source, { paused, looping: repeat, volume: 0, seek });
   useEffect(() => {
     if (!position || !video.duration) return;
     runOnUI(() => { "worklet"; seek.value = Math.max(0, position.value); })();

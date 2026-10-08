@@ -5,10 +5,10 @@ import { useDerivedValue, type SharedValue } from "react-native-reanimated";
 import { useNativeVideo } from "./useNativeVideo";
 
 /** A native decoded frame and its poster share one canvas; no WebView or snapshot. */
-export function NativeVideoView({ source, poster, playing, position }: {
-  source: string; poster: string; playing: boolean; position?: SharedValue<number>;
+export function NativeVideoView({ source, poster, playing, position, looping = true }: {
+  source: string; poster: string; playing: boolean; position?: SharedValue<number>; looping?: boolean;
 }) {
-  const video = useNativeVideo(source, playing, position);
+  const video = useNativeVideo(source, playing, position, looping);
   const preview = useImage(poster);
   const image = useDerivedValue(() => video.currentFrame.value ?? preview, [preview]);
   const [size, setSize] = useState({ width: 0, height: 0 });

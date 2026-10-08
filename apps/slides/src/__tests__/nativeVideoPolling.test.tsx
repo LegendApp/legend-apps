@@ -9,10 +9,10 @@ function player(source) {
   if (source === "missing") return null;
   const image = {};
   const result = { polls: 0, disposed: 0, available: false, playing: false,
-    nextImage() { this.polls++; return this.available ? image : null; },
+    nextImage() { this.polls++; return this.available ? this.image ?? image : null; },
     currentTime() { return this.time ?? 12; }, duration() { if (this.disposed) throw new Error("disposed player"); return 10000; }, framerate: () => 60,
     rotation: () => 0, size: () => ({ width: 100, height: 100 }),
-    seek(time) { this.seekTime = time; this.time = time; }, setLooping() {}, setVolume() {}, play() { this.playing = true; }, pause() { this.playing = false; },
+    seek(time) { this.seekTime = time; this.time = time; }, setLooping(value) { this.looping = value; }, setVolume() {}, play() { this.playing = true; }, pause() { this.playing = false; },
     dispose() { this.disposed++; } };
   players.push(result); return result;
 }
@@ -38,6 +38,7 @@ test("paused video acquires one frame, stops polling, resumes without replacing 
   await act(() => { tree = create(<Probe source="one" playing={false} />); });
   await act(() => loads.shift()());
   const native = players.at(-1), frame = frames.at(-1);
+  expect(native.looping).toBe(true);
   await act(() => frame.tick());
   expect(native.polls).toBe(1); expect(frame.active).toBe(true);
   native.available = true;
@@ -130,5 +131,32 @@ test("an asynchronous restore cannot publish an initial zero-time frame over the
   await act(() => frame.tick());
   expect(native.polls).toBe(1);
   expect(frame.active).toBe(false);
+  await act(() => tree.unmount());
+});
+
+test("one-shot playback retains the final decoded frame through the end and carousel remount", async () => {
+  const position = { value: 0 };
+  let value, tree;
+  function Probe() { value = useNativeVideo("launch", true, position, false); return null; }
+  await act(() => { tree = create(<Probe />); });
+  await act(() => loads.shift()());
+  const native = players.at(-1);
+  expect(native.looping).toBe(false);
+  native.time = 0;
+  native.available = true;
+  await act(() => frames.at(-1).tick());
+  native.time = native.duration() - 1000 / native.framerate();
+  native.image = { final: true };
+  await act(() => frames.at(-1).tick());
+  const held = value.currentFrame.value;
+  expect(held).toBe(native.image);
+  native.available = false;
+  await act(() => frames.at(-1).tick());
+  expect(value.currentFrame.value).toBe(held);
+  await act(() => tree.unmount());
+  await act(() => { tree = create(<Probe />); });
+  await act(() => loads.shift()());
+  expect(players.at(-1).looping).toBe(false);
+  expect(players.at(-1).seekTime).toBe(native.time);
   await act(() => tree.unmount());
 });
