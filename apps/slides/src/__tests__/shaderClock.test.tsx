@@ -9,6 +9,73 @@ import { frames, flushUI } from "./uiClockMock";
 const { PresentationProvider } = await import("../../../../packages/presentation/src/runtime");
 const { useAnimatedShaderUniforms } = await import("../../../../packages/presentation/src/useAnimatedShaderUniforms");
 
+test("departing step effects keep their identity for one second, then freeze without React frames", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ playbackPhase: "playing", slideIndex: 0, stepIndex: 0 });
+  let uniforms, renders = 0, tree;
+  function Probe({ active }) {
+    renders++;
+    uniforms = useAnimatedShaderUniforms({}, 8, { active, clock: "step", clocks: { anchored: 0 } });
+    return null;
+  }
+  const render = active => <PresentationProvider value={runtime$}><Probe active={active} /></PresentationProvider>;
+  try {
+    await act(() => { tree = create(render(false)); }); flushUI();
+    const frame = frames.at(-1);
+    frame.tick(1000); frame.tick(2000);
+    expect(uniforms.value.time).toBe(8, "never-active cards start as static previews");
+    await act(() => tree.update(render(true))); flushUI();
+    frame.tick(2500);
+    expect(uniforms.value.time).toBe(1.5);
+    await act(() => { runtime$.stepIndex.set(1); tree.update(render(false)); }); flushUI();
+    expect(uniforms.value.time).toBe(1.5, "exit does not sample the new step's zero time");
+    expect(uniforms.value.stepIndex).toBe(0);
+    const before = renders;
+    frame.tick(2600); frame.tick(3000);
+    expect(uniforms.value.time).toBe(2);
+    frame.tick(3500);
+    expect(uniforms.value.time).toBe(2.5);
+    expect(uniforms.value.anchored).toBe(2.5);
+    frame.tick(9000);
+    expect(uniforms.value.time).toBe(2.5, "idle content retains the final exit frame");
+    expect(renders).toBe(before);
+    await act(() => tree.update(render(true))); flushUI();
+    expect(uniforms.value.stepIndex).toBe(1);
+    expect(uniforms.value.time).toBe(6.4);
+    await act(() => tree.update(render(false))); flushUI();
+    frame.tick(9100);
+    await act(() => tree.update(render(true))); flushUI();
+    frame.tick(11000);
+    expect(uniforms.value.time).toBe(8.4, "reactivation cancels the previous retirement");
+    await act(() => { runtime$.assign({ playbackPhase: "preparing" }); tree.update(render(false)); }); flushUI();
+    expect(uniforms.value.time).toBe(8, "inactive preparation restores the static pose");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("retired shaders discard live poses for previews and new slide activations", async () => {
+  const runtime$ = observable({ playbackPhase: "playing", slideIndex: 0, stepIndex: 0, startedAt: 1 });
+  let uniforms, tree;
+  function Probe({ active, delay = 1000 }) { uniforms = useAnimatedShaderUniforms({}, 8, { active, inactivityDelay: delay }); return null; }
+  const render = (active, delay = 1000) => <PresentationProvider value={runtime$}><Probe active={active} delay={delay} /></PresentationProvider>;
+  try {
+    await act(() => { tree = create(render(true)); }); flushUI();
+    const frame = frames.at(-1);
+    frame.tick(1000); frame.tick(2000);
+    await act(() => tree.update(render(false, 0))); flushUI();
+    frame.tick(5000);
+    expect(uniforms.value.time).toBe(1, "zero delay freezes immediately at the live pose");
+    await act(() => runtime$.playbackPhase.set("preview")); flushUI();
+    expect(uniforms.value.time).toBe(8);
+    await act(() => { runtime$.assign({ playbackPhase: "playing", startedAt: 2 }); tree.update(render(true)); }); flushUI();
+    frame.tick(6000); frame.tick(7000);
+    await act(() => tree.update(render(false))); flushUI();
+    frame.tick(8000); frame.tick(9000);
+    expect(uniforms.value.time).toBe(2);
+    await act(() => runtime$.startedAt.set(3)); flushUI();
+    expect(uniforms.value.time).toBe(8, "a pooled inactive card cannot keep the previous visit's live pose");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
 test("shared shader clock resets atomically, advances through slow frames, and freezes outgoing content", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let uniforms;

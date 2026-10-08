@@ -1,18 +1,60 @@
 import { useBackgroundBrightnessScale, useBackgroundMotion } from "./background";
-import { useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
+import { useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { usePresentationValue } from "./runtime";
 import { samplePlayback, usePlayback } from "./playback";
+import type { PlaybackState } from "./playbackState";
 
-type ShaderMotion = { active?: boolean; persistentBackground?: boolean | "read"; clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
+type ShaderMotion = { active?: boolean; inactivityDelay?: number; persistentBackground?: boolean | "read"; clocks?: Record<string, number>; clock?: "slide" | "step" | number; speed?: number; slideChangeBoost?: number; slideChangeDuration?: number };
+
+/** Retire a previously live effect after its exit, without a JS timer or frame subscription once idle. */
+function useShaderPlayback(active: boolean, delay: number, playback: SharedValue<PlaybackState>, activation: string, phase?: PlaybackState["phase"]) {
+  const activity = useSharedValue({ requested: active, active, activation, until: 0, retained: null as PlaybackState | null });
+  useAnimatedReaction(() => {
+    const old = activity.value;
+    const reset = phase === "preview" || phase === "preparing" || phase === "playing" && old.activation !== activation;
+    return active || old.active || reset && old.retained !== null ? playback.value : null;
+  }, clock => {
+    if (!clock) return;
+    const old = activity.value;
+    if (active) {
+      if (!old.requested || !old.retained || old.retained.slideKey !== clock.slideKey ||
+          old.retained.stepKey !== clock.stepKey || old.retained.stepPending !== clock.stepPending ||
+          old.retained.phase !== clock.phase || old.activation !== activation) {
+        activity.value = { requested: true, active: true, activation, until: 0, retained: clock };
+      }
+    } else if (clock.phase === "preview" || clock.phase === "preparing" || phase === "playing" && old.activation !== activation) {
+      activity.value = { requested: false, active: false, activation, until: 0, retained: null };
+    } else if (old.requested) {
+      activity.value = { requested: false, active: delay > 0, activation, until: clock.slideTime + delay / 1000, retained: old.retained };
+    } else if (old.retained?.slideKey !== clock.slideKey) {
+      activity.value = { requested: false, active: false, activation, until: 0, retained: null };
+    } else if (clock.slideTime >= old.until) {
+      activity.value = { ...old, active: false };
+    }
+  }, [active, delay, playback, activation, phase]);
+  return useDerivedValue(() => {
+    if (active) return playback.value;
+    const old = activity.value;
+    if (!old.retained) return null;
+    const current = old.active ? playback.value : null;
+    const slideTime = current ? Math.min(current.slideTime, old.until) : old.until;
+    return { ...old.retained, phase: current?.phase ?? "paused",
+      slideTime, stepTime: old.retained.stepTime + Math.max(0, slideTime - old.retained.slideTime) };
+  }, [active, playback]);
+}
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
 export function useAnimatedShaderUniforms(
   uniforms: Record<string, number | number[]>, previewTime = 0,
-  { active = true, persistentBackground = false, clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
+  { active = true, inactivityDelay = 1000, persistentBackground = false, clocks, clock = "slide", speed = 1, slideChangeBoost = 0, slideChangeDuration = 2 }: ShaderMotion = {},
 ) {
   const playback = usePlayback();
   const brightnessScale=useBackgroundBrightnessScale();
   const slideIndex = usePresentationValue("slideIndex");
+  const startedAt = usePresentationValue("startedAt");
+  const phase = usePresentationValue("playbackPhase");
+  const shaderPlayback = useShaderPlayback(active, Number.isFinite(inactivityDelay) ? Math.max(0, inactivityDelay) : 1000,
+    playback, `${slideIndex}:${startedAt ?? 0}`, phase);
   const rate = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const boost = Number.isFinite(slideChangeBoost) ? Math.max(0, slideChangeBoost) : 0;
   const duration = Math.max(0.001, Number.isFinite(slideChangeDuration) ? slideChangeDuration : 2);
@@ -20,13 +62,16 @@ export function useAnimatedShaderUniforms(
   const sharedMotion=useBackgroundMotion();
   const localMotion=useSharedValue({time:0,raw:0,burst:duration,slideIndex,owner:""});
   const persistent=Boolean(persistentBackground) && sharedMotion!==null;
-  const integrates=active && adjusted && persistentBackground!=="read";
+  const integrates=adjusted && persistentBackground!=="read";
   const motion=persistent ? sharedMotion! : localMotion;
   // Background speed modulation integrates the shared elapsed clock. It owns
   // no frame loop, never caps elapsed time, and does not change step timing.
   // Do not subscribe this optional integrator to every frame for normal-speed
   // shaders. Their uniform derivation below is the only clock consumer needed.
-  useAnimatedReaction(() => integrates ? { clock: playback.value, index: slideIndex } : null, (sample) => {
+  useAnimatedReaction(() => {
+    const state = integrates ? shaderPlayback.value : null;
+    return state ? { clock: state, index: slideIndex } : null;
+  }, (sample) => {
     if (!sample) return;
     const { clock, index } = sample;
     if (!persistent && (clock.phase === "preparing" || clock.slideTime < motion.value.raw)) {
@@ -51,13 +96,13 @@ export function useAnimatedShaderUniforms(
   return useDerivedValue(() => {
     // A frozen card must not subscribe to the live clock. Sample its stable
     // preview pose until it approaches the visible carousel region.
-    if (!active) {
+    const state = shaderPlayback.value;
+    if (!state) {
       const frozenClocks: Record<string, number> = {};
       for (const name of Object.keys(clocks ?? {})) frozenClocks[name] = previewTime;
       return { ...uniforms, ...frozenClocks, time: previewTime,
         slideTime: previewTime, stepTime: previewTime, stepIndex: 0 };
     }
-    const state = playback.value;
     const sampled = samplePlayback(state, previewTime, clock);
     const extraClocks: Record<string, number> = {};
     for (const name of Object.keys(clocks ?? {})) extraClocks[name] = samplePlayback(state, previewTime, clocks![name]);
@@ -68,7 +113,7 @@ export function useAnimatedShaderUniforms(
       stepTime: samplePlayback(state, previewTime, "step"),
       stepIndex: state.stepIndex,
     };
-  }, [active, uniforms, clocks, adjusted, persistent, previewTime, clock, brightnessScale]);
+  }, [shaderPlayback, uniforms, clocks, adjusted, persistent, previewTime, clock, brightnessScale]);
 }
 
 /** Interaction geometry rides on the persistent background, never its slide clock
