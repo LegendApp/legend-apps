@@ -4504,10 +4504,27 @@ index ff3d4c2..40c40cb 100644
  }
  
 diff --git a/ios/input/ENRMInputFormatter.mm b/ios/input/ENRMInputFormatter.mm
-index 851d990..8930fee 100644
+index 851d9902..fcdaab2a 100644
 --- a/ios/input/ENRMInputFormatter.mm
 +++ b/ios/input/ENRMInputFormatter.mm
-@@ -89,6 +89,14 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
+@@ -70,7 +70,15 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
+                         style:(ENRMInputFormatterStyle *)style
+                 scopedToRange:(NSRange)scope
+ {
+-  NSTextStorage *textStorage = textView.textStorage;
++  [self applyFormattingRanges:ranges toTextStorage:textView.textStorage style:style scopedToRange:scope];
++  ENRMSetNeedsDisplay(textView);
++}
++
++- (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
++                   toTextStorage:(NSTextStorage *)textStorage
++                        style:(ENRMInputFormatterStyle *)style
++                scopedToRange:(NSRange)scope
++{
+   NSUInteger textLength = textStorage.length;
+ 
+   if (textLength == 0) {
+@@ -89,6 +97,14 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
  
    [textStorage addAttribute:NSFontAttributeName value:style.baseFont range:scopeRange];
    [textStorage addAttribute:NSForegroundColorAttributeName value:style.baseTextColor range:scopeRange];
@@ -4522,7 +4539,37 @@ index 851d990..8930fee 100644
    [textStorage removeAttribute:NSUnderlineStyleAttributeName range:scopeRange];
    [textStorage removeAttribute:NSStrikethroughStyleAttributeName range:scopeRange];
    [textStorage removeAttribute:NSBackgroundColorAttributeName range:scopeRange];
-@@ -213,5 +221,6 @@
+@@ -156,7 +172,6 @@ - (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
+     [layoutManager ensureLayoutForCharacterRange:scopeRange];
+   }
+ 
+-  ENRMSetNeedsDisplay(textView);
+ }
+ 
+ - (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
+@@ -173,12 +188,20 @@ - (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
+               toTextView:(ENRMPlatformTextView *)textView
+                    style:(ENRMInputFormatterStyle *)style
+            scopedToRange:(NSRange)scope
++{
++  [self applyBlockRanges:blockRanges toTextStorage:textView.textStorage style:style scopedToRange:scope];
++  ENRMSetNeedsDisplay(textView);
++}
++
++- (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
++              toTextStorage:(NSTextStorage *)textStorage
++                   style:(ENRMInputFormatterStyle *)style
++           scopedToRange:(NSRange)scope
+ {
+   if (_blockHandlers.count == 0) {
+     return;
+   }
+ 
+-  NSTextStorage *textStorage = textView.textStorage;
+   NSUInteger textLength = textStorage.length;
+   if (textLength == 0) {
+     return;
+@@ -213,7 +236,8 @@ - (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
      [textStorage removeAttribute:ENRMBlockTypeAttributeName range:range];
      [textStorage removeAttribute:ENRMBlockLevelAttributeName range:range];
      [textStorage removeAttribute:ENRMBlockOrdinalAttributeName range:range];
@@ -4530,6 +4577,16 @@ index 851d990..8930fee 100644
 +    // The inline pass has already restored the base paragraph metrics. Keep
 +    // those metrics when removing the previous block's bookkeeping.
    }
+ 
+   for (ENRMBlockRange *blockRange in blockRanges) {
+@@ -283,7 +307,6 @@ - (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
+ 
+   [textStorage endEditing];
+ 
+-  ENRMSetNeedsDisplay(textView);
+ }
+ 
+ /// Applies `blockFont` over `range` while preserving the symbolic traits already
 diff --git a/ios/input/ENRMInputFormatterStyle.h b/ios/input/ENRMInputFormatterStyle.h
 index c09a3cb..e100911 100644
 --- a/ios/input/ENRMInputFormatterStyle.h
@@ -4791,7 +4848,7 @@ index 231d841..a244fa2 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 9a9987e..3ac3117 100644
+index 9a9987e0..b8b6cea1 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -4800,15 +4857,16 @@ index 9a9987e..3ac3117 100644
  #import "ContextMenuUtils.h"
  #import "ENRMAutoLinkDetector.h"
  #import "ENRMBlockEditCoordinator.h"
-@@ -17,6 +18,7 @@
+@@ -17,6 +18,8 @@
  #import "ENRMInputListMarkerDrawer.h"
  #import "ENRMInputParser.h"
  #import "ENRMInputTextView.h"
 +#import "../utils/ENRMInputMeasurement.h"
++#import "ENRMInputMeasurementStyle.h"
  #import "ENRMInputTypingAttributesController.h"
  #import "ENRMLinkCoordinator.h"
  #import "ENRMLinkRegexConfig.h"
-@@ -34,7 +36,6 @@
+@@ -34,7 +37,6 @@
  #if TARGET_OS_OSX
  #import <React/RCTBackedTextInputDelegate.h>
  #endif
@@ -4816,7 +4874,7 @@ index 9a9987e..3ac3117 100644
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -59,6 +60,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -59,6 +61,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -4830,7 +4888,7 @@ index 9a9987e..3ac3117 100644
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  @end
-@@ -97,9 +105,13 @@ @implementation EnrichedMarkdownTextInput {
+@@ -97,9 +106,13 @@ @implementation EnrichedMarkdownTextInput {
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
@@ -4844,7 +4902,7 @@ index 9a9987e..3ac3117 100644
    NSArray<NSString *> *_contextMenuItemTexts;
    NSArray<NSString *> *_contextMenuItemIcons;
    ENRMAutoLinkDetector *_autoLinkDetector;
-@@ -242,6 +254,9 @@ - (void)setupTextView
+@@ -242,6 +255,9 @@ - (void)setupTextView
  #else
    _textView.selectable = YES;
  
@@ -4854,7 +4912,7 @@ index 9a9987e..3ac3117 100644
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -256,7 +271,8 @@ - (void)setupTextView
+@@ -256,7 +272,8 @@ - (void)setupTextView
    _textView.textContainer.widthTracksTextView = YES;
  
    _scrollView.documentView = _textView;
@@ -4864,35 +4922,59 @@ index 9a9987e..3ac3117 100644
  #endif
  
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -339,7 +355,97 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
+@@ -313,7 +330,14 @@ - (void)updateState:(const facebook::react::State::Shared &)state
+ 
+ - (void)requestHeightUpdate
+ {
++#if TARGET_OS_OSX
++  if (_state) {
++    NSAttributedString *text = ENRMPrepareInputMeasurementText(ENRMGetAttributedText(_textView), _textView.typingAttributes);
++    _state->updateState(EnrichedMarkdownTextInputState(++_heightUpdateCounter, wrapManagedObject(text)));
++  }
++#else
+   ENRMRequestHeightUpdate<EnrichedMarkdownTextInputState>(_state, _heightUpdateCounter, self);
++#endif
+ }
+ 
+ /// Yoga-resolved direction inherited from any ancestor `direction` style.
+@@ -335,40 +359,108 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
+     _resolvedLayoutDirection = resolved;
+     if (_writingDirectionMode == ENRMWritingDirectionModeFirstStrong && _textView.textStorage.length > 0) {
+       [self applyFormatting];
++      [self requestHeightUpdate];
+     }
    }
  }
  
 -#pragma mark - Measurement
+-
+-- (CGSize)measureSize:(CGFloat)maxWidth
 +#if TARGET_OS_OSX
 +- (void)applyParagraphBaselineOffset
-+{
-+  // Heading delimiters are already removed by the input parser. Keep visible
-+  // text intact, and use the renderer's baseline centering for paragraphs.
-+  if (!_usesParagraphBaselineOffset || _textView.textStorage.length == 0) {
-+    return;
-+  }
-+  [_textView.textStorage enumerateAttribute:ENRMBlockTypeAttributeName
-+                                  inRange:NSMakeRange(0, _textView.textStorage.length)
-+                                  options:0
-+                               usingBlock:^(NSNumber *type, NSRange range, BOOL *stop) {
-+    if (type == nil || type.integerValue == ENRMInputBlockTypeParagraph) {
-+      applyBaselineOffset(self->_textView.textStorage, range);
-+    }
-+  }];
+ {
+-  NSMutableAttributedString *measuredText =
+-      [[NSMutableAttributedString alloc] initWithAttributedString:ENRMGetAttributedText(_textView)];
++  ENRMApplyInputParagraphBaselineOffset(_textView.textStorage, _usesParagraphBaselineOffset);
 +}
-+
+ 
+-  // Empty input should still be the height of a single line.
+-  // Use typingAttributes so the measurement matches the actual configured font.
+-  if (measuredText.length == 0) {
+-    [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
+-                                                                         attributes:_textView.typingAttributes]];
 +- (void)applyTextViewLayout
 +{
 +  if (_scrollContainerView == nil || _scrollView == nil || _textView == nil) {
 +    return;
-+  }
-+
+   }
+ 
+-  // Trailing newlines are not counted by boundingRectWithSize — append
+-  // a mock character so the extra line is included in the height.
+-  if (measuredText.length > 0) {
+-    unichar lastChar = [measuredText.string characterAtIndex:measuredText.length - 1];
+-    if ([[NSCharacterSet newlineCharacterSet] characterIsMember:lastChar]) {
+-      [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
+-                                                                           attributes:_textView.typingAttributes]];
 +  NSRect bounds = self.bounds;
 +  CGFloat width = MAX(0, NSWidth(bounds));
 +  CGFloat height = MAX(0, NSHeight(bounds));
@@ -4927,9 +5009,9 @@ index 9a9987e..3ac3117 100644
 +                                                                   range:NSMakeRange(0, markdown.length)];
 +    if (match != nil) {
 +      prefixLength = (NSInteger)NSMaxRange(match.range);
-+    }
-+  }
-+
+     }
+   }
+ 
 +  return prefixLength;
 +}
 +
@@ -4960,13 +5042,12 @@ index 9a9987e..3ac3117 100644
 +{
 +}
 +#endif
- 
- - (CGSize)measureSize:(CGFloat)maxWidth
- {
-@@ -363,12 +469,18 @@ - (CGSize)measureSize:(CGFloat)maxWidth
-     }
-   }
- 
++
++- (CGSize)measureSize:(CGFloat)maxWidth
++{
++  NSAttributedString *measuredText = ENRMInputTextForMeasurement(ENRMGetAttributedText(_textView),
++                                                                   _textView.typingAttributes);
++
 +#if TARGET_OS_OSX
 +  return CGSizeMake(maxWidth, ENRMInputTextHeight(measuredText, maxWidth));
 +#else
@@ -4983,7 +5064,7 @@ index 9a9987e..3ac3117 100644
  }
  
  #pragma mark - Props
-@@ -504,19 +616,35 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -504,28 +596,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      writingDirectionChanged = YES;
    }
  
@@ -5022,15 +5103,18 @@ index 9a9987e..3ac3117 100644
        [self applyFormatting];
      }
  
-@@ -525,7 +653,6 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+     [self requestHeightUpdate];
+-  } else if (writingDirectionChanged && _textView.textStorage.length > 0) {
++  } else if (writingDirectionChanged) {
      [self applyFormatting];
++    [self requestHeightUpdate];
    }
  
 -  [super updateProps:props oldProps:oldProps];
  }
  
  #pragma mark - Relayout
-@@ -533,7 +660,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -533,7 +641,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -5039,7 +5123,7 @@ index 9a9987e..3ac3117 100644
  }
  
  - (void)_performRelayout
-@@ -542,22 +669,36 @@ - (void)_performRelayout
+@@ -542,22 +650,36 @@ - (void)_performRelayout
      return;
    }
  
@@ -5090,7 +5174,7 @@ index 9a9987e..3ac3117 100644
    }
  }
  
-@@ -569,6 +710,9 @@ - (void)didMoveToWindow
+@@ -569,6 +691,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5100,7 +5184,7 @@ index 9a9987e..3ac3117 100644
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +806,7 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -662,6 +787,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5108,7 +5192,7 @@ index 9a9987e..3ac3117 100644
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +818,12 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -673,9 +799,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5123,7 +5207,7 @@ index 9a9987e..3ac3117 100644
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -743,6 +891,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
+@@ -743,6 +872,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5144,7 +5228,7 @@ index 9a9987e..3ac3117 100644
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +949,92 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -787,12 +930,43 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -5170,65 +5254,18 @@ index 9a9987e..3ac3117 100644
  - (void)resetBaseTypingAttributes
  {
 -  ENRMSetDefaultTypingAttributes(_textView, @{
-+  _textView.font = _formatterStyle.baseFont;
-+  NSMutableDictionary *attrs = [@{
-     NSFontAttributeName : _formatterStyle.baseFont,
-     NSForegroundColorAttributeName : _formatterStyle.baseTextColor,
+-    NSFontAttributeName : _formatterStyle.baseFont,
+-    NSForegroundColorAttributeName : _formatterStyle.baseTextColor,
 -  });
-+  } mutableCopy];
-+  if (_formatterStyle.baseLineHeight > 0) {
-+    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-+    paragraphStyle.minimumLineHeight = _formatterStyle.baseLineHeight;
-+    paragraphStyle.maximumLineHeight = _formatterStyle.baseLineHeight;
-+    attrs[NSParagraphStyleAttributeName] = paragraphStyle;
-+  }
-+  ENRMSetDefaultTypingAttributes(_textView, attrs);
++  _textView.font = _formatterStyle.baseFont;
++  ENRMSetDefaultTypingAttributes(_textView, ENRMInputBaseTypingAttributes(_formatterStyle));
 +}
 +
 +- (BOOL)applyBlockStyleForMarkdown:(NSString *)markdown
 +{
 +  const auto &viewProps = *std::static_pointer_cast<EnrichedMarkdownTextInputProps const>(_props);
-+  NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-+  BOOL changed = NO;
-+  _usesParagraphBaselineOffset = YES;
-+
-+  if ([trimmedMarkdown hasPrefix:@"```"] || [trimmedMarkdown hasPrefix:@"~~~"]) {
-+    _usesParagraphBaselineOffset = NO;
-+    changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.codeBlock);
-+  } else {
-+    NSRegularExpression *headingRegex = [NSRegularExpression regularExpressionWithPattern:@"^#{1,6}\\s"
-+                                                                                  options:0
-+                                                                                    error:nil];
-+    NSTextCheckingResult *headingMatch = [headingRegex firstMatchInString:trimmedMarkdown
-+                                                                  options:0
-+                                                                    range:NSMakeRange(0, trimmedMarkdown.length)];
-+    if (headingMatch != nil) {
-+      _usesParagraphBaselineOffset = NO;
-+      NSUInteger headingLevel = headingMatch.range.length - 1;
-+      switch (headingLevel) {
-+        case 1:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h1);
-+          break;
-+        case 2:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h2);
-+          break;
-+        case 3:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h3);
-+          break;
-+        case 4:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h4);
-+          break;
-+        case 5:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h5);
-+          break;
-+        default:
-+          changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.h6);
-+          break;
-+      }
-+    } else {
-+      changed = applyInputBlockStyleProps(_formatterStyle, viewProps.markdownStyle.paragraph);
-+    }
-+  }
++  BOOL changed = ENRMApplyInputMarkdownBlockStyle(_formatterStyle, viewProps.markdownStyle, markdown,
++                                                 &_usesParagraphBaselineOffset);
 +
 +  if (changed) {
 +    [_formatterStyle invalidateFontCache];
@@ -5239,7 +5276,7 @@ index 9a9987e..3ac3117 100644
  }
  
  - (void)applyFormatting
-@@ -829,6 +1071,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -829,6 +1003,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
@@ -5247,7 +5284,7 @@ index 9a9987e..3ac3117 100644
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -837,6 +1080,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -837,6 +1012,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5257,7 +5294,7 @@ index 9a9987e..3ac3117 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1125,23 @@ - (void)setValue:(NSString *)markdown
+@@ -879,6 +1057,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -5281,7 +5318,7 @@ index 9a9987e..3ac3117 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -889,6 +1152,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -889,6 +1084,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -5403,7 +5440,7 @@ index 9a9987e..3ac3117 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1377,9 +1755,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1377,9 +1687,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5436,7 +5473,7 @@ index 9a9987e..3ac3117 100644
  }
  
  - (void)copyToClipboard
-@@ -1413,16 +1813,53 @@ - (CGRect)computeCaretRect
+@@ -1413,16 +1745,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5495,7 +5532,7 @@ index 9a9987e..3ac3117 100644
  - (void)requestCaretRect:(NSInteger)requestId
  {
    [_inputEventEmitter requestCaretRect:requestId];
-@@ -1540,6 +1977,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1540,6 +1909,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -5528,7 +5565,7 @@ index 9a9987e..3ac3117 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2097,12 @@ - (void)handleTextChanged
+@@ -1634,7 +2029,12 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -5542,7 +5579,7 @@ index 9a9987e..3ac3117 100644
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2117,9 @@ - (void)handleTextChanged
+@@ -1649,6 +2049,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5552,7 +5589,7 @@ index 9a9987e..3ac3117 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2182,12 @@ - (void)manageSelectionBasedChanges
+@@ -1711,6 +2114,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -5566,7 +5603,7 @@ index 9a9987e..3ac3117 100644
          }
        }
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index 1d28946..b49cbc7 100644
+index 1d28946d..49075e33 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
 @@ -92,6 +92,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
@@ -5581,7 +5618,7 @@ index 1d28946..b49cbc7 100644
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
-@@ -183,3 +188,48 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -183,3 +188,101 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
  
    return changed;
  }
@@ -5628,6 +5665,59 @@ index 1d28946..b49cbc7 100644
 +    changed = YES;
 +  }
 +
++  return changed;
++}
++
++
++template <typename MarkdownStyleProps>
++BOOL ENRMApplyInputMarkdownBlockStyle(ENRMInputFormatterStyle *style, const MarkdownStyleProps &markdownStyle,
++                                     NSString *markdown, BOOL *usesParagraphBaselineOffset)
++{
++  NSString *trimmedMarkdown = [markdown stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
++  BOOL changed = NO;
++  *usesParagraphBaselineOffset = YES;
++
++  if ([trimmedMarkdown hasPrefix:@"```"] || [trimmedMarkdown hasPrefix:@"~~~"]) {
++    *usesParagraphBaselineOffset = NO;
++    changed = applyInputBlockStyleProps(style, markdownStyle.codeBlock);
++  } else {
++    NSRegularExpression *headingRegex = [NSRegularExpression regularExpressionWithPattern:@"^#{1,6}\\s"
++                                                                                  options:0
++                                                                                    error:nil];
++    NSTextCheckingResult *headingMatch = [headingRegex firstMatchInString:trimmedMarkdown
++                                                                  options:0
++                                                                    range:NSMakeRange(0, trimmedMarkdown.length)];
++    if (headingMatch != nil) {
++      *usesParagraphBaselineOffset = NO;
++      NSUInteger headingLevel = headingMatch.range.length - 1;
++      switch (headingLevel) {
++        case 1:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h1);
++          break;
++        case 2:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h2);
++          break;
++        case 3:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h3);
++          break;
++        case 4:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h4);
++          break;
++        case 5:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h5);
++          break;
++        default:
++          changed = applyInputBlockStyleProps(style, markdownStyle.h6);
++          break;
++      }
++    } else {
++      changed = applyInputBlockStyleProps(style, markdownStyle.paragraph);
++    }
++  }
++
++  if (changed) {
++    [style invalidateFontCache];
++  }
 +  return changed;
 +}
 diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
@@ -8074,14 +8164,47 @@ new file mode 100755
 +#endif
 diff --git a/ios/utils/ENRMInputMeasurement.h b/ios/utils/ENRMInputMeasurement.h
 new file mode 100644
+index 00000000..f8f6f3a7
 --- /dev/null
 +++ b/ios/utils/ENRMInputMeasurement.h
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,53 @@
 +#pragma once
 +
 +#include <TargetConditionals.h>
 +#if TARGET_OS_OSX
 +#import <AppKit/AppKit.h>
++#else
++#import <UIKit/UIKit.h>
++#endif
++
++static inline NSMutableAttributedString *ENRMInputTextForMeasurement(NSAttributedString *text, NSDictionary *typingAttributes)
++{
++  NSMutableAttributedString *snapshot = [[NSMutableAttributedString alloc] initWithAttributedString:text];
++  if (snapshot.length == 0 || [[NSCharacterSet newlineCharacterSet]
++      characterIsMember:[snapshot.string characterAtIndex:snapshot.length - 1]]) {
++    [snapshot appendAttributedString:[[NSAttributedString alloc] initWithString:@"I" attributes:typingAttributes]];
++  }
++  return snapshot;
++}
++
++static inline NSAttributedString *ENRMPrepareInputMeasurementText(NSAttributedString *text, NSDictionary *typingAttributes)
++{
++  NSMutableAttributedString *snapshot = ENRMInputTextForMeasurement(text, typingAttributes);
++  NSMutableAttributedString *frozen = [[NSMutableAttributedString alloc] initWithString:snapshot.string];
++  // Attribute dictionaries are interned; distinguish snapshots from live mutable paragraph styles.
++  NSObject *identity = [[NSObject alloc] init];
++  [snapshot enumerateAttributesInRange:NSMakeRange(0, snapshot.length) options:0
++                           usingBlock:^(NSDictionary *attributes, NSRange range, BOOL *stop) {
++    NSMutableDictionary *copied = [attributes mutableCopy];
++    copied[@"ENRMInputMeasurementSnapshot"] = identity;
++    NSParagraphStyle *paragraph = attributes[NSParagraphStyleAttributeName];
++    if (paragraph) copied[NSParagraphStyleAttributeName] = [paragraph copy];
++    [frozen setAttributes:copied range:range];
++  }];
++  return [frozen copy];
++}
++
++#if TARGET_OS_OSX
 +
 +// NSString drawing subtracts baseline offsets from wrapped line heights.
 +// Measure with the same TextKit layout and zero padding as the editing view.
@@ -8089,6 +8212,7 @@ new file mode 100644
 +{
 +  NSTextStorage *storage = [[NSTextStorage alloc] initWithAttributedString:text];
 +  NSLayoutManager *layout = [[NSLayoutManager alloc] init];
++  layout.backgroundLayoutEnabled = NO;
 +  NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize:NSMakeSize(MAX(0, width), CGFLOAT_MAX)];
 +  container.lineFragmentPadding = 0;
 +  [layout addTextContainer:container];
@@ -8308,3 +8432,207 @@ diff --git a/ios/utils/MarkdownExtractor.m b/ios/utils/MarkdownExtractor.m
 
                          BOOL isHighlight = [attrs[HighlightAttributeName] boolValue];
                          NSString *linkURL = attrs[NSLinkAttributeName];
+diff --git a/ios/input/ENRMInputFormatter.h b/ios/input/ENRMInputFormatter.h
+index f7166a42..08bb6d10 100644
+--- a/ios/input/ENRMInputFormatter.h
++++ b/ios/input/ENRMInputFormatter.h
+@@ -43,6 +43,16 @@ NS_ASSUME_NONNULL_BEGIN
+                    style:(ENRMInputFormatterStyle *)style
+            scopedToRange:(NSRange)scope;
+ 
++- (void)applyFormattingRanges:(NSArray<ENRMFormattingRange *> *)ranges
++                   toTextStorage:(NSTextStorage *)textStorage
++                        style:(ENRMInputFormatterStyle *)style
++                scopedToRange:(NSRange)scope;
++
++- (void)applyBlockRanges:(NSArray<ENRMBlockRange *> *)blockRanges
++              toTextStorage:(NSTextStorage *)textStorage
++                   style:(ENRMInputFormatterStyle *)style
++           scopedToRange:(NSRange)scope;
++
+ @end
+ 
+ NS_ASSUME_NONNULL_END
+diff --git a/ios/input/internals/EnrichedMarkdownTextInputState.h b/ios/input/internals/EnrichedMarkdownTextInputState.h
+index 2b517afd..474c93ee 100644
+--- a/ios/input/internals/EnrichedMarkdownTextInputState.h
++++ b/ios/input/internals/EnrichedMarkdownTextInputState.h
+@@ -6,18 +6,18 @@ namespace facebook::react {
+ class EnrichedMarkdownTextInputState {
+ public:
+   EnrichedMarkdownTextInputState() = default;
+-  EnrichedMarkdownTextInputState(int counter, std::shared_ptr<void> ref) : counter_(counter), viewRef_(ref) {}
++  EnrichedMarkdownTextInputState(int counter, std::shared_ptr<void> ref) : counter_(counter), measurementData_(ref) {}
+ 
+   int getHeightRecalculationCounter() const {
+     return counter_;
+   }
+-  std::shared_ptr<void> getComponentViewRef() const {
+-    return viewRef_;
++  std::shared_ptr<void> getMeasurementData() const {
++    return measurementData_;
+   }
+ 
+ private:
+   int counter_{0};
+-  std::shared_ptr<void> viewRef_{nullptr};
++  std::shared_ptr<void> measurementData_{nullptr};
+ };
+ 
+ } // namespace facebook::react
+diff --git a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.h b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.h
+index 1488126f..c54c7a31 100644
+--- a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.h
++++ b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.h
+@@ -34,7 +34,9 @@ public:
+ 
+ private:
+   int localHeightRecalculationCounter_{0};
++#if !TARGET_OS_OSX
+   id setupMockInputView_(CGFloat width) const;
++#endif
+ };
+ 
+ } // namespace facebook::react
+diff --git a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
+index bf1992c2..cc2ef066 100644
+--- a/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
++++ b/ios/input/internals/EnrichedMarkdownTextInputShadowNode.mm
+@@ -3,6 +3,9 @@
+ #import "EnrichedMarkdownTextInput.h"
+ #import <react/utils/ManagedObjectWrapper.h>
+ #import <yoga/Yoga.h>
++#if TARGET_OS_OSX
++#import "ENRMInitialInputMeasurement.h"
++#endif
+ 
+ namespace facebook::react {
+ 
+@@ -33,6 +36,7 @@
+   }
+ }
+ 
++#if !TARGET_OS_OSX
+ id EnrichedMarkdownTextInputShadowNode::setupMockInputView_(CGFloat width) const
+ {
+   EnrichedMarkdownTextInput *mockView =
+@@ -46,23 +50,37 @@
+   return mockView;
+ }
+ 
++#endif
++
+ Size EnrichedMarkdownTextInputShadowNode::measureContent(const LayoutContext &layoutContext,
+                                                          const LayoutConstraints &layoutConstraints) const
+ {
+   CGFloat maxWidth = layoutConstraints.maximumSize.width;
+ 
++  CGSize size;
++#if TARGET_OS_OSX
++  @autoreleasepool {
++    NSAttributedString *text = (NSAttributedString *)unwrapManagedObject(getStateData().getMeasurementData());
++    if (!text) {
++      NSWritingDirection direction = layoutConstraints.layoutDirection == LayoutDirection::RightToLeft
++          ? NSWritingDirectionRightToLeft : NSWritingDirectionLeftToRight;
++      text = ENRMInitialInputMeasurementText(*std::static_pointer_cast<const EnrichedMarkdownTextInputProps>(getProps()), direction);
++    }
++    size = CGSizeMake(maxWidth, ENRMInputTextHeight(text, maxWidth));
++  }
++#else
+   RCTInternalGenericWeakWrapper *weakWrapper =
+-      (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getComponentViewRef());
++      (RCTInternalGenericWeakWrapper *)unwrapManagedObject(getStateData().getMeasurementData());
+   EnrichedMarkdownTextInput *view = weakWrapper ? (EnrichedMarkdownTextInput *)weakWrapper.object : nil;
+ 
+-  __block CGSize size;
++  __block CGSize measuredSize;
+ 
+   void (^measureBlock)(void) = ^{
+     if (view) {
+-      size = [view measureSize:maxWidth];
++      measuredSize = [view measureSize:maxWidth];
+     } else {
+       EnrichedMarkdownTextInput *mockView = setupMockInputView_(maxWidth);
+-      size = [mockView measureSize:maxWidth];
++      measuredSize = [mockView measureSize:maxWidth];
+     }
+   };
+ 
+@@ -72,6 +90,9 @@
+     dispatch_sync(dispatch_get_main_queue(), measureBlock);
+   }
+ 
++  size = measuredSize;
++#endif
++
+   Float clampedWidth = std::max((Float)size.width, layoutConstraints.minimumSize.width);
+   clampedWidth = std::min(clampedWidth, layoutConstraints.maximumSize.width);
+   Float clampedHeight = std::max((Float)size.height, layoutConstraints.minimumSize.height);
+diff --git a/ios/input/ENRMInputMeasurementStyle.h b/ios/input/ENRMInputMeasurementStyle.h
+new file mode 100644
+index 00000000..5cd74521
+--- /dev/null
++++ b/ios/input/ENRMInputMeasurementStyle.h
+@@ -0,0 +1,30 @@
++#pragma once
++#import "ENRMInputFormatterStyle.h"
++#import "ENRMBlockRange.h"
++#import "ParagraphStyleUtils.h"
++
++static inline NSDictionary *ENRMInputBaseTypingAttributes(ENRMInputFormatterStyle *style)
++{
++  NSMutableDictionary *attrs = [@{ NSFontAttributeName: style.baseFont,
++                                  NSForegroundColorAttributeName: style.baseTextColor } mutableCopy];
++  if (style.baseLineHeight > 0) {
++    NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
++    paragraph.minimumLineHeight = style.baseLineHeight;
++    paragraph.maximumLineHeight = style.baseLineHeight;
++    attrs[NSParagraphStyleAttributeName] = paragraph;
++  }
++  return attrs;
++}
++
++static inline void ENRMApplyInputParagraphBaselineOffset(NSTextStorage *storage, BOOL usesParagraphBaselineOffset)
++{
++  if (!usesParagraphBaselineOffset || storage.length == 0) {
++    return;
++  }
++  [storage enumerateAttribute:ENRMBlockTypeAttributeName inRange:NSMakeRange(0, storage.length) options:0
++                   usingBlock:^(NSNumber *type, NSRange range, BOOL *stop) {
++    if (type == nil || type.integerValue == ENRMInputBlockTypeParagraph) {
++      applyBaselineOffset(storage, range);
++    }
++  }];
++}
+diff --git a/ios/input/internals/ENRMInitialInputMeasurement.h b/ios/input/internals/ENRMInitialInputMeasurement.h
+new file mode 100644
+index 00000000..1557ce14
+--- /dev/null
++++ b/ios/input/internals/ENRMInitialInputMeasurement.h
+@@ -0,0 +1,26 @@
++#pragma once
++#import "ENRMInputParser.h"
++#import "ENRMInputFormatter.h"
++#import "ENRMInputMeasurementStyle.h"
++#import "InputStylePropsUtils.h"
++#import "ENRMInputMeasurement.h"
++
++template <typename InputProps>
++static NSAttributedString *ENRMInitialInputMeasurementText(const InputProps &props, NSWritingDirection direction)
++{
++  ENRMInputFormatterStyle *style = [[ENRMInputFormatterStyle alloc] init];
++  applyInputStyleProps(style, props, InputProps{});
++  NSString *markdown = [NSString stringWithUTF8String:props.defaultValue.c_str()];
++  BOOL usesBaseline = YES;
++  ENRMApplyInputMarkdownBlockStyle(style, props.markdownStyle, markdown, &usesBaseline);
++  ENRMParseResult *parsed = [[[ENRMInputParser alloc] init] parseToPlainTextAndRanges:markdown];
++  NSTextStorage *storage = [[NSTextStorage alloc] initWithString:parsed.plainText];
++  ENRMInputFormatter *formatter = [[ENRMInputFormatter alloc] init];
++  NSRange range = NSMakeRange(0, storage.length);
++  [formatter applyFormattingRanges:parsed.formattingRanges toTextStorage:storage style:style scopedToRange:range];
++  [formatter applyBlockRanges:parsed.blockRanges toTextStorage:storage style:style scopedToRange:range];
++  ENRMWritingDirectionMode mode = ENRMResolveWritingDirectionMode([NSString stringWithUTF8String:props.writingDirection.c_str()]);
++  ENRMApplyWritingDirectionMode(storage, mode, direction);
++  ENRMApplyInputParagraphBaselineOffset(storage, usesBaseline);
++  return ENRMPrepareInputMeasurementText(storage, ENRMInputBaseTypingAttributes(style));
++}
