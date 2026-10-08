@@ -27,7 +27,10 @@ test("departing step effects keep their identity for one second, then freeze wit
     await act(() => tree.update(render(true))); flushUI();
     frame.tick(2500);
     expect(uniforms.value.time).toBe(1.5);
-    await act(() => { runtime$.stepIndex.set(1); tree.update(render(false)); }); flushUI();
+    await act(() => { runtime$.stepIndex.set(1); tree.update(render(false)); });
+    expect(uniforms.value.time).toBe(1.5, "the first exit sample must retain live time before UI retirement runs");
+    expect(uniforms.value.stepIndex).toBe(0);
+    flushUI();
     expect(uniforms.value.time).toBe(1.5, "exit does not sample the new step's zero time");
     expect(uniforms.value.stepIndex).toBe(0);
     const before = renders;
@@ -64,15 +67,67 @@ test("retired shaders discard live poses for previews and new slide activations"
     await act(() => tree.update(render(false, 0))); flushUI();
     frame.tick(5000);
     expect(uniforms.value.time).toBe(1, "zero delay freezes immediately at the live pose");
-    await act(() => runtime$.playbackPhase.set("preview")); flushUI();
+    await act(() => runtime$.playbackPhase.set("preview"));
+    expect(uniforms.value.time).toBe(8, "preview sampling must reset before the queued retirement reaction");
+    flushUI();
     expect(uniforms.value.time).toBe(8);
     await act(() => { runtime$.assign({ playbackPhase: "playing", startedAt: 2 }); tree.update(render(true)); }); flushUI();
     frame.tick(6000); frame.tick(7000);
     await act(() => tree.update(render(false))); flushUI();
     frame.tick(8000); frame.tick(9000);
     expect(uniforms.value.time).toBe(2);
-    await act(() => runtime$.startedAt.set(3)); flushUI();
+    await act(() => runtime$.startedAt.set(3));
+    expect(uniforms.value.time).toBe(8, "a new activation must discard an idle pose immediately");
+    flushUI();
     expect(uniforms.value.time).toBe(8, "a pooled inactive card cannot keep the previous visit's live pose");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("a step-anchored carousel shader keeps running before and during its move out of the center", async () => {
+  const { FilmstripMotionView } = await import("../../decks/react-native-desktop/FilmstripMotionView");
+  const { usePlaybackTween } = await import("../../../../packages/presentation/src/usePlaybackTween");
+  const runtime$ = observable({ playbackPhase: "playing", slideIndex: 0, stepIndex: 1 });
+  let uniforms, renders = 0, tree;
+  function Card({ position }) {
+    renders++;
+    uniforms = useAnimatedShaderUniforms({ stage: 1 }, 2, { clock: 1, active: position === 1 });
+    const progress = usePlaybackTween({ position }, 500);
+    return <FilmstripMotionView index={1} enabled animateExit={false} progress={progress}>OS Integration</FilmstripMotionView>;
+  }
+  const render = position => <PresentationProvider value={runtime$}><Card position={position} /></PresentationProvider>;
+  try {
+    await act(() => { tree = create(render(1)); }); flushUI();
+    const frame = frames.at(-1);
+    const x = () => tree.root.findAllByType("animated-view")[0].props.style[1].value.transform[0].translateX;
+    frame.tick(1000); frame.tick(4000);
+    expect(uniforms.value.time).toBe(3);
+    expect(x()).toBe(0);
+    await act(() => { runtime$.stepIndex.set(2); tree.update(render(2)); });
+    expect(uniforms.value.time).toBe(3);
+    expect(uniforms.value.stepIndex).toBe(1);
+    expect(x()).toBe(0);
+    flushUI();
+    const before = renders;
+    frame.tick(4100); frame.tick(4350);
+    expect(uniforms.value.time).toBeCloseTo(3.35);
+    expect(x()).toBeCloseTo(-450);
+    frame.tick(4600);
+    expect(uniforms.value.time).toBeCloseTo(3.6);
+    expect(x()).toBe(-900);
+    frame.tick(5000); frame.tick(8000);
+    expect(uniforms.value.time).toBe(4);
+    expect(renders).toBe(before);
+
+    await act(() => { runtime$.stepIndex.set(1); tree.update(render(1)); });
+    expect(uniforms.value.time).toBe(0);
+    flushUI();
+    frame.tick(8100); frame.tick(8300);
+    expect(uniforms.value.time).toBeCloseTo(0.2);
+    await act(() => { runtime$.stepIndex.set(0); tree.update(render(0)); });
+    expect(uniforms.value.time).toBeCloseTo(0.2);
+    flushUI();
+    frame.tick(8400);
+    expect(uniforms.value.time).toBeCloseTo(0.3);
   } finally { if (tree) await act(() => tree.unmount()); }
 });
 

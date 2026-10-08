@@ -41,16 +41,19 @@ function useShaderPlayback(active: boolean, delay: number, playback: SharedValue
   }, [active, delay, playback, activation, phase, selectedClock, maxTime]);
   return useDerivedValue(() => {
     const old = activity.value;
+    if (!active && (phase === "preview" || phase === "preparing" ||
+        phase === "playing" && old.activation !== activation)) return null;
     const live = active ? playback.value : null;
     if (old.frozen && (!live || old.activation === activation && old.retained?.slideKey === live.slideKey &&
         old.retained.stepKey === live.stepKey && old.retained.phase === live.phase)) return old.retained;
     if (live) return live;
     if (!old.retained) return null;
-    const current = old.active ? playback.value : null;
-    const slideTime = current ? Math.min(current.slideTime, old.until) : old.until;
+    const current = old.active || old.requested ? playback.value : null;
+    const until = old.requested && current ? current.slideTime + delay / 1000 : old.until;
+    const slideTime = current ? Math.min(current.slideTime, until) : until;
     return { ...old.retained, phase: current?.phase ?? "paused",
       slideTime, stepTime: old.retained.stepTime + Math.max(0, slideTime - old.retained.slideTime) };
-  }, [active, playback, activation]);
+  }, [active, playback, activation, phase, delay]);
 }
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
