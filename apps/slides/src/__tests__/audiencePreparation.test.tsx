@@ -2,11 +2,15 @@
 import { expect, mock, spyOn, test } from "bun:test";
 import React, { useContext, useEffect } from "react";
 import { act, create } from "react-test-renderer";
-import { BackgroundHost, NavigationTransitionContext } from "@legend-apps/presentation";
+import { observable } from "@legendapp/state";
+import { useValue } from "@legendapp/state/react";
+import { BackgroundHost, NavigationTransitionContext, usePreparationTask } from "@legend-apps/presentation";
 import { transitions } from "./nativeMock";
+const pending$ = observable({ index: -1, waiting: false });
 const mounts: number[] = [], unmounts: number[] = [];
 const renders = new Map<number, number>();
 function Deck(props) {
+  usePreparationTask(useValue(() => pending$.index.get() === props.targetIndex && pending$.waiting.get()));
   renders.set(props.targetIndex, (renders.get(props.targetIndex) ?? 0) + 1);
   useEffect(() => { mounts.push(props.targetIndex); return () => { unmounts.push(props.targetIndex); }; }, []);
   return <deck {...props} navigation={useContext(NavigationTransitionContext)} />;
@@ -40,6 +44,7 @@ async function harness(run) {
   } finally {
     if (renderer) await act(() => renderer.unmount());
     transitions.splice(0);
+    pending$.assign({ index: -1, waiting: false });
     setSlidesState(initial);
     globalThis.requestIdleCallback = originalRequest;
     globalThis.cancelIdleCallback = originalCancel;
@@ -133,4 +138,30 @@ test("far jumps skip intermediate slides and cuts, revisions, and unmount cancel
   const count=mounts.length;
   await act(() => cancelled());
   expect(mounts).toHaveLength(count);
+}));
+
+
+test("incoming readiness holds the transition clock and playback until preparation completes", () => harness(async h => {
+  await act(() => pending$.assign({ index: 7, waiting: true }));
+  await act(() => setCurrentSlide(7));
+  expect(transitions).toHaveLength(0);
+  expect(h.decks().find(deck => deck.props.targetIndex === 7).props.isPreparing).toBe(true);
+  expect(h.decks().find(deck => deck.props.targetIndex === 9).props.isOutgoing).toBe(true);
+  await act(() => pending$.waiting.set(false));
+  expect(transitions).toHaveLength(1);
+  expect(h.decks().find(deck => deck.props.targetIndex === 7).props.isPreparing).toBe(false);
+  await h.finish();
+  expect(h.indexes()).toEqual([7,8]);
+}));
+
+test("a superseded pending slide cannot start the replacement transition", () => harness(async h => {
+  await act(() => pending$.assign({ index: 7, waiting: true }));
+  await act(() => setCurrentSlide(7));
+  expect(transitions).toHaveLength(0);
+  await act(() => setCurrentSlide(6));
+  expect(transitions).toHaveLength(1);
+  await act(() => pending$.waiting.set(false));
+  expect(transitions).toHaveLength(1);
+  expect(h.decks().find(deck => deck.props.targetIndex === 6).props.isPreparing).toBe(false);
+  await h.finish();
 }));

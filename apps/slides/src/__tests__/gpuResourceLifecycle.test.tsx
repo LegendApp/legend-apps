@@ -22,7 +22,7 @@ test("persistent backgrounds retain GPU resources across slides and report the c
     react: React, "react-native": { View: "View", Text: "Text" },
     "react-native-webgpu": { Canvas: "Canvas" }, "react-native-reanimated": {},
     "@legend-apps/presentation": { useBackgroundSize: () => size,
-      useBackgroundIntensity: () => 1, usePresentationValue: field => field === "slideIndex" ? index : preview },
+      useBackgroundIntensity: () => 1, usePreparationTask: () => {}, usePresentationValue: field => field === "slideIndex" ? index : preview },
     "./slidesStore": { reportSlideError: (...args) => errors.push(args) },
   };
   const Component = new Function("require", "exports", "setup", code + "\nstartShaderCanvas = setup; return TypeGPUShader;")(

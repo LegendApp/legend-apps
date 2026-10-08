@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "re
 import { Text, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback } from "@legend-apps/presentation";
+import { useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask } from "@legend-apps/presentation";
 import { reportSlideError } from "./slidesStore";
 
 type Resources = {
@@ -29,7 +29,9 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const brightness = background ? intensity : 1;
   const canvas = useRef<CanvasRef>(null);
   const [resources, setResources] = useState<Resources>();
+  const [preparedResources, setPreparedResources] = useState<Resources>();
   const [error, setError] = useState<string>();
+  usePreparationTask(!error && (!resources || preparedResources !== resources));
   const slideIndex = usePresentationValue("slideIndex");
   const isPreview = usePresentationValue("isPreview");
   const errorContext = useRef({ slideIndex, isPreview });
@@ -45,7 +47,7 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
     setResources, setError }), [code, particles, particleCount]);
   return <View style={{ width, height, overflow: "hidden", borderRadius: background ? 0 : 20 }}>
     <Canvas ref={canvas} style={{ width, height }} transparent />
-    {resources && !error && <UIFrames key={code} resources={resources} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} />}
+    {resources && !error && <UIFrames key={code} resources={resources} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} onReady={() => setPreparedResources(resources)} />}
     {error && <Text style={{ color: "#ffb4ae", padding: 24 }}>TypeGPU preview unavailable: {error}</Text>}
   </View>;
 }
@@ -143,7 +145,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, reportError
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, width, height, aspect, brightness, particleCount, previewTime, onError }: { resources: Resources; width: number; height: number; aspect: number; brightness: number; particleCount: number; previewTime: number; onError(message: string): void }) {
+function UIFrames({ resources: r, width, height, aspect, brightness, particleCount, previewTime, onError, onReady }: { resources: Resources; width: number; height: number; aspect: number; brightness: number; particleCount: number; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -181,7 +183,8 @@ function UIFrames({ resources: r, width, height, aspect, brightness, particleCou
       pass.setPipeline(render); pass.draw(3);
       if (particles) { pass.setPipeline(particles); pass.draw(6, particleCount); }
       pass.end(); device.queue.submit([encoder.finish()]); context.present();
-      count.value += 1; rendered.value = true;
+      count.value += 1;
+      if (!rendered.value) { rendered.value = true; runOnJS(onReady)(); }
     } catch (caught) {
       alive.set(false);
       runOnJS(onError)(String(caught));
@@ -198,7 +201,7 @@ function UIFrames({ resources: r, width, height, aspect, brightness, particleCou
     runOnUI(() => {
       "worklet";
       const phase = playback.value.phase;
-      if (phase === "preview") { count.value = 0; draw(0); }
+      if (phase === "preview" || phase === "preparing") { count.value = 0; draw(0); }
       else if (phase === "playing" && !rendered.value) draw(0);
     })();
     return () => frame.setActive(false);

@@ -1,9 +1,9 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { useValue } from "@legendapp/state/react";
-import { SnapshotCaptureBoundary, NavigationTransitionContext, useHasBackground, FocusSurfaceContext, createFocusSurface,
+import { SnapshotCaptureBoundary, PreparationBoundary, NavigationTransitionContext, useHasBackground, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
-import { memo, startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, withTiming } from "react-native-reanimated";
 import { createTransitionProgress, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "@legend-apps/presentation";
@@ -58,6 +58,7 @@ function AudienceContent() {
     frozenSteps: new Map<number, number>(),
     ...resolve(currentSlide, currentSlide),
     progress: createTransitionProgress(1),
+    contentReady: true,
     ready: true,
     motions: new Map<number, FocusMotion>(),
   }));
@@ -86,7 +87,8 @@ function AudienceContent() {
       frozenSteps,
       ...resolved,
       progress: createTransitionProgress(cut ? 1 : 0),
-      ready: cut || (!resolved.focus && !hasShared),
+      contentReady: cut,
+      ready: cut,
       duration: hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
     });
@@ -98,8 +100,13 @@ function AudienceContent() {
     setSlidesState({ audienceOpen: true });
   }, []);
 
+  const preparationReady = useCallback(() => {
+    setTransitionState(current => current === transitionState && !current.contentReady
+      ? { ...current, contentReady: true } : current);
+  }, [transitionState]);
+
   useLayoutEffect(() => {
-    if (transitionState.ready || transitionState.outgoing === null) return;
+    if (transitionState.ready || !transitionState.contentReady || transitionState.outgoing === null) return;
     let cancelled = false;
     const prepare = async () => {
       const from = surfaces.get(transitionState.outgoing!);
@@ -233,14 +240,15 @@ function AudienceContent() {
         const incoming = layer.index === currentSlide;
         const behindBackground = isPreload || incoming && !transitionState.ready;
         return (
-          <AudienceSlide key={layer.index} index={layer.index} preparing={isPreload} incoming={incoming}
+          <AudienceSlide key={layer.index} index={layer.index} preparing={isPreload || incoming && !transitionState.ready} incoming={incoming}
+            onPrepared={incoming && !transitionState.contentReady ? preparationReady : undefined}
             transitioning={incoming && previousSlide !== null} behindBackground={behindBackground}
             style={isPreload ? visibleStyle : layer.style} progress={progress} surfaces={surfaces}
             layoutKey={`${revision}:${incoming ? currentStep : transitionState.frozenSteps.get(layer.index) ?? 0}`}
             motion={transitionState.motions.get(layer.index)} definition={isPreload ? undefined : transitionState.definition}
             reference={transitionState.reference} settled={previousSlide === null} reverse={transitionState.reverse}
             hasBackground={hasBackground} shared={transitionState.motions.size > 0}
-            targetStep={incoming ? undefined : transitionState.frozenSteps.get(layer.index)} />
+            targetStep={incoming ? !transitionState.ready ? currentStep : undefined : transitionState.frozenSteps.get(layer.index)} />
         );
       })}
       {blackout && <View accessibilityLabel="Audience blacked out" style={styles.blackout} />}
@@ -248,9 +256,9 @@ function AudienceContent() {
   );
 }
 
-function AudienceSlide({ index, preparing, incoming, transitioning, behindBackground, style, progress, surfaces,
+function AudienceSlide({ onPrepared, index, preparing, incoming, transitioning, behindBackground, style, progress, surfaces,
   layoutKey, motion, definition, reference, settled, reverse, hasBackground, shared, targetStep }: {
-  index: number; preparing: boolean; incoming: boolean; transitioning: boolean; behindBackground: boolean;
+  onPrepared?: () => void; index: number; preparing: boolean; incoming: boolean; transitioning: boolean; behindBackground: boolean;
   style: TransitionStyle; progress: TransitionProgress; surfaces: Map<number, FocusSurface>; layoutKey: string;
   motion?: FocusMotion; definition?: TransitionDefinition; reference: SlideTransition; settled: boolean;
   reverse: boolean; hasBackground: boolean; shared: boolean; targetStep?: number;
@@ -261,6 +269,7 @@ function AudienceSlide({ index, preparing, incoming, transitioning, behindBackgr
   const retainedMotion = useRetainedLayerValue(motion, preparing);
   return <AudienceLayer preparing={preparing} behindBackground={behindBackground} style={style}
     progress={progress} transitioning={transitioning}>
+    <PreparationBoundary onReady={onPrepared}>
     <AudienceFocusSurface layoutKey={layoutKey} index={index} surfaces={surfaces} motion={retainedMotion}>
       <SlideCanvas targetIndex={index}>
         <UserTransitionLayer definition={definition} reference={reference} progress={progress} incoming={incoming}
@@ -270,6 +279,7 @@ function AudienceSlide({ index, preparing, incoming, transitioning, behindBackgr
         </UserTransitionLayer>
       </SlideCanvas>
     </AudienceFocusSurface>
+    </PreparationBoundary>
   </AudienceLayer>;
 }
 
@@ -286,7 +296,7 @@ const AudienceDeckContent = memo(function AudienceDeckContent({ index, preparing
   navigation: { progress: TransitionProgress; outgoing: boolean };
 }) {
   return <NavigationTransitionContext.Provider value={navigation}>
-    <DeckRenderer isPreparing={preparing} isOutgoing={outgoing} isPreview={preparing}
+    <DeckRenderer isPreparing={preparing} isOutgoing={outgoing} isPreview={false}
       targetIndex={index} targetStep={targetStep} />
   </NavigationTransitionContext.Provider>;
 });

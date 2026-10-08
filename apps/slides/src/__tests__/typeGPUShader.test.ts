@@ -16,7 +16,7 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
   const effects = [], calls = [], uniforms = [], errors = [];
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0 } };
-  let callback, enabled = false;
+  let callback, enabled = false, ready = 0;
   const frame = { setActive: value => { enabled = value; } };
   const pass = kind => ({
     setPipeline() {}, setBindGroup: (_, value) => calls.push([kind, value]),
@@ -50,9 +50,9 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
   );
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
     clock: {}, states: [], groups: ["A", "B"], compute: {}, render: {}, particles: {} },
-    aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error) });
+    aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
-  return { calls, uniforms, errors, enabled: () => enabled,
+  return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
     playback,
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
@@ -67,6 +67,7 @@ test("active GPU frames alternate storage buffers and dispatch the configured pa
   expect(f.calls).toContainEqual(["dispatch", 32]);
   expect(f.calls).toContainEqual(["draw", 6, 2048]);
   f.tick();
+  expect(f.ready()).toBe(1);
   expect(f.calls).toContainEqual(["compute", "B"]);
   expect(f.calls).toContainEqual(["render", "A"]);
   expect(f.uniforms.at(-1)[0]).toBeCloseTo(0.016);
@@ -86,10 +87,15 @@ test("preview renders one deterministic frame without starting a loop", () => {
   f.stop();
 });
 
-test("preparing surfaces do not submit a frame", () => {
+test("preparing surfaces submit one initial frame and acknowledge readiness without starting a loop", () => {
   const f = frames({ active: false, preview: true, preparing: true });
   expect(f.enabled()).toBe(false);
-  expect(f.uniforms).toEqual([]);
+  expect(f.uniforms).toHaveLength(1);
+  expect(f.uniforms[0].slice(0, 4)).toEqual([0, 0, 0, 1]);
+  expect(f.ready()).toBe(1);
+  f.tick();
+  expect(f.uniforms).toHaveLength(1);
+  expect(f.ready()).toBe(1);
   f.stop();
 });
 

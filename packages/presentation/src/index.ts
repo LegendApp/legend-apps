@@ -1,5 +1,6 @@
 export { useRuntimeProjection } from "./useRuntimeProjection";
 export { PresentationCanvas, PresentationCanvasScaleContext } from "./PresentationCanvas";
+export { PreparationBoundary, usePreparationTask } from "./PreparationBoundary";
 export { ProgressivePreparation } from "./ProgressivePreparation";
 export { Background, BackgroundHost, useBackgroundIntensity, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
 export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";

@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useState, type ReactNode } from "react";
 import { usePresentationValue } from "./runtime";
+import { usePreparationTask } from "./PreparationBoundary";
 
 /** Spread hidden native tree construction across idle commits; live content is complete immediately. */
 export function ProgressivePreparation({ children }: { children: readonly ReactNode[] }) {
@@ -9,6 +10,8 @@ export function ProgressivePreparation({ children }: { children: readonly ReactN
   if (preparedCount > count || !preparing && preparedCount < count) {
     setPreparedCount(count);
   }
+
+  usePreparationTask(!!preparing && preparedCount < count);
 
   useEffect(() => {
     if (!preparing || preparedCount >= count) return;

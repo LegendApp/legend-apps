@@ -98,12 +98,12 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
     const stepCount = normalizeStepCount(slidesState$.slides[slideIndex].metadata.steps.get());
     // Fixed previews and retained outgoing surfaces ignore later navigation.
-    const currentSlide = isPreview ? slideIndex : isOutgoing ? slidesState$.currentSlide.peek() : slidesState$.currentSlide.get();
-    const currentStep = isPreview || isOutgoing ? targetStep ?? 0 : slidesState$.currentStep.get();
+    const currentSlide = isPreview || isPreparing ? slideIndex : isOutgoing ? slidesState$.currentSlide.peek() : slidesState$.currentSlide.get();
+    const currentStep = isPreview || isOutgoing || isPreparing ? targetStep ?? 0 : slidesState$.currentStep.get();
     return {
       currentSlide, currentStep, goTo: setCurrentSlide,
       titleAnimationSpeed: titleAnimationSpeedSetting.get(),
-      isActive: !isPreview && !isOutgoing && slideIndex === currentSlide,
+      isActive: !isPreparing && !isPreview && !isOutgoing && slideIndex === currentSlide,
       isPreview: Boolean(isPreview), isPreparing,
       playbackPhase: isPreparing ? "preparing" : isOutgoing ? "outgoing" : isPreview ? "preview" : slideIndex === currentSlide ? "playing" : "paused",
       next: nextSlide, previous: previousSlide,
