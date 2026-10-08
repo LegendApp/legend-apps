@@ -23,6 +23,42 @@ mock.module("react-native-enriched-markdown", () => ({
 }));
 const { EditableMarkdown, NotesEditingBoundary } = await import("../EditableMarkdown");
 
+test("numbered notes start faded before native layout on every slide", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const content = (slide, currentStep) => <EditableMarkdown key={slide} editable={false} currentStep={currentStep}
+    markdown={`1. First note on slide ${slide}\n\n2. Second note on slide ${slide}`}
+    textColor="#abcdef" inactiveColor="#123456" placeholder="Notes" onSave={async () => {}} />;
+  let tree;
+  try {
+    for (const [slide, step] of [[0, 0], [1, 1], [2, 0]]) {
+      await act(() => { if (tree) tree.update(content(slide, step)); else tree = create(content(slide, step)); });
+      const editor = tree.root.findByType("editor");
+      expect(editor.props.style.color).toBe("#123456");
+      expect(editor.props.markdownStyle.paragraph.color).toBe("#123456");
+      expect(tree.root.findAllByType("note-color-overlay")).toHaveLength(0);
+      await act(async () => editor.props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
+      expect(tree.root.findByType("editor").props.style.color).toBe("#123456");
+      const overlays = tree.root.findAllByType("note-color-overlay");
+      expect(overlays).toHaveLength(1);
+      expect(overlays[0].props.style.color).toBe("#abcdef");
+      expect(overlays[0].parent.parent.props.style.top).toBe(-step * 70);
+    }
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("notes with no inactive steps start at the active color", async () => {
+  let tree;
+  try {
+    for (const markdown of ["Plain notes", "1. Only the current step", "```text\n2. A fenced example\n```", "8:10 A timestamp"]) {
+      await act(() => { tree = create(<EditableMarkdown editable={false} currentStep={0} markdown={markdown}
+        textColor="#abcdef" inactiveColor="#123456" placeholder="Notes" onSave={async () => {}} />); });
+      expect(tree.root.findByType("editor").props.style.color).toBe("#abcdef");
+      await act(() => tree.unmount());
+      tree = undefined;
+    }
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
 test("focus preserves native text, layout and selection; outside clicks flush the draft", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const editing = mock(), save = mock(async () => {});

@@ -1,6 +1,6 @@
 import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
 import type { NotesDrafts } from "./notesDrafts";
-import { speakerNotesEditorMarkdown } from "./speakerNoteSteps";
+import { speakerNotesEditorMarkdown, splitSpeakerNoteSteps } from "./speakerNoteSteps";
 import { defaultPresenterTextColor, defaultPresenterInactiveColor } from "./presenterAppearance";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -93,7 +93,8 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   const [editing, setEditing] = useState(false);
   const [document, setDocument] = useState(draftMarkdownRef.current);
   const [regions, setRegions] = useState<NoteRegion[]>([]);
-  const hasInactiveNotes = !editing && regions.some(region => region.step !== undefined && region.step !== currentStep);
+  const sections = useMemo(() => splitSpeakerNoteSteps(document), [document]);
+  const hasInactiveNotes = !editing && sections.some(section => section.step !== undefined && section.step !== currentStep);
   const markdownStyle = hasInactiveNotes ? inactiveMarkdownStyle : activeMarkdownStyle;
   const readingColor = hasInactiveNotes ? inactiveColor : textColor;
   const propMarkdownRef = useRef(markdown);
