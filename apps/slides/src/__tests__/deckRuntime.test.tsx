@@ -375,3 +375,68 @@ test("title speed setting reaches live and preview runtimes without changing nav
     log.mockRestore();
   }
 });
+
+
+test("preview navigation retains compiled deck construction while resetting each selected slide", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  let documentMounts = 0, slideMounts = 0;
+  function Probe() {
+    const [identity] = React.useState(() => ++slideMounts);
+    return <runtime identity={identity} value={usePresentation()} />;
+  }
+  function Document({ components: { Deck, Slide } }) {
+    React.useEffect(() => { documentMounts++; }, []);
+    return <Deck configJson="{}">{[0, 1].map(index =>
+      <Slide key={index} metadataJson='{"steps":3}' notes=""><Probe /></Slide>)}</Deck>;
+  }
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer isPreview targetIndex={0} targetStep={0} />); });
+    const first = tree.root.findByType("runtime").props.identity;
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={0} targetStep={2} />));
+    expect(tree.root.findByType("runtime").props.identity).toBe(first);
+    expect(tree.root.findByType("runtime").props.value.stepIndex).toBe(2);
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={1} targetStep={0} />));
+    expect(tree.root.findByType("runtime").props.identity).not.toBe(first);
+    expect(tree.root.findByType("runtime").props.value.slideIndex).toBe(1);
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={0} />));
+    expect(tree.root.findByType("runtime").props.identity).not.toBe(first);
+    expect(documentMounts).toBe(1);
+    expect(slideMounts).toBe(3);
+    await act(() => slidesState$.retryRevision.set(initial.retryRevision + 1));
+    expect(documentMounts).toBe(2);
+    await act(() => slidesState$.revision.set(initial.revision + 1));
+    expect(documentMounts).toBe(3);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+  }
+});
+
+test("a failed selected slide recovers on navigation without rebuilding the compiled deck", async () => {
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  let mounts = 0;
+  function Broken() { throw new Error("broken preview"); }
+  function Document({ components: { Deck, Slide } }) {
+    React.useEffect(() => { mounts++; }, []);
+    return <Deck configJson="{}"><Slide metadataJson="{}" notes=""><Broken /></Slide>
+      <Slide metadataJson="{}" notes=""><healthy /></Slide></Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer isPreview targetIndex={0} />); });
+    expect(tree.root.findAllByType("healthy")).toHaveLength(0);
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={1} />));
+    expect(tree.root.findAllByType("healthy")).toHaveLength(1);
+    expect(mounts).toBe(1);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});

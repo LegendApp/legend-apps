@@ -123,7 +123,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const Template = resolvedTemplate.component;
   const content = renderMdxChildren(resolveSteps(selected.props.children, [markdownComponents.ul, markdownComponents.ol]).content);
   return (
-    <PresentationObservableProvider value={runtime$}>
+    <PresentationObservableProvider key={targetIndex ?? "current"} value={runtime$}>
       <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
         {background !== undefined && <Background>
           {background !== false && <Image source={{ uri: background }} resizeMode="cover" style={StyleSheet.absoluteFill} />}
@@ -299,7 +299,7 @@ export function DeckRenderer({
   }
   return (
     <DeckRenderContext.Provider value={{ isPreview, isPreparing, isOutgoing, targetIndex, targetStep }}>
-      <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}:${targetIndex ?? "current"}`}>
+      <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}`}>
         <Component components={markdownComponents} />
       </SlideErrorBoundary>
     </DeckRenderContext.Provider>
@@ -309,6 +309,7 @@ export function DeckRenderer({
 function SlideErrorBoundary({ children, index, isPreview }: { children: ReactNode; index: number; isPreview: boolean }) {
   return (
     <ContentErrorBoundary
+      resetKey={String(index)}
       fallback={<View className="flex-1 items-center justify-center"><Text style={styles.paragraph}>Slide unavailable</Text></View>}
       onError={(error) => reportSlideError(error, index, isPreview)}
     >
