@@ -1,6 +1,7 @@
 import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
 import type { NotesDrafts } from "./notesDrafts";
 import { speakerNotesEditorMarkdown } from "./speakerNoteSteps";
+import { defaultPresenterTextColor, defaultPresenterInactiveColor } from "./presenterAppearance";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   EnrichedMarkdownTextInput,
@@ -33,13 +34,14 @@ const viewerMarkdownStyle: MarkdownStyle = {
   strong: { color: "#d1d5db" },
 };
 
-function createNotesMarkdownStyle(fontSize: number): MarkdownStyle {
+function createNotesMarkdownStyle(fontSize: number, color: string): MarkdownStyle {
   const scale = fontSize / 17;
-  const style = { ...viewerMarkdownStyle };
+  const style: MarkdownStyle = Object.fromEntries(Object.entries(viewerMarkdownStyle).map(([key, value]) => [key, { ...value, color }]));
+  style.list = { ...style.list, markerColor: color };
   for (const key of ["paragraph", "list", "h1", "h2", "h3", "code", "codeBlock"] as const) {
     const base = viewerMarkdownStyle[key]!;
     style[key] = {
-      ...base,
+      ...style[key],
       fontSize: base.fontSize! * scale,
       lineHeight: base.fontSize! * scale * notesLineHeightRatio,
     };
@@ -66,14 +68,17 @@ type EditableMarkdownProps = {
   onSectionsLayout?(regions: NoteRegion[]): void;
   fontSize?: number;
   backgroundColor?: string;
+  textColor?: string;
+  inactiveColor?: string;
   markdown: string;
   onEditingChange?(editing: boolean): void;
   onSave(markdown: string, expectedNotes: string): Promise<void>;
   placeholder: string;
 };
 
-export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionsLayout, fontSize = 17, backgroundColor = "#171819" }: EditableMarkdownProps) {
-  const markdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize), [fontSize]);
+export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, markdown, onEditingChange, onSave, placeholder, onSectionsLayout, fontSize = 17, backgroundColor = "#171819", textColor = defaultPresenterTextColor, inactiveColor = defaultPresenterInactiveColor }: EditableMarkdownProps) {
+  const activeMarkdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize, textColor), [fontSize, textColor]);
+  const inactiveMarkdownStyle = useMemo(() => createNotesMarkdownStyle(fontSize, inactiveColor), [fontSize, inactiveColor]);
   // Keep native text and Markdown paragraph metrics identical in both modes.
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
   const dismiss = useContext(NotesDismissContext);
@@ -88,6 +93,9 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   const [editing, setEditing] = useState(false);
   const [document, setDocument] = useState(draftMarkdownRef.current);
   const [regions, setRegions] = useState<NoteRegion[]>([]);
+  const hasInactiveNotes = !editing && regions.some(region => region.step !== undefined && region.step !== currentStep);
+  const markdownStyle = hasInactiveNotes ? inactiveMarkdownStyle : activeMarkdownStyle;
+  const readingColor = hasInactiveNotes ? inactiveColor : textColor;
   const propMarkdownRef = useRef(markdown);
 
   useEffect(() => {
@@ -205,7 +213,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
       style={[styles.viewerShell, editing && styles.focusedShell]}>
       <View style={{ position: "relative" }}>
         <NotesText markdown={document} editable={editable} markdownStyle={markdownStyle}
-          placeholder={placeholder} textStyle={textStyle}
+          placeholder={placeholder} textStyle={{ ...textStyle, color: readingColor }}
           onFocus={input => { inputRef.current = input; startEditing(); }} onBlur={finishEditing}
           onLayout={paragraphs => {
             const next = notesLayout(paragraphs);
@@ -219,9 +227,16 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
             if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
           }} />
-        {!editing && regions.map((region, index) => region.step !== undefined && region.step !== currentStep
+        {/* Clip read-only foregrounds to active regions while preserving the editable native view. */}
+        {hasInactiveNotes && regions.map((region, index) => region.step === undefined || region.step === currentStep
           ? <View key={index} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-              style={{ position: "absolute", left: 0, right: 0, top: region.y, height: region.height, backgroundColor, opacity: 0.45 }} />
+              style={{ position: "absolute", left: 0, right: 0, top: region.y, height: region.height, overflow: "hidden", backgroundColor }}>
+              <View style={{ position: "absolute", top: -region.y, left: 0, right: 0 }}>
+                <EnrichedMarkdownTextInput key={document} accessible={false} defaultValue={speakerNotesEditorMarkdown(document)} editable={false}
+                  markdownStyle={activeMarkdownStyle} multiline scrollEnabled={false}
+                  style={{ ...styles.editor, ...textStyle, color: textColor, minHeight: 0 }} />
+              </View>
+            </View>
           : null)}
       </View>
     </View>
@@ -231,7 +246,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
 /** Keep the native text view and layout alive across focus; AppKit owns click-to-caret hit testing. */
 function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, onFocus, onBlur, onChange, onLayout }: {
   markdown: string; editable: boolean; markdownStyle: MarkdownStyle; placeholder: string;
-  textStyle: { fontSize: number; lineHeight: number };
+  textStyle: { fontSize: number; lineHeight: number; color: string };
   onFocus(input: EnrichedMarkdownTextInputInstance | null): void;
   onBlur(): void; onChange(markdown: string): void;
   onLayout(paragraphs: NoteParagraph[]): void;
@@ -282,7 +297,6 @@ function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, 
 const styles = StyleSheet.create({
   editor: {
     backgroundColor: "transparent",
-    color: "#d1d5db",
     fontSize: 17,
     minHeight: 120,
     padding: 0,

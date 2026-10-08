@@ -11,6 +11,10 @@ mock.module("react-native", () => ({
   },
 }));
 mock.module("../EditableMarkdown", () => ({ EditableMarkdown: "notes" }));
+mock.module("../slidesSettings", () => ({
+  usePresenterTextColorSetting: () => "#d1d5db",
+  usePresenterInactiveColorSetting: () => "#52525b",
+}));
 const { ScrollableNotes } = await import("../ScrollableNotes");
 
 test("focus keeps the scrolled viewport and only navigation resumes step following", async () => {

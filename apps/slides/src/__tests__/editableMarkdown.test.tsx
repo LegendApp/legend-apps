@@ -10,10 +10,12 @@ mock.module("react-native-enriched-markdown", () => ({
   EnrichedMarkdownTextInput: ({ ref, ...props }) => {
     const id = useRef(++nextId).current;
     const nativeText = useRef(props.defaultValue);
+    const defaultValue = useRef(props.defaultValue).current;
     useImperativeHandle(ref, () => ({ blur, setValue: value => { nativeText.current = value; setValue(value); },
       getParagraphLayouts: async () => nativeText.current.split(/\n+/).map((text, i) => ({ text, y: i * 70, height: 30 })),
       getMarkdown: () => new Promise(() => {}) }));
-    return <editor {...props} nativeId={id} onChangeMarkdown={value => {
+    const Host = props.accessible === false ? "note-color-overlay" : "editor";
+    return <Host {...props} defaultValue={defaultValue} nativeId={id} onChangeMarkdown={value => {
       nativeText.current = value;
       props.onChangeMarkdown(value);
     }} />;
@@ -108,5 +110,51 @@ test("newly entered step labels acquire layout markers on blur without replacing
     expect(setValue).toHaveBeenLastCalledWith("1:\u2060 First\n\n2:\u2060 Newly pasted");
     expect(sectionLayout).toHaveBeenLastCalledWith([{ step: 0, y: 0, height: 70 }, { step: 1, y: 70, height: 30 }]);
     expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("presenter colors follow the current step and editing without replacing the editable document", async () => {
+  const markdown = "General reminder\n\n1. First step\n\n2. Second step";
+  const content = (step, textColor = "#abcdef", inactiveColor = "#123456", notes = markdown) => <EditableMarkdown editable
+    markdown={notes} currentStep={step} textColor={textColor} inactiveColor={inactiveColor}
+    placeholder="Notes" onSave={async () => {}} />;
+  let tree;
+  try {
+    await act(() => { tree = create(content(0)); });
+    const id = tree.root.findByType("editor").props.nativeId;
+    await act(async () => tree.root.findByType("editor").props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
+    const writes = setValue.mock.calls.length;
+    for (const step of [0, 1, 0]) {
+      await act(() => tree.update(content(step)));
+      const editor = tree.root.findByType("editor");
+      expect(editor.props.nativeId).toBe(id);
+      expect(editor.props.style.color).toBe("#123456");
+      expect(editor.props.markdownStyle.paragraph.color).toBe("#123456");
+      const overlays = tree.root.findAllByType("note-color-overlay");
+      expect(overlays).toHaveLength(2);
+      for (const overlay of overlays) {
+        expect(overlay.props.editable).toBe(false);
+        expect(overlay.props.style.color).toBe("#abcdef");
+        expect(overlay.props.defaultValue).toBe(editor.props.defaultValue);
+      }
+      expect(overlays[1].parent.parent.props.style.top).toBe(step === 0 ? -70 : -140);
+    }
+    await act(() => tree.update(content(0, "#fedcba", "#654321")));
+    expect(tree.root.findByType("editor").props.style.color).toBe("#654321");
+    expect(tree.root.findAllByType("note-color-overlay")[0].props.style.color).toBe("#fedcba");
+    await act(() => tree.root.findByType("editor").props.onFocus());
+    expect(tree.root.findAllByType("note-color-overlay")).toHaveLength(0);
+    expect(tree.root.findByType("editor").props.style.color).toBe("#fedcba");
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+    await act(async () => tree.root.findByType("editor").props.onBlur());
+    expect(tree.root.findAllByType("note-color-overlay")).toHaveLength(2);
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+    expect(setValue.mock.calls.length).toBe(writes);
+    await act(async () => tree.update(content(0, "#fedcba", "#654321", "New reminder\n\n1. Updated first\n\n2. Updated second")));
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+    for (const overlay of tree.root.findAllByType("note-color-overlay")) {
+      expect(overlay.props.defaultValue).toContain("Updated first");
+      expect(overlay.props.defaultValue).toContain("Updated second");
+    }
   } finally { if (tree) await act(() => tree.unmount()); }
 });

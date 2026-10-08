@@ -1,11 +1,14 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ComponentProps } from "react";
 import { ScrollView, View } from "react-native";
 import { EditableMarkdown } from "./EditableMarkdown";
+import { usePresenterTextColorSetting, usePresenterInactiveColorSetting } from "./slidesSettings";
 
 type Props = ComponentProps<typeof EditableMarkdown> & { notesWidth: number };
 
 /** Reading and editing share the same scroll owner and native text layout. */
 export function ScrollableNotes({ notesWidth, onEditingChange, ...props }: Props) {
+  const textColor = usePresenterTextColorSetting();
+  const inactiveColor = usePresenterInactiveColorSetting();
   const scroll = useRef<ScrollView>(null);
   const sections = useRef(new Map<number, { y: number; height: number }>());
   const contentHeight = useRef(0);
@@ -26,7 +29,7 @@ export function ScrollableNotes({ notesWidth, onEditingChange, ...props }: Props
       contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: padding }}
       onContentSizeChange={(_width, nextHeight) => { contentHeight.current = nextHeight; follow(); }}>
       <View style={{ width: "100%", maxWidth: notesWidth, alignSelf: "center" }}>
-        <EditableMarkdown {...props}
+        <EditableMarkdown textColor={textColor} inactiveColor={inactiveColor} {...props}
           onEditingChange={value => {
             editing.current = value;
             onEditingChange?.(value);

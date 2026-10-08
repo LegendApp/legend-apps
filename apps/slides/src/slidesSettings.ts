@@ -1,4 +1,5 @@
 import { createObservableSettings } from "@legend-apps/storage";
+import { defaultPresenterTextColor, defaultPresenterInactiveColor, normalizePresenterColor } from "./presenterAppearance";
 
 export const defaultPresentationTimerStartsOnSecondSlide = true;
 export const defaultRehearsalTimerPausesWhileEditing = true;
@@ -20,6 +21,14 @@ const slidesSettings = createObservableSettings({
     presentationNotesWidth: {
       defaultValue: 800,
       normalize: (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(400, Math.min(2400, value)) : 800,
+    },
+    presenterTextColor: {
+      defaultValue: defaultPresenterTextColor as string,
+      normalize: (value: unknown) => normalizePresenterColor(value, defaultPresenterTextColor),
+    },
+    presenterInactiveColor: {
+      defaultValue: defaultPresenterInactiveColor as string,
+      normalize: (value: unknown) => normalizePresenterColor(value, defaultPresenterInactiveColor),
     },
     backgroundIntensity: {
       defaultValue: 1,
@@ -88,6 +97,14 @@ export const useNotesPreviewRatioSetting = notesPreviewRatioSetting.use;
 const presentationNotesFontSizeSetting = slidesSettings.field("presentationNotesFontSize");
 export const usePresentationNotesFontSizeSetting = presentationNotesFontSizeSetting.use;
 export const setPresentationNotesFontSizeSetting = presentationNotesFontSizeSetting.set;
+
+const presenterTextColorSetting = slidesSettings.field("presenterTextColor");
+export const usePresenterTextColorSetting = presenterTextColorSetting.use;
+export const setPresenterTextColorSetting = presenterTextColorSetting.set;
+
+const presenterInactiveColorSetting = slidesSettings.field("presenterInactiveColor");
+export const usePresenterInactiveColorSetting = presenterInactiveColorSetting.use;
+export const setPresenterInactiveColorSetting = presenterInactiveColorSetting.set;
 
 export const displayRoleHistorySetting = slidesSettings.field("displayRoleHistory");
 

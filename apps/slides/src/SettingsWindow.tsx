@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TextInput } from "react-native";
+import { TextInput, View } from "react-native";
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import {
@@ -17,7 +17,12 @@ import {
   setRehearsalTimerPausesWhileEditingSetting,
   usePresentationTimerStartsOnSecondSlideSetting,
   useRehearsalTimerPausesWhileEditingSetting,
+  usePresenterTextColorSetting,
+  setPresenterTextColorSetting,
+  usePresenterInactiveColorSetting,
+  setPresenterInactiveColorSetting,
 } from "./slidesSettings";
+import { normalizePresenterColor } from "./presenterAppearance";
 import { slidesSettingsWindowIdentifier } from "./slidesWindows";
 
 type SlidesSettingsPage = "appearance" | "timer" | "transitions";
@@ -76,13 +81,34 @@ function NotesFontSizeInput({ value }: { value: number }) {
 function AppearanceSettingsContent() {
   const width = usePresentationNotesWidthSetting();
   const fontSize = usePresentationNotesFontSizeSetting();
+  const textColor = usePresenterTextColorSetting();
+  const inactiveColor = usePresenterInactiveColorSetting();
   return <SettingsSection first title={null}>
     <SettingsRow title="Presentation Notes Width" description="Maximum width of the centered notes column."
       control={<SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
         options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />} />
     <SettingsRow title="Presentation Notes Font Size" description="Text size in the notes viewer and editor (12–40 pt)."
       control={<NotesFontSizeInput key={fontSize} value={fontSize} />} />
+    <SettingsRow title="Presenter Text Color" description="Text color for the current step and notes without a step number."
+      control={<PresenterColorInput key={textColor} label="Presenter text color" value={textColor} onChange={setPresenterTextColorSetting} />} />
+    <SettingsRow title="Presenter Inactive Color" description="Text color for notes belonging to other steps."
+      control={<PresenterColorInput key={inactiveColor} label="Presenter inactive color" value={inactiveColor} onChange={setPresenterInactiveColorSetting} />} />
   </SettingsSection>;
+}
+
+function PresenterColorInput({ label, value, onChange }: { label: string; value: string; onChange(color: string): void }) {
+  const [draft, setDraft] = useState(value);
+  const commit = () => {
+    const color = normalizePresenterColor(draft, value);
+    setDraft(color);
+    onChange(color);
+  };
+  return <View className="flex-row items-center gap-2">
+    <View className="h-5 w-5 rounded border border-border-primary" style={{ backgroundColor: normalizePresenterColor(draft, value) }} />
+    <TextInput accessibilityLabel={label} value={draft} onChangeText={setDraft} onEndEditing={commit} onSubmitEditing={commit}
+      autoCapitalize="none" autoCorrect={false} selectTextOnFocus
+      className="h-8 w-28 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-foreground" />
+  </View>;
 }
 
 const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
