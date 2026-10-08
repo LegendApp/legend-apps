@@ -23,6 +23,15 @@ export type SpeakerNotesFileAccess = {
   writeIfUnchanged(path: string, expectedContents: string, contents: string): Promise<boolean>;
 };
 
+export class SpeakerNotesConflictError extends Error {
+  constructor(public readonly savedNotes: string, recovered = false) {
+    super(recovered
+      ? "This recovered draft has no editing baseline. Review the saved notes before choosing which version to keep."
+      : "Speaker notes changed on disk since editing began. Review the saved notes before choosing which version to keep.");
+    this.name = "SpeakerNotesConflictError";
+  }
+}
+
 function splitSourceLines(source: string) {
   const lines: SourceLine[] = [];
   const pattern = /[^\r\n]*(?:\r\n|\r|\n|$)/g;
@@ -345,6 +354,14 @@ function slideSource(source: string, slideIndex: number) {
   return source.slice(slide.start, slide.end);
 }
 
+function slideNotes(source: string, slideIndex: number) {
+  const { comments, slides } = sourceStructure(source);
+  const slide = slides[slideIndex];
+  if (!slide) throw new Error(`Slide ${slideIndex + 1} does not exist in the MDX source.`);
+  return comments.filter(comment => comment.start >= slide.start && comment.end <= slide.end)
+    .map(comment => source.slice(comment.contentStart, comment.contentEnd).trim()).join("\n\n");
+}
+
 export function updateSlideSpeakerNotes(source: string, slideIndex: number, nextNotes: string) {
   if (!Number.isInteger(slideIndex) || slideIndex < 0) {
     throw new Error("Slide index must be a non-negative integer.");
@@ -413,7 +430,7 @@ export async function persistSlideSpeakerNotesWithFileAccess(
   notes: string,
   fileAccess: SpeakerNotesFileAccess,
   expectedTarget?: string,
-  expectedNotes?: string,
+  expectedNotes?: string | null,
 ) {
   let expectedSlideSource: string | undefined;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -422,9 +439,9 @@ export async function persistSlideSpeakerNotesWithFileAccess(
       throw new Error("The target slide changed since these notes were opened. Your draft has been kept; review the deck before saving.");
     }
     // Compare against the editing baseline, not the first read made by autosave.
-    if (expectedNotes !== undefined && updateSlideSpeakerNotes(source, slideIndex, expectedNotes) !== source
+    if (expectedNotes !== undefined && (expectedNotes === null || updateSlideSpeakerNotes(source, slideIndex, expectedNotes) !== source)
       && updateSlideSpeakerNotes(source, slideIndex, notes) !== source) {
-      throw new Error("Speaker notes changed on disk since editing began. Your draft has been kept for recovery.");
+      throw new SpeakerNotesConflictError(slideNotes(source, slideIndex), expectedNotes === null);
     }
     const currentSlideSource = slideSource(source, slideIndex);
     if (expectedSlideSource === undefined) {

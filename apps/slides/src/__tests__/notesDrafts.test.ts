@@ -2,6 +2,59 @@
 import { expect, test } from "bun:test";
 import { createNotesDrafts } from "../notesDrafts";
 
+test("accepting disk notes keeps the original draft if the resolution fails", async () => {
+  let disk = {};
+  const drafts = createNotesDrafts({ read: () => disk, write: value => { disk = value; } });
+  drafts.bind("slide", async () => { throw new Error("changed again"); });
+  drafts.update("slide", "my draft", "original");
+  expect(await drafts.resolve("slide", "reviewed disk notes", "reviewed disk notes")).toBe(false);
+  expect(disk.slide).toEqual({ text: "my draft", base: "original" });
+});
+
+test("accepting saved notes cannot discard edits made during its write", async () => {
+  const drafts = createNotesDrafts();
+  let finish;
+  drafts.bind("slide", async () => { await new Promise(resolve => { finish = resolve; }); });
+  drafts.update("slide", "my draft", "original");
+  const resolving = drafts.resolve("slide", "disk notes", "disk notes");
+  while (!finish) await Promise.resolve();
+  drafts.update("slide", "newer draft", "original");
+  finish();
+  expect(await resolving).toBe(false);
+  expect(drafts.entries()).toEqual([["slide", { text: "newer draft", base: "disk notes" }]]);
+  drafts.bind("slide", async (_text, base) => { expect(base).toBe("disk notes"); });
+  expect(await drafts.flushAll()).toBe(true);
+});
+
+test("saving a reviewed draft keeps later edits and advances their baseline", async () => {
+  const drafts = createNotesDrafts();
+  const saved = [];
+  drafts.update("slide", "my draft", "original");
+  drafts.bind("slide", async (text, base) => {
+    saved.push([text, base]);
+    if (text === "my draft") drafts.update("slide", "later edit", "stale prop");
+  });
+  expect(await drafts.resolve("slide", "reviewed disk notes")).toBe(true);
+  expect(saved).toEqual([["my draft", "reviewed disk notes"], ["later edit", "my draft"]]);
+  expect(drafts.entries()).toEqual([]);
+});
+
+test("exit waits for a saved-notes resolution rather than writing the old draft", async () => {
+  const drafts = createNotesDrafts();
+  let finish;
+  const writes = [];
+  drafts.bind("slide", text => { writes.push(text); return new Promise(resolve => { finish = resolve; }); });
+  drafts.update("slide", "my draft", "original");
+  const resolving = drafts.resolve("slide", "disk notes", "disk notes");
+  const exiting = drafts.flushAll();
+  while (!finish) await Promise.resolve();
+  expect(writes).toEqual(["disk notes"]);
+  finish();
+  expect(await resolving).toBe(true);
+  expect(await exiting).toBe(true);
+  expect(drafts.entries()).toEqual([]);
+});
+
 test("exit flush drains edits made during a pending save", async () => {
   const drafts = createNotesDrafts();
   const writes = [], completions = [];

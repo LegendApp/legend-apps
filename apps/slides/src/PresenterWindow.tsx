@@ -113,7 +113,7 @@ function SpeakerNotes({ deckPath, editable, notes, onEditingChange, onSave, slid
     editable: boolean;
     notes?: string;
     onEditingChange(editing: boolean): void;
-    onSave(notes: string, target: string, expectedNotes: string): Promise<void>;
+    onSave(notes: string, target: string, expectedNotes: string | undefined): Promise<void>;
     slideIndex: number;
     weight: number;
 }) {
@@ -159,7 +159,7 @@ type PresenterWorkspaceProps = {
     notesEditable: boolean;
     notes?: string;
     onNotesEditingChange(editing: boolean): void;
-    onSaveNotes(deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string): Promise<void>;
+    onSaveNotes(deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string | undefined): Promise<void>;
     resetVersion: number;
     showNext: boolean;
     showNotes: boolean;
@@ -543,10 +543,10 @@ export function PresenterWindow() {
         setRehearsalEnabled(mode === "rehearsal");
         rememberRehearsalEnabled(mode === "rehearsal");
     }, [setRehearsalEnabled]);
-    const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string) => {
+    const saveSpeakerNotes = useCallback(async (deckPath: string, slideIndex: number, notes: string, target: string, expectedNotes: string | undefined) => {
         try {
             await persistSlideSpeakerNotes(deckPath, slideIndex, notes, target, expectedNotes);
-            setSlidesState((current) => current.deckPath === deckPath
+            setSlidesState((current) => current.deckPath === deckPath && current.noteTargets?.[slideIndex] === target
                 ? {
                     displayMessage: "",
                     slides: current.slides.map((slide, index) => index === slideIndex ? { ...slide, notes } : slide),
@@ -554,7 +554,7 @@ export function PresenterWindow() {
                 : {});
         }
         catch (error) {
-            const displayMessage = `Speaker notes: ${error instanceof Error ? error.message : String(error)}`;
+            const displayMessage = `Speaker notes for slide ${slideIndex + 1} were not saved. Open that slide's notes to review the warning and recovery choices.`;
             setSlidesState((current) => current.deckPath === deckPath
                 ? { displayMessage }
                 : {});
@@ -614,7 +614,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
     keyboardJump$: Observable<string>;
     presenter$: Observable<PresenterSession>;
     onNotesEditingChange: (editing: boolean) => void;
-    onSaveNotes: (path: string, index: number, notes: string, target: string, expectedNotes: string) => Promise<void>;
+    onSaveNotes: (path: string, index: number, notes: string, target: string, expectedNotes: string | undefined) => Promise<void>;
 }) {
     const notesEditable = useValue(presenter$.rehearsalEnabled);
     const resetVersion = useValue(presenter$.presenterLayoutResetVersion);

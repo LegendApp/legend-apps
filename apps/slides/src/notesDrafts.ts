@@ -39,6 +39,29 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
       persist();
     },
     flush,
+    async resolve(key: string, base: string, replacement?: string) {
+      const before = drafts.get(key);
+      while (pending.has(key)) await pending.get(key);
+      const latest = drafts.get(key);
+      if (!latest || (replacement !== undefined && latest !== before)) return false;
+      if (replacement !== undefined) {
+        const save = saves.get(key);
+        if (!save) return false;
+        const work = Promise.resolve().then(async () => {
+          try { await save(replacement, base); } catch { return false; }
+          const current = drafts.get(key);
+          if (current === latest) drafts.delete(key);
+          else if (current) drafts.set(key, { ...current, base: replacement });
+          persist();
+          return current === latest;
+        }).finally(() => pending.delete(key));
+        pending.set(key, work);
+        return work;
+      }
+      drafts.set(key, { text: latest.text, base });
+      persist();
+      return flush(key);
+    },
     entries: () => [...drafts.entries()],
     sessionEntries,
     persist,

@@ -22,6 +22,66 @@ mock.module("react-native-enriched-markdown", () => ({
   },
 }));
 const { EditableMarkdown, NotesEditingBoundary } = await import("../EditableMarkdown");
+const { createNotesDrafts } = await import("../notesDrafts");
+const { getSpeakerNotesTargets, persistSlideSpeakerNotesWithFileAccess } = await import("../../../../packages/presentation/src/speakerNotesSource");
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+for (const useSaved of [false, true]) test(`notes conflicts can ${useSaved ? "accept saved notes" : "save the latest draft"} without replacing the native editor`, async () => {
+  let source = "# Slide\n\n<!-- original -->\n";
+  const target = getSpeakerNotesTargets(source)[0];
+  let durable = {};
+  const drafts = createNotesDrafts({ read: () => durable, write: value => { durable = value; } });
+  const access = { read: async () => source, writeIfUnchanged: async (_path, expected, next) => {
+    if (source !== expected) return false;
+    source = next; return true;
+  } };
+  const save = mock(async (text, base) => { await persistSlideSpeakerNotesWithFileAccess("deck", 0, text, access, target, base ?? null); });
+  let tree;
+  try {
+    await act(() => { tree = create(<EditableMarkdown editable draftKey="slide" drafts={drafts}
+      markdown="original" placeholder="Notes" onSave={save} />); });
+    const editor = tree.root.findByType("editor");
+    const id = editor.props.nativeId;
+    await act(() => { editor.props.onFocus(); editor.props.onChangeMarkdown("my draft"); });
+    source = "# Slide\n\n<!-- external notes -->\n";
+    await act(async () => { editor.props.onBlur(); await drafts.flush("slide"); });
+    expect(source).toContain("external notes");
+    expect(durable.slide.text).toBe("my draft");
+    expect(tree.root.findAllByType("text").some(node => node.props.children === "external notes")).toBe(true);
+    // A subsequent disk edit must be reviewed again, even after choosing a resolution.
+    source = "# Slide\n\n<!-- newer external notes -->\n";
+    const button = () => tree.root.findByProps({ accessibilityLabel: useSaved ? "Use saved notes" : "Replace saved notes with my draft" });
+    await act(async () => { button().props.onPress(); });
+    expect(source).toContain("newer external notes");
+    expect(durable.slide.text).toBe("my draft");
+    expect(tree.root.findAllByType("text").some(node => node.props.children === "newer external notes")).toBe(true);
+    if (!useSaved) await act(() => { editor.props.onChangeMarkdown("latest draft"); });
+    await act(async () => { button().props.onPress(); });
+    expect(source).toContain(useSaved ? "newer external notes" : "latest draft");
+    expect(durable).toEqual({});
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+    expect(tree.root.findAllByProps({ accessibilityLabel: "Use saved notes" })).toHaveLength(0);
+    if (useSaved) expect(setValue.mock.calls.at(-1)[0]).toBe("newer external notes");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("a recovered draft without a baseline offers review before any disk write", async () => {
+  let source = "# Slide\n\n<!-- saved notes -->\n";
+  const target = getSpeakerNotesTargets(source)[0];
+  const drafts = createNotesDrafts({ read: () => ({ slide: "recovered draft" }), write: () => {} });
+  const write = mock(async () => true);
+  let tree;
+  try {
+    await act(async () => { tree = create(<EditableMarkdown editable draftKey="slide" drafts={drafts}
+      markdown="saved notes" placeholder="Notes" onSave={async (text, base) => {
+        await persistSlideSpeakerNotesWithFileAccess("deck", 0, text, { read: async () => source, writeIfUnchanged: write }, target, base ?? null);
+      }} />); });
+    expect(write).not.toHaveBeenCalled();
+    expect(tree.root.findAllByType("text").some(node => node.props.children === "saved notes")).toBe(true);
+    expect(tree.root.findByType("editor").props.defaultValue).toBe("recovered draft");
+    expect(drafts.get("slide", "")).toBe("recovered draft");
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
 
 test("numbered notes start faded before native layout on every slide", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;

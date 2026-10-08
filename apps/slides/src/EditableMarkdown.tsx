@@ -1,4 +1,5 @@
 import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
+import { SpeakerNotesConflictError } from "@legend-apps/presentation";
 import type { NotesDrafts } from "./notesDrafts";
 import { speakerNotesEditorMarkdown, splitSpeakerNoteSteps } from "./speakerNoteSteps";
 import { defaultPresenterTextColor, defaultPresenterInactiveColor } from "./presenterAppearance";
@@ -8,7 +9,7 @@ import {
   type EnrichedMarkdownTextInputInstance,
   type MarkdownStyle,
 } from "react-native-enriched-markdown";
-import { StyleSheet, View, type ViewProps } from "react-native";
+import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
 export const editableMarkdownSaveDebounceMs = 1000;
 const notesLineHeightRatio = 1.4;
@@ -72,7 +73,7 @@ type EditableMarkdownProps = {
   inactiveColor?: string;
   markdown: string;
   onEditingChange?(editing: boolean): void;
-  onSave(markdown: string, expectedNotes: string): Promise<void>;
+  onSave(markdown: string, expectedNotes: string | undefined): Promise<void>;
   placeholder: string;
 };
 
@@ -93,6 +94,15 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   const [editing, setEditing] = useState(false);
   const [document, setDocument] = useState(draftMarkdownRef.current);
   const [regions, setRegions] = useState<NoteRegion[]>([]);
+  const [saveError, setSaveError] = useState<Error | null>(null);
+  const saveErrorRef = useRef<Error | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const resolvingRef = useRef(false);
+  const reportSaveError = useCallback((error: unknown) => {
+    const next = error instanceof Error ? error : new Error(String(error));
+    saveErrorRef.current = next;
+    setSaveError(next);
+  }, []);
   const sections = useMemo(() => splitSpeakerNoteSteps(document), [document]);
   const hasInactiveNotes = !editing && sections.some(section => section.step !== undefined && section.step !== currentStep);
   const markdownStyle = hasInactiveNotes ? inactiveMarkdownStyle : activeMarkdownStyle;
@@ -109,13 +119,21 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
 
   useEffect(() => {
     if (draftKey && drafts) drafts.bind(draftKey, async (text, base) => {
-      if (base === undefined) throw new Error("This recovered draft needs review before saving.");
-      await onSaveRef.current(text, base);
-      savedMarkdownRef.current = text;
+      try {
+        await onSaveRef.current(text, base);
+        savedMarkdownRef.current = text;
+        saveErrorRef.current = null;
+        setSaveError(null);
+      } catch (error) {
+        reportSaveError(error);
+        throw error;
+      }
     });
-  }, [draftKey, drafts]);
+    if (draftKey && drafts) void drafts.flush(draftKey);
+  }, [draftKey, drafts, reportSaveError]);
 
   const enqueueSave = useCallback((nextMarkdown: string) => {
+    if (saveErrorRef.current || resolvingRef.current) return;
     const normalized = nextMarkdown.trim();
     if (draftKey && drafts) {
       // Recovery owns pending writes after this component unmounts.
@@ -136,8 +154,8 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
         savedMarkdownRef.current = normalized;
       });
     saveQueueRef.current = save;
-    void save.catch(() => {});
-  }, [draftKey, drafts]);
+    void save.catch(reportSaveError);
+  }, [draftKey, drafts, reportSaveError]);
 
   const flushDraft = useCallback(() => {
     if (saveTimeoutRef.current) {
@@ -179,6 +197,30 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     onEditingChangeRef.current?.(true);
   }, [editable]);
 
+  const resolveConflict = async (useSaved: boolean) => {
+    if (!(saveError instanceof SpeakerNotesConflictError) || resolvingRef.current) return;
+    const saved = saveError.savedNotes;
+    inputRef.current?.blur();
+    finishEditing();
+    resolvingRef.current = true;
+    setResolving(true);
+    try {
+      if (draftKey && drafts) {
+        if (!await drafts.resolve(draftKey, saved, useSaved ? saved : undefined)) return;
+      } else {
+        await saveQueueRef.current.catch(() => {});
+        await onSaveRef.current(useSaved ? saved : draftMarkdownRef.current.trim(), saved);
+      }
+      if (useSaved) {
+        draftMarkdownRef.current = savedMarkdownRef.current = saved;
+        setDocument(saved);
+      } else savedMarkdownRef.current = draftMarkdownRef.current.trim();
+      saveErrorRef.current = null;
+      setSaveError(null);
+    } catch (error) { reportSaveError(error); }
+    finally { resolvingRef.current = false; setResolving(false); }
+  };
+
   useEffect(() => {
     if (propMarkdownRef.current === markdown) return;
     // Save acknowledgements must not replace a newer local edit or its selection.
@@ -212,8 +254,31 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     <View accessibilityLabel={editable ? "Edit speaker notes" : "Speaker notes"}
       onTouchStart={event => event.stopPropagation()}
       style={[styles.viewerShell, editing && styles.focusedShell]}>
+      {saveError && <View className="mb-3 gap-3 rounded-lg border border-amber-700 bg-zinc-900 p-3">
+        <Text className="font-semibold text-amber-300">Speaker notes not saved</Text>
+        <Text className="text-zinc-200">{saveError.message} Autosave is paused. Your draft is kept below.</Text>
+        {saveError instanceof SpeakerNotesConflictError && <>
+          <Text className="font-semibold text-zinc-300">Saved notes in the deck file</Text>
+          <Text selectable className="text-zinc-200">{saveError.savedNotes || "(No saved notes)"}</Text>
+          <View className="flex-row flex-wrap gap-2">
+            <Pressable accessibilityRole="button" accessibilityLabel="Use saved notes" disabled={resolving}
+              className="rounded-md bg-zinc-700 px-3 py-2" onPress={() => { void resolveConflict(true); }}>
+              <Text className="text-white">Use saved notes</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Replace saved notes with my draft" disabled={resolving}
+              className="rounded-md bg-amber-800 px-3 py-2" onPress={() => { void resolveConflict(false); }}>
+              <Text className="text-white">Replace saved notes with my draft</Text>
+            </Pressable>
+          </View>
+        </>}
+        <Pressable accessibilityRole="button" accessibilityLabel="Retry saving speaker notes" disabled={resolving}
+          onPress={() => { saveErrorRef.current = null; setSaveError(null); flushDraft(); }}>
+          <Text className="text-blue-300">Retry save / refresh conflict</Text>
+        </Pressable>
+        <Text className="font-semibold text-zinc-300">Your draft</Text>
+      </View>}
       <View style={{ position: "relative" }}>
-        <NotesText markdown={document} editable={editable} markdownStyle={markdownStyle}
+        <NotesText markdown={document} editable={editable && !resolving} markdownStyle={markdownStyle}
           placeholder={placeholder} textStyle={{ ...textStyle, color: readingColor }}
           onFocus={input => { inputRef.current = input; startEditing(); }} onBlur={finishEditing}
           onLayout={paragraphs => {
