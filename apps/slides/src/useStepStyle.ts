@@ -31,7 +31,7 @@ export function interpolateStepStyle(from: unknown, to: unknown, progress: numbe
 export function useStepStyle(target: ViewStyle, duration: number) {
   const playback = usePlayback();
   const key = JSON.stringify(target);
-  const motion = useSharedValue({ from: target, last: target, key, slideKey: "", stepKey: "", start: 0, played: false, settled: true });
+  const motion = useSharedValue({ from: target, last: target, key, slideKey: "", stepKey: "", start: 0, pending: false, played: false, settled: true });
   useAnimatedReaction(() => playback.value, clock => {
     if (clock.phase === "outgoing" || clock.phase === "paused") return;
     const old = motion.value;
@@ -40,15 +40,21 @@ export function useStepStyle(target: ViewStyle, duration: number) {
       return;
     }
     const first = !old.played || old.slideKey !== clock.slideKey;
-    if (first || old.key !== key || old.stepKey !== clock.stepKey) {
+    if (first || old.key !== key) {
       // Retarget from the displayed value, including interrupted transitions.
       const from = first ? target : old.last;
       motion.value = { from, last: from, key, slideKey: clock.slideKey, stepKey: clock.stepKey,
-        start: first || old.stepKey !== clock.stepKey ? 0 : clock.stepTime, played: true, settled: false };
+        start: first ? 0 : old.stepKey !== clock.stepKey ? clock.slideTime - clock.stepTime : clock.slideTime,
+        pending: !first && old.stepKey !== clock.stepKey && clock.stepPending, played: true, settled: false };
+    } else if (old.stepKey !== clock.stepKey) {
+      motion.value = { ...old, stepKey: clock.stepKey };
+    }
+    if (motion.value.pending && !clock.stepPending) {
+      motion.value = { ...motion.value, pending: false, start: clock.slideTime - clock.stepTime };
     }
     const next = motion.value;
     if (next.settled) return;
-    const progress = duration <= 0 ? 1 : Math.max(0, Math.min(1, (clock.stepTime - next.start) * 1000 / duration));
+    const progress = duration <= 0 ? 1 : Math.max(0, Math.min(1, (next.pending ? 0 : clock.slideTime - next.start) * 1000 / duration));
     const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
     motion.value = { ...next, settled: progress === 1, last: progress === 1 ? target : interpolateStepStyle(next.from, target, eased) };
   }, [target, key, duration]);

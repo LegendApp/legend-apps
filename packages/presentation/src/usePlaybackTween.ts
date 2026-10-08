@@ -22,7 +22,7 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
   const playback = usePlayback();
   const entrance = initial !== undefined;
   const from = initial ?? target;
-  const motion = useSharedValue({ from, to: target, start: 0, slideKey: "", stepKey: "", played: false, settled: false, last: from });
+  const motion = useSharedValue({ from, to: target, start: 0, pending: false, slideKey: "", stepKey: "", played: false, settled: false, last: from });
   useAnimatedReaction(() => ({ clock: playback.value, target, from, entrance }), ({ clock, target: to, from, entrance }) => {
     const old = motion.value;
     if (clock.phase === "outgoing" || clock.phase === "paused") return;
@@ -31,16 +31,22 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
       return;
     }
     const first = !old.played || old.slideKey !== clock.slideKey;
-    if (first || old.stepKey !== clock.stepKey || !equal(old.to, to)) {
-      const start = first || old.stepKey !== clock.stepKey ? 0 : clock.stepTime;
+    if (first || !equal(old.to, to)) {
+      const start = first ? 0 : old.stepKey !== clock.stepKey ? clock.slideTime - clock.stepTime : clock.slideTime;
       const origin = first ? entrance ? from : to : old.last;
-      motion.value = { from: origin, to, start, slideKey: clock.slideKey, stepKey: clock.stepKey, played: true, settled: equal(origin, to), last: origin };
+      motion.value = { from: origin, to, start, pending: !first && old.stepKey !== clock.stepKey && clock.stepPending,
+        slideKey: clock.slideKey, stepKey: clock.stepKey, played: true, settled: equal(origin, to), last: origin };
+    } else if (old.stepKey !== clock.stepKey) {
+      motion.value = { ...old, stepKey: clock.stepKey };
+    }
+    if (motion.value.pending && !clock.stepPending) {
+      motion.value = { ...motion.value, pending: false, start: clock.slideTime - clock.stepTime };
     }
     const next = motion.value;
     // A settled pose must not keep invalidating every downstream native style
     // and Skia uniform while the slide's ambient clock continues to tick.
     if (next.settled) return;
-    const elapsed = clock.stepTime - next.start - delay / 1000;
+    const elapsed = (next.pending ? 0 : clock.slideTime - next.start) - delay / 1000;
     motion.value = { ...next, settled: elapsed * 1000 >= duration,
       last: interpolate(next.from, next.to, elapsed, duration, easing) as T };
   }, [target, from, entrance, duration, easing, delay]);

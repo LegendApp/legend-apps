@@ -46,6 +46,23 @@ test("UI style interpolation retains numeric transforms, hex colors and discrete
     .toEqual({ opacity: 0.5, transform: [{ translateY: 10 }], backgroundColor: "rgba(128,128,128,1)", display: "flex" });
 });
 
+test("later steps leave an unchanged reveal moving toward its original deadline", async () => {
+  const runtime$ = observable({ slideIndex: 0, stepIndex: 0, playbackPhase: "playing" });
+  let tree;
+  try {
+    await act(() => { tree = create(<PresentationProvider value={runtime$}><Step at={1}>Content</Step></PresentationProvider>); }); flushUI();
+    const frame = frames.at(-1);
+    const opacity = () => tree.root.findByType("animated-view").props.style.value.opacity;
+    frame.tick(1000);
+    await act(() => runtime$.stepIndex.set(1)); flushUI();
+    frame.tick(1100); frame.tick(1250);
+    expect(opacity()).toBeCloseTo(0.5);
+    await act(() => runtime$.stepIndex.set(2)); flushUI();
+    frame.tick(1300); frame.tick(1400);
+    expect(opacity()).toBe(1);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
 test("reveal ordering includes list items, shared positions, exits and animation triggers", () => {
   const result = resolveSteps(<>
     <Steps><ul><li>One</li><li>Two</li></ul></Steps>

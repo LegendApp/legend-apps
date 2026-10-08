@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { transformSync } from "esbuild";
 
 function harness(source, initial, delay = 0) {
-  const clock = { value: { phase: "playing", slideKey: "slide", stepKey: "step-0", stepTime: 0 } };
+  const clock = { value: { phase: "playing", slideKey: "slide", stepKey: "step-0", slideTime: 0, stepTime: 0 } };
   let run, shared, writes = 0;
   const mocks = {
     "./playback": { usePlayback: () => clock },
@@ -19,7 +19,12 @@ function harness(source, initial, delay = 0) {
   Function("require", "module", "exports", code)(name => mocks[name], module, module.exports);
   let target = { x: 100 };
   let output = module.exports.usePlaybackTween(target, 500, initial, "cubic", delay);
-  return { retarget(x) { target = { x }; output = module.exports.usePlaybackTween(target, 500, initial, "cubic", delay); }, get output() { return output; }, clock, tick(time) { clock.value.stepTime = time; run(); }, get writes() { return writes; } };
+  let stepKey = clock.value.stepKey;
+  return { retarget(x) { target = { x }; output = module.exports.usePlaybackTween(target, 500, initial, "cubic", delay); }, get output() { return output; }, clock, tick(time) {
+    clock.value.slideTime += stepKey === clock.value.stepKey ? time - clock.value.stepTime : time;
+    stepKey = clock.value.stepKey;
+    clock.value.stepTime = time; run();
+  }, get writes() { return writes; } };
 }
 const source = readFileSync(new URL("../usePlaybackTween.ts", import.meta.url), "utf8");
 test("settled poses stop publishing through an idle slide", () => {
@@ -81,4 +86,15 @@ test("delayed crossfades hold the old text and use the step clock in both direct
   assert.equal(h.output.value.x, 0);
   h.tick(0.83);
   assert.equal(h.output.value.x, 100);
+});
+
+test("an unrelated step does not restart an unfinished entrance or its delay", () => {
+  const h = harness(source, { x: 0 }, 100);
+  h.tick(0); h.tick(0.35);
+  assert.ok(Math.abs(h.output.value.x - 50) < 0.001);
+  h.clock.value.stepKey = "step-1";
+  h.tick(0);
+  assert.ok(Math.abs(h.output.value.x - 50) < 0.001);
+  h.tick(0.25);
+  assert.equal(h.output.value.x, 100, "the original entrance finishes at its original deadline");
 });
