@@ -13,6 +13,7 @@ const manifest = {
     macos: { hidden: true },
   },
   recentDocuments: { macos: true },
+  urlSchemes: { macos: ["legend-slides"] },
   nativeModules: {
     macos: [
       "@legend-apps/storage",

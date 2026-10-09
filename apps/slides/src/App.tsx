@@ -12,6 +12,8 @@ import { useEffect, useRef } from "react";
 import { openSlidesPresenterWindow } from "./slidesWindows";
 import { getLastDeckPath, loadDeck } from "./deckLoader";
 import { getSlidesState } from "./slidesStore";
+import { parseEffectAction } from "../../../packages/presentation/src/effectPacks/protocol";
+import { runEffectCommand } from "./effectCommands";
 
 export type SlidesAppProps = { launchArguments?: string[] };
 
@@ -55,6 +57,21 @@ export function App({ launchArguments }: SlidesAppProps) {
       }
     }
     const documents = ownRegistration(subscribeToOpenRequests(event => {
+      if (event.type === "url" && event.url.startsWith("legend-slides:")) {
+        try {
+          const action = parseEffectAction(event.url);
+          const description = action.type === "install" ? `${action.pack} ${action.version}` : `the ${action.effect} example`;
+          Alert.alert("Install optional effects", `Download ${description} and its required packs?`, [
+            { text: "Cancel", style: "cancel" },
+            { text: "Install", onPress: () => {
+              void runEffectCommand(["--effect-action", event.url], `Installing ${description}…`).then(async result => {
+                if (result.path) await openRequestedDocument(result.path, openPresenter, loadDeck, () => Alert.alert("Finish editing first", "Save your current deck before opening an example."));
+              }).catch(reportOpenError);
+            } },
+          ]);
+        } catch (error) { reportOpenError(error); }
+        return;
+      }
       if (event.type !== "file") return;
       const { path } = event;
       void openRequestedDocument(path, openPresenter, loadDeck, () => Alert.alert("Finish editing first", "Turn off source editing with the toolbar button before opening another deck. Changes save automatically.")).catch(reportOpenError);

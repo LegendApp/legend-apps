@@ -1,6 +1,7 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
 import { deckWatchDirectories } from "./deckWatchDirectories";
+import { effectRequests$, reportMissingEffects } from "./effectRequests";
 import { compilerCommand } from "./compilerCommand";
 import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
@@ -162,7 +163,7 @@ function decodeBase64(value: string) {
   return bytes;
 }
 
-function parseCompilerResult(stdout: string): CompileDeckResult {
+export function parseCompilerResult(stdout: string): CompileDeckResult {
   const envelope = JSON.parse(stdout) as { data?: unknown; encoding?: unknown };
   if (envelope.encoding !== "gzip-base64" || typeof envelope.data !== "string") {
     return envelope as CompileDeckResult;
@@ -174,6 +175,7 @@ export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   const sequence = ++buildSequence;
+  if (remember) effectRequests$.pending.set(null);
   try {
     await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
   } catch (error) {
@@ -225,9 +227,12 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
 
   if (result.sourceSlideEnds) onSourceIndex?.(result.sourceSlideEnds);
   if (!result.success) {
+    reportMissingEffects(path, result.missingEffectPacks ?? []);
     setSlidesState(failedDeckUpdate(result));
     return;
   }
+
+  reportMissingEffects(path, []);
 
   // Do not evaluate deck code or replace global styles until the presenter
   // finishes presenting. Check the presentation state after the asynchronous build.

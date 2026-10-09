@@ -1,0 +1,20 @@
+import { useValue } from "@legendapp/state/react";
+import { Pressable, Text, View } from "react-native";
+import { loadDeck } from "./deckLoader";
+import { runEffectCommand } from "./effectCommands";
+import { effectRequests$ } from "./effectRequests";
+export function EffectInstallStatus() {
+  const pending = useValue(effectRequests$.pending), busy = useValue(effectRequests$.busy);
+  const message = useValue(effectRequests$.message), error = useValue(effectRequests$.error);
+  if (!pending && !busy && !message && !error) return null;
+  return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 20, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
+    <Text style={{ color: "#fafafa", fontSize: 14 }}>{busy ? message : error || (pending ? `This deck needs optional effects: ${pending.packs.join(", ")}` : message)}</Text>
+    {pending && <Pressable disabled={busy} accessibilityRole="button" accessibilityLabel="Install Required Effects" onPress={async () => {
+      try { await runEffectCommand([pending.path, "--install-effects"], "Installing required effects…"); if (effectRequests$.pending.peek()?.path === pending.path) await loadDeck(pending.path); }
+      catch { /* The status preserves the retry action and shows the error. */ }
+    }} style={{ alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 7, backgroundColor: "#303948", opacity: busy ? 0.5 : 1 }}>
+      <Text style={{ color: "#e0f2fe", fontSize: 13, fontWeight: "600" }}>{busy ? "Installing…" : "Install Required Effects"}</Text>
+    </Pressable>}
+    {!busy && !pending && <Pressable accessibilityRole="button" onPress={() => effectRequests$.assign({ message: "", error: "" })}><Text style={{ color: "#a5b4fc" }}>Dismiss</Text></Pressable>}
+  </View>;
+}

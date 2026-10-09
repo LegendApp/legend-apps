@@ -21,6 +21,7 @@ import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, loadDeck } from "./deckLoader";
+import { EffectInstallStatus } from "./EffectInstallStatus";
 import { getRehearsalEnabled, rememberRehearsalEnabled, getPresentationDisplayId, getPresenterLayout, rememberPresentationDisplayId, rememberPresenterLayout, resetPresenterLayout as resetStoredPresenterLayout, } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
@@ -637,6 +638,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
         void setWindowOptions("slides-presenter", { title: filename ? `${filename} — Legend Slides` : "Legend Slides" }).catch(console.error);
     }, [deckPath]);
     return (<>
+      <EffectInstallStatus />
       {hasDeck ? (<View style={styles.presenter}>
           <KeyboardJump value$={keyboardJump$}/>
 
