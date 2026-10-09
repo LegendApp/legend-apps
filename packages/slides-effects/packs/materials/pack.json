@@ -7,7 +7,9 @@
     "BranchMaterial": "./BranchMaterial.ts",
     "GlassStrike": "./GlassStrike.tsx",
     "ImageShatter": "./ImageShatter.tsx",
-    "Fire": "./Fire.tsx"
+    "Fire": "./Fire.tsx",
+    "Distortion": "./Distortion.ts",
+    "Refraction": "./Refraction.ts"
   },
   "capabilities": [
     "reanimated",
