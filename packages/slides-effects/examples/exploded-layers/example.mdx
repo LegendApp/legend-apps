@@ -1,0 +1,13 @@
+---
+title: Exploded layers
+---
+
+import { View, Text } from "react-native";
+import { ExplodedLayers } from "slides:presenting/Composition";
+
+
+# Exploded layers
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <ExplodedLayers expanded={step > 0} layers={[{id: "ui",label: "UI",content: <Text>Presentation</Text>,color: "#155e75"},{id: "data",label: "Data",content: <Text>Model</Text>,color: "#312e81"}]} style={{width: 1696,height: 580}} />}</Steps>
+</View>

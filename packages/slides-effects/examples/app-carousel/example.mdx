@@ -1,0 +1,13 @@
+---
+title: Media carousel
+---
+
+import { View, Text } from "react-native";
+import { AppCarousel } from "slides:media/AppCarousel";
+
+
+# Media carousel
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <AppCarousel items={["One","Two","Three"]} position={step} cardWidth={900} geometry={{centerX: 848,centerY: 325,spacing: 780}} renderCard={(id,layout) => <View style={{width: layout.width,height: layout.height,backgroundColor: "#164e63",borderRadius: 40,alignItems: "center",justifyContent: "center"}}><Text style={{color: "white",fontSize: 90}}>{id}</Text></View>} />}</Steps>
+</View>

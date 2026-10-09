@@ -1,0 +1,13 @@
+---
+title: Progressive detail
+---
+
+import { View, Text } from "react-native";
+import { ProgressiveDetail } from "slides:presenting/Composition";
+
+
+# Progressive detail
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <ProgressiveDetail expanded={step > 0} summary={<Text style={{fontSize: 80,color: "white"}}>The idea</Text>} detail={<Text style={{fontSize: 60,color: "#67e8f9"}}>The implementation</Text>} style={{width: 1696,height: 580}} />}</Steps>
+</View>

@@ -1,0 +1,13 @@
+---
+title: Content swap
+---
+
+import { View, Text } from "react-native";
+import { ContentSwap } from "slides:presenting/Composition";
+
+
+# Content swap
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <ContentSwap active={step > 0} before={<Text style={{color: "white",fontSize: 100}}>The evidence</Text>} after={<Text style={{color: "#67e8f9",fontSize: 100}}>The takeaway</Text>} style={{width: 1696,height: 580}} />}</Steps>
+</View>

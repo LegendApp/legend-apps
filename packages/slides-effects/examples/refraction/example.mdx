@@ -1,0 +1,14 @@
+---
+title: Refraction
+---
+
+import { View, Text } from "react-native";
+import { createRefractionShader } from "slides:materials/Refraction";
+
+export const refraction = createRefractionShader();
+
+# Refraction
+
+<View style={{ width: 1696, height: 650 }}>
+<Effect shader={refraction} strength={18} uniforms={{surfaceA: [0.1,0.1,0.4,0.8],surfaceB: [0.5,0.2,0.9,0.9]}} style={{width: 1696,height: 600}}><View style={{width: 1696,height: 600,backgroundColor: "#164e63",justifyContent: "center"}}><Text style={{color: "white",fontSize: 130}}>Light through glass</Text></View></Effect>
+</View>

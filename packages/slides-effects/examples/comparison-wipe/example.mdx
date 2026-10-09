@@ -1,0 +1,13 @@
+---
+title: Comparison wipe
+---
+
+import { View, Text } from "react-native";
+import { ComparisonWipe } from "slides:presenting/Composition";
+
+
+# Comparison wipe
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <ComparisonWipe position={step / 2} before={<View style={{flex: 1,backgroundColor: "#164e63"}} />} after={<View style={{flex: 1,backgroundColor: "#6d28d9"}} />} beforeLabel="Before" afterLabel="After" style={{width: 1696,height: 580}} />}</Steps>
+</View>

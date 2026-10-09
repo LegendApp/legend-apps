@@ -1,0 +1,15 @@
+---
+title: Interactive glass
+---
+
+import { View, Text } from "react-native";
+import { TypeGPUGlassBackground } from "slides:backgrounds/TypeGPUGlassBackground";
+
+export function GlassExample({renderer}) { return <TypeGPUGlassBackground>{renderer}</TypeGPUGlassBackground>; }
+
+# Interactive glass
+
+<View style={{ width: 1696, height: 650 }}>
+<GlassExample renderer={<TypeGPUShader />} />
+<Text style={{ color: "#f8fafc", fontSize: 86, textAlign: "center", marginTop: 230 }}>A little atmosphere</Text>
+</View>

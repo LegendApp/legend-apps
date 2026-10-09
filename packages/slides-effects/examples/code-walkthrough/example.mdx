@@ -1,0 +1,14 @@
+---
+title: Code walkthrough
+---
+
+import { View, Text } from "react-native";
+import { CodeWalkthrough } from "slides:presenting/CodeWalkthrough";
+
+export const code = "const data = await load();\nconst result = transform(data);\nrender(result);";
+
+# Code walkthrough
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <CodeWalkthrough source={code} lines={[step + 1, step + 1]} explanation={<Text style={{color: "white",fontSize: 48}}>Follow the highlighted line.</Text>} />}</Steps>
+</View>

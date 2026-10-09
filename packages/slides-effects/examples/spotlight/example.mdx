@@ -1,0 +1,14 @@
+---
+title: Spotlight and callouts
+---
+
+import { View, Text } from "react-native";
+import { AttentionStage } from "slides:presenting/Attention";
+import { AttentionTarget, Spotlight, Callout } from "slides:presenting/Attention";
+
+
+# Spotlight and callouts
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={3}>{step => <AttentionStage style={{width: 1696,height: 580}}><AttentionTarget id="idea" style={{position: "absolute",left: 150,top: 160}}><Text style={{color: "white",fontSize: 90}}>The idea</Text></AttentionTarget><AttentionTarget id="detail" style={{position: "absolute",left: 950,top: 300}}><Text style={{color: "white",fontSize: 90}}>The detail</Text></AttentionTarget><Spotlight target={step ? "detail" : "idea"} /><Callout target={step ? "detail" : "idea"}>Look here</Callout></AttentionStage>}</Steps>
+</View>

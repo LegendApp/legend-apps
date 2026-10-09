@@ -1,0 +1,15 @@
+---
+title: Freeze and annotate
+---
+
+import { View, Text } from "react-native";
+import { FreezeFrame } from "slides:presenting/FreezeFrame";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+
+export function Orbit({time}) { const style = useAnimatedStyle(() => ({transform: [{translateX: 600 + Math.sin(time.value) * 300},{translateY: 220 + Math.cos(time.value) * 100}]})); return <View style={{width: 1696,height: 650}}><Animated.View style={[{width: 100,height: 100,borderRadius: 50,backgroundColor: "#67e8f9"},style]} /></View>; }
+
+# Freeze and annotate
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={2}>{step => <FreezeFrame paused={step > 0} annotation={<Text style={{color: "white",fontSize: 48}}>Pause to explain this frame</Text>}>{time => <Orbit time={time} />}</FreezeFrame>}</Steps>
+</View>

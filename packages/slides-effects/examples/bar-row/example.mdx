@@ -1,0 +1,13 @@
+---
+title: Animated chart row
+---
+
+import { View, Text } from "react-native";
+import { BarRow } from "slides:charts/BarRow";
+
+
+# Animated chart row
+
+<View style={{ width: 1696, height: 650 }}>
+<Steps count={2}>{step => <BarRow id="sample-row" name="Requests" value={step ? 82 : 38} maximum={100} y={180} highlighted animateValue valueLabel="requests" />}</Steps>
+</View>

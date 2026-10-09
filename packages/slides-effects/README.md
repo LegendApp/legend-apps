@@ -21,23 +21,30 @@ Cross-pack imports must declare the exact installed dependency version in the
 importing manifest. A missing declaration or incompatible version fails compilation.
 
 In a source checkout, the compiler finds this `packs/` directory. An installed app
-looks in `~/Library/Application Support/Legend Slides/effects/`. A caller can
-override the root with `LEGEND_SLIDES_EFFECT_PACKS` or the compiler's
-`--effect-packs <directory>` option. Install source folders under that root with
-the same `<id>/pack.json` layout before opening a talk. Source is trusted code with
-the same host API access as a local deck component.
+resolves verified source snapshots from `~/Library/Application Support/Legend Slides/effects/`.
+`LEGEND_SLIDES_EFFECT_PACKS` or `--effect-packs <directory>` overrides the cache.
+Source is trusted code with the same host API access as a local deck component.
 
-The native app and shipped compiler intentionally omit these implementations.
-Downloading, version pins, capability negotiation and installation UI are future
-work. Pack versions describe a source snapshot; they do not yet lock a deck to
-that version. Keep packs installed for offline presentation. The current runtime
-entries contain no bundled talk videos, recordings, screenshots or demo Lottie
-assets. They require the host capabilities named in their manifests; initial
-runtime validation targets macOS. Do not assume every entry has a static-web or
-mobile equivalent.
+The native app and shipped compiler omit these implementations. The gallery at
+`https://legend.so/slides/effects/` installs small family packs and their exact
+versioned dependencies. Opening a deck with missing packs offers installation
+and retry; compilation itself never downloads code. Keep the generated
+`<deck>.effects.lock.json` beside the deck to preserve checksums and versions.
+Installed packs and pinned decks work offline, and upgrades coexist with older
+versions. Installation is disabled during presentation.
+
+The runtime entries contain no bundled talk videos, recordings, screenshots or
+demo Lottie assets. They require the host capabilities named in their manifests;
+initial runtime validation targets macOS. Do not assume every entry has a
+static-web or mobile equivalent.
+
+`catalog.json` describes curated gallery entries. Self-contained examples live in
+`examples/<slug>/example.mdx`. The Legend Docs release script compiles those
+examples against immutable archived packs before publishing the catalog. Bump a
+pack version when runtime source changes; published checksums cannot be replaced.
 
 Use explicit stage geometry (`width`, `height`, panel bounds, title width/font)
-to fit a talk. Examples and advanced scene choreography remain in `legend-talks`.
+to fit a talk. Talk-specific choreography remains in `legend-talks`.
 Typography includes 16 entrances. Backgrounds have individual entrypoints plus an
 optional `AnimatedAtmosphere` chooser. Presenting tools include measured attention,
 callouts, code walkthrough, comparison, detail, layers, content replacement and a

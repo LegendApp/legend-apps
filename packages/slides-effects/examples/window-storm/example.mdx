@@ -1,0 +1,14 @@
+---
+title: Window storm
+---
+
+import { View, Text } from "react-native";
+import { createWindowStorm } from "slides:particles/WindowStorm";
+
+export const field = createWindowStorm({particleCount: 384});
+
+# Window storm
+
+<View style={{ width: 1696, height: 650 }}>
+<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />
+</View>

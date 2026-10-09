@@ -1,0 +1,15 @@
+---
+title: Prismatic tear
+---
+
+import { View, Text } from "react-native";
+import { prismaticTear } from "slides:materials/Distortion";
+
+
+# Prismatic tear
+
+<View style={{ width: 1696, height: 650 }}>
+<Effect shader={prismaticTear} uniforms={{delaySeconds: 1,durationSeconds: 0.36,intervalSeconds: 4}} style={{width: 1696,height: 600}}>
+<View style={{width: 1696,height: 600,backgroundColor: "#164e63",alignItems: "center",justifyContent: "center"}}><Text style={{color: "white",fontSize: 100}}>A change in perspective</Text></View>
+</Effect>
+</View>

@@ -1,0 +1,14 @@
+---
+title: Trajectory emitter
+---
+
+import { View, Text } from "react-native";
+import { TrajectoryEmitter } from "slides:particles/TrajectoryEmitter";
+
+export const paths = [0,1,2].map(index => [{time: 0,x: 200,y: 200,opacity: 0},{time: 300,x: 600,y: 200 + index * 100,opacity: 1},{time: 1800,x: 1400,y: 200 + index * 100,opacity: 0}]);
+
+# Trajectory emitter
+
+<View style={{ width: 1696, height: 650 }}>
+<TrajectoryEmitter trajectories={paths} interval={800} renderParticle={() => <View style={{width: 36,height: 36,borderRadius: 18,backgroundColor: "#67e8f9"}} />} />
+</View>

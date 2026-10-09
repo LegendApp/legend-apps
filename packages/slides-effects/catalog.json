@@ -1,0 +1,747 @@
+{
+  "schemaVersion": 1,
+  "effects": [
+    {
+      "slug": "animated-title",
+      "title": "Animated title",
+      "pack": "typography",
+      "entry": "AnimatedTitle",
+      "symbol": "AnimatedTitle",
+      "description": "Sixteen entrances for words, letters and whole headings.",
+      "tags": [
+        "typography"
+      ],
+      "props": [
+        {
+          "name": "effect",
+          "description": "Select one of sixteen entrance presets."
+        },
+        {
+          "name": "width / fontSize",
+          "description": "Fit the heading to your stage."
+        },
+        {
+          "name": "clock",
+          "description": "Use slide or step playback time."
+        }
+      ],
+      "snippet": "---\ntitle: Animated title\n---\n\nimport { View, Text } from \"react-native\";\nimport { AnimatedTitle } from \"slides:typography/AnimatedTitle\";\n\n\n# Animated title\n\n<View style={{ width: 1696, height: 650 }}>\n<AnimatedTitle effect=\"word-lift\" width={1696} fontSize={104}>Make an entrance</AnimatedTitle>\n</View>\n"
+    },
+    {
+      "slug": "ambientaurora",
+      "title": "Ambient aurora",
+      "pack": "backgrounds",
+      "entry": "AmbientAurora",
+      "symbol": "AmbientAurora",
+      "description": "Soft animated ribbons of color.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Ambient aurora\n---\n\nimport { View, Text } from \"react-native\";\nimport { AmbientAurora } from \"slides:backgrounds/AmbientAurora\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Ambient aurora\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><AmbientAurora /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "droplets",
+      "title": "Droplets",
+      "pack": "backgrounds",
+      "entry": "Droplets",
+      "symbol": "Droplets",
+      "description": "A liquid droplet field with smooth unions.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Droplets\n---\n\nimport { View, Text } from \"react-native\";\nimport { Droplets } from \"slides:backgrounds/Droplets\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Droplets\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Droplets /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "fluid",
+      "title": "Fluid",
+      "pack": "backgrounds",
+      "entry": "Fluid",
+      "symbol": "Fluid",
+      "description": "Flowing color and light.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Fluid\n---\n\nimport { View, Text } from \"react-native\";\nimport { Fluid } from \"slides:backgrounds/Fluid\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Fluid\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Fluid /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "smoke",
+      "title": "Smoke",
+      "pack": "backgrounds",
+      "entry": "Smoke",
+      "symbol": "Smoke",
+      "description": "Drifting layered smoke.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Smoke\n---\n\nimport { View, Text } from \"react-native\";\nimport { Smoke } from \"slides:backgrounds/Smoke\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Smoke\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Smoke /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "wireframe",
+      "title": "Wireframe",
+      "pack": "backgrounds",
+      "entry": "Wireframe",
+      "symbol": "Wireframe",
+      "description": "An animated geometric wireframe.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Wireframe\n---\n\nimport { View, Text } from \"react-native\";\nimport { Wireframe } from \"slides:backgrounds/Wireframe\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Wireframe\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Wireframe /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "glassatmosphere",
+      "title": "Glass atmosphere",
+      "pack": "backgrounds",
+      "entry": "GlassAtmosphere",
+      "symbol": "GlassAtmosphere",
+      "description": "Ambient refracted glass forms.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Glass atmosphere\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassAtmosphere } from \"slides:backgrounds/GlassAtmosphere\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Glass atmosphere\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><GlassAtmosphere /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "interactive-glass",
+      "title": "Interactive glass",
+      "pack": "backgrounds",
+      "entry": "TypeGPUGlassBackground",
+      "symbol": "TypeGPUGlassBackground",
+      "description": "A WebGPU glass atmosphere.",
+      "tags": [
+        "backgrounds"
+      ],
+      "props": [
+        {
+          "name": "Background",
+          "description": "Use the host wrapper for priority and intensity."
+        }
+      ],
+      "snippet": "---\ntitle: Interactive glass\n---\n\nimport { View, Text } from \"react-native\";\nimport { TypeGPUGlassBackground } from \"slides:backgrounds/TypeGPUGlassBackground\";\n\nexport function GlassExample({renderer}) { return <TypeGPUGlassBackground>{renderer}</TypeGPUGlassBackground>; }\n\n# Interactive glass\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassExample renderer={<TypeGPUShader />} />\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+    },
+    {
+      "slug": "glass-panels",
+      "title": "Glass panels",
+      "pack": "materials",
+      "entry": "GlassPanels",
+      "symbol": "GlassPanels",
+      "description": "Rounded panels rendered together on one glass surface.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "panels",
+          "description": "Supply panel bounds and corner radii."
+        },
+        {
+          "name": "tint",
+          "description": "Choose the RGB material palette."
+        }
+      ],
+      "snippet": "---\ntitle: Glass panels\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassPanels } from \"slides:materials/GlassPanels\";\n\n\n# Glass panels\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassPanels width={1696} height={650} panels={[{x: 240,y: 180,width: 500,height: 280,radius: 40},{x: 900,y: 220,width: 480,height: 240,radius: 40}]} />\n</View>\n"
+    },
+    {
+      "slug": "glass-strike",
+      "title": "Glass strike",
+      "pack": "materials",
+      "entry": "GlassStrike",
+      "symbol": "GlassStrike",
+      "description": "Strike a glass panel, shatter it and optionally resolve to a check.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "crossed",
+          "description": "Trigger the impact on a reveal step."
+        },
+        {
+          "name": "resolveToCheck",
+          "description": "Resolve the X into a check."
+        },
+        {
+          "name": "geometry",
+          "description": "Customize the material and stroke geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Glass strike\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassStrike } from \"slides:materials/GlassStrike\";\n\n\n# Glass strike\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={2}>{step => <GlassStrike width={1696} height={650} centerX={848} panelHalfHeight={150} crossed={step > 0} resolveToCheck />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "upward-flames",
+      "title": "Upward flames",
+      "pack": "materials",
+      "entry": "Fire",
+      "symbol": "Flames",
+      "description": "Fire grows upward from a bar using the shared step clock.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "width / barHeight",
+          "description": "Set the flame emitter bounds."
+        },
+        {
+          "name": "x / y",
+          "description": "Place the bar on the stage."
+        }
+      ],
+      "snippet": "---\ntitle: Upward flames\n---\n\nimport { View, Text } from \"react-native\";\nimport { Flames } from \"slides:materials/Fire\";\n\n\n# Upward flames\n\n<View style={{ width: 1696, height: 650 }}>\n<Flames width={600} barHeight={30} x={548} y={410} />\n</View>\n"
+    },
+    {
+      "slug": "falling-sprites",
+      "title": "Falling sprites",
+      "pack": "materials",
+      "entry": "Fire",
+      "symbol": "FallingSprites",
+      "description": "Images fall through fire, splash and accumulate on the stage floor.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "sprite",
+          "description": "Supply a sprite image URI."
+        },
+        {
+          "name": "width / x / y",
+          "description": "Set the emitter position and width."
+        }
+      ],
+      "snippet": "---\ntitle: Falling sprites\n---\n\nimport { View, Text } from \"react-native\";\nimport { FallingSprites } from \"slides:materials/Fire\";\n\n\n# Falling sprites\n\n<View style={{ width: 1696, height: 650 }}>\n<FallingSprites width={600} barHeight={30} x={548} y={300} sprite={\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAACgCAIAAABseyVrAAADvElEQVR4nO3ZsY3cMBCG0evAoXtwBa7LHRhw6HouO8BFOVgYF7iA1UqUOENSmAd88ehn8CK9ffn6TSrb2/QF0sQAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOm6AHz/eEypZ/PP348p9Wz+8+tzSj2b//54nxIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBxj3+f+y0I4HDzggAONy8I4HDzvQEcPu8sgwEATm1eBMCpzYsAOLX5lgBOvbDRQDaAC5unA7iweTqAC5vvBODC8xoZ5AHo3DwFQOfmKQA6N98AQOcL9w0kAQjZPBhAyObBAEI2AwAAAKsCCHnhjoEMAIGbhwEI3DwMQODmRQEEvvCVgXAA4ZsHAAjfPABA+GYAAABgJQDhL9w0EAsgaXMqgKTNqQCSNgMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAJoAMA8+fiAWQYeD5E7EAMgw8fyIWQIaB508AAAAAUwHEGti8Hw4g1sDm/XAAsQY274cDiDWweX8JAFEGXh3PABBl4NXxDABRBl4dzwAQZeDVcQAAAGABAP0Gdi4nAeg3sHM5CUC/gZ3LSQD6DexcXgjAZQaHN/MAXGZweDMPwGUGhzfzAFxmcHhzOQBnDbQczAZw1kDLwWwAZw20HMwGcNZAy8EVATQyaD81AEAjg/ZTAwA0Mmg/NQBAI4P2U+sCCGwYgMCGAQhsGIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoDkO4eACodACodACodACodACodACodACodACqdP8H+BPsTDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADUBiDdPQBUOgBUOgBUOgBUOgBUOgBUOv8B/AfwHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADghgCkuweASgeASgeASgeASgeASgeASgeASgeASgeASgeASgeASvcfT6aDDVH/LJsAAAAASUVORK5CYII=\"} />\n</View>\n"
+    },
+    {
+      "slug": "image-shatter",
+      "title": "Image shatter",
+      "pack": "materials",
+      "entry": "ImageShatter",
+      "symbol": "ImageShatter",
+      "description": "Reveal an image, then break it into falling pieces.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "source",
+          "description": "Supply an image URI."
+        },
+        {
+          "name": "revealAtStep",
+          "description": "Reveal on this step and shatter on the next."
+        },
+        {
+          "name": "geometry",
+          "description": "Supply image size, position, scale and radius."
+        }
+      ],
+      "snippet": "---\ntitle: Image shatter\n---\n\nimport { View, Text } from \"react-native\";\nimport { ImageShatter } from \"slides:materials/ImageShatter\";\n\n\n# Image shatter\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <ImageShatter source={\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAACgCAIAAABseyVrAAADvElEQVR4nO3ZsY3cMBCG0evAoXtwBa7LHRhw6HouO8BFOVgYF7iA1UqUOENSmAd88ehn8CK9ffn6TSrb2/QF0sQAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOm6AHz/eEypZ/PP348p9Wz+8+tzSj2b//54nxIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBxj3+f+y0I4HDzggAONy8I4HDzvQEcPu8sgwEATm1eBMCpzYsAOLX5lgBOvbDRQDaAC5unA7iweTqAC5vvBODC8xoZ5AHo3DwFQOfmKQA6N98AQOcL9w0kAQjZPBhAyObBAEI2AwAAAKsCCHnhjoEMAIGbhwEI3DwMQODmRQEEvvCVgXAA4ZsHAAjfPABA+GYAAABgJQDhL9w0EAsgaXMqgKTNqQCSNgMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAJoAMA8+fiAWQYeD5E7EAMgw8fyIWQIaB508AAAAAUwHEGti8Hw4g1sDm/XAAsQY274cDiDWweX8JAFEGXh3PABBl4NXxDABRBl4dzwAQZeDVcQAAAGABAP0Gdi4nAeg3sHM5CUC/gZ3LSQD6DexcXgjAZQaHN/MAXGZweDMPwGUGhzfzAFxmcHhzOQBnDbQczAZw1kDLwWwAZw20HMwGcNZAy8EVATQyaD81AEAjg/ZTAwA0Mmg/NQBAI4P2U+sCCGwYgMCGAQhsGIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoDkO4eACodACodACodACodACodACodACodACqdP8H+BPsTDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADUBiDdPQBUOgBUOgBUOgBUOgBUOgBUOv8B/AfwHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADghgCkuweASgeASgeASgeASgeASgeASgeASgeASgeASgeASgeASvcfT6aDDVH/LJsAAAAASUVORK5CYII=\"} width={1696} height={650} revealAtStep={1} geometry={{imageWidth: 900,imageHeight: 500,centerX: 848,centerY: 325,scale: 1}} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "prismatic-tear",
+      "title": "Prismatic tear",
+      "pack": "materials",
+      "entry": "Distortion",
+      "symbol": "prismaticTear",
+      "description": "Timed image distortion over captured slide content.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "strength",
+          "description": "Adjust displacement."
+        },
+        {
+          "name": "timing uniforms",
+          "description": "Control delay, duration and interval."
+        }
+      ],
+      "snippet": "---\ntitle: Prismatic tear\n---\n\nimport { View, Text } from \"react-native\";\nimport { prismaticTear } from \"slides:materials/Distortion\";\n\n\n# Prismatic tear\n\n<View style={{ width: 1696, height: 650 }}>\n<Effect shader={prismaticTear} uniforms={{delaySeconds: 1,durationSeconds: 0.36,intervalSeconds: 4}} style={{width: 1696,height: 600}}>\n<View style={{width: 1696,height: 600,backgroundColor: \"#164e63\",alignItems: \"center\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 100}}>A change in perspective</Text></View>\n</Effect>\n</View>\n"
+    },
+    {
+      "slug": "soft-ripple",
+      "title": "Soft ripple",
+      "pack": "materials",
+      "entry": "Distortion",
+      "symbol": "softRipple",
+      "description": "Timed image distortion over captured slide content.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "strength",
+          "description": "Adjust displacement."
+        },
+        {
+          "name": "timing uniforms",
+          "description": "Control delay, duration and interval."
+        }
+      ],
+      "snippet": "---\ntitle: Soft ripple\n---\n\nimport { View, Text } from \"react-native\";\nimport { softRipple } from \"slides:materials/Distortion\";\n\n\n# Soft ripple\n\n<View style={{ width: 1696, height: 650 }}>\n<Effect shader={softRipple} uniforms={{delaySeconds: 1,durationSeconds: 0.36,intervalSeconds: 4}} style={{width: 1696,height: 600}}>\n<View style={{width: 1696,height: 600,backgroundColor: \"#164e63\",alignItems: \"center\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 100}}>A change in perspective</Text></View>\n</Effect>\n</View>\n"
+    },
+    {
+      "slug": "refraction",
+      "title": "Refraction",
+      "pack": "materials",
+      "entry": "Refraction",
+      "symbol": "createRefractionShader",
+      "description": "Rounded glass regions refract and blur their captured content.",
+      "tags": [
+        "materials"
+      ],
+      "props": [
+        {
+          "name": "surfaceA / surfaceB",
+          "description": "Normalized region bounds."
+        },
+        {
+          "name": "radii",
+          "description": "Corner radii for both regions."
+        },
+        {
+          "name": "ramp",
+          "description": "Optional material-strength timeline."
+        }
+      ],
+      "snippet": "---\ntitle: Refraction\n---\n\nimport { View, Text } from \"react-native\";\nimport { createRefractionShader } from \"slides:materials/Refraction\";\n\nexport const refraction = createRefractionShader();\n\n# Refraction\n\n<View style={{ width: 1696, height: 650 }}>\n<Effect shader={refraction} strength={18} uniforms={{surfaceA: [0.1,0.1,0.4,0.8],surfaceB: [0.5,0.2,0.9,0.9]}} style={{width: 1696,height: 600}}><View style={{width: 1696,height: 600,backgroundColor: \"#164e63\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 130}}>Light through glass</Text></View></Effect>\n</View>\n"
+    },
+    {
+      "slug": "glow-field",
+      "title": "Glow field",
+      "pack": "particles",
+      "entry": "GlowField",
+      "symbol": "createGlowField",
+      "description": "A configurable particle program executed by the host WebGPU renderer.",
+      "tags": [
+        "particles"
+      ],
+      "props": [
+        {
+          "name": "particleCount",
+          "description": "Choose particle density; keep it paired with the returned program."
+        },
+        {
+          "name": "speed / scale",
+          "description": "Adjust shared-clock speed and cloud geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Glow field\n---\n\nimport { View, Text } from \"react-native\";\nimport { createGlowField } from \"slides:particles/GlowField\";\n\nexport const field = createGlowField({particleCount: 1536});\n\n# Glow field\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
+    },
+    {
+      "slug": "window-storm",
+      "title": "Window storm",
+      "pack": "particles",
+      "entry": "WindowStorm",
+      "symbol": "createWindowStorm",
+      "description": "A configurable particle program executed by the host WebGPU renderer.",
+      "tags": [
+        "particles"
+      ],
+      "props": [
+        {
+          "name": "particleCount",
+          "description": "Choose particle density; keep it paired with the returned program."
+        },
+        {
+          "name": "speed / scale",
+          "description": "Adjust shared-clock speed and cloud geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Window storm\n---\n\nimport { View, Text } from \"react-native\";\nimport { createWindowStorm } from \"slides:particles/WindowStorm\";\n\nexport const field = createWindowStorm({particleCount: 384});\n\n# Window storm\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
+    },
+    {
+      "slug": "constellation",
+      "title": "Constellation",
+      "pack": "particles",
+      "entry": "Constellation",
+      "symbol": "createConstellation",
+      "description": "A configurable particle program executed by the host WebGPU renderer.",
+      "tags": [
+        "particles"
+      ],
+      "props": [
+        {
+          "name": "particleCount",
+          "description": "Choose particle density; keep it paired with the returned program."
+        },
+        {
+          "name": "speed / scale",
+          "description": "Adjust shared-clock speed and cloud geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Constellation\n---\n\nimport { View, Text } from \"react-native\";\nimport { createConstellation } from \"slides:particles/Constellation\";\n\nexport const field = createConstellation({particleCount: 1024,rows: 5});\n\n# Constellation\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
+    },
+    {
+      "slug": "interface-reveal",
+      "title": "Interface reveal",
+      "pack": "particles",
+      "entry": "InterfaceReveal",
+      "symbol": "createInterfaceReveal",
+      "description": "A configurable particle program executed by the host WebGPU renderer.",
+      "tags": [
+        "particles"
+      ],
+      "props": [
+        {
+          "name": "particleCount",
+          "description": "Choose particle density; keep it paired with the returned program."
+        },
+        {
+          "name": "speed / scale",
+          "description": "Adjust shared-clock speed and cloud geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Interface reveal\n---\n\nimport { View, Text } from \"react-native\";\nimport { createInterfaceReveal } from \"slides:particles/InterfaceReveal\";\n\nexport const field = createInterfaceReveal({particleCount: 4096,columns: 80});\n\n# Interface reveal\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
+    },
+    {
+      "slug": "trajectory-emitter",
+      "title": "Trajectory emitter",
+      "pack": "particles",
+      "entry": "TrajectoryEmitter",
+      "symbol": "TrajectoryEmitter",
+      "description": "Repeat arbitrary content along native keyframe paths.",
+      "tags": [
+        "particles"
+      ],
+      "props": [
+        {
+          "name": "trajectories",
+          "description": "Supply ordered native keyframes."
+        },
+        {
+          "name": "interval / start",
+          "description": "Set spacing and start delay."
+        },
+        {
+          "name": "renderParticle",
+          "description": "Supply the emitted content."
+        }
+      ],
+      "snippet": "---\ntitle: Trajectory emitter\n---\n\nimport { View, Text } from \"react-native\";\nimport { TrajectoryEmitter } from \"slides:particles/TrajectoryEmitter\";\n\nexport const paths = [0,1,2].map(index => [{time: 0,x: 200,y: 200,opacity: 0},{time: 300,x: 600,y: 200 + index * 100,opacity: 1},{time: 1800,x: 1400,y: 200 + index * 100,opacity: 0}]);\n\n# Trajectory emitter\n\n<View style={{ width: 1696, height: 650 }}>\n<TrajectoryEmitter trajectories={paths} interval={800} renderParticle={() => <View style={{width: 36,height: 36,borderRadius: 18,backgroundColor: \"#67e8f9\"}} />} />\n</View>\n"
+    },
+    {
+      "slug": "branch-fan",
+      "title": "Branch fan",
+      "pack": "diagrams",
+      "entry": "BranchFan",
+      "symbol": "BranchFan",
+      "description": "Curved, illuminated ribbons connect a root to caller-defined endpoints.",
+      "tags": [
+        "diagrams"
+      ],
+      "props": [
+        {
+          "name": "geometry",
+          "description": "Root and downward endpoints, strands and twist."
+        },
+        {
+          "name": "emphasized",
+          "description": "Change palette on the step clock."
+        }
+      ],
+      "snippet": "---\ntitle: Branch fan\n---\n\nimport { View, Text } from \"react-native\";\nimport { BranchFan } from \"slides:diagrams/BranchFan\";\n\n\n# Branch fan\n\n<View style={{ width: 1696, height: 650 }}>\n<BranchFan width={1696} height={650} geometry={{root: {x: 848,y: 60},ends: [{x: 250,y: 550},{x: 848,y: 550},{x: 1446,y: 550}]}} />\n</View>\n"
+    },
+    {
+      "slug": "progressive-detail",
+      "title": "Progressive detail",
+      "pack": "presenting",
+      "entry": "Composition",
+      "symbol": "ProgressiveDetail",
+      "description": "Reveal and compare caller-supplied content while keeping its state mounted.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "content",
+          "description": "Supply the illustrations or React content."
+        },
+        {
+          "name": "style",
+          "description": "Give the composition explicit stage bounds."
+        }
+      ],
+      "snippet": "---\ntitle: Progressive detail\n---\n\nimport { View, Text } from \"react-native\";\nimport { ProgressiveDetail } from \"slides:presenting/Composition\";\n\n\n# Progressive detail\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <ProgressiveDetail expanded={step > 0} summary={<Text style={{fontSize: 80,color: \"white\"}}>The idea</Text>} detail={<Text style={{fontSize: 60,color: \"#67e8f9\"}}>The implementation</Text>} style={{width: 1696,height: 580}} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "comparison-wipe",
+      "title": "Comparison wipe",
+      "pack": "presenting",
+      "entry": "Composition",
+      "symbol": "ComparisonWipe",
+      "description": "Reveal and compare caller-supplied content while keeping its state mounted.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "content",
+          "description": "Supply the illustrations or React content."
+        },
+        {
+          "name": "style",
+          "description": "Give the composition explicit stage bounds."
+        }
+      ],
+      "snippet": "---\ntitle: Comparison wipe\n---\n\nimport { View, Text } from \"react-native\";\nimport { ComparisonWipe } from \"slides:presenting/Composition\";\n\n\n# Comparison wipe\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <ComparisonWipe position={step / 2} before={<View style={{flex: 1,backgroundColor: \"#164e63\"}} />} after={<View style={{flex: 1,backgroundColor: \"#6d28d9\"}} />} beforeLabel=\"Before\" afterLabel=\"After\" style={{width: 1696,height: 580}} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "content-swap",
+      "title": "Content swap",
+      "pack": "presenting",
+      "entry": "Composition",
+      "symbol": "ContentSwap",
+      "description": "Reveal and compare caller-supplied content while keeping its state mounted.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "content",
+          "description": "Supply the illustrations or React content."
+        },
+        {
+          "name": "style",
+          "description": "Give the composition explicit stage bounds."
+        }
+      ],
+      "snippet": "---\ntitle: Content swap\n---\n\nimport { View, Text } from \"react-native\";\nimport { ContentSwap } from \"slides:presenting/Composition\";\n\n\n# Content swap\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <ContentSwap active={step > 0} before={<Text style={{color: \"white\",fontSize: 100}}>The evidence</Text>} after={<Text style={{color: \"#67e8f9\",fontSize: 100}}>The takeaway</Text>} style={{width: 1696,height: 580}} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "exploded-layers",
+      "title": "Exploded layers",
+      "pack": "presenting",
+      "entry": "Composition",
+      "symbol": "ExplodedLayers",
+      "description": "Reveal and compare caller-supplied content while keeping its state mounted.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "content",
+          "description": "Supply the illustrations or React content."
+        },
+        {
+          "name": "style",
+          "description": "Give the composition explicit stage bounds."
+        }
+      ],
+      "snippet": "---\ntitle: Exploded layers\n---\n\nimport { View, Text } from \"react-native\";\nimport { ExplodedLayers } from \"slides:presenting/Composition\";\n\n\n# Exploded layers\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <ExplodedLayers expanded={step > 0} layers={[{id: \"ui\",label: \"UI\",content: <Text>Presentation</Text>,color: \"#155e75\"},{id: \"data\",label: \"Data\",content: <Text>Model</Text>,color: \"#312e81\"}]} style={{width: 1696,height: 580}} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "spotlight",
+      "title": "Spotlight and callouts",
+      "pack": "presenting",
+      "entry": "Attention",
+      "symbol": "AttentionStage",
+      "description": "Measured attention overlays follow targets through stage scaling.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "target",
+          "description": "Use an AttentionTarget ID."
+        },
+        {
+          "name": "padding / darkness",
+          "description": "Control the spotlight cutout and dimming."
+        }
+      ],
+      "snippet": "---\ntitle: Spotlight and callouts\n---\n\nimport { View, Text } from \"react-native\";\nimport { AttentionStage } from \"slides:presenting/Attention\";\nimport { AttentionTarget, Spotlight, Callout } from \"slides:presenting/Attention\";\n\n\n# Spotlight and callouts\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <AttentionStage style={{width: 1696,height: 580}}><AttentionTarget id=\"idea\" style={{position: \"absolute\",left: 150,top: 160}}><Text style={{color: \"white\",fontSize: 90}}>The idea</Text></AttentionTarget><AttentionTarget id=\"detail\" style={{position: \"absolute\",left: 950,top: 300}}><Text style={{color: \"white\",fontSize: 90}}>The detail</Text></AttentionTarget><Spotlight target={step ? \"detail\" : \"idea\"} /><Callout target={step ? \"detail\" : \"idea\"}>Look here</Callout></AttentionStage>}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "code-walkthrough",
+      "title": "Code walkthrough",
+      "pack": "presenting",
+      "entry": "CodeWalkthrough",
+      "symbol": "CodeWalkthrough",
+      "description": "Emphasize and scroll to selected lines of source.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "source",
+          "description": "Source text to display."
+        },
+        {
+          "name": "lines",
+          "description": "One-based selected lines."
+        },
+        {
+          "name": "explanation",
+          "description": "Content beside the code."
+        }
+      ],
+      "snippet": "---\ntitle: Code walkthrough\n---\n\nimport { View, Text } from \"react-native\";\nimport { CodeWalkthrough } from \"slides:presenting/CodeWalkthrough\";\n\nexport const code = \"const data = await load();\\nconst result = transform(data);\\nrender(result);\";\n\n# Code walkthrough\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <CodeWalkthrough source={code} lines={[step + 1, step + 1]} explanation={<Text style={{color: \"white\",fontSize: 48}}>Follow the highlighted line.</Text>} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "freeze-frame",
+      "title": "Freeze and annotate",
+      "pack": "presenting",
+      "entry": "FreezeFrame",
+      "symbol": "FreezeFrame",
+      "description": "Pause a controlled animation and show annotations without remounting it.",
+      "tags": [
+        "presenting"
+      ],
+      "props": [
+        {
+          "name": "paused",
+          "description": "Pause the supplied clock."
+        },
+        {
+          "name": "children",
+          "description": "Feed the supplied shared seconds to your animation."
+        },
+        {
+          "name": "annotation",
+          "description": "Content shown while paused."
+        }
+      ],
+      "snippet": "---\ntitle: Freeze and annotate\n---\n\nimport { View, Text } from \"react-native\";\nimport { FreezeFrame } from \"slides:presenting/FreezeFrame\";\nimport Animated, { useAnimatedStyle } from \"react-native-reanimated\";\n\nexport function Orbit({time}) { const style = useAnimatedStyle(() => ({transform: [{translateX: 600 + Math.sin(time.value) * 300},{translateY: 220 + Math.cos(time.value) * 100}]})); return <View style={{width: 1696,height: 650}}><Animated.View style={[{width: 100,height: 100,borderRadius: 50,backgroundColor: \"#67e8f9\"},style]} /></View>; }\n\n# Freeze and annotate\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={2}>{step => <FreezeFrame paused={step > 0} annotation={<Text style={{color: \"white\",fontSize: 48}}>Pause to explain this frame</Text>}>{time => <Orbit time={time} />}</FreezeFrame>}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "chart-bar",
+      "title": "Chart bar",
+      "pack": "charts",
+      "entry": "ChartBar",
+      "symbol": "ChartBar",
+      "description": "A textured animated bar with optional grouping colors.",
+      "tags": [
+        "charts"
+      ],
+      "props": [
+        {
+          "name": "highlighted / grouped",
+          "description": "Caller-owned emphasis."
+        },
+        {
+          "name": "luminous / rounded",
+          "description": "Select material and corner style."
+        },
+        {
+          "name": "style",
+          "description": "Set bar dimensions."
+        }
+      ],
+      "snippet": "---\ntitle: Chart bar\n---\n\nimport { View, Text } from \"react-native\";\nimport { ChartBar } from \"slides:charts/ChartBar\";\n\n\n# Chart bar\n\n<View style={{ width: 1696, height: 650 }}>\n<ChartBar luminous highlighted rounded style={{width: 1400,height: 80,marginTop: 250}} />\n</View>\n"
+    },
+    {
+      "slug": "bar-row",
+      "title": "Animated chart row",
+      "pack": "charts",
+      "entry": "BarRow",
+      "symbol": "BarRow",
+      "description": "Stable labels and changing values move with an animated chart bar.",
+      "tags": [
+        "charts"
+      ],
+      "props": [
+        {
+          "name": "id",
+          "description": "Unique shared-element ID within the deck."
+        },
+        {
+          "name": "value / maximum",
+          "description": "Caller-owned data and scale."
+        },
+        {
+          "name": "layout",
+          "description": "Override label, bar and row geometry."
+        }
+      ],
+      "snippet": "---\ntitle: Animated chart row\n---\n\nimport { View, Text } from \"react-native\";\nimport { BarRow } from \"slides:charts/BarRow\";\n\n\n# Animated chart row\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={2}>{step => <BarRow id=\"sample-row\" name=\"Requests\" value={step ? 82 : 38} maximum={100} y={180} highlighted animateValue valueLabel=\"requests\" />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "app-carousel",
+      "title": "Media carousel",
+      "pack": "media",
+      "entry": "AppCarousel",
+      "symbol": "AppCarousel",
+      "description": "A configurable filmstrip with focus blur and retained content.",
+      "tags": [
+        "media"
+      ],
+      "props": [
+        {
+          "name": "items / renderCard",
+          "description": "Supply stable IDs and arbitrary card content."
+        },
+        {
+          "name": "position / mode",
+          "description": "Select a card and filmstrip/grid/hero layout."
+        },
+        {
+          "name": "geometry",
+          "description": "Set stage center, spacing and grid bounds."
+        }
+      ],
+      "snippet": "---\ntitle: Media carousel\n---\n\nimport { View, Text } from \"react-native\";\nimport { AppCarousel } from \"slides:media/AppCarousel\";\n\n\n# Media carousel\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <AppCarousel items={[\"One\",\"Two\",\"Three\"]} position={step} cardWidth={900} geometry={{centerX: 848,centerY: 325,spacing: 780}} renderCard={(id,layout) => <View style={{width: layout.width,height: layout.height,backgroundColor: \"#164e63\",borderRadius: 40,alignItems: \"center\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 90}}>{id}</Text></View>} />}</Steps>\n</View>\n"
+    },
+    {
+      "slug": "lottie-player",
+      "title": "Lottie animation",
+      "pack": "animation",
+      "entry": "LottiePlayer",
+      "symbol": "LottiePlayer",
+      "description": "Native Lottie playback synchronized with the shared slide clock.",
+      "tags": [
+        "animation"
+      ],
+      "props": [
+        {
+          "name": "source",
+          "description": "Parsed Lottie JSON supplied by the deck."
+        },
+        {
+          "name": "durationSeconds",
+          "description": "Map native progress to slide time."
+        },
+        {
+          "name": "previewProgress",
+          "description": "Choose the static presenter preview."
+        }
+      ],
+      "snippet": "---\ntitle: Lottie animation\n---\n\nimport { View, Text } from \"react-native\";\nimport { LottiePlayer } from \"slides:animation/LottiePlayer\";\n\nexport const animation = {\"v\":\"5.9.0\",\"fr\":30,\"ip\":0,\"op\":90,\"w\":400,\"h\":400,\"nm\":\"Orbit\",\"ddd\":0,\"assets\":[],\"layers\":[{\"ddd\":0,\"ind\":1,\"ty\":4,\"nm\":\"Disc\",\"sr\":1,\"ks\":{\"o\":{\"a\":0,\"k\":100},\"r\":{\"a\":0,\"k\":0},\"p\":{\"a\":0,\"k\":[200,200,0]},\"a\":{\"a\":0,\"k\":[0,0,0]},\"s\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[40,40,100],\"e\":[100,100,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":45,\"s\":[100,100,100],\"e\":[40,40,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":90,\"s\":[40,40,100]}]}},\"shapes\":[{\"ty\":\"el\",\"p\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[220,220]},\"nm\":\"Circle\"},{\"ty\":\"fl\",\"c\":{\"a\":0,\"k\":[0.4,0.9,1,1]},\"o\":{\"a\":0,\"k\":100},\"r\":1}],\"ip\":0,\"op\":90,\"st\":0,\"bm\":0}]};\n\n# Lottie animation\n\n<View style={{ width: 1696, height: 650 }}>\n<LottiePlayer source={animation} durationSeconds={3} style={{width: 600,height: 600,alignSelf: \"center\"}} />\n</View>\n"
+    }
+  ]
+}
