@@ -197,7 +197,7 @@ config.resolver.blockList = [
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, name, platform) => {
   if (name === "@legendapp/spark" || name.startsWith("@legendapp/spark/")) return context.resolveRequest({ ...context, originModulePath: path.join(__dirname, "index.ts") }, name, platform);
-  if (/^(react|react-native|react-native-nitro-modules|uniwind|@legendapp\\/state)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
+  if (/^(react|react-native|react-native-nitro-modules|react-native-worklets|react-native-reanimated|uniwind|@legendapp\\/state)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
   return resolveRequest ? resolveRequest(context, name, platform) : context.resolveRequest(context, name, platform);
 };
 module.exports = withDesktop(withUniwindConfig(config, { cssEntryFile: ${JSON.stringify(path.relative(project, path.join(shellDir, "src/global.css")))}, dtsFile: "./uniwind-types.d.ts" }), { runtimes: false });

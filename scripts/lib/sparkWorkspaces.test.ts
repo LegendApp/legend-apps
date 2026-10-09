@@ -77,6 +77,26 @@ test("Metro excludes sibling consumer installs while retaining its dependencies 
   assert.equal(blocked(path.resolve("apps/code/src/App.tsx")), false);
 });
 
+test("Metro resolves animation runtimes and their self-imports from the native host", async () => {
+  const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
+  const config = { server: {}, resolver: { resolveRequest: (context: { originModulePath: string }, _name: string, _platform: string) => context.originModulePath } };
+  const module = { exports: {} as typeof config };
+  const dependencies: Record<string, unknown> = {
+    "node:path": path,
+    "expo-desktop-metro-config": { makeMetroConfig: () => config },
+    "@legendapp/spark/metro": { withDesktop: (value: unknown) => value },
+    "uniwind/metro": { withUniwindConfig: (value: unknown) => value },
+  };
+  new Function("require", "module", "__dirname", fs.readFileSync(path.join(project, "metro.config.js"), "utf8"))(
+    (name: string) => dependencies[name], module, project,
+  );
+  const context = { originModulePath: path.resolve("apps/slides/node_modules/react-native-worklets/src/createSerializable.ts") };
+  for (const name of ["react-native-worklets", "react-native-worklets/src/index", "react-native-reanimated", "react-native-reanimated/lib/module/index"]) {
+    assert.equal(module.exports.resolver.resolveRequest(context, name, "macos"), path.join(project, "index.ts"));
+  }
+  assert.equal(module.exports.resolver.resolveRequest(context, "react-native-worklets-other", "macos"), context.originModulePath);
+});
+
 test("generated native config loads the current Spark native API", async () => {
   const manifest = await loadAppManifest("hello-world");
   const project = prepareSparkWorkspace(manifest);
