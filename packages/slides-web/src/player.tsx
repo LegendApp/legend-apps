@@ -2,10 +2,12 @@ import React, { memo, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useValue } from "@legendapp/state/react";
 const { default: Deck, __legendSlidesTemplates, __legendSlidesTransitions } = require("virtual:deck");
+const { default: preloadAssets } = require("virtual:preload");
 import { DeckRenderer, SlideCanvas } from "../../../apps/slides/src/DeckRenderer";
 import { getSlidesState, setSlidesState, slidesState$, nextSlide, previousSlide } from "../../../apps/slides/src/slidesStore";
 import { acceptsShortcut, parsePosition } from "./navigation";
 import { readNotesVisibility, saveNotesVisibility, SpeakerNotes } from "./notes";
+import { startPreloading } from "./preload";
 
 setSlidesState({ component: Deck, templates: __legendSlidesTemplates, transitions: __legendSlidesTransitions, status: "ready" });
 function readPosition() {
@@ -47,6 +49,13 @@ function App() {
       setPositionReady(true);
     }
   }, [slides.length, positionReady]);
+  useEffect(() => {
+    if (!positionReady) return;
+    const preloader = startPreloading(preloadAssets, getSlidesState().currentSlide);
+    (window as any).__legendSlides.preload = preloader.status;
+    const unsubscribe = slidesState$.currentSlide.onChange(({ value }) => preloader.prioritize(value));
+    return () => { unsubscribe(); preloader.dispose(); };
+  }, [positionReady]);
   useEffect(() => {
     const navigation = (event: KeyboardEvent) => {
       if (!acceptsShortcut(event)) return;

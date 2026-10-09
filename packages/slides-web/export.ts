@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { build, type Plugin } from "esbuild";
 import { transformSync } from "@babel/core";
 import { compileDeck } from "../presentation/src/compiler/compileDeck";
+import { createPreloadManifest } from "./preloadManifest";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "../..");
@@ -38,6 +39,7 @@ async function buildWebsite(deck: string, output: string) {
       if (await fs.stat(media).catch(() => null)) await copyAsset(media);
     }
   }
+  const preload = await createPreloadManifest(deckPath, result.dependencies.map(file => file.replace(/^.*deck-asset:/, "")), [...copied]);
   const deckCode = result.code.replaceAll(pathToFileURL(deckRoot).href + "/", "./assets/");
   const aliases: Record<string, string> = {
     "react-native": path.join(src, "native.tsx"),
@@ -58,7 +60,8 @@ async function buildWebsite(deck: string, output: string) {
     name: "legend-slides-browser",
     setup(api) {
       api.onResolve({ filter: /^virtual:deck$/ }, () => ({ path: "deck", namespace: "compiled" }));
-      api.onLoad({ filter: /.*/, namespace: "compiled" }, () => ({ contents: deckCode, loader: "js", resolveDir: src }));
+      api.onResolve({ filter: /^virtual:preload$/ }, () => ({ path: "preload", namespace: "compiled" }));
+      api.onLoad({ filter: /.*/, namespace: "compiled" }, args => ({ contents: args.path === "preload" ? `export default ${JSON.stringify(preload)};` : deckCode, loader: "js", resolveDir: src }));
       api.onResolve({ filter: /.*/ }, args => {
         if (aliases[args.path]) return { path: aliases[args.path] };
         if (args.path.startsWith(".")) {
@@ -92,7 +95,7 @@ async function buildWebsite(deck: string, output: string) {
   await fs.writeFile(path.join(out, "styles.css"), css);
   await fs.copyFile(path.join(src, "player.css"), path.join(out, "player.css"));
   await fs.writeFile(path.join(out, "export.json"), JSON.stringify({ format: "legend-slides-web", version: 1,
-    source: path.basename(deckPath), assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), warnings: result.warnings }, null, 2));
+    source: path.basename(deckPath), assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, warnings: result.warnings }, null, 2));
   return out;
 }
 

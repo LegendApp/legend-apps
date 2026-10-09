@@ -32,6 +32,10 @@ Web adapters handle DOM text measurement, scaled layouts, DOM captures through `
 
 Recorded demos retain their original frame rates and codec requirements. Chromium on macOS played the ReactCon `.mov` and `.mp4` files; other browsers may need media transcoding. This exporter does not transcode recordings.
 
+After the player opens, a background queue preloads exported assets in slide order. The exporter follows local component imports and includes companion recordings; assets whose use cannot be determined statically load last. Shared component modules are grouped conservatively, so some media may load earlier than its exact reveal step. Jumping to a slide prioritizes its media and subsequent slides, including assets shared with earlier slides.
+
+The queue downloads one file at a time with low fetch priority and yields between files using the browser's background task scheduler (or a short timer fallback). It never waits before showing a slide or mounts hidden slide/video players. Completed images and videos are reused through blob URLs; an already mounted video keeps its source and playback position. Failed preloads fall back to normal loading when needed. Compressed media stays available for the page's lifetime, using approximately the exported media's file size in additional storage; decoding and rendering still happen through the existing libraries. Fetch priority is a browser hint, so network contention and media decoding can still affect transitions.
+
 ## Validation
 
 ```sh
@@ -43,5 +47,7 @@ bun run typecheck
 Install `tests/browser-audit.js` in the exported page's browser console, then await `runSlidesAudit({ start: 0, count: 8 })`. Repeat in batches through all reveal states. Keep the tab visible or recording: an offscreen browser can throttle animation frames even when `document.visibilityState` says `visible`. Results accumulate in `window.__slidesAudit`. The audit is test instrumentation and is not bundled into the site.
 
 For sidebar checks, export `tests/fixtures/notes.mdx`, clear the `legend-slides:notes-visible` local storage key, and reload. Install `tests/notes-browser.js` in that page's console and await `testNotesSidebar()`. Also reload with the sidebar hidden and shown to verify persistence, and navigate a long set of numbered notes to verify scrolling.
+
+Inspect `window.__legendSlides.preload` for preload progress and failures. Once complete, open image/video slides and verify their media uses blob URLs without further asset requests. Test navigation while the queue is active as well as after it finishes.
 
 See [ReactCon validation](REACTCON_VALIDATION.md) for measured results and limitations. The export has **not passed the requested universal 60 fps target**.

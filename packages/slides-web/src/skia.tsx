@@ -2,7 +2,10 @@ import { toBlob } from "html-to-image";
 import { forwardRef } from "react";
 import { View } from "react-native";
 import { Skia, Canvas as SkiaCanvas, Path as SkiaPath, Text as SkiaText, type CanvasRef, type CanvasProps, type SkFont, type SkPath } from "@shopify/react-native-skia/lib/module";
+import { preloadedSource } from "./preload";
 export * from "@shopify/react-native-skia/lib/module";
+const dataFromURI = Skia.Data.fromURI.bind(Skia.Data);
+Skia.Data.fromURI = uri => dataFromURI(preloadedSource(uri));
 
 export const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ style, ...props }, ref) {
   return <View style={style}><SkiaCanvas {...props} ref={ref} style={{ width: "100%", height: "100%" }} /></View>;

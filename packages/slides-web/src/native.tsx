@@ -1,12 +1,16 @@
-import React, { forwardRef, useRef, useLayoutEffect } from "react";
+import React, { forwardRef, useMemo, useRef, useLayoutEffect } from "react";
 import * as Native from "react-native-web";
 export * from "react-native-web";
 import { useResolveClassNames } from "uniwind";
+import { preloadedSource } from "./preload";
 export const View = forwardRef<any, any>(function View({ className = "", style, ...props }, ref) {
   return <Native.View {...props} style={[useResolveClassNames(className), style]} ref={ref} />;
 });
-export const Image = forwardRef<any, any>(function Image({ className = "", style, ...props }, ref) {
-  return <Native.Image {...props} style={[useResolveClassNames(className), style]} ref={ref} />;
+export const Image = forwardRef<any, any>(function Image({ className = "", style, source, ...props }, ref) {
+  const uri = source?.uri;
+  const mediaUri = useMemo(() => uri ? preloadedSource(uri) : uri, [uri]);
+  const imageSource = uri ? { ...source, uri: mediaUri } : source;
+  return <Native.Image {...props} source={imageSource} style={[useResolveClassNames(className), style]} ref={ref} />;
 });
 export const Text = forwardRef<any, any>(function Text({ onTextLayout, className = "", style, ...props }, forwarded) {
   const ref = useRef<HTMLElement>(null);
