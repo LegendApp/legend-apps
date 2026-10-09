@@ -13,6 +13,8 @@ The output includes JavaScript, CSS, CanvasKit, a licensed font, images, recordi
 
 Use the arrows, Space, or Page Up/Down to navigate reveal steps. Home/End jump to the beginning/end; N toggles speaker notes; F toggles fullscreen. The slide picker jumps directly to a slide. Links such as `#18/4` restore a slide and reveal step, including on reload.
 
+Speaker notes open in a sidebar by default on slides that have notes. Use the Notes button, N, or the sidebar's close button to hide or show it. Visibility is saved in local storage and survives reloads; slides without notes hide both the sidebar and its toggle without changing that preference. Numbered notes follow the active reveal step and scroll into view in either navigation direction. Inactive steps start faded, while unnumbered notes remain fully visible.
+
 ## Browser behavior
 
 The existing MDX compiler, slide renderer, shared elements, and playback controller are reused. React Native Web, Reanimated's web backend, Uniwind, and React Native Skia's CanvasKit backend provide browser rendering. There is no custom graphics engine, rendering worker, or product frame loop. The web export uses the libraries' JavaScript scheduling, as authorized for this browser target; native animation policy and behavior remain unchanged.
@@ -39,5 +41,7 @@ bun run typecheck
 ```
 
 Install `tests/browser-audit.js` in the exported page's browser console, then await `runSlidesAudit({ start: 0, count: 8 })`. Repeat in batches through all reveal states. Keep the tab visible or recording: an offscreen browser can throttle animation frames even when `document.visibilityState` says `visible`. Results accumulate in `window.__slidesAudit`. The audit is test instrumentation and is not bundled into the site.
+
+For sidebar checks, export `tests/fixtures/notes.mdx`, clear the `legend-slides:notes-visible` local storage key, and reload. Install `tests/notes-browser.js` in that page's console and await `testNotesSidebar()`. Also reload with the sidebar hidden and shown to verify persistence, and navigate a long set of numbered notes to verify scrolling.
 
 See [ReactCon validation](REACTCON_VALIDATION.md) for measured results and limitations. The export has **not passed the requested universal 60 fps target**.

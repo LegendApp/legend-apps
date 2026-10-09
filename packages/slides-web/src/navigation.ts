@@ -7,7 +7,7 @@ export function parsePosition(hash: string, steps: number[]) {
 }
 
 export function acceptsShortcut(event: KeyboardEvent) {
-  const target = event.target as HTMLElement | null;
+  const target = event.target instanceof Element ? event.target : null;
   return !event.altKey && !event.ctrlKey && !event.metaKey && !event.repeat &&
     !target?.closest("input, textarea, select, button, [contenteditable=true]");
 }

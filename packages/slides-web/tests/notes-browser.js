@@ -1,0 +1,44 @@
+// Export tests/fixtures/notes.mdx and run this in its page after clearing
+// localStorage["legend-slides:notes-visible"] and reloading.
+window.testNotesSidebar = async () => {
+  const player = window.__legendSlides;
+  const wait = () => new Promise(resolve => setTimeout(resolve, 100));
+  const check = (condition, message) => { if (!condition) throw new Error(message); };
+  const sidebar = () => document.querySelector("#speaker-notes");
+  const toggle = () => document.querySelector('[aria-controls="speaker-notes"]');
+  const active = () => document.querySelector('[aria-current="step"]');
+  const key = "legend-slides:notes-visible";
+  player.goTo(0, 0);
+  await wait();
+  check(sidebar(), "Notes should be open by default");
+  check(active()?.textContent.includes("First step"), "First step should be active");
+  player.next();
+  await wait();
+  check(active()?.textContent.includes("Second step"), "Forward navigation should follow notes");
+  player.previous();
+  await wait();
+  check(active()?.textContent.includes("First step"), "Reverse navigation should follow notes");
+  player.goTo(1);
+  await wait();
+  check(!sidebar() && !toggle(), "Slides without notes should have no sidebar or toggle");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "n" }));
+  await wait();
+  check(localStorage.getItem(key) !== "false", "An empty slide must preserve visibility preference");
+  player.goTo(0, 2);
+  await wait();
+  check(sidebar() && active()?.textContent.includes("Third step"), "Notes should return on a slide with notes");
+  document.querySelector('[aria-label="Hide speaker notes"]').click();
+  await wait();
+  check(!sidebar() && localStorage.getItem(key) === "false", "Hiding should persist");
+  player.goTo(1);
+  await wait();
+  player.goTo(2);
+  await wait();
+  check(!sidebar(), "Navigation must not override a hidden preference");
+  toggle().click();
+  await wait();
+  check(sidebar() && localStorage.getItem(key) === "true", "Showing should persist");
+  check(document.querySelector(".note-section").style.opacity === "1", "Plain notes should stay fully visible");
+  check(!player.errors.length && !player.getState().runtimeErrors.length, "The fixture should have no runtime errors");
+  return "Speaker notes navigation and visibility checks passed";
+};
