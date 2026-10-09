@@ -1,4 +1,4 @@
-// @ts-nocheck Guard every shipped host, deck, and example, including local web assets.
+// @ts-nocheck Guard host, optional packs, decks and examples, including local web assets.
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -13,8 +13,9 @@ function sources(directory) {
     return entry.isDirectory() ? sources(file) : /\.[jt]sx?$/.test(file) ? [file] : [];
   });
 }
-const files = [...sources(path.join(root, "apps/slides")), ...sources(path.join(root, "packages/presentation/src"))];
-test("Slides, bundled decks, and examples never use React Native Animated or JS animation schedulers", () => {
+const files = [...sources(path.join(root, "apps/slides")), ...sources(path.join(root, "packages/presentation/src")),
+  ...sources(path.join(root, "packages/slides-effects/packs"))];
+test("Slides, optional packs, decks and examples never use React Native Animated or JS animation schedulers", () => {
   for (const file of files) {
     const source = readFileSync(file, "utf8");
     expect(source, file).not.toMatch(/\bdisableWorklets\b|\buseFrame\s*\(/);

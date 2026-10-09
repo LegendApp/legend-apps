@@ -17,6 +17,8 @@ entrypoints. Relative helpers stay inside that pack. Decks cannot use a pack
 reference to import arbitrary files outside their own directory. Selected pack
 manifests and source files are compiler dependencies, and the native app watches
 those pack directories. CSS scanning includes selected pack roots.
+Cross-pack imports must declare the exact installed dependency version in the
+importing manifest. A missing declaration or incompatible version fails compilation.
 
 In a source checkout, the compiler finds this `packs/` directory. An installed app
 looks in `~/Library/Application Support/Legend Slides/effects/`. A caller can
@@ -41,6 +43,10 @@ optional `AnimatedAtmosphere` chooser. Presenting tools include measured attenti
 callouts, code walkthrough, comparison, detail, layers, content replacement and a
 controlled freeze clock. Hidden children must manage their own playback eligibility;
 opacity alone does not stop their work.
+Charts, media, Lottie, destruction, particle programs and branching ribbons are
+also independently addressable. See each family's README for content and geometry
+contracts. Refraction and distortion are shader entrypoints for the host `Effect`;
+the gallery's region defaults and escalating timeline stay with its example.
 
 Tests run through `bun run test:slides`. The lifecycle suites exercise preparation,
 static previews, step changes, pause, outgoing frames and re-entry, including

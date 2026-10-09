@@ -3,6 +3,10 @@
 `GlassPanels` draws supplied rounded rectangles into one surface, using a bounded
 shader cache. Geometry, size, breathing, edge motion, eligibility and RGB tint are
 caller inputs. `BranchMaterial` exports the lit ribbon shader fragment.
+`Distortion` supplies prismatic tear, soft ripple and timing inputs for host effects.
+`Refraction` supplies `createRefractionShader`, which takes normalized region uniforms
+through the host `Effect`, optional radii and an optional explicit ramp. Without a
+ramp it uses steady material strength; gallery region/timeline defaults stay local.
 
 `GlassStrike` draws glass, the two impact strokes, falling shards, chips and sparks,
 and optionally a success check. Supply canvas bounds/style, `centerX`, panel height,

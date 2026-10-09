@@ -40,3 +40,22 @@ test("media, charts and Lottie entrypoints compile independently without demo as
     }
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("particle and material entries bundle independently through the deck transforms", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-effect-programs-"));
+  try {
+    for (const [name, entry] of [["createGlowField", "particles/GlowField"], ["createWindowStorm", "particles/WindowStorm"],
+      ["createConstellation", "particles/Constellation"], ["createInterfaceReveal", "particles/InterfaceReveal"],
+      ["TrajectoryEmitter", "particles/TrajectoryEmitter"], ["GlassStrike", "materials/GlassStrike"],
+      ["ImageShatter", "materials/ImageShatter"], ["Flames", "materials/Fire"],
+      ["prismaticTear", "materials/Distortion"], ["createRefractionShader", "materials/Refraction"]]) {
+      const deck = path.join(root, "deck.mdx");
+      fs.writeFileSync(deck, `export { ${name} } from "slides:${entry}"\n\n# Standalone effect`);
+      const result = await compileDeck(deck);
+      expect(result.success, JSON.stringify(result.errors)).toBe(true);
+      if (!result.success) throw Error(result.errors.join("\n"));
+      expect(result.dependencies.some(file => /legend-talks|rnconnection-assets|AnimatedAtmosphere/.test(file))).toBe(false);
+      expect(result.dependencies.filter(file => file.endsWith("pack.json")).length).toBe(1);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
