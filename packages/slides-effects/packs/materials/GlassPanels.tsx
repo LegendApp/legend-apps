@@ -50,10 +50,12 @@ float4 glassPanel(float2 p,float2 size,float radius,float clock) {
   return float4(min(color,float3(alpha)),alpha);
 }`;
 
-export function createGlassPanelsShader(panels: readonly GlassPanelShape[]) {
+export function createGlassPanelsShader(panels: readonly GlassPanelShape[], tint: readonly [number, number, number] = [1,1,1]) {
+  if (tint.some(n => !Number.isFinite(n) || n < 0 || n > 1)) throw new Error("Glass tint components must be between 0 and 1");
   const number = (value: number) => value.toFixed(3);
   return `uniform float time;\nuniform float pulse;\nuniform float edgeMotion;\n${glassPanelMaterial}\nhalf4 main(float2 p) { float4 result=float4(0);\n${panels.map((panel, index) => `{
     float4 layer=glassPanel(p-float2(${number(panel.x + panel.width / 2)},${number(panel.y + panel.height / 2)}),float2(${number(panel.width / 2)},${number(panel.height / 2)}),${number(panel.radius ?? 24)},time+${number(index * 1.7)});
+    layer.rgb*=float3(${tint.map(number).join(",")});
     result=layer+result*(1.0-layer.a);
   }`).join("\n")}\nreturn half4(result); }`;
 }
@@ -71,7 +73,8 @@ function compilePanels(source: string) {
 }
 
 /** Pass stable panel geometry. Pulsing and shimmer use the presentation GPU clock. */
-export function GlassPanels({ panels, width, height, pulse = 0.003, edgeMotion = 1.2, active = true }: {
+export function GlassPanels({ panels, width, height, pulse = 0.003, edgeMotion = 1.2, active = true, tint }: {
+  tint?: readonly [number, number, number];
   active?: boolean;
   panels: readonly GlassPanelShape[];
   width: number;
@@ -81,7 +84,7 @@ export function GlassPanels({ panels, width, height, pulse = 0.003, edgeMotion =
   /** Edge displacement in logical slide pixels; zero keeps the contour rigid. */
   edgeMotion?: number;
 }) {
-  const effect = useMemo(() => compilePanels(createGlassPanelsShader(panels)), [panels]);
+  const effect = useMemo(() => compilePanels(createGlassPanelsShader(panels, tint)), [panels, tint]);
   const uniforms = useAnimatedShaderUniforms({ pulse, edgeMotion }, 8, { active });
   return <PresentationCanvas width={width} height={height}>
     <Fill><Shader source={effect} uniforms={uniforms} /></Fill>
