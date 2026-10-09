@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "../deckBuildPolicy";
 import { getSlidesState, setSlidesState } from "../slidesStore";
+import { deckWatchDirectories } from "../deckWatchDirectories";
 const require = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
 const { transformSync } = require("esbuild");
 
@@ -15,6 +16,7 @@ test("failed replacement opens retain the visible deck watcher until a successfu
     "./deckReloadQueue": { createDeckReloadQueue: reload => ({ changed: reload, dispose() {} }) },
     "./compilerCommand": { compilerCommand: async () => ({ target: { type: "executable", path: "/bun" }, prefix: [] }) },
     "./transitionLibrary": { transitionDirectoryPath: () => "/transitions" },
+    "./deckWatchDirectories": { deckWatchDirectories },
     "./slidesPreferences": { rememberDeckPath() {} },
     "./slidesStore": { getSlidesState, setSlidesState },
     "./deckBuildPolicy": { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate },
@@ -22,6 +24,7 @@ test("failed replacement opens retain the visible deck watcher until a successfu
       commands.push(args[0]);
       return { exit: { type: "exited", code: 0 }, stdout: new TextEncoder().encode(JSON.stringify(fail ? { success: false, errors: ["broken"], warnings: [] } : {
         success: true, code: "module.exports.default = function Deck() {};", uniwindCode: "{}", warnings: [],
+        dependencies: ["/effects/media/pack.json", "/effects/media/AppCarousel.tsx"],
       })), stderr: new Uint8Array() };
     } },
     "@legendapp/spark/files": { watch: async (path, changed) => {
@@ -37,11 +40,13 @@ test("failed replacement opens retain the visible deck watcher until a successfu
   const { loadDeck } = module.exports;
   await loadDeck("/a/deck.mdx");
   setSlidesState({ slides: Array.from({ length: 5 }, () => ({ metadata: { steps: 3 }, notes: "" })), currentSlide: 4, currentStep: 2 });
-  const original = watchers[0];
+  const original = watchers.findLast(watcher => !watcher.removed && watcher.paths[0] === "/a");
+  const originalPack = watchers.findLast(watcher => !watcher.removed && watcher.paths[0] === "/effects/media");
   fail = true;
   await loadDeck("/b/deck.mdx");
   expect(getSlidesState()).toMatchObject({ deckPath: "/a/deck.mdx", currentSlide: 4, currentStep: 2 });
   expect(original.removed).toBe(false);
+  expect(originalPack.removed).toBe(false);
   await original.changed();
   expect(commands.at(-1)).toBe("/a/deck.mdx");
   fail = false;
@@ -50,7 +55,8 @@ test("failed replacement opens retain the visible deck watcher until a successfu
   await loadDeck("/b/deck.mdx");
   await Promise.resolve();
   expect(original.removed).toBe(true);
-  expect(watchers.at(-2).paths[0]).toBe("/b");
+  expect(originalPack.removed).toBe(true);
+  expect(watchers.filter(watcher => !watcher.removed).map(watcher => watcher.paths[0])).toEqual(["/b", "/effects/media", "/transitions"]);
   expect(getSlidesState()).toMatchObject({ deckPath: "/b/deck.mdx", currentSlide: 0, currentStep: 0 });
   expect(Object.keys(getSlidesState().stepEpochs)).toEqual(["0"]);
 });
