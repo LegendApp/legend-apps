@@ -7,7 +7,8 @@ import { DeckRenderer, SlideCanvas } from "../../../apps/slides/src/DeckRenderer
 import { getSlidesState, setSlidesState, slidesState$, nextSlide, previousSlide } from "../../../apps/slides/src/slidesStore";
 import { acceptsShortcut, parsePosition } from "./navigation";
 import { readNotesVisibility, saveNotesVisibility, SpeakerNotes } from "./notes";
-import { startPreloading } from "./preload";
+import { startPreloading, type AssetPreloader } from "./preload";
+import { PreloadStatus } from "./preloadStatus";
 
 setSlidesState({ component: Deck, templates: __legendSlidesTemplates, transitions: __legendSlidesTransitions, status: "ready" });
 function readPosition() {
@@ -43,6 +44,7 @@ function App() {
     saveNotesVisibility(next);
   }, [notesVisible]);
   const [positionReady, setPositionReady] = useState(false);
+  const [preloader, setPreloader] = useState<AssetPreloader>();
   useEffect(() => {
     if (slides.length && !positionReady) {
       readPosition();
@@ -52,7 +54,8 @@ function App() {
   useEffect(() => {
     if (!positionReady) return;
     const preloader = startPreloading(preloadAssets, getSlidesState().currentSlide);
-    (window as any).__legendSlides.preload = preloader.status;
+    Object.defineProperty((window as any).__legendSlides, "preload", { configurable: true, get: () => preloader.status });
+    setPreloader(preloader);
     const unsubscribe = slidesState$.currentSlide.onChange(({ value }) => preloader.prioritize(value));
     return () => { unsubscribe(); preloader.dispose(); };
   }, [positionReady]);
@@ -75,12 +78,13 @@ function App() {
   return <main><div className="presentation"><PresentationStage />
     {notesVisible && hasNotes && <SpeakerNotes key={currentSlide} notes={notes} currentStep={currentStep} onHide={toggleNotes} />}
     </div>
-    <nav aria-label="Presentation controls"><button onClick={previousSlide} aria-label="Previous step">←</button>
+    <nav aria-label="Presentation controls"><div className="navigation-controls"><button onClick={previousSlide} aria-label="Previous step">←</button>
       <select aria-label="Slide" value={currentSlide} onChange={event => goTo(Number(event.target.value))}>{slides.map((slide, index) => <option key={index} value={index}>{index + 1}. {String(slide.metadata.title ?? "Untitled")}</option>)}</select>
       <span>{currentStep + 1} / {slides[currentSlide]?.metadata.steps ?? 1}</span>
       <button onClick={nextSlide} aria-label="Next step">→</button>
       {hasNotes && <button aria-controls="speaker-notes" aria-expanded={notesVisible} onClick={toggleNotes}>Notes</button>}
-      <button onClick={toggleFullscreen}>Fullscreen</button></nav>
+      <button onClick={toggleFullscreen}>Fullscreen</button></div>
+      {preloader && <PreloadStatus preloader={preloader} />}</nav>
     {runtimeErrors.length > 0 && <output role="alert">{runtimeErrors.join("\n")}</output>}
   </main>;
 }

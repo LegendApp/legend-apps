@@ -88,3 +88,31 @@ test("disposal cancels an in-flight download and stops the queue", async () => {
     expect(preloader.status.failed).toEqual([]);
   } finally { preloader.dispose(); server.stop(true); globalThis.document = originalDocument; }
 });
+
+test("versioned assets use cache-first requests and publish progress without reusing a changed content URL", async () => {
+  const versions = [];
+  const cacheModes = [];
+  const server = Bun.serve({ port: 0, fetch(request) {
+    const version = new URL(request.url).searchParams.get("v");
+    versions.push(version);
+    return new Response(version);
+  } });
+  const originalDocument = globalThis.document;
+  const originalFetch = globalThis.fetch;
+  globalThis.document = { baseURI: server.url.href };
+  globalThis.fetch = (source, options) => { cacheModes.push(options?.cache); return originalFetch(source, options); };
+  const first = new AssetPreloader([{ source: "/poster.png", slide: 0, version: "first" }]);
+  const next = new AssetPreloader([{ source: "/poster.png", slide: 0, version: "changed" }]);
+  const progress = [];
+  const unsubscribe = first.status$.onChange(({ value }) => progress.push({ loaded: value.loaded, complete: value.complete }));
+  try {
+    await first.run();
+    await next.run();
+    expect(versions).toEqual(["first", "changed"]);
+    expect(cacheModes).toEqual(["force-cache", "force-cache"]);
+    expect(progress.some(value => value.loaded === 1)).toBe(true);
+    expect(progress.at(-1)).toEqual({ loaded: 1, complete: true });
+    expect(await (await originalFetch(first.source("/poster.png"))).text()).toBe("first");
+    expect(await (await originalFetch(next.source("/poster.png"))).text()).toBe("changed");
+  } finally { unsubscribe(); first.dispose(); next.dispose(); server.stop(true); globalThis.fetch = originalFetch; globalThis.document = originalDocument; }
+});

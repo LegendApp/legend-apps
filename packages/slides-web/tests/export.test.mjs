@@ -25,6 +25,12 @@ test("exports real assets and preserves a completed export when recompilation fa
     const out = path.join(dir, "website");
     await exportWebsite(deck, out);
     expect(await fs.readFile(path.join(out, "assets/..poster.png"))).toEqual(image);
+    const initialManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
+    expect(initialManifest.preload[0].version).toMatch(/^[a-f0-9]{64}$/);
+    await fs.writeFile(path.join(source, "..poster.png"), Buffer.concat([image, Buffer.from("changed")]));
+    await exportWebsite(deck, out);
+    const changedManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
+    expect(changedManifest.preload[0].version).not.toBe(initialManifest.preload[0].version);
     const before = await fs.readFile(path.join(out, "player.js"));
     expect(before.toString()).toContain("./assets/..poster.png");
     expect(before.toString()).not.toContain("./assets/poster.png");

@@ -3,7 +3,7 @@ import path from "node:path";
 import { parseSync } from "@babel/core";
 import { getDeckSourceStructure } from "../presentation/src/speakerNotesSource";
 
-export type PreloadAsset = { source: string; slide: number; slides?: number[] };
+export type PreloadAsset = { source: string; slide: number; slides?: number[]; version?: string };
 
 export async function createPreloadManifest(deck: string, dependencies: string[], assets: string[]): Promise<PreloadAsset[]> {
   const source = await fs.readFile(deck, "utf8");

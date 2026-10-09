@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { build, type Plugin } from "esbuild";
 import { transformSync } from "@babel/core";
 import { compileDeck } from "../presentation/src/compiler/compileDeck";
@@ -40,6 +41,9 @@ async function buildWebsite(deck: string, output: string) {
     }
   }
   const preload = await createPreloadManifest(deckPath, result.dependencies.map(file => file.replace(/^.*deck-asset:/, "")), [...copied]);
+  for (const asset of preload) {
+    asset.version = createHash("sha256").update(await fs.readFile(path.join(out, decodeURIComponent(asset.source)))).digest("hex");
+  }
   const deckCode = result.code.replaceAll(pathToFileURL(deckRoot).href + "/", "./assets/");
   const aliases: Record<string, string> = {
     "react-native": path.join(src, "native.tsx"),

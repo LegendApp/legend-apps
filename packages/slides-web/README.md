@@ -36,6 +36,8 @@ After the player opens, a background queue preloads exported assets in slide ord
 
 The queue downloads one file at a time with low fetch priority and yields between files using the browser's background task scheduler (or a short timer fallback). It never waits before showing a slide or mounts hidden slide/video players. Completed images and videos are reused through blob URLs; an already mounted video keeps its source and playback position. Failed preloads fall back to normal loading when needed. Compressed media stays available for the page's lifetime, using approximately the exported media's file size in additional storage; decoding and rendering still happen through the existing libraries. Fetch priority is a browser hint, so network contention and media decoding can still affect transitions.
 
+The bottom-right status shows preparation progress and becomes **Media ready** when all assets are available. Each exported asset has a content hash, and preload requests use that version in the URL with the browser's [cache-first fetch mode](https://developer.mozilla.org/en-US/docs/Web/API/Request/cache). Subsequent visits can restore unchanged downloads from the HTTP cache without transferring them again; changed assets get a new URL on re-export. This works over HTTP, including the Tailscale preview address, without a service worker. Browsers may evict cached files, and private browsing or a host's `Cache-Control: no-store` can prevent persistence. Hosts should allow asset caching; the player and HTML should remain revalidatable.
+
 ## Validation
 
 ```sh
