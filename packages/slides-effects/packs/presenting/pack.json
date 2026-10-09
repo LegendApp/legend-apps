@@ -1,0 +1,16 @@
+{
+  "id": "presenting",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "Attention": "./Attention.tsx",
+    "Composition": "./Composition.tsx",
+    "FreezeFrame": "./FreezeFrame.tsx",
+    "CodeWalkthrough": "./CodeWalkthrough.tsx",
+    "Motion": "./Motion.ts"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia"
+  ]
+}

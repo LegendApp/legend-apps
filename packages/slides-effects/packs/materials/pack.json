@@ -1,0 +1,13 @@
+{
+  "id": "materials",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "GlassPanels": "./GlassPanels.tsx",
+    "BranchMaterial": "./BranchMaterial.ts"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia"
+  ]
+}

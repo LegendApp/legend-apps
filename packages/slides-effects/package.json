@@ -1,0 +1,17 @@
+{
+  "name": "@legend-apps/slides-effects",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@legend-apps/presentation": "workspace:*",
+    "@shopify/react-native-skia": "^2.11.1",
+    "react": "catalog:",
+    "react-native": "catalog:",
+    "react-native-reanimated": "4.3.4",
+    "typegpu": "^0.12.4",
+    "lottie-react-native": "7.3.8"
+  },
+  "devDependencies": {
+    "@legendapp/state": "catalog:"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "backgrounds",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "AmbientAurora": "./AmbientAurora.tsx",
+    "AnimatedAtmosphere": "./AnimatedAtmosphere.tsx",
+    "TypeGPUGlassBackground": "./TypeGPUGlassBackground.tsx",
+    "Droplets": "./Droplets.tsx",
+    "GlassAtmosphere": "./GlassAtmosphere.tsx",
+    "Fluid": "./Fluid.tsx",
+    "Smoke": "./Smoke.tsx",
+    "Wireframe": "./Wireframe.tsx",
+    "DropletMaterial": "./DropletMaterial.ts",
+    "DropletGeometry": "./DropletGeometry.ts",
+    "DropletField": "./DropletField.ts"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia",
+    "webgpu"
+  ]
+}

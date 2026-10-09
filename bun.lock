@@ -664,6 +664,22 @@
         "react-native": "catalog:",
       },
     },
+    "packages/slides-effects": {
+      "name": "@legend-apps/slides-effects",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-apps/presentation": "workspace:*",
+        "@shopify/react-native-skia": "^2.11.1",
+        "lottie-react-native": "7.3.8",
+        "react": "catalog:",
+        "react-native": "catalog:",
+        "react-native-reanimated": "4.3.4",
+        "typegpu": "^0.12.4",
+      },
+      "devDependencies": {
+        "@legendapp/state": "catalog:",
+      },
+    },
     "packages/slides-web": {
       "name": "@legend-apps/slides-web",
       "version": "0.0.0",
@@ -1335,6 +1351,8 @@
     "@legend-apps/sf-symbol": ["@legend-apps/sf-symbol@workspace:packages/sf-symbol"],
 
     "@legend-apps/sidebar": ["@legend-apps/sidebar@workspace:packages/sidebar"],
+
+    "@legend-apps/slides-effects": ["@legend-apps/slides-effects@workspace:packages/slides-effects"],
 
     "@legend-apps/slides-web": ["@legend-apps/slides-web@workspace:packages/slides-web"],
 

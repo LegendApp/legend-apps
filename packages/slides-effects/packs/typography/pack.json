@@ -1,0 +1,12 @@
+{
+  "id": "typography",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "AnimatedTitle": "./AnimatedTitle.tsx",
+    "TitleEntrances": "./TitleEntrances.ts"
+  },
+  "capabilities": [
+    "reanimated"
+  ]
+}
