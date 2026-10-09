@@ -4848,7 +4848,7 @@ index 231d841..a244fa2 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 9a9987e0..b8b6cea1 100644
+index 9a9987e0..81eb858a 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -4857,16 +4857,17 @@ index 9a9987e0..b8b6cea1 100644
  #import "ContextMenuUtils.h"
  #import "ENRMAutoLinkDetector.h"
  #import "ENRMBlockEditCoordinator.h"
-@@ -17,6 +18,8 @@
+@@ -17,6 +18,9 @@
  #import "ENRMInputListMarkerDrawer.h"
  #import "ENRMInputParser.h"
  #import "ENRMInputTextView.h"
 +#import "../utils/ENRMInputMeasurement.h"
++#import "../utils/ENRMInputScrolling.h"
 +#import "ENRMInputMeasurementStyle.h"
  #import "ENRMInputTypingAttributesController.h"
  #import "ENRMLinkCoordinator.h"
  #import "ENRMLinkRegexConfig.h"
-@@ -34,7 +37,6 @@
+@@ -34,7 +38,6 @@
  #if TARGET_OS_OSX
  #import <React/RCTBackedTextInputDelegate.h>
  #endif
@@ -4874,7 +4875,7 @@ index 9a9987e0..b8b6cea1 100644
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -59,6 +61,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
+@@ -59,6 +62,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -4888,7 +4889,7 @@ index 9a9987e0..b8b6cea1 100644
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
  @end
-@@ -97,9 +106,13 @@ @implementation EnrichedMarkdownTextInput {
+@@ -97,9 +107,13 @@ @implementation EnrichedMarkdownTextInput {
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
@@ -4902,7 +4903,7 @@ index 9a9987e0..b8b6cea1 100644
    NSArray<NSString *> *_contextMenuItemTexts;
    NSArray<NSString *> *_contextMenuItemIcons;
    ENRMAutoLinkDetector *_autoLinkDetector;
-@@ -242,6 +255,9 @@ - (void)setupTextView
+@@ -242,6 +256,9 @@ - (void)setupTextView
  #else
    _textView.selectable = YES;
  
@@ -4912,12 +4913,12 @@ index 9a9987e0..b8b6cea1 100644
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -256,7 +272,8 @@ - (void)setupTextView
+@@ -256,7 +273,7 @@ - (void)setupTextView
    _textView.textContainer.widthTracksTextView = YES;
  
-   _scrollView.documentView = _textView;
+-  _scrollView.documentView = _textView;
 -  self.contentView = _scrollView;
-+  [_scrollContainerView addSubview:_scrollView];
++  ENRMConfigureInputScrolling(_scrollContainerView, _scrollView, _textView, NO);
 +  self.contentView = _scrollContainerView;
  #endif
  
@@ -5064,7 +5065,18 @@ index 9a9987e0..b8b6cea1 100644
  }
  
  #pragma mark - Props
-@@ -504,28 +596,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -382,7 +474,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
+     _textView.editable = newViewProps.editable;
+   }
+ 
+-#if !TARGET_OS_OSX
++#if TARGET_OS_OSX
++  ENRMConfigureInputScrolling(_scrollContainerView, _scrollView, _textView, newViewProps.scrollEnabled);
++#else
+   if (newViewProps.scrollEnabled != oldViewProps.scrollEnabled) {
+     _textView.scrollEnabled = newViewProps.scrollEnabled;
+   }
+@@ -504,28 +598,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      writingDirectionChanged = YES;
    }
  
@@ -5114,7 +5126,7 @@ index 9a9987e0..b8b6cea1 100644
  }
  
  #pragma mark - Relayout
-@@ -533,7 +641,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -533,7 +643,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -5123,7 +5135,7 @@ index 9a9987e0..b8b6cea1 100644
  }
  
  - (void)_performRelayout
-@@ -542,22 +650,36 @@ - (void)_performRelayout
+@@ -542,22 +652,36 @@ - (void)_performRelayout
      return;
    }
  
@@ -5174,7 +5186,7 @@ index 9a9987e0..b8b6cea1 100644
    }
  }
  
-@@ -569,6 +691,9 @@ - (void)didMoveToWindow
+@@ -569,6 +693,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5184,7 +5196,7 @@ index 9a9987e0..b8b6cea1 100644
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -662,6 +787,7 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -662,6 +789,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5192,7 +5204,7 @@ index 9a9987e0..b8b6cea1 100644
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -673,9 +799,12 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -673,9 +801,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5207,7 +5219,7 @@ index 9a9987e0..b8b6cea1 100644
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -743,6 +872,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
+@@ -743,6 +874,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5228,7 +5240,7 @@ index 9a9987e0..b8b6cea1 100644
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +930,43 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -787,12 +932,43 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -5276,7 +5288,7 @@ index 9a9987e0..b8b6cea1 100644
  }
  
  - (void)applyFormatting
-@@ -829,6 +1003,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -829,6 +1005,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
@@ -5284,7 +5296,7 @@ index 9a9987e0..b8b6cea1 100644
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -837,6 +1012,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -837,6 +1014,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5294,7 +5306,7 @@ index 9a9987e0..b8b6cea1 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -879,6 +1057,23 @@ - (void)setValue:(NSString *)markdown
+@@ -879,6 +1059,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -5318,7 +5330,7 @@ index 9a9987e0..b8b6cea1 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -889,6 +1084,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -889,6 +1086,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -5440,7 +5452,7 @@ index 9a9987e0..b8b6cea1 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1377,9 +1687,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1377,9 +1689,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5473,7 +5485,7 @@ index 9a9987e0..b8b6cea1 100644
  }
  
  - (void)copyToClipboard
-@@ -1413,16 +1745,53 @@ - (CGRect)computeCaretRect
+@@ -1413,16 +1747,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5532,7 +5544,7 @@ index 9a9987e0..b8b6cea1 100644
  - (void)requestCaretRect:(NSInteger)requestId
  {
    [_inputEventEmitter requestCaretRect:requestId];
-@@ -1540,6 +1909,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1540,6 +1911,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -5565,7 +5577,7 @@ index 9a9987e0..b8b6cea1 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1634,7 +2029,12 @@ - (void)handleTextChanged
+@@ -1634,7 +2031,12 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -5579,7 +5591,7 @@ index 9a9987e0..b8b6cea1 100644
      [self applyFormatting];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1649,6 +2049,9 @@ - (void)handleTextChanged
+@@ -1649,6 +2051,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -5589,7 +5601,7 @@ index 9a9987e0..b8b6cea1 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1711,6 +2114,12 @@ - (void)manageSelectionBasedChanges
+@@ -1711,6 +2116,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -8647,3 +8659,26 @@ index 00000000..1557ce14
 +  ENRMApplyInputParagraphBaselineOffset(storage, usesBaseline);
 +  return ENRMPrepareInputMeasurementText(storage, ENRMInputBaseTypingAttributes(style));
 +}
+diff --git a/ios/utils/ENRMInputScrolling.h b/ios/utils/ENRMInputScrolling.h
+new file mode 100644
+--- /dev/null
++++ b/ios/utils/ENRMInputScrolling.h
+@@ -0,0 +1,18 @@
++#pragma once
++
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
++#import <AppKit/AppKit.h>
++
++static inline void ENRMConfigureInputScrolling(NSView *container, NSScrollView *scroll, NSTextView *text, BOOL enabled)
++{
++  if (enabled) {
++    if (scroll.documentView != text) scroll.documentView = text;
++    if (scroll.superview != container) [container addSubview:scroll];
++  } else {
++    if (scroll.documentView == text) scroll.documentView = nil;
++    [scroll removeFromSuperview];
++    if (text.superview != container) [container addSubview:text];
++  }
++}
++#endif

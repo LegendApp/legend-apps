@@ -34,6 +34,11 @@ clang -fobjc-arc -framework AppKit \
   "$markdown_editor_dir/tests/MarkdownInputLayout.test.m" -o "$markdown_test_binary"
 "$markdown_test_binary"
 
+clang -fobjc-arc -framework AppKit \
+  -I"$markdown_dependency_dir/ios/utils" \
+  "$markdown_editor_dir/tests/MarkdownInputScrolling.test.m" -o "$markdown_test_binary"
+"$markdown_test_binary"
+
 # Compile the real detector with a minimal style declaration: these tests exercise
 # detection and serialization, without requiring React's generated prop headers.
 markdown_detector_test_dir="$(mktemp -d "${TMPDIR:-/tmp}/legend-markdown-autolink.XXXXXX")"
