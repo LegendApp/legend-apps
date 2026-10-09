@@ -9,11 +9,13 @@ const deckPath = process.argv[2];
 const source = process.argv.includes("--draft") ? readFileSync(0, "utf8") : undefined;
 const transitionFlag = process.argv.indexOf("--transitions");
 const transitionDirectory = transitionFlag >= 0 ? process.argv[transitionFlag + 1] : undefined;
+const packsFlag = process.argv.indexOf("--effect-packs");
+const effectPacksDirectory = packsFlag >= 0 ? process.argv[packsFlag + 1] : undefined;
 const copyFlag = process.argv.indexOf("--copy-transition");
 const result = copyFlag >= 0
   ? await copyTransitionToDeck(deckPath, process.argv[copyFlag + 1], transitionDirectory!).then((copy) => ({ success: true, copy })).catch((error) => ({ success: false, errors: [String(error)], warnings: [] }))
   : deckPath
-  ? await compileDeck(deckPath, { source, transitionDirectory })
+  ? await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory })
   : { success: false as const, errors: ["Usage: bun scripts/compile-slides.ts <deck.mdx>"], warnings: [] };
 let sourceSlideEnds: number[] | undefined;
 if (source !== undefined) {

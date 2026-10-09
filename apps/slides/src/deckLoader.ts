@@ -1,5 +1,6 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
+import { deckWatchDirectories } from "./deckWatchDirectories";
 import { compilerCommand } from "./compilerCommand";
 import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
@@ -39,6 +40,7 @@ import { getSlidesState, setSlidesState } from "./slidesStore";
 let watchers: ReturnType<typeof ownRegistration>[] = [];
 let watchedDirectory: string | undefined;
 let watchedDeckPath: string | undefined;
+let watchedDirectories: string[] = [];
 let reloadQueue: ReturnType<typeof createDeckReloadQueue> | undefined;
 let buildSequence = 0;
 let draftReloadHandler: ((path: string) => Promise<unknown>) | undefined;
@@ -127,9 +129,12 @@ function directoryName(path: string) {
   return path.slice(0, Math.max(1, path.lastIndexOf("/")));
 }
 
-function watchDeckDirectory(path: string) {
+function watchDeckDirectory(path: string, dependencies?: string[]) {
   const directory = directoryName(path);
-  if (watchedDirectory === directory && watchedDeckPath === path) {
+  const directories = dependencies ? deckWatchDirectories(path, transitionDirectoryPath(), dependencies)
+    : watchedDeckPath === path ? watchedDirectories : deckWatchDirectories(path, transitionDirectoryPath(), []);
+  if (watchedDirectory === directory && watchedDeckPath === path &&
+      directories.join("\n") === watchedDirectories.join("\n")) {
     return;
   }
   for (const watcher of watchers) void watcher.remove().catch(console.error);
@@ -137,6 +142,7 @@ function watchDeckDirectory(path: string) {
   reloadQueue?.dispose();
   watchedDirectory = directory;
   watchedDeckPath = path;
+  watchedDirectories = directories;
   const queue = createDeckReloadQueue(async () => {
     if (draftReloadHandler) await draftReloadHandler(path);
     else await loadDeck(path, false);
@@ -144,7 +150,7 @@ function watchDeckDirectory(path: string) {
     setSlidesState({ buildErrors: [String(error)], status: "error" });
   });
   reloadQueue = queue;
-  watchers = [directory, transitionDirectoryPath()].map(path => ownRegistration(watch(path, () => queue.changed({ contentChanged: true }), { recursive: true })));
+  watchers = directories.map(path => ownRegistration(watch(path, () => queue.changed({ contentChanged: true }), { recursive: true })));
 }
 
 function decodeBase64(value: string) {
@@ -243,7 +249,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
   try {
     const { component, templates, transitions } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
-    watchDeckDirectory(path);
+    watchDeckDirectory(path, result.dependencies);
     setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets });
     if (remember) {
       rememberDeckPath(path);

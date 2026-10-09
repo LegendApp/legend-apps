@@ -17,6 +17,7 @@ import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
+import { defaultEffectPacksDirectory, resolveEffectPack } from "./effectPacks";
 
 const workletsPlugin = createRequire(import.meta.url).resolve("react-native-worklets/plugin");
 const reactCompilerPlugin = createRequire(import.meta.url).resolve("babel-plugin-react-compiler");
@@ -152,7 +153,8 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
   };
 }
 
-export function localDeckPlugin(entryPath: string, transitionDirectory?: string): Plugin {
+export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
+  options: { effectPacksDirectory?: string; dependencies?: Set<string> } = {}): Plugin {
   const deckRoot = fs.realpathSync(path.dirname(entryPath));
   return {
     name: "legend-slides-local-deck",
@@ -161,12 +163,18 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string)
         contents: compileReactSource(fs.readFileSync(args.path, "utf8"), args.path),
         loader: /\.[cm]?tsx?$/i.test(args.path) ? "tsx" : "jsx",
       }));
-      const transitionRoots = new Map<string, string>();
+      const libraryRoots = new Map<string, string>();
+      buildApi.onResolve({ filter: /^slides:/ }, (args) => {
+        const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory());
+        libraryRoots.set(pack.file, pack.root);
+        options.dependencies?.add(pack.manifest);
+        return { path: pack.file };
+      });
       buildApi.onResolve({ filter: /^legend-transition:/ }, (args) => {
         const reference = args.path.slice("legend-transition:".length);
         const file = resolveTransitionFile(reference, deckRoot, transitionDirectory);
         if (file) {
-          transitionRoots.set(file, reference.startsWith("./") ? deckRoot : fs.realpathSync(transitionDirectory!));
+          libraryRoots.set(file, reference.startsWith("./") ? deckRoot : fs.realpathSync(transitionDirectory!));
           return { path: file };
         }
         return { namespace: "builtin-transition", path: reference };
@@ -189,11 +197,11 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string)
           return { errors: [{ text: `Could not resolve local import "${args.path}".` }] };
         }
         const realPath = fs.realpathSync(resolvedPath);
-        const allowedRoot = transitionRoots.get(args.importer) ?? deckRoot;
+        const allowedRoot = libraryRoots.get(args.importer) ?? deckRoot;
         if (!isWithin(allowedRoot, realPath)) {
-          return { errors: [{ text: `Local import "${args.path}" escapes the deck directory.` }] };
+          return { errors: [{ text: `Local import "${args.path}" escapes the ${libraryRoots.has(args.importer) ? "library" : "deck"} directory.` }] };
         }
-        if (transitionRoots.has(args.importer)) transitionRoots.set(realPath, allowedRoot);
+        if (libraryRoots.has(args.importer)) libraryRoots.set(realPath, allowedRoot);
         return assetExtensions.has(path.extname(realPath).toLowerCase())
           ? { namespace: "deck-asset", path: realPath }
           : { path: realPath };
@@ -220,7 +228,7 @@ function dependenciesFrom(result: BuildResult, workingDirectory: string) {
   return Object.keys(result.metafile?.inputs ?? {}).filter((input) => !input.startsWith("builtin-transition:")).map((input) => path.resolve(workingDirectory, input)).sort();
 }
 
-async function compileUniwind(deckRoot: string, draftSource?: string) {
+async function compileUniwind(deckRoot: string, draftSource?: string, packRoots: string[] = []) {
   const cssPath = path.resolve(import.meta.dirname, "../../../../shell/src/global.css");
   const compilerModulePath = path.resolve(import.meta.dirname, "../../../../shell/node_modules/uniwind/src/metro/compileVirtual.ts");
   const { compileVirtual } = await import(pathToFileURL(compilerModulePath).href) as {
@@ -238,7 +246,7 @@ async function compileUniwind(deckRoot: string, draftSource?: string) {
   const draftDirectory = draftSource === undefined ? undefined : fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-css-"));
   try {
   if (draftDirectory) fs.writeFileSync(path.join(draftDirectory, "draft.mdx"), draftSource!);
-  const css = `${fs.readFileSync(cssPath, "utf8")}\n@source ${JSON.stringify(deckRoot)};\n${draftDirectory ? `@source ${JSON.stringify(draftDirectory)};` : ""}`;
+  const css = `${fs.readFileSync(cssPath, "utf8")}\n${[deckRoot, ...packRoots].map(root => `@source ${JSON.stringify(root)};`).join("\n")}\n${draftDirectory ? `@source ${JSON.stringify(draftDirectory)};` : ""}`;
   return await compileVirtual({
     css,
     cssPath,
@@ -252,7 +260,7 @@ async function compileUniwind(deckRoot: string, draftSource?: string) {
   }
 }
 
-export async function compileDeck(deckPath: string, options: { source?: string; transitionDirectory?: string } = {}): Promise<CompileDeckResult> {
+export async function compileDeck(deckPath: string, options: { source?: string; transitionDirectory?: string; effectPacksDirectory?: string } = {}): Promise<CompileDeckResult> {
   const absoluteDeckPath = path.resolve(deckPath);
   if (!absoluteDeckPath.toLowerCase().endsWith(".mdx")) {
     return { success: false, errors: ["Decks must use the .mdx extension."], warnings: [] };
@@ -277,7 +285,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       outfile: "deck.js",
       platform: "neutral",
       plugins: [
-        localDeckPlugin(absoluteDeckPath, options.transitionDirectory),
+        localDeckPlugin(absoluteDeckPath, options.transitionDirectory, { effectPacksDirectory: options.effectPacksDirectory, dependencies: extraDependencies }),
         mdxDeckPlugin(absoluteDeckPath, extraDependencies, source, options.transitionDirectory),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
@@ -315,7 +323,8 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
         ...extraDependencies,
       ])].sort(),
       success: true,
-      uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath), options.source),
+      uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath), options.source,
+        [...extraDependencies].filter(file => file.endsWith(`${path.sep}pack.json`)).map(file => path.dirname(file))),
       warnings: formatMessages(result.warnings),
     };
   } catch (error) {
