@@ -66,3 +66,27 @@ test("manifests reject missing, incompatible, unexported and escaping entries", 
   fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 1, exports: { Pose: "../../outside.ts" } }));
   expect(() => resolveEffectPack("slides:motion/Pose", packs)).toThrow();
 });
+
+test("cross-pack imports require declared dependency versions and track both roots", async () => {
+  const { deck, packs } = fixture({
+    "packs/motion/Pose.ts": 'export { sample } from "slides:math/Twice";',
+    "packs/math/pack.json": JSON.stringify({ id: "math", version: "1.0.0", hostApiVersion: 1, exports: { Twice: "./Twice.ts" } }),
+    "packs/math/Twice.ts": 'export function sample(x) { "worklet"; return x * 2; }',
+  });
+  let result = await compileDeck(deck, { effectPacksDirectory: packs });
+  expect(result.success).toBe(false);
+  expect(result.errors.join("\n")).toContain("does not declare");
+  const manifest = path.join(packs, "motion/pack.json");
+  const config = JSON.parse(fs.readFileSync(manifest, "utf8"));
+  config.dependencies = { math: "2.0.0" };
+  fs.writeFileSync(manifest, JSON.stringify(config));
+  result = await compileDeck(deck, { effectPacksDirectory: packs });
+  expect(result.success).toBe(false);
+  expect(result.errors.join("\n")).toContain("version 2.0.0");
+  config.dependencies.math = "1.0.0";
+  fs.writeFileSync(manifest, JSON.stringify(config));
+  result = await compileDeck(deck, { effectPacksDirectory: packs });
+  expect(result.success).toBe(true);
+  expect(result.dependencies).toContain(path.join(packs, "motion/pack.json"));
+  expect(result.dependencies).toContain(path.join(packs, "math/pack.json"));
+});

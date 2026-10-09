@@ -164,9 +164,13 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
         loader: /\.[cm]?tsx?$/i.test(args.path) ? "tsx" : "jsx",
       }));
       const libraryRoots = new Map<string, string>();
+      const packRoots = new Set<string>();
       buildApi.onResolve({ filter: /^slides:/ }, (args) => {
-        const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory());
+        const importerRoot = libraryRoots.get(args.importer);
+        const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
+          importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined);
         libraryRoots.set(pack.file, pack.root);
+        packRoots.add(pack.root);
         options.dependencies?.add(pack.manifest);
         return { path: pack.file };
       });
