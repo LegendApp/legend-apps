@@ -1,0 +1,30 @@
+{
+  "name": "@legend-apps/slides-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "export": "bun export.ts",
+    "test": "bun test tests"
+  },
+  "dependencies": {
+    "@legend-apps/presentation": "0.0.0",
+    "@legendapp/state": "catalog:",
+    "canvaskit-wasm": "0.41.0",
+    "esbuild": "^0.25.9",
+    "html-to-image": "^1.11.13",
+    "react": "catalog:",
+    "react-dom": "19.1.4",
+    "react-native-web": "^0.21.2",
+    "@shopify/react-native-skia": "2.11.1",
+    "@babel/core": "^7.29.0",
+    "react-native-worklets": "0.8.3",
+    "react-native-reanimated": "4.3.4",
+    "uniwind": "1.6.3"
+  },
+  "devDependencies": {
+    "@types/react-native-web": "^0.19.2",
+    "@types/react-dom": "^19.1.0",
+    "@types/babel__core": "^7.20.5"
+  }
+}
