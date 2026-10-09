@@ -13,8 +13,9 @@ import { usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const titleSpeed$ = state.observable(1);
+const brightness$ = state.observable(1);
 
-function compiledRenderer() {
+function compiledRenderer(exportName = "DeckRenderer") {
   const filename = fileURLToPath(new URL("../DeckRenderer.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -39,14 +40,14 @@ function compiledRenderer() {
     "./Effect": { Effect: "effect" },
     "./TypeGPU": { TypeGPU: "gpu" },
     "./TypeGPUShader": { TypeGPUShader: "gpu-shader" },
-    "./slidesSettings": { useBackgroundIntensitySetting: () => 1, titleAnimationSpeedSetting: { get: () => titleSpeed$.get() } },
+    "./slidesSettings": { useBackgroundIntensitySetting: () => stateReact.useValue(brightness$), titleAnimationSpeedSetting: { get: () => titleSpeed$.get() } },
     "./Webview": { Webview: "webview" },
   };
   const module = { exports: {} };
   new Function("require", "module", "exports", code)(
     (name) => nativeLeaves[name] ?? require(name), module, module.exports,
   );
-  return module.exports.DeckRenderer;
+  return module.exports[exportName];
 }
 
 test("compiled slide runtime deactivates on exit and reactivates on return", async () => {
@@ -438,5 +439,34 @@ test("a failed selected slide recovers on navigation without rebuilding the comp
     if (tree) await act(() => tree.unmount());
     setSlidesState(initial);
     log.mockRestore();
+  }
+});
+
+test("brightness changes preserve the measured preview stage and mounted slide", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const SlideCanvas = compiledRenderer("SlideCanvas");
+  let mounts = 0;
+  function Probe() {
+    React.useEffect(() => { mounts++; }, []);
+    return <preview-content />;
+  }
+  let renderer;
+  try {
+    setSlidesState({ config: {} });
+    await act(() => { renderer = create(<SlideCanvas isPreview><Probe /></SlideCanvas>); });
+    const canvas = renderer.root.findAllByType("view").find(node => node.props.style?.alignItems === "center");
+    await act(() => canvas.props.onLayout({ nativeEvent: { layout: { width: 640, height: 360 } } }));
+    const stage = () => renderer.root.findByType("scaled-view").props.style[1];
+    expect(stage()).toMatchObject({ width: 640, height: 360 });
+    for (const intensity of [0, 2, 6, 3, 0, 1]) {
+      await act(() => brightness$.set(intensity));
+      expect(stage()).toMatchObject({ width: 640, height: 360 });
+      expect(mounts).toBe(1);
+    }
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    brightness$.set(1);
+    setSlidesState(initial);
   }
 });
