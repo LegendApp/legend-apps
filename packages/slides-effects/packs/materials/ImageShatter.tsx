@@ -1,7 +1,8 @@
 import { Canvas, Fill, ImageShader, Shader, Skia, useImage } from "@shopify/react-native-skia";
-import { useAnimatedShaderUniforms } from "@legend-apps/presentation";
+import { GPUShader, useAnimatedShaderUniforms } from "@legend-apps/presentation";
 import { useMemo } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
+import { createImageShatterGPU } from "./ImageShatterGPU";
 export const imageShatterShader = `
 const float2 halfSize = float2(520,355.319);
 const float2 imageCenter = float2(960,600);
@@ -85,7 +86,7 @@ function compileShatter(source: string) {
   }
   return effect;
 }
-export function ImageShatter({ source, revealAtStep, geometry, width, height, style, accessibilityLabel }: { source: string; revealAtStep: number;
+function SkiaImageShatter({ source, revealAtStep, geometry, width, height, style, accessibilityLabel }: { source: string; revealAtStep: number;
   geometry: ImageShatterGeometry; width: number; height: number; style?: StyleProp<ViewStyle>; accessibilityLabel?: string }) {
   const image = useImage(source);
   const effect = useMemo(() => compileShatter(createImageShatterShader(geometry)), [geometry]);
@@ -94,4 +95,14 @@ export function ImageShatter({ source, revealAtStep, geometry, width, height, st
     <Fill><Shader source={effect} uniforms={uniforms}><ImageShader image={image} fit="contain"
       rect={{ x: 0, y: 0, width: geometry.imageWidth, height: geometry.imageHeight }} tx="clamp" ty="clamp" /></Shader></Fill>
   </Canvas>;
+}
+
+export function ImageShatter(props: Parameters<typeof SkiaImageShatter>[0]) {
+  const { source, revealAtStep, geometry, width, height, style, accessibilityLabel } = props;
+  const code = useMemo(() => createImageShatterGPU(geometry, width, height, revealAtStep), [geometry, width, height, revealAtStep]);
+  return <View style={[{ width, height }, style]} pointerEvents="none">
+    <GPUShader code={code} width={width} height={height} image={source} particles particleCount={40}
+      particleBlend="over" borderRadius={0} accessibilityLabel={accessibilityLabel}
+      fallback={<SkiaImageShatter {...props} style={undefined} />} />
+  </View>;
 }

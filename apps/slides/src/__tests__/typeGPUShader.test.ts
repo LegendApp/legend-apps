@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, preparing = false } = {}) {
+function frames({ preview = false, active = true, preparing = false, composite = false, data = false, clockMode = "step" } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -15,7 +15,7 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
   });
   const effects = [], calls = [], uniforms = [], errors = [];
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
-    slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0 } };
+    slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
   let callback, enabled = false, ready = 0;
   const frame = { setActive: value => { enabled = value; } };
   const pass = kind => ({
@@ -33,11 +33,11 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
   const mocks = {
     react: { useRef: value => ({ current: value }), useEffect: effect => effects.push(effect) },
     "react-native": {},
-    "react-native-webgpu": {},
+    "@shopify/react-native-skia": {}, "react-native-webgpu": {},
     "@legend-apps/presentation": { usePresentationValue: field => ({
       isActive: active, isPreview: preview, isPreparing: preparing, stepIndex: 1,
     })[field], usePlayback: () => playback,
-      samplePlayback: (state, previewTime) => state.phase === "preview" ? previewTime : state.stepTime },
+      samplePlayback: (state, previewTime, clock) => state.phase === "preview" ? previewTime : clock === "slide" ? state.slideTime : state.stepTime },
     "react-native-reanimated": {
       useSharedValue: value => ({ value }),
       useFrameCallback: fn => { callback = fn; return frame; },
@@ -49,8 +49,9 @@ function frames({ preview = false, active = true, preparing = false } = {}) {
     name => mocks[name] ?? require(name), {},
   );
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
-    clock: {}, states: [], groups: ["A", "B"], compute: {}, render: {}, particles: {} },
-    aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    clock: {}, states: [], groups: ["A", "B"], compute: {}, render: {}, particles: {}, frameData: data ? {} : undefined,
+    composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
+    clockMode, frameData: data ? { value: [1,2,3,4] } : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
     playback,
@@ -169,5 +170,23 @@ test("GPU particles reinitialize on preview promotion and step changes", () => {
   f.tick();
   expect(f.uniforms.at(-1)[2]).toBe(0);
   expect(f.uniforms.at(-1)[3]).toBe(2);
+  f.stop();
+});
+
+test("geometry can retain slide time across steps while uploading UI data and composing a lens", () => {
+  const f = frames({ composite:true, data:true, clockMode:"slide" });
+  expect(f.uniforms[0][0]).toBe(10);
+  expect(f.uniforms[0][6]).toBe(10);
+  expect(f.uniforms[0][7]).toBe(0);
+  expect(f.uniforms[1]).toEqual([1,2,3,4]);
+  expect(f.calls).toContainEqual(["render","lens"]);
+  expect(f.calls.filter(call => call[0]==="draw")).toHaveLength(3);
+  f.playback.value={...f.playback.value,stepKey:"connect",stepIndex:2,stepTime:0};
+  f.tick();
+  expect(f.uniforms.at(-2)[0]).toBe(10);
+  expect(f.uniforms.at(-2)[2]).toBe(0);
+  f.playback.value={...f.playback.value,phase:"outgoing"};
+  const count=f.uniforms.length;
+  f.tick(); expect(f.uniforms).toHaveLength(count);
   f.stop();
 });

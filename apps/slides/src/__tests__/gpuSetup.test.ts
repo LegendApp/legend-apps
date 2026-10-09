@@ -23,7 +23,7 @@ async function setup(validationError, cancelDuringValidation = false) {
     createComputePipeline: () => { calls.push("pipeline"); return {}; }, createRenderPipeline: () => ({}),
     destroy: () => { calls.push("destroy"); done(); },
   };
-  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" } }, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
+  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
     "react-native-reanimated": { makeMutable: value => ({ value }), runOnUI: fn => fn } };
   const start = new Function("require", "exports", "navigator", code + "\nreturn startShaderCanvas;")(
     name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => device }), getPreferredCanvasFormat: () => "bgra8unorm" } },

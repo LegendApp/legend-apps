@@ -1,6 +1,7 @@
-import { FocusSurfaceContext, useAnimatedShaderUniforms } from "@legend-apps/presentation";
+import { createFallingSpritesGPU } from "./FallingSpritesGPU";
+import { GPUShader, FocusSurfaceContext, useAnimatedShaderUniforms } from "@legend-apps/presentation";
 import { Canvas, Fill, ImageShader, Shader, Skia, useImage } from "@shopify/react-native-skia";
-import { useContext, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 export const spriteFireShader = `
 uniform float time;
@@ -164,12 +165,21 @@ function fireEffect() {
   }
   return effect;
 }
-export function FallingSprites({ width, barHeight, x, y, sprite, accessibilityLabel }: { width: number; barHeight: number; x: number; y: number; sprite: string; accessibilityLabel?: string }) {
+function SkiaSpriteCanvas({ width, barHeight, floorY, sprite, accessibilityLabel }: { width:number; barHeight:number; floorY:number; sprite:string; accessibilityLabel?:string }) {
+  const image = useImage(sprite);
+  const uniforms = useAnimatedShaderUniforms({ fireWidth: width, barHeight, floorY, drops: 1 }, 5.4, { clock: "step" });
+  return image && <Canvas pointerEvents="none" accessibilityLabel={accessibilityLabel} style={{ width:width+256,height:floorY+24 }}>
+    <Fill><Shader source={fireEffect()} uniforms={uniforms}>
+      <ImageShader image={image} fit="contain" rect={{x:0,y:0,width:256,height:256}} tx="clamp" ty="clamp" />
+    </Shader></Fill>
+  </Canvas>;
+}
+
+export function FallingSprites({ width, barHeight, x, y, sprite, accessibilityLabel }: { width:number; barHeight:number; x:number; y:number; sprite:string; accessibilityLabel?:string }) {
   const surface = useContext(FocusSurfaceContext)?.surface;
   const ref = useRef<View>(null);
-  const poopImage = useImage(sprite);
   const [floorY, setFloorY] = useState(1056);
-  const uniforms = useAnimatedShaderUniforms({ fireWidth: width, barHeight, floorY, drops: 1 }, 5.4, { clock: "step" });
+  const program = useMemo(() => createFallingSpritesGPU(width, barHeight, floorY), [width, barHeight, floorY]);
   const measureFloor = () => {
     if (surface?.root) ref.current?.measureLayout(surface.root, (_left, top) => {
       if (surface.height > 0) setFloorY(surface.height - top - 24);
@@ -177,12 +187,9 @@ export function FallingSprites({ width, barHeight, x, y, sprite, accessibilityLa
   };
   return <View ref={ref} collapsable={false} onLayout={measureFloor} pointerEvents="none"
     style={{ position: "absolute", zIndex: 1, left: x - 128, top: y - 184, width: width + 256, height: 184 + barHeight }}>
-    {poopImage && <Canvas pointerEvents="none" accessibilityLabel={accessibilityLabel}
-      style={{ position: "absolute", left: 0, top: 0, width: width + 256, height: floorY + 24 }}>
-      <Fill><Shader source={fireEffect()} uniforms={uniforms}>
-        <ImageShader image={poopImage} fit="contain" rect={{ x: 0, y: 0, width: 256, height: 256 }} tx="clamp" ty="clamp" />
-      </Shader></Fill>
-    </Canvas>}
+    <GPUShader {...program} particles image={sprite} width={width + 256} height={floorY + 24} particleBlend="over"
+      previewTime={5.4} borderRadius={0} accessibilityLabel={accessibilityLabel}
+      fallback={<SkiaSpriteCanvas width={width} barHeight={barHeight} floorY={floorY} sprite={sprite} accessibilityLabel={accessibilityLabel} />} />
   </View>;
 }
 

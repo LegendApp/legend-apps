@@ -2,6 +2,7 @@ import { titleAnimationSpeedSetting, useBackgroundIntensitySetting } from "./sli
 import { useResolveClassNames } from "uniwind";
 import { useValue } from "@legendapp/state/react";
 import {
+  GPUShaderProvider,
   useRuntimeProjection,
   usePresentationValue,
   Background,
@@ -300,7 +301,7 @@ export function DeckRenderer({
   return (
     <DeckRenderContext.Provider value={{ isPreview, isPreparing, isOutgoing, targetIndex, targetStep }}>
       <SlideErrorBoundary index={targetIndex ?? 0} isPreview={isPreview} key={`${revision}:${retryRevision}`}>
-        <Component components={markdownComponents} />
+        <GPUShaderProvider renderer={TypeGPUShader}><Component components={markdownComponents} /></GPUShaderProvider>
       </SlideErrorBoundary>
     </DeckRenderContext.Provider>
   );

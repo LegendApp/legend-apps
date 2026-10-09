@@ -210,3 +210,22 @@ The `packs/presenting` folder has navigation-driven explanation tools:
 
 These tools keep content mounted; hidden children need their own playback control.
 Read the actual pack README and component props before composing advanced demos.
+
+### GPU programs inside local TSX and packs
+
+Import `GPUShader` from `@legend-apps/presentation` for local effects. Slides
+provides its renderer automatically. It accepts the same `code`, dimensions,
+`particles`, `particleCount`, and `previewTime` as `TypeGPUShader`, plus
+`clock="slide" | "step"`, `image` (a deck asset URI), `particleBlend="over"`
+(default: additive), `borderRadius`, and a React `fallback` for unsupported hosts.
+A `frameData` shared value and `frameDataSize` in floats can supply existing UI
+worklet simulation data at binding 5. Keep visual clocks in that same snapshot
+when a simulation publishes them atomically with positions.
+
+The 32-byte frame uniform includes slide and step time in its last two floats.
+Image programs declare sampler/texture bindings 3/4 in group 0. Optional
+`composite` programs render their field to an HDR texture, then use
+`compositeFragment` with sampler/texture bindings 0/1 in group 1. This supports
+lens refraction without a custom rendering loop. `materials/GPU` exposes small
+WGSL frame, image, and quad helpers. Keep native per-frame updates in host-compiled
+worklets, and use Skia fallbacks where WebGPU is unavailable.

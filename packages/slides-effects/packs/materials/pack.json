@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "hostApiVersion": 1,
   "exports": {
+    "GPU": "./GPU.ts",
     "GlassPanels": "./GlassPanels.tsx",
     "BranchMaterial": "./BranchMaterial.ts",
     "GlassStrike": "./GlassStrike.tsx",
@@ -13,6 +14,7 @@
   },
   "capabilities": [
     "reanimated",
-    "skia"
+    "skia",
+    "webgpu"
   ]
 }

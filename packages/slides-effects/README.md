@@ -52,3 +52,11 @@ Tests run through `bun run test:slides`. The lifecycle suites exercise preparati
 static previews, step changes, pause, outgoing frames and re-entry, including
 compiled worklet closures. Packs use the host clock; they must never introduce a
 JavaScript animation loop.
+
+`materials/ImageShatter` and `materials/Fire`'s falling sprites use textured
+TypeGPU instances through `GPUShader` from `@legend-apps/presentation`. The Slides
+host supplies its renderer with `GPUShaderProvider`; unsupported browsers and
+hosts without that provider retain the Skia rendering. Flames remain in Skia.
+`materials/GPU` supplies the shared frame declaration and small WGSL geometry
+helpers for deck-local programs. Image textures are decoded and uploaded once
+during preparation, never on animation frames.

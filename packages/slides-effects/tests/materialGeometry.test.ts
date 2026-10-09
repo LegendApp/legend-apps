@@ -2,7 +2,7 @@
 import { expect, mock, test } from "bun:test";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-mock.module("@legend-apps/presentation", () => ({ PresentationCanvas: "canvas", useAnimatedShaderUniforms: () => ({}), FocusSurfaceContext: {} }));
+mock.module("@legend-apps/presentation", () => ({ GPUShader:"gpu", PresentationCanvas: "canvas", useAnimatedShaderUniforms: () => ({}), FocusSurfaceContext: {} }));
 mock.module("@shopify/react-native-skia", () => ({ Canvas: "canvas", Fill: "fill", ImageShader: "image-shader", Shader: "shader",
   useImage: () => ({}), Skia: { RuntimeEffect: { Make: () => ({}) } } }));
 const { createGlassStrikeShader } = await import("../packs/materials/GlassStrike");
