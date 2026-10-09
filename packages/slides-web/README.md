@@ -3,7 +3,7 @@
 Export ReactCon from the repository root:
 
 ```sh
-bun packages/slides-web/export.ts apps/slides/decks/react-native-desktop/reactcon.mdx --out dist/reactcon
+bun packages/slides-web/export.ts ../legend-talks/talks/react-native-desktop/reactcon.mdx --out dist/reactcon
 python3 -m http.server 4330 --directory dist
 ```
 

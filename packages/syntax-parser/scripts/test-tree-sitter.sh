@@ -22,7 +22,7 @@ clang++ -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/QueryDispatch.t
 clang++ -DLEGEND_SYNTAX_TEST_GRAMMARS -std=c++20 -O2 -Wall -Wextra -Werror "$syntax_root/tests/MarkdownHighlighter.test.cpp" \
   "$syntax_root/cpp/TreeSitterHighlighter.cpp" "$tree_build/"*.o -o "$tree_build/markdown-test"
 "$tree_build/markdown-test" "$syntax_root/../../apps/slides/examples/"*.mdx \
-  "$syntax_root/../../apps/slides/decks/react-native-desktop/talk.mdx" "$syntax_root/TREE_SITTER.md"
+  "$syntax_root/TREE_SITTER.md"
 clang -std=c11 -O2 -I"$tree_vendor/runtime/include" -c "$tree_vendor/runtime/src/lib.c" -o "$tree_build/runtime.unprefixed"
 clang -std=c11 -O2 -I"$tree_vendor/javascript/src" -c "$tree_vendor/javascript/src/parser.c" -o "$tree_build/javascript-parser.unprefixed"
 clang -std=c11 -O2 -I"$tree_vendor/javascript/src" -c "$tree_vendor/javascript/src/scanner.c" -o "$tree_build/javascript-scanner.unprefixed"

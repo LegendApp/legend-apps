@@ -5,9 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { sidebarStorm } from "../../decks/react-native-desktop/sidebarStorm";
-import { gpuConstellation } from "../../decks/react-native-desktop/packs/data/gpuConstellation";
-import { gpuInterfaceReveal } from "../../decks/react-native-desktop/packs/data/gpuInterfaceReveal";
 import { cloudProgram } from "../../examples/components/CloudProgram";
 import { compileDeck } from "../../../../packages/presentation/src/compiler";
 
@@ -15,7 +12,7 @@ import { gameOfLifeShader } from "../../examples/components/GameOfLifeProgram";
 
 import { boidsProgram } from "../../examples/components/TypeGPUBoids";
 
-const programs = { sidebarStorm, gpuConstellation, gpuInterfaceReveal, cloudProgram, gameOfLifeShader, boidsProgram };
+const programs = { cloudProgram, gameOfLifeShader, boidsProgram };
 test.skipIf(process.platform !== "darwin")("example programs compile with the app's native WebGPU shader compiler", () => {
   const require = createRequire(import.meta.url);
   const webgpu = path.dirname(require.resolve("react-native-webgpu/package.json"));
@@ -37,7 +34,7 @@ test.skipIf(process.platform !== "darwin")("example programs compile with the ap
 }, 60_000);
 
 test("documented GPU decks compile using the shared-clock shader host", async () => {
-  for (const name of ["examples/showcase.mdx", "decks/react-native-desktop/talk.mdx", "decks/react-native-desktop/effects.mdx"]) {
+  for (const name of ["examples/showcase.mdx"]) {
     const file = path.resolve(import.meta.dir, "../..", name);
     expect(fs.readFileSync(file, "utf8")).not.toMatch(/<TypeGPU\s/);
     const result = await compileDeck(file);

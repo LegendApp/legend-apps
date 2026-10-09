@@ -172,7 +172,7 @@ support, not needed for ordinary deck components.
 
 ## Local effect packs (not installed host components)
 
-The source checkout contains `apps/slides/decks/react-native-desktop/effects.mdx`,
+The source checkout contains `../legend-talks/talks/react-native-desktop/effects.mdx`,
 a 40-slide gallery. Its `packs/` directory and `PresentingDemos.tsx` are reusable
 source, not built-in names. To use them outside that directory, copy the necessary
 modules/assets beneath the new deck and update relative imports. `slides:` package

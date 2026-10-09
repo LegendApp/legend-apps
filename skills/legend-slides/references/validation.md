@@ -57,7 +57,7 @@ loaded. In Edit Source, drafts compile after a pause; save them explicitly.
 - `apps/slides/examples/showcase.mdx`: native components and executable code.
 - `apps/slides/examples/layouts.mdx`: nested groups, columns, grids, reveals.
 - `apps/slides/examples/shared.mdx`, `focus.mdx`: motion between slides.
-- `apps/slides/decks/react-native-desktop/effects.mdx`: one demo per effect.
+- `../legend-talks/talks/react-native-desktop/effects.mdx`: one demo per effect.
 
 The installed skill carries `assets/starter.mdx`; it does not carry all those
 checkout examples or their native dependencies.

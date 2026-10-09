@@ -5,7 +5,7 @@ import path from "node:path";
 // Bun caches module mocks across files. Each suite has its own native/clock
 // harness, so run in separate processes to make results independent of ordering.
 const root = path.resolve(import.meta.dirname, "..");
-const directories = ["packages/presentation/src/__tests__", "apps/slides/src/__tests__", "apps/slides/decks/react-native-desktop/__tests__"];
+const directories = ["packages/presentation/src/__tests__", "apps/slides/src/__tests__"];
 const files = directories.flatMap(directory => readdirSync(path.join(root, directory))
   .filter(file => /\.test\.[cm]?[jt]sx?$/.test(file)).map(file => path.join(directory, file))).sort();
 let failures = 0;
