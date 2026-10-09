@@ -1,0 +1,12 @@
+{
+  "id": "animation",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "LottiePlayer": "./LottiePlayer.tsx"
+  },
+  "capabilities": [
+    "reanimated",
+    "lottie"
+  ]
+}

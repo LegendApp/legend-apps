@@ -1,0 +1,14 @@
+{
+  "id": "charts",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "BarRow": "./BarRow.tsx",
+    "ChartBar": "./ChartBar.tsx",
+    "NumberTiming": "./NumberTiming.ts"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia"
+  ]
+}

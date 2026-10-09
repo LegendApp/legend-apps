@@ -1,0 +1,18 @@
+{
+  "id": "media",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "AppCarousel": "./AppCarousel.tsx",
+    "FilmstripMotionView": "./FilmstripMotionView.tsx",
+    "CarouselBlurView": "./CarouselBlurView.tsx",
+    "PosterVideo": "./PosterVideo.tsx",
+    "RecordingPosition": "./RecordingPosition.ts",
+    "CarouselGeometry": "./CarouselGeometry.ts"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia",
+    "native-video"
+  ]
+}

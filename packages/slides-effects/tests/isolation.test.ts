@@ -25,3 +25,18 @@ test("a selected background bundles no atmosphere catalog or talk assets", async
     expect(compilations).toBe(0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("media, charts and Lottie entrypoints compile independently without demo assets", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-effect-content-"));
+  try {
+    for (const [name, entry] of [["AppCarousel", "media/AppCarousel"], ["LottiePlayer", "animation/LottiePlayer"], ["BarRow", "charts/BarRow"]]) {
+      const deck = path.join(root, "deck.mdx");
+      fs.writeFileSync(deck, `export { ${name} } from "slides:${entry}"\n\n# External content`);
+      const result = await compileDeck(deck);
+      expect(result.success).toBe(true);
+      if (!result.success) throw Error(result.errors.join("\n"));
+      expect(result.code).toContain("__workletHash");
+      expect(result.dependencies.some(file => /rnconnection-assets|AppShowcase|native-orbit/.test(file))).toBe(false);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
