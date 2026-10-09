@@ -25,7 +25,7 @@ type Resources = {
 export function TypeGPUShader({ code, width: configuredWidth = 1696, height: configuredHeight = 650, background = false,
   particles = false, particleCount = 256, particleVertexCount = 6, particleBlend = "additive", previewTime = 4,
   clock: clockMode = "step", image, composite = false, frameData, frameDataSize = 0, borderRadius,
-  fallback, accessibilityLabel }: GPUShaderProps) {
+  fallback, accessibilityLabel, active = true, children, maxTime, frameTimeIndex }: GPUShaderProps) {
   const size = useBackgroundSize();
   const intensity = useBackgroundIntensity();
   const displayScale = useContext(PresentationCanvasScaleContext);
@@ -46,13 +46,8 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   // live window resizing must not recompile pipelines or reset simulation buffers.
   useLayoutEffect(() => {
     if (Platform.OS === "web") {
-      const surface = canvas.current?.getContext("webgpu")?.canvas;
-      if (surface) {
-        const pixelWidth = Math.max(1, Math.round(width * displayScale * PixelRatio.get()));
-        const pixelHeight = Math.max(1, Math.round(height * displayScale * PixelRatio.get()));
-        if (surface.width !== pixelWidth) surface.width = pixelWidth;
-        if (surface.height !== pixelHeight) surface.height = pixelHeight;
-      }
+      const context = canvas.current?.getContext("webgpu");
+      if (context) resizeBrowserSurface(context, width, height, displayScale);
       return;
     }
     const surface = canvas.current?.getNativeSurface();
@@ -60,18 +55,26 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   }, [width, height, displayScale, resources]);
   useEffect(() => {
     if (!supported) return;
-    return startShaderCanvas({ canvas, code, particles, particleCount, particleBlend, image, composite, width, height, frameDataSize,
+    return startShaderCanvas({ canvas, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize,
       reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
       setResources, setError });
   }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize]);
   return <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
     {supported && <Canvas ref={canvas} style={{ width, height }} transparent />}
-    {resources && !error && <UIFrames key={code} resources={resources} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={setError} onReady={() => setPreparedResources(resources)} />}
+    {resources && !error && <UIFrames key={code} resources={resources} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={setError} onReady={() => setPreparedResources(resources)} />}
+    {resources && !error && children}
     {(!supported || error) && fallback}
     {error && !fallback && <Text style={{ color: "#ffb4ae", padding: 24 }}>TypeGPU preview unavailable: {error}</Text>}
   </View>;
 }
 
+function resizeBrowserSurface(context: RNCanvasContext, width: number, height: number, displayScale: number) {
+  const surface = context.canvas;
+  const pixelWidth = Math.max(1, Math.round(width * displayScale * PixelRatio.get()));
+  const pixelHeight = Math.max(1, Math.round(height * displayScale * PixelRatio.get()));
+  if (surface.width !== pixelWidth) surface.width = pixelWidth;
+  if (surface.height !== pixelHeight) surface.height = pixelHeight;
+}
 
 // Dawn's event pump runs on JS even after frame rendering transfers to the UI
 // runtime. Both threads can submit pending Metal work, so device locking is
@@ -84,10 +87,10 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ canvas, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, frameDataSize = 0, reportError, setResources, setError }: {
+function startShaderCanvas({ canvas, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, reportError, setResources, setError }: {
   canvas: RefObject<CanvasRef | null>; code: string;
   particles: boolean; particleCount: number; particleBlend?: "additive" | "over"; image?: string; composite?: boolean;
-  width?: number; height?: number; frameDataSize?: number; reportError(error: unknown): void;
+  width?: number; height?: number; displayScale?: number; frameDataSize?: number; reportError(error: unknown): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
 }) {
     setResources(undefined);
@@ -115,6 +118,9 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         });
         const context = canvas.current.getContext("webgpu");
         if (!context) throw new Error("WebGPU surface unavailable");
+        // The library sizes from DOM bounds, which are zero during preparation.
+        // Set the drawing buffer before transferring ownership to UIFrames.
+        if (Platform.OS === "web") resizeBrowserSurface(context, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
         context.configure({ device, format, alphaMode: "premultiplied" });
         const fieldFormat = composite ? "rgba16float" : format;
@@ -196,7 +202,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[]>; previewTime: number; onError(message: string): void; onReady(): void }) {
+function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[]>; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -205,6 +211,7 @@ function UIFrames({ resources: r, width, height, aspect, brightness, particleCou
   const { alive, disposed } = r;
   const count = useSharedValue(0);
   const rendered = useSharedValue(false);
+  const finished = useSharedValue(false);
   const simulationEpoch = useSharedValue({ phase: "", slideKey: "", stepKey: "" });
   const { device, context, clock, groups, compute, render, particles } = r;
   const draw = (dt: number) => {
@@ -230,21 +237,26 @@ function UIFrames({ resources: r, width, height, aspect, brightness, particleCou
     }
   };
   const frame = useFrameCallback(info => {
-    if (playback.value.phase !== "playing") return;
+    if (!effectActive || playback.value.phase !== "playing") return;
+    const state=playback.value, previous=simulationEpoch.value;
+    if (finished.value && previous.slideKey===state.slideKey && previous.stepKey===state.stepKey && previous.phase==="playing") return;
     // Clamp only the simulation integration delta; visual time comes from the
     // shared wall clock and must not slow down when a frame is delayed.
     draw(Math.min(info.timeSincePreviousFrame ?? 0, 40)/1000);
+    const time=frameTimeIndex===undefined ? samplePlayback(state,previewTime,clockMode) : frameData?.value[frameTimeIndex];
+    finished.value=maxTime!==undefined && time!==undefined && time>=maxTime;
   }, false);
   useEffect(() => {
-    frame.setActive(active && !preview && !preparing);
+    frame.setActive(effectActive && active && !preview && !preparing);
     runOnUI(() => {
       "worklet";
       const phase = playback.value.phase;
-      if (phase === "preview" || phase === "preparing") { count.value = 0; draw(0); }
-      else if (phase === "playing" && !rendered.value) draw(0);
+      if (phase === "playing") finished.value=false;
+      if (phase === "preview" || phase === "preparing") { finished.value=false; count.value = 0; draw(0); }
+      else if (phase === "playing" && (!rendered.value || !effectActive)) draw(0);
     })();
     return () => frame.setActive(false);
-  }, [active, preview, preparing, previewTime, step, frame, rendered, brightness, playback, width, height, clockMode, frameData, particleVertexCount]);
+  }, [active, effectActive, maxTime, frameTimeIndex, preview, preparing, previewTime, step, frame, rendered, finished, brightness, playback, width, height, clockMode, frameData, particleVertexCount]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
     runOnUI(destroyGPU)(device, alive, disposed);

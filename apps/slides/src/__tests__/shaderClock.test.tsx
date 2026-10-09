@@ -8,14 +8,17 @@ import "./nativeMock";
 import { frames, flushUI } from "./uiClockMock";
 const { PresentationProvider } = await import("../../../../packages/presentation/src/runtime");
 const { useAnimatedShaderUniforms } = await import("../../../../packages/presentation/src/useAnimatedShaderUniforms");
+const { useGPUShaderData } = await import("../../../../packages/presentation/src/useGPUShaderData");
+const fields = ["time", "stepIndex", "anchored", ["geometry", 4]] as const;
 
 test("departing step effects keep their identity for one second, then freeze without React frames", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const runtime$ = observable({ playbackPhase: "playing", slideIndex: 0, stepIndex: 0 });
-  let uniforms, renders = 0, tree;
+  let uniforms, data, renders = 0, tree;
   function Probe({ active }) {
     renders++;
-    uniforms = useAnimatedShaderUniforms({}, 8, { active, clock: "step", clocks: { anchored: 0 } });
+    uniforms = useAnimatedShaderUniforms({ geometry: [1,2,3,4] }, 8, { active, clock: "step", clocks: { anchored: 0 } });
+    data = useGPUShaderData(uniforms, fields);
     return null;
   }
   const render = active => <PresentationProvider value={runtime$}><Probe active={active} /></PresentationProvider>;
@@ -33,6 +36,7 @@ test("departing step effects keep their identity for one second, then freeze wit
     flushUI();
     expect(uniforms.value.time).toBe(1.5, "exit does not sample the new step's zero time");
     expect(uniforms.value.stepIndex).toBe(0);
+    expect(data.value).toEqual([1.5,0,1.5,1,2,3,4]);
     const before = renders;
     frame.tick(2600); frame.tick(3000);
     expect(uniforms.value.time).toBe(2);
@@ -41,6 +45,7 @@ test("departing step effects keep their identity for one second, then freeze wit
     expect(uniforms.value.anchored).toBe(2.5);
     frame.tick(9000);
     expect(uniforms.value.time).toBe(2.5, "idle content retains the final exit frame");
+    expect(data.value).toEqual([2.5,0,2.5,1,2,3,4]);
     expect(renders).toBe(before);
     await act(() => tree.update(render(true))); flushUI();
     expect(uniforms.value.stepIndex).toBe(1);

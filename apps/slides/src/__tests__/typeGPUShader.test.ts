@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, preparing = false, composite = false, data = false, clockMode = "step" } = {}) {
+function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step" } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -14,6 +14,7 @@ function frames({ preview = false, active = true, preparing = false, composite =
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
   const effects = [], calls = [], uniforms = [], errors = [];
+  const frameData={value:[1,2,3,4]};
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
   let callback, enabled = false, ready = 0;
@@ -51,10 +52,10 @@ function frames({ preview = false, active = true, preparing = false, composite =
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
     clock: {}, states: [], groups: ["A", "B"], compute: {}, render: {}, particles: {}, frameData: data ? {} : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
-    clockMode, frameData: data ? { value: [1,2,3,4] } : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    effectActive, maxTime, frameTimeIndex, clockMode, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
-    playback,
+    playback, frameData,
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
@@ -85,6 +86,28 @@ test("preview renders one deterministic frame without starting a loop", () => {
   expect(f.enabled()).toBe(false);
   expect(f.uniforms).toHaveLength(1);
   expect(f.uniforms[0].slice(0, 4)).toEqual([7, 0, 0, 1]);
+  f.stop();
+});
+
+test("inactive effect layers prepare once without submitting ongoing frames", () => {
+  const f = frames({ effectActive:false, data:true });
+  expect(f.enabled()).toBe(false);
+  expect(f.ready()).toBe(1);
+  const count=f.uniforms.length;
+  f.tick(); expect(f.uniforms).toHaveLength(count);
+  f.stop();
+});
+
+test("finite GPU effects draw their final snapshot, stop submissions, and replay on a new step", () => {
+  const f=frames({data:true,maxTime:2,frameTimeIndex:0});
+  f.frameData.value=[2,2,3,4]; f.tick();
+  expect(f.uniforms.at(-1)).toEqual([2,2,3,4]);
+  const count=f.uniforms.length;
+  f.tick(); f.tick(); expect(f.uniforms).toHaveLength(count);
+  f.playback.value={...f.playback.value,stepKey:"replay",stepTime:0};
+  f.frameData.value=[0,2,3,4]; f.tick();
+  expect(f.uniforms.length).toBe(count+2);
+  expect(f.uniforms.at(-1)).toEqual([0,2,3,4]);
   f.stop();
 });
 
@@ -156,6 +179,38 @@ test("native devices require synchronization while browser devices use standard 
     return device;
   } })).toBe(device);
   expect(descriptors.at(-1)).toBeUndefined();
+});
+
+test("offscreen browser preparation sizes the surface before configuring and submitting it", async () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false,
+    presets: [require.resolve("@react-native/babel-preset")],
+    plugins: [require.resolve("react-native-worklets/plugin")],
+  });
+  const start = new Function("require", "exports", code + "\nreturn startShaderCanvas;")(
+    name => name.startsWith("@babel/") ? require(name) : name === "react-native" ? { Platform:{OS:"web"}, PixelRatio:{get:()=>2} }
+      : name === "react-native-reanimated" ? {makeMutable:value=>({value}),runOnUI:fn=>fn} : {}, {},
+  );
+  const surface = {width:0,height:0};
+  const assertSize = () => expect([surface.width,surface.height]).toEqual([2016,1000]);
+  const context = {canvas:surface,configure:assertSize,getCurrentTexture:()=>{assertSize();return {createView(){}};}};
+  const device = {
+    addEventListener(){},pushErrorScope(){},popErrorScope:async()=>null,lost:new Promise(()=>{}),destroy(){},
+    createShaderModule:()=>({getCompilationInfo:async()=>({messages:[]})}),
+    createBuffer:()=>({}),createBindGroupLayout:()=>({}),createPipelineLayout:()=>({}),
+    createBindGroup:()=>({}),createComputePipeline:()=>({}),createRenderPipeline:()=>({}),
+  };
+  const originalNavigator = globalThis.navigator;
+  Object.defineProperty(globalThis,"navigator",{configurable:true,value:{gpu:{requestAdapter:async()=>({requestDevice:async()=>device}),getPreferredCanvasFormat:()=>"bgra8unorm"}}});
+  try {
+    await new Promise<void>((resolve,reject)=>{
+      start({canvas:{current:{getContext:()=>{surface.width=0;surface.height=0;return context;}}},
+        code:"",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
+        setResources:r=>{if(r){r.context.getCurrentTexture();resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
+    });
+  } finally {Object.defineProperty(globalThis,"navigator",{configurable:true,value:originalNavigator});}
 });
 
 

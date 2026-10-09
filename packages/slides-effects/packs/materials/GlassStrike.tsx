@@ -1,8 +1,9 @@
 import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
-import { useAnimatedShaderUniforms } from "@legend-apps/presentation";
+import { GPUShader, useAnimatedShaderUniforms, useGPUShaderData } from "@legend-apps/presentation";
 import { useMemo } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
 import { glassPanelMaterial } from "./GlassPanels";
+import { createGlassStrikeGPU, glassStrikeData, glassStrikeParticleCount } from "./GlassStrikeGPU";
 export const glassStrikeShader = `
 const float halfWidth = 251.0;
 const float radius = 40.0;
@@ -192,11 +193,19 @@ function compileStrike(source: string) {
   }
   return effect;
 }
-export function GlassStrike({ crossed = false, settled = false, resolveToCheck = true, centerX, phase = 0, panelHalfHeight = 151, trigger = "step", active = true,
+export function GlassStrike({ crossed = false, settled = false, resolveToCheck = true, centerX, phase = 0, panelHalfHeight = 151, trigger = "step", active = true, maxTime,
   width, height, style, geometry }: { crossed?: boolean; settled?: boolean; resolveToCheck?: boolean; centerX: number; phase?: number; panelHalfHeight?: number;
-  trigger?: "slide" | "step" | number; active?: boolean; width: number; height: number; style?: StyleProp<ViewStyle>; geometry?: GlassStrikeGeometry; }) {
+  trigger?: "slide" | "step" | number; active?: boolean; maxTime?: number; width: number; height: number; style?: StyleProp<ViewStyle>; geometry?: GlassStrikeGeometry; }) {
   const effect = useMemo(() => compileStrike(createGlassStrikeShader(geometry)), [geometry]);
   const uniforms = useAnimatedShaderUniforms({ panelHalfHeight, resolveToCheck: resolveToCheck ? 1 : 0, broken: crossed ? 1 : 0,
-    settled: settled ? 1 : 0, phase, centerX }, crossed ? 6 : 2, { active, clock: crossed && !settled ? trigger : "slide" });
-  return <Canvas pointerEvents="none" style={[{ width, height }, style]}><Fill><Shader source={effect} uniforms={uniforms} /></Fill></Canvas>;
+    settled: settled ? 1 : 0, phase, centerX }, crossed ? 6 : 2, { active, maxTime, clock: crossed && !settled ? trigger : "slide" });
+  const code = useMemo(() => createGlassStrikeGPU(width, height, geometry), [width, height, geometry]);
+  const data = useGPUShaderData(uniforms, glassStrikeData);
+  return <View pointerEvents="none" style={[{ width, height }, style]}>
+    <GPUShader code={code} active={active && crossed} width={width} height={height} particles particleCount={glassStrikeParticleCount}
+      particleBlend="over" composite frameData={data} frameDataSize={12} maxTime={maxTime} frameTimeIndex={0} borderRadius={0}
+      fallback={<Canvas style={{ width, height }}><Fill><Shader source={effect} uniforms={uniforms} /></Fill></Canvas>}>
+      {!crossed && <Canvas style={{ position:"absolute", inset:0 }}><Fill><Shader source={effect} uniforms={uniforms} /></Fill></Canvas>}
+    </GPUShader>
+  </View>;
 }

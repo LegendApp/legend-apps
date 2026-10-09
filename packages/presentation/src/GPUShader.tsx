@@ -8,6 +8,8 @@ export type GPUShaderProps = {
   particleBlend?: "additive" | "over"; previewTime?: number;
   clock?: "slide" | "step"; image?: string; composite?: boolean;
   frameData?: SharedValue<number[]>; frameDataSize?: number;
+  active?: boolean; children?: ReactNode;
+  maxTime?: number; frameTimeIndex?: number;
   borderRadius?: number; fallback?: ReactNode; accessibilityLabel?: string;
 };
 const GPUShaderContext = createContext<ComponentType<GPUShaderProps> | null>(null);
