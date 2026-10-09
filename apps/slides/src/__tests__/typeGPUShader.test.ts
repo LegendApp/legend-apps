@@ -124,7 +124,7 @@ test("the native GPU bridge compiles with React Compiler and the worklet transfo
 });
 
 
-test("UI renderer requires Dawn synchronization and never retries an unsafe device", async () => {
+test("native devices require synchronization while browser devices use standard WebGPU", async () => {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -132,8 +132,9 @@ test("UI renderer requires Dawn synchronization and never retries an unsafe devi
     presets: [require.resolve("@react-native/babel-preset")],
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
+  const platform = { OS: "macos" };
   const requestShaderDevice = new Function("require", "exports", code + "\nreturn requestShaderDevice;")(
-    name => name.startsWith("@babel/") ? require(name) : ({}), {},
+    name => name.startsWith("@babel/") ? require(name) : name === "react-native" ? { Platform: platform } : ({}), {},
   );
   const descriptors = [];
   const device = {};
@@ -148,6 +149,12 @@ test("UI renderer requires Dawn synchronization and never retries an unsafe devi
     throw new Error("Unsupported synchronization");
   } })).rejects.toThrow("Unsupported synchronization");
   expect(attempts).toBe(1);
+  platform.OS = "web";
+  expect(await requestShaderDevice({ requestDevice: async descriptor => {
+    descriptors.push(descriptor);
+    return device;
+  } })).toBe(device);
+  expect(descriptors.at(-1)).toBeUndefined();
 });
 
 

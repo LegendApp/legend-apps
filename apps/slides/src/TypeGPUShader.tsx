@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Text, View } from "react-native";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { PixelRatio, Platform, Text, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask } from "@legend-apps/presentation";
+import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask } from "@legend-apps/presentation";
 import { reportSlideError } from "./slidesStore";
 
 type Resources = {
@@ -24,14 +24,16 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
 }) {
   const size = useBackgroundSize();
   const intensity = useBackgroundIntensity();
+  const displayScale = useContext(PresentationCanvasScaleContext);
   const width = background ? Math.max(1, Math.round(size.width)) : configuredWidth;
   const height = background ? Math.max(1, Math.round(size.height)) : configuredHeight;
   const brightness = background ? intensity : 1;
   const canvas = useRef<CanvasRef>(null);
+  const supported = Platform.OS !== "web" || !!navigator.gpu;
   const [resources, setResources] = useState<Resources>();
   const [preparedResources, setPreparedResources] = useState<Resources>();
   const [error, setError] = useState<string>();
-  usePreparationTask(!error && (!resources || preparedResources !== resources));
+  usePreparationTask(supported && !error && (!resources || preparedResources !== resources));
   const slideIndex = usePresentationValue("slideIndex");
   const isPreview = usePresentationValue("isPreview");
   const errorContext = useRef({ slideIndex, isPreview });
@@ -39,14 +41,27 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   // Surface dimensions are independent of shader/device ownership. In particular,
   // live window resizing must not recompile pipelines or reset simulation buffers.
   useLayoutEffect(() => {
+    if (Platform.OS === "web") {
+      const surface = canvas.current?.getContext("webgpu")?.canvas;
+      if (surface) {
+        const pixelWidth = Math.max(1, Math.round(width * displayScale * PixelRatio.get()));
+        const pixelHeight = Math.max(1, Math.round(height * displayScale * PixelRatio.get()));
+        if (surface.width !== pixelWidth) surface.width = pixelWidth;
+        if (surface.height !== pixelHeight) surface.height = pixelHeight;
+      }
+      return;
+    }
     const surface = canvas.current?.getNativeSurface();
     if (surface) { surface.width = width; surface.height = height; }
-  }, [width, height]);
-  useEffect(() => startShaderCanvas({ canvas, code, particles, particleCount,
-    reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
-    setResources, setError }), [code, particles, particleCount]);
+  }, [width, height, displayScale, resources]);
+  useEffect(() => {
+    if (!supported) return;
+    return startShaderCanvas({ canvas, code, particles, particleCount,
+      reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
+      setResources, setError });
+  }, [supported, code, particles, particleCount]);
   return <View style={{ width, height, overflow: "hidden", borderRadius: background ? 0 : 20 }}>
-    <Canvas ref={canvas} style={{ width, height }} transparent />
+    {supported && <Canvas ref={canvas} style={{ width, height }} transparent />}
     {resources && !error && <UIFrames key={code} resources={resources} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} previewTime={previewTime} onError={setError} onReady={() => setPreparedResources(resources)} />}
     {error && <Text style={{ color: "#ffb4ae", padding: 24 }}>TypeGPU preview unavailable: {error}</Text>}
   </View>;
@@ -57,6 +72,7 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
 // runtime. Both threads can submit pending Metal work, so device locking is
 // required. Never retry without it: unsupported adapters must fail safely.
 function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
+  if (Platform.OS === "web") return adapter.requestDevice();
   return adapter.requestDevice({
     requiredFeatures: ["implicit-device-synchronization" as GPUFeatureName],
   });

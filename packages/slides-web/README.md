@@ -23,12 +23,14 @@ Web adapters handle DOM text measurement, scaled layouts, DOM captures through `
 
 | Native feature | Web export |
 | --- | --- |
-| TypeGPU worklet renderer | Omit its decorative effect; preserve surrounding content |
+| TypeGPU shaders | Render through the WebGPU Canvas adapter and Reanimated's web scheduling; omit the effect when WebGPU is unavailable |
 | Runtime shader image filters | Preserve the filter input and other supported effects |
 | Native shader slide transitions | Cut between slides; retain supported reveal and layout animation |
 | Text-to-path conversion | Draw the text with Skia text |
 | System font matching inside Skia | Use bundled Roboto |
 | Native code block | Plain formatted code |
+
+TypeGPU requires a browser with WebGPU and a secure context: HTTPS for remote hosts, or HTTP on localhost. Plain HTTP Tailscale addresses preserve the slide content but omit TypeGPU effects. Shader programs, compute buffers, and particle rendering are shared with the native renderer; the native-only device synchronization feature is not requested on web. Previews remain static and outgoing effects freeze on their last frame.
 
 Recorded demos retain their original frame rates and codec requirements. Chromium on macOS played the ReactCon `.mov` and `.mp4` files; other browsers may need media transcoding. This exporter does not transcode recordings.
 

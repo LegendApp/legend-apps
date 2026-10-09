@@ -49,15 +49,12 @@ async function buildWebsite(deck: string, output: string) {
     "react-native": path.join(src, "native.tsx"),
     "@shopify/react-native-skia": path.join(src, "skia.tsx"),
     "@legend-apps/scaled-view": path.join(src, "scaled.tsx"),
-    "react-native-webgpu": path.join(src, "gpu.tsx"),
   };
   const replacements: Record<string, string> = {
     "NativeVideoView.tsx": "video.tsx",
     "slidesSettings.ts": "settings.ts",
     "CodeBlock.tsx": "code.tsx",
     "Webview.tsx": "webview.tsx",
-    "TypeGPU.tsx": "gpu.tsx",
-    "TypeGPUShader.tsx": "gpu.tsx",
     "brightnessDiagnostics.ts": "settings.ts",
   };
   const plugin: Plugin = {
