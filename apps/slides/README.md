@@ -843,7 +843,7 @@ custom components.
 `TypeGPUShader` accepts a TypeGPU-resolved WGSL program and runs compute/render
 passes from a host-compiled Reanimated UI worklet. It does not use the older
 `TypeGPU` component's JavaScript frame callback. See
-[the talk’s TypeGPU examples](https://github.com/LegendApp/legend-talks/blob/main/talks/react-native-desktop/TypeGPUAlternates.ts) for the current program contract:
+[the talk’s TypeGPU examples](https://github.com/LegendApp/legend-talks/blob/main/react-native-desktop/TypeGPUAlternates.ts) for the current program contract:
 a 32-byte frame uniform, two ping-pong particle buffers, and the named compute,
 fullscreen and optional instanced-particle entry points.
 
