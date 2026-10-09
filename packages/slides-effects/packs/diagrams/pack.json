@@ -1,0 +1,15 @@
+{
+  "id": "diagrams",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "BranchFan": "./BranchFan.tsx"
+  },
+  "capabilities": [
+    "reanimated",
+    "skia"
+  ],
+  "dependencies": {
+    "materials": "1.0.0"
+  }
+}

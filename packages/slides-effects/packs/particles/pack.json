@@ -1,0 +1,16 @@
+{
+  "id": "particles",
+  "version": "1.0.0",
+  "hostApiVersion": 1,
+  "exports": {
+    "GlowField": "./GlowField.ts",
+    "WindowStorm": "./WindowStorm.ts",
+    "Constellation": "./Constellation.ts",
+    "InterfaceReveal": "./InterfaceReveal.ts",
+    "TrajectoryEmitter": "./TrajectoryEmitter.tsx"
+  },
+  "capabilities": [
+    "reanimated",
+    "webgpu"
+  ]
+}
