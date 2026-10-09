@@ -44,7 +44,7 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
     if (!fs.existsSync(at)) fs.symlinkSync(path.relative(path.dirname(at), target), at);
   }
   // Ship only the compiler's source closure; presentation UI and tests stay out.
-  for (const entry of ["compiler", "transitions", "layout.ts", "speakerNotesSource.ts"]) {
+  for (const entry of ["compiler", "effectPacks", "transitions", "layout.ts", "speakerNotesSource.ts"]) {
     fs.cpSync(path.join(rootDir, "packages/presentation/src", entry), path.join(destination, "packages/presentation/src", entry), {
       recursive: true,
       filter: file => !file.split(path.sep).includes("__tests__") && !/\.test\.[cm]?[jt]sx?$/.test(file),

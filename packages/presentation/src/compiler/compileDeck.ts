@@ -17,7 +17,9 @@ import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
-import { defaultEffectPacksDirectory, resolveEffectPack } from "./effectPacks";
+import { defaultEffectPacksDirectory, MissingEffectPack, resolveEffectPack } from "./effectPacks";
+import type { EffectLock } from "../effectPacks/schema";
+import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLock } from "../effectPacks/storage";
 
 const workletsPlugin = createRequire(import.meta.url).resolve("react-native-worklets/plugin");
 const reactCompilerPlugin = createRequire(import.meta.url).resolve("babel-plugin-react-compiler");
@@ -154,7 +156,8 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
 }
 
 export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
-  options: { effectPacksDirectory?: string; dependencies?: Set<string> } = {}): Plugin {
+  options: { effectPacksDirectory?: string; dependencies?: Set<string>; lock?: EffectLock; missingPacks?: Set<string>;
+    packIds?: Set<string>; resolvedPins?: EffectLock["packs"] } = {}): Plugin {
   const deckRoot = fs.realpathSync(path.dirname(entryPath));
   return {
     name: "legend-slides-local-deck",
@@ -165,14 +168,23 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
       }));
       const libraryRoots = new Map<string, string>();
       const packRoots = new Set<string>();
+      const verified = new Set<string>();
       buildApi.onResolve({ filter: /^slides:/ }, (args) => {
-        const importerRoot = libraryRoots.get(args.importer);
-        const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
-          importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined);
-        libraryRoots.set(pack.file, pack.root);
-        packRoots.add(pack.root);
-        options.dependencies?.add(pack.manifest);
-        return { path: pack.file };
+        const id = /^slides:([a-z][a-z0-9-]*)\//.exec(args.path)?.[1];
+        if (id) options.packIds?.add(id);
+        try {
+          const importerRoot = libraryRoots.get(args.importer);
+          const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
+            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified);
+          if (pack.pin && options.resolvedPins) options.resolvedPins[pack.id] = pack.pin;
+          libraryRoots.set(pack.file, pack.root);
+          packRoots.add(pack.root);
+          options.dependencies?.add(pack.manifest);
+          return { path: pack.file };
+        } catch (error) {
+          if (error instanceof MissingEffectPack) options.missingPacks?.add(error.id);
+          return { errors: [{ text: error instanceof Error ? error.message : String(error) }] };
+        }
       });
       buildApi.onResolve({ filter: /^legend-transition:/ }, (args) => {
         const reference = args.path.slice("legend-transition:".length);
@@ -273,7 +285,10 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     return { success: false, errors: [`Deck not found: ${absoluteDeckPath}`], warnings: [] };
   }
 
+  const missingPacks = new Set<string>(), packIds = new Set<string>();
   try {
+    const lock = readEffectLock(absoluteDeckPath), pins: EffectLock["packs"] = {};
+    const packsDirectory = options.effectPacksDirectory ?? (lock ? installedPacksDirectory() : defaultEffectPacksDirectory());
     const source = options.source ?? fs.readFileSync(absoluteDeckPath, "utf8");
     const extraDependencies = new Set<string>();
     const result = await build({
@@ -289,7 +304,8 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       outfile: "deck.js",
       platform: "neutral",
       plugins: [
-        localDeckPlugin(absoluteDeckPath, options.transitionDirectory, { effectPacksDirectory: options.effectPacksDirectory, dependencies: extraDependencies }),
+        localDeckPlugin(absoluteDeckPath, options.transitionDirectory, { effectPacksDirectory: packsDirectory,
+          dependencies: extraDependencies, lock, missingPacks, packIds, resolvedPins: pins }),
         mdxDeckPlugin(absoluteDeckPath, extraDependencies, source, options.transitionDirectory),
       ],
       resolveExtensions: [".macos.tsx", ".macos.ts", ".native.tsx", ".native.ts", ".tsx", ".ts", ".jsx", ".js", ".json"],
@@ -319,7 +335,14 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     if (!code) {
       return { success: false, errors: ["The compiler did not produce a Hermes-compatible deck bundle."], warnings: [] };
     }
+    const uniwindCode = await compileUniwind(path.dirname(absoluteDeckPath), options.source,
+      [...extraDependencies].filter(file => file.endsWith(`${path.sep}pack.json`)).map(file => path.dirname(file)));
+    if (!lock && options.source === undefined && packIds.size && Object.keys(pins).length === packIds.size) {
+      writeEffectLock(absoluteDeckPath, { schemaVersion: 1, packs: pins });
+    }
+    if (fs.existsSync(effectLockPath(absoluteDeckPath))) extraDependencies.add(effectLockPath(absoluteDeckPath));
     return {
+      effectPackIds: [...packIds].sort(),
       code,
       noteTargets: getSpeakerNotesTargets(source),
       dependencies: [...new Set([
@@ -327,14 +350,13 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
         ...extraDependencies,
       ])].sort(),
       success: true,
-      uniwindCode: await compileUniwind(path.dirname(absoluteDeckPath), options.source,
-        [...extraDependencies].filter(file => file.endsWith(`${path.sep}pack.json`)).map(file => path.dirname(file))),
+      uniwindCode,
       warnings: formatMessages(result.warnings),
     };
   } catch (error) {
     const errors = typeof error === "object" && error && "errors" in error
       ? formatMessages((error as { errors: Message[] }).errors)
       : [error instanceof Error ? error.message : String(error)];
-    return { success: false, errors, warnings: [] };
+    return { success: false, errors, warnings: [], effectPackIds: [...packIds].sort(), missingEffectPacks: [...missingPacks].sort() };
   }
 }

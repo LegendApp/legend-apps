@@ -1,4 +1,5 @@
 export type CompileDeckSuccess = {
+  effectPackIds?: string[];
   noteTargets?: string[];
   sourceSlideEnds?: number[];
   code: string;
@@ -9,6 +10,8 @@ export type CompileDeckSuccess = {
 };
 
 export type CompileDeckFailure = {
+  effectPackIds?: string[];
+  missingEffectPacks?: string[];
   sourceSlideEnds?: number[];
   errors: string[];
   success: false;
