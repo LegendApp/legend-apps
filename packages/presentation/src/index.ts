@@ -64,4 +64,4 @@ export { NativeVideoView } from "./NativeVideoView";
 
 export { createTransitionProgress, interpolateTransition, subtractTransition, divideTransition, sampleTransitionValue, resolveTransitionStyle, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "./transitionValues";
 
-export { GPUShader, GPUShaderProvider, useGPUShaderAvailable, type GPUShaderProps } from "./GPUShader";
+export { GPUShader, GPUShaderProvider, type GPUShaderProps } from "./GPUShader";

@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step" } = {}) {
+function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -50,7 +50,7 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     name => mocks[name] ?? require(name), {},
   );
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
-    clock: {}, states: [], groups: ["A", "B"], compute: {}, render: {}, particles: {}, frameData: data ? {} : undefined,
+    clock: {}, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
     effectActive, maxTime, frameTimeIndex, clockMode, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
@@ -86,6 +86,15 @@ test("preview renders one deterministic frame without starting a loop", () => {
   expect(f.enabled()).toBe(false);
   expect(f.uniforms).toHaveLength(1);
   expect(f.uniforms[0].slice(0, 4)).toEqual([7, 0, 0, 1]);
+  f.stop();
+});
+
+test("analytic effects draw and composite without compute dispatch or alternating buffers", () => {
+  const f=frames({simulation:false,composite:true,data:true});
+  f.tick();f.tick();
+  expect(f.calls.some(call=>call[0]==="compute" || call[0]==="dispatch")).toBe(false);
+  expect(f.calls.filter(call=>call[0]==="render").map(call=>call[1])).toEqual(["A","A","lens","A","A","lens","A","A","lens"]);
+  expect(f.calls.filter(call=>call[0]==="draw")).toHaveLength(9);
   f.stop();
 });
 
@@ -181,7 +190,34 @@ test("native devices require synchronization while browser devices use standard 
   expect(descriptors.at(-1)).toBeUndefined();
 });
 
-test("offscreen browser preparation sizes the surface before configuring and submitting it", async () => {
+test("missing WebGPU and renderer errors surface instead of switching renderers", () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename,"utf8"),{
+    filename,babelrc:false,configFile:false,presets:[require.resolve("@react-native/babel-preset")],
+    plugins:[require.resolve("react-native-worklets/plugin")],
+  });
+  let error,state=0;
+  const renderer=new Function("require","exports",code+"\nreturn TypeGPUShader;")(
+    name=>name.startsWith("@babel/") ? require(name) : name==="react" ? {
+      useContext:()=>1,useRef:value=>({current:value}),useEffect(){},useLayoutEffect(){},
+      useState:()=>[state++%3===2 ? error : undefined,()=>{}],
+    } : name==="react-native" ? {Platform:{OS:"web"}} : name==="@legend-apps/presentation" ? {
+      useBackgroundSize:()=>({width:1920,height:1080}),useBackgroundIntensity:()=>1,
+      usePresentationValue:()=>0,usePreparationTask(){},
+    } : name==="react/jsx-runtime" ? require(name) : {},{},
+  );
+  const originalNavigator=globalThis.navigator;
+  try {
+    Object.defineProperty(globalThis,"navigator",{configurable:true,value:{}});
+    expect(()=>renderer({code:""})).toThrow("WebGPU is required");
+    Object.defineProperty(globalThis,"navigator",{configurable:true,value:{gpu:{}}});
+    error="WebGPU device lost";
+    expect(()=>renderer({code:""})).toThrow("WebGPU device lost");
+  } finally {Object.defineProperty(globalThis,"navigator",{configurable:true,value:originalNavigator});}
+});
+
+test("offscreen browser setup sizes first and allocates simulation resources only for compute programs", async () => {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -196,20 +232,24 @@ test("offscreen browser preparation sizes the surface before configuring and sub
   const surface = {width:0,height:0};
   const assertSize = () => expect([surface.width,surface.height]).toEqual([2016,1000]);
   const context = {canvas:surface,configure:assertSize,getCurrentTexture:()=>{assertSize();return {createView(){}};}};
+  const buffers=[],computes=[];
   const device = {
     addEventListener(){},pushErrorScope(){},popErrorScope:async()=>null,lost:new Promise(()=>{}),destroy(){},
     createShaderModule:()=>({getCompilationInfo:async()=>({messages:[]})}),
-    createBuffer:()=>({}),createBindGroupLayout:()=>({}),createPipelineLayout:()=>({}),
-    createBindGroup:()=>({}),createComputePipeline:()=>({}),createRenderPipeline:()=>({}),
+    createBuffer:descriptor=>{buffers.push(descriptor);return {};},createBindGroupLayout:()=>({}),createPipelineLayout:()=>({}),
+    createBindGroup:()=>({}),createComputePipeline:descriptor=>{computes.push(descriptor);return {};},createRenderPipeline:()=>({}),
   };
   const originalNavigator = globalThis.navigator;
   Object.defineProperty(globalThis,"navigator",{configurable:true,value:{gpu:{requestAdapter:async()=>({requestDevice:async()=>device}),getPreferredCanvasFormat:()=>"bgra8unorm"}}});
   try {
-    await new Promise<void>((resolve,reject)=>{
+    for (const simulation of [false,true]) await new Promise<void>((resolve,reject)=>{
       start({canvas:{current:{getContext:()=>{surface.width=0;surface.height=0;return context;}}},
-        code:"",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
-        setResources:r=>{if(r){r.context.getCurrentTexture();resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
+        code:simulation ? "@compute @workgroup_size(64) fn simulate() {}" : "",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
+        setResources:r=>{if(r){r.context.getCurrentTexture();expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
     });
+    expect(buffers.filter(b=>b.usage===(128|8))).toHaveLength(2);
+    expect(buffers.filter(b=>b.usage===(64|8))).toHaveLength(2);
+    expect(computes).toHaveLength(1);
   } finally {Object.defineProperty(globalThis,"navigator",{configurable:true,value:originalNavigator});}
 });
 

@@ -9,7 +9,9 @@ export function createGlassStrikeGPU(width: number, height: number, geometry: Gl
     strikeTint = [1,0.045,0.025], checkTint = [0.12,0.95,0.38],
     strokePoints = [[-302,-240],[306,238],[298,-245],[-309,246]] } = geometry;
   const n = gpuNumber;
-  if (width <= 0 || height <= 0 || halfWidth <= 0 || radius < 0 || scale <= 0) throw new Error("Invalid glass strike geometry");
+  if (strokePoints.length !== 4 || ![width,height,centerY,halfWidth,radius,scale,...strokePoints.flat()].every(Number.isFinite) ||
+      width <= 0 || height <= 0 || halfWidth <= 0 || radius < 0 || scale <= 0 ||
+      [...strikeTint,...checkTint].some(v=>!Number.isFinite(v) || v<0 || v>1)) throw new Error("Invalid glass strike geometry");
   return gpuProgram(`${gpuQuad}
 @group(0) @binding(5) var<storage,read> data:array<vec4f>;
 const resolution=vec2f(${n(width)},${n(height)});

@@ -1,5 +1,4 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from "react";
-import { Platform } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 
 export type GPUShaderProps = {
@@ -10,7 +9,7 @@ export type GPUShaderProps = {
   frameData?: SharedValue<number[]>; frameDataSize?: number;
   active?: boolean; children?: ReactNode;
   maxTime?: number; frameTimeIndex?: number;
-  borderRadius?: number; fallback?: ReactNode; accessibilityLabel?: string;
+  borderRadius?: number; accessibilityLabel?: string;
 };
 const GPUShaderContext = createContext<ComponentType<GPUShaderProps> | null>(null);
 export function GPUShaderProvider({ renderer, children }: { renderer: ComponentType<GPUShaderProps>; children?: ReactNode }) {
@@ -19,10 +18,6 @@ export function GPUShaderProvider({ renderer, children }: { renderer: ComponentT
 /** Packs describe a program; the host owns its canvas, playback and GPU lifetime. */
 export function GPUShader(props: GPUShaderProps) {
   const Renderer = useContext(GPUShaderContext);
-  return Renderer ? <Renderer {...props} /> : props.fallback ?? null;
-}
-
-export function useGPUShaderAvailable() {
-  const renderer = useContext(GPUShaderContext);
-  return !!renderer && (Platform.OS !== "web" || !!navigator.gpu);
+  if (!Renderer) throw new Error("GPUShader requires a GPUShaderProvider");
+  return <Renderer {...props} />;
 }

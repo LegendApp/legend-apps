@@ -4,7 +4,6 @@ const Frame = d.struct({ time: d.f32, dt: d.f32, frame: d.f32, step: d.f32,
   aspect: d.f32, brightness: d.f32, slideTime: d.f32, stepTime: d.f32 }).$name("Frame");
 export const gpuFrame = `
 @group(0) @binding(0) var<uniform> clock: Frame;
-@compute @workgroup_size(64) fn simulate() {}
 struct Surface { @builtin(position) position: vec4f, @location(0) uv: vec2f }
 @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> Surface {
   let uv = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
