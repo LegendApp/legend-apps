@@ -44,7 +44,8 @@ test("step schedules leave lead and tail time and reject impossible schedules", 
   expect(schedule[2]).toBeLessThan(6500);
   expect(() => recordingSchedule(4, 3)).toThrow("exceeds");
   for (const steps of [-1, 1.5, NaN]) expect(() => recordingSchedule(8, steps)).toThrow("--steps");
-  for (const seconds of [2, 601, NaN]) expect(() => recordingSchedule(seconds, 0)).toThrow("--seconds");
+  expect(recordingSchedule(595, 0)).toEqual([]);
+  for (const seconds of [2, 596, 600, NaN]) expect(() => recordingSchedule(seconds, 0)).toThrow("--seconds");
 });
 
 test("MDX step discovery handles render-prop counts without counting the initial state or code samples", () => {
@@ -91,9 +92,8 @@ test("audience selection requires the launched process and never falls back to p
 });
 
 test("windowed audience crops its title bar in capture pixels while fullscreen stays uncropped", () => {
-  expect(audienceCropTop(true, 1920, 960)).toBe(0);
-  expect(audienceCropTop(false, 1920, 960)).toBe(56);
-  expect(audienceCropTop(false, 1920, 0)).toBe(28);
+  expect(audienceCropTop(true, 1920, 1512)).toBe(0);
+  expect(audienceCropTop(false, 1920, 1512)).toBe(36);
   expect(presenterWindowTitle("glass-strike")).toBe("glass-strike.mdx — Legend Slides");
 });
 

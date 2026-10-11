@@ -187,12 +187,11 @@ try {
   run("osascript", ["-e", keyboard.activate]);
   target = audienceTarget(listWindows(), deckWindow.pid, pattern);
   if (!target) throw new Error("The Legend Slides audience window disappeared while preparing recording focus.");
-  // Windowed audiences include a title bar; measure their Accessibility size to convert points to capture pixels.
+  // Windowed audiences include a title bar; recorder window dimensions are in points.
   const audienceProcess = `tell application "System Events" to tell (first application process whose unix id is ${target.pid})`;
   const audienceWindow = `window ${JSON.stringify(target.title)}`;
   const fullscreen = run("osascript", ["-e", `${audienceProcess} to get value of attribute "AXFullScreen" of ${audienceWindow}`]).stdout.trim() === "true";
-  const axSize = run("osascript", ["-e", `${audienceProcess} to get value of attribute "AXSize" of ${audienceWindow}`]).stdout.trim().split(",").map(Number);
-  automaticCrop = audienceCropTop(fullscreen, target.width, axSize[0]);
+  automaticCrop = audienceCropTop(fullscreen, 1920, target.width);
   console.log(`Recording audience window ${target.id} "${target.title}" for ${seconds}s, ${steps} step(s)…`);
   recording = spawn(recorder, ["--window-id", String(target.id), "--output", raw, "--seconds", String(seconds + 5), "--fps", "60", "--width", "1920", "--reserve-bytes", reserve], { stdio: ["ignore", "pipe", "inherit"] });
   recorderEvents = observeRecorder(recording);
@@ -205,8 +204,8 @@ try {
   run("osascript", ["-e", advanceAudience]);
   const startedAt = performance.now();
   const navigationSeconds = (startedAt - readyAt) / 1000;
-  if (navigationSeconds >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
   playbackOffset = readyOffset + navigationSeconds;
+  if (playbackOffset >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
   for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Keep the already-focused audience active without raising it during the capture.

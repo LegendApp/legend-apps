@@ -64,16 +64,16 @@ export function audienceTarget(windows: RecordingWindow[], pid: number, pattern?
 
 export const presenterWindowTitle = (slug: string) => `${slug}.mdx — Legend Slides`;
 
-/** ScreenCaptureKit reports pixels while Accessibility reports points. */
-export function audienceCropTop(fullscreen: boolean, captureWidth: number, axWidth: number, titleBarPoints = 28) {
+/** Convert the title bar from window points to the recorder's output pixels. */
+export function audienceCropTop(fullscreen: boolean, recordedWidth: number, windowPointWidth: number, titleBarPoints = 28) {
   if (fullscreen) return 0;
-  const scale = Number.isFinite(captureWidth / axWidth) && axWidth > 0 ? captureWidth / axWidth : 1;
-  return Math.round(titleBarPoints * scale);
+  return Math.round(titleBarPoints * recordedWidth / windowPointWidth);
 }
 
 export function recordingSchedule(seconds: number, steps: number) {
   const lead = 1500, tail = 1500;
-  if (!Number.isFinite(seconds) || seconds < 3 || seconds > 600) throw new Error("--seconds must be between 3 and 600.");
+  // The recorder's 600-second limit includes the five-second capture lead-in.
+  if (!Number.isFinite(seconds) || seconds < 3 || seconds > 595) throw new Error("--seconds must be between 3 and 595.");
   if (!Number.isSafeInteger(steps) || steps < 0) throw new Error("--steps must be a nonnegative integer.");
   const interval = steps ? (seconds * 1000 - lead - tail) / steps : 0;
   if (steps && interval < 800) throw new Error("Step schedule exceeds the recording duration; increase --seconds or reduce --steps.");
