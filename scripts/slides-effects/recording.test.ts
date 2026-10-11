@@ -66,7 +66,12 @@ test("pack hashes use the publisher's sorted archive and reject mismatches in ei
     fs.writeFileSync(path.join(directory, "pack.json"), '{"version":"1"}');
     fs.writeFileSync(path.join(directory, "A.tsx"), "export const A = 1;");
     fs.writeFileSync(path.join(directory, "ignored.md"), "not a runtime file");
-    const expected = sha256(JSON.stringify({ schemaVersion: 1, files: { "A.tsx": "export const A = 1;", "pack.json": '{"version":"1"}' } }) + "\n");
+    fs.mkdirSync(path.join(directory, "nested"));
+    fs.writeFileSync(path.join(directory, "nested/Z.ts"), "export const Z = 2;");
+    fs.writeFileSync(path.join(directory, "nested/B.json"), "{}");
+    const expected = sha256(JSON.stringify({ schemaVersion: 1, files: {
+      "A.tsx": "export const A = 1;", "nested/B.json": "{}", "nested/Z.ts": "export const Z = 2;", "pack.json": '{"version":"1"}',
+    } }) + "\n");
     expect(packArchiveHash(directory)).toBe(expected);
     const hashes = { exampleSha256: "example", packSha256: expected };
     assertPreviewHashes(hashes, hashes);

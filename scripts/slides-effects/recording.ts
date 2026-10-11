@@ -57,7 +57,7 @@ export function recordingSchedule(seconds: number, steps: number) {
 
 /** Register immediately after spawn so an exit during navigation cannot be missed. */
 export function observeRecorder(child: ChildProcess) {
-  let ready = false, output = "";
+  let output = "";
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>(resolve => {
     child.once("exit", (code, signal) => resolve({ code, signal }));
     child.once("error", error => resolve({ code: null, signal: null, error }));
@@ -68,11 +68,11 @@ export function observeRecorder(child: ChildProcess) {
       const lines = output.split("\n");
       output = lines.pop()!;
       for (const line of lines) {
-        if (/"type"\s*:\s*"ready"/.test(line)) { ready = true; resolve(); }
+        if (/"type"\s*:\s*"ready"/.test(line)) resolve();
       }
     });
     void exited.then(result => {
-      if (!ready) reject(result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before ready.`));
+      reject(result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before ready.`));
     });
   });
   return { started, exited };
@@ -87,13 +87,16 @@ export const sha256 = (data: Buffer | string) => createHash("sha256").update(dat
 
 /** Match the public catalog publisher's sorted, content-addressed pack archive. */
 export function packArchiveHash(directory: string) {
-  function runtimeFiles(directory: string, prefix = ""): Record<string, string> {
-    return Object.fromEntries(fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+  const files: Record<string, string> = {};
+  function visit(directory: string, prefix = "") {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const file = path.join(directory, entry.name), relative = prefix + entry.name;
-      return entry.isDirectory() ? Object.entries(runtimeFiles(file, relative + "/")) : /\.(tsx?|json)$/.test(file) ? [[relative, fs.readFileSync(file, "utf8")]] : [];
-    }));
+      if (entry.isDirectory()) visit(file, relative + "/");
+      else if (/\.(tsx?|json)$/.test(file)) files[relative] = fs.readFileSync(file, "utf8");
+    }
   }
-  return sha256(JSON.stringify({ schemaVersion: 1, files: runtimeFiles(directory) }) + "\n");
+  visit(directory);
+  return sha256(JSON.stringify({ schemaVersion: 1, files }) + "\n");
 }
 
 export function assertPreviewHashes(local: { exampleSha256: string; packSha256: string }, published: { exampleSha256: string; packSha256: string }) {
