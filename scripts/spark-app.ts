@@ -12,7 +12,7 @@ const separator = extra.indexOf("--");
 const commandArgs = separator < 0 ? extra : extra.slice(0, separator);
 const [appId, action = "prepare"] = commandArgs;
 const actionArgs = commandArgs.slice(2);
-const runnerArgs = actionArgs;
+const actionTail = [...actionArgs, ...(separator < 0 ? [] : extra.slice(separator))];
 const appArgs = separator < 0 ? [] : extra.slice(separator + 1);
 if (!appId) throw new Error(`Usage: bun scripts/spark-app.ts <app> <prepare|install|build|build-release|run|start|analyze> [--offline] [--reinstall]\n${sparkOfflineHelp}`);
 if (!["prepare", "install", "build", "build-release", "run", "start", "analyze"].includes(action)) throw new Error(`Unknown Spark action: ${action}`);
@@ -30,9 +30,9 @@ if (installOptions.offline) {
   for (const [key, value] of Object.entries(env)) if (value !== undefined) process.env[key] = value;
 }
 let cli = "";
-const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : [...actionArgs, ...(separator < 0 ? [] : extra.slice(separator))])];
+const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : actionTail)];
 try {
-  if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : extra);
+  if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
   if (["install", "build", "build-release", "run", "start"].includes(action)) installSparkWorkspace({ project, appId, env, ...installOptions });
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
   if (installOptions.offline && ["build", "build-release", "run"].includes(action)) {
@@ -46,11 +46,11 @@ if (action === "prepare") console.log(project);
 else if (action !== "install") {
   if (action === "run") {
     runCommand("node", [cli, ...buildArgs], { cwd: project, env });
-    if (installOptions.offline) await assertSparkOfflineStart(project, cli, runnerArgs);
-    await runSparkDevServer({ appId, project, cli, runnerArgs, appArgs, env });
+    if (installOptions.offline) await assertSparkOfflineStart(project, cli, actionArgs);
+    await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, appArgs, env });
   }
   else if (action === "build-release" || action === "build") runCommand("node", [cli, ...buildArgs], { cwd: project, env });
   else if (action === "start") await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, noOpen: true, env });
-  else if (action === "analyze") runCommand("node", [cli, "analyze", ...extra], { cwd: project, env });
+  else if (action === "analyze") runCommand("node", [cli, "analyze", ...actionTail], { cwd: project, env });
   else throw new Error(`Unknown Spark action: ${action}`);
 }

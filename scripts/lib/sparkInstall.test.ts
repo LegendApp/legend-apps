@@ -500,6 +500,30 @@ test("spark-app wires installs and reports Bun failures cleanly", { timeout: 30_
   assert.equal(fs.existsSync(stamp), false);
 });
 
+test("spark-app forwards only the analyze action tail to the CLI and offline guard", { timeout: 30_000 }, t => {
+  const f = appFixture(t);
+  const offlineArgsFile = path.join(f.repoRoot, "offline-args.json");
+  f.write("scripts/lib/sparkInstall.ts", fs.readFileSync(path.join(f.repoRoot, "scripts/lib/sparkInstall.ts"), "utf8").replace(
+    "export function assertSparkOfflineArgs(args: string[]) {",
+    `export function assertSparkOfflineArgs(args: string[]) {
+  fs.writeFileSync(${JSON.stringify(offlineArgsFile)}, JSON.stringify(args));`,
+  ));
+  const cli = fs.realpathSync(path.join(f.repoRoot, "example/node_modules/@legendapp/spark/bin/spark.cjs"));
+  for (const tail of [[], ["--help"], ["--help", "--", "--offline", "--reinstall"]]) {
+    for (const mode of ["online", "flag", "env"]) {
+      const result = mode === "flag"
+        ? f.invoke("spark-app", ["--offline", "example", "analyze", ...tail])
+        : f.app("analyze", tail, mode === "env");
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(f.commands().at(-1).args, [cli, "analyze", ...tail]);
+      if (mode !== "online") {
+        assert.deepEqual(JSON.parse(fs.readFileSync(offlineArgsFile, "utf8")), tail);
+      }
+    }
+  }
+  assert.deepEqual(f.attempts(), []);
+});
+
 for (const offlineEnv of [false, true]) {
   test(`spark-app enforces offline downstream via ${offlineEnv ? "env" : "flag"}`, { timeout: 30_000 }, t => {
     const f = appFixture(t);
