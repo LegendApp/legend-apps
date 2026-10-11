@@ -82,11 +82,12 @@ test("identifies renamed runtimes from version output rather than the executable
 });
 
 test("discovers version-manager runtimes with the configured fish login shell", async () => {
-  const { host } = fakeHost({ "/Users/me/.local/bin/node": "v22.2.0" });
+  const { host } = fakeHost({ "/Users/me/.local/bin/node": "v22.2.0" }, { home: "/Volumes/Homes/different-home-name" });
   const run = host.run;
   const calls = [];
   host.run = async (executable, args, options) => {
     calls.push([executable, ...args]);
+    if (executable === "/usr/bin/id") return { code: 0, stdout: "me\n", stderr: "" };
     if (executable === "/usr/bin/dscl") return { code: 0, stdout: "UserShell: /opt/homebrew/bin/fish\n", stderr: "" };
     if (executable === "/opt/homebrew/bin/fish") return { code: 0, stdout: "/Users/me/.local/bin/node\n", stderr: "" };
     return run(executable, args, options);

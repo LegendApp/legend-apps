@@ -46,7 +46,8 @@ function runtimeHost() {
 let checkSequence = 0;
 let resolving: Promise<CompilerRuntime | null> | undefined;
 /** Find a runtime once per launch; `refresh` re-runs discovery (Settings, after install). */
-export function resolveCompilerRuntime(options: { refresh?: boolean } = {}) {
+export function resolveCompilerRuntime(options: { refresh?: boolean } = {}): Promise<CompilerRuntime | null> {
+  if (compilerRuntime$.status.peek() === "downloading") return downloading!;
   if (options.refresh) resolving = undefined;
   return resolving ??= (async () => {
     const sequence = ++checkSequence;
@@ -54,11 +55,22 @@ export function resolveCompilerRuntime(options: { refresh?: boolean } = {}) {
     const host = await runtimeHost();
     const [runtime, arch] = await Promise.all([
       findRuntime(host, { customPath: getCompilerRuntimePathSetting() || undefined }).catch(() => null),
-      runtimeArch(host),
+      runtimeArch(host).catch(() => null),
     ]);
     if (sequence === checkSequence && compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime, arch });
-    return runtime;
+    return sequence === checkSequence ? runtime : resolveCompilerRuntime();
   })();
+}
+
+export function compilerRuntimeGeneration() { return checkSequence; }
+
+/** Only the discovery used by a failed command can be invalidated. */
+export function invalidateCompilerRuntime(generation: number) {
+  if (generation === checkSequence && compilerRuntime$.status.peek() !== "downloading") {
+    compilerRuntime$.assign({ status: "missing", runtime: null });
+    resolving = undefined;
+    ++checkSequence;
+  }
 }
 
 let downloading: Promise<CompilerRuntime | null> | undefined;
@@ -97,9 +109,9 @@ export async function prefetchCompilerRuntime() {
 /** All runtime changes use this operation so a pending deck is retried exactly once. */
 export async function changeCompilerRuntime(operation: () => Promise<CompilerRuntime | null | void>) {
   await operation();
+  const { loadDeck } = await import("./deckLoader");
   const path = compilerRuntime$.retryDeck.peek();
   if (!path || compilerRuntime$.status.peek() !== "ready") return;
   compilerRuntime$.retryDeck.set(null);
-  const { loadDeck } = await import("./deckLoader");
   await loadDeck(path);
 }

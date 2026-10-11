@@ -59,8 +59,10 @@ export function staticCandidates(host: Pick<RuntimeHost, "home" | "dataDirectory
 /** GUI apps get a minimal PATH; ask the user's login shell where version managers put bun and node. */
 export async function loginShellCandidates(host: RuntimeHost, shell?: string): Promise<Candidate[]> {
   if (!shell) {
-    const user = host.home.split("/").pop()!;
-    const configured = await host.run("/usr/bin/dscl", [".", "-read", `/Users/${user}`, "UserShell"], { timeoutMs: 5000 }).catch(() => null);
+    const user = await host.run("/usr/bin/id", ["-un"], { timeoutMs: 5000 }).catch(() => null);
+    const configured = user?.code === 0 && user.stdout.trim()
+      ? await host.run("/usr/bin/dscl", [".", "-read", `/Users/${user.stdout.trim()}`, "UserShell"], { timeoutMs: 5000 }).catch(() => null)
+      : null;
     shell = configured?.code === 0 ? /^UserShell:\s*(\/\S+)\s*$/m.exec(configured.stdout)?.[1] : undefined;
   }
   // Both POSIX shells and fish support command -v and these login/interactive flags.
