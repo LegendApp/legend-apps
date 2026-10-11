@@ -1,6 +1,5 @@
-import { runCommand } from "@legendapp/spark/processes";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { compilerCommand } from "./compilerCommand";
+import { runCompilerCommand } from "./compilerCommand";
 import { parseCompilerResult } from "./deckLoader";
 import { effectRequests$ } from "./effectRequests";
 import { getSlidesState } from "./slidesStore";
@@ -10,8 +9,7 @@ export async function runEffectCommand(args: string[], message: string) {
   if (state.deckLocked || state.audienceOpen) throw new Error("Finish presenting before installing effects.");
   effectRequests$.assign({ busy: true, message, error: "" });
   try {
-    const compiler = await compilerCommand();
-    const output = await runCommand({ target: compiler.target, env: compiler.env, args: [...compiler.prefix, ...args], timeoutMs: 120_000 });
+    const output = await runCompilerCommand(args, { timeoutMs: 120_000 });
     if (output.timedOut) throw new Error("Effect installation timed out. Retry when your connection is available.");
     const result = parseCompilerResult(decodeProcessText(output.stdout)) as unknown as { success: boolean; errors?: string[]; path?: string };
     if (!result.success) throw new Error(result.errors?.join("\n") || decodeProcessText(output.stderr) || "Effect installation failed.");

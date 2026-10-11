@@ -10,11 +10,14 @@ mock.module("../compilerRuntimeCore", () => ({
 mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => selected, setCompilerRuntimePathSetting: value => { selected = value; } }));
 mock.module("@legendapp/spark/files", () => ({ getDirectory: async () => "/Users/me/Library/Application Support/Slides", exists() {}, mkdir() {}, move() {}, remove() {} }));
 mock.module("@legendapp/spark/processes", () => ({ spawn() {}, resolveCommand() {}, runCommand: async options => { commands.push(options); return commandResults.shift(); } }));
-mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: () => "" }));
-mock.module("../deckLoader", () => ({ loadDeck: async path => { loaded.push(path); } }));
+mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => typeof value === "string" ? value : "" }));
+mock.module("../deckLoader", () => ({ loadDeck: async path => { loaded.push(path); }, parseCompilerResult: JSON.parse }));
+mock.module("../slidesStore", () => ({ getSlidesState: () => ({ deckLocked: false, audienceOpen: false }) }));
 globalThis.__DEV__ = false;
 const { compilerRuntime$, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime, prefetchCompilerRuntime, changeCompilerRuntime, CompilerRuntimeMissingError } = await import("../compilerRuntime");
 const { runCompilerCommand } = await import("../compilerCommand");
+const { runEffectCommand } = await import("../effectCommands");
+const { effectRequests$ } = await import("../effectRequests");
 
 function deferred() {
   let resolve;
@@ -222,6 +225,29 @@ test("superseded commands check cancellation after completion before invalidatin
     expect(commands).toHaveLength(count);
     expect(compilerRuntime$.status.peek()).toBe("ready");
   }
+});
+
+test("effect installation recovers cached missing discovery and launcher exit 127", async () => {
+  discover = async () => null;
+  await resolveCompilerRuntime({ refresh: true });
+  discover = async () => runtime;
+  commandResults = [{ ...result(0), stdout: '{"success":true}' }];
+  expect(await runEffectCommand(["--install-effects", "/deck.mdx"], "Installing")).toEqual({ success: true });
+  expect(commands).toHaveLength(1);
+  commandResults = [result(127), { ...result(0), stdout: '{"success":true}' }];
+  expect(await runEffectCommand(["--install-effects", "/deck.mdx"], "Installing")).toEqual({ success: true });
+  expect(commands).toHaveLength(3);
+  expect(commands[2].timeoutMs).toBe(120_000);
+  expect(effectRequests$.busy.peek()).toBe(false);
+  expect(effectRequests$.error.peek()).toBe("");
+});
+
+test("effect installation surfaces runtime recovery instructions instead of parsing exit 127", async () => {
+  commandResults = [result(127), result(127)];
+  await expect(runEffectCommand(["--install-effects", "/deck.mdx"], "Installing")).rejects.toBeInstanceOf(CompilerRuntimeMissingError);
+  expect(effectRequests$.error.peek()).toContain("Settings › Compiler");
+  expect(effectRequests$.busy.peek()).toBe(false);
+  expect(compilerRuntime$.status.peek()).toBe("missing");
 });
 
 test("fresh deck discovery waits for an active install instead of caching missing state", async () => {
