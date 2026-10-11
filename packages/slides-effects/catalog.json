@@ -143,7 +143,13 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Wireframe\n---\n\nimport { View, Text } from \"react-native\";\nimport { Wireframe } from \"slides:backgrounds/Wireframe\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Wireframe\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Wireframe /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Wireframe\n---\n\nimport { View, Text } from \"react-native\";\nimport { Wireframe } from \"slides:backgrounds/Wireframe\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Wireframe\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Wireframe /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "motion": [
+          "1:6"
+        ],
+        "noiseDb": -80
+      }
     },
     {
       "slug": "glassatmosphere",
@@ -161,7 +167,14 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Glass atmosphere\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassAtmosphere } from \"slides:backgrounds/GlassAtmosphere\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Glass atmosphere\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><GlassAtmosphere /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Glass atmosphere\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassAtmosphere } from \"slides:backgrounds/GlassAtmosphere\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Glass atmosphere\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><GlassAtmosphere /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "motion": [
+          "2:7"
+        ],
+        "noiseDb": -80,
+        "freezeMs": 300
+      }
     },
     {
       "slug": "interactive-glass",
@@ -179,7 +192,13 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Interactive glass\n---\n\nimport { View, Text } from \"react-native\";\nimport { TypeGPUGlassBackground } from \"slides:backgrounds/TypeGPUGlassBackground\";\n\nexport function GlassExample({renderer}) { return <TypeGPUGlassBackground>{renderer}</TypeGPUGlassBackground>; }\n\n# Interactive glass\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassExample renderer={<TypeGPUShader />} />\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Interactive glass\n---\n\nimport { View, Text } from \"react-native\";\nimport { TypeGPUGlassBackground } from \"slides:backgrounds/TypeGPUGlassBackground\";\n\nexport function GlassExample({renderer}) { return <TypeGPUGlassBackground>{renderer}</TypeGPUGlassBackground>; }\n\n# Interactive glass\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassExample renderer={<TypeGPUShader />} />\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "motion": [
+          "2:7"
+        ],
+        "noiseDb": -70
+      }
     },
     {
       "slug": "glass-panels",
@@ -201,7 +220,14 @@
           "description": "Choose the RGB material palette."
         }
       ],
-      "snippet": "---\ntitle: Glass panels\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassPanels } from \"slides:materials/GlassPanels\";\n\n\n# Glass panels\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassPanels width={1696} height={650} panels={[{x: 240,y: 180,width: 500,height: 280,radius: 40},{x: 900,y: 220,width: 480,height: 240,radius: 40}]} />\n</View>\n"
+      "snippet": "---\ntitle: Glass panels\n---\n\nimport { View, Text } from \"react-native\";\nimport { GlassPanels } from \"slides:materials/GlassPanels\";\n\n\n# Glass panels\n\n<View style={{ width: 1696, height: 650 }}>\n<GlassPanels width={1696} height={650} panels={[{x: 240,y: 180,width: 500,height: 280,radius: 40},{x: 900,y: 220,width: 480,height: 240,radius: 40}]} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "2:7"
+        ],
+        "noiseDb": -80,
+        "freezeMs": 300
+      }
     },
     {
       "slug": "glass-strike",
@@ -249,7 +275,12 @@
           "description": "Place the bar on the stage."
         }
       ],
-      "snippet": "---\ntitle: Upward flames\n---\n\nimport { View, Text } from \"react-native\";\nimport { Flames } from \"slides:materials/Fire\";\n\n\n# Upward flames\n\n<View style={{ width: 1696, height: 650 }}>\n<Flames width={600} barHeight={30} x={548} y={410} />\n</View>\n"
+      "snippet": "---\ntitle: Upward flames\n---\n\nimport { View, Text } from \"react-native\";\nimport { Flames } from \"slides:materials/Fire\";\n\n\n# Upward flames\n\n<View style={{ width: 1696, height: 650 }}>\n<Flames width={600} barHeight={30} x={548} y={410} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "3.5:7"
+        ]
+      }
     },
     {
       "slug": "falling-sprites",
@@ -271,7 +302,12 @@
           "description": "Set the emitter position and width."
         }
       ],
-      "snippet": "---\ntitle: Falling sprites\n---\n\nimport { View, Text } from \"react-native\";\nimport { FallingSprites } from \"slides:materials/Fire\";\n\n\n# Falling sprites\n\n<View style={{ width: 1696, height: 650 }}>\n<FallingSprites width={600} barHeight={30} x={548} y={300} sprite={\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAACgCAIAAABseyVrAAADvElEQVR4nO3ZsY3cMBCG0evAoXtwBa7LHRhw6HouO8BFOVgYF7iA1UqUOENSmAd88ehn8CK9ffn6TSrb2/QF0sQAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOm6AHz/eEypZ/PP348p9Wz+8+tzSj2b//54nxIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBxj3+f+y0I4HDzggAONy8I4HDzvQEcPu8sgwEATm1eBMCpzYsAOLX5lgBOvbDRQDaAC5unA7iweTqAC5vvBODC8xoZ5AHo3DwFQOfmKQA6N98AQOcL9w0kAQjZPBhAyObBAEI2AwAAAKsCCHnhjoEMAIGbhwEI3DwMQODmRQEEvvCVgXAA4ZsHAAjfPABA+GYAAABgJQDhL9w0EAsgaXMqgKTNqQCSNgMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAJoAMA8+fiAWQYeD5E7EAMgw8fyIWQIaB508AAAAAUwHEGti8Hw4g1sDm/XAAsQY274cDiDWweX8JAFEGXh3PABBl4NXxDABRBl4dzwAQZeDVcQAAAGABAP0Gdi4nAeg3sHM5CUC/gZ3LSQD6DexcXgjAZQaHN/MAXGZweDMPwGUGhzfzAFxmcHhzOQBnDbQczAZw1kDLwWwAZw20HMwGcNZAy8EVATQyaD81AEAjg/ZTAwA0Mmg/NQBAI4P2U+sCCGwYgMCGAQhsGIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoDkO4eACodACodACodACodACodACodACodACqdP8H+BPsTDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADUBiDdPQBUOgBUOgBUOgBUOgBUOgBUOv8B/AfwHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADghgCkuweASgeASgeASgeASgeASgeASgeASgeASgeASgeASgeASvcfT6aDDVH/LJsAAAAASUVORK5CYII=\"} />\n</View>\n"
+      "snippet": "---\ntitle: Falling sprites\n---\n\nimport { View, Text } from \"react-native\";\nimport { FallingSprites } from \"slides:materials/Fire\";\n\n\n# Falling sprites\n\n<View style={{ width: 1696, height: 650 }}>\n<FallingSprites width={600} barHeight={30} x={548} y={300} sprite={\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAACgCAIAAABseyVrAAADvElEQVR4nO3ZsY3cMBCG0evAoXtwBa7LHRhw6HouO8BFOVgYF7iA1UqUOENSmAd88ehn8CK9ffn6TSrb2/QF0sQAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOkAUOm6AHz/eEypZ/PP348p9Wz+8+tzSj2b//54nxIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBxj3+f+y0I4HDzggAONy8I4HDzvQEcPu8sgwEATm1eBMCpzYsAOLX5lgBOvbDRQDaAC5unA7iweTqAC5vvBODC8xoZ5AHo3DwFQOfmKQA6N98AQOcL9w0kAQjZPBhAyObBAEI2AwAAAKsCCHnhjoEMAIGbhwEI3DwMQODmRQEEvvCVgXAA4ZsHAAjfPABA+GYAAABgJQDhL9w0EAsgaXMqgKTNqQCSNgMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAJoAMA8+fiAWQYeD5E7EAMgw8fyIWQIaB508AAAAAUwHEGti8Hw4g1sDm/XAAsQY274cDiDWweX8JAFEGXh3PABBl4NXxDABRBl4dzwAQZeDVcQAAAGABAP0Gdi4nAeg3sHM5CUC/gZ3LSQD6DexcXgjAZQaHN/MAXGZweDMPwGUGhzfzAFxmcHhzOQBnDbQczAZw1kDLwWwAZw20HMwGcNZAy8EVATQyaD81AEAjg/ZTAwA0Mmg/NQBAI4P2U+sCCGwYgMCGAQhsGIDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoDkO4eACodACodACodACodACodACodACodACqdP8H+BPsTDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADUBiDdPQBUOgBUOgBUOgBUOgBUOgBUOv8B/AfwHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADghgCkuweASgeASgeASgeASgeASgeASgeASgeASgeASgeASgeASvcfT6aDDVH/LJsAAAAASUVORK5CYII=\"} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "2:7"
+        ]
+      }
     },
     {
       "slug": "image-shatter",
@@ -319,7 +355,14 @@
           "description": "Control delay, duration and interval."
         }
       ],
-      "snippet": "---\ntitle: Prismatic tear\n---\n\nimport { View, Text } from \"react-native\";\nimport { prismaticTear } from \"slides:materials/Distortion\";\n\n\n# Prismatic tear\n\n<View style={{ width: 1696, height: 650 }}>\n<Effect shader={prismaticTear} uniforms={{delaySeconds: 1,durationSeconds: 0.36,intervalSeconds: 4}} style={{width: 1696,height: 600}}>\n<View style={{width: 1696,height: 600,backgroundColor: \"#164e63\",alignItems: \"center\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 100}}>A change in perspective</Text></View>\n</Effect>\n</View>\n"
+      "snippet": "---\ntitle: Prismatic tear\n---\n\nimport { View, Text } from \"react-native\";\nimport { prismaticTear } from \"slides:materials/Distortion\";\n\n\n# Prismatic tear\n\n<View style={{ width: 1696, height: 650 }}>\n<Effect shader={prismaticTear} uniforms={{delaySeconds: 1,durationSeconds: 0.36,intervalSeconds: 4}} style={{width: 1696,height: 600}}>\n<View style={{width: 1696,height: 600,backgroundColor: \"#164e63\",alignItems: \"center\",justifyContent: \"center\"}}><Text style={{color: \"white\",fontSize: 100}}>A change in perspective</Text></View>\n</Effect>\n</View>\n",
+      "recording": {
+        "motion": [
+          "1.1:1.4",
+          "5.1:5.4"
+        ],
+        "noiseDb": -70
+      }
     },
     {
       "slug": "soft-ripple",
@@ -481,7 +524,12 @@
           "description": "Supply the emitted content."
         }
       ],
-      "snippet": "---\ntitle: Trajectory emitter\n---\n\nimport { View, Text } from \"react-native\";\nimport { TrajectoryEmitter } from \"slides:particles/TrajectoryEmitter\";\n\nexport const paths = [0,1,2].map(index => [{time: 0,x: 200,y: 200,opacity: 0},{time: 300,x: 600,y: 200 + index * 100,opacity: 1},{time: 1800,x: 1400,y: 200 + index * 100,opacity: 0}]);\n\n# Trajectory emitter\n\n<View style={{ width: 1696, height: 650 }}>\n<TrajectoryEmitter trajectories={paths} interval={800} renderParticle={() => <View style={{width: 36,height: 36,borderRadius: 18,backgroundColor: \"#67e8f9\"}} />} />\n</View>\n"
+      "snippet": "---\ntitle: Trajectory emitter\n---\n\nimport { View, Text } from \"react-native\";\nimport { TrajectoryEmitter } from \"slides:particles/TrajectoryEmitter\";\n\nexport const paths = [0,1,2].map(index => [{time: 0,x: 200,y: 200,opacity: 0},{time: 300,x: 600,y: 200 + index * 100,opacity: 1},{time: 1800,x: 1400,y: 200 + index * 100,opacity: 0}]);\n\n# Trajectory emitter\n\n<View style={{ width: 1696, height: 650 }}>\n<TrajectoryEmitter trajectories={paths} interval={800} renderParticle={() => <View style={{width: 36,height: 36,borderRadius: 18,backgroundColor: \"#67e8f9\"}} />} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "1:7"
+        ]
+      }
     },
     {
       "slug": "branch-fan",
@@ -503,7 +551,13 @@
           "description": "Change palette on the step clock."
         }
       ],
-      "snippet": "---\ntitle: Branch fan\n---\n\nimport { View, Text } from \"react-native\";\nimport { BranchFan } from \"slides:diagrams/BranchFan\";\n\n\n# Branch fan\n\n<View style={{ width: 1696, height: 650 }}>\n<BranchFan width={1696} height={650} geometry={{root: {x: 848,y: 60},ends: [{x: 250,y: 550},{x: 848,y: 550},{x: 1446,y: 550}]}} />\n</View>\n"
+      "snippet": "---\ntitle: Branch fan\n---\n\nimport { View, Text } from \"react-native\";\nimport { BranchFan } from \"slides:diagrams/BranchFan\";\n\n\n# Branch fan\n\n<View style={{ width: 1696, height: 650 }}>\n<BranchFan width={1696} height={650} geometry={{root: {x: 848,y: 60},ends: [{x: 250,y: 550},{x: 848,y: 550},{x: 1446,y: 550}]}} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "1:7"
+        ],
+        "noiseDb": -70
+      }
     },
     {
       "slug": "progressive-detail",
