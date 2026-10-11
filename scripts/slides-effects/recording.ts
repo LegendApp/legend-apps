@@ -1,0 +1,103 @@
+import type { ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+
+const presentationRequire = createRequire(path.resolve(import.meta.dirname, "../../packages/presentation/package.json"));
+type MdxNode = { type: string; name?: string; value?: string | { value: string }; attributes?: MdxNode[]; children?: MdxNode[] };
+const { createProcessor } = presentationRequire("@mdx-js/mdx") as { createProcessor(options: object): { parse(source: string): MdxNode } };
+const frontmatter = presentationRequire("remark-frontmatter").default;
+
+/** Runtime step metadata is discovered by rendering; inspect literal MDX steps without running deck code. */
+export function exampleStepPresses(source: string) {
+  const tree = createProcessor({ remarkPlugins: [frontmatter] }).parse(source);
+  let cursor = 0;
+  function literal(node: MdxNode, name: string): number | undefined {
+    const attribute = node.attributes?.find(attribute => attribute.name === name);
+    if (!attribute) return;
+    const value = typeof attribute.value === "object" ? attribute.value.value : attribute.value;
+    if (!/^\d+$/.test(value ?? "")) throw new Error(`Nonliteral ${node.name} ${name}; pass --steps explicitly.`);
+    return Number(value);
+  }
+  function visit(node: MdxNode) {
+    if (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") {
+      if (node.name === "Steps") {
+        const count = literal(node, "count");
+        if (count === undefined) throw new Error("Steps without a literal count; pass --steps explicitly.");
+        if (count < 1) throw new Error("Steps count must include at least the initial state.");
+        cursor = Math.max(cursor, count - 1);
+      }
+      if (node.name === "Step") {
+        if (node.attributes?.some(attribute => attribute.name === "states")) throw new Error("Step states need an explicit --steps count.");
+        cursor = Math.max(cursor, literal(node, "at") ?? cursor + 1, literal(node, "until") ?? 0);
+      }
+    }
+    node.children?.forEach(visit);
+  }
+  visit(tree);
+  return cursor;
+}
+
+export type RecordingWindow = { id: number; title: string; owner: string; pid: number; width: number; height: number };
+
+export function audienceTarget(windows: RecordingWindow[], pid: number, pattern?: RegExp) {
+  return windows.find(window => window.pid === pid && window.title === "Legend Slides — Audience"
+    && window.width > 200 && window.height > 200 && (!pattern || pattern.test(window.title)));
+}
+
+export function recordingSchedule(seconds: number, steps: number) {
+  const lead = 1500, tail = 1500;
+  if (!Number.isFinite(seconds) || seconds < 3 || seconds > 600) throw new Error("--seconds must be between 3 and 600.");
+  if (!Number.isSafeInteger(steps) || steps < 0) throw new Error("--steps must be a nonnegative integer.");
+  const interval = steps ? (seconds * 1000 - lead - tail) / steps : 0;
+  if (steps && interval < 800) throw new Error("Step schedule exceeds the recording duration; increase --seconds or reduce --steps.");
+  return Array.from({ length: steps }, (_, index) => lead + index * interval);
+}
+
+/** Register immediately after spawn so an exit during navigation cannot be missed. */
+export function observeRecorder(child: ChildProcess) {
+  let ready = false, output = "";
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>(resolve => {
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.once("error", error => resolve({ code: null, signal: null, error }));
+  });
+  const started = new Promise<void>((resolve, reject) => {
+    child.stdout!.on("data", chunk => {
+      output += String(chunk);
+      const lines = output.split("\n");
+      output = lines.pop()!;
+      for (const line of lines) {
+        if (/"type"\s*:\s*"ready"/.test(line)) { ready = true; resolve(); }
+      }
+    });
+    void exited.then(result => {
+      if (!ready) reject(result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before ready.`));
+    });
+  });
+  return { started, exited };
+}
+
+export function assertRecorderSucceeded(result: { code: number | null; signal: NodeJS.Signals | null; error?: Error }) {
+  if (result.error) throw result.error;
+  if (result.code !== 0) throw new Error(`Recorder failed (${result.code ?? result.signal}).`);
+}
+
+export const sha256 = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
+
+/** Match the public catalog publisher's sorted, content-addressed pack archive. */
+export function packArchiveHash(directory: string) {
+  function runtimeFiles(directory: string, prefix = ""): Record<string, string> {
+    return Object.fromEntries(fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(entry => {
+      const file = path.join(directory, entry.name), relative = prefix + entry.name;
+      return entry.isDirectory() ? Object.entries(runtimeFiles(file, relative + "/")) : /\.(tsx?|json)$/.test(file) ? [[relative, fs.readFileSync(file, "utf8")]] : [];
+    }));
+  }
+  return sha256(JSON.stringify({ schemaVersion: 1, files: runtimeFiles(directory) }) + "\n");
+}
+
+export function assertPreviewHashes(local: { exampleSha256: string; packSha256: string }, published: { exampleSha256: string; packSha256: string }) {
+  if (local.exampleSha256 !== published.exampleSha256 || local.packSha256 !== published.packSha256) {
+    throw new Error("Example or pack differs from the published catalog; refresh legend-docs before --apply.");
+  }
+}
