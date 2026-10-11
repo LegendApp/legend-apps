@@ -51,13 +51,13 @@ export function resolveCompilerRuntime(options: { refresh?: boolean } = {}): Pro
   if (options.refresh) resolving = undefined;
   return resolving ??= (async () => {
     const sequence = ++checkSequence;
-    if (compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: "checking", error: "" });
+    compilerRuntime$.assign({ status: "checking", error: "" });
     const host = await runtimeHost();
     const [runtime, arch] = await Promise.all([
       findRuntime(host, { customPath: getCompilerRuntimePathSetting() || undefined }).catch(() => null),
       runtimeArch(host).catch(() => null),
     ]);
-    if (sequence === checkSequence && compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime, arch });
+    if (sequence === checkSequence) compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime, arch });
     return sequence === checkSequence ? runtime : resolveCompilerRuntime();
   })();
 }
