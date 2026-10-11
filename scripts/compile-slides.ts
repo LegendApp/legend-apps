@@ -3,7 +3,7 @@ import { copyTransitionToDeck } from "../packages/presentation/src/compiler/expo
 import { gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { compileDeck } from "../packages/presentation/src/compiler";
-import { installEffectPacks, installEffectExample, loadEffectCatalog } from "../packages/presentation/src/effectPacks/install";
+import { effectCatalogURL, installEffectPacks, installEffectExample, loadEffectCatalog, removeEffectPack, type EffectInstallProgress } from "../packages/presentation/src/effectPacks/install";
 import { parseEffectAction } from "../packages/presentation/src/effectPacks/protocol";
 import { getDeckSourceStructure } from "../packages/presentation/src/speakerNotesSource";
 
@@ -14,7 +14,12 @@ const transitionDirectory = transitionFlag >= 0 ? process.argv[transitionFlag + 
 const packsFlag = process.argv.indexOf("--effect-packs");
 const effectPacksDirectory = packsFlag >= 0 ? process.argv[packsFlag + 1] : undefined;
 const copyFlag = process.argv.indexOf("--copy-transition");
+// The app reads one JSON line per progress update from stderr.
+const onProgress = (progress: EffectInstallProgress) => process.stderr.write(`${JSON.stringify({ effectProgress: progress })}\n`);
 async function execute() {
+  if (process.argv.includes("--effect-catalog")) return { success: true, catalog: await loadEffectCatalog(), url: effectCatalogURL() };
+  const removeFlag = process.argv.indexOf("--remove-effect");
+  if (removeFlag >= 0) { await removeEffectPack(process.argv[removeFlag + 1]); return { success: true }; }
   const actionFlag = process.argv.indexOf("--effect-action");
   if (actionFlag >= 0) {
     const action = parseEffectAction(process.argv[actionFlag + 1]);
@@ -22,7 +27,7 @@ async function execute() {
     const catalog = await loadEffectCatalog();
     const release = catalog.packs[action.pack]?.versions[action.version];
     if (!release) throw new Error("The requested pack version is not in the catalog.");
-    const installed = await installEffectPacks([action.pack], { requested: { [action.pack]: release } });
+    const installed = await installEffectPacks([action.pack], { requested: { [action.pack]: release }, onProgress });
     return { success: true, installed: Object.keys(installed.lock.packs) };
   }
   if (!deckPath) return { success: false, errors: ["Usage: bun scripts/compile-slides.ts <deck.mdx> [--install-effects]"], warnings: [] };
@@ -30,7 +35,7 @@ async function execute() {
   let result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory });
   if (process.argv.includes("--install-effects")) {
     if (!result.effectPackIds?.length) return result;
-    await installEffectPacks(result.effectPackIds, { directory: effectPacksDirectory, deck: deckPath });
+    await installEffectPacks(result.effectPackIds, { directory: effectPacksDirectory, deck: deckPath, onProgress });
     result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory });
   }
   return result;

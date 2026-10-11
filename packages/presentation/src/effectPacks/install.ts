@@ -8,13 +8,14 @@ export function catalogResourceURL(resource: string, catalogURL: string) {
   if (url.origin !== catalog.origin || (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) throw new Error("Effect downloads must use the catalog's HTTPS origin.");
   return url.href;
 }
-async function download(url: string, maximum: number, expected?: { sha256: string; bytes: number }) {
+export type EffectInstallProgress = { pack: string; receivedBytes: number; totalBytes: number };
+async function download(url: string, maximum: number, expected?: { sha256: string; bytes: number }, onBytes?: (size: number) => void) {
   const response = await fetch(url, { signal: AbortSignal.timeout(30_000), redirect: "error" });
   if (!response.ok || !response.body) throw new Error(`Effect download failed (${response.status}).`);
   const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
   try {
     for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.length;
-      if (size > maximum) throw new Error("Effect download exceeds its declared size."); chunks.push(value); }
+      if (size > maximum) throw new Error("Effect download exceeds its declared size."); chunks.push(value); onBytes?.(size); }
   } finally { await reader.cancel(); }
   const bytes = Buffer.concat(chunks);
   if (expected && (size !== expected.bytes || sha256(bytes) !== expected.sha256)) throw new Error("Effect download checksum or size does not match the catalog.");
@@ -43,11 +44,12 @@ export function resolveInstallation(catalog: EffectCatalog, ids: string[], exist
   ids.forEach(id => visit(id));
   return { lock: { schemaVersion: 1 as const, packs: pins }, releases };
 }
-async function installRelease(directory: string, id: string, release: PackRelease, catalogURL: string) {
+async function installRelease(directory: string, id: string, release: PackRelease, catalogURL: string, onProgress?: (progress: EffectInstallProgress) => void) {
   const destination = pinnedPackDirectory(directory, id, release);
   if (verifyInstalledPack(destination, release)) return;
   ensureEffectSpace(directory, release.bytes * 4);
-  const text = await download(catalogResourceURL(release.url, catalogURL), release.bytes, release);
+  const text = await download(catalogResourceURL(release.url, catalogURL), release.bytes, release,
+    receivedBytes => onProgress?.({ pack: id, receivedBytes, totalBytes: release.bytes }));
   const archive = readPackArchive(text), manifest = JSON.parse(archive.files["pack.json"]);
   if (manifest.id !== id || manifest.version !== release.version || manifest.hostApiVersion !== release.hostApiVersion ||
     JSON.stringify(manifest.dependencies ?? {}) !== JSON.stringify(release.dependencies) || JSON.stringify(manifest.exports) !== JSON.stringify(release.exports) ||
@@ -62,7 +64,7 @@ async function installRelease(directory: string, id: string, release: PackReleas
     catch (error) { if (!verifyInstalledPack(destination, release)) throw error; }
   } finally { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true }); }
 }
-type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin> };
+type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin>; onProgress?: (progress: EffectInstallProgress) => void };
 async function withInstallationLease<T>(directory: string, work: () => Promise<T>) {
   ensureEffectSpace(directory, 2_000_000);
   fs.mkdirSync(directory, { recursive: true });
@@ -101,11 +103,17 @@ async function installPacks(ids: string[], options: InstallOptions) {
   const catalog = await loadEffectCatalog(catalogURL);
   const { lock, releases } = resolveInstallation(catalog, ids, existing, options.requested);
   ensureEffectSpace(directory, [...releases.values()].reduce((sum, release) => sum + release.bytes * 4, 0));
-  for (const [id, release] of releases) await installRelease(directory, id, release, catalogURL);
+  for (const [id, release] of releases) await installRelease(directory, id, release, catalogURL, options.onProgress);
   if (options.deck) writeEffectLock(options.deck, lock, before);
   // Default selections affect new decks only. Existing decks resolve their lockfile.
   for (const [id] of releases) atomicWrite(path.join(directory, id, "active.json"), JSON.stringify(lock.packs[id]) + "\n");
   return { lock, catalog };
+}
+/** Remove every installed version; decks pinned to the pack offer to reinstall it. */
+export async function removeEffectPack(id: string, options: { directory?: string } = {}) {
+  if (!validPackId(id)) throw new Error("Invalid effect pack ID.");
+  const directory = options.directory ?? installedPacksDirectory();
+  await withInstallationLease(directory, async () => fs.rmSync(path.join(directory, id), { recursive: true, force: true }));
 }
 export async function installEffectExample(slug: string, options: { directory?: string; catalogURL?: string } = {}) {
   const directory = options.directory ?? installedPacksDirectory();
