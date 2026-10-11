@@ -13,8 +13,9 @@ export async function compilerCommand(refresh = false): Promise<{ target: Proces
   return { target: { type: "executable", path: bun }, prefix: [source] };
 }
 
-/** A cached runtime can vanish; rediscover and retry once before asking for installation. */
+/** Retry a vanished runtime once, with one extra retry cycle for newer-runtime recovery. */
 export async function runCompilerCommand(args: string[], options: Pick<Parameters<typeof runCommand>[0], "input" | "timeoutMs"> = {}, checkCancelled?: () => void) {
+  let retriedNewerRuntime = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const compiler = await compilerCommand(attempt === 1);
@@ -23,8 +24,9 @@ export async function runCompilerCommand(args: string[], options: Pick<Parameter
       checkCancelled?.();
       if (__DEV__ || result.exit.type !== "exited" || result.exit.code !== 127) return result;
       if (attempt === 1) {
-        if (compiler.generation !== compilerRuntimeGeneration()) {
+        if (!retriedNewerRuntime && compiler.generation !== compilerRuntimeGeneration()) {
           // Recovery superseded this command; retry the current runtime without refreshing it.
+          retriedNewerRuntime = true;
           attempt = -1;
           continue;
         }

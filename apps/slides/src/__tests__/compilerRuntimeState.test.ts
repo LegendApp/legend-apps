@@ -228,6 +228,50 @@ test("retrying a newer generation still stops when its runtime keeps exiting 127
   expect(compilerRuntime$.status.peek()).toBe("missing");
 });
 
+test("concurrent persistent exit 127 commands have a bounded total retry count", async () => {
+  const completions = Array.from({ length: 12 }, deferred);
+  commandResults = completions.map(completion => completion.promise);
+  const failures = [];
+  const running = [["/deck.mdx"], ["--install-effects", "/deck.mdx"]].map(args =>
+    runCompilerCommand(args).catch(error => { failures.push(error); }));
+  try {
+    await turn();
+    // Each refresh supersedes the other command's pending retry.
+    for (const index of [0, 1, 2, 4, 3, 6, 5]) {
+      completions[index].resolve(result(127));
+      await turn();
+    }
+    expect(failures).toHaveLength(1);
+    expect(compilerRuntime$.status.peek()).toBe("ready");
+    completions[7].resolve(result(127));
+    await turn();
+    expect(commands).toHaveLength(8);
+    expect(failures).toHaveLength(2);
+    for (const error of failures) expect(error).toBeInstanceOf(CompilerRuntimeMissingError);
+    expect(compilerRuntime$.status.peek()).toBe("missing");
+  } finally {
+    // Settle pending launches even if the regression assertions fail.
+    for (const completion of completions) completion.resolve(result(0));
+    await Promise.all(running);
+  }
+});
+
+test("concurrent commands recover when a newer runtime appears after their retries", async () => {
+  const deck = deferred(), effects = deferred();
+  commandResults = [result(127), result(127), deck.promise, effects.promise, result(0), result(0)];
+  const running = [runCompilerCommand(["/deck.mdx"]), runCompilerCommand(["--install-effects", "/deck.mdx"])];
+  await turn();
+  expect(commands).toHaveLength(4);
+  discover = async () => ({ ...runtime, path: "/replacement/node" });
+  await resolveCompilerRuntime({ refresh: true });
+  deck.resolve(result(127));
+  effects.resolve(result(127));
+  for (const completion of await Promise.all(running)) expect(completion.exit.code).toBe(0);
+  expect(commands).toHaveLength(6);
+  expect(commands.slice(4).map(command => command.env.LEGEND_SLIDES_RUNTIME)).toEqual(["/replacement/node", "/replacement/node"]);
+  expect(compilerRuntime$.status.peek()).toBe("ready");
+});
+
 test("superseded commands check cancellation after completion before invalidating or retrying", async () => {
   for (const attempt of [0, 1]) {
     const completion = deferred();
