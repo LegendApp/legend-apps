@@ -72,7 +72,8 @@ export function observeRecorder(child: ChildProcess, readyTimeoutMs = 30_000) {
     child.once("error", error => resolve({ code: null, signal: null, error }));
   });
   let timeout: ReturnType<typeof setTimeout>;
-  const ready = new Promise<number>((resolve, reject) => {
+  const started = new Promise<number>((resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error("Recorder did not become ready within 30 seconds.")), readyTimeoutMs);
     child.stdout!.on("data", chunk => {
       output += String(chunk);
       const lines = output.split("\n");
@@ -89,11 +90,7 @@ export function observeRecorder(child: ChildProcess, readyTimeoutMs = 30_000) {
     void exited.then(result => {
       reject(result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before ready.`));
     });
-  });
-  const deadline = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new Error("Recorder did not become ready within 30 seconds.")), readyTimeoutMs);
-  });
-  const started = Promise.race([ready, deadline]).finally(() => clearTimeout(timeout));
+  }).finally(() => clearTimeout(timeout));
   return { started, exited };
 }
 

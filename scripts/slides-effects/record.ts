@@ -151,12 +151,12 @@ try {
   run("open", ["-n", ...env.flatMap(value => ["--env", value]), appPath, "--args", ...devArgs, deck]);
   let deckWindow: RecordingWindow | undefined;
   const pattern = option("--window") ? new RegExp(option("--window")!, "i") : undefined;
+  presenterTitle = presenterWindowTitle(slug);
   for (let attempt = 0; attempt < 60 && !deckWindow; attempt++) {
     await sleep(1000);
-    deckWindow = listWindows().find(w => w.owner === "Legend Slides" && w.title === `${slug}.mdx — Legend Slides` && w.width > 200 && w.height > 200);
+    deckWindow = listWindows().find(w => w.owner === "Legend Slides" && w.title === presenterTitle && w.width > 200 && w.height > 200);
   }
   if (!deckWindow) throw new Error("The deck window did not appear within 60 s. Check that the deck compiles and Metro is running for dev builds.");
-  presenterTitle = presenterWindowTitle(slug);
   presenterPid = deckWindow.pid;
   // Scope the toolbar action to this deck and wait until compilation enables Start.
   const startAudience = `tell application "System Events"
@@ -196,11 +196,12 @@ try {
   const exitedEarly = recorderEvents.exited.then(result => { throw result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before navigation finished.`); });
   void exitedEarly.catch(() => {});
   // Leave the blank lead-in only once native capture is producing frames.
-  run("osascript", ["-e", `${audienceProcess}
+  const advanceAudience = `${audienceProcess}
     set frontmost to true
     perform action "AXRaise" of ${audienceWindow}
     key code 124
-  end tell`]);
+  end tell`;
+  run("osascript", ["-e", advanceAudience]);
   const startedAt = performance.now();
   const navigationSeconds = (startedAt - readyAt) / 1000;
   if (navigationSeconds >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
@@ -208,11 +209,7 @@ try {
   for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Address this process and audience window explicitly before sending focus-dependent keys.
-    run("osascript", ["-e", `${audienceProcess}
-      set frontmost to true
-      perform action "AXRaise" of ${audienceWindow}
-      key code 124
-    end tell`]);
+    run("osascript", ["-e", advanceAudience]);
   }
   assertRecorderSucceeded(await recorderEvents.exited);
 } catch (error) {
@@ -239,7 +236,7 @@ if (!fs.existsSync(raw)) throw new Error("The recorder produced no video.");
 
 // Export: apply any explicit crop, scale, H.264 without audio; poster from the last second.
 const video = path.join(work, "preview.mp4"), poster = path.join(work, "poster.png");
-const totalCropTop = cropTop + (typeof automaticCrop === "number" ? automaticCrop : 0);
+const totalCropTop = cropTop + automaticCrop;
 const filter = `crop=iw:ih-${totalCropTop}:0:${totalCropTop},scale=${width}:-2:flags=lanczos`;
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(playbackOffset), "-i", raw, "-t", String(seconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
