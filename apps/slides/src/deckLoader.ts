@@ -3,7 +3,7 @@ import { createDeckReloadQueue } from "./deckReloadQueue";
 import { deckWatchDirectories } from "./deckWatchDirectories";
 import { effectRequests$, reportMissingEffects } from "./effectRequests";
 import { runCompilerCommand } from "./compilerCommand";
-import { CompilerRuntimeMissingError, compilerRuntime$ } from "./compilerRuntime";
+import { CompilerRuntimeMissingError, compilerRuntime$, downloadCompilerRuntime } from "./compilerRuntime";
 import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
 import * as Motion from "@legendapp/motion";
@@ -176,14 +176,28 @@ export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   const sequence = ++buildSequence;
-  compilerRuntime$.retryDeck.set(null);
+  compilerRuntime$.retryDeck.set(compilerRuntime$.status.peek() === "downloading" ? path : null);
   if (remember) effectRequests$.pending.set(null);
-  try {
-    await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
-  } catch (error) {
-    if (sequence === buildSequence) {
-      if (error instanceof CompilerRuntimeMissingError) compilerRuntime$.retryDeck.set(path);
-      setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
+      if (sequence === buildSequence) compilerRuntime$.retryDeck.set(null);
+      break;
+    } catch (error) {
+      if (sequence === buildSequence) {
+        const missingRuntime = error instanceof CompilerRuntimeMissingError;
+        if (missingRuntime) compilerRuntime$.retryDeck.set(path);
+        setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
+        // Publish the deck prompt before installing. A failed install needs an explicit retry.
+        if (missingRuntime && attempt === 0 && compilerRuntime$.status.peek() !== "error") {
+          const runtime = await downloadCompilerRuntime();
+          if (runtime && sequence === buildSequence) {
+            compilerRuntime$.retryDeck.set(null);
+            continue;
+          }
+        }
+      }
+      break;
     }
   }
   return sequence === buildSequence && getSlidesState().status === "ready";

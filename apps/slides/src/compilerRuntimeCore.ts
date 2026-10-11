@@ -29,6 +29,7 @@ export const pinnedBun = {
 } as const;
 export const minimumRuntimeVersion: Record<RuntimeKind, string> = { bun: "1.3.0", node: "22.0.0" };
 export type BunArch = keyof typeof pinnedBun.assets;
+export type BunInstallProgress = { phase: "downloading" | "verifying" | "installing"; fraction: number; totalBytes: number };
 
 export function bunDownloadUrl(arch: BunArch) {
   return `https://github.com/oven-sh/bun/releases/download/bun-v${pinnedBun.version}/${pinnedBun.assets[arch].name}.zip`;
@@ -116,28 +117,32 @@ export async function runtimeArch(host: RuntimeHost): Promise<BunArch> {
  * Download the pinned Bun zip, check its SHA-256 against the value compiled into the app,
  * unpack it in a scratch folder, and rename it into place so a partial install is never visible.
  */
-export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunArch; force?: boolean; onProgress?(fraction: number): void } = {}): Promise<CompilerRuntime> {
+export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunArch; force?: boolean; onProgress?(progress: BunInstallProgress): void } = {}): Promise<CompilerRuntime> {
   const arch = options.arch ?? await runtimeArch(host);
   const asset = pinnedBun.assets[arch];
   const root = `${host.dataDirectory}/runtime`;
   const final = `${root}/bun-${pinnedBun.version}`;
   const existing = await probeRuntime(host, { path: `${final}/bun`, source: "downloaded" });
   if (!options.force && existing?.version === pinnedBun.version) return existing;
+  const report = (phase: BunInstallProgress["phase"], fraction: number) => options.onProgress?.({ phase, fraction, totalBytes: pinnedBun.bytes[arch] });
+  report("downloading", 0);
   const scratch = `${root}/.install-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   await host.mkdir(scratch);
   try {
     const zip = `${scratch}/bun.zip`;
     const download = await host.run("/usr/bin/curl", ["-fL", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--retry", "2", "--connect-timeout", "20", "--progress-bar", "-o", zip, bunDownloadUrl(arch)], {
       timeoutMs: 15 * 60_000,
-      onStderr: text => { const fraction = parseCurlProgress(text); if (fraction !== null) options.onProgress?.(fraction); },
+      onStderr: text => { const fraction = parseCurlProgress(text); if (fraction !== null) report("downloading", fraction); },
     });
     if (download.code !== 0 || download.timedOut) {
       throw new RuntimeInstallError("Couldn't download Bun. Check your connection and try again.");
     }
+    report("verifying", 1);
     const sum = await host.run("/usr/bin/shasum", ["-a", "256", zip]);
     if (sum.code !== 0 || sum.stdout.split(/\s+/)[0] !== asset.sha256) {
       throw new RuntimeInstallError("The Bun download didn't match its expected checksum, so it wasn't installed.");
     }
+    report("installing", 1);
     const unpack = await host.run("/usr/bin/ditto", ["-x", "-k", zip, `${scratch}/unpacked`]);
     if (unpack.code !== 0) throw new RuntimeInstallError("Couldn't unpack the Bun download.");
     const unpacked = `${scratch}/unpacked/${asset.name}`;
@@ -145,7 +150,6 @@ export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunA
     if (probed?.version !== pinnedBun.version) throw new RuntimeInstallError("The downloaded Bun didn't start on this Mac.");
     if (await host.exists(final)) await host.remove(final);
     await host.move(unpacked, final);
-    options.onProgress?.(1);
     return { path: `${final}/bun`, kind: "bun", version: pinnedBun.version, source: "downloaded" };
   } finally {
     await host.remove(scratch).catch(() => {});

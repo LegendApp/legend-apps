@@ -2,7 +2,7 @@ import { observable } from "@legendapp/state";
 import { spawn } from "@legendapp/spark/processes";
 import { exists, getDirectory, mkdir, move, remove } from "@legendapp/spark/files";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { findRuntime, installPinnedBun, probeRuntime, runtimeArch, type BunArch, type CompilerRuntime, type RuntimeHost } from "./compilerRuntimeCore";
+import { findRuntime, installPinnedBun, probeRuntime, runtimeArch, type BunArch, type BunInstallProgress, type CompilerRuntime, type RuntimeHost } from "./compilerRuntimeCore";
 import { getCompilerRuntimePathSetting, setCompilerRuntimePathSetting } from "./slidesSettings";
 
 export type CompilerRuntimeStatus = "unknown" | "checking" | "ready" | "missing" | "downloading" | "error";
@@ -10,7 +10,7 @@ export const compilerRuntime$ = observable({
   status: "unknown" as CompilerRuntimeStatus,
   runtime: null as CompilerRuntime | null,
   arch: null as BunArch | null,
-  progress: 0,
+  progress: null as BunInstallProgress | null,
   error: "",
   /** Deck to reload once a runtime becomes available. */
   retryDeck: null as string | null,
@@ -79,7 +79,7 @@ export function downloadCompilerRuntime(options: { force?: boolean } = {}) {
   if (downloading) return downloading;
   return resolving = downloading = (async () => {
     ++checkSequence; // Discovery started before this install cannot publish its result.
-    compilerRuntime$.assign({ status: "downloading", progress: 0, error: "" });
+    compilerRuntime$.assign({ status: "downloading", progress: null, error: "" });
     try {
       await installPinnedBun(await runtimeHost(), { force: options.force, onProgress: progress => compilerRuntime$.progress.set(progress) });
       compilerRuntime$.status.set("checking");
@@ -99,12 +99,6 @@ export async function setCustomCompilerRuntime(path: string | null) {
   }
   setCompilerRuntimePathSetting(path ?? "");
   return resolveCompilerRuntime({ refresh: true });
-}
-
-/** First launch: if nothing usable is installed, fetch Bun in the background so the first deck opens. */
-export async function prefetchCompilerRuntime() {
-  if (__DEV__) return;
-  if (!(await resolveCompilerRuntime())) await downloadCompilerRuntime();
 }
 
 /** All runtime changes use this operation so a pending deck is retried exactly once. */

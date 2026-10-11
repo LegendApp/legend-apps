@@ -2,17 +2,19 @@
 import { expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import React from "react";
+import { act, create } from "react-test-renderer";
 import { getSlidesState, setSlidesState } from "../slidesStore";
 import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "../deckBuildPolicy";
 import { effectRequests$, reportMissingEffects } from "../effectRequests";
 import { deckWatchDirectories } from "../deckWatchDirectories";
 
 const runtime = { path: "/runtime/bun", kind: "bun", version: "1.3.14", source: "system" };
-let discover = async () => null, run = async () => success;
+let discover = async () => null, run = async () => success, install = async () => { throw new Error("offline"); };
 const success = { exit: { type: "exited", code: 0 }, stdout: JSON.stringify({
   success: true, code: "module.exports.default = function Deck() {};", uniwindCode: "{}", warnings: [], dependencies: [],
 }), stderr: "" };
-mock.module("../compilerRuntimeCore", () => ({ findRuntime: () => discover(), runtimeArch: async () => "x64", probeRuntime() {}, installPinnedBun() {} }));
+mock.module("../compilerRuntimeCore", () => ({ findRuntime: () => discover(), runtimeArch: async () => "x64", probeRuntime() {}, installPinnedBun: (...args) => install(...args) }));
 mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => "", setCompilerRuntimePathSetting() {} }));
 mock.module("@legendapp/spark/files", () => ({ getDirectory: async () => "/Users/me/Library/Application Support/Slides", exists() {}, mkdir() {}, move() {}, remove() {} }));
 mock.module("@legendapp/spark/processes", () => ({ runCommand: options => run(options), spawn() {}, resolveCommand() {} }));
@@ -48,6 +50,35 @@ function deferred() {
   const promise = new Promise(done => { resolve = done; });
   return { promise, resolve };
 }
+
+test("launching without a deck does not discover or download a compiler", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let discoveries = 0, downloads = 0, decks = 0;
+  discover = async () => { discoveries++; return null; };
+  install = async () => { downloads++; throw new Error("offline"); };
+  const appMocks = {
+    react: React,
+    "@legendapp/spark/app": { addAppListener: () => ({ remove: async () => {} }) },
+    "@legend-apps/runtime-utils": { ownRegistration: value => value },
+    "@legendapp/spark/app/documents": { subscribeToOpenRequests: () => ({ remove: async () => {} }) },
+    "./slidesExit": { registerSlidesExitPreparation: () => () => {}, installSlidesExitHandler: () => ({ remove: async () => {} }) },
+    "./slidesWindows": { openSlidesPresenterWindow: async () => {} },
+    "./slidesStore": { getSlidesState: () => ({ status: "idle" }) },
+    "./deckLoader": { getLastDeckPath: () => undefined, loadDeck: async () => { decks++; } },
+    "./CompilerRuntimePrompt": { startCompilerRuntimePrefetch: () => { downloads++; } },
+  };
+  const appModule = { exports: {} };
+  const appCode = transformSync(readFileSync(new URL("../App.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs" }).code;
+  Function("require", "module", "exports", appCode)(name => appMocks[name] ?? {}, appModule, appModule.exports);
+  const App = appModule.exports.App;
+  let renderer;
+  try {
+    await act(() => { renderer = create(React.createElement(App)); });
+    expect(discoveries).toBe(0);
+    expect(downloads).toBe(0);
+    expect(decks).toBe(0);
+  } finally { if (renderer) await act(() => renderer.unmount()); }
+});
 
 test("opening B clears A's missing-runtime retry before compilation and later detection preserves B", async () => {
   await resolveCompilerRuntime({ refresh: true });
@@ -114,4 +145,62 @@ test("a late launcher failure after runtime recovery opens the deck without stra
   expect(compilerRuntime$.status.peek()).toBe("ready");
   expect(compilerRuntime$.retryDeck.peek()).toBeNull();
   expect(getSlidesState()).toMatchObject({ deckPath: "/recovered.mdx", status: "ready", buildErrors: [] });
+});
+
+test("runtime discovery alone does not download; the first deck installs with a pending prompt and resumes its draft", async () => {
+  discover = async () => null;
+  let installs = 0, report;
+  const download = deferred();
+  install = (_host, options) => { installs++; report = options.onProgress; return download.promise; };
+  await resolveCompilerRuntime({ refresh: true });
+  expect(installs).toBe(0);
+  const commands = [];
+  run = async options => { commands.push(options); return success; };
+  const opening = loadDeck("/first.mdx", false, "draft source");
+  await turn();
+  expect(installs).toBe(1);
+  expect(compilerRuntime$.retryDeck.peek()).toBe("/first.mdx");
+  expect(compilerRuntime$.status.peek()).toBe("downloading");
+  report({ phase: "verifying", fraction: 1, totalBytes: 100 });
+  expect(compilerRuntime$.progress.peek().phase).toBe("verifying");
+  discover = async () => runtime;
+  download.resolve(runtime);
+  expect(await opening).toBe(true);
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toMatchObject({ input: "draft source", args: ["/first.mdx", "--transitions", "/transitions", "--draft"] });
+  expect(compilerRuntime$.retryDeck.peek()).toBeNull();
+  await loadDeck("/second.mdx");
+  expect(installs).toBe(1);
+});
+
+test("a deck opened during installation supersedes the pending deck without starting another download", async () => {
+  discover = async () => null;
+  await resolveCompilerRuntime({ refresh: true });
+  const download = deferred();
+  let installs = 0;
+  install = () => { installs++; return download.promise; };
+  const openingA = loadDeck("/a.mdx");
+  await turn();
+  const openingB = loadDeck("/b.mdx");
+  expect(compilerRuntime$.retryDeck.peek()).toBe("/b.mdx");
+  discover = async () => runtime;
+  run = async () => success;
+  download.resolve(runtime);
+  expect(await openingA).toBe(false);
+  expect(await openingB).toBe(true);
+  expect(installs).toBe(1);
+  expect(getSlidesState().deckPath).toBe("/b.mdx");
+  expect(compilerRuntime$.retryDeck.peek()).toBeNull();
+});
+
+test("failed on-demand installation leaves the deck prompt and does not automatically retry", async () => {
+  discover = async () => null;
+  await resolveCompilerRuntime({ refresh: true });
+  let installs = 0;
+  install = async () => { installs++; throw new Error("offline"); };
+  expect(await loadDeck("/failed.mdx")).toBe(false);
+  expect(compilerRuntime$.retryDeck.peek()).toBe("/failed.mdx");
+  expect(compilerRuntime$.status.peek()).toBe("error");
+  expect(compilerRuntime$.error.peek()).toBe("offline");
+  expect(installs).toBe(1);
 });

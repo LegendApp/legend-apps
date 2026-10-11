@@ -14,7 +14,6 @@ import { getLastDeckPath, loadDeck } from "./deckLoader";
 import { getSlidesState } from "./slidesStore";
 import { parseEffectAction } from "../../../packages/presentation/src/effectPacks/protocol";
 import { runEffectCommand } from "./effectCommands";
-import { startCompilerRuntimePrefetch } from "./CompilerRuntimePrompt";
 
 export type SlidesAppProps = { launchArguments?: string[] };
 
@@ -46,8 +45,6 @@ export function App({ launchArguments }: SlidesAppProps) {
     const openPresenter = openSlidesPresenterWindow;
     const reportOpenError = (error: unknown) => Alert.alert("Could not open presenter", String(error));
     void openPresenter().catch(reportOpenError);
-    // Release builds ship no JavaScript runtime; find one or start fetching Bun before the first deck compiles.
-    startCompilerRuntimePrefetch();
     // Deck opening is part of launch, not a reaction to presenter renders.
     // Deduplicate setup-cleanup-setup and leave Dock reopen focused on windows.
     const launchKey = launchedPath ?? "";

@@ -1,6 +1,6 @@
 // @ts-nocheck Bun test globals follow the repository test setup.
 import { expect, test } from "bun:test";
-import { compareVersions, findRuntime, installPinnedBun, parseCurlProgress, parseRuntimeVersion, pinnedBun, type RuntimeHost } from "../compilerRuntimeCore";
+import { compareVersions, findRuntime, installPinnedBun, parseCurlProgress, parseRuntimeVersion, pinnedBun, type BunInstallProgress, type RuntimeHost } from "../compilerRuntimeCore";
 
 function fakeHost(files: Record<string, string>, extra: Partial<RuntimeHost> = {}) {
   const calls: string[] = [];
@@ -61,10 +61,15 @@ function installHost(sha: string) {
 
 test("installs the pinned Bun only after its checksum matches, then moves it into place", async () => {
   const { host, files } = installHost(pinnedBun.assets.arm64.sha256);
-  const progress: number[] = [];
+  const progress: BunInstallProgress[] = [];
   const runtime = await installPinnedBun(host, { arch: "arm64", onProgress: value => progress.push(value) });
   expect(runtime).toMatchObject({ path: `${host.dataDirectory}/runtime/bun-${pinnedBun.version}/bun`, source: "downloaded" });
-  expect(progress).toEqual([0.5, 1]);
+  expect(progress).toEqual([
+    { phase: "downloading", fraction: 0, totalBytes: pinnedBun.bytes.arm64 },
+    { phase: "downloading", fraction: 0.5, totalBytes: pinnedBun.bytes.arm64 },
+    { phase: "verifying", fraction: 1, totalBytes: pinnedBun.bytes.arm64 },
+    { phase: "installing", fraction: 1, totalBytes: pinnedBun.bytes.arm64 },
+  ]);
   expect(Object.keys(files)).toEqual([`${host.dataDirectory}/runtime/bun-${pinnedBun.version}/bun`]);
 });
 

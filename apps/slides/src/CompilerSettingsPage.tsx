@@ -4,24 +4,24 @@ import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { compilerRuntime$, resolveCompilerRuntime } from "./compilerRuntime";
 import { pinnedBun } from "./compilerRuntimeCore";
-import { chooseOwnRuntime, detectRuntimeAndRetry, automaticRuntimeAndRetry, downloadRuntimeAndRetry, RuntimeButton } from "./CompilerRuntimePrompt";
+import { chooseOwnRuntime, detectRuntimeAndRetry, automaticRuntimeAndRetry, downloadRuntimeAndRetry, RuntimeButton, CompilerRuntimeProgress } from "./CompilerRuntimePrompt";
 import { useCompilerRuntimePathSetting } from "./slidesSettings";
 
 const sourceLabel = { custom: "your choice", downloaded: "downloaded by Legend Slides", system: "found on this Mac" } as const;
 
 export function CompilerSettingsPage() {
   const status = useValue(compilerRuntime$.status), runtime = useValue(compilerRuntime$.runtime);
-  const progress = useValue(compilerRuntime$.progress), error = useValue(compilerRuntime$.error);
+  const error = useValue(compilerRuntime$.error);
   const customPath = useCompilerRuntimePathSetting();
   useEffect(() => { if (compilerRuntime$.status.peek() === "unknown") void resolveCompilerRuntime(); }, []);
   const busy = status === "downloading" || status === "checking";
-  const summary = status === "downloading" ? `Downloading Bun ${pinnedBun.version}… ${Math.round(progress * 100)}%`
-    : status === "checking" ? "Looking for Bun or Node…"
+  const summary = status === "checking" ? "Looking for Bun or Node…"
     : runtime ? `${runtime.kind === "bun" ? "Bun" : "Node"} ${runtime.version} (${sourceLabel[runtime.source]})`
     : "No runtime found. Decks can't compile until you download Bun or choose your own.";
   return <SettingsSection first title="Deck Compiler">
     <SettingsRow title="JavaScript Runtime" description={runtime?.path ?? "Legend Slides compiles decks with Bun 1.3+ or Node 22+."}
-      control={<Text className="text-sm text-foreground" style={{ maxWidth: 260 }}>{summary}</Text>} />
+      controlWrapperClassName={status === "downloading" ? "w-64 items-stretch" : undefined}
+      control={status === "downloading" ? <CompilerRuntimeProgress /> : <Text className="text-sm text-foreground" style={{ maxWidth: 260 }}>{summary}</Text>} />
     {status === "error" && <SettingsRow title="Download Failed" description={error} control={null} />}
     <SettingsRow title="Bundled Download" description={`Install Bun ${pinnedBun.version} from GitHub into Application Support. Verified with a SHA-256 checksum built into the app.`}
       control={<View className="flex-row gap-2">

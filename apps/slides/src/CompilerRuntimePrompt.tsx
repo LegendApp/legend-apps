@@ -1,7 +1,7 @@
 import { useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { Pressable, Text, View } from "react-native";
-import { compilerRuntime$, changeCompilerRuntime, resolveCompilerRuntime, downloadCompilerRuntime, prefetchCompilerRuntime, setCustomCompilerRuntime } from "./compilerRuntime";
+import { compilerRuntime$, changeCompilerRuntime, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime } from "./compilerRuntime";
 import { pinnedBun } from "./compilerRuntimeCore";
 
 export function detectRuntimeAndRetry() {
@@ -14,11 +14,6 @@ export function automaticRuntimeAndRetry() {
 
 export function downloadRuntimeAndRetry(force = false) {
   return changeCompilerRuntime(() => downloadCompilerRuntime({ force }));
-}
-
-/** Launch-time background install; reopens a deck that failed while it ran. Errors stay in the prompt. */
-export function startCompilerRuntimePrefetch() {
-  void changeCompilerRuntime(prefetchCompilerRuntime).catch(() => {});
 }
 
 export async function chooseOwnRuntime() {
@@ -40,25 +35,39 @@ export function RuntimeButton({ title, onPress, disabled }: { title: string; onP
   </Pressable>;
 }
 
-export function runtimeStatusText(status: string, progress: number, error: string, arch: "arm64" | "x64" | null) {
-  if (status === "downloading") return `Legend Slides is downloading Bun ${pinnedBun.version} in the background. This deck will retry when it finishes… ${Math.round(progress * 100)}%`;
+export function runtimeStatusText(status: string, error: string, arch: "arm64" | "x64" | null) {
+  if (status === "downloading") return "Preparing the compiler. This deck will retry when it finishes…";
   if (status === "checking") return "Looking for Bun or Node…";
   if (status === "error") return error;
   return `This deck needs a JavaScript runtime to compile. Download Bun (${arch ? `about ${Math.round(pinnedBun.bytes[arch] / 1_000_000)} MB, ` : ""}once) or use your own Bun 1.3+ or Node 22+.`;
+}
+
+/** Both windows render the same install progress, including when Settings opens mid-download. */
+export function CompilerRuntimeProgress({ textColor }: { textColor?: string }) {
+  const progress = useValue(compilerRuntime$.progress);
+  const percent = Math.round((progress?.fraction ?? 0) * 100);
+  const text = !progress ? "Preparing Bun download…"
+    : progress.phase === "verifying" ? "Verifying Bun download…"
+    : progress.phase === "installing" ? "Installing Bun…"
+    : `Downloading Bun ${pinnedBun.version}… ${Math.round(progress.fraction * progress.totalBytes).toLocaleString()} / ${progress.totalBytes.toLocaleString()} bytes (${percent}%)`;
+  return <View className="gap-2">
+    <Text className="text-sm text-foreground" style={textColor ? { color: textColor } : undefined}>{text}</Text>
+    <View accessibilityRole="progressbar" accessibilityLabel={text} accessibilityValue={{ min: 0, max: 100, now: percent }} className="h-1 rounded bg-[#303948]">
+      <View className="h-1 rounded bg-[#7dd3fc]" style={{ width: `${percent}%` }} />
+    </View>
+  </View>;
 }
 
 /** Shown over the presenter when a deck can't compile because no runtime is installed. */
 export function CompilerRuntimePrompt() {
   const retry = useValue(compilerRuntime$.retryDeck), status = useValue(compilerRuntime$.status);
   const arch = useValue(compilerRuntime$.arch);
-  const progress = useValue(compilerRuntime$.progress), error = useValue(compilerRuntime$.error);
+  const error = useValue(compilerRuntime$.error);
   if (!retry || status === "ready") return null;
   const busy = status === "downloading" || status === "checking";
   return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 21, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
-    <Text style={{ color: "#fafafa", fontSize: 14 }}>{runtimeStatusText(status, progress, error, arch)}</Text>
-    {status === "downloading" && <View style={{ height: 4, borderRadius: 2, backgroundColor: "#303948" }}>
-      <View style={{ height: 4, borderRadius: 2, width: `${Math.round(progress * 100)}%`, backgroundColor: "#7dd3fc" }} />
-    </View>}
+    <Text style={{ color: "#fafafa", fontSize: 14 }}>{runtimeStatusText(status, error, arch)}</Text>
+    {status === "downloading" && <CompilerRuntimeProgress textColor="#fafafa" />}
     <View style={{ flexDirection: "row", gap: 8 }}>
       <RuntimeButton title={status === "error" ? "Try Again" : "Download Bun"} disabled={busy} onPress={() => void downloadRuntimeAndRetry()} />
       <RuntimeButton title="Detect Again" disabled={busy} onPress={() => void detectRuntimeAndRetry()} />

@@ -14,7 +14,7 @@ mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => t
 mock.module("../deckLoader", () => ({ loadDeck: async path => { loaded.push(path); }, parseCompilerResult: JSON.parse }));
 mock.module("../slidesStore", () => ({ getSlidesState: () => ({ deckLocked: false, audienceOpen: false }) }));
 globalThis.__DEV__ = false;
-const { compilerRuntime$, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime, prefetchCompilerRuntime, changeCompilerRuntime, CompilerRuntimeMissingError } = await import("../compilerRuntime");
+const { compilerRuntime$, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime, changeCompilerRuntime, CompilerRuntimeMissingError } = await import("../compilerRuntime");
 const { runCompilerCommand } = await import("../compilerCommand");
 const { runEffectCommand } = await import("../effectCommands");
 const { effectRequests$ } = await import("../effectRequests");
@@ -69,10 +69,10 @@ test("discovery finishing during a download cannot overwrite installation state"
   expect(compilerRuntime$.status.peek()).toBe("ready");
 });
 
-test("detect, automatic, custom, download and prefetch share one pending-deck retry", async () => {
+test("detect, automatic, custom, download share one pending-deck retry", async () => {
   for (const operation of [
     () => resolveCompilerRuntime({ refresh: true }), () => setCustomCompilerRuntime(null),
-    () => setCustomCompilerRuntime("/chosen/engine"), () => downloadCompilerRuntime(), prefetchCompilerRuntime,
+    () => setCustomCompilerRuntime("/chosen/engine"), () => downloadCompilerRuntime(),
   ]) {
     compilerRuntime$.retryDeck.set("/deck.mdx");
     const before = loaded.length;
@@ -80,22 +80,26 @@ test("detect, automatic, custom, download and prefetch share one pending-deck re
     expect(loaded.length).toBe(before + 1);
     expect(compilerRuntime$.retryDeck.peek()).toBeNull();
   }
-  expect(loaded).toEqual(Array(5).fill("/deck.mdx"));
+  expect(loaded).toEqual(Array(4).fill("/deck.mdx"));
 });
 
-test("prefetch completing a shared background download retries the failed deck", async () => {
-  discover = async () => null;
-  await resolveCompilerRuntime({ refresh: true });
+test("concurrent downloads publish shared progress and retry the pending deck once", async () => {
   const download = deferred();
-  let installs = 0;
-  install = () => { installs++; return download.promise; };
-  const prefetched = changeCompilerRuntime(prefetchCompilerRuntime);
-  await turn();
+  let installs = 0, report;
+  install = (_host, options) => { installs++; report = options.onProgress; return download.promise; };
   compilerRuntime$.retryDeck.set("/deck.mdx");
-  const clicked = changeCompilerRuntime(downloadCompilerRuntime);
-  discover = async () => runtime;
+  const first = changeCompilerRuntime(downloadCompilerRuntime);
+  const second = changeCompilerRuntime(downloadCompilerRuntime);
+  await turn();
+  for (const phase of ["downloading", "verifying", "installing"]) {
+    const progress = { phase, fraction: phase === "downloading" ? 0.5 : 1, totalBytes: 100 };
+    report(progress);
+    expect(compilerRuntime$.status.peek()).toBe("downloading");
+    expect(compilerRuntime$.progress.peek()).toEqual(progress);
+    expect(loaded).toEqual([]);
+  }
   download.resolve(runtime);
-  await Promise.all([prefetched, clicked]);
+  await Promise.all([first, second]);
   expect(installs).toBe(1);
   expect(loaded).toEqual(["/deck.mdx"]);
 });
@@ -203,12 +207,12 @@ test("a late second exit 127 waits for an active download and retries", async ()
   await turn();
   install = () => download.promise;
   const installing = downloadCompilerRuntime();
-  compilerRuntime$.progress.set(0.5);
+  compilerRuntime$.progress.set({ phase: "verifying", fraction: 1, totalBytes: 100 });
   completion.resolve(result(127));
   await turn();
   expect(commands).toHaveLength(2);
   expect(compilerRuntime$.status.peek()).toBe("downloading");
-  expect(compilerRuntime$.progress.peek()).toBe(0.5);
+  expect(compilerRuntime$.progress.peek()).toEqual({ phase: "verifying", fraction: 1, totalBytes: 100 });
   download.resolve(runtime);
   await installing;
   expect((await running).exit.code).toBe(0);
