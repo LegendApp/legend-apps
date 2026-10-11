@@ -19,7 +19,8 @@ mock.module("../../../../packages/storage/src/NativeStorage", () => ({ default: 
   writeStorageText: (_root, path, value) => { files.set(path, value); onWrite?.(); return true; },
 } }));
 mock.module("@legendapp/spark/settings/window", () => ({
-  VirtualizedSettingsWindow: ({ pages }) => pages[0].render(),
+  SettingsWindow: ({ pages }) => pages[0].render(),
+  SettingsPage: ({ children }) => children,
   SettingsSection: "section",
   SettingsRow: ({ title, control }) => <row title={title}>{control}</row>,
 }));

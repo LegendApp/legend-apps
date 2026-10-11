@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { CompilerSettingsPage } from "./CompilerSettingsPage";
 import { EffectsSettingsPage } from "./EffectsSettingsPage";
@@ -7,7 +7,8 @@ import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import {
   SettingsRow,
   SettingsSection,
-  VirtualizedSettingsWindow as SharedSettingsWindow,
+  SettingsPage,
+  SettingsWindow as SharedSettingsWindow,
   type SettingsWindowPage,
 } from "@legendapp/spark/settings/window";
 import {
@@ -113,7 +114,7 @@ function PresenterColorInput({ label, value, onChange }: { label: string; value:
   </View>;
 }
 
-const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
+const pageContent: SettingsWindowPage<SlidesSettingsPage>[] = [{
   id: "appearance", title: "Appearance", render: () => <AppearanceSettingsContent />,
 }, {
   id: "timer",
@@ -122,6 +123,7 @@ const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
 }, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> },
   { id: "effects", title: "Effects", render: () => <EffectsSettingsPage /> },
   { id: "compiler", title: "Compiler", render: () => <CompilerSettingsPage /> }];
+const pages = pageContent.map(page => ({ ...page, render: () => <SettingsPage><Text className="mb-5 text-xl font-semibold text-text-primary">{page.title}</Text>{page.render()}</SettingsPage> }));
 
 export function SettingsWindow() {
   return (
