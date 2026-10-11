@@ -10,6 +10,12 @@ import { compileDeck } from "../compiler";
 import { defaultEffectPacksDirectory } from "../compiler/effectPacks";
 const cleanups = [];
 afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()));
+async function withEnv(name, value, work) {
+  const previous = process.env[name];
+  process.env[name] = value;
+  try { await work(); }
+  finally { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; }
+}
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-install-"));
   const directory = path.join(root, "installed"), deck = path.join(root, "talk.mdx");
@@ -66,29 +72,18 @@ test("catalog rejects malformed preview fields", async () => {
 });
 test("unlocked decks use installed packs by default in development", async () => {
   const f = fixture();
-  const previous = process.env.LEGEND_SLIDES_EFFECT_PACKS;
-  process.env.LEGEND_SLIDES_EFFECT_PACKS = f.directory;
-  try {
+  await withEnv("LEGEND_SLIDES_EFFECT_PACKS", f.directory, async () => {
     expect(defaultEffectPacksDirectory()).toBe(f.directory);
     await installEffectPacks(["motion"], { ...f.options, deck: undefined });
     expect((await compileDeck(f.deck)).success).toBe(true);
-  } finally {
-    if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
-    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previous;
-  }
+  });
 });
 test("removal refuses active dependents and skips the installation space check", async () => {
   const f = fixture();
   await installEffectPacks(["motion"], { ...f.options, deck: undefined });
   await expect(removeEffectPack("math", { directory: f.directory })).rejects.toThrow('installed pack "motion" depends on it');
   expect(fs.existsSync(path.join(f.directory, "math"))).toBe(true);
-  const previous = process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES;
-  process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES = String(Number.MAX_SAFE_INTEGER);
-  try { await removeEffectPack("motion", { directory: f.directory }); }
-  finally {
-    if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES;
-    else process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES = previous;
-  }
+  await withEnv("LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES", String(Number.MAX_SAFE_INTEGER), () => removeEffectPack("motion", { directory: f.directory }));
   expect(fs.existsSync(path.join(f.directory, "motion"))).toBe(false);
   await removeEffectPack("math", { directory: f.directory });
 });

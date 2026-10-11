@@ -65,8 +65,7 @@ async function installRelease(directory: string, id: string, release: PackReleas
   } finally { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true }); }
 }
 type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin>; onProgress?: (progress: EffectInstallProgress) => void };
-async function withInstallationLease<T>(directory: string, work: () => Promise<T>, checkSpace = true) {
-  if (checkSpace) ensureEffectSpace(directory, 2_000_000);
+async function withInstallationLease<T>(directory: string, work: () => Promise<T>) {
   fs.mkdirSync(directory, { recursive: true });
   const lease = path.join(directory, ".installation.lock"), token = crypto.randomUUID();
   const temporary = path.join(directory, `.lease-${token}`);
@@ -93,6 +92,7 @@ async function withInstallationLease<T>(directory: string, work: () => Promise<T
 }
 export async function installEffectPacks(ids: string[], options: InstallOptions = {}) {
   const directory = options.directory ?? installedPacksDirectory();
+  ensureEffectSpace(directory, 2_000_000);
   return withInstallationLease(directory, () => installPacks(ids, { ...options, directory }));
 }
 async function installPacks(ids: string[], options: InstallOptions) {
@@ -127,7 +127,7 @@ export async function removeEffectPack(id: string, options: { directory?: string
       }
     }
     fs.rmSync(path.join(directory, id), { recursive: true, force: true });
-  }, false);
+  });
 }
 export async function installEffectExample(slug: string, options: { directory?: string; catalogURL?: string } = {}) {
   const directory = options.directory ?? installedPacksDirectory();
