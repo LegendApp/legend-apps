@@ -2,6 +2,7 @@ import { useState } from "react";
 import { TextInput, View } from "react-native";
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { CompilerSettingsPage } from "./CompilerSettingsPage";
+import { EffectsSettingsPage } from "./EffectsSettingsPage";
 import { SelectControl, SwitchControl } from "@legend-apps/design-system";
 import {
   SettingsRow,
@@ -26,7 +27,7 @@ import {
 import { normalizePresenterColor } from "./presenterAppearance";
 import { slidesSettingsWindowIdentifier } from "./slidesWindows";
 
-type SlidesSettingsPage = "appearance" | "timer" | "transitions" | "compiler";
+type SlidesSettingsPage = "appearance" | "timer" | "transitions" | "effects" | "compiler";
 
 function TimerSettingsPage() {
   const presentationTimerStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
@@ -119,6 +120,7 @@ const pages: SettingsWindowPage<SlidesSettingsPage>[] = [{
   render: () => <TimerSettingsPage />,
   title: "Timer",
 }, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> },
+  { id: "effects", title: "Effects", render: () => <EffectsSettingsPage /> },
   { id: "compiler", title: "Compiler", render: () => <CompilerSettingsPage /> }];
 
 export function SettingsWindow() {

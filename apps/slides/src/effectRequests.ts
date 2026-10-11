@@ -1,7 +1,9 @@
 import { observable } from "@legendapp/state";
+import type { EffectInstallProgress } from "../../../packages/presentation/src/effectPacks/install";
 export const effectRequests$ = observable({
   pending: null as { path: string; packs: string[] } | null,
   busy: false,
+  progress: null as EffectInstallProgress | null,
   message: "",
   error: "",
 });

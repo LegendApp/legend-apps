@@ -26,6 +26,7 @@ mock.module("@legendapp/spark/settings/window", () => ({
 mock.module("@legend-apps/design-system", () => ({ SelectControl: "select", SwitchControl: "switch" }));
 mock.module("../TransitionSettingsPage", () => ({ TransitionSettingsPage: "transitions" }));
 mock.module("../CompilerSettingsPage", () => ({ CompilerSettingsPage: "compiler" }));
+mock.module("../EffectsSettingsPage", () => ({ EffectsSettingsPage: "effects" }));
 mock.module("../slidesWindows", () => ({ slidesSettingsWindowIdentifier: "settings" }));
 mock.module("../EditableMarkdown", () => ({ EditableMarkdown: "notes" }));
 const { SettingsWindow } = await import("../SettingsWindow");
