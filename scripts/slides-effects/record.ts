@@ -17,8 +17,8 @@ mp4 and a PNG poster into legend-docs/docs/public/slides/effects/previews/<slug>
   --seconds N        recording length (default 8)
   --steps N          right-arrow presses after the lead-in (default: <Step> count in the example)
   --release          launch the release build (default: dev build; start Metro with bun run slides first)
-  --window REGEX     window title to record (default: audience window, else the largest Slides window)
-  --crop-top PX      pixels to drop from the top of the capture (title bar; default 56)
+  --window REGEX     window title to record (default: Legend Slides — Audience)
+  --crop-top PX      pixels to drop from the top of the capture (default 0)
   --width PX         export width (default 1280)
   --docs PATH        legend-docs checkout (default ../legend-docs)
   --apply            write the preview into legend-docs' catalog.json (refresh keeps it while hashes match)
@@ -54,7 +54,7 @@ const docs = path.resolve(option("--docs") ?? path.join(repo, "../legend-docs"))
 const previews = path.join(docs, "docs/public/slides/effects/previews", slug);
 const seconds = Number(option("--seconds") ?? 8);
 const steps = Number(option("--steps") ?? (exampleSource.match(/<Step\b/g) ?? []).length);
-const cropTop = Number(option("--crop-top") ?? 56);
+const cropTop = Number(option("--crop-top") ?? 0);
 const width = Number(option("--width") ?? 1280);
 const reserve = option("--reserve-bytes") ?? "30000000000";
 const release = flag("--release");
@@ -116,16 +116,23 @@ try {
     devArgs.push("-RCT_jsLocation", `127.0.0.1:${port}`);
   }
   run("open", ["-n", ...env.flatMap(value => ["--env", value]), appPath, "--args", ...devArgs, deck]);
-  let target: Window | undefined;
+  let deckWindow: Window | undefined;
   const pattern = option("--window") ? new RegExp(option("--window")!, "i") : undefined;
-  for (let attempt = 0; attempt < 60 && !target; attempt++) {
+  for (let attempt = 0; attempt < 60 && !deckWindow; attempt++) {
     await sleep(1000);
-    const windows = listWindows().filter(w => /slides/i.test(w.owner) && w.width > 200 && w.height > 200);
-    target = pattern ? windows.find(w => pattern.test(w.title))
-      : windows.find(w => /audience/i.test(w.title)) ?? windows.sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    deckWindow = listWindows().find(w => w.owner === "Legend Slides" && w.title === `${slug}.mdx — Legend Slides` && w.width > 200 && w.height > 200);
   }
-  if (!target) throw new Error("No Slides window appeared within 60 s. Check the deck compiles (open it manually) and that Metro is running for dev builds.");
+  if (!deckWindow) throw new Error("The deck window did not appear within 60 s. Check that the deck compiles and Metro is running for dev builds.");
   await sleep(3000); // Let compilation and preparation settle before the lead-in.
+  run("osascript", ["-e", 'tell application "System Events" to tell process "LegendSlides" to click (first UI element of toolbar 1 of window 1 whose description is "Start Presentation")']);
+  let target: Window | undefined;
+  for (let attempt = 0; attempt < 20 && !target; attempt++) {
+    await sleep(1000);
+    const windows = listWindows().filter(w => w.owner === "Legend Slides" && w.width > 200 && w.height > 200);
+    target = pattern ? windows.find(w => pattern.test(w.title))
+      : windows.find(w => w.title === "Legend Slides — Audience");
+  }
+  if (!target) throw new Error("The Legend Slides audience window did not appear within 20 s after starting the presentation.");
   console.log(`Recording window ${target.id} "${target.title}" for ${seconds}s, ${steps} step(s)…`);
   recording = spawn(recorder, ["--window-id", String(target.id), "--output", raw, "--seconds", String(seconds), "--fps", "60", "--width", "1920", "--reserve-bytes", reserve], { stdio: ["ignore", "pipe", "inherit"] });
   const ready = new Promise<void>((resolve, reject) => {
@@ -143,6 +150,8 @@ try {
   await new Promise(resolve => recording!.on("exit", resolve));
 } finally {
   if (recording && recording.exitCode === null) recording.kill("SIGINT");
+  run("osascript", ["-e", 'tell application "System Events" to tell process "LegendSlides" to click (first UI element of toolbar 1 of window 1 whose description is "Stop")'], { allowFail: true });
+  await sleep(1000);
   run("osascript", ["-e", 'tell application id "so.legend.slides.macos" to quit'], { allowFail: true });
   await sleep(2000);
   // Only the instance opened with this run's temporary deck; never another Slides session.
