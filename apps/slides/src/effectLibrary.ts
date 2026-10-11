@@ -9,8 +9,11 @@ export type EffectPackRow = { id: string; latest?: string; installed?: PackPin; 
 
 /** The compiler installs into ~/Library/Application Support/Legend Slides/effects; data is Application Support/<app>. */
 export async function effectsDirectory() {
+  if (process.env.LEGEND_SLIDES_EFFECT_PACKS) return process.env.LEGEND_SLIDES_EFFECT_PACKS;
   const data = await getDirectory("data");
-  return `${data.slice(0, data.indexOf("/Library/"))}/Library/Application Support/Legend Slides/effects`;
+  const library = data.indexOf("/Library/");
+  if (library < 0) throw new Error("Could not locate the effects folder in Application Support.");
+  return `${data.slice(0, library)}/Library/Application Support/Legend Slides/effects`;
 }
 
 /** Read each pack's default selection without the compiler, so installed packs stay visible offline. */

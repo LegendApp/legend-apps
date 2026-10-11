@@ -7,11 +7,12 @@ import { act, create } from "react-test-renderer";
 
 let alerts = [];
 mock.module("react-native", () => ({ Platform: { OS: "macos" }, View: "view", Text: "text", Image: "image", Pressable: "pressable", ScrollView: "scroll",
-  Linking: { openURL() {} }, Alert: { alert: (...args) => alerts.push(args) } }));
+  Linking: { openURL: async url => { opened.push(url); } }, Alert: { alert: (...args) => alerts.push(args) } }));
 const data = "/Users/me/Library/Application Support/Slides", effects = "/Users/me/Library/Application Support/Legend Slides/effects";
-let files = {}, commands = [], respond, loaded = [];
+let files = {}, commands = [], respond, loaded = [], opened = [], created = [];
 mock.module("@legendapp/spark/files", () => ({
   getDirectory: async () => data,
+  mkdir: async path => { created.push(path); },
   exists: async path => Object.keys(files).some(file => file === path || file.startsWith(`${path}/`)),
   list: async path => [...new Set(Object.keys(files).filter(file => file.startsWith(`${path}/`)).map(file => file.slice(path.length + 1).split("/")[0]))]
     .map(name => ({ name, path: `${path}/${name}` })),
@@ -30,6 +31,7 @@ mock.module("@legendapp/spark/settings/window", () => ({
   SettingsRow: ({ title, description, control }) => <row title={title} description={description}>{control}</row>,
 }));
 const { EffectsSettingsPage } = await import("../EffectsSettingsPage");
+const { EffectInstallStatus } = await import("../EffectInstallStatus");
 const { effectRequests$ } = await import("../effectRequests");
 const { effectPackRows, catalogResource } = await import("../effectLibrary");
 
@@ -54,11 +56,11 @@ async function render() {
   return renderer;
 }
 beforeEach(() => {
-  alerts = []; commands = []; loaded = [];
+  alerts = []; commands = []; loaded = []; opened = []; created = [];
   files = { [`${effects}/backgrounds/active.json`]: JSON.stringify(pin("1.0.0", "a")), [`${effects}/charts/active.json`]: JSON.stringify(pin("1.0.0", "c")),
     [`${effects}/examples/aurora/example.mdx`]: "" };
   respond = args => args[0] === "--effect-catalog" ? ok({ catalog, url }) : ok({});
-  effectRequests$.assign({ pending: null, busy: false, message: "", error: "", progress: null });
+  effectRequests$.assign({ pending: null, busy: false, message: "", error: "", progress: null, source: "presenter" });
   slidesState$.assign({ deckLocked: false, audienceOpen: false });
 });
 
@@ -93,19 +95,27 @@ test("lists packs with previews, versions and state, and installs updates with p
     let finish;
     respond = (args, options) => args[0] === "--effect-action" ? new Promise(done => {
       options.onOutput({ stream: "stderr", bytes: '{"effectProgress":{"pack":"backgrounds","receivedBytes":4,"totalBytes":10}}\n{"effect' });
-      finish = () => { files[`${effects}/backgrounds/active.json`] = JSON.stringify(pin("2.0.0", "b")); done(ok({})); };
+      finish = () => { options.onOutput({ stream: "stderr", bytes: 'Progress":{"pack":"backgrounds","receivedBytes":10,"totalBytes":10}}\n' }); files[`${effects}/backgrounds/active.json`] = JSON.stringify(pin("2.0.0", "b")); done(ok({})); };
     }) : ok({ catalog, url });
     effectRequests$.pending.set({ path: "/deck.mdx", packs: ["backgrounds"] });
     await act(async () => { button(section(renderer, "Backgrounds"), "Update to 2.0.0").props.onPress(); await turn(); });
     expect(commands.at(-1)).toEqual(["--effect-action", "legend-slides://effects/install?pack=backgrounds&version=2.0.0"]);
     const bar = renderer.root.findByProps({ accessibilityRole: "progressbar" });
-    expect(bar.props.accessibilityLabel).toBe("Updating backgrounds 2.0.0… backgrounds 40%");
+    expect(bar.props.accessibilityLabel).toBe("Updating backgrounds 2.0.0… backgrounds 4 / 10 bytes (40%)");
     expect(button(section(renderer, "Media"), "Install").props.disabled).toBe(true);
     await act(async () => { finish(); await turn(); await turn(); });
     expect(section(renderer, "Backgrounds").props.description).toStartWith("Installed · 2.0.0");
-    expect(renderer.root.findAll(node => node.type === "row" && node.props.title === "Updated backgrounds 2.0.0. It is available offline.")).toHaveLength(1);
+    expect(renderer.root.findByProps({ accessibilityRole: "progressbar" }).props.accessibilityLabel).toBe("Updated backgrounds 2.0.0. It is available offline. backgrounds 10 / 10 bytes (100%)");
+    expect(effectRequests$.source.peek()).toBe("settings");
     expect(loaded).toEqual(["/deck.mdx"]);
   } finally { await act(() => renderer.unmount()); }
+});
+test("Settings operations do not show a presenter overlay", async () => {
+  effectRequests$.assign({ busy: true, message: "Installing backgrounds…", source: "settings" });
+  let renderer;
+  await act(async () => { renderer = create(<EffectInstallStatus />); });
+  try { expect(renderer.root.findAll(node => node.type === "text" && node.children.includes("Installing backgrounds…"))).toHaveLength(0); }
+  finally { await act(() => renderer.unmount()); }
 });
 
 test("removal asks first, runs under the compiler's lease and reports failures", async () => {
@@ -137,5 +147,42 @@ test("offline shows installed packs and presenting blocks changes", async () => 
     respond = args => args[0] === "--effect-catalog" ? ok({ catalog, url }) : ok({});
     await act(async () => { button(renderer.root, "Try Again").props.onPress(); await turn(); });
     expect(section(renderer, "Media").props.description).toBe("Not installed · Latest 1.0.0");
+  } finally { await act(() => renderer.unmount()); }
+});
+test("Open Folder creates the effects directory before opening it", async () => {
+  const renderer = await render();
+  try {
+    await act(async () => { button(renderer.root, "Open Folder").props.onPress(); await turn(); });
+    expect(created).toEqual([effects]);
+    expect(opened).toEqual([`file://${encodeURI(effects)}`]);
+  } finally { await act(() => renderer.unmount()); }
+});
+test("a late catalog response cannot replace a newer retry", async () => {
+  respond = () => ok({ success: false, errors: ["offline"] });
+  const renderer = await render();
+  try {
+    const replies = [];
+    respond = () => new Promise(resolve => { replies.push(resolve); });
+    await act(() => {
+      const retry = button(renderer.root, "Try Again").props.onPress;
+      retry();
+      retry();
+    });
+    await act(async () => { replies[1](ok({ catalog, url })); await turn(); });
+    expect(section(renderer, "Media")).toBeDefined();
+    await act(async () => { replies[0](ok({ success: false, errors: ["stale"] })); await turn(); });
+    expect(section(renderer, "Media")).toBeDefined();
+    expect(renderer.root.findAll(node => node.type === "row" && node.props.title === "Catalog unavailable")).toHaveLength(0);
+  } finally { await act(() => renderer.unmount()); }
+});
+test("failed compiler output does not expose progress JSON as an error", async () => {
+  const renderer = await render();
+  try {
+    respond = (args, options) => {
+      options.onOutput({ stream: "stderr", bytes: '{"effectProgress":{"pack":"media","receivedBytes":1,"totalBytes":2}}\n' });
+      return ok({ success: false, errors: [] });
+    };
+    await act(async () => { button(section(renderer, "Media"), "Install").props.onPress(); await turn(); });
+    expect(renderer.root.findAll(node => node.type === "row" && node.props.description === "Effect installation failed.")).toHaveLength(1);
   } finally { await act(() => renderer.unmount()); }
 });

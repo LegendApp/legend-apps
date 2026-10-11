@@ -1,8 +1,9 @@
 import { useValue } from "@legendapp/state/react";
 import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
 import { NativeVideoView } from "@legend-apps/presentation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { mkdir } from "@legendapp/spark/files";
 import type { EffectCatalog, EffectListing, PackPin } from "../../../packages/presentation/src/effectPacks/schema";
 import { RuntimeButton } from "./CompilerRuntimePrompt";
 import { loadDeck } from "./deckLoader";
@@ -33,7 +34,7 @@ function EffectCard({ effect, catalogURL }: { effect: EffectListing; catalogURL:
 function EffectProgress() {
   const message = useValue(effectRequests$.message), progress = useValue(effectRequests$.progress);
   const percent = progress ? Math.round(progress.receivedBytes / progress.totalBytes * 100) : 0;
-  const text = progress ? `${message} ${progress.pack} ${percent}%` : message;
+  const text = progress ? `${message} ${progress.pack} ${progress.receivedBytes.toLocaleString()} / ${progress.totalBytes.toLocaleString()} bytes (${percent}%)` : message;
   return <View className="gap-2">
     <Text className="text-sm text-foreground">{text}</Text>
     <View accessibilityRole="progressbar" accessibilityLabel={text} accessibilityValue={{ min: 0, max: 100, now: percent }} className="h-1 rounded bg-[#303948]">
@@ -45,17 +46,20 @@ function EffectProgress() {
 export function EffectsSettingsPage() {
   const [installed, setInstalled] = useState<Record<string, PackPin> | null>(null);
   const [catalog, setCatalog] = useState<Catalog>(null);
-  const busy = useValue(effectRequests$.busy), message = useValue(effectRequests$.message), error = useValue(effectRequests$.error);
+  const catalogRequest = useRef(0);
+  const busy = useValue(effectRequests$.busy), message = useValue(effectRequests$.message), error = useValue(effectRequests$.error), progress = useValue(effectRequests$.progress);
   const presenting = useValue(() => slidesState$.deckLocked.get() || slidesState$.audienceOpen.get());
   const refreshInstalled = () => effectsDirectory().then(readInstalledEffectPacks).then(setInstalled, () => setInstalled({}));
   const refreshCatalog = () => {
+    const request = ++catalogRequest.current;
     setCatalog(null);
-    loadEffectCatalog().then(setCatalog, (failure: unknown) => setCatalog({ error: failure instanceof Error ? failure.message : String(failure) }));
+    loadEffectCatalog().then(value => { if (request === catalogRequest.current) setCatalog(value); },
+      (failure: unknown) => { if (request === catalogRequest.current) setCatalog({ error: failure instanceof Error ? failure.message : String(failure) }); });
   };
-  useEffect(() => { void refreshInstalled(); refreshCatalog(); }, []);
+  useEffect(() => { void refreshInstalled(); refreshCatalog(); return () => { catalogRequest.current++; }; }, []);
 
   const run = (args: string[], working: string, done: string) => {
-    void runEffectCommand(args, working, done).then(() => {
+    void runEffectCommand(args, working, done, "settings").then(() => {
       // A deck waiting on optional effects retries with the new selection.
       const pending = effectRequests$.pending.peek();
       if (pending) void loadDeck(pending.path);
@@ -74,12 +78,12 @@ export function EffectsSettingsPage() {
   return <>
     <SettingsSection first title="Effect Packs">
       <SettingsRow title="Installed effects" description="Packs install into Application Support and work offline. Decks keep the version they were built with."
-        control={<RuntimeButton title="Open Folder" onPress={() => void effectsDirectory().then(directory => Linking.openURL(`file://${encodeURI(directory)}`)).catch(console.error)} />} />
+        control={<RuntimeButton title="Open Folder" onPress={() => void effectsDirectory().then(async directory => { await mkdir(directory, { recursive: true }); await Linking.openURL(`file://${encodeURI(directory)}`); }).catch(console.error)} />} />
       {!catalog && <SettingsRow title="Catalog" description="Loading effects from legend.so…" control={null} />}
       {catalog && "error" in catalog && <SettingsRow title="Catalog unavailable" description={`Showing installed packs only. ${catalog.error}`}
         control={<RuntimeButton title="Try Again" onPress={refreshCatalog} />} />}
       {presenting && <SettingsRow title="Presenting" description="Finish presenting to install, update or remove effects." control={null} />}
-      {busy ? <View className="px-4 py-4"><EffectProgress /></View>
+      {busy || message && progress ? <View className="px-4 py-4"><EffectProgress /></View>
         : error ? <SettingsRow title="Effect operation failed" description={error} control={null} />
         : message ? <SettingsRow title={message} control={null} /> : null}
     </SettingsSection>

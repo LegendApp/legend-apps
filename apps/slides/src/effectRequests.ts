@@ -4,6 +4,7 @@ export const effectRequests$ = observable({
   pending: null as { path: string; packs: string[] } | null,
   busy: false,
   progress: null as EffectInstallProgress | null,
+  source: "presenter" as "presenter" | "settings",
   message: "",
   error: "",
 });
