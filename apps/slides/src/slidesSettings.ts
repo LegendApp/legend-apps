@@ -42,6 +42,10 @@ const slidesSettings = createObservableSettings({
       defaultValue: defaultPresentationTimerStartsOnSecondSlide,
       normalize: (value) => normalizeBoolean(value, defaultPresentationTimerStartsOnSecondSlide),
     },
+    compilerRuntimePath: {
+      defaultValue: "" as string,
+      normalize: (value: unknown) => typeof value === "string" && value.startsWith("/") ? value : "",
+    },
     rehearsalTimerPausesWhileEditing: {
       defaultValue: defaultRehearsalTimerPausesWhileEditing,
       normalize: (value) => normalizeBoolean(value, defaultRehearsalTimerPausesWhileEditing),
@@ -111,3 +115,18 @@ export const displayRoleHistorySetting = slidesSettings.field("displayRoleHistor
 export const titleAnimationSpeedSetting = slidesSettings.field("titleAnimationSpeed");
 export const useTitleAnimationSpeedSetting = titleAnimationSpeedSetting.use;
 export const setTitleAnimationSpeedSetting = titleAnimationSpeedSetting.set;
+
+const compilerRuntimePathSetting = slidesSettings.field("compilerRuntimePath");
+
+/** Explicit bun or node executable chosen in Settings; empty means automatic discovery. */
+export function getCompilerRuntimePathSetting() {
+  return compilerRuntimePathSetting.get();
+}
+
+export function setCompilerRuntimePathSetting(path: string) {
+  compilerRuntimePathSetting.set(path);
+}
+
+export function useCompilerRuntimePathSetting() {
+  return compilerRuntimePathSetting.use();
+}
