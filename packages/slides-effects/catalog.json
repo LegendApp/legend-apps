@@ -613,7 +613,14 @@
           "description": "Control the spotlight cutout and dimming."
         }
       ],
-      "snippet": "---\ntitle: Spotlight and callouts\n---\n\nimport { View, Text } from \"react-native\";\nimport { AttentionStage } from \"slides:presenting/Attention\";\nimport { AttentionTarget, Spotlight, Callout } from \"slides:presenting/Attention\";\n\n\n# Spotlight and callouts\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <AttentionStage style={{width: 1696,height: 580}}><AttentionTarget id=\"idea\" style={{position: \"absolute\",left: 150,top: 160}}><Text style={{color: \"white\",fontSize: 90}}>The idea</Text></AttentionTarget><AttentionTarget id=\"detail\" style={{position: \"absolute\",left: 950,top: 300}}><Text style={{color: \"white\",fontSize: 90}}>The detail</Text></AttentionTarget><Spotlight target={step ? \"detail\" : \"idea\"} /><Callout target={step ? \"detail\" : \"idea\"}>Look here</Callout></AttentionStage>}</Steps>\n</View>\n"
+      "snippet": "---\ntitle: Spotlight and callouts\n---\n\nimport { View, Text } from \"react-native\";\nimport { AttentionStage, AttentionTarget, Spotlight, Callout } from \"slides:presenting/Attention\";\nimport { useMotion } from \"slides:presenting/Motion\";\n\nexport function MovingIdea({ step }) {\n  const position = useMotion(step === 1 ? [950, 300] : [150, 160], 1200);\n  return <AttentionTarget id=\"idea\" style={{ position: \"absolute\" }} frameStyle={() => { \"worklet\"; return { transform: [{ translateX: position.value[0] }, { translateY: position.value[1] }] }; }}><Text style={{ color: \"white\", fontSize: 90 }}>The idea</Text></AttentionTarget>;\n}\n\n# Spotlight and callouts\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <AttentionStage style={{ width: 1696, height: 580 }}><MovingIdea step={step} /><Spotlight target=\"idea\" /><Callout target=\"idea\">Follow the idea</Callout></AttentionStage>}</Steps>\n</View>\n",
+      "recording": {
+        "seconds": 8,
+        "motion": [
+          "1.8:2.5",
+          "4.3:5"
+        ]
+      }
     },
     {
       "slug": "code-walkthrough",
