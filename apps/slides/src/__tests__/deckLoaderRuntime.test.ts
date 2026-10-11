@@ -15,7 +15,7 @@ const success = { exit: { type: "exited", code: 0 }, stdout: JSON.stringify({
 mock.module("../compilerRuntimeCore", () => ({ findRuntime: () => discover(), runtimeArch: async () => "x64", probeRuntime() {}, installPinnedBun() {} }));
 mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => "", setCompilerRuntimePathSetting() {} }));
 mock.module("@legendapp/spark/files", () => ({ getDirectory: async () => "/Users/me/Library/Application Support/Slides", exists() {}, mkdir() {}, move() {}, remove() {} }));
-mock.module("@legendapp/spark/processes", () => ({ runCommand: () => run(), spawn() {}, resolveCommand() {} }));
+mock.module("@legendapp/spark/processes", () => ({ runCommand: options => run(options), spawn() {}, resolveCommand() {} }));
 mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => value }));
 globalThis.__DEV__ = false;
 const compilerRuntime = await import("../compilerRuntime");
@@ -90,4 +90,28 @@ test("cancelling a failed load clears its pending runtime retry", async () => {
   expect(compilerRuntime$.retryDeck.peek()).toBe("/a.mdx");
   invalidateDeckBuild();
   expect(compilerRuntime$.retryDeck.peek()).toBeNull();
+});
+
+test("a late launcher failure after runtime recovery opens the deck without stranding a retry", async () => {
+  discover = async () => runtime;
+  await resolveCompilerRuntime({ refresh: true });
+  const completion = deferred();
+  const commands = [];
+  run = options => {
+    commands.push(options);
+    if (commands.length === 1) return { ...success, exit: { type: "exited", code: 127 } };
+    if (commands.length === 2) return completion.promise;
+    return success;
+  };
+  const opening = loadDeck("/recovered.mdx");
+  await turn();
+  expect(commands).toHaveLength(2);
+  await changeCompilerRuntime(() => resolveCompilerRuntime({ refresh: true }));
+  completion.resolve({ ...success, exit: { type: "exited", code: 127 } });
+  expect(await opening).toBe(true);
+  expect(commands).toHaveLength(3);
+  expect(commands[2].env.LEGEND_SLIDES_RUNTIME).toBe(runtime.path);
+  expect(compilerRuntime$.status.peek()).toBe("ready");
+  expect(compilerRuntime$.retryDeck.peek()).toBeNull();
+  expect(getSlidesState()).toMatchObject({ deckPath: "/recovered.mdx", status: "ready", buildErrors: [] });
 });

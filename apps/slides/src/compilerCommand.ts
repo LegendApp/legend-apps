@@ -23,6 +23,11 @@ export async function runCompilerCommand(args: string[], options: Pick<Parameter
       checkCancelled?.();
       if (__DEV__ || result.exit.type !== "exited" || result.exit.code !== 127) return result;
       if (attempt === 1) {
+        if (compiler.generation !== compilerRuntimeGeneration()) {
+          // Recovery superseded this command; retry the current runtime without refreshing it.
+          attempt = -1;
+          continue;
+        }
         invalidateCompilerRuntime(compiler.generation!);
         throw new CompilerRuntimeMissingError();
       }

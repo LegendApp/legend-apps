@@ -182,33 +182,50 @@ test("architecture failure leaves discovery usable and the prompt enabled", asyn
   expect(compilerRuntime$.arch.peek()).toBeNull();
 });
 
-test("a late second exit 127 cannot invalidate a newer discovery, even at the same path", async () => {
+test("a late second exit 127 retries a newer discovery, even at the same path", async () => {
   const completion = deferred();
-  commandResults = [result(127), completion.promise];
+  commandResults = [result(127), completion.promise, result(0)];
   const running = runCompilerCommand(["/old.mdx"]);
   await turn();
   expect(commands).toHaveLength(2);
   await resolveCompilerRuntime({ refresh: true });
   completion.resolve(result(127));
-  await expect(running).rejects.toBeInstanceOf(CompilerRuntimeMissingError);
+  expect((await running).exit.code).toBe(0);
+  expect(commands).toHaveLength(3);
   expect(compilerRuntime$.status.peek()).toBe("ready");
   expect(compilerRuntime$.runtime.peek()).toEqual(runtime);
 });
 
-test("a late second exit 127 preserves active download progress", async () => {
+test("a late second exit 127 waits for an active download and retries", async () => {
   const completion = deferred(), download = deferred();
-  commandResults = [result(127), completion.promise];
+  commandResults = [result(127), completion.promise, result(0)];
   const running = runCompilerCommand(["/deck.mdx"]);
   await turn();
   install = () => download.promise;
   const installing = downloadCompilerRuntime();
   compilerRuntime$.progress.set(0.5);
   completion.resolve(result(127));
-  await expect(running).rejects.toBeInstanceOf(CompilerRuntimeMissingError);
+  await turn();
+  expect(commands).toHaveLength(2);
   expect(compilerRuntime$.status.peek()).toBe("downloading");
   expect(compilerRuntime$.progress.peek()).toBe(0.5);
   download.resolve(runtime);
   await installing;
+  expect((await running).exit.code).toBe(0);
+  expect(commands).toHaveLength(3);
+  expect(compilerRuntime$.status.peek()).toBe("ready");
+});
+
+test("retrying a newer generation still stops when its runtime keeps exiting 127", async () => {
+  const completion = deferred();
+  commandResults = [result(127), completion.promise, result(127), result(127)];
+  const running = runCompilerCommand(["/deck.mdx"]);
+  await turn();
+  await resolveCompilerRuntime({ refresh: true });
+  completion.resolve(result(127));
+  await expect(running).rejects.toBeInstanceOf(CompilerRuntimeMissingError);
+  expect(commands).toHaveLength(4);
+  expect(compilerRuntime$.status.peek()).toBe("missing");
 });
 
 test("superseded commands check cancellation after completion before invalidating or retrying", async () => {
