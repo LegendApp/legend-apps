@@ -106,7 +106,16 @@ const raw = path.join(work, "raw.mp4");
 let recording: ChildProcess | undefined;
 try {
   console.log(`Opening ${slug} in ${path.basename(appPath)}…`);
-  run(process.execPath, [path.join(repo, "scripts/open-app.ts"), "slides", "macos", ...(release ? ["--release"] : []), deck]);
+  // Launch directly so the app inherits a PATH containing bun: dev builds spawn the deck compiler with it.
+  const env = [`PATH=${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`];
+  const devArgs: string[] = [];
+  if (!release) {
+    const { resolveDevServerPort } = await import(path.join(repo, "scripts/lib/apps.ts"));
+    const port = resolveDevServerPort("slides", []);
+    env.push(`SPARK_BUNDLE_URL=http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`);
+    devArgs.push("-RCT_jsLocation", `127.0.0.1:${port}`);
+  }
+  run("open", ["-n", ...env.flatMap(value => ["--env", value]), appPath, "--args", ...devArgs, deck]);
   let target: Window | undefined;
   const pattern = option("--window") ? new RegExp(option("--window")!, "i") : undefined;
   for (let attempt = 0; attempt < 60 && !target; attempt++) {
@@ -153,8 +162,7 @@ const passed = check.status === 0;
 fs.mkdirSync(previews, { recursive: true });
 const posterBytes = fs.readFileSync(poster), videoBytes = fs.readFileSync(video);
 const posterName = `${sha256(posterBytes)}.png`, videoName = `${sha256(videoBytes)}.mp4`;
-fs.copyFileSync(poster, path.join(previews, posterName));
-if (passed) fs.copyFileSync(video, path.join(previews, videoName));
+if (passed) { fs.copyFileSync(poster, path.join(previews, posterName)); fs.copyFileSync(video, path.join(previews, videoName)); }
 
 const catalogFile = path.join(docs, "docs/public/slides/effects/catalog.json");
 const catalog = JSON.parse(fs.readFileSync(catalogFile, "utf8"));
@@ -168,6 +176,6 @@ const preview = effect && pack && {
   packSha256: pack.versions[pack.latest].sha256,
 };
 if (effect && effect.example.sha256 !== sha256(exampleSource)) console.warn("The published example differs from this checkout's example; run the legend-docs refresh first or the preview will be dropped.");
-if (flag("--apply") && preview) { effect.preview = preview; fs.writeFileSync(catalogFile, JSON.stringify(catalog, null, 2) + "\n"); }
-console.log(JSON.stringify({ slug, passed, quality: report, raw, previews, preview: preview ?? "effect not yet in the published catalog; run the legend-docs refresh, then re-run with --apply", applied: flag("--apply") && !!preview }, null, 2));
+if (flag("--apply") && preview && passed) { effect.preview = preview; fs.writeFileSync(catalogFile, JSON.stringify(catalog, null, 2) + "\n"); }
+console.log(JSON.stringify({ slug, passed, quality: report, raw, previews, preview: preview ?? "effect not yet in the published catalog; run the legend-docs refresh, then re-run with --apply", applied: flag("--apply") && !!preview && passed }, null, 2));
 if (!passed) console.warn(`Motion check failed (see ${report}); kept the poster only. Watch ${video} at normal speed before overriding.`);
