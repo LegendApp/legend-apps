@@ -4,6 +4,7 @@ import { exists, getDirectory, mkdir, move, remove } from "@legendapp/spark/file
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { findRuntime, installPinnedBun, probeRuntime, runtimeArch, type BunArch, type BunInstallProgress, type CompilerRuntime, type RuntimeHost } from "./compilerRuntimeCore";
 import { getCompilerRuntimePathSetting, setCompilerRuntimePathSetting } from "./slidesSettings";
+import { getSlidesState } from "./slidesStore";
 
 export type CompilerRuntimeStatus = "unknown" | "checking" | "ready" | "missing" | "downloading" | "error";
 export const compilerRuntime$ = observable({
@@ -51,13 +52,17 @@ export function resolveCompilerRuntime(options: { refresh?: boolean } = {}): Pro
   if (options.refresh) resolving = undefined;
   return resolving ??= (async () => {
     const sequence = ++checkSequence;
-    compilerRuntime$.assign({ status: "checking", error: "" });
+    compilerRuntime$.status.set("checking");
     const host = await runtimeHost();
     const [runtime, arch] = await Promise.all([
       findRuntime(host, { customPath: getCompilerRuntimePathSetting() || undefined }).catch(() => null),
       runtimeArch(host).catch(() => null),
     ]);
-    if (sequence === checkSequence) compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime, arch });
+    if (sequence === checkSequence) {
+      // Discovery must not erase a failed install while no runtime is available.
+      const error = runtime ? "" : compilerRuntime$.error.peek();
+      compilerRuntime$.assign({ status: runtime ? "ready" : error ? "error" : "missing", runtime, arch, error });
+    }
     return sequence === checkSequence ? runtime : resolveCompilerRuntime();
   })();
 }
@@ -106,7 +111,8 @@ export async function changeCompilerRuntime(operation: () => Promise<CompilerRun
   await operation();
   const { loadDeck } = await import("./deckLoader");
   const path = compilerRuntime$.retryDeck.peek();
-  if (!path || compilerRuntime$.status.peek() !== "ready") return;
+  // An active load already awaits discovery/download with its original draft and callback.
+  if (!path || compilerRuntime$.status.peek() !== "ready" || getSlidesState().status === "building") return;
   compilerRuntime$.retryDeck.set(null);
   await loadDeck(path);
 }

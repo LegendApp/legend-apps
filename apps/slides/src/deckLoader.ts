@@ -187,14 +187,17 @@ export async function loadDeck(path: string, remember = true, draftSource?: stri
       if (sequence === buildSequence) {
         const missingRuntime = error instanceof CompilerRuntimeMissingError;
         if (missingRuntime) compilerRuntime$.retryDeck.set(path);
-        setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
+        const installRuntime = missingRuntime && attempt === 0 && compilerRuntime$.status.peek() !== "error";
+        const message = error instanceof Error ? error.message : String(error);
+        setSlidesState({ buildErrors: installRuntime ? [] : [message], status: installRuntime ? "building" : "error" });
         // Publish the deck prompt before installing. A failed install needs an explicit retry.
-        if (missingRuntime && attempt === 0 && compilerRuntime$.status.peek() !== "error") {
+        if (installRuntime) {
           const runtime = await downloadCompilerRuntime();
           if (runtime && sequence === buildSequence) {
             compilerRuntime$.retryDeck.set(null);
             continue;
           }
+          if (sequence === buildSequence) setSlidesState({ buildErrors: [compilerRuntime$.error.peek() || message], status: "error" });
         }
       }
       break;
