@@ -1,6 +1,6 @@
 // @ts-nocheck Bun's test globals are intentionally scoped to this standalone test suite.
 import { describe, expect, test } from "bun:test";
-import { createAudienceSession } from "../audienceSession";
+import { audienceFullscreenForDisplayCount, createAudienceSession } from "../audienceSession";
 
 const projector = { id: "projector", size: { width: 1920, height: 1080 }, workArea: { x: 1920, y: 0, width: 1920, height: 1080 } };
 function setup(open = async () => {}) {
@@ -16,6 +16,23 @@ function setup(open = async () => {}) {
 }
 
 describe("audience display recovery", () => {
+  test("uses a normal visible window on one display and fullscreen on multiple displays", async () => {
+    const calls = [];
+    const session = createAudienceSession({
+      open: async (_display, fullscreen) => { calls.push(["open", fullscreen]); },
+      close: async () => {},
+      focusPresenter: async () => { calls.push(["focus-presenter"]); },
+      update: () => {},
+    });
+
+    await session.open(projector, false, audienceFullscreenForDisplayCount(1));
+    expect(calls).toEqual([["open", false]]);
+    await session.close();
+    calls.length = 0;
+    await session.open(projector, false, audienceFullscreenForDisplayCount(2));
+    expect(calls).toEqual([["open", true], ["focus-presenter"]]);
+  });
+
   test("closes on disconnect and does not silently resume on reconnect", async () => {
     const { session, calls, state } = setup();
     await session.open(projector);

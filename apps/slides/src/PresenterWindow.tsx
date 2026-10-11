@@ -27,7 +27,7 @@ import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
 import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
-import { createAudienceSession } from "./audienceSession";
+import { audienceFullscreenForDisplayCount, createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
 import { presenterAppearanceToolbarItemId, createPresenterToolbarItems, formatPresenterElapsed, presenterDisplayToolbarItemId, presenterEditToolbarItemId, presenterElapsedToolbarItemId, presenterModePresentationValue, presenterModeRehearsalValue, presenterModeToolbarItemId, presenterStartToolbarItemId, presenterStartValue, presenterStopValue, presenterTimerPauseValue, presenterTimerRestartValue, presenterTimerResumeValue, } from "./presenterToolbar";
 import { initialPresenterTimerState, transitionPresenterTimer, type PresenterMode, type PresenterTimerEvent, } from "./presenterTimer";
@@ -402,10 +402,10 @@ export function PresenterWindow() {
     const audienceOpen = useValue(slidesState$.audienceOpen);
     const blackout = useValue(slidesState$.blackout);
     const [audience] = useState(() => createAudienceSession({
-        async open(display) {
+        async open(display, fullscreen) {
             await openOrShowWindow("slides-audience", () => slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } }));
             await setWindowBounds("slides-audience", { displayId: display.id, x: 0, y: 0, ...display.size });
-            await setWindowFullscreen("slides-audience", true);
+            await setWindowFullscreen("slides-audience", fullscreen);
         },
         async close() {
             const result = await closeWindow("slides-audience");
@@ -502,7 +502,7 @@ export function PresenterWindow() {
         const mode = rehearsalEnabled ? "rehearsal" : "presentation";
         if (selectedDisplay) {
             notesOutput$.preview.set(false);
-            if (await openAudience(selectedDisplay, rehearsalEnabled))
+            if (await openAudience(selectedDisplay, rehearsalEnabled, audienceFullscreenForDisplayCount(displays.length)))
                 setActiveMode(mode);
         }
     }, [openAudience, setActiveMode, presenter$]);
@@ -532,7 +532,7 @@ export function PresenterWindow() {
                 if (closingPresenter.current)
                     return;
                 if (selected)
-                    await openAudience(selected, presenter$.rehearsalEnabled.peek());
+                    await openAudience(selected, presenter$.rehearsalEnabled.peek(), audienceFullscreenForDisplayCount(presenter$.displays.peek().length));
                 else
                     await closeAudience();
             }

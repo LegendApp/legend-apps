@@ -1,8 +1,12 @@
 import { displayKey } from "./displayRoles";
 import type { DisplayInfo } from "@legendapp/spark/windows";
 
+export function audienceFullscreenForDisplayCount(displayCount: number) {
+  return displayCount > 1;
+}
+
 type AudiencePlatform = {
-  open(display: DisplayInfo): Promise<void>;
+  open(display: DisplayInfo, fullscreen: boolean): Promise<void>;
   close(): Promise<void>;
   focusPresenter(): Promise<void>;
   update(state: { audienceOpen?: boolean; blackout?: boolean; displayMessage?: string; deckLocked?: boolean }): void;
@@ -13,6 +17,7 @@ type AudiencePlatform = {
 export function createAudienceSession(platform: AudiencePlatform) {
   let active: DisplayInfo | null = null;
   let rehearsing = false;
+  let fullscreen = true;
   let queue = Promise.resolve();
   const enqueue = (operation: () => Promise<void>) => {
     const result = queue.then(operation).then(() => true).catch((error) => {
@@ -24,15 +29,16 @@ export function createAudienceSession(platform: AudiencePlatform) {
   };
 
   return {
-    open(display: DisplayInfo, rehearsal = false) {
+    open(display: DisplayInfo, rehearsal = false, useFullscreen = true) {
       return enqueue(async () => {
         // Apply the lock in queue order; an earlier close must not clear it.
         platform.update({ deckLocked: !rehearsal });
-        await platform.open(display);
+        await platform.open(display, useFullscreen);
         active = display;
         rehearsing = rehearsal;
+        fullscreen = useFullscreen;
         platform.update({ audienceOpen: true, deckLocked: !rehearsal, blackout: false, displayMessage: "" });
-        if (!rehearsing) await platform.focusPresenter();
+        if (!rehearsing && fullscreen) await platform.focusPresenter();
       });
     },
     close() {
@@ -58,9 +64,9 @@ export function createAudienceSession(platform: AudiencePlatform) {
           platform.update({ audienceOpen: false, deckLocked: false, blackout: false });
           await platform.focusPresenter();
         } else if (JSON.stringify([next.id, next.size, next.workArea]) !== JSON.stringify([active.id, active.size, active.workArea])) {
-          await platform.open(next);
+          await platform.open(next, fullscreen);
           active = next;
-          if (!rehearsing) await platform.focusPresenter();
+          if (!rehearsing && fullscreen) await platform.focusPresenter();
         }
       });
     },
