@@ -2,13 +2,14 @@ import { observable } from "@legendapp/state";
 import { spawn } from "@legendapp/spark/processes";
 import { exists, getDirectory, mkdir, move, remove } from "@legendapp/spark/files";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { findRuntime, installPinnedBun, probeRuntime, runtimeKindForPath, type CompilerRuntime, type RuntimeHost } from "./compilerRuntimeCore";
+import { findRuntime, installPinnedBun, probeRuntime, runtimeArch, type BunArch, type CompilerRuntime, type RuntimeHost } from "./compilerRuntimeCore";
 import { getCompilerRuntimePathSetting, setCompilerRuntimePathSetting } from "./slidesSettings";
 
 export type CompilerRuntimeStatus = "unknown" | "checking" | "ready" | "missing" | "downloading" | "error";
 export const compilerRuntime$ = observable({
   status: "unknown" as CompilerRuntimeStatus,
   runtime: null as CompilerRuntime | null,
+  arch: null as BunArch | null,
   progress: 0,
   error: "",
   /** Deck to reload once a runtime becomes available. */
@@ -42,25 +43,32 @@ function runtimeHost() {
   })();
 }
 
+let checkSequence = 0;
 let resolving: Promise<CompilerRuntime | null> | undefined;
 /** Find a runtime once per launch; `refresh` re-runs discovery (Settings, after install). */
 export function resolveCompilerRuntime(options: { refresh?: boolean } = {}) {
-  if (options.refresh || (!resolving && compilerRuntime$.status.peek() !== "downloading")) resolving = undefined;
+  if (options.refresh) resolving = undefined;
   return resolving ??= (async () => {
+    const sequence = ++checkSequence;
     if (compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: "checking", error: "" });
-    const runtime = await findRuntime(await runtimeHost(), { customPath: getCompilerRuntimePathSetting() || undefined }).catch(() => null);
-    if (compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime });
+    const host = await runtimeHost();
+    const [runtime, arch] = await Promise.all([
+      findRuntime(host, { customPath: getCompilerRuntimePathSetting() || undefined }).catch(() => null),
+      runtimeArch(host),
+    ]);
+    if (sequence === checkSequence && compilerRuntime$.status.peek() !== "downloading") compilerRuntime$.assign({ status: runtime ? "ready" : "missing", runtime, arch });
     return runtime;
   })();
 }
 
 let downloading: Promise<CompilerRuntime | null> | undefined;
 /** Install the pinned Bun with progress. Concurrent callers share one download. */
-export function downloadCompilerRuntime() {
+export function downloadCompilerRuntime(options: { force?: boolean } = {}) {
   return downloading ??= (async () => {
+    ++checkSequence; // Discovery started before this install cannot publish its result.
     compilerRuntime$.assign({ status: "downloading", progress: 0, error: "" });
     try {
-      await installPinnedBun(await runtimeHost(), { onProgress: progress => compilerRuntime$.progress.set(progress) });
+      await installPinnedBun(await runtimeHost(), { force: options.force, onProgress: progress => compilerRuntime$.progress.set(progress) });
       compilerRuntime$.status.set("checking");
       return await resolveCompilerRuntime({ refresh: true });
     } catch (error) {
@@ -73,7 +81,7 @@ export function downloadCompilerRuntime() {
 /** Use an explicit bun or node executable, or pass null to go back to automatic discovery. */
 export async function setCustomCompilerRuntime(path: string | null) {
   if (path) {
-    const runtime = await probeRuntime(await runtimeHost(), { path, kind: runtimeKindForPath(path), source: "custom" });
+    const runtime = await probeRuntime(await runtimeHost(), { path, source: "custom" });
     if (!runtime) throw new Error("That file isn't Bun 1.3+ or Node 22+.");
   }
   setCompilerRuntimePathSetting(path ?? "");
@@ -84,4 +92,14 @@ export async function setCustomCompilerRuntime(path: string | null) {
 export async function prefetchCompilerRuntime() {
   if (__DEV__) return;
   if (!(await resolveCompilerRuntime())) await downloadCompilerRuntime();
+}
+
+/** All runtime changes use this operation so a pending deck is retried exactly once. */
+export async function changeCompilerRuntime(operation: () => Promise<CompilerRuntime | null | void>) {
+  await operation();
+  const path = compilerRuntime$.retryDeck.peek();
+  if (!path || compilerRuntime$.status.peek() !== "ready") return;
+  compilerRuntime$.retryDeck.set(null);
+  const { loadDeck } = await import("./deckLoader");
+  await loadDeck(path);
 }

@@ -2,7 +2,7 @@ import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
 import { deckWatchDirectories } from "./deckWatchDirectories";
 import { effectRequests$, reportMissingEffects } from "./effectRequests";
-import { compilerCommand } from "./compilerCommand";
+import { runCompilerCommand } from "./compilerCommand";
 import { CompilerRuntimeMissingError, compilerRuntime$ } from "./compilerRuntime";
 import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
@@ -15,7 +15,6 @@ import * as ReactNativeSkia from "@shopify/react-native-skia";
 import * as NumberFlowSkia from "number-flow-react-native/skia";
 import * as TypeGPUNoise from "@typegpu/noise";
 import * as TypeGPUReact from "@typegpu/react";
-import { runCommand } from "@legendapp/spark/processes";
 import { watch } from "@legendapp/spark/files";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
@@ -180,8 +179,8 @@ export async function loadDeck(path: string, remember = true, draftSource?: stri
   try {
     await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
   } catch (error) {
-    if (error instanceof CompilerRuntimeMissingError) compilerRuntime$.retryDeck.set(path);
     if (sequence === buildSequence) {
+      if (error instanceof CompilerRuntimeMissingError) compilerRuntime$.retryDeck.set(path);
       setSlidesState({ buildErrors: [error instanceof Error ? error.message : String(error)], status: "error" });
     }
   }
@@ -198,15 +197,11 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
   // Keep the last good deck watched until a replacement is actually published.
   if (!getSlidesState().component) watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
-  const compiler = await compilerCommand();
-  if (sequence !== buildSequence) return;
-
-  const commandResult = await runCommand({
-    target: compiler.target,
-    env: compiler.env,
-    args: [...compiler.prefix, path, "--transitions", transitionDirectoryPath(), ...(draftSource === undefined ? [] : ["--draft"])],
+  const commandResult = await runCompilerCommand([path, "--transitions", transitionDirectoryPath(), ...(draftSource === undefined ? [] : ["--draft"])], {
     input: draftSource,
     timeoutMs: 60_000,
+  }, () => {
+    if (sequence !== buildSequence) throw new Error("Deck build superseded.");
   });
   if (sequence !== buildSequence) {
     return;
@@ -274,9 +269,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
 export async function copyLibraryTransitionToDeck(name: string) {
   const deckPath = getSlidesState().deckPath;
   if (!deckPath) throw new Error("Open a deck first.");
-  const compiler = await compilerCommand();
-  const result = await runCommand({ target: compiler.target, env: compiler.env,
-    args: [...compiler.prefix, deckPath, "--transitions", transitionDirectoryPath(), "--copy-transition", name], timeoutMs: 60000 });
+  const result = await runCompilerCommand([deckPath, "--transitions", transitionDirectoryPath(), "--copy-transition", name], { timeoutMs: 60000 });
   if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0 || result.timedOut) throw new Error(decodeProcessText(result.stderr) || "Transition export failed.");
   const exported = parseCompilerResult(decodeProcessText(result.stdout)) as unknown as { success: boolean; errors?: string[]; copy: { original: string; updated: string; filename: string } };
   if (!exported.success) throw new Error(exported.errors?.join("\n") ?? "Transition export failed.");

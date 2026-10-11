@@ -45,35 +45,38 @@ export function compareVersions(a: string, b: string) {
   for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
   return 0;
 }
-export function runtimeKindForPath(path: string): RuntimeKind {
-  return /(^|\/)node[^/]*$/.test(path) ? "node" : "bun";
-}
-
-type Candidate = { path: string; kind: RuntimeKind; source: RuntimeSource };
+type Candidate = { path: string; source: RuntimeSource };
 /** Discovery order: explicit choice, app-downloaded Bun, well-known Bun installs, then well-known Node installs. */
 export function staticCandidates(host: Pick<RuntimeHost, "home" | "dataDirectory">, customPath?: string): Candidate[] {
   const list: Candidate[] = [];
-  if (customPath) list.push({ path: customPath, kind: runtimeKindForPath(customPath), source: "custom" });
-  list.push({ path: downloadedBunPath(host.dataDirectory), kind: "bun", source: "downloaded" });
-  for (const path of [`${host.home}/.bun/bin/bun`, "/opt/homebrew/bin/bun", "/usr/local/bin/bun"]) list.push({ path, kind: "bun", source: "system" });
-  for (const path of ["/opt/homebrew/bin/node", "/usr/local/bin/node", `${host.home}/.volta/bin/node`]) list.push({ path, kind: "node", source: "system" });
+  if (customPath) list.push({ path: customPath, source: "custom" });
+  list.push({ path: downloadedBunPath(host.dataDirectory), source: "downloaded" });
+  for (const path of [`${host.home}/.bun/bin/bun`, "/opt/homebrew/bin/bun", "/usr/local/bin/bun"]) list.push({ path, source: "system" });
+  for (const path of ["/opt/homebrew/bin/node", "/usr/local/bin/node", `${host.home}/.volta/bin/node`]) list.push({ path, source: "system" });
   return list;
 }
 
 /** GUI apps get a minimal PATH; ask the user's login shell where version managers put bun and node. */
-export async function loginShellCandidates(host: RuntimeHost, shell = "/bin/zsh"): Promise<Candidate[]> {
-  const result = await host.run(shell, ["-ilc", "command -v bun; command -v node"], { timeoutMs: 5000 }).catch(() => null);
+export async function loginShellCandidates(host: RuntimeHost, shell?: string): Promise<Candidate[]> {
+  if (!shell) {
+    const user = host.home.split("/").pop()!;
+    const configured = await host.run("/usr/bin/dscl", [".", "-read", `/Users/${user}`, "UserShell"], { timeoutMs: 5000 }).catch(() => null);
+    shell = configured?.code === 0 ? /^UserShell:\s*(\/\S+)\s*$/m.exec(configured.stdout)?.[1] : undefined;
+  }
+  // Both POSIX shells and fish support command -v and these login/interactive flags.
+  const result = await host.run(shell ?? "/bin/zsh", ["-ilc", "command -v bun; command -v node"], { timeoutMs: 5000 }).catch(() => null);
   if (!result || result.timedOut) return [];
   return result.stdout.split("\n").map(line => line.trim()).filter(line => line.startsWith("/") && /\/(bun|node)$/.test(line))
-    .map(path => ({ path, kind: runtimeKindForPath(path), source: "system" as const }));
+    .map(path => ({ path, source: "system" as const }));
 }
 
 export async function probeRuntime(host: RuntimeHost, candidate: Candidate): Promise<CompilerRuntime | null> {
   if (!(await host.exists(candidate.path))) return null;
   const result = await host.run(candidate.path, ["--version"], { timeoutMs: 5000 }).catch(() => null);
   const version = result && result.code === 0 ? parseRuntimeVersion(result.stdout) : null;
-  if (!version || compareVersions(version, minimumRuntimeVersion[candidate.kind]) < 0) return null;
-  return { ...candidate, version };
+  const kind: RuntimeKind = result?.stdout.trim().startsWith("v") ? "node" : "bun";
+  if (!version || compareVersions(version, minimumRuntimeVersion[kind]) < 0) return null;
+  return { ...candidate, kind, version };
 }
 
 export async function findRuntime(host: RuntimeHost, options: { customPath?: string; shell?: string } = {}): Promise<CompilerRuntime | null> {
@@ -91,7 +94,7 @@ export async function findRuntime(host: RuntimeHost, options: { customPath?: str
   if (found) return found;
   const fromShell = await loginShellCandidates(host, options.shell);
   // Prefer Bun from the shell over Node from the shell.
-  return tryAll([...fromShell.filter(c => c.kind === "bun"), ...fromShell.filter(c => c.kind === "node")]);
+  return tryAll([...fromShell.filter(c => c.path.endsWith("/bun")), ...fromShell.filter(c => c.path.endsWith("/node"))]);
 }
 
 /** Last percentage in curl's `--progress-bar` output. */
@@ -103,22 +106,26 @@ export function parseCurlProgress(text: string) {
 
 export class RuntimeInstallError extends Error {}
 
+export async function runtimeArch(host: RuntimeHost): Promise<BunArch> {
+  return (await host.run("/usr/bin/uname", ["-m"])).stdout.trim() === "arm64" ? "arm64" : "x64";
+}
+
 /**
  * Download the pinned Bun zip, check its SHA-256 against the value compiled into the app,
  * unpack it in a scratch folder, and rename it into place so a partial install is never visible.
  */
-export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunArch; onProgress?(fraction: number): void } = {}): Promise<CompilerRuntime> {
-  const arch = options.arch ?? ((await host.run("/usr/bin/uname", ["-m"])).stdout.trim() === "arm64" ? "arm64" : "x64");
+export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunArch; force?: boolean; onProgress?(fraction: number): void } = {}): Promise<CompilerRuntime> {
+  const arch = options.arch ?? await runtimeArch(host);
   const asset = pinnedBun.assets[arch];
   const root = `${host.dataDirectory}/runtime`;
   const final = `${root}/bun-${pinnedBun.version}`;
-  const existing = await probeRuntime(host, { path: `${final}/bun`, kind: "bun", source: "downloaded" });
-  if (existing?.version === pinnedBun.version) return existing;
+  const existing = await probeRuntime(host, { path: `${final}/bun`, source: "downloaded" });
+  if (!options.force && existing?.version === pinnedBun.version) return existing;
   const scratch = `${root}/.install-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   await host.mkdir(scratch);
   try {
     const zip = `${scratch}/bun.zip`;
-    const download = await host.run("/usr/bin/curl", ["-fL", "--proto", "=https", "--tlsv1.2", "--retry", "2", "--connect-timeout", "20", "--progress-bar", "-o", zip, bunDownloadUrl(arch)], {
+    const download = await host.run("/usr/bin/curl", ["-fL", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--retry", "2", "--connect-timeout", "20", "--progress-bar", "-o", zip, bunDownloadUrl(arch)], {
       timeoutMs: 15 * 60_000,
       onStderr: text => { const fraction = parseCurlProgress(text); if (fraction !== null) options.onProgress?.(fraction); },
     });
@@ -132,7 +139,7 @@ export async function installPinnedBun(host: RuntimeHost, options: { arch?: BunA
     const unpack = await host.run("/usr/bin/ditto", ["-x", "-k", zip, `${scratch}/unpacked`]);
     if (unpack.code !== 0) throw new RuntimeInstallError("Couldn't unpack the Bun download.");
     const unpacked = `${scratch}/unpacked/${asset.name}`;
-    const probed = await probeRuntime(host, { path: `${unpacked}/bun`, kind: "bun", source: "downloaded" });
+    const probed = await probeRuntime(host, { path: `${unpacked}/bun`, source: "downloaded" });
     if (probed?.version !== pinnedBun.version) throw new RuntimeInstallError("The downloaded Bun didn't start on this Mac.");
     if (await host.exists(final)) await host.remove(final);
     await host.move(unpacked, final);

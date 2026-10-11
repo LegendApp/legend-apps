@@ -74,3 +74,40 @@ test("a checksum mismatch leaves nothing installed", async () => {
   expect(Object.keys(files)).toEqual([]);
   expect(calls).not.toContain("/usr/bin/ditto");
 });
+
+test("identifies renamed runtimes from version output rather than the executable name", async () => {
+  expect(await findRuntime(fakeHost({ "/custom/engine": "v22.1.0" }).host, { customPath: "/custom/engine" })).toMatchObject({ kind: "node" });
+  expect(await findRuntime(fakeHost({ "/custom/node": "1.3.14" }).host, { customPath: "/custom/node" })).toMatchObject({ kind: "bun" });
+  expect(await findRuntime(fakeHost({ "/custom/engine": "v20.0.0" }).host, { customPath: "/custom/engine" })).toBeNull();
+});
+
+test("discovers version-manager runtimes with the configured fish login shell", async () => {
+  const { host } = fakeHost({ "/Users/me/.local/bin/node": "v22.2.0" });
+  const run = host.run;
+  const calls = [];
+  host.run = async (executable, args, options) => {
+    calls.push([executable, ...args]);
+    if (executable === "/usr/bin/dscl") return { code: 0, stdout: "UserShell: /opt/homebrew/bin/fish\n", stderr: "" };
+    if (executable === "/opt/homebrew/bin/fish") return { code: 0, stdout: "/Users/me/.local/bin/node\n", stderr: "" };
+    return run(executable, args, options);
+  };
+  expect(await findRuntime(host)).toMatchObject({ kind: "node", version: "22.2.0" });
+  expect(calls).toContainEqual(["/usr/bin/dscl", ".", "-read", "/Users/me", "UserShell"]);
+  expect(calls).toContainEqual(["/opt/homebrew/bin/fish", "-ilc", "command -v bun; command -v node"]);
+});
+
+test("reuses an installed pin unless force is requested and restricts curl redirects to HTTPS", async () => {
+  const { host, files } = installHost(pinnedBun.assets.arm64.sha256);
+  files[`${host.dataDirectory}/runtime/bun-${pinnedBun.version}/bun`] = pinnedBun.version;
+  const run = host.run;
+  const downloads = [];
+  host.run = async (executable, args, options) => {
+    if (executable === "/usr/bin/curl") downloads.push(args);
+    return run(executable, args, options);
+  };
+  await installPinnedBun(host, { arch: "arm64" });
+  expect(downloads).toHaveLength(0);
+  await installPinnedBun(host, { arch: "arm64", force: true });
+  expect(downloads).toHaveLength(1);
+  expect(downloads[0].slice(downloads[0].indexOf("--proto-redir"), downloads[0].indexOf("--proto-redir") + 2)).toEqual(["--proto-redir", "=https"]);
+});
