@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -182,6 +182,11 @@ try {
     target = audienceTarget(listWindows(), deckWindow.pid, pattern);
   }
   if (!target) throw new Error("The Legend Slides audience window did not appear within 20 s after starting the presentation.");
+  const keyboard = audienceKeyboardScripts(target.pid, target.title);
+  // Focus before capture begins; raising a window during recording can invalidate its ScreenCaptureKit stream.
+  run("osascript", ["-e", keyboard.activate]);
+  target = audienceTarget(listWindows(), deckWindow.pid, pattern);
+  if (!target) throw new Error("The Legend Slides audience window disappeared while preparing recording focus.");
   // Windowed audiences include a title bar; measure their Accessibility size to convert points to capture pixels.
   const audienceProcess = `tell application "System Events" to tell (first application process whose unix id is ${target.pid})`;
   const audienceWindow = `window ${JSON.stringify(target.title)}`;
@@ -196,11 +201,7 @@ try {
   const exitedEarly = recorderEvents.exited.then(result => { throw result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before navigation finished.`); });
   void exitedEarly.catch(() => {});
   // Leave the blank lead-in only once native capture is producing frames.
-  const advanceAudience = `${audienceProcess}
-    set frontmost to true
-    perform action "AXRaise" of ${audienceWindow}
-    key code 124
-  end tell`;
+  const advanceAudience = keyboard.advance;
   run("osascript", ["-e", advanceAudience]);
   const startedAt = performance.now();
   const navigationSeconds = (startedAt - readyAt) / 1000;
@@ -208,7 +209,7 @@ try {
   playbackOffset = readyOffset + navigationSeconds;
   for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
-    // Address this process and audience window explicitly before sending focus-dependent keys.
+    // Keep the already-focused audience active without raising it during the capture.
     run("osascript", ["-e", advanceAudience]);
   }
   assertRecorderSucceeded(await recorderEvents.exited);
@@ -241,7 +242,8 @@ const filter = `crop=iw:ih-${totalCropTop}:0:${totalCropTop},scale=${width}:-2:f
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(playbackOffset), "-i", raw, "-t", String(seconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");
-const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
+const dimensions = JSON.parse(run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", video]).stdout).streams[0];
+const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
 const passed = check.status === 0;
 
 if (!passed) {

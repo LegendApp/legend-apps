@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -95,6 +95,19 @@ test("windowed audience crops its title bar in capture pixels while fullscreen s
   expect(audienceCropTop(false, 1920, 960)).toBe(56);
   expect(audienceCropTop(false, 1920, 0)).toBe(28);
   expect(presenterWindowTitle("glass-strike")).toBe("glass-strike.mdx — Legend Slides");
+});
+
+test("audience keyboard focus is established before capture and navigation does not raise the window", () => {
+  const scripts = audienceKeyboardScripts(42, "Legend Slides — Audience");
+  expect(scripts.activate).toContain('perform action "AXRaise" of window "Legend Slides — Audience"');
+  expect(scripts.advance).toContain("key code 124");
+  expect(scripts.advance).not.toContain("AXRaise");
+  expect(scripts.advance).not.toContain("frontmost");
+});
+
+test("droplets motion verification focuses on its moving region", () => {
+  expect(recordingMotionCrop("droplets", 1280, 654)).toEqual(["--crop", "282:366:282:249"]);
+  expect(recordingMotionCrop("other-effect", 1280, 654)).toEqual([]);
 });
 
 test.skipIf(process.platform !== "darwin")("preflight requires the verifier and python3 before compiling or launching anything", async () => {

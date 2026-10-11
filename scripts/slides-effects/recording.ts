@@ -41,6 +41,22 @@ export function exampleStepPresses(source: string) {
 
 export type RecordingWindow = { id: number; title: string; owner: string; pid: number; width: number; height: number };
 
+export function audienceKeyboardScripts(pid: number, title: string) {
+  const process = `tell application "System Events" to tell (first application process whose unix id is ${pid})`;
+  const window = `window ${JSON.stringify(title)}`;
+  return {
+    activate: `${process}\n  set frontmost to true\n  perform action "AXRaise" of ${window}\nend tell`,
+    advance: `${process}\n  key code 124\nend tell`,
+  };
+}
+
+export function recordingMotionCrop(slug: string, width: number, height: number) {
+  if (slug !== "droplets") return [];
+  const x = Math.round(width * 0.22), y = Math.round(height * 0.56);
+  const cropWidth = Math.round(width * 0.22), cropHeight = Math.round(height * 0.38);
+  return ["--crop", `${x}:${y}:${cropWidth}:${cropHeight}`];
+}
+
 export function audienceTarget(windows: RecordingWindow[], pid: number, pattern?: RegExp) {
   return windows.find(window => window.pid === pid && window.title === "Legend Slides — Audience"
     && window.width > 200 && window.height > 200 && (!pattern || pattern.test(window.title)));
