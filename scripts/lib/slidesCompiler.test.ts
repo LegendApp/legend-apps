@@ -107,3 +107,16 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     fs.rmSync(temp, { recursive: true, force: true });
   }
 }, 60_000);
+
+test("compiler bundle rejects worklets plugin changes that bypass the require.resolve rewrite", async () => {
+  const { rewriteWorkletsBabelPlugins } = await import("./slidesCompilerBundle");
+  expect(rewriteWorkletsBabelPlugins('require.resolve("@babel/plugin-transform-arrow-functions")')).toBe('require("@babel/plugin-transform-arrow-functions")');
+  expect(() => rewriteWorkletsBabelPlugins('require.resolve("react-native-worklets/package.json")')).toThrow("no nested require.resolve");
+});
+
+test("compiler bundle rejects a worklets plugin path that no longer matches", async () => {
+  const { inlineWorkletsBabelPlugins } = await import("./slidesCompilerBundle");
+  let onEnd;
+  inlineWorkletsBabelPlugins().setup({ onLoad() {}, onEnd(callback) { onEnd = callback; } });
+  expect(onEnd().errors[0].text).toContain("not found or rewritten");
+});

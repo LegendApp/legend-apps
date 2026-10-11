@@ -6,6 +6,7 @@ import { rootDir } from "./apps";
 const presentationRequire = createRequire(path.join(rootDir, "packages/presentation/package.json"));
 // Root scripts can't resolve esbuild's types, so describe the small surface used here.
 type BuildApi = {
+  onEnd(callback: () => { errors: { text: string }[] } | void): void;
   onResolve(options: { filter: RegExp }, callback: (args: { path: string }) => unknown): void;
   onLoad(options: { filter: RegExp; namespace?: string }, callback: (args: { path: string }) => unknown): void;
 };
@@ -42,20 +43,30 @@ function staticUniwind(): Plugin {
  * The worklets Babel plugin hands Babel `require.resolve` paths for its nested plugins.
  * Babel also accepts the modules themselves, which lets esbuild include them.
  */
-function inlineWorkletsBabelPlugins(): Plugin {
+export function inlineWorkletsBabelPlugins(): Plugin {
+  let rewritten = false;
   return {
     name: "slides-inline-worklets-babel-plugins",
     setup(api) {
       api.onLoad({ filter: /react-native-worklets\/plugin\/index\.js$/ }, async ({ path: file }) => {
         const fs = await import("node:fs");
-        const source = fs.readFileSync(file, "utf8")
-          .replace(/require\.resolve\(("@babel\/[^"]+")\)/g, "require($1)")
-          // Only used to place generated worklet files in bundle mode, which the compiler does not use.
-          .replace('require.resolve("react-native-worklets/package.json")', '__dirname + "/react-native-worklets/package.json"');
+        const source = rewriteWorkletsBabelPlugins(fs.readFileSync(file, "utf8"));
+        rewritten = true;
         return { contents: source, loader: "js" };
+      });
+      api.onEnd(() => {
+        if (!rewritten) return { errors: [{ text: "Worklets Babel plugin was not found or rewritten." }] };
       });
     },
   };
+}
+
+export function rewriteWorkletsBabelPlugins(source: string) {
+  const nestedPlugins = /require\.resolve\(("@babel\/[^"]+")\)/g;
+  if (!nestedPlugins.test(source)) throw new Error("Worklets Babel plugin changed: no nested require.resolve calls were rewritten.");
+  return source.replace(nestedPlugins, "require($1)")
+    // Only used to place generated worklet files in bundle mode, which the compiler does not use.
+    .replace('require.resolve("react-native-worklets/package.json")', '__dirname + "/react-native-worklets/package.json"');
 }
 
 /** Bundle the deck compiler into one ESM file that runs on Bun or Node 22+. */
