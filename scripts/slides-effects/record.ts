@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -132,6 +132,9 @@ snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack,
 fs.writeFileSync(deck, recordingDeckSource(exampleSource));
 const raw = path.join(work, "raw.mp4");
 let playbackOffset = 0;
+let automaticCrop = 0;
+let presenterTitle: string | undefined;
+let presenterPid: number | undefined;
 let recording: ChildProcess | undefined;
 let recorderEvents: ReturnType<typeof observeRecorder> | undefined;
 try {
@@ -153,10 +156,12 @@ try {
     deckWindow = listWindows().find(w => w.owner === "Legend Slides" && w.title === `${slug}.mdx — Legend Slides` && w.width > 200 && w.height > 200);
   }
   if (!deckWindow) throw new Error("The deck window did not appear within 60 s. Check that the deck compiles and Metro is running for dev builds.");
+  presenterTitle = presenterWindowTitle(slug);
+  presenterPid = deckWindow.pid;
   // Scope the toolbar action to this deck and wait until compilation enables Start.
   const startAudience = `tell application "System Events"
     tell (first application process whose unix id is ${deckWindow.pid})
-      tell toolbar 1 of window ${JSON.stringify(deckWindow.title)}
+      tell toolbar 1 of window ${JSON.stringify(presenterTitle)}
         set startButton to first UI element whose description is "Start Presentation" or description is "Start Rehearsal"
         if enabled of startButton then
           click startButton
@@ -177,12 +182,12 @@ try {
     target = audienceTarget(listWindows(), deckWindow.pid, pattern);
   }
   if (!target) throw new Error("The Legend Slides audience window did not appear within 20 s after starting the presentation.");
-  // Start Presentation opens a fullscreen audience surface; confirm it before capturing the slide area.
+  // Windowed audiences include a title bar; measure their Accessibility size to convert points to capture pixels.
   const audienceProcess = `tell application "System Events" to tell (first application process whose unix id is ${target.pid})`;
   const audienceWindow = `window ${JSON.stringify(target.title)}`;
-  if (run("osascript", ["-e", `${audienceProcess} to get value of attribute "AXFullScreen" of ${audienceWindow}`]).stdout.trim() !== "true") {
-    throw new Error("Audience window is not fullscreen; refusing to record window chrome.");
-  }
+  const fullscreen = run("osascript", ["-e", `${audienceProcess} to get value of attribute "AXFullScreen" of ${audienceWindow}`]).stdout.trim() === "true";
+  const axSize = run("osascript", ["-e", `${audienceProcess} to get value of attribute "AXSize" of ${audienceWindow}`]).stdout.trim().split(",").map(Number);
+  automaticCrop = audienceCropTop(fullscreen, target.width, axSize[0]);
   console.log(`Recording audience window ${target.id} "${target.title}" for ${seconds}s, ${steps} step(s)…`);
   recording = spawn(recorder, ["--window-id", String(target.id), "--output", raw, "--seconds", String(seconds + 5), "--fps", "60", "--width", "1920", "--reserve-bytes", reserve], { stdio: ["ignore", "pipe", "inherit"] });
   recorderEvents = observeRecorder(recording);
@@ -220,7 +225,10 @@ try {
     await recorderEvents.exited;
     clearTimeout(deadline);
   }
-  run("osascript", ["-e", 'tell application "System Events" to tell process "LegendSlides" to click (first UI element of toolbar 1 of window 1 whose description is "Stop")'], { allowFail: true });
+  if (presenterPid && presenterTitle) {
+    const stop = `tell application "System Events" to tell (first application process whose unix id is ${presenterPid}) to click (first UI element of toolbar 1 of window ${JSON.stringify(presenterTitle)} whose description is "Stop")`;
+    run("osascript", ["-e", stop], { allowFail: true });
+  }
   await sleep(1000);
   run("osascript", ["-e", 'tell application id "so.legend.slides.macos" to quit'], { allowFail: true });
   await sleep(2000);
@@ -231,7 +239,8 @@ if (!fs.existsSync(raw)) throw new Error("The recorder produced no video.");
 
 // Export: apply any explicit crop, scale, H.264 without audio; poster from the last second.
 const video = path.join(work, "preview.mp4"), poster = path.join(work, "poster.png");
-const filter = `crop=iw:ih-${cropTop}:0:${cropTop},scale=${width}:-2:flags=lanczos`;
+const totalCropTop = cropTop + (typeof automaticCrop === "number" ? automaticCrop : 0);
+const filter = `crop=iw:ih-${totalCropTop}:0:${totalCropTop},scale=${width}:-2:flags=lanczos`;
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(playbackOffset), "-i", raw, "-t", String(seconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");

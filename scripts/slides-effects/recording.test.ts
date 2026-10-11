@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, exampleStepPresses, observeRecorder, packArchiveHash, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -88,6 +88,13 @@ test("audience selection requires the launched process and never falls back to p
   expect(audienceTarget([window, { ...audience, pid: 20 }], 10)).toBeUndefined();
   expect(audienceTarget([window, audience], 10, /Example/)).toBeUndefined();
   expect(audienceTarget([window, audience], 10, /Audience/)).toBe(audience);
+});
+
+test("windowed audience crops its title bar in capture pixels while fullscreen stays uncropped", () => {
+  expect(audienceCropTop(true, 1920, 960)).toBe(0);
+  expect(audienceCropTop(false, 1920, 960)).toBe(56);
+  expect(audienceCropTop(false, 1920, 0)).toBe(28);
+  expect(presenterWindowTitle("glass-strike")).toBe("glass-strike.mdx — Legend Slides");
 });
 
 test.skipIf(process.platform !== "darwin")("preflight requires the verifier and python3 before compiling or launching anything", async () => {

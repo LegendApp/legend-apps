@@ -46,6 +46,15 @@ export function audienceTarget(windows: RecordingWindow[], pid: number, pattern?
     && window.width > 200 && window.height > 200 && (!pattern || pattern.test(window.title)));
 }
 
+export const presenterWindowTitle = (slug: string) => `${slug}.mdx — Legend Slides`;
+
+/** ScreenCaptureKit reports pixels while Accessibility reports points. */
+export function audienceCropTop(fullscreen: boolean, captureWidth: number, axWidth: number, titleBarPoints = 28) {
+  if (fullscreen) return 0;
+  const scale = Number.isFinite(captureWidth / axWidth) && axWidth > 0 ? captureWidth / axWidth : 1;
+  return Math.round(titleBarPoints * scale);
+}
+
 export function recordingSchedule(seconds: number, steps: number) {
   const lead = 1500, tail = 1500;
   if (!Number.isFinite(seconds) || seconds < 3 || seconds > 600) throw new Error("--seconds must be between 3 and 600.");
