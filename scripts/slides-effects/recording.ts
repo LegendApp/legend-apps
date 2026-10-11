@@ -51,6 +51,10 @@ export function audienceKeyboardScripts(pid: number, title: string) {
 }
 
 export function recordingMotionCrop(slug: string, width: number, height: number) {
+  // Slow backgrounds occupy the edges; static text in the center dilutes their frame differences.
+  if (slug === "smoke" || slug === "ambientaurora") return ["--crop", `0:${Math.round(height * 0.1)}:${Math.round(width * 0.18)}:${Math.round(height * 0.8)}`];
+  if (slug === "freeze-frame") return ["--crop", `${Math.round(width * 0.25)}:${Math.round(height * 0.25)}:${Math.round(width * 0.4)}:${Math.round(height * 0.55)}`];
+  if (slug === "bar-row") return ["--crop", `${Math.round(width * 0.22)}:${Math.round(height * 0.4)}:${Math.round(width * 0.62)}:${Math.round(height * 0.12)}`];
   if (slug !== "droplets") return [];
   const x = Math.round(width * 0.22), y = Math.round(height * 0.56);
   const cropWidth = Math.round(width * 0.22), cropHeight = Math.round(height * 0.38);
@@ -153,7 +157,7 @@ export function snapshotEffectPacks(source: string, destination: string, pack: s
 
 /** Brief motion after entry/reveals; callers can specify longer effect-specific intervals. */
 export function recordingMotionIntervals(seconds: number, schedule: number[], explicit?: string[]) {
-  const intervals = explicit?.length ? explicit : (schedule.length ? schedule.map(offset => `${offset / 1000 + 0.1}:${offset / 1000 + 0.5}`) : ["0.1:0.5"]);
+  const intervals = explicit?.length ? explicit : (schedule.length ? schedule.map(offset => `${offset / 1000 + 0.1}:${offset / 1000 + 0.5}`) : ["0.6:1"]);
   return intervals.map(value => {
     const parts = value.split(":");
     const [start, end] = parts.map(Number);
@@ -162,4 +166,12 @@ export function recordingMotionIntervals(seconds: number, schedule: number[], ex
     }
     return `${start}:${end}`;
   });
+}
+
+/** Sparse native recordings must retain each source sample and its presentation timestamp. */
+export function recordingExportArgs(raw: string, video: string, offset: number, seconds: number, cropTop: number, width: number) {
+  return ["-hide_banner", "-loglevel", "error", "-ss", String(offset), "-i", raw, "-t", String(seconds),
+    "-vf", `crop=iw:ih-${cropTop}:0:${cropTop},scale=${width}:-2:flags=lanczos`, "-an",
+    "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p",
+    "-fps_mode", "passthrough", "-enc_time_base", "demux", "-movflags", "+faststart", video];
 }

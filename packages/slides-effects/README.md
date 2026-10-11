@@ -67,3 +67,20 @@ hosts without that provider retain the Skia rendering. Flames remain in Skia.
 `materials/GPU` supplies the shared frame declaration and small WGSL geometry
 helpers for deck-local programs. Image textures are decoded and uploaded once
 during preparation, never on animation frames.
+
+## Recording gallery previews
+
+`bun run effects:record <slug> --apply` uses the catalog entry's optional
+`recording` profile for `seconds`, playback-relative `motion` intervals, and
+verifier `noiseDb` / `freezeMs`. CLI duration and motion flags take precedence.
+Reveal windows use completed keyboard-command times. Sparse native sample
+timestamps survive export without frame resampling. Step-less defaults skip the
+first 600 ms; finite entrances keep explicit early windows. Freeze-frame checks
+a crop of the moving orbit before the pause; bar-row inspects the thin bar.
+Spotlight changes its target instantly and cannot pass a continuous-motion check. Smoke and aurora inspect the
+moving left edge; their small frame differences need a more sensitive -80 dB noise
+threshold and 300 ms (smoke) / 400 ms (aurora) accumulation window. Fluid also uses
+-80 dB. These profiles were calibrated against native clips; the verifier
+regression checks that each rejects a frozen export. Longer background captures show the designed slow motion without speeding
+up the recording. Run that regression with `LEGEND_VIDEO_RECORDING_SKILL` set to
+the video-recording skill directory.

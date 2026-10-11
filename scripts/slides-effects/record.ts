@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 // Record a gallery preview (mp4 + png poster) of one effect's example deck running in the native Slides app.
-// macOS only. Uses an optional app-lock for "slides". Never deploys.
+// macOS only. Uses the workspace app-lock for "slides" when available. Never deploys.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -14,8 +14,8 @@ slide window with ScreenCaptureKit (video-recording skill recorder), advances --
 reveals with the right arrow, quits the app it launched, then exports an H.264
 mp4 and a PNG poster into legend-docs/docs/public/slides/effects/previews/<slug>/.
 
-  --seconds N        recording length (default 8)
-  --motion START:END expected motion in effect playback seconds (repeatable; default brief entry/reveal intervals)
+  --seconds N        recording length (default: catalog profile or 8)
+  --motion START:END expected motion in effect playback seconds (repeatable; default: catalog profile or brief entry/reveal intervals)
   --steps N          right-arrow presses after the lead-in (default: literal <Step>/<Steps count={n}> states)
   --release          launch the release build (default: dev build; start Metro with bun run slides first)
   --window REGEX     audience window title filter (never selects presenter chrome)
@@ -38,7 +38,7 @@ if (!/^[a-z][a-z0-9-]*$/.test(slug)) throw new Error("Pass an effect slug first,
 if (process.platform !== "darwin") throw new Error("effects:record runs on macOS only.");
 
 const repo = path.resolve(import.meta.dirname, "../..");
-const appLock = process.env.LEGEND_APP_LOCK;
+const appLock = process.env.LEGEND_APP_LOCK ?? path.join(os.homedir(), "devroot/scripts/app-lock");
 // Hold the shared slides lock for the whole run, unless a caller already does.
 if (!process.env.LEGEND_EFFECTS_RECORD_LOCKED && appLock && fs.existsSync(appLock) && !flag("--preflight")) {
   const result = spawnSync(appLock, ["slides", "--", process.execPath, import.meta.filename, ...args], {
@@ -52,7 +52,10 @@ if (!fs.existsSync(example)) throw new Error(`No example deck for "${slug}" (${e
 const exampleSource = fs.readFileSync(example, "utf8");
 const docs = path.resolve(option("--docs") ?? path.join(repo, "../legend-docs"));
 const previews = path.join(docs, "docs/public/slides/effects/previews", slug);
-const seconds = Number(option("--seconds") ?? 8);
+const localEffect = JSON.parse(fs.readFileSync(path.join(sources, "catalog.json"), "utf8")).effects.find((entry: { slug: string }) => entry.slug === slug);
+if (!localEffect) throw new Error(`No local catalog entry for ${slug}.`);
+const profile = localEffect.recording;
+const seconds = Number(option("--seconds") ?? profile?.seconds ?? 8);
 const steps = Number(option("--steps") ?? exampleStepPresses(exampleSource));
 const cropTop = Number(option("--crop-top") ?? 0);
 const width = Number(option("--width") ?? 1280);
@@ -68,7 +71,8 @@ function checkDisk(directory: string) {
 checkDisk("/System/Volumes/Data");
 checkDisk(os.tmpdir());
 const schedule = recordingSchedule(seconds, steps);
-const motion = recordingMotionIntervals(seconds, schedule, args.flatMap((value, index) => value === "--motion" ? [args[index + 1] ?? ""] : []));
+const explicitMotion = args.flatMap((value, index) => value === "--motion" ? [args[index + 1] ?? ""] : []);
+let motion = recordingMotionIntervals(seconds, schedule, explicitMotion.length ? explicitMotion : profile?.motion);
 if (!Number.isSafeInteger(cropTop) || cropTop < 0) throw new Error("--crop-top must be a nonnegative integer.");
 if (!Number.isSafeInteger(width) || width < 320 || width > 3840 || width % 2) throw new Error("--width must be an even integer between 320 and 3840.");
 const run = (command: string, commandArgs: string[], options: { allowFail?: boolean } = {}) => {
@@ -115,8 +119,6 @@ const catalogFile = path.join(docs, "docs/public/slides/effects/catalog.json");
 const catalog = JSON.parse(fs.readFileSync(catalogFile, "utf8"));
 const effect = catalog.effects.find((entry: { slug: string }) => entry.slug === slug);
 const pack = effect && catalog.packs[effect.pack];
-const localEffect = JSON.parse(fs.readFileSync(path.join(sources, "catalog.json"), "utf8")).effects.find((entry: { slug: string }) => entry.slug === slug);
-if (!localEffect) throw new Error(`No local catalog entry for ${slug}.`);
 const hashes = { exampleSha256: sha256(exampleSource), packSha256: packArchiveHash(path.join(sources, "packs", localEffect.pack)) };
 if (flag("--apply")) {
   if (!effect || !pack || effect.pack !== localEffect.pack) throw new Error("Effect is missing or has a different pack in legend-docs; refresh its catalog before --apply.");
@@ -132,6 +134,7 @@ snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack,
 fs.writeFileSync(deck, recordingDeckSource(exampleSource));
 const raw = path.join(work, "raw.mp4");
 let playbackOffset = 0;
+const actualSchedule: number[] = [];
 let automaticCrop = 0;
 let presenterTitle: string | undefined;
 let presenterPid: number | undefined;
@@ -156,7 +159,7 @@ try {
     await sleep(1000);
     deckWindow = listWindows().find(w => w.owner === "Legend Slides" && w.title === presenterTitle && w.width > 200 && w.height > 200);
   }
-  if (!deckWindow) throw new Error("The deck window did not appear within 60 s. Check that the deck compiles and Metro is running for dev builds.");
+  if (!deckWindow) throw new Error(`The deck window did not appear within 60 s. Slides windows: ${JSON.stringify(listWindows().filter(window => window.owner === "Legend Slides"))}. Check compilation and Metro logs.`);
   presenterPid = deckWindow.pid;
   // Scope the toolbar action to this deck and wait until compilation enables Start.
   const startAudience = `tell application "System Events"
@@ -210,8 +213,12 @@ try {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Keep the already-focused audience active without raising it during the capture.
     run("osascript", ["-e", advanceAudience]);
+    actualSchedule.push(performance.now() - startedAt);
   }
-  assertRecorderSucceeded(await recorderEvents.exited);
+  if (!explicitMotion.length && !profile?.motion?.length) motion = recordingMotionIntervals(seconds, actualSchedule);
+  const result = await recorderEvents.exited;
+  if (result.code !== 0 && fs.existsSync(`${raw}.capture.json`)) console.error(fs.readFileSync(`${raw}.capture.json`, "utf8"));
+  assertRecorderSucceeded(result);
 } catch (error) {
   console.error(`Recording failed; local artifacts are in ${work} (raw capture: ${raw}).`);
   throw error;
@@ -227,7 +234,7 @@ try {
     run("osascript", ["-e", stop], { allowFail: true });
   }
   await sleep(1000);
-  run("osascript", ["-e", 'tell application id "so.legend.slides.macos" to quit'], { allowFail: true });
+  if (presenterPid) run("kill", ["-TERM", String(presenterPid)], { allowFail: true });
   await sleep(2000);
   // Only the instance opened with this run's temporary deck; never another Slides session.
   run("pkill", ["-f", work], { allowFail: true });
@@ -237,12 +244,11 @@ if (!fs.existsSync(raw)) throw new Error("The recorder produced no video.");
 // Export: apply any explicit crop, scale, H.264 without audio; poster from the last second.
 const video = path.join(work, "preview.mp4"), poster = path.join(work, "poster.png");
 const totalCropTop = cropTop + automaticCrop;
-const filter = `crop=iw:ih-${totalCropTop}:0:${totalCropTop},scale=${width}:-2:flags=lanczos`;
-run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(playbackOffset), "-i", raw, "-t", String(seconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
+run("ffmpeg", recordingExportArgs(raw, video, playbackOffset, seconds, totalCropTop, width));
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");
 const dimensions = JSON.parse(run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", video]).stdout).streams[0];
-const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
+const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), ...(profile?.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]), ...(profile?.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
 const passed = check.status === 0;
 
 if (!passed) {

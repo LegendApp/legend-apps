@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -143,7 +143,7 @@ test("ready requires native frame timing for trimming and motion checks", async 
 });
 
 test("motion windows cover finite entrances and individual reveals rather than static tails", () => {
-  expect(recordingMotionIntervals(8, [])).toEqual(["0.1:0.5"]);
+  expect(recordingMotionIntervals(8, [])).toEqual(["0.6:1"]);
   expect(recordingMotionIntervals(8, recordingSchedule(8, 2))).toEqual(["1.6:2", "4.1:4.5"]);
   expect(recordingMotionIntervals(8, [], ["0.1:7.5"])).toEqual(["0.1:7.5"]);
   for (const value of ["", ":1", "0:9", "1:0", "NaN:1", "0:1:2"]) {
@@ -189,3 +189,58 @@ test("the capture deck holds the example after a blank slide and compiles only s
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("catalog recording profiles retain a bounded motion check", () => {
+  const { effects } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/catalog.json"), "utf8"));
+  for (const effect of effects.filter(effect => effect.recording)) {
+    const seconds = effect.recording.seconds ?? 8;
+    const source = fs.readFileSync(path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${effect.slug}/example.mdx`), "utf8");
+    const intervals = recordingMotionIntervals(seconds, recordingSchedule(seconds, exampleStepPresses(source)), effect.recording.motion);
+    expect(intervals.length).toBeGreaterThan(0);
+    expect(intervals.some(value => { const [start, end] = value.split(":").map(Number); return end - start >= (effect.recording.freezeMs ?? 150) / 1000; })).toBe(true);
+  }
+  expect(recordingMotionCrop("smoke", 1280, 654)).toEqual(["--crop", "0:65:230:523"]);
+});
+
+const videoSkill = process.env.LEGEND_VIDEO_RECORDING_SKILL;
+test.skipIf(!videoSkill)("every recording profile rejects a frozen export with the real video verifier", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slides-record-static-test-"));
+  try {
+    const video = path.join(directory, "static.mp4");
+    const encoded = spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x180:r=60", "-vf", "select=eq(n\\,0),loop=loop=-1:size=1:start=0,setpts=N/(60*TB)", "-t", "16", "-c:v", "libx264", "-pix_fmt", "yuv420p", video], { encoding: "utf8" });
+    expect(encoded.status).toBe(0);
+    const { effects } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/catalog.json"), "utf8"));
+    for (const effect of effects.filter(effect => effect.recording || effect.slug === "bar-row")) {
+      const profile = effect.recording ?? { motion: recordingMotionIntervals(8, recordingSchedule(8, 1)) };
+      const verified = spawnSync("python3", [path.join(videoSkill, "scripts/verify-video.py"), video,
+        ...profile.motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(effect.slug, 320, 180),
+        ...(profile.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]),
+        ...(profile.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]),
+      ], { encoding: "utf8" });
+      expect(verified.status).toBe(1);
+      expect(JSON.parse(verified.stdout).findings.some(finding => finding.kind === "visible-stalls-during-expected-motion")).toBe(true);
+    }
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+}, 30_000);
+
+test("export preserves sparse native sample timestamps instead of resampling to average FPS", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slides-record-vfr-test-"));
+  const run = (command, args) => {
+    const result = spawnSync(command, args, { encoding: "utf8" });
+    expect(result.status).toBe(0);
+    return result.stdout;
+  };
+  try {
+    const raw = path.join(directory, "raw.mp4"), video = path.join(directory, "preview.mp4");
+    run("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x180:r=60:d=3",
+      "-vf", "select='lt(t,1)+eq(mod(n,60),0)'", "-fps_mode", "passthrough", "-c:v", "libx264", raw]);
+    run("ffmpeg", recordingExportArgs(raw, video, 0, 3, 0, 320));
+    const timestamps = file => JSON.parse(run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "frame=best_effort_timestamp_time", "-of", "json", file])).frames.map(frame => Number(frame.best_effort_timestamp_time));
+    const source = timestamps(raw), exported = timestamps(video);
+    expect(source.length).toBe(62);
+    expect(exported.length).toBe(source.length);
+    source.forEach((time, index) => expect(exported[index]).toBeCloseTo(time, 3));
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+}, 30_000);

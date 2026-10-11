@@ -25,7 +25,12 @@
           "description": "Use slide or step playback time."
         }
       ],
-      "snippet": "---\ntitle: Animated title\n---\n\nimport { View, Text } from \"react-native\";\nimport { AnimatedTitle } from \"slides:typography/AnimatedTitle\";\n\n\n# Animated title\n\n<View style={{ width: 1696, height: 650 }}>\n<AnimatedTitle effect=\"word-lift\" width={1696} fontSize={104}>Make an entrance</AnimatedTitle>\n</View>\n"
+      "snippet": "---\ntitle: Animated title\n---\n\nimport { View, Text } from \"react-native\";\nimport { AnimatedTitle } from \"slides:typography/AnimatedTitle\";\n\n\n# Animated title\n\n<View style={{ width: 1696, height: 650 }}>\n<AnimatedTitle effect=\"word-lift\" width={1696} fontSize={104}>Make an entrance</AnimatedTitle>\n</View>\n",
+      "recording": {
+        "motion": [
+          "0.1:0.5"
+        ]
+      }
     },
     {
       "slug": "ambientaurora",
@@ -43,7 +48,15 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Ambient aurora\n---\n\nimport { View, Text } from \"react-native\";\nimport { AmbientAurora } from \"slides:backgrounds/AmbientAurora\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Ambient aurora\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><AmbientAurora /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Ambient aurora\n---\n\nimport { View, Text } from \"react-native\";\nimport { AmbientAurora } from \"slides:backgrounds/AmbientAurora\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Ambient aurora\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><AmbientAurora /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "seconds": 16,
+        "motion": [
+          "2:14"
+        ],
+        "noiseDb": -80,
+        "freezeMs": 400
+      }
     },
     {
       "slug": "droplets",
@@ -79,7 +92,14 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Fluid\n---\n\nimport { View, Text } from \"react-native\";\nimport { Fluid } from \"slides:backgrounds/Fluid\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Fluid\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Fluid /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Fluid\n---\n\nimport { View, Text } from \"react-native\";\nimport { Fluid } from \"slides:backgrounds/Fluid\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Fluid\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Fluid /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "seconds": 12,
+        "motion": [
+          "1:10"
+        ],
+        "noiseDb": -80
+      }
     },
     {
       "slug": "smoke",
@@ -97,7 +117,15 @@
           "description": "Use the host wrapper for priority and intensity."
         }
       ],
-      "snippet": "---\ntitle: Smoke\n---\n\nimport { View, Text } from \"react-native\";\nimport { Smoke } from \"slides:backgrounds/Smoke\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Smoke\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Smoke /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n"
+      "snippet": "---\ntitle: Smoke\n---\n\nimport { View, Text } from \"react-native\";\nimport { Smoke } from \"slides:backgrounds/Smoke\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Smoke\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Smoke /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
+      "recording": {
+        "seconds": 12,
+        "motion": [
+          "2:10"
+        ],
+        "noiseDb": -80,
+        "freezeMs": 300
+      }
     },
     {
       "slug": "wireframe",
@@ -637,7 +665,12 @@
           "description": "Content shown while paused."
         }
       ],
-      "snippet": "---\ntitle: Freeze and annotate\n---\n\nimport { View, Text } from \"react-native\";\nimport { FreezeFrame } from \"slides:presenting/FreezeFrame\";\nimport Animated, { useAnimatedStyle } from \"react-native-reanimated\";\n\nexport function Orbit({time}) { const style = useAnimatedStyle(() => ({transform: [{translateX: 600 + Math.sin(time.value) * 300},{translateY: 220 + Math.cos(time.value) * 100}]})); return <View style={{width: 1696,height: 650}}><Animated.View style={[{width: 100,height: 100,borderRadius: 50,backgroundColor: \"#67e8f9\"},style]} /></View>; }\n\n# Freeze and annotate\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={2}>{step => <FreezeFrame paused={step > 0} annotation={<Text style={{color: \"white\",fontSize: 48}}>Pause to explain this frame</Text>}>{time => <Orbit time={time} />}</FreezeFrame>}</Steps>\n</View>\n"
+      "snippet": "---\ntitle: Freeze and annotate\n---\n\nimport { View, Text } from \"react-native\";\nimport { FreezeFrame } from \"slides:presenting/FreezeFrame\";\nimport Animated, { useAnimatedStyle } from \"react-native-reanimated\";\n\nexport function Orbit({time}) { const style = useAnimatedStyle(() => ({transform: [{translateX: 600 + Math.sin(time.value) * 300},{translateY: 220 + Math.cos(time.value) * 100}]})); return <View style={{width: 1696,height: 650}}><Animated.View style={[{width: 100,height: 100,borderRadius: 50,backgroundColor: \"#67e8f9\"},style]} /></View>; }\n\n# Freeze and annotate\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={2}>{step => <FreezeFrame paused={step > 0} annotation={<Text style={{color: \"white\",fontSize: 48}}>Pause to explain this frame</Text>}>{time => <Orbit time={time} />}</FreezeFrame>}</Steps>\n</View>\n",
+      "recording": {
+        "motion": [
+          "0.5:1.2"
+        ]
+      }
     },
     {
       "slug": "chart-bar",
@@ -663,7 +696,12 @@
           "description": "Set bar dimensions."
         }
       ],
-      "snippet": "---\ntitle: Chart bar\n---\n\nimport { View, Text } from \"react-native\";\nimport { ChartBar } from \"slides:charts/ChartBar\";\n\n\n# Chart bar\n\n<View style={{ width: 1696, height: 650 }}>\n<ChartBar luminous highlighted rounded style={{width: 1400,height: 80,marginTop: 250}} />\n</View>\n"
+      "snippet": "---\ntitle: Chart bar\n---\n\nimport { View, Text } from \"react-native\";\nimport { ChartBar } from \"slides:charts/ChartBar\";\n\n\n# Chart bar\n\n<View style={{ width: 1696, height: 650 }}>\n<ChartBar luminous highlighted rounded style={{width: 1400,height: 80,marginTop: 250}} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "0.1:0.5"
+        ]
+      }
     },
     {
       "slug": "bar-row",
@@ -741,7 +779,14 @@
           "description": "Choose the static presenter preview."
         }
       ],
-      "snippet": "---\ntitle: Lottie animation\n---\n\nimport { View, Text } from \"react-native\";\nimport { LottiePlayer } from \"slides:animation/LottiePlayer\";\n\nexport const animation = {\"v\":\"5.9.0\",\"fr\":30,\"ip\":0,\"op\":90,\"w\":400,\"h\":400,\"nm\":\"Orbit\",\"ddd\":0,\"assets\":[],\"layers\":[{\"ddd\":0,\"ind\":1,\"ty\":4,\"nm\":\"Disc\",\"sr\":1,\"ks\":{\"o\":{\"a\":0,\"k\":100},\"r\":{\"a\":0,\"k\":0},\"p\":{\"a\":0,\"k\":[200,200,0]},\"a\":{\"a\":0,\"k\":[0,0,0]},\"s\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[40,40,100],\"e\":[100,100,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":45,\"s\":[100,100,100],\"e\":[40,40,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":90,\"s\":[40,40,100]}]}},\"shapes\":[{\"ty\":\"el\",\"p\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[220,220]},\"nm\":\"Circle\"},{\"ty\":\"fl\",\"c\":{\"a\":0,\"k\":[0.4,0.9,1,1]},\"o\":{\"a\":0,\"k\":100},\"r\":1}],\"ip\":0,\"op\":90,\"st\":0,\"bm\":0}]};\n\n# Lottie animation\n\n<View style={{ width: 1696, height: 650 }}>\n<LottiePlayer source={animation} durationSeconds={3} style={{width: 600,height: 600,alignSelf: \"center\"}} />\n</View>\n"
+      "snippet": "---\ntitle: Lottie animation\n---\n\nimport { View, Text } from \"react-native\";\nimport { LottiePlayer } from \"slides:animation/LottiePlayer\";\n\nexport const animation = {\"v\":\"5.9.0\",\"fr\":30,\"ip\":0,\"op\":90,\"w\":400,\"h\":400,\"nm\":\"Orbit\",\"ddd\":0,\"assets\":[],\"layers\":[{\"ddd\":0,\"ind\":1,\"ty\":4,\"nm\":\"Disc\",\"sr\":1,\"ks\":{\"o\":{\"a\":0,\"k\":100},\"r\":{\"a\":0,\"k\":0},\"p\":{\"a\":0,\"k\":[200,200,0]},\"a\":{\"a\":0,\"k\":[0,0,0]},\"s\":{\"a\":1,\"k\":[{\"t\":0,\"s\":[40,40,100],\"e\":[100,100,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":45,\"s\":[100,100,100],\"e\":[40,40,100],\"i\":{\"x\":[0.5],\"y\":[1]},\"o\":{\"x\":[0.5],\"y\":[0]}},{\"t\":90,\"s\":[40,40,100]}]}},\"shapes\":[{\"ty\":\"el\",\"p\":{\"a\":0,\"k\":[0,0]},\"s\":{\"a\":0,\"k\":[220,220]},\"nm\":\"Circle\"},{\"ty\":\"fl\",\"c\":{\"a\":0,\"k\":[0.4,0.9,1,1]},\"o\":{\"a\":0,\"k\":100},\"r\":1}],\"ip\":0,\"op\":90,\"st\":0,\"bm\":0}]};\n\n# Lottie animation\n\n<View style={{ width: 1696, height: 650 }}>\n<LottiePlayer source={animation} durationSeconds={3} style={{width: 600,height: 600,alignSelf: \"center\"}} />\n</View>\n",
+      "recording": {
+        "motion": [
+          "0.6:1.2",
+          "2:2.5",
+          "3.6:4.2"
+        ]
+      }
     }
   ]
 }
