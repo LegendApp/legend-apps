@@ -28,8 +28,10 @@ effect has states worth showing. Pack runtime code lives in `packages/slides-eff
      It must contain `scripts/record-macos.swift` and `scripts/verify-video.py`; no personal
      installation location is assumed. `python3` and `ffmpeg` are required. Optionally set
      `LEGEND_RECORD_MACOS` to an already compiled recorder.
-   - It uses `LEGEND_APP_LOCK` or `~/devroot/scripts/app-lock` if present, and stores the
-     compiled recorder and local capture artifacts in the system temporary directory.
+   - Optionally set `LEGEND_APP_LOCK` to an app-lock executable. It holds the slides lock
+     for the entire capture. The script stores the compiled recorder and local capture artifacts in the system temporary directory.
+   - It snapshots the validated local packs and passes `LEGEND_SLIDES_EFFECT_PACKS` to
+     both development and release builds, so captures cannot use older installed packs.
    - It launches the build with the example, opens and confirms its fullscreen audience window,
      records that slide surface with the ScreenCaptureKit recorder, advances literal `<Step>` and
      `<Steps count={n}>` states (count includes the initial state; use `--steps` for dynamic counts),

@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -37,9 +37,9 @@ if (!/^[a-z][a-z0-9-]*$/.test(slug)) throw new Error("Pass an effect slug first,
 if (process.platform !== "darwin") throw new Error("effects:record runs on macOS only.");
 
 const repo = path.resolve(import.meta.dirname, "../..");
-const appLock = process.env.LEGEND_APP_LOCK ?? path.join(os.homedir(), "devroot/scripts/app-lock");
+const appLock = process.env.LEGEND_APP_LOCK;
 // Hold the shared slides lock for the whole run, unless a caller already does.
-if (!process.env.LEGEND_EFFECTS_RECORD_LOCKED && fs.existsSync(appLock) && !flag("--preflight")) {
+if (!process.env.LEGEND_EFFECTS_RECORD_LOCKED && appLock && fs.existsSync(appLock) && !flag("--preflight")) {
   const result = spawnSync(appLock, ["slides", "--", process.execPath, import.meta.filename, ...args], {
     stdio: "inherit", env: { ...process.env, LEGEND_EFFECTS_RECORD_LOCKED: "1" } });
   process.exit(result.status ?? 1);
@@ -125,6 +125,8 @@ if (running()) throw new Error("Legend Slides is already running. Save and quit 
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);
+const capturePacks = path.join(work, "packs");
+snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack, hashes.packSha256);
 fs.writeFileSync(deck, exampleSource);
 const raw = path.join(work, "raw.mp4");
 let recording: ChildProcess | undefined;
@@ -132,7 +134,7 @@ let recorderEvents: ReturnType<typeof observeRecorder> | undefined;
 try {
   console.log(`Opening ${slug} in ${path.basename(appPath)}…`);
   // Launch directly so the app inherits a PATH containing bun: dev builds spawn the deck compiler with it.
-  const env = [`PATH=${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`];
+  const env = [`PATH=${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, `LEGEND_SLIDES_EFFECT_PACKS=${capturePacks}`];
   const devArgs: string[] = [];
   if (!release) {
     const { resolveDevServerPort } = await import(path.join(repo, "scripts/lib/apps.ts"));

@@ -104,3 +104,11 @@ export function assertPreviewHashes(local: { exampleSha256: string; packSha256: 
     throw new Error("Example or pack differs from the published catalog; refresh legend-docs before --apply.");
   }
 }
+
+/** Release and development compilers must consume the same validated sources. */
+export function snapshotEffectPacks(source: string, destination: string, pack: string, expectedHash: string) {
+  fs.cpSync(source, destination, { recursive: true });
+  if (packArchiveHash(path.join(destination, pack)) !== expectedHash) {
+    throw new Error("Effect pack changed while preparing capture; record again.");
+  }
+}

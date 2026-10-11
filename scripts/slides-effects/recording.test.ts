@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256 } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -106,4 +106,30 @@ test.skipIf(process.platform !== "darwin")("preflight requires the verifier and 
     expect(missingPython.stderr).toContain("python3 is required");
     expect(missingPython.stdout).not.toContain("Compiling");
   } finally { fs.rmSync(skill, { recursive: true, force: true }); }
+});
+
+test("the capture deck compiles only validated snapshot pack sources", async () => {
+  const { compileDeck } = await import("../../packages/presentation/src/compiler/compileDeck");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slides-record-snapshot-test-"));
+  const packs = path.resolve(import.meta.dirname, "../../packages/slides-effects/packs");
+  const example = fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/examples/animated-title/example.mdx"), "utf8");
+  const capturePacks = path.join(directory, "packs");
+  const deck = path.join(directory, "capture.mdx");
+  const previous = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  try {
+    snapshotEffectPacks(packs, capturePacks, "typography", packArchiveHash(path.join(packs, "typography")));
+    expect(() => snapshotEffectPacks(packs, path.join(directory, "stale"), "typography", "wrong")).toThrow("changed");
+    fs.writeFileSync(deck, example);
+    // This is the environment inherited by the release helper as well as dev compilers.
+    process.env.LEGEND_SLIDES_EFFECT_PACKS = capturePacks;
+    const result = await compileDeck(deck);
+    expect(result.success).toBe(true);
+    expect(result.dependencies).toContain(path.join(capturePacks, "typography/AnimatedTitle.tsx"));
+    expect(result.dependencies.some(file => file.startsWith(packs))).toBe(false);
+    expect(result.code).toContain("Make an entrance");
+  } finally {
+    if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
+    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previous;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
