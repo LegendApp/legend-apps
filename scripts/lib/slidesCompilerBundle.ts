@@ -1,11 +1,17 @@
 import path from "node:path";
 import { createRequire } from "node:module";
-import type { Plugin } from "esbuild";
 import { rootDir } from "./apps";
 
 // The compiler's own esbuild lives with the presentation package.
 const presentationRequire = createRequire(path.join(rootDir, "packages/presentation/package.json"));
-const { build } = presentationRequire("esbuild") as typeof import("esbuild");
+// Root scripts can't resolve esbuild's types, so describe the small surface used here.
+type BuildApi = {
+  onResolve(options: { filter: RegExp }, callback: (args: { path: string }) => unknown): void;
+  onLoad(options: { filter: RegExp; namespace?: string }, callback: (args: { path: string }) => unknown): void;
+};
+type Plugin = { name: string; setup(api: BuildApi): void };
+type Metafile = { outputs: Record<string, { inputs: Record<string, { bytesInOutput: number }> }> };
+const { build } = presentationRequire("esbuild") as { build(options: Record<string, unknown>): Promise<{ metafile: Metafile }> };
 
 /** Native or self-locating packages stay on disk beside the bundle. */
 export const slidesCompilerExternals = ["esbuild", "lightningcss", "@tailwindcss/oxide", "fsevents"];
