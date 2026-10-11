@@ -4,7 +4,6 @@ import { resolveTransitionFile } from "./transitionLibrary";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { transformSync } from "@babel/core";
 import { compile } from "@mdx-js/mdx";
@@ -17,13 +16,15 @@ import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
+import { loadUniwindCompiler } from "./uniwindCompiler";
 import { defaultEffectPacksDirectory, MissingEffectPack, resolveEffectPack } from "./effectPacks";
 import type { EffectLock } from "../effectPacks/schema";
 import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLock } from "../effectPacks/storage";
 
-const workletsPlugin = createRequire(import.meta.url).resolve("react-native-worklets/plugin");
-const reactCompilerPlugin = createRequire(import.meta.url).resolve("babel-plugin-react-compiler");
-const blockScopingPlugin = createRequire(import.meta.url).resolve("@babel/plugin-transform-block-scoping");
+// Pass plugin modules rather than paths so the shipped compiler can be a single bundle.
+const workletsPlugin = require("react-native-worklets/plugin");
+const reactCompilerPlugin = require("babel-plugin-react-compiler");
+const blockScopingPlugin = require("@babel/plugin-transform-block-scoping");
 const hostModules = new Set([
   "react",
   "react/compiler-runtime",
@@ -246,17 +247,7 @@ function dependenciesFrom(result: BuildResult, workingDirectory: string) {
 
 async function compileUniwind(deckRoot: string, draftSource?: string, packRoots: string[] = []) {
   const cssPath = path.resolve(import.meta.dirname, "../../../../shell/src/global.css");
-  const compilerModulePath = path.resolve(import.meta.dirname, "../../../../shell/node_modules/uniwind/src/metro/compileVirtual.ts");
-  const { compileVirtual } = await import(pathToFileURL(compilerModulePath).href) as {
-    compileVirtual(options: {
-      css: string;
-      cssPath: string;
-      debug: boolean;
-      platform: string;
-      polyfills: undefined;
-      themes: string[];
-    }): Promise<string>;
-  };
+  const compileVirtual = await loadUniwindCompiler();
   // Tailwind scans an isolated copy for new draft classes; the actual deck and
   // its directory are never written until the user saves.
   const draftDirectory = draftSource === undefined ? undefined : fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-css-"));
