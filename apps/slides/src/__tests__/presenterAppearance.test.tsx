@@ -8,6 +8,7 @@ import { defaultPresenterTextColor, defaultPresenterInactiveColor, normalizePres
 
 const files = new Map();
 let onWrite;
+let selectedPage = "appearance", pageMounts = 0;
 mock.module("react-native", () => ({
   Platform: { OS: "macos" }, View: "view", Text: "text", TextInput: "input", ScrollView: "scroll",
   StyleSheet: { create: styles => styles, flatten: styles => styles },
@@ -19,8 +20,8 @@ mock.module("../../../../packages/storage/src/NativeStorage", () => ({ default: 
   writeStorageText: (_root, path, value) => { files.set(path, value); onWrite?.(); return true; },
 } }));
 mock.module("@legendapp/spark/settings/window", () => ({
-  SettingsWindow: ({ pages }) => pages[0].render(),
-  SettingsPage: ({ children }) => children,
+  SettingsWindow: ({ pages }) => pages.find(page => page.id === selectedPage).render(),
+  SettingsPage: ({ children }) => { React.useEffect(() => { pageMounts++; }, []); return children; },
   SettingsSection: "section",
   SettingsRow: ({ title, control }) => <row title={title}>{control}</row>,
 }));
@@ -40,6 +41,22 @@ test("presenter colors default safely and normalize valid hex colors", () => {
   expect(normalizePresenterColor(" #ABCDEF ", defaultPresenterTextColor)).toBe("#abcdef");
   for (const value of [null, 42, "", "#12", "#gggggg", "invalid", "#00000080"]) {
     expect(normalizePresenterColor(value, defaultPresenterTextColor)).toBe(defaultPresenterTextColor);
+  }
+});
+
+test("switching Settings pages remounts the page scroll view", async () => {
+  selectedPage = "appearance";
+  pageMounts = 0;
+  let tree;
+  try {
+    await act(() => { tree = create(<SettingsWindow />); });
+    expect(pageMounts).toBe(1);
+    selectedPage = "effects";
+    await act(() => tree.update(<SettingsWindow />));
+    expect(pageMounts).toBe(2);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    selectedPage = "appearance";
   }
 });
 

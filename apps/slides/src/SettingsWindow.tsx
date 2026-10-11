@@ -123,7 +123,7 @@ const pageContent: SettingsWindowPage<SlidesSettingsPage>[] = [{
 }, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> },
   { id: "effects", title: "Effects", render: () => <EffectsSettingsPage /> },
   { id: "compiler", title: "Compiler", render: () => <CompilerSettingsPage /> }];
-const pages = pageContent.map(page => ({ ...page, render: () => <SettingsPage><Text className="mb-5 text-xl font-semibold text-text-primary">{page.title}</Text>{page.render()}</SettingsPage> }));
+const pages = pageContent.map(page => ({ ...page, render: () => <SettingsPage key={page.id}><Text className="mb-5 text-xl font-semibold text-text-primary">{page.title}</Text>{page.render()}</SettingsPage> }));
 
 export function SettingsWindow() {
   return (
