@@ -265,3 +265,16 @@ test("fresh deck discovery waits for an active install instead of caching missin
   expect(await installing).toEqual(runtime);
   expect(checks).toBe(1);
 });
+
+test("discovery finishing after a failed install receives that result without waiting on itself", async () => {
+  const old = deferred();
+  discover = () => old.promise;
+  const checking = resolveCompilerRuntime({ refresh: true });
+  await turn();
+  install = async () => { throw new Error("offline"); };
+  expect(await downloadCompilerRuntime()).toBeNull();
+  old.resolve(null);
+  expect(await checking).toBeNull();
+  expect(compilerRuntime$.status.peek()).toBe("error");
+  expect(compilerRuntime$.error.peek()).toBe("offline");
+});

@@ -76,7 +76,8 @@ export function invalidateCompilerRuntime(generation: number) {
 let downloading: Promise<CompilerRuntime | null> | undefined;
 /** Install the pinned Bun with progress. Concurrent callers share one download. */
 export function downloadCompilerRuntime(options: { force?: boolean } = {}) {
-  return downloading ??= (async () => {
+  if (downloading) return downloading;
+  return resolving = downloading = (async () => {
     ++checkSequence; // Discovery started before this install cannot publish its result.
     compilerRuntime$.assign({ status: "downloading", progress: 0, error: "" });
     try {
