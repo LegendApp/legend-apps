@@ -85,7 +85,15 @@ test("removal refuses active dependents and skips the installation space check",
   expect(fs.existsSync(path.join(f.directory, "math"))).toBe(true);
   await withEnv("LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES", String(Number.MAX_SAFE_INTEGER), () => removeEffectPack("motion", { directory: f.directory }));
   expect(fs.existsSync(path.join(f.directory, "motion"))).toBe(false);
+  fs.mkdirSync(path.join(f.directory, "broken"));
+  fs.writeFileSync(path.join(f.directory, "broken/active.json"), "{");
+  const corruptPin = { version: "1.0.0", sha256: "a".repeat(64) };
+  const corruptManifest = pinnedPackDirectory(f.directory, "corrupt", corruptPin);
+  fs.mkdirSync(corruptManifest, { recursive: true });
+  fs.writeFileSync(path.join(f.directory, "corrupt/active.json"), JSON.stringify(corruptPin));
+  fs.writeFileSync(path.join(corruptManifest, "pack.json"), "{");
   await removeEffectPack("math", { directory: f.directory });
+  expect(fs.existsSync(path.join(f.directory, "math"))).toBe(false);
 });
 test("new versions coexist without changing an existing deck's pin", async () => {
   const f = fixture(); await installEffectPacks(["motion"], f.options);

@@ -20,9 +20,10 @@ those pack directories. CSS scanning includes selected pack roots.
 Cross-pack imports must declare the exact installed dependency version in the
 importing manifest. A missing declaration or incompatible version fails compilation.
 
-In a source checkout, the compiler finds this `packs/` directory. An installed app
-resolves verified source snapshots from `~/Library/Application Support/Legend Slides/effects/`.
-`LEGEND_SLIDES_EFFECT_PACKS` or `--effect-packs <directory>` overrides the cache.
+Decks resolve verified source snapshots from
+`~/Library/Application Support/Legend Slides/effects/`, including in a source checkout.
+To compile against this `packs/` directory while developing effects, set
+`LEGEND_SLIDES_EFFECT_PACKS` or pass `--effect-packs <directory>` to the compiler.
 Source is trusted code with the same host API access as a local deck component.
 
 The native app and shipped compiler omit these implementations. The gallery at

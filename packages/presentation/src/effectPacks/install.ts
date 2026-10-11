@@ -119,10 +119,14 @@ export async function removeEffectPack(id: string, options: { directory?: string
       if (!entry.isDirectory() || entry.name === id || !validPackId(entry.name)) continue;
       const active = path.join(directory, entry.name, "active.json");
       if (!fs.existsSync(active)) continue;
-      const pin = JSON.parse(fs.readFileSync(active, "utf8")) as PackPin;
-      validatePin(pin);
-      const manifest = path.join(pinnedPackDirectory(directory, entry.name, pin), "pack.json");
-      if (fs.existsSync(manifest) && Object.hasOwn(JSON.parse(fs.readFileSync(manifest, "utf8")).dependencies ?? {}, id)) {
+      let dependencies: Record<string, string>;
+      try {
+        const pin = JSON.parse(fs.readFileSync(active, "utf8")) as PackPin;
+        validatePin(pin);
+        const manifest = path.join(pinnedPackDirectory(directory, entry.name, pin), "pack.json");
+        dependencies = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")).dependencies ?? {} : {};
+      } catch { continue; }
+      if (Object.hasOwn(dependencies, id)) {
         throw new Error(`Cannot remove "${id}": installed pack "${entry.name}" depends on it.`);
       }
     }
