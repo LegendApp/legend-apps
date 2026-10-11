@@ -38,7 +38,7 @@ if (!/^[a-z][a-z0-9-]*$/.test(slug)) throw new Error("Pass an effect slug first,
 if (process.platform !== "darwin") throw new Error("effects:record runs on macOS only.");
 
 const repo = path.resolve(import.meta.dirname, "../..");
-const appLock = process.env.LEGEND_APP_LOCK ?? path.join(os.homedir(), "devroot/scripts/app-lock");
+const appLock = process.env.LEGEND_APP_LOCK;
 // Hold the shared slides lock for the whole run, unless a caller already does.
 if (!process.env.LEGEND_EFFECTS_RECORD_LOCKED && appLock && fs.existsSync(appLock) && !flag("--preflight")) {
   const result = spawnSync(appLock, ["slides", "--", process.execPath, import.meta.filename, ...args], {

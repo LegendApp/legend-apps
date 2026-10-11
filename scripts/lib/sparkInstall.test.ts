@@ -447,6 +447,9 @@ import { rootDir } from "./apps";
 export function getDevSyntaxAssetSourceRoot() { return "syntax"; }
 export function getSlidesCompilerPath() { return "compiler"; }
 export function runCommand(command, args, options) {
+  if (command === "node" && args.includes("build") && args.includes("--dev")) {
+    fs.writeFileSync(path.join(options.cwd, ".spark/settings.json"), JSON.stringify({ target: "dev" }));
+  }
   fs.appendFileSync(path.join(rootDir, "commands"), JSON.stringify({ command, args, ...options }) + "\\n");
 }
 `);
@@ -591,31 +594,22 @@ for (const offlineEnv of [false, true]) {
 }
 
 for (const offlineEnv of [false, true]) {
-  test(`offline Spark startup guards Runner downloads via ${offlineEnv ? "env" : "flag"}`, t => {
+  test(`offline run checks the dev target after building via ${offlineEnv ? "env" : "flag"}`, t => {
     const f = appFixture(t);
     const { app, commands } = f;
     assert.equal(app("install").status, 0);
     const args = offlineEnv ? [] : ["--offline"];
-    const count = commands().length;
     for (const settings of [undefined, { target: "go" }, { target: "go", goApp: "saved-runner" }]) {
       const settingsFile = path.join(f.repoRoot, "example/.spark/settings.json");
       if (settings) f.write("example/.spark/settings.json", settings);
       else fs.rmSync(settingsFile);
-      const refused = app("run", args, offlineEnv);
-      assert.equal(refused.status, 1);
-      assert.match(refused.stderr, /Go startup may download a Runner.*disabled offline/);
+      const built = app("run", args, offlineEnv);
+      assert.equal(built.status, 0, built.stderr);
+      assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile, "utf8")), { target: "dev" });
+      const calls = commands().slice(-2);
+      assert.deepEqual(calls[0].args.slice(1), ["build", "--dev"]);
+      assert.equal(calls[1].command, "dev");
     }
-    assert.equal(commands().length, count);
-    for (const appFlag of ["--no-open", "--runner-binary=app-value", "--help"]) {
-      const refused = app("run", [...args, "--app-arg", appFlag], offlineEnv);
-      assert.equal(refused.status, 1);
-      assert.match(refused.stderr, /Go startup may download a Runner/);
-    }
-    f.write("runner.json", { runtime: { incompatible: true } });
-    const incompatible = app("run", args, offlineEnv);
-    assert.equal(incompatible.status, 1);
-    assert.match(incompatible.stderr, /without a compatible local Runner/);
-    fs.rmSync(path.join(f.repoRoot, "runner.json"));
     for (const startup of [["--no-open"], ["--runner-binary", "local-runner"], ["--runner-binary=local-runner"]]) {
       const allowed = app("run", [...args, ...startup], offlineEnv);
       assert.equal(allowed.status, 0, allowed.stderr);

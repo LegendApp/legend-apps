@@ -33,7 +33,6 @@ try {
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? runnerArgs : extra);
   if (["install", "build", "build-release", "run", "start"].includes(action)) installSparkWorkspace({ project, appId, env, ...installOptions });
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
-  if (installOptions.offline && action === "run") await assertSparkOfflineStart(project, cli, runnerArgs);
   if (installOptions.offline && ["build", "build-release", "run"].includes(action)) {
     await assertSparkOfflineBuild(project, cli, buildArgs);
   }
@@ -45,6 +44,7 @@ if (action === "prepare") console.log(project);
 else if (action !== "install") {
   if (action === "run") {
     runCommand("node", [cli, ...buildArgs], { cwd: project, env });
+    if (installOptions.offline) await assertSparkOfflineStart(project, cli, runnerArgs);
     await runSparkDevServer({ appId, project, cli, runnerArgs, appArgs, env });
   }
   else if (action === "build-release" || action === "build") runCommand("node", [cli, ...buildArgs], { cwd: project, env });
