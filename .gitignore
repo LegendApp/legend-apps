@@ -5,6 +5,7 @@ node_modules/
 dist/
 .DS_Store
 .env
+/spark.local.json
 
 shell/.legend/
 shell/ios/

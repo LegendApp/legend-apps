@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 const flags = new Set(args.filter(arg => arg.startsWith("--")));
 const apps = args.filter(arg => !arg.startsWith("--"));
 if (flags.has("--help")) {
-  console.log("Usage: bun run spark:sync [app=slides] [--skip-pull] [--no-run]\nPull both checkouts from dev, pack changed Spark sources, update the catalog, and run a macOS dev build.\nLEGEND_SPARK_ROOT overrides the sibling SDK checkout; LEGEND_SYNC_REMOTE overrides dev.");
+  console.log("Usage: bun run spark:sync [app=slides] [--skip-pull] [--no-run]\nPull both checkouts from dev, pack changed Spark sources, update spark.local.json, and run a macOS dev build.\nLEGEND_SPARK_ROOT overrides the sibling SDK checkout; LEGEND_SYNC_REMOTE overrides dev.");
   process.exit(0);
 }
 if (apps.length > 1 || [...flags].some(flag => !["--skip-pull", "--no-run"].includes(flag))) {
@@ -18,6 +18,7 @@ if (apps.length > 1 || [...flags].some(flag => !["--skip-pull", "--no-run"].incl
 const appId = apps[0] ?? "slides";
 const sparkRoot = realpathSync(path.resolve(process.env.LEGEND_SPARK_ROOT ?? path.join(rootDir, "../legend-spark")));
 const packageFile = path.join(rootDir, "package.json");
+const localFile = path.join(rootDir, "spark.local.json");
 const manifestFile = path.join(sparkRoot, "artifacts/packages/manifest.json");
 const markerFile = path.join(sparkRoot, ".spark/sync-sdk.json");
 
@@ -50,18 +51,11 @@ function withPin(source: string, pin: string) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function currentPin() {
-  const pin = readJson(packageFile).catalog?.["@legendapp/spark"];
-  if (typeof pin !== "string") throw new Error("Select a Spark SDK version in the workspace catalog.");
-  return pin;
-}
-
 function archivesPresent(manifest: unknown): manifest is Record<string, string> {
   return !!manifest && typeof manifest === "object" && "@legendapp/spark" in manifest &&
     Object.values(manifest).every(file => typeof file === "string" && file.endsWith(".tgz") && existsSync(path.resolve(path.dirname(manifestFile), file)));
 }
 
-currentPin();
 if (git(sparkRoot, ["status", "--porcelain"])) throw new Error("Commit or stash local Spark changes before syncing so the packed SDK matches its commit.");
 if (!flags.has("--skip-pull")) {
   const branches = [sparkRoot, rootDir].map(repo => {
@@ -72,20 +66,11 @@ if (!flags.has("--skip-pull")) {
   });
   const source = readFileSync(packageFile, "utf8");
   const committed = git(rootDir, ["show", "HEAD:package.json"]);
-  const localPin = currentPin();
-  const committedPin = JSON.parse(committed).catalog["@legendapp/spark"];
-  const pinChanged = localPin !== committedPin;
-  if (JSON.stringify(JSON.parse(withPin(source, committedPin))) !== JSON.stringify(JSON.parse(committed)) ||
+  if (JSON.stringify(JSON.parse(source)) !== JSON.stringify(JSON.parse(committed)) ||
       git(rootDir, ["diff", "--cached", "--name-only", "--", "package.json"])) {
-    throw new Error("Commit or stash package.json edits before syncing; only the local Spark catalog pin can be carried across pulls.");
+    throw new Error("Commit or stash package.json edits before syncing.");
   }
-  // A machine-local archive pin must not block incoming package.json updates.
-  if (pinChanged) writeFileSync(packageFile, withPin(source, committedPin));
-  try {
-    for (const { repo, branch } of branches) run(repo, "git", ["pull", "--ff-only", remote, branch]);
-  } finally {
-    if (pinChanged) writeFileSync(packageFile, withPin(readFileSync(packageFile, "utf8"), localPin));
-  }
+  for (const { repo, branch } of branches) run(repo, "git", ["pull", "--ff-only", remote, branch]);
 }
 
 const head = git(sparkRoot, ["rev-parse", "HEAD"]);
@@ -105,12 +90,18 @@ if (!archivesPresent(manifest) || packed?.sparkHead !== head || packed?.archive 
 } else console.log(`Spark SDK is current for ${head.slice(0, 7)}.`);
 
 const selected = `file:${path.relative(rootDir, path.resolve(path.dirname(manifestFile), manifest["@legendapp/spark"]))}`;
-if (selected !== currentPin()) {
-  console.log(`Pinning @legendapp/spark to ${selected}`);
-  writeFileSync(packageFile, withPin(readFileSync(packageFile, "utf8"), selected));
+if (selected !== readCache(localFile)?.sdk) {
+  console.log(`Selecting local @legendapp/spark: ${selected}`);
+  writeFileSync(localFile, `${JSON.stringify({ sdk: selected }, null, 2)}\n`);
 }
 if (flags.has("--no-run")) console.log(`SDK ready; launch with: bun run spark:sync ${appId} --skip-pull`);
 else {
-  run(rootDir, "bun", ["install", "--no-save"]);
+  const source = readFileSync(packageFile, "utf8");
+  try {
+    writeFileSync(packageFile, withPin(source, selected));
+    run(rootDir, "bun", ["install", "--no-save"]);
+  } finally {
+    writeFileSync(packageFile, source);
+  }
   run(rootDir, "bun", ["run", "spark", appId, "run"]);
 }

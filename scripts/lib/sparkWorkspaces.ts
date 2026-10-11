@@ -126,8 +126,9 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
 export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
   const project = sparkWorkspace(manifest.id);
   const repo = json(path.join(rootDir, "package.json"));
-  const sdk = repo.catalog["@legendapp/spark"];
-  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in the workspace catalog.");
+  const localFile = path.join(rootDir, "spark.local.json");
+  const sdk = fs.existsSync(localFile) ? json(localFile).sdk : repo.catalog["@legendapp/spark"];
+  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in spark.local.json or the workspace catalog.");
   const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(rootDir, sdk.slice(5))}` : sdk;
   const template = json(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
   const app = json(path.join(appsDir, manifest.id, "package.json"));

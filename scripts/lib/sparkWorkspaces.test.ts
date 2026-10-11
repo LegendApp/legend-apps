@@ -42,12 +42,13 @@ for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenu
   });
 }
 
-test("all workspace consumers resolve the catalog's selected Spark SDK", async () => {
+test("all workspace consumers resolve the locally selected or catalog Spark SDK", async () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const repo = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
   assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
-  const sdk = repo.catalog["@legendapp/spark"];
+  const localFile = path.join(root, "spark.local.json");
+  const sdk = fs.existsSync(localFile) ? JSON.parse(fs.readFileSync(localFile, "utf8")).sdk : repo.catalog["@legendapp/spark"];
   const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(root, sdk.slice(5))}` : sdk;
   const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
   const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));

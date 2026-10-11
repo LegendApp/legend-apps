@@ -6,12 +6,42 @@ catalog and generate consumers under
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
-The root and every app/package resolve Spark through the workspace catalog. Update
-its archive path after packing the sibling SDK, then run `bun install`. Do not add a relative file override: Bun resolves those
-incorrectly for workspace consumers. All consumers must use the same SDK.
-Generated consumers use the archive selected in the root catalog, its bundled
-CLI, and its template. Packing another SDK
-does not change that selection. Verification uses the installed SDK as well.
+The committed root catalog pins the published npm SDK (`0.0.1-next.3`). For a
+local artifact, create the gitignored root `spark.local.json`:
+
+```json
+{"sdk": "file:../legend-spark/artifacts/packages/<tgz>"}
+```
+
+Generated hosts use this override when present, resolving file paths from the repo
+root; otherwise they use the catalog. The selected SDK flows into generated
+`package.json` dependencies and overrides, so changing or removing the override
+invalidates the install hash. Archive contents are also hashed. Do not commit
+local SDK paths in `package.json` or `bun.lock`.
+
+Root scripts and typecheck read Spark's template, bundled native metadata, and
+APIs from root `node_modules`, so the root installation also needs the local SDK
+when testing its changes. Bun does not read `spark.local.json`. The minimal local
+install substitutes only the Spark catalog value for `bun install --no-save`, then
+restores the exact original `package.json` in `finally`; `--no-save` preserves the
+tracked lockfile. `spark:sync` does this automatically. To install an already
+packed artifact without pulling or repacking:
+
+```sh
+bun -e 'import fs from "node:fs"; import { spawnSync } from "node:child_process";
+const source = fs.readFileSync("package.json", "utf8");
+const pkg = JSON.parse(source);
+pkg.catalog["@legendapp/spark"] = JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk;
+try {
+  fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+  const result = spawnSync("bun", ["install", "--no-save"], { stdio: "inherit" });
+  if (result.error) throw result.error;
+  process.exitCode = result.status ?? 1;
+} finally { fs.writeFileSync("package.json", source); }'
+```
+
+Keep the published pin restored after the install. Reinstall normally after
+removing the override to return the root SDK to the published version.
 
 App icon catalogs under `apps/<app>/macos/legendapp-shell-macos/Assets.xcassets`
 or `apps/<app>/AppIcon.appiconset` are copied into Spark's generated native
@@ -28,7 +58,7 @@ while its active block can commit and blur. Native document selections keep Esca
 to collapse the selection. Rebuild native hosts
 after the SDK update; Metro reload alone cannot load the new keyboard contract.
 
-After changing Spark's native SDK, run `npm run pack:local` there, then:
+After changing Spark's native SDK, run `bun run pack:local` there, then:
 
 ```sh
 bun run spark code install
@@ -42,13 +72,13 @@ runs Spark's source CLI; repack and reinstall after native SDK changes.
 
 On a machine that pulls the framework from another machine's `dev` remote,
 `bun run spark:sync [app]` (default `slides`) does the whole refresh: fast-forward
-both checkouts from `dev`, install Spark dependencies with `npm ci` and run
-`pack:local` when its commit moved or archives are missing, re-point the workspace
-catalog, install the root SDK, and launch a native dev build. The successful pack
+both checkouts from `dev`, install Spark dependencies with `bun install --frozen-lockfile` and run
+`pack:local` when its commit moved or archives are missing, write the ignored local
+override, install the root SDK, and launch a native dev build. The successful pack
 commit is recorded in Spark's ignored `.spark/sync-sdk.json`, so retries recover
 from failed packs and unchanged sources skip packing.
 
-The local catalog pin is carried across pulls; other `package.json` edits must be
+The ignored local override survives pulls; `package.json` edits must be
 committed or stashed first. Spark must have a clean checkout. The root install uses
 `--no-save` to keep the machine-local archive out of the tracked lockfile.
 `LEGEND_SPARK_ROOT` overrides the sibling checkout and `LEGEND_SYNC_REMOTE`

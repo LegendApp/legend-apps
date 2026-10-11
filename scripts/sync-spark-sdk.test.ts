@@ -33,6 +33,7 @@ function fixture(customSpark = false) {
     git(repo, "config", "user.email", "sync@example.invalid");
   }
   write(path.join(devApps, "scripts/sync-spark-sdk.ts"), fs.readFileSync(path.join(import.meta.dirname, "sync-spark-sdk.ts"), "utf8"));
+  write(path.join(devApps, ".gitignore"), "spark.local.json\n");
   write(path.join(devApps, "package.json"), JSON.stringify({ name: "apps", version: "1", catalog: { "@legendapp/spark": "0.0.1-next.2" } }, null, 2) + "\n");
   write(path.join(devSpark, "source.txt"), "first");
   write(path.join(devSpark, "package.json"), JSON.stringify({ name: "spark", packageManager: "bun@1.3.14" }));
@@ -60,8 +61,11 @@ if (args === "install --frozen-lockfile") {
 }
 if (args === "install --no-save" || args.startsWith("run spark ")) {
   const pin = JSON.parse(fs.readFileSync("package.json", "utf8")).catalog["@legendapp/spark"];
-  if (args === "install --no-save") fs.writeFileSync(process.env.SDK_SYNC_TEST_LOG + ".installed", pin);
-  else if (fs.readFileSync(process.env.SDK_SYNC_TEST_LOG + ".installed", "utf8") !== pin) process.exit(2);
+  if (args === "install --no-save") {
+    if (process.env.ROOT_INSTALL_FAIL === "1") process.exit(1);
+    fs.writeFileSync(process.env.SDK_SYNC_TEST_LOG + ".installed", pin);
+  }
+  else if (fs.readFileSync(process.env.SDK_SYNC_TEST_LOG + ".installed", "utf8") !== JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk) process.exit(2);
   process.exit(0);
 }
 if (args !== "run pack:local") process.exit(2);
@@ -78,8 +82,9 @@ fs.writeFileSync("artifacts/packages/manifest.json", JSON.stringify({ "@legendap
   });
   const ok = (args: string[] = []) => { const result = run(args); assert.equal(result.status, 0, result.stderr + result.stdout); return result; };
   const operations = () => fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n") : [];
-  const pin = () => JSON.parse(fs.readFileSync(path.join(apps, "package.json"), "utf8")).catalog["@legendapp/spark"];
-  return { root, apps, spark, devApps, devSpark, git, write, commit, run, ok, operations, pin };
+  const pin = () => fs.existsSync(path.join(apps, "spark.local.json")) ? JSON.parse(fs.readFileSync(path.join(apps, "spark.local.json"), "utf8")).sdk : undefined;
+  const catalog = () => JSON.parse(fs.readFileSync(path.join(apps, "package.json"), "utf8")).catalog["@legendapp/spark"];
+  return { root, apps, spark, devApps, devSpark, git, write, commit, run, ok, operations, pin, catalog };
 }
 
 test("pulls dev, uses Spark’s Bun lockfile without an npm lockfile, and installs the SDK before launch", () => {
@@ -87,6 +92,8 @@ test("pulls dev, uses Spark’s Bun lockfile without an npm lockfile, and instal
   assert.ok(fs.existsSync(path.join(f.spark, "bun.lock")));
   assert.equal(fs.existsSync(path.join(f.spark, "package-lock.json")), false);
   f.ok();
+  assert.equal(f.catalog(), "0.0.1-next.2");
+  assert.equal(f.git(f.apps, "status", "--porcelain"), "");
   assert.deepEqual(f.operations(), ["bun install --frozen-lockfile", "bun run pack:local", "bun install --no-save", "bun run spark slides run"]);
   assert.equal(f.pin(), "file:../custom-sdk/artifacts/packages/spark-first.tgz");
   f.ok(["--no-run", "diff"]);
@@ -102,6 +109,7 @@ test("pulls dev, uses Spark’s Bun lockfile without an npm lockfile, and instal
   assert.equal(f.git(f.spark, "rev-parse", "HEAD"), f.git(f.devSpark, "rev-parse", "HEAD"));
   assert.equal(f.git(f.apps, "rev-parse", "HEAD"), f.git(f.devApps, "rev-parse", "HEAD"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.apps, "package.json"), "utf8")).version, "2");
+  assert.equal(f.catalog(), "0.0.1-next.3");
   assert.ok((f.pin()).endsWith("spark-second.tgz"));
   assert.deepEqual(f.operations().slice(-4), ["bun install --frozen-lockfile", "bun run pack:local", "bun install --no-save", "bun run spark diff run"]);
 });
@@ -130,7 +138,7 @@ test("rebuilds missing companion archives and corrupt markers", () => {
   assert.equal((f.operations().filter(line => line === "bun run pack:local")).length, 3);
 });
 
-test("preserves a local pin when a divergent apps branch prevents pulling", () => {
+test("preserves the ignored local override when a divergent apps branch prevents pulling", () => {
   const f = fixture();
   f.ok(["--no-run"]);
   const pin = f.pin();
@@ -143,7 +151,7 @@ test("preserves a local pin when a divergent apps branch prevents pulling", () =
   assert.deepEqual(f.operations(), ["bun install --frozen-lockfile", "bun run pack:local"]);
 });
 
-test("rejects uncommitted Spark sources and unrelated catalog edits without discarding them", () => {
+test("rejects uncommitted Spark sources and package.json edits without discarding them", () => {
   const f = fixture();
   f.write(path.join(f.spark, "source.txt"), "dirty");
   assert.notEqual(f.run().status, 0);
@@ -160,7 +168,7 @@ test("rejects uncommitted Spark sources and unrelated catalog edits without disc
   assert.equal(fs.readFileSync(file, "utf8"), source);
 });
 
-test("a failed frozen install leaves the SDK pin and marker untouched and can be retried", () => {
+test("a failed frozen install leaves the local override and marker untouched and can be retried", () => {
   const f = fixture();
   const originalPin = f.pin();
   const result = f.run(["--skip-pull", "--no-run"], { INSTALL_FAIL: "1" });
@@ -171,4 +179,17 @@ test("a failed frozen install leaves the SDK pin and marker untouched and can be
   f.ok(["--skip-pull", "--no-run"]);
   assert.deepEqual(f.operations(), ["bun install --frozen-lockfile", "bun install --frozen-lockfile", "bun run pack:local"]);
   assert.ok(f.pin().endsWith("spark-first.tgz"));
+});
+
+test("a failed local root install restores package.json exactly and preserves the published catalog", () => {
+  const f = fixture();
+  const file = path.join(f.apps, "package.json");
+  const source = fs.readFileSync(file, "utf8").replace('"version": "1"', '"version": "dirty-local"');
+  f.write(file, source);
+  const result = f.run(["--skip-pull"], { ROOT_INSTALL_FAIL: "1" });
+  assert.notEqual(result.status, 0);
+  assert.equal(fs.readFileSync(file, "utf8"), source);
+  assert.equal(f.catalog(), "0.0.1-next.2");
+  assert.ok(f.pin().endsWith("spark-first.tgz"));
+  assert.equal(f.operations().some(line => line.startsWith("bun run spark ")), false);
 });
