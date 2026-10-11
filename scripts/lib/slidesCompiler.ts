@@ -11,6 +11,19 @@ export function isCompilerRuntimeFile(file: string) {
   return !/\.map$|\.d\.[cm]?ts$/.test(file);
 }
 
+/**
+ * react-dom is only bundled into Webview components by esbuild with NODE_ENV=production,
+ * so the helper needs the client entry and its production build, not server/dev/profiling builds.
+ */
+const packageRuntimeFiles: Record<string, RegExp> = {
+  "react-dom": /^(package\.json|LICENSE|index\.js|client\.js|cjs\/react-dom(-client)?\.production\.js)$/,
+};
+
+export function isPackageRuntimeFile(name: string, relativeFile: string) {
+  const allowed = packageRuntimeFiles[name];
+  return !allowed || relativeFile === "" || relativeFile === "cjs" || allowed.test(relativeFile);
+}
+
 /** Preserve runtime package resolution (including native/dynamic compiler deps). */
 export function packageSlidesCompiler(destination: string, bunExecutable = process.execPath) {
   fs.mkdirSync(destination, { recursive: true });
@@ -29,7 +42,11 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
     if (known) return known;
     const target = path.join(destination, "node_modules", ".compiler", `${name.replaceAll("/", "-")}-${createHash("sha256").update(source).digest("hex").slice(0, 12)}`);
     copied.set(source, target);
-    fs.cpSync(source, target, { recursive: true, dereference: true, filter: (file) => file === source || (!path.relative(source, file).split(path.sep).includes("node_modules") && isCompilerRuntimeFile(file)) });
+    fs.cpSync(source, target, { recursive: true, dereference: true, filter: (file) => {
+      if (file === source) return true;
+      const relative = path.relative(source, file);
+      return !relative.split(path.sep).includes("node_modules") && isCompilerRuntimeFile(file) && isPackageRuntimeFile(name, relative.split(path.sep).join("/"));
+    } });
     const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
     for (const dependency of new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})])) {
       try { link(install(dependency, source), path.join(target, "node_modules", dependency)); }

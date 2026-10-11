@@ -1,6 +1,6 @@
 // @ts-nocheck Bun test globals follow the repository test setup.
 import { expect, test } from "bun:test";
-import { isCompilerRuntimeFile } from "./slidesCompiler";
+import { isCompilerRuntimeFile, isPackageRuntimeFile } from "./slidesCompiler";
 
 test("compiler packaging omits maps and declarations while retaining runtime TypeScript and native modules", () => {
   for (const name of ["index.js.map", "index.d.ts", "index.d.mts", "index.d.cts", "index.d.ts.map"]) {
@@ -9,6 +9,16 @@ test("compiler packaging omits maps and declarations while retaining runtime Typ
   for (const name of ["compileVirtual.ts", "index.mjs", "index.cjs", "lightningcss.node", "package.json", "LICENSE", "theme.css"]) {
     expect(isCompilerRuntimeFile(name)).toBe(true);
   }
+});
+
+test("compiler packaging keeps only the react-dom client production build", () => {
+  for (const file of ["package.json", "client.js", "index.js", "cjs/react-dom-client.production.js", "cjs/react-dom.production.js"]) {
+    expect(isPackageRuntimeFile("react-dom", file)).toBe(true);
+  }
+  for (const file of ["server.js", "cjs/react-dom-client.development.js", "cjs/react-dom-server.node.production.js", "cjs/react-dom-profiling.profiling.js"]) {
+    expect(isPackageRuntimeFile("react-dom", file)).toBe(false);
+  }
+  expect(isPackageRuntimeFile("react", "cjs/react.development.js")).toBe(true);
 });
 
 test("packaged compiler signs as a helper bundle and compiles local worklets and Webview components", async () => {
