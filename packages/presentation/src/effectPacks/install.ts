@@ -65,8 +65,8 @@ async function installRelease(directory: string, id: string, release: PackReleas
   } finally { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true }); }
 }
 type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin>; onProgress?: (progress: EffectInstallProgress) => void };
-async function withInstallationLease<T>(directory: string, work: () => Promise<T>) {
-  ensureEffectSpace(directory, 2_000_000);
+async function withInstallationLease<T>(directory: string, work: () => Promise<T>, checkSpace = true) {
+  if (checkSpace) ensureEffectSpace(directory, 2_000_000);
   fs.mkdirSync(directory, { recursive: true });
   const lease = path.join(directory, ".installation.lock"), token = crypto.randomUUID();
   const temporary = path.join(directory, `.lease-${token}`);
@@ -113,7 +113,21 @@ async function installPacks(ids: string[], options: InstallOptions) {
 export async function removeEffectPack(id: string, options: { directory?: string } = {}) {
   if (!validPackId(id)) throw new Error("Invalid effect pack ID.");
   const directory = options.directory ?? installedPacksDirectory();
-  await withInstallationLease(directory, async () => fs.rmSync(path.join(directory, id), { recursive: true, force: true }));
+  if (!fs.existsSync(directory)) return;
+  await withInstallationLease(directory, async () => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === id || !validPackId(entry.name)) continue;
+      const active = path.join(directory, entry.name, "active.json");
+      if (!fs.existsSync(active)) continue;
+      const pin = JSON.parse(fs.readFileSync(active, "utf8")) as PackPin;
+      validatePin(pin);
+      const manifest = path.join(pinnedPackDirectory(directory, entry.name, pin), "pack.json");
+      if (fs.existsSync(manifest) && Object.hasOwn(JSON.parse(fs.readFileSync(manifest, "utf8")).dependencies ?? {}, id)) {
+        throw new Error(`Cannot remove "${id}": installed pack "${entry.name}" depends on it.`);
+      }
+    }
+    fs.rmSync(path.join(directory, id), { recursive: true, force: true });
+  }, false);
 }
 export async function installEffectExample(slug: string, options: { directory?: string; catalogURL?: string } = {}) {
   const directory = options.directory ?? installedPacksDirectory();

@@ -1,13 +1,10 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { validatePin, type EffectLock, type PackPin } from "../effectPacks/schema";
-import { pinnedPackDirectory, verifyInstalledPack } from "../effectPacks/storage";
+import { installedPacksDirectory, pinnedPackDirectory, verifyInstalledPack } from "../effectPacks/storage";
 
 export function defaultEffectPacksDirectory() {
-  const source = path.resolve(import.meta.dirname, "../../../slides-effects/packs");
-  return process.env.LEGEND_SLIDES_EFFECT_PACKS ?? (fs.existsSync(source) ? source
-    : path.join(os.homedir(), "Library/Application Support/Legend Slides/effects"));
+  return installedPacksDirectory();
 }
 
 export class MissingEffectPack extends Error {

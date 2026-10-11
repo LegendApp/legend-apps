@@ -40,7 +40,8 @@ export function validateCatalog(catalog: EffectCatalog) {
     const pack = effect && catalog.packs[effect.pack];
     if (!effect || !validPackId(effect.slug) || slugs.has(effect.slug) || !pack?.versions[pack.latest].exports[effect.entry] || !effect.example ||
       typeof effect.example.url !== "string" || !validSha(effect.example.sha256) || !Number.isSafeInteger(effect.example.bytes) || effect.example.bytes < 1 || effect.example.bytes > 1_000_000 ||
-      typeof effect.title !== "string" || typeof effect.description !== "string" || typeof effect.snippet !== "string" || !strings(effect.tags) || !Array.isArray(effect.props) || effect.props.some(prop => !prop || typeof prop.name !== "string" || typeof prop.description !== "string")) throw new Error("Invalid catalog effect.");
+      typeof effect.title !== "string" || typeof effect.description !== "string" || typeof effect.snippet !== "string" || !strings(effect.tags) || !Array.isArray(effect.props) || effect.props.some(prop => !prop || typeof prop.name !== "string" || typeof prop.description !== "string") ||
+      effect.preview !== undefined && (!record(effect.preview) || typeof effect.preview.poster !== "string" || typeof effect.preview.renderer !== "string" || effect.preview.video !== undefined && typeof effect.preview.video !== "string")) throw new Error("Invalid catalog effect.");
     slugs.add(effect.slug);
   }
   return catalog;

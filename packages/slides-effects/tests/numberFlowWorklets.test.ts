@@ -11,7 +11,7 @@ test("compiled number timing captures functions without cyclic host modules", as
   try {
     const deck = path.join(directory, "deck.mdx");
     fs.writeFileSync(deck, 'export { numberFlowTiming } from "slides:charts/NumberTiming"\n\n# Numbers');
-    const compiled = await compileDeck(deck);
+    const compiled = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const presentation: any = { samplePlayback: (clock: any) => clock.stepTime };
     const reanimated: any = { defineAnimation: (_: number, factory: () => unknown) => factory() };

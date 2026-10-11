@@ -48,7 +48,7 @@ test("compiled title worklets serialize and obey preparation, preview, steps, ex
 
     const deck = path.join(directory, "deck.mdx");
     fs.writeFileSync(deck, 'export { AnimatedTitle } from "slides:typography/AnimatedTitle"\n\n# Entrances');
-    const compiled = await compileDeck(deck);
+    const compiled = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const input = { phase: "playing" as const, slideKey: "sample", stepKey: "initial", stepIndex: 0 };
     const playback = { value: createPlaybackState(input) };

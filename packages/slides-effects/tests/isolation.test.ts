@@ -4,13 +4,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { compileDeck } from "../../presentation/src/compiler";
+const effectPacksDirectory = path.resolve(import.meta.dirname, "../packs");
 
 test("a selected background bundles no atmosphere catalog or talk assets", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-effect-isolation-"));
   try {
     const deck = path.join(root, "deck.mdx");
     fs.writeFileSync(deck, 'export { Droplets } from "slides:backgrounds/Droplets"\n\n# Standalone');
-    const result = await compileDeck(deck);
+    const result = await compileDeck(deck, { effectPacksDirectory });
     expect(result.success).toBe(true);
     if (!result.success) throw Error(result.errors.join("\n"));
     for (const name of ["Smoke", "Fluid", "Wireframe", "AnimatedAtmosphere", "TypeGPUGlassBackground"]) {
@@ -32,7 +33,7 @@ test("media, charts and Lottie entrypoints compile independently without demo as
     for (const [name, entry] of [["AppCarousel", "media/AppCarousel"], ["LottiePlayer", "animation/LottiePlayer"], ["BarRow", "charts/BarRow"]]) {
       const deck = path.join(root, "deck.mdx");
       fs.writeFileSync(deck, `export { ${name} } from "slides:${entry}"\n\n# External content`);
-      const result = await compileDeck(deck);
+      const result = await compileDeck(deck, { effectPacksDirectory });
       expect(result.success).toBe(true);
       if (!result.success) throw Error(result.errors.join("\n"));
       expect(result.code).toContain("__workletHash");
@@ -51,7 +52,7 @@ test("particle and material entries bundle independently through the deck transf
       ["prismaticTear", "materials/Distortion"], ["createRefractionShader", "materials/Refraction"]]) {
       const deck = path.join(root, "deck.mdx");
       fs.writeFileSync(deck, `export { ${name} } from "slides:${entry}"\n\n# Standalone effect`);
-      const result = await compileDeck(deck);
+      const result = await compileDeck(deck, { effectPacksDirectory });
       expect(result.success, JSON.stringify(result.errors)).toBe(true);
       if (!result.success) throw Error(result.errors.join("\n"));
       expect(result.dependencies.some(file => /legend-talks|rnconnection-assets|AnimatedAtmosphere/.test(file))).toBe(false);

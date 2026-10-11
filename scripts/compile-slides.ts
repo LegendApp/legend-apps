@@ -19,15 +19,15 @@ const onProgress = (progress: EffectInstallProgress) => process.stderr.write(`${
 async function execute() {
   if (process.argv.includes("--effect-catalog")) return { success: true, catalog: await loadEffectCatalog(), url: effectCatalogURL() };
   const removeFlag = process.argv.indexOf("--remove-effect");
-  if (removeFlag >= 0) { await removeEffectPack(process.argv[removeFlag + 1]); return { success: true }; }
+  if (removeFlag >= 0) { await removeEffectPack(process.argv[removeFlag + 1], { directory: effectPacksDirectory }); return { success: true }; }
   const actionFlag = process.argv.indexOf("--effect-action");
   if (actionFlag >= 0) {
     const action = parseEffectAction(process.argv[actionFlag + 1]);
-    if (action.type === "example") return { success: true, path: await installEffectExample(action.effect) };
+    if (action.type === "example") return { success: true, path: await installEffectExample(action.effect, { directory: effectPacksDirectory }) };
     const catalog = await loadEffectCatalog();
     const release = catalog.packs[action.pack]?.versions[action.version];
     if (!release) throw new Error("The requested pack version is not in the catalog.");
-    const installed = await installEffectPacks([action.pack], { requested: { [action.pack]: release }, onProgress });
+    const installed = await installEffectPacks([action.pack], { directory: effectPacksDirectory, requested: { [action.pack]: release }, onProgress });
     return { success: true, installed: Object.keys(installed.lock.packs) };
   }
   if (!deckPath) return { success: false, errors: ["Usage: bun scripts/compile-slides.ts <deck.mdx> [--install-effects]"], warnings: [] };

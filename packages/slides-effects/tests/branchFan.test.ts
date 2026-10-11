@@ -13,7 +13,7 @@ test("standalone branch fans compile lazily and draw caller geometry on two stag
   try {
     const deck = path.join(root, "deck.mdx");
     fs.writeFileSync(deck, 'export { BranchFan, createBranchFanShader } from "slides:diagrams/BranchFan"\n\n# Arbitrary fan');
-    const result = await compileDeck(deck);
+    const result = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
     if (!result.success) throw Error(result.errors.join("\n"));
     expect(result.code).toContain("react/compiler-runtime");

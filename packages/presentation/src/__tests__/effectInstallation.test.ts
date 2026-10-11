@@ -4,9 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import { installEffectExample, installEffectPacks, resolveInstallation } from "../effectPacks/install";
+import { installEffectExample, installEffectPacks, loadEffectCatalog, removeEffectPack, resolveInstallation } from "../effectPacks/install";
 import { effectLockPath, pinnedPackDirectory, readEffectLock, readPackArchive, sha256, writeEffectLock } from "../effectPacks/storage";
 import { compileDeck } from "../compiler";
+import { defaultEffectPacksDirectory } from "../compiler/effectPacks";
 const cleanups = [];
 afterEach(() => cleanups.splice(0).forEach(cleanup => cleanup()));
 function fixture() {
@@ -54,6 +55,42 @@ test("download dependencies atomically, retry idempotently and compile locked ve
   const module = { exports: {} }; Function("require", "module", "exports", result.code)(() => ({}), module, module.exports);
   expect(module.exports.sample(21)).toBe(42);
   expect(result.dependencies).toContain(effectLockPath(f.deck));
+});
+test("catalog rejects malformed preview fields", async () => {
+  const f = fixture();
+  f.catalog.effects.push({ slug: "pose", pack: "motion", entry: "Pose", title: "Pose", description: "", symbol: "sample", tags: [], props: [], snippet: "",
+    example: { url: "/example.mdx", sha256: "e".repeat(64), bytes: 1 }, preview: { poster: null, renderer: "video" } });
+  await expect(loadEffectCatalog(f.options.catalogURL)).rejects.toThrow("Invalid catalog effect");
+  f.catalog.effects[0].preview = { poster: "/pose.png", video: 5, renderer: "video" };
+  await expect(loadEffectCatalog(f.options.catalogURL)).rejects.toThrow("Invalid catalog effect");
+});
+test("unlocked decks use installed packs by default in development", async () => {
+  const f = fixture();
+  const previous = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  process.env.LEGEND_SLIDES_EFFECT_PACKS = f.directory;
+  try {
+    expect(defaultEffectPacksDirectory()).toBe(f.directory);
+    await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+    expect((await compileDeck(f.deck)).success).toBe(true);
+  } finally {
+    if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
+    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previous;
+  }
+});
+test("removal refuses active dependents and skips the installation space check", async () => {
+  const f = fixture();
+  await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+  await expect(removeEffectPack("math", { directory: f.directory })).rejects.toThrow('installed pack "motion" depends on it');
+  expect(fs.existsSync(path.join(f.directory, "math"))).toBe(true);
+  const previous = process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES;
+  process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES = String(Number.MAX_SAFE_INTEGER);
+  try { await removeEffectPack("motion", { directory: f.directory }); }
+  finally {
+    if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES;
+    else process.env.LEGEND_SLIDES_EFFECTS_DISK_RESERVE_BYTES = previous;
+  }
+  expect(fs.existsSync(path.join(f.directory, "motion"))).toBe(false);
+  await removeEffectPack("math", { directory: f.directory });
 });
 test("new versions coexist without changing an existing deck's pin", async () => {
   const f = fixture(); await installEffectPacks(["motion"], f.options);
@@ -149,4 +186,12 @@ test("the compiler CLI lists, installs with progress, compiles from Application 
   expect(fs.existsSync(path.join(effects, "motion"))).toBe(false);
   expect((await run(f.deck)).result.missingEffectPacks).toEqual(["motion"]);
   expect((await run("--remove-effect", "../outside")).result.errors.join("\n")).toContain("Invalid effect pack ID");
+  const custom = path.join(f.root, "custom");
+  fs.mkdirSync(path.join(custom, "motion"), { recursive: true });
+  fs.mkdirSync(path.join(effects, "motion"), { recursive: true });
+  expect((await run("--remove-effect", "motion", "--effect-packs", custom)).result.success).toBe(true);
+  expect(fs.existsSync(path.join(custom, "motion"))).toBe(false);
+  expect(fs.existsSync(path.join(effects, "motion"))).toBe(true);
+  expect((await run("--effect-action", "legend-slides://effects/install?pack=motion&version=1.0.0", "--effect-packs", custom)).result.success).toBe(true);
+  expect(fs.existsSync(path.join(custom, "motion/active.json"))).toBe(true);
 });
