@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
+import { bundleSlidesCompiler, slidesCompilerEntry } from "./slidesCompilerBundle";
 
 /** Types and source maps are not loaded by the shipped transpile-only compiler. */
 export function isCompilerRuntimeFile(file: string) {
@@ -24,8 +25,37 @@ export function isPackageRuntimeFile(name: string, relativeFile: string) {
   return !allowed || relativeFile === "" || relativeFile === "cjs" || allowed.test(relativeFile);
 }
 
-/** Preserve runtime package resolution (including native/dynamic compiler deps). */
-export function packageSlidesCompiler(destination: string, bunExecutable = process.execPath) {
+/** Shell launcher: the app passes the resolved runtime (Bun or Node 22+) in LEGEND_SLIDES_RUNTIME. */
+export const slidesCompilerLauncher = `#!/bin/sh
+compiler_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+runtime="\${LEGEND_SLIDES_RUNTIME:-}"
+if [ -z "$runtime" ]; then
+  for candidate in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+    if [ -x "$candidate" ]; then runtime="$candidate"; break; fi
+  done
+fi
+if [ -z "$runtime" ]; then runtime="$(command -v bun || command -v node || true)"; fi
+if [ -z "$runtime" ]; then
+  echo "Legend Slides needs Bun or Node 22+ to compile decks." >&2
+  exit 127
+fi
+exec "$runtime" "$compiler_dir/${slidesCompilerEntry}" "$@"
+`;
+
+/** Copy only manifests and stylesheets: Tailwind and uniwind resolve their CSS imports from disk. */
+function copyStylesheetPackage(from: string, name: string, destination: string) {
+  const source = fs.realpathSync(path.dirname(createRequire(path.join(from, "package.json")).resolve(`${name}/package.json`)));
+  fs.cpSync(source, destination, { recursive: true, dereference: true,
+    filter: file => file === source || (!path.relative(source, file).split(path.sep).includes("node_modules")
+      && (fs.statSync(file).isDirectory() || /(^|\/)(package\.json|LICENSE[^/]*)$|\.css$/.test(file))) });
+}
+
+/**
+ * Package the single-file compiler plus the few packages it loads from disk:
+ * native binaries (esbuild, lightningcss, Tailwind oxide) and Webview browser runtimes.
+ * No JavaScript runtime is bundled; see `slidesCompilerLauncher`.
+ */
+export async function packageSlidesCompiler(destination: string) {
   fs.mkdirSync(destination, { recursive: true });
   const copied = new Map<string, string>();
   function install(name: string, from: string): string {
@@ -60,33 +90,38 @@ export function packageSlidesCompiler(destination: string, bunExecutable = proce
     fs.mkdirSync(path.dirname(at), { recursive: true });
     if (!fs.existsSync(at)) fs.symlinkSync(path.relative(path.dirname(at), target), at);
   }
-  // Ship only the compiler's source closure; presentation UI and tests stay out.
-  for (const entry of ["compiler", "effectPacks", "transitions", "layout.ts", "speakerNotesSource.ts"]) {
-    fs.cpSync(path.join(rootDir, "packages/presentation/src", entry), path.join(destination, "packages/presentation/src", entry), {
-      recursive: true,
-      filter: file => !file.split(path.sep).includes("__tests__") && !/\.test\.[cm]?[jt]sx?$/.test(file),
-    });
-  }
-  fs.mkdirSync(path.join(destination, "scripts"), { recursive: true });
-  fs.copyFileSync(path.join(rootDir, "scripts/compile-slides.ts"), path.join(destination, "scripts/compile-slides.ts"));
+  const entry = path.join(destination, slidesCompilerEntry);
+  await bundleSlidesCompiler(entry);
   fs.mkdirSync(path.join(destination, "shell/src"), { recursive: true });
   fs.writeFileSync(path.join(destination, "shell/src/host-classes.txt"), collectSlidesHostClasses(rootDir));
   fs.writeFileSync(path.join(destination, "shell/src/global.css"),
     fs.readFileSync(path.join(rootDir, "shell/src/global.css"), "utf8") + '\n@source "./host-classes.txt";\n');
-  const compilerDependencies = ["react", "react-dom", "@legendapp/state", "@babel/core", "babel-plugin-react-compiler", "@babel/plugin-transform-block-scoping", "react-native-worklets", "@mdx-js/mdx", "esbuild", "remark-frontmatter", "remark-gfm", "remark-directive", "unplugin-typegpu", "typegpu", "yaml"];
-  for (const name of compilerDependencies) link(install(name, path.join(rootDir, "packages/presentation")), path.join(destination, "node_modules", name));
-  // The worklets plugin imports Babel internals supplied by the host Babel install.
-  // Its package manifest does not declare these as runtime dependencies.
-  const babelRoot = path.dirname(createRequire(path.join(rootDir, "packages/presentation/package.json")).resolve("@babel/core/package.json"));
-  for (const name of ["@babel/generator", "@babel/traverse", "@babel/types"]) {
-    link(install(name, babelRoot), path.join(destination, "node_modules", name));
+  for (const name of ["tailwindcss", "uniwind"]) copyStylesheetPackage(path.join(rootDir, "shell"), name, path.join(destination, "shell/node_modules", name));
+  // Under Node, @tailwindcss/node registers this ESM loader by package path.
+  const tailwindNode = resolvePackageRoot("@tailwindcss/node", resolvePackageRoot("uniwind", path.join(rootDir, "shell")));
+  for (const file of ["package.json", "LICENSE", "dist/esm-cache.loader.mjs"]) {
+    if (!fs.existsSync(path.join(tailwindNode, file))) continue;
+    fs.mkdirSync(path.dirname(path.join(destination, "node_modules/@tailwindcss/node", file)), { recursive: true });
+    fs.copyFileSync(path.join(tailwindNode, file), path.join(destination, "node_modules/@tailwindcss/node", file));
   }
-  for (const name of ["uniwind", "tailwindcss"]) link(install(name, path.join(rootDir, "shell")), path.join(destination, "shell/node_modules", name));
-  fs.copyFileSync(bunExecutable, path.join(destination, "bun"));
-  fs.chmodSync(path.join(destination, "bun"), 0o755);
-  fs.writeFileSync(path.join(destination, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>bun</string><key>CFBundleIdentifier</key><string>so.legend.slides.compiler</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
-  fs.writeFileSync(path.join(destination, "run"), '#!/bin/sh\ncompiler_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$compiler_dir/bun" "$compiler_dir/scripts/compile-slides.ts" "$@"\n', { mode: 0o755 });
+  // Webview components are bundled for the browser from these packages at compile time.
+  for (const name of ["react", "react-dom", "@legendapp/state"]) link(install(name, path.join(rootDir, "packages/presentation")), path.join(destination, "node_modules", name));
+  // Externals resolved from the bundle. One lightningcss (uniwind's pin) serves both Tailwind and
+  // uniwind; it produces byte-identical deck CSS to the previous two-version helper.
+  const uniwindRoot = resolvePackageRoot("uniwind", path.join(rootDir, "shell"));
+  const externalRoots: Record<string, string> = {
+    esbuild: path.join(rootDir, "packages/presentation"),
+    lightningcss: uniwindRoot,
+    "@tailwindcss/oxide": uniwindRoot,
+  };
+  for (const [name, from] of Object.entries(externalRoots)) link(install(name, from), path.join(destination, "node_modules", name));
+  fs.writeFileSync(path.join(destination, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>so.legend.slides.compiler</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
+  fs.writeFileSync(path.join(destination, "run"), slidesCompilerLauncher, { mode: 0o755 });
   return destination;
+}
+
+function resolvePackageRoot(name: string, from: string) {
+  return fs.realpathSync(path.dirname(createRequire(path.join(from, "package.json")).resolve(`${name}/package.json`)));
 }
 
 /** Sign nested compiler executables explicitly; codesign --deep misses arbitrary resource paths. */
@@ -114,6 +149,7 @@ export function signSlidesCompiler(directory: string, identity: string) {
       }
     }
     visit(directory);
-    if (fs.existsSync(path.join(directory, "Info.plist"))) sign(directory, true);
+    // Only bundles that embed a JIT runtime (Bun) need allow-jit; the Slides compiler launches an external one.
+    if (fs.existsSync(path.join(directory, "Info.plist"))) sign(directory, fs.existsSync(path.join(directory, "bun")));
   }
 }

@@ -146,7 +146,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     if (appId === "slides") {
       const compilerDirectory = path.join(appPath, "Contents/Helpers/slides-compiler.helper");
       fs.rmSync(compilerDirectory, { recursive: true, force: true });
-      packageSlidesCompiler(compilerDirectory);
+      await packageSlidesCompiler(compilerDirectory);
       fs.writeFileSync(path.join(compilerDirectory, ".spark-entry"), "run");
       signSlidesCompiler(compilerDirectory, getExistingCodeSignIdentity(appPath));
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));

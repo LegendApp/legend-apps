@@ -30,7 +30,7 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "slides-package-test-"));
   try {
     const app = path.join(temp, "Slides.app");
-    const compiler = packageSlidesCompiler(path.join(app, "Contents/Helpers/slides-compiler.helper"));
+    const compiler = await packageSlidesCompiler(path.join(app, "Contents/Helpers/slides-compiler.helper"));
     fs.writeFileSync(path.join(compiler, ".spark-entry"), "run");
     if (process.platform === "darwin") {
       const { spawnSync } = await import("node:child_process");
@@ -44,18 +44,28 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
         expect(result.stderr).not.toContain("bundle format unrecognized");
         expect(result.status).toBe(0);
       }
+      // No embedded runtime, so the helper bundle itself needs no JIT entitlement.
       const entitlement = spawnSync("codesign", ["-d", "--entitlements", ":-", compiler], { encoding: "utf8" });
       expect(entitlement.status).toBe(0);
-      expect(entitlement.stdout).toContain("com.apple.security.cs.allow-jit");
+      expect(entitlement.stdout).not.toContain("com.apple.security.cs.allow-jit");
     }
-    const sources = path.join(compiler, "packages/presentation/src");
-    expect(fs.readdirSync(sources).sort()).toEqual(["compiler", "effectPacks", "layout.ts", "speakerNotesSource.ts", "transitions"]);
-    expect(fs.readdirSync(sources, { recursive: true }).some(file => /__tests__|\.test\./.test(String(file)))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "runtime/compiler/dist/bin/compiler.mjs"))).toBe(true);
+    expect(fs.existsSync(path.join(compiler, "packages"))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "bun"))).toBe(false);
     const deck = path.join(temp, "deck.mdx");
     fs.writeFileSync(deck, '---\ntransition: fade\n---\nexport { pose } from "./pose"\n\n# Portable\n\n<Webview component="./Panel.tsx" />');
     fs.writeFileSync(path.join(temp, "pose.ts"), 'export function pose(x: number) { "worklet"; return x * 2; }');
     fs.writeFileSync(path.join(temp, "Panel.tsx"), 'import { observable } from "@legendapp/state"; import { useValue } from "@legendapp/state/react"; const label = observable("Portable webview"); export default function Panel() { return <div>{useValue(label)}</div>; }');
-    const child = Bun.spawn([path.join(compiler, "run"), deck], { cwd: temp, stdout: "pipe", stderr: "pipe" });
+    // The helper ships no JavaScript runtime; exercise every runtime available on this machine.
+    const runtimes = [Bun.which("bun") ?? process.execPath, Bun.which("node")].filter((runtime): runtime is string => !!runtime);
+    for (const runtime of runtimes.slice(1)) {
+      const viaRuntime = Bun.spawn([path.join(compiler, "run"), deck], { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtime }, stdout: "pipe", stderr: "pipe" });
+      const [out, err, code] = await Promise.all([new Response(viaRuntime.stdout).text(), new Response(viaRuntime.stderr).text(), viaRuntime.exited]);
+      expect(err).toBe("");
+      expect(code).toBe(0);
+      expect(JSON.parse(gunzipSync(Buffer.from(JSON.parse(out).data, "base64")).toString())).toMatchObject({ success: true });
+    }
+    const child = Bun.spawn([path.join(compiler, "run"), deck], { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0] }, stdout: "pipe", stderr: "pipe" });
     const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     expect(stderr).toBe("");
     expect(status).toBe(0);
