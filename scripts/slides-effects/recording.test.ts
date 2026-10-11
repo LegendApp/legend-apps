@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, exampleStepPresses, observeRecorder, packArchiveHash, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -16,8 +16,8 @@ function child() {
 test("recorder exit during navigation remains observable after the step loop", async () => {
   const process = child(), observed = observeRecorder(process);
   process.stdout.write('{"ty');
-  process.stdout.write('pe":"ready"}\n');
-  await observed.started;
+  process.stdout.write('pe":"ready","firstFrameHostSeconds":100,"hostSeconds":100.2}\n');
+  expect(await observed.started).toBeCloseTo(0.2);
   process.emit("exit", 0, null);
   await new Promise(done => setTimeout(done, 5));
   expect(await observed.exited).toEqual({ code: 0, signal: null });
@@ -108,7 +108,30 @@ test.skipIf(process.platform !== "darwin")("preflight requires the verifier and 
   } finally { fs.rmSync(skill, { recursive: true, force: true }); }
 });
 
-test("the capture deck compiles only validated snapshot pack sources", async () => {
+test("recorder readiness has a deadline even when the process stays alive", async () => {
+  const process = child(), observed = observeRecorder(process, 5);
+  await expect(observed.started).rejects.toThrow("did not become ready");
+  process.emit("exit", 0, null);
+  expect(await observed.exited).toEqual({ code: 0, signal: null });
+});
+
+test("ready requires native frame timing for trimming and motion checks", async () => {
+  const process = child(), observed = observeRecorder(process);
+  process.stdout.write('{"type":"ready"}\n');
+  await expect(observed.started).rejects.toThrow("native timing");
+  process.emit("exit", 0, null);
+});
+
+test("motion windows cover finite entrances and individual reveals rather than static tails", () => {
+  expect(recordingMotionIntervals(8, [])).toEqual(["0.1:0.5"]);
+  expect(recordingMotionIntervals(8, recordingSchedule(8, 2))).toEqual(["1.6:2", "4.1:4.5"]);
+  expect(recordingMotionIntervals(8, [], ["0.1:7.5"])).toEqual(["0.1:7.5"]);
+  for (const value of ["", ":1", "0:9", "1:0", "NaN:1", "0:1:2"]) {
+    expect(() => recordingMotionIntervals(8, [], [value])).toThrow("--motion");
+  }
+});
+
+test("the capture deck holds the example after a blank slide and compiles only snapshot pack sources", async () => {
   const { compileDeck } = await import("../../packages/presentation/src/compiler/compileDeck");
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slides-record-snapshot-test-"));
   const packs = path.resolve(import.meta.dirname, "../../packages/slides-effects/packs");
@@ -119,7 +142,7 @@ test("the capture deck compiles only validated snapshot pack sources", async () 
   try {
     snapshotEffectPacks(packs, capturePacks, "typography", packArchiveHash(path.join(packs, "typography")));
     expect(() => snapshotEffectPacks(packs, path.join(directory, "stale"), "typography", "wrong")).toThrow("changed");
-    fs.writeFileSync(deck, example);
+    fs.writeFileSync(deck, recordingDeckSource(example));
     // This is the environment inherited by the release helper as well as dev compilers.
     process.env.LEGEND_SLIDES_EFFECT_PACKS = capturePacks;
     const result = await compileDeck(deck);
@@ -127,6 +150,19 @@ test("the capture deck compiles only validated snapshot pack sources", async () 
     expect(result.dependencies).toContain(path.join(capturePacks, "typography/AnimatedTitle.tsx"));
     expect(result.dependencies.some(file => file.startsWith(packs))).toBe(false);
     expect(result.code).toContain("Make an entrance");
+    // Exercise the same remark transform used by the compiler to check the slide boundary.
+    const { createRequire } = await import("node:module");
+    const require = createRequire(path.resolve(import.meta.dirname, "../../packages/presentation/package.json"));
+    const { createProcessor } = require("@mdx-js/mdx");
+    const { remarkSlides } = await import("../../packages/presentation/src/compiler/remarkSlides");
+    const processor = createProcessor({ remarkPlugins: [require("remark-frontmatter").default] });
+    const ast = processor.parse(recordingDeckSource(example));
+    remarkSlides()(ast);
+    const slides = ast.children.find(node => node.name === "Deck").children.filter(node => node.name === "Slide");
+    expect(slides).toHaveLength(2);
+    expect(slides[0].children).toHaveLength(0);
+    expect(slides[1].children.length).toBeGreaterThan(0);
+    expect(recordingDeckSource("# No frontmatter")).toStartWith("\n<SlideSeparator />");
   } finally {
     if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
     else process.env.LEGEND_SLIDES_EFFECT_PACKS = previous;

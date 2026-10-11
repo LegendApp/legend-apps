@@ -29,17 +29,22 @@ effect has states worth showing. Pack runtime code lives in `packages/slides-eff
      installation location is assumed. `python3` and `ffmpeg` are required. Optionally set
      `LEGEND_RECORD_MACOS` to an already compiled recorder.
    - Optionally set `LEGEND_APP_LOCK` to an app-lock executable. It holds the slides lock
-     for the entire capture. The script stores the compiled recorder and local capture artifacts in the system temporary directory.
+     for the entire capture. The script stores the compiled recorder and local capture
+     artifacts in the system temporary directory.
    - It snapshots the validated local packs and passes `LEGEND_SLIDES_EFFECT_PACKS` to
      both development and release builds, so captures cannot use older installed packs.
-   - It launches the build with the example, opens and confirms its fullscreen audience window,
-     records that slide surface with the ScreenCaptureKit recorder, advances literal `<Step>` and
-     `<Steps count={n}>` states (count includes the initial state; use `--steps` for dynamic counts),
+   - It launches the build with a blank lead-in before the example and confirms its fullscreen
+     audience window. It starts example playback after the ScreenCaptureKit recorder is
+     ready, trims the lead-in, and advances literal `<Step>` and `<Steps count={n}>` states
+     (count includes the initial state; use `--steps` for dynamic counts),
      quits the app it started, and writes an H.264 mp4 plus a PNG poster to
      `legend-docs/docs/public/slides/effects/previews/<slug>/` (content-addressed names).
    - Video and poster are copied only if the motion check passes. Failure publishes nothing
      and reports the local video, poster, and quality report paths. `--apply` rejects example
      or pack hashes that differ from the published catalog; refresh first.
+   - Motion checks default to brief intervals after entry or each reveal, allowing finite
+     entrance effects to settle. Use repeatable `--motion START:END` intervals in effect
+     playback seconds for longer or delayed motion. Recorder startup times out after 30 seconds.
    - Fullscreen audience capture defaults to no crop. `--crop-top` is an explicit override.
      Watch the mp4 at normal speed before trusting it; confirm the slide content and playback.
    - With a dev build, start Metro first (`bun run slides`) or pass `--release` for a current release build.

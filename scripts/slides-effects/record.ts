@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, recordingDeckSource, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -15,6 +15,7 @@ reveals with the right arrow, quits the app it launched, then exports an H.264
 mp4 and a PNG poster into legend-docs/docs/public/slides/effects/previews/<slug>/.
 
   --seconds N        recording length (default 8)
+  --motion START:END expected motion in effect playback seconds (repeatable; default brief entry/reveal intervals)
   --steps N          right-arrow presses after the lead-in (default: literal <Step>/<Steps count={n}> states)
   --release          launch the release build (default: dev build; start Metro with bun run slides first)
   --window REGEX     audience window title filter (never selects presenter chrome)
@@ -67,6 +68,7 @@ function checkDisk(directory: string) {
 checkDisk("/System/Volumes/Data");
 checkDisk(os.tmpdir());
 const schedule = recordingSchedule(seconds, steps);
+const motion = recordingMotionIntervals(seconds, schedule, args.flatMap((value, index) => value === "--motion" ? [args[index + 1] ?? ""] : []));
 if (!Number.isSafeInteger(cropTop) || cropTop < 0) throw new Error("--crop-top must be a nonnegative integer.");
 if (!Number.isSafeInteger(width) || width < 320 || width > 3840 || width % 2) throw new Error("--width must be an even integer between 320 and 3840.");
 const run = (command: string, commandArgs: string[], options: { allowFail?: boolean } = {}) => {
@@ -127,8 +129,9 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);
 const capturePacks = path.join(work, "packs");
 snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack, hashes.packSha256);
-fs.writeFileSync(deck, exampleSource);
+fs.writeFileSync(deck, recordingDeckSource(exampleSource));
 const raw = path.join(work, "raw.mp4");
+let playbackOffset = 0;
 let recording: ChildProcess | undefined;
 let recorderEvents: ReturnType<typeof observeRecorder> | undefined;
 try {
@@ -181,12 +184,22 @@ try {
     throw new Error("Audience window is not fullscreen; refusing to record window chrome.");
   }
   console.log(`Recording audience window ${target.id} "${target.title}" for ${seconds}s, ${steps} step(s)…`);
-  recording = spawn(recorder, ["--window-id", String(target.id), "--output", raw, "--seconds", String(seconds), "--fps", "60", "--width", "1920", "--reserve-bytes", reserve], { stdio: ["ignore", "pipe", "inherit"] });
+  recording = spawn(recorder, ["--window-id", String(target.id), "--output", raw, "--seconds", String(seconds + 5), "--fps", "60", "--width", "1920", "--reserve-bytes", reserve], { stdio: ["ignore", "pipe", "inherit"] });
   recorderEvents = observeRecorder(recording);
-  await recorderEvents.started;
+  const readyOffset = await recorderEvents.started;
+  const readyAt = performance.now();
   const exitedEarly = recorderEvents.exited.then(result => { throw result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before navigation finished.`); });
   void exitedEarly.catch(() => {});
+  // Leave the blank lead-in only once native capture is producing frames.
+  run("osascript", ["-e", `${audienceProcess}
+    set frontmost to true
+    perform action "AXRaise" of ${audienceWindow}
+    key code 124
+  end tell`]);
   const startedAt = performance.now();
+  const navigationSeconds = (startedAt - readyAt) / 1000;
+  if (navigationSeconds >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
+  playbackOffset = readyOffset + navigationSeconds;
   for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Address this process and audience window explicitly before sending focus-dependent keys.
@@ -219,10 +232,10 @@ if (!fs.existsSync(raw)) throw new Error("The recorder produced no video.");
 // Export: apply any explicit crop, scale, H.264 without audio; poster from the last second.
 const video = path.join(work, "preview.mp4"), poster = path.join(work, "poster.png");
 const filter = `crop=iw:ih-${cropTop}:0:${cropTop},scale=${width}:-2:flags=lanczos`;
-run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", raw, "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
-run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", raw, "-vf", filter, "-frames:v", "1", poster]);
+run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-ss", String(playbackOffset), "-i", raw, "-t", String(seconds), "-vf", filter, "-an", "-c:v", "libx264", "-preset", "slow", "-crf", "24", "-pix_fmt", "yuv420p", "-movflags", "+faststart", video]);
+run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");
-const check = run("python3", [verifier, video, "--motion", `${1.5}:${Math.max(2, seconds - 0.5)}`, "--timings", `${raw}.frames.jsonl`, "--report", report], { allowFail: true });
+const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
 const passed = check.status === 0;
 
 if (!passed) {

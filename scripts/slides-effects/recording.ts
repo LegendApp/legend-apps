@@ -56,25 +56,35 @@ export function recordingSchedule(seconds: number, steps: number) {
 }
 
 /** Register immediately after spawn so an exit during navigation cannot be missed. */
-export function observeRecorder(child: ChildProcess) {
+export function observeRecorder(child: ChildProcess, readyTimeoutMs = 30_000) {
   let output = "";
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>(resolve => {
     child.once("exit", (code, signal) => resolve({ code, signal }));
     child.once("error", error => resolve({ code: null, signal: null, error }));
   });
-  const started = new Promise<void>((resolve, reject) => {
+  let timeout: ReturnType<typeof setTimeout>;
+  const ready = new Promise<number>((resolve, reject) => {
     child.stdout!.on("data", chunk => {
       output += String(chunk);
       const lines = output.split("\n");
       output = lines.pop()!;
       for (const line of lines) {
-        if (/"type"\s*:\s*"ready"/.test(line)) resolve();
+        if (/"type"\s*:\s*"ready"/.test(line)) {
+          const event = JSON.parse(line);
+          const offset = event.hostSeconds - event.firstFrameHostSeconds;
+          if (!Number.isFinite(offset) || offset < 0) reject(new Error("Recorder ready event lacks valid native timing."));
+          else resolve(offset);
+        }
       }
     });
     void exited.then(result => {
       reject(result.error ?? new Error(`Recorder exited (${result.code ?? result.signal}) before ready.`));
     });
   });
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error("Recorder did not become ready within 30 seconds.")), readyTimeoutMs);
+  });
+  const started = Promise.race([ready, deadline]).finally(() => clearTimeout(timeout));
   return { started, exited };
 }
 
@@ -105,10 +115,29 @@ export function assertPreviewHashes(local: { exampleSha256: string; packSha256: 
   }
 }
 
+/** Keep the first effect slide in preparation until recording is ready. */
+export function recordingDeckSource(source: string) {
+  const header = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(source)?.[0] ?? "";
+  return header + "\n<SlideSeparator />\n\n" + source.slice(header.length);
+}
+
 /** Release and development compilers must consume the same validated sources. */
 export function snapshotEffectPacks(source: string, destination: string, pack: string, expectedHash: string) {
   fs.cpSync(source, destination, { recursive: true });
   if (packArchiveHash(path.join(destination, pack)) !== expectedHash) {
     throw new Error("Effect pack changed while preparing capture; record again.");
   }
+}
+
+/** Brief motion after entry/reveals; callers can specify longer effect-specific intervals. */
+export function recordingMotionIntervals(seconds: number, schedule: number[], explicit?: string[]) {
+  const intervals = explicit?.length ? explicit : (schedule.length ? schedule.map(offset => `${offset / 1000 + 0.1}:${offset / 1000 + 0.5}`) : ["0.1:0.5"]);
+  return intervals.map(value => {
+    const parts = value.split(":");
+    const [start, end] = parts.map(Number);
+    if (parts.length !== 2 || !parts.every(part => part.trim()) || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start || end > seconds) {
+      throw new Error("--motion must be START:END within the effect's recording duration.");
+    }
+    return `${start}:${end}`;
+  });
 }
