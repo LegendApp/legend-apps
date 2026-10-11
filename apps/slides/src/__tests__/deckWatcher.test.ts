@@ -1,5 +1,6 @@
 // @ts-nocheck Run the loader with explicit compiler and filesystem boundaries.
 import { expect, test } from "bun:test";
+import { observable } from "@legendapp/state";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { failedDeckUpdate, shouldDeferDeckUpdate, successfulDeckUpdate } from "../deckBuildPolicy";
@@ -15,6 +16,7 @@ test("failed replacement opens retain the visible deck watcher until a successfu
   const mocks = {
     "@legend-apps/runtime-utils": { ownRegistration: (promise) => ({ remove: async () => { (await promise).remove(); } }), decodeProcessText: bytes => new TextDecoder().decode(bytes) },
     "./deckReloadQueue": { createDeckReloadQueue: reload => ({ changed: reload, dispose() {} }) },
+    "./compilerRuntime": { compilerRuntime$: observable({ retryDeck: null }), CompilerRuntimeMissingError: class extends Error {} },
     "./compilerCommand": { runCompilerCommand: async args => mocks["@legendapp/spark/processes"].runCommand({ args }) },
     "./transitionLibrary": { transitionDirectoryPath: () => "/transitions" },
     "./deckWatchDirectories": { deckWatchDirectories },

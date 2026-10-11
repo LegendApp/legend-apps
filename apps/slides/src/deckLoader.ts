@@ -52,6 +52,7 @@ export function setDraftReloadHandler(handler?: (path: string) => Promise<unknow
 
 export function invalidateDeckBuild() {
   buildSequence += 1;
+  compilerRuntime$.retryDeck.set(null);
 }
 
 // react-native-webgpu installs these globals after its constants module has
@@ -175,6 +176,7 @@ export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   const sequence = ++buildSequence;
+  compilerRuntime$.retryDeck.set(null);
   if (remember) effectRequests$.pending.set(null);
   try {
     await buildDeck(path, remember, sequence, draftSource, onSourceIndex);
