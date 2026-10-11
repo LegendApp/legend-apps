@@ -26,6 +26,12 @@ const packDirectory = path.join(root, "packs", pack);
 const manifestFile = path.join(packDirectory, "pack.json");
 if (!fs.existsSync(manifestFile)) throw new Error(`Unknown pack "${pack}". Existing: ${fs.readdirSync(path.join(root, "packs")).join(", ")}`);
 const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+const catalogFile = path.join(root, "catalog.json");
+const catalog = JSON.parse(fs.readFileSync(catalogFile, "utf8"));
+if (catalog.effects.some((effect: { slug: string }) => effect.slug === slug)) throw new Error(`Catalog already has "${slug}".`);
+const exampleFile = path.join(root, "examples", slug, "example.mdx");
+if (fs.existsSync(exampleFile)) throw new Error(`${exampleFile} already exists.`);
+
 if (!manifest.exports?.[symbol]) {
   if (!args.includes("--scaffold-export")) throw new Error(`${pack} does not export "${symbol}". Add it to pack.json or pass --scaffold-export.`);
   const file = path.join(packDirectory, `${symbol}.tsx`);
@@ -42,15 +48,9 @@ export function ${symbol}({ width = 1696, height = 650 }: { width?: number; heig
   console.log(`Scaffolded ${path.relative(process.cwd(), file)}. Bump ${pack} from ${manifest.version} before publishing.`);
 }
 
-const catalogFile = path.join(root, "catalog.json");
-const catalog = JSON.parse(fs.readFileSync(catalogFile, "utf8"));
-if (catalog.effects.some((effect: { slug: string }) => effect.slug === slug)) throw new Error(`Catalog already has "${slug}".`);
-const exampleFile = path.join(root, "examples", slug, "example.mdx");
-if (fs.existsSync(exampleFile)) throw new Error(`${exampleFile} already exists.`);
-
 const title = option("--title") ?? slug.replace(/-/g, " ").replace(/^./, c => c.toUpperCase());
 const source = `---
-title: ${title}
+title: ${JSON.stringify(title)}
 ---
 
 import { View } from "react-native";
