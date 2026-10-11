@@ -3,7 +3,12 @@ import { Pressable, Text, View } from "react-native";
 import { loadDeck } from "./deckLoader";
 import { runEffectCommand } from "./effectCommands";
 import { effectRequests$ } from "./effectRequests";
+import { CompilerRuntimePrompt } from "./CompilerRuntimePrompt";
 export function EffectInstallStatus() {
+  return <><CompilerRuntimePrompt /><EffectPackStatus /></>;
+}
+
+function EffectPackStatus() {
   const pending = useValue(effectRequests$.pending), busy = useValue(effectRequests$.busy);
   const message = useValue(effectRequests$.message), error = useValue(effectRequests$.error);
   if (!pending && !busy && !message && !error) return null;
