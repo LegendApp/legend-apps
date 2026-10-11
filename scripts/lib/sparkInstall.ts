@@ -6,10 +6,12 @@ import { pathToFileURL } from "node:url";
 import { rootDir } from "./apps";
 
 const ignoredDirectories = new Set(["node_modules", ".git"]);
+const ignoredFiles = new Set([".DS_Store", "Thumbs.db", "desktop.ini"]);
 
 function fileList(directory: string, prefix = ""): string[] {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     if (ignoredDirectories.has(entry.name)) return [];
+    if (ignoredFiles.has(entry.name)) return [];
     const relative = path.join(prefix, entry.name);
     if (!entry.isDirectory()) return [relative];
     return fileList(path.join(directory, entry.name), relative);
@@ -62,11 +64,11 @@ export function sparkInstallHash(project: string, appId: string, repoRoot = root
 
 export function parseSparkInstallArgs(args: string[], env: Record<string, string | undefined> = process.env) {
   const separator = args.indexOf("--");
-  const runnerArgs = separator < 0 ? args : args.slice(0, separator);
+  const beforeSeparator = separator < 0 ? args : args.slice(0, separator);
   return {
-    offline: env.LEGEND_OFFLINE === "1" || runnerArgs.includes("--offline"),
-    force: runnerArgs.includes("--reinstall"),
-    extra: [...runnerArgs.filter(arg => arg !== "--offline" && arg !== "--reinstall"), ...(separator < 0 ? [] : args.slice(separator))],
+    offline: env.LEGEND_OFFLINE === "1" || beforeSeparator.includes("--offline"),
+    force: beforeSeparator.includes("--reinstall"),
+    extra: [...beforeSeparator.filter(arg => arg !== "--offline" && arg !== "--reinstall"), ...(separator < 0 ? [] : args.slice(separator))],
   };
 }
 

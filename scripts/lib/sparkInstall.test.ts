@@ -94,6 +94,16 @@ test("source edits, node_modules, and .git do not invalidate the file snapshot",
   assert.equal(f.hash(), before);
 });
 
+test("OS metadata files do not invalidate the file snapshot", t => {
+  const f = fixture(t);
+  const before = f.hash();
+  for (const file of [".DS_Store", "Thumbs.db", "desktop.ini"]) {
+    f.write(`apps/example/${file}`, "OS metadata");
+    f.write(`packages/local/src/${file}`, "OS metadata");
+  }
+  assert.equal(f.hash(), before);
+});
+
 test("file snapshots are sorted independently of directory enumeration order", t => {
   const f = fixture(t);
   f.write("packages/local/src/z.ts", "z");
@@ -180,7 +190,7 @@ test("install locks recover dead owners and empty directories", t => {
 });
 
 for (const pauseAfter of ["read", "unlink"]) {
-  test(`concurrent stale-lock recoverers preserve a replacement after ${pauseAfter}`, async t => {
+  test(`concurrent stale-lock recoverers preserve a replacement after ${pauseAfter}`, { timeout: 30_000 }, async t => {
     const f = fixture(t);
     const lock = path.join(f.project, ".legend-install.lock");
     const dead = spawnSync(process.execPath, ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" });
@@ -245,7 +255,7 @@ installSparkWorkspace({ ...${JSON.stringify(f.options)}, force: true }, () => {
   });
 }
 
-test("concurrent workspace installs serialize the stamp check and write", async t => {
+test("concurrent workspace installs serialize the stamp check and write", { timeout: 30_000 }, async t => {
   const f = fixture(t);
   const marker = path.join(f.repoRoot, "installing");
   const finished = path.join(f.repoRoot, "finished");
@@ -325,6 +335,9 @@ test("install flags respect env and preserve flags passed to the launched app", 
   });
   assert.deepEqual(parseSparkInstallArgs([], { LEGEND_OFFLINE: "1", LEGEND_REINSTALL: "1" }), { offline: true, force: false, extra: [] });
   assert.deepEqual(parseSparkInstallArgs(["--", "--offline"], { LEGEND_OFFLINE: "0" }), { offline: false, force: false, extra: ["--", "--offline"] });
+  assert.deepEqual(parseSparkInstallArgs(["--offline", "slides", "run", "--reinstall", "--", "--offline"], {}), {
+    offline: true, force: true, extra: ["slides", "run", "--", "--offline"],
+  });
 });
 
 function cliFixture(t: TestContext, appIds = ["example"]) {
@@ -357,7 +370,7 @@ process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 2
   }
   const env = { ...process.env, PATH: `${path.join(f.repoRoot, "bin")}:${process.env.PATH}`, LEGEND_OFFLINE: "0", EXPO_OFFLINE: "0" };
   const invoke = (script: string, args: string[], offlineEnv = false) => spawnSync(process.execPath, [path.join(f.repoRoot, `scripts/${script}.ts`), ...args], {
-    env: { ...env, LEGEND_OFFLINE: offlineEnv ? "1" : "0" }, encoding: "utf8",
+    env: { ...env, LEGEND_OFFLINE: offlineEnv ? "1" : "0" }, encoding: "utf8", timeout: 30_000,
   });
   const attempts = () => fs.existsSync(path.join(f.repoRoot, "attempts"))
     ? fs.readFileSync(path.join(f.repoRoot, "attempts"), "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
@@ -411,7 +424,7 @@ export const findGo = () => fs.existsSync(${JSON.stringify(path.join(f.repoRoot,
   return { fingerprint, projectFingerprint };
 }
 
-test("warm continues after failure, retains Bun status, and preserves stamps offline", t => {
+test("warm continues after failure, retains Bun status, and preserves stamps offline", { timeout: 30_000 }, t => {
   const f = cliFixture(t, ["example", "unsupported", "last"]);
   f.write("fail", "");
   const failed = f.invoke("spark-warm", []);
@@ -464,7 +477,7 @@ export async function runSparkDevServer(options) { runCommand("dev", options.run
   return { ...f, fingerprint, projectFingerprint, app, stamp, commands };
 }
 
-test("spark-app wires installs and reports Bun failures cleanly", t => {
+test("spark-app wires installs and reports Bun failures cleanly", { timeout: 30_000 }, t => {
   const f = appFixture(t);
   const { app, stamp, commands } = f;
   for (const action of ["prepare", "analyze"]) {
@@ -488,7 +501,7 @@ test("spark-app wires installs and reports Bun failures cleanly", t => {
 });
 
 for (const offlineEnv of [false, true]) {
-  test(`spark-app enforces offline downstream via ${offlineEnv ? "env" : "flag"}`, t => {
+  test(`spark-app enforces offline downstream via ${offlineEnv ? "env" : "flag"}`, { timeout: 30_000 }, t => {
     const f = appFixture(t);
     const { fingerprint, projectFingerprint, app, stamp, commands } = f;
     assert.equal(app("install").status, 0);
@@ -567,7 +580,7 @@ for (const offlineEnv of [false, true]) {
 }
 
 for (const offlineEnv of [false, true]) {
-  test(`offline project redirects reject missing and stale stamps via ${offlineEnv ? "env" : "flag"}`, t => {
+  test(`offline project redirects reject missing and stale stamps via ${offlineEnv ? "env" : "flag"}`, { timeout: 30_000 }, t => {
     const f = appFixture(t);
     const { app, commands } = f;
     assert.equal(app("install").status, 0);
@@ -594,7 +607,7 @@ for (const offlineEnv of [false, true]) {
 }
 
 for (const offlineEnv of [false, true]) {
-  test(`offline run checks the dev target after building via ${offlineEnv ? "env" : "flag"}`, t => {
+  test(`offline run checks the dev target after building via ${offlineEnv ? "env" : "flag"}`, { timeout: 30_000 }, t => {
     const f = appFixture(t);
     const { app, commands } = f;
     assert.equal(app("install").status, 0);
@@ -610,6 +623,8 @@ for (const offlineEnv of [false, true]) {
       assert.deepEqual(calls[0].args.slice(1), ["build", "--dev"]);
       assert.equal(calls[1].command, "dev");
     }
+    const prefixedFlags = f.invoke("spark-app", ["--offline", "example", "run"]);
+    assert.equal(prefixedFlags.status, 0, prefixedFlags.stderr);
     for (const startup of [["--no-open"], ["--runner-binary", "local-runner"], ["--runner-binary=local-runner"]]) {
       const allowed = app("run", [...args, ...startup], offlineEnv);
       assert.equal(allowed.status, 0, allowed.stderr);
