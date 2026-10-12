@@ -1,10 +1,9 @@
 {
   "id": "particles",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "hostApiVersion": 1,
   "exports": {
     "GlowField": "./GlowField.ts",
-    "WindowStorm": "./WindowStorm.ts",
     "Constellation": "./Constellation.ts",
     "InterfaceReveal": "./InterfaceReveal.ts",
     "TrajectoryEmitter": "./TrajectoryEmitter.tsx"

@@ -14,7 +14,7 @@ test("a selected background bundles no atmosphere catalog or talk assets", async
     const result = await compileDeck(deck, { effectPacksDirectory });
     expect(result.success).toBe(true);
     if (!result.success) throw Error(result.errors.join("\n"));
-    for (const name of ["Smoke", "Fluid", "Wireframe", "AnimatedAtmosphere", "TypeGPUGlassBackground"]) {
+    for (const name of ["Fluid", "Wireframe", "AnimatedAtmosphere", "TypeGPUGlassBackground"]) {
       expect(result.dependencies.some(file => file.endsWith(`/${name}.tsx`))).toBe(false);
     }
     expect(result.dependencies.some(file => file.includes("rnconnection-assets"))).toBe(false);
@@ -45,7 +45,7 @@ test("media, charts and Lottie entrypoints compile independently without demo as
 test("particle and material entries bundle independently through the deck transforms", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-effect-programs-"));
   try {
-    for (const [name, entry] of [["createGlowField", "particles/GlowField"], ["createWindowStorm", "particles/WindowStorm"],
+    for (const [name, entry] of [["createGlowField", "particles/GlowField"],
       ["createConstellation", "particles/Constellation"], ["createInterfaceReveal", "particles/InterfaceReveal"],
       ["TrajectoryEmitter", "particles/TrajectoryEmitter"], ["GlassStrike", "materials/GlassStrike"],
       ["ImageShatter", "materials/ImageShatter"], ["Flames", "materials/Fire"],

@@ -102,32 +102,6 @@
       }
     },
     {
-      "slug": "smoke",
-      "title": "Smoke",
-      "pack": "backgrounds",
-      "entry": "Smoke",
-      "symbol": "Smoke",
-      "description": "Drifting layered smoke.",
-      "tags": [
-        "backgrounds"
-      ],
-      "props": [
-        {
-          "name": "Background",
-          "description": "Use the host wrapper for priority and intensity."
-        }
-      ],
-      "snippet": "---\ntitle: Smoke\n---\n\nimport { View, Text } from \"react-native\";\nimport { Smoke } from \"slides:backgrounds/Smoke\";\nimport { Background } from \"@legend-apps/presentation\";\n\n\n# Smoke\n\n<View style={{ width: 1696, height: 650 }}>\n<Background><Smoke /></Background>\n<Text style={{ color: \"#f8fafc\", fontSize: 86, textAlign: \"center\", marginTop: 230 }}>A little atmosphere</Text>\n</View>\n",
-      "recording": {
-        "seconds": 12,
-        "motion": [
-          "2:10"
-        ],
-        "noiseDb": -80,
-        "freezeMs": 300
-      }
-    },
-    {
       "slug": "wireframe",
       "title": "Wireframe",
       "pack": "backgrounds",
@@ -433,28 +407,6 @@
         }
       ],
       "snippet": "---\ntitle: Glow field\n---\n\nimport { View, Text } from \"react-native\";\nimport { createGlowField } from \"slides:particles/GlowField\";\n\nexport const field = createGlowField({particleCount: 1536});\n\n# Glow field\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
-    },
-    {
-      "slug": "window-storm",
-      "title": "Window storm",
-      "pack": "particles",
-      "entry": "WindowStorm",
-      "symbol": "createWindowStorm",
-      "description": "A configurable particle program executed by the host WebGPU renderer.",
-      "tags": [
-        "particles"
-      ],
-      "props": [
-        {
-          "name": "particleCount",
-          "description": "Choose particle density; keep it paired with the returned program."
-        },
-        {
-          "name": "speed / scale",
-          "description": "Adjust shared-clock speed and cloud geometry."
-        }
-      ],
-      "snippet": "---\ntitle: Window storm\n---\n\nimport { View, Text } from \"react-native\";\nimport { createWindowStorm } from \"slides:particles/WindowStorm\";\n\nexport const field = createWindowStorm({particleCount: 384});\n\n# Window storm\n\n<View style={{ width: 1696, height: 650 }}>\n<TypeGPUShader code={field.program} particleCount={field.particleCount} particles width={1696} height={650} />\n</View>\n"
     },
     {
       "slug": "constellation",

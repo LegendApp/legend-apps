@@ -1,7 +1,7 @@
 # Backgrounds
 
 Import individual entries such as `slides:backgrounds/Droplets`, `AmbientAurora`,
-`Fluid`, `Smoke`, `Wireframe`, `GlassAtmosphere` or `TypeGPUGlassBackground`.
+`Fluid`, `Wireframe`, `GlassAtmosphere` or `TypeGPUGlassBackground`.
 The optional `AnimatedAtmosphere` chooser imports its full variant source set;
 use an individual entry when the deck needs only one variant. Skia compilation
 is deferred until rendering rather than performed when the module is imported.

@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { createWindowStorm } from "../packs/particles/WindowStorm";
 import { createConstellation } from "../packs/particles/Constellation";
 import { createInterfaceReveal } from "../packs/particles/InterfaceReveal";
 import { createGlowField } from "../packs/particles/GlowField";
@@ -14,9 +13,8 @@ import { createGlowField } from "../packs/particles/GlowField";
 
 
 const programs = Object.fromEntries([
-  ["storm", createWindowStorm()], ["constellation", createConstellation()],
+  ["constellation", createConstellation()],
   ["interface", createInterfaceReveal()], ["glow", createGlowField()],
-  ["smallStorm", createWindowStorm({ particleCount: 17, speed: 0, scale: 0.6 })],
   ["smallConstellation", createConstellation({ particleCount: 256, rows: 3, speed: 0.7, scale: 0.6 })],
   ["smallInterface", createInterfaceReveal({ particleCount: 256, columns: 24, speed: 1.5, scale: 0.8 })],
   ["smallGlow", createGlowField({ particleCount: 256, speed: 0.5, scale: 0.7, tintA: [1,0.3,0.1], tintB: [0.4,0.7,1] })],
@@ -42,7 +40,7 @@ test.skipIf(process.platform !== "darwin")("default and configured particle prog
 }, 60_000);
 
 test("particle factories reject invalid renderer counts and geometry", () => {
-  for (const create of [createWindowStorm, createConstellation, createInterfaceReveal, createGlowField]) {
+  for (const create of [createConstellation, createInterfaceReveal, createGlowField]) {
     expect(create({ particleCount: 257 }).particleCount).toBe(257);
     for (const options of [{particleCount: 0}, {particleCount: 1.5}, {particleCount: 16385}, {speed: -1}, {scale: 0}]) expect(() => create(options)).toThrow();
   }

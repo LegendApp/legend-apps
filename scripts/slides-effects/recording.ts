@@ -52,7 +52,7 @@ export function audienceKeyboardScripts(pid: number, title: string) {
 
 export function recordingMotionCrop(slug: string, width: number, height: number) {
   // Slow backgrounds occupy the edges; static text in the center dilutes their frame differences.
-  if (slug === "smoke" || slug === "ambientaurora" || slug === "wireframe" || slug === "glassatmosphere") return ["--crop", `0:${Math.round(height * 0.1)}:${Math.round(width * 0.18)}:${Math.round(height * 0.8)}`];
+  if (slug === "ambientaurora" || slug === "wireframe" || slug === "glassatmosphere") return ["--crop", `0:${Math.round(height * 0.1)}:${Math.round(width * 0.18)}:${Math.round(height * 0.8)}`];
   if (slug === "interactive-glass") return ["--crop", `${Math.round(width * 0.12)}:${Math.round(height * 0.09)}:${Math.round(width * 0.39)}:${Math.round(height * 0.77)}`];
   if (slug === "glass-panels") return ["--crop", `${Math.round(width * 0.22)}:${Math.round(height * 0.38)}:${Math.round(width * 0.24)}:${Math.round(height * 0.34)}`];
   if (slug === "prismatic-tear") return ["--crop", `${Math.round(width * 0.27)}:${Math.round(height * 0.43)}:${Math.round(width * 0.47)}:${Math.round(height * 0.28)}`];

@@ -1,6 +1,6 @@
 # Particles
 
-`GlowField`, `Constellation`, `InterfaceReveal` and `WindowStorm` export their
+`GlowField`, `Constellation` and `InterfaceReveal` export their
 default programs and configurable factories. A factory returns `{ program,
 particleCount }`; pass both to the host `TypeGPUShader` with `particles` enabled.
 Keep those values paired, especially for GlowField's storage-backed compute pass.

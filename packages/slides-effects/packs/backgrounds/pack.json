@@ -1,6 +1,6 @@
 {
   "id": "backgrounds",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "hostApiVersion": 1,
   "exports": {
     "AmbientAurora": "./AmbientAurora.tsx",
@@ -9,7 +9,6 @@
     "Droplets": "./Droplets.tsx",
     "GlassAtmosphere": "./GlassAtmosphere.tsx",
     "Fluid": "./Fluid.tsx",
-    "Smoke": "./Smoke.tsx",
     "Wireframe": "./Wireframe.tsx",
     "DropletMaterial": "./DropletMaterial.ts",
     "DropletGeometry": "./DropletGeometry.ts",

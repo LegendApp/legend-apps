@@ -199,7 +199,7 @@ test("catalog recording profiles retain a bounded motion check", () => {
     expect(intervals.length).toBeGreaterThan(0);
     expect(intervals.some(value => { const [start, end] = value.split(":").map(Number); return end - start >= (effect.recording.freezeMs ?? 150) / 1000; })).toBe(true);
   }
-  expect(recordingMotionCrop("smoke", 1280, 654)).toEqual(["--crop", "0:65:230:523"]);
+  expect(recordingMotionCrop("ambientaurora", 1280, 654)).toEqual(["--crop", "0:65:230:523"]);
 });
 
 const videoSkill = process.env.LEGEND_VIDEO_RECORDING_SKILL;
