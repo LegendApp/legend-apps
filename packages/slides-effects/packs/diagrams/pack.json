@@ -1,6 +1,6 @@
 {
   "id": "diagrams",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "hostApiVersion": 1,
   "exports": {
     "BranchFan": "./BranchFan.tsx"
@@ -10,6 +10,6 @@
     "skia"
   ],
   "dependencies": {
-    "materials": "1.0.1"
+    "materials": "1.0.2"
   }
 }
