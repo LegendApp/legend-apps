@@ -38,7 +38,7 @@
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "^1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
         "uniwind": "^1.6.3",
       },
     },
@@ -103,7 +103,7 @@
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
         "uniwind": "^1.6.3",
       },
     },
@@ -171,7 +171,7 @@
         "fflate": "^0.8.3",
         "lottie-react-native": "7.3.8",
         "number-flow-react-native": "0.5.1",
-        "react-native-enriched-markdown": "1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
         "react-native-reanimated": "4.3.4",
         "react-native-webgpu": "^0.8.5",
         "react-native-webview": "16.0.0",
@@ -197,7 +197,7 @@
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "buffer": "5.7.1",
-        "react-native-enriched-markdown": "^1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
       },
     },
     "packages/app-exit": {
@@ -483,7 +483,7 @@
         "@legend-apps/markdown-parser": "0.0.0",
         "@legendapp/list": "catalog:",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
       },
       "peerDependencies": {
         "react": "catalog:",
@@ -784,7 +784,7 @@
       "dependencies": {
         "@legend-apps/markdown-document": "workspace:*",
         "@legendapp/state": "catalog:",
-        "react-native-enriched-markdown": "1.0.2",
+        "react-native-enriched-markdown": "1.1.1",
         "uniwind": "^1.6.3",
       },
       "peerDependencies": {
@@ -869,8 +869,8 @@
     "react-native-worklets@0.8.3": "patches/react-native-worklets@0.8.3.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
+    "react-native-enriched-markdown@1.1.1": "patches/react-native-enriched-markdown@1.1.1.patch",
     "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch",
-    "react-native-enriched-markdown@1.0.2": "patches/react-native-enriched-markdown@1.0.2.patch",
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
   },
   "catalog": {
@@ -2636,7 +2636,7 @@
 
     "react-native-css-interop": ["react-native-css-interop@0.2.4", "", { "dependencies": { "@babel/helper-module-imports": "^7.22.15", "@babel/traverse": "^7.23.0", "@babel/types": "^7.23.0", "debug": "^4.3.7", "lightningcss": "~1.27.0", "semver": "^7.6.3" }, "peerDependencies": { "react": ">=18", "react-native": "*", "react-native-reanimated": ">=3.6.2", "react-native-safe-area-context": "*", "react-native-svg": "*", "tailwindcss": "~3" }, "optionalPeers": ["react-native-safe-area-context", "react-native-svg"] }, "sha512-ATP3BACxGM4h/l8cisFauGMGxnXpu8Bcp4Bc3O7iNZpq7j0VJjc1RRRBUSBY4C4WuI7VA/xvp3puijVS9d95rg=="],
 
-    "react-native-enriched-markdown": ["react-native-enriched-markdown@1.0.2", "", { "peerDependencies": { "katex": ">=0.16.0", "react": "*", "react-native": "*" }, "optionalPeers": ["katex"] }, "sha512-zvVM4W1VMV/cYAKUTYoVheadOGHLbny2kALFn0vi5av/WFa0JSYboeeq/vPRqS5dc8qvUTjXwVlrkhrcuinNQA=="],
+    "react-native-enriched-markdown": ["react-native-enriched-markdown@1.1.1", "", { "peerDependencies": { "katex": ">=0.16.0", "react": "*", "react-native": "*" }, "optionalPeers": ["katex"] }, "sha512-JvbRIVy75MAoGCv8V6sSscu11/Ian588wfIgH+j64XFpf6gy5sNNkMyG087MH88jNCf3p7fTjgEAGxZMhEqL4A=="],
 
     "react-native-is-edge-to-edge": ["react-native-is-edge-to-edge@1.3.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA=="],
 

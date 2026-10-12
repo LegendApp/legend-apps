@@ -36,6 +36,8 @@ int main()
 
     for (NSNumber *enabled in @[@NO, @NO, @YES, @YES, @NO]) {
       ENRMConfigureInputScrolling(container, inner, text, enabled.boolValue);
+      require(text.verticallyResizable == enabled.boolValue, @"only a standalone scroll document may resize vertically");
+      require(!text.horizontallyResizable, @"wrapping input must keep its assigned width");
       require(NSEqualRanges(text.selectedRange, NSMakeRange(9, 5)), @"changing scroll ownership retains selection");
       require([text.string hasPrefix:@"Numbered notes"], @"changing scroll ownership retains document");
       if (enabled.boolValue) {

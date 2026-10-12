@@ -11,7 +11,7 @@
     "@legend-apps/media-library-scanner": "0.0.0",
     "@legend-apps/media-tags": "0.0.0",
     "@legendapp/list": "catalog:",
-    "react-native-enriched-markdown": "^1.0.2",
+    "react-native-enriched-markdown": "1.1.1",
     "@legendapp/spark": "catalog:",
     "@legend-apps/runtime-utils": "0.0.0",
     "buffer": "5.7.1"

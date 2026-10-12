@@ -10,6 +10,8 @@
 #import <react/renderer/components/RNMarkdownBlockEditorSpec/RCTComponentViewHelpers.h>
 
 #import <ReactNativeEnrichedMarkdown/EnrichedMarkdown.h>
+#import <ReactNativeEnrichedMarkdown/EnrichedMarkdownText.h>
+#import <ReactNativeEnrichedMarkdown/ENRMTextHitTest.h>
 #import <ReactNativeEnrichedMarkdown/MarkdownExtractor.h>
 #import <ReactNativeEnrichedMarkdown/ENRMInputParser.h>
 #import <ReactNativeEnrichedMarkdown/ENRMBlockRange.h>
@@ -1404,6 +1406,34 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   }
   if (_contentsHidden && _editorInput != nil && !_editorInput.hidden) {
     return hitView;
+  }
+  for (NSView *view = hitView; view != nil && view != self; view = view.superview) {
+    if ([view isKindOfClass:NSClassFromString(@"ENRMVideoContainerView")]) {
+      return hitView;
+    }
+    if (![view isKindOfClass:[NSTextView class]]) {
+      continue;
+    }
+    NSTextView *textView = (NSTextView *)view;
+    NSPoint textPoint = [textView convertPoint:point fromView:self.superview];
+    NSUInteger index = ENRMCharacterIndexAtPoint((RCTUITextView *)textView, textPoint);
+    if (index == NSNotFound) {
+      continue;
+    }
+    NSDictionary *attributes = [textView.textStorage attributesAtIndex:index effectiveRange:NULL];
+    if (attributes[@"imageURL"] == nil || attributes[@"linkURL"] != nil) {
+      continue;
+    }
+    for (NSView *renderer = textView.superview; renderer != nil && renderer != self; renderer = renderer.superview) {
+      if ([renderer isKindOfClass:[EnrichedMarkdown class]] || [renderer isKindOfClass:[EnrichedMarkdownText class]]) {
+        // The renderer suppresses Fabric touches only when this image's native press handler is enabled.
+        CGPoint rendererPoint = [renderer convertPoint:point fromView:self.superview];
+        if ([(RCTViewComponentView *)renderer touchEventEmitterAtPoint:rendererPoint] == nullptr) {
+          return hitView;
+        }
+        break;
+      }
+    }
   }
   return self;
 }

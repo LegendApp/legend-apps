@@ -7,7 +7,7 @@
     "@legend-apps/chat-history": "workspace:*",
     "@legend-apps/theme": "workspace:*",
     "@legendapp/list": "catalog:",
-    "react-native-enriched-markdown": "^1.0.2",
+    "react-native-enriched-markdown": "1.1.1",
     "uniwind": "^1.6.3",
     "@legendapp/state": "catalog:",
     "@legendapp/spark": "catalog:",

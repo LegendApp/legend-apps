@@ -6,7 +6,7 @@ markdown_extraction_dir="$(mktemp -d "${TMPDIR:-/tmp}/legend-markdown-extraction
 trap 'rm -rf "$markdown_extraction_dir"' EXIT
 # Compile the real extractor with lightweight declarations for unrelated rendering dependencies.
 cp "$markdown_dependency_dir/ios/utils/MarkdownExtractor.m" "$markdown_dependency_dir/ios/utils/MarkdownExtractor.h" "$markdown_extraction_dir/"
-cp "$markdown_dependency_dir/ios/renderer/BaselineShiftTextAttributes.h" "$markdown_extraction_dir/"
+cp "$markdown_dependency_dir/ios/renderer/BaselineShiftTextAttributes.h" "$markdown_dependency_dir/ios/renderer/BaselineShiftTextAttributes.m" "$markdown_extraction_dir/"
 cat > "$markdown_extraction_dir/ENRMUIKit.h" <<'HEADER'
 #pragma once
 #import <AppKit/AppKit.h>
@@ -39,6 +39,6 @@ for header in BlockquoteBorder ENRMFeatureFlags ENRMImageAttachment HighlightRen
   echo '#import "ExtractionStubs.h"' > "$markdown_extraction_dir/$header.h"
 done
 clang -fobjc-arc -framework AppKit -I"$markdown_extraction_dir" \
-  "$markdown_extraction_dir/MarkdownExtractor.m" "$markdown_editor_dir/tests/MarkdownExtraction.test.m" \
+  "$markdown_extraction_dir/BaselineShiftTextAttributes.m" "$markdown_extraction_dir/MarkdownExtractor.m" "$markdown_editor_dir/tests/MarkdownExtraction.test.m" \
   -o "$markdown_extraction_dir/test"
 "$markdown_extraction_dir/test"

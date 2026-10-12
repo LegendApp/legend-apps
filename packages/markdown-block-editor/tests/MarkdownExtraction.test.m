@@ -31,12 +31,12 @@ int main() {
         return 1;
       }
     }
-    for (NSNumber *script in @[@1, @-1]) {
+    for (NSString *script in @[ENRMScriptValueSuperscript, ENRMScriptValueSubscript]) {
       for (NSNumber *baseline in @[@0, @3, @-2]) {
         NSAttributedString *text = [[NSAttributedString alloc] initWithString:@"x2y"
           attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:12],
             NSBaselineOffsetAttributeName: baseline, ENRMScriptAttributeName: script}];
-        NSString *expected = script.intValue > 0 ? @"^2^" : @"~2~";
+        NSString *expected = [script isEqualToString:ENRMScriptValueSuperscript] ? @"^2^" : @"~2~";
         NSString *actual = extractMarkdownFromAttributedString(text, NSMakeRange(1, 1));
         if (![actual isEqualToString:expected]) {
           NSLog(@"FAIL script %@ with baseline %@: %@", script, baseline, actual);
