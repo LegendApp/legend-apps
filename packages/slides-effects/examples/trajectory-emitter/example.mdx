@@ -5,10 +5,16 @@ title: Trajectory emitter
 import { View, Text } from "react-native";
 import { TrajectoryEmitter } from "slides:particles/TrajectoryEmitter";
 
-export const paths = [0,1,2].map(index => [{time: 0,x: 200,y: 200,opacity: 0},{time: 300,x: 600,y: 200 + index * 100,opacity: 1},{time: 1800,x: 1400,y: 200 + index * 100,opacity: 0}]);
+export const paths = [0, 1, 2].map(index => [
+  { time: 0, x: 180, y: 500, opacity: 0, scale: 0.6 },
+  { time: 380, x: 460, y: 400 - index * 45, opacity: 1, scale: 1 },
+  { time: 1050, x: 920, y: 220 + index * 70, opacity: 1, scale: 1 },
+  { time: 1950, x: 1490, y: 150 + index * 95, opacity: 0, scale: 0.7 },
+]);
 
 # Trajectory emitter
 
 <View style={{ width: 1696, height: 650 }}>
-<TrajectoryEmitter trajectories={paths} interval={800} renderParticle={() => <View style={{width: 36,height: 36,borderRadius: 18,backgroundColor: "#67e8f9"}} />} />
+<Text style={{ color: "#e0f2fe", fontSize: 46, marginTop: 50, marginLeft: 80 }}>Events flow through the pipeline</Text>
+<TrajectoryEmitter trajectories={paths} interval={650} style={{ position: "absolute", width: 190, height: 60 }} renderParticle={index => <View style={{ paddingHorizontal: 20, paddingVertical: 12, borderRadius: 16, backgroundColor: "#0e7490", borderColor: "#67e8f9", borderWidth: 2 }}><Text style={{ color: "white", fontSize: 30 }}>{["request", "parse", "render"][index % 3]}</Text></View>} />
 </View>

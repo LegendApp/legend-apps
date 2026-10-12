@@ -3,11 +3,11 @@ import { GPUShader, FocusSurfaceContext, useAnimatedShaderUniforms } from "@lege
 import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
 import { useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-export function FallingSprites({ width, barHeight, x, y, sprite, accessibilityLabel }: { width:number; barHeight:number; x:number; y:number; sprite:string; accessibilityLabel?:string }) {
+export function FallingSprites({ width, barHeight, x, y, sprite, spriteScale = 1, accessibilityLabel }: { width:number; barHeight:number; x:number; y:number; sprite:string; spriteScale?:number; accessibilityLabel?:string }) {
   const surface = useContext(FocusSurfaceContext)?.surface;
   const ref = useRef<View>(null);
   const [floorY, setFloorY] = useState(1056);
-  const program = useMemo(() => createFallingSpritesGPU(width, barHeight, floorY), [width, barHeight, floorY]);
+  const program = useMemo(() => createFallingSpritesGPU(width, barHeight, floorY, spriteScale), [width, barHeight, floorY, spriteScale]);
   const measureFloor = () => {
     if (surface?.root) ref.current?.measureLayout(surface.root, (_left, top) => {
       if (surface.height > 0) setFloorY(surface.height - top - 24);
@@ -24,6 +24,7 @@ export const flameSource = `
 uniform float time;
 uniform float fireWidth;
 uniform float barHeight;
+uniform float intensity;
 
 float hash(float2 p) {
   return fract(sin(dot(p,float2(127.1,311.7)))*43758.5453);
@@ -93,15 +94,15 @@ half4 main(float2 p) {
   }
   float bounds=smoothstep(0.0,14.0,p.y);
   alpha=clamp(alpha,0.0,1.0)*bounds;
-  return half4(min(color*bounds,float3(alpha)),alpha);
+  return half4(min(color*bounds,float3(alpha)),alpha)*intensity;
 }`;
 let flameEffect: NonNullable<ReturnType<typeof Skia.RuntimeEffect.Make>>;
-export function Flames({ width, barHeight, x, y, accessibilityLabel }: { width: number; barHeight: number; x: number; y: number; accessibilityLabel?: string }) {
+export function Flames({ width, barHeight, x, y, intensity = 1, accessibilityLabel }: { width: number; barHeight: number; x: number; y: number; intensity?: number; accessibilityLabel?: string }) {
   if (!flameEffect) {
     flameEffect = Skia.RuntimeEffect.Make(flameSource)!;
     if (!flameEffect) throw new Error("Could not compile upward flames");
   }
-  const uniforms = useAnimatedShaderUniforms({ fireWidth: width, barHeight }, 5.4, { clock: "step" });
+  const uniforms = useAnimatedShaderUniforms({ fireWidth: width, barHeight, intensity: Number.isFinite(intensity) ? Math.max(0, Math.min(1, intensity)) : 1 }, 5.4, { clock: "step" });
   return <View pointerEvents="none" style={{ position: "absolute", zIndex: 0, left: x - 128, top: y - 184, width: width + 256, height: 184 + barHeight }}>
     <Canvas pointerEvents="none" accessibilityLabel={accessibilityLabel} style={{ position: "absolute", left: 0, top: 0, width: width + 256, height: 184 + barHeight + 25 }}>
       <Fill><Shader source={flameEffect} uniforms={uniforms} /></Fill>

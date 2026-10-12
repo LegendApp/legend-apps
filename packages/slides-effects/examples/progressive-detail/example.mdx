@@ -5,9 +5,11 @@ title: Progressive detail
 import { View, Text } from "react-native";
 import { ProgressiveDetail } from "slides:presenting/Composition";
 
+export function Summary() { return <View style={{ padding: 42, borderRadius: 32, backgroundColor: "#123444" }}><Text style={{ color: "white", fontSize: 74 }}>One request</Text><Text style={{ color: "#67e8f9", fontSize: 38 }}>from tap to pixels</Text></View>; }
+export function Detail() { return <View style={{ width: 920, gap: 24 }}>{["1  Parse the input", "2  Update state", "3  Draw the view"].map(row => <View key={row} style={{ padding: 22, borderRadius: 20, backgroundColor: "#164e63" }}><Text style={{ color: "white", fontSize: 42 }}>{row}</Text></View>)}</View>; }
 
 # Progressive detail
 
 <View style={{ width: 1696, height: 650 }}>
-<Steps count={3}>{step => <ProgressiveDetail expanded={step > 0} summary={<Text style={{fontSize: 80,color: "white"}}>The idea</Text>} detail={<Text style={{fontSize: 60,color: "#67e8f9"}}>The implementation</Text>} style={{width: 1696,height: 580}} />}</Steps>
+<Steps count={3}>{step => <ProgressiveDetail expanded={step > 0} summary={<Summary />} detail={<Detail />} style={{ width: 1696, height: 580 }} />}</Steps>
 </View>

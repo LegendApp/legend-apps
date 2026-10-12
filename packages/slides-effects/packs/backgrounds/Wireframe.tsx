@@ -1,6 +1,7 @@
 import { atmosphereCommon } from "./common";
 import { Atmosphere, type AtmosphereProps } from "./Atmosphere";
 export const wireframeSource = atmosphereCommon + `
+    uniform float effectIntensity;
     half4 main(float2 position) {
       float2 uv = position / resolution;
       float aspect = resolution.x / resolution.y;
@@ -17,7 +18,7 @@ export const wireframeSource = atmosphereCommon + `
       float line = max(lines.x, lines.y);
       float folds = 0.5 + 0.5 * sin(mesh.x * 5.0 + mesh.y * 3.0 + t);
       float3 color = mix(float3(0.07, 0.16, 0.23), float3(0.30, 0.43, 0.52), folds);
-      return half4(color * line * edges(uv) * brightness, 1.0);
+      return half4(color * line * effectIntensity * edges(uv) * brightness, 1.0);
     }
   `;
 export function Wireframe(props: AtmosphereProps) { return <Atmosphere {...props} source={wireframeSource} persistentBackground={false} />; }

@@ -1,6 +1,7 @@
 import { atmosphereCommon } from "./common";
 import { Atmosphere, type AtmosphereProps } from "./Atmosphere";
 export const glassSource = atmosphereCommon + `
+    uniform float effectIntensity;
     half4 main(float2 position) {
       float2 uv = position / resolution;
       float2 p = (uv - 0.5) * float2(resolution.x / resolution.y, 1.0);
@@ -26,7 +27,7 @@ export const glassSource = atmosphereCommon + `
         float shoulder = exp(-pow((band + 0.018) * 19.0, 2.0));
         float trough = exp(-pow((band - 0.035) * 25.0, 2.0));
         float highlight = (crest * 0.19 + shoulder * 0.065) * facing;
-        color += float3(0.70, 0.82, 0.96) * highlight;
+        color += float3(0.70, 0.82, 0.96) * highlight * effectIntensity;
         color *= 1.0 - trough * 0.35;
       }
       return half4(color * brightness, 1.0);

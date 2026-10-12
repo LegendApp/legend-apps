@@ -5,7 +5,9 @@ shader cache. Geometry, size, breathing, edge motion, eligibility and RGB tint a
 caller inputs. `BranchMaterial` exports the lit ribbon shader fragment.
 `Distortion` supplies prismatic tear, soft ripple and timing inputs for host effects.
 `Refraction` supplies `createRefractionShader`, which takes normalized region uniforms
-through the host `Effect`, optional radii and an optional explicit ramp. Without a
+through the host `Effect`, optional radii and an optional explicit ramp and `intensity` from 0 to 1. The default
+intensity of 1 preserves the existing material. `createPrismaticTearShader` and
+`createSoftRippleShader` take the same scale; the original shader exports use 1. Without a
 ramp it uses steady material strength; gallery region/timeline defaults stay local.
 
 `GlassStrike` draws glass, the two impact strokes, falling shards, chips and sparks,
@@ -21,8 +23,10 @@ radius and `revealAtStep`. The image arrives on that step, shatters on the next,
 then becomes transparent. It uses 40 analytic fragments and the shared step clock.
 Supply surface bounds/style for the falling area; no screenshot is bundled.
 
-`Fire` exports `Flames` and `FallingSprites`. Supply emission position, width and
-bar height; supply an image URI only for falling sprites. Flames rise over five
+`Fire` exports `Flames` and `FallingSprites`. `Flames` accepts `intensity`
+from 0 to 1 (default 1) for its light output. Supply emission position, width and
+bar height; supply an image URI only for falling sprites. `spriteScale` changes
+falling sprite size and defaults to 1. Flames rise over five
 seconds and use a bounded image-free surface. Sprites fall, splash and accumulate
 at the logical slide floor measured from the host focus surface. The default
 sprite coordinate space is 256×256; the image is fitted into it. Both use the

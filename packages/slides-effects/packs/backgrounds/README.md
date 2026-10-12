@@ -7,7 +7,9 @@ use an individual entry when the deck needs only one variant. Skia compilation
 is deferred until rendering rather than performed when the module is imported.
 
 Use the host `Background` to own background priority and intensity. These effects
-read host dimensions and playback; previews have deterministic poses. Where an
+read host dimensions and playback; previews have deterministic poses. `Fluid`, `Wireframe` and `GlassAtmosphere` accept `intensity` from 0 to 1;
+1 preserves their current look. Fluid scales its folds, Wireframe its line
+brightness and GlassAtmosphere its highlights. Where an
 entry accepts speed/brightness, those affect its visual rather than creating a
 separate timer. `Droplets` also accepts the existing shared-uniform contract for
 advanced compositions. `DropletGeometry`, `DropletMaterial` and `DropletField`

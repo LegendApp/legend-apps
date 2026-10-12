@@ -4,9 +4,10 @@ import { particleFrame } from "./Frame";
 export const gpuInterfaceRevealCount = 4096;
 
 // Analytic motion stays in the vertex shader; the host supplies shared playback time.
-export function createInterfaceReveal({ columns = 80, ...options }: ParticleOptions & { columns?: number } = {}) {
+export function createInterfaceReveal({ columns = 80, intensity = 1, ...options }: ParticleOptions & { columns?: number; intensity?: number } = {}) {
   const { particleCount, speed, scale } = particleOptions(options, gpuInterfaceRevealCount);
   if (!Number.isInteger(columns) || columns < 2 || columns > 256) throw new Error("Invalid interface column count");
+  if (!Number.isFinite(intensity) || intensity < 0 || intensity > 1) throw new Error("Invalid interface intensity");
   const rows = Math.max(2, Math.ceil(particleCount / columns));
   return { particleCount, program: `${particleFrame}
 struct Particle {
@@ -24,10 +25,10 @@ struct Particle {
   let column = f32(instanceIndex % ${columns}u) * 79 / ${columns - 1}.0;
   let row = floor(id / ${columns}.0) * 51 / ${rows - 1}.0;
   let seed = fract(id * 0.618034);
-  let cycle = fract(clock.time * 0.095 * ${speed});
+  let cycle = fract(clock.time * 0.095 * ${speed} * ${0.5 + intensity * 0.5});
   let progress = smoothstep(0.08 + seed * 0.16, 0.7 + seed * 0.08, cycle);
 
-  let angle = id * 0.117 + clock.time * 0.48 * ${speed};
+  let angle = id * 0.117 + clock.time * 0.48 * ${speed} * ${0.5 + intensity * 0.5};
   let radius = 0.15 + seed * 1.22;
   let sourceX = cos(angle) * radius * 1.5;
   let sourceY = sin(angle) * radius * 0.78;
@@ -47,7 +48,7 @@ struct Particle {
   let sidebarRows = sidebar * insideRows * step(0.48, fract(row * 0.18));
   let contentArea = step(24, column) * step(column, 72) * insideRows;
   let contentLines = contentArea * step(0.68, fract(row * 0.14));
-  let visible = max(border, max(titlebar, max(sidebarRows, contentLines)));
+  let visible = max(border, max(titlebar, max(sidebarRows, contentLines))) * ${intensity === 0 ? "0.0" : `step(seed, ${intensity})`};
 
   return Particle(vec4f(centerX + (x - 0.5) * pointSize / clock.aspect, centerY + (y - 0.5) * pointSize, 0, 1),
     vec2f(x, y),

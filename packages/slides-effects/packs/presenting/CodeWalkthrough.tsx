@@ -8,24 +8,27 @@ export function CodeWalkthrough({
   source,
   lines,
   explanation,
-  height = 580
+  height = 580,
+  fontSize = 25
 }: {
   source: string;
   lines?: readonly [number, number];
   explanation?: ReactNode;
   height?: number;
+  fontSize?: number;
 }) {
   const rows = source.split("\n");
+  const lineHeight = fontSize * 1.68;
   const start = lines ? clamp(lines[0], 1, rows.length) : 1;
   const end = lines ? clamp(lines[1], start, rows.length) : rows.length;
   const opacity = useMotion(rows.map((_, index) => index + 1 >= start && index + 1 <= end ? 1 : 0.25), 350);
   const scroll = useRef<ScrollView>(null);
   useEffect(() => {
     scroll.current?.scrollTo({
-      y: Math.max(0, (start - 2) * 42),
+      y: Math.max(0, (start - 2) * lineHeight),
       animated: false
     });
-  }, [start]);
+  }, [start, lineHeight]);
   return <View style={[styles.frame, {
     height
   }]}>
@@ -38,7 +41,7 @@ export function CodeWalkthrough({
           backgroundColor: lines && index + 1 >= start && index + 1 <= end ? "#123444" : "transparent"
         }];
       }}>
-        <Text style={styles.number}>{index + 1}</Text><Text style={styles.source}>{line || " "}</Text>
+        <Text style={[styles.number, { fontSize: fontSize * 0.88 }]}>{index + 1}</Text><Text style={[styles.source, { fontSize, lineHeight }]}>{line || " "}</Text>
       </FrameView>)}
     </ScrollView>
     {explanation !== undefined && <View style={styles.explanation}>{explanation}</View>}

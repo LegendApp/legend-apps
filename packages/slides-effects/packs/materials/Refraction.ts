@@ -1,6 +1,7 @@
-export type RefractionOptions = { radii?: readonly [number, number]; ramp?: { response: number; moreRefraction: number; peak: number } };
-export function createRefractionShader({ radii = [18,30], ramp }: RefractionOptions = {}) {
+export type RefractionOptions = { radii?: readonly [number, number]; intensity?: number; ramp?: { response: number; moreRefraction: number; peak: number } };
+export function createRefractionShader({ radii = [18,30], intensity = 1, ramp }: RefractionOptions = {}) {
   if (radii.some(n => !Number.isFinite(n) || n < 0) || ramp && (![ramp.response, ramp.moreRefraction, ramp.peak].every(Number.isFinite) || ramp.response < 0 || ramp.moreRefraction <= ramp.response || ramp.peak <= ramp.moreRefraction)) throw new Error("Invalid refraction radii or ramp");
+  if (!Number.isFinite(intensity) || intensity < 0 || intensity > 1) throw new Error("Invalid refraction intensity");
   const value = (n: number) => n.toFixed(6);
   const progress = ramp ? `0.08 * smoothstep(0.0, ${value(ramp.response)}, time)
       + 0.08 * smoothstep(${value(ramp.response)}, ${value(ramp.moreRefraction)}, time)
@@ -85,7 +86,7 @@ export function createRefractionShader({ radii = [18,30], ramp }: RefractionOpti
     float outsideShadow = (1.0 - inside) * nearby * (1.0 - smoothstep(2.0, 18.0, distance)) * 0.18;
     half3 withShadow = original.rgb * (1.0 - outsideShadow);
     half3 color = mix(withShadow, glass, inside);
-    return half4(color, original.a);
+    return half4(${intensity === 1 ? "color" : `mix(original.rgb, color, ${value(intensity)})`}, original.a);
   }
 `;
 }

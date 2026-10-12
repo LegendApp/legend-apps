@@ -2,6 +2,8 @@ import { useBackgroundInteractionUniforms, useAnimatedShaderUniforms, useBackgro
 import { Canvas, Fill, Shader, Skia } from "@shopify/react-native-skia";
 import { StyleSheet, View } from "react-native";
 export type AtmosphereProps = {
+  /** Effect detail from 0 to 1; 1 preserves the designed appearance. */
+  intensity?: number;
   /** Light output multiplier: 0 is black, 1 is the designed brightness. */
   brightness?: number;
   /** Motion multiplier: 0 holds a still frame, 1 is the designed speed. */
@@ -22,16 +24,17 @@ export function atmosphereEffect(source: string) {
   }
   return effect;
 }
-export function Atmosphere({ source, persistentBackground = false, brightness = 1, speed = 1, slideChangeBoost, titleFeed = 0, bestRect = [0,0,0,0], sharedUniforms }: AtmosphereProps & { source: string; persistentBackground?: boolean }) {
-  const intensity = useBackgroundIntensity();
+export function Atmosphere({ source, persistentBackground = false, brightness = 1, intensity = 1, speed = 1, slideChangeBoost, titleFeed = 0, bestRect = [0,0,0,0], sharedUniforms }: AtmosphereProps & { source: string; persistentBackground?: boolean }) {
+  const backgroundIntensity = useBackgroundIntensity();
   const { width, height } = useBackgroundSize();
   const effect = atmosphereEffect(source);
   const idleSpeed = 0.16;
   const motionSpeed = Number.isFinite(speed) ? Math.max(0, speed) : 1;
   const uniforms = useAnimatedShaderUniforms({
     titleFeed, bestRect, backgroundTime: 0, drops: Array(288).fill(0),
+    effectIntensity: Number.isFinite(intensity) ? Math.max(0, Math.min(1, intensity)) : 1,
     resolution: [Math.max(1, width), Math.max(1, height)],
-    brightness: (Number.isFinite(brightness) ? Math.max(0, brightness) : 1) * intensity,
+    brightness: (Number.isFinite(brightness) ? Math.max(0, brightness) : 1) * backgroundIntensity,
   }, 8, {
     persistentBackground,
     speed: motionSpeed * idleSpeed,

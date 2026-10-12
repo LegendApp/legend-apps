@@ -5,9 +5,10 @@ title: Comparison wipe
 import { View, Text } from "react-native";
 import { ComparisonWipe } from "slides:presenting/Composition";
 
+export function Panel({ refined }) { return <View style={{ flex: 1, padding: 90, backgroundColor: refined ? "#083344" : "#172033", justifyContent: "center" }}><Text style={{ color: "white", fontSize: 72 }}>{refined ? "Clear signal" : "Too much noise"}</Text><View style={{ flexDirection: "row", gap: 28, marginTop: 48 }}>{[0, 1, 2, 3].map(i => <View key={i} style={{ width: 245, height: refined ? 95 + i * 65 : 180 + (i % 2) * 150, borderRadius: 18, backgroundColor: refined ? "#22d3ee" : i % 2 ? "#6d28d9" : "#a3346b" }} />)}</View></View>; }
 
 # Comparison wipe
 
 <View style={{ width: 1696, height: 650 }}>
-<Steps count={3}>{step => <ComparisonWipe position={step / 2} before={<View style={{flex: 1,backgroundColor: "#164e63"}} />} after={<View style={{flex: 1,backgroundColor: "#6d28d9"}} />} beforeLabel="Before" afterLabel="After" style={{width: 1696,height: 580}} />}</Steps>
+<Steps count={3}>{step => <ComparisonWipe position={step > 0 ? 0.5 : 0} before={<Panel refined={false} />} after={<Panel refined />} beforeLabel="Before" afterLabel="After" style={{ width: 1696, height: 580 }} />}</Steps>
 </View>

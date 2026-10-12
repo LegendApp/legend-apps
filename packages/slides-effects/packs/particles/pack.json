@@ -1,6 +1,6 @@
 {
   "id": "particles",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "hostApiVersion": 1,
   "exports": {
     "GlowField": "./GlowField.ts",

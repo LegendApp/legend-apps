@@ -72,13 +72,14 @@ during preparation, never on animation frames.
 ## Recording gallery previews
 
 `bun run effects:record <slug> --apply` uses the catalog entry's optional
-`recording` profile for `seconds`, playback-relative `motion` intervals, and
+`recording` profile for `seconds`, playback-relative `motion` intervals, optional
+`posterAt` seconds, extra `steps` for step-driven decks, and
 verifier `noiseDb` / `freezeMs`. CLI duration and motion flags take precedence.
 Reveal windows use completed keyboard-command times. Sparse native sample
 timestamps survive export without frame resampling. Step-less defaults skip the
 first 600 ms; finite entrances keep explicit early windows. Freeze-frame checks
 a crop of the moving orbit before the pause; bar-row inspects the thin bar.
-Spotlight changes its target instantly and cannot pass a continuous-motion check. Aurora inspects the
+Spotlight changes its target in discrete jumps, so its preview remains a still. Aurora inspects the
 moving left edge; its small frame differences need a more sensitive -80 dB noise
 threshold and 400 ms accumulation window. Fluid also uses
 -80 dB. These profiles were calibrated against native clips; the verifier

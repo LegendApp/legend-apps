@@ -7,6 +7,7 @@ mock.module("@shopify/react-native-skia", () => ({ Canvas: "canvas", Fill: "fill
   useImage: () => ({}), Skia: { RuntimeEffect: { Make: () => ({}) } } }));
 const { createIntactGlassShader } = await import("../packs/materials/GlassStrike");
 const { createImageShatterGPU } = await import("../packs/materials/ImageShatterGPU");
+const { createFallingSpritesGPU } = await import("../packs/materials/FallingSpritesGPU");
 const { createGlassStrikeGPU } = await import("../packs/materials/GlassStrikeGPU");
 const { createGlassPanelsShader } = await import("../packs/materials/GlassPanels");
 const { flameSource } = await import("../packs/materials/Fire");
@@ -50,8 +51,9 @@ test("intact glass geometry scales consistently and retained Skia materials rend
       strokePoints: [[-220,-140],[220,140],[220,-140],[-220,140]] }));
     const flames = compile(flameSource);
     expect(flameSource).not.toContain("uniform shader");
-    expect(render(flames, { time:0,fireWidth:368,barHeight:30 }, 1/4).every(v=>v===0)).toBe(true);
-    expect(render(flames, { time:5.4,fireWidth:368,barHeight:30 }, 1/4).some(v=>v>0)).toBe(true);
+    expect(render(flames, { time:0,fireWidth:368,barHeight:30,intensity:1 }, 1/4).every(v=>v===0)).toBe(true);
+    expect(render(flames, { time:5.4,fireWidth:368,barHeight:30,intensity:1 }, 1/4).some(v=>v>0)).toBe(true);
+    expect(render(flames, { time:5.4,fireWidth:368,barHeight:30,intensity:0 }, 1/4).every(v=>v===0)).toBe(true);
     const panels = [{ x: 10, y: 20, width: 400, height: 180, radius: 30 }];
     expect(render(compile(createGlassPanelsShader(panels, [0.5,0.7,1])), { time: 2, pulse: 0, edgeMotion: 0 }).some(v => v > 0)).toBe(true);
     for (const options of [{}, { radii: [12,24], ramp: { response: 0.5, moreRefraction: 8, peak: 24 } }]) {
@@ -65,5 +67,6 @@ test("invalid material geometry fails before shader compilation", () => {
   expect(() => createIntactGlassShader({ scale: 0 })).toThrow();
   expect(() => createGlassStrikeGPU(1920,1080,{ strikeTint: [2,0,0] })).toThrow();
   expect(() => createImageShatterGPU({ imageWidth: 0, imageHeight: 400, centerX: 500, centerY: 320 },1920,1080,1)).toThrow();
+  expect(() => createFallingSpritesGPU(600, 30, 800, 0)).toThrow();
   expect(() => createRefractionShader({ ramp: { response: 1, moreRefraction: 1, peak: 2 } })).toThrow();
 });

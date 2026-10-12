@@ -1,7 +1,7 @@
 import { gpuImage, gpuNumber, gpuProgram, gpuQuad } from "./GPU";
 
-export function createFallingSpritesGPU(width: number, barHeight: number, floorY: number) {
-  if (width <= 0 || barHeight < 0 || floorY <= 0) throw new Error("Invalid falling sprite geometry");
+export function createFallingSpritesGPU(width: number, barHeight: number, floorY: number, spriteScale = 1) {
+  if (width <= 0 || barHeight < 0 || floorY <= 0 || !Number.isFinite(spriteScale) || spriteScale <= 0) throw new Error("Invalid falling sprite geometry");
   const lanes = Math.ceil(width / 92), rows = Math.ceil((floorY + 110) / 20);
   const n = gpuNumber;
   return { particleCount: lanes * (1 + rows * 6), code: gpuProgram(`${gpuImage}${gpuQuad}
@@ -21,7 +21,7 @@ struct Sprite { @builtin(position) position:vec4f, @location(0) uv:vec2f, @locat
   let origin=(id+0.25+seed*0.5)*92.0;
   var center=vec2f(-100000); var size=vec2f(0); var angle=0.0;
   let generation=select(f32((item-1u)/6u),cycle,item==0u);
-  let variation=hash2(vec2f(id,generation+57.0)); let bigSize=42.0+63.0*variation*variation;
+  let variation=hash2(vec2f(id,generation+57.0)); let bigSize=(42.0+63.0*variation*variation)*${n(spriteScale)};
   let ground=floorY-generation*20.0;
   let impact=release+sqrt(max(1.0,ground-bigSize*0.4-sourceY)/510.0);
   if(local>=0.0 && origin>=8.0 && origin<=fireWidth-8.0) {

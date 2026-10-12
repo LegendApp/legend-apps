@@ -53,9 +53,12 @@ export function ComparisonWipe({
   afterLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const [size, setSize] = useState({
-    width: 0,
-    height: 0
+  const [size, setSize] = useState(() => {
+    const bounds = StyleSheet.flatten(style);
+    return {
+      width: typeof bounds?.width === "number" ? bounds.width : 0,
+      height: typeof bounds?.height === "number" ? bounds.height : 0
+    };
   });
   const motion = useMotion([clamp(position, 0, 1)], 900);
   return <View style={[styles.wipe, style]} onLayout={({
@@ -136,6 +139,32 @@ export type ExplodedLayer = {
   content: ReactNode;
   color?: string;
 };
+function ExplodedLayerView({ expanded, layer, index, count, height, layerHeight }: {
+  expanded: boolean;
+  layer: ExplodedLayer;
+  index: number;
+  count: number;
+  height: number;
+  layerHeight: number;
+}) {
+  const motion = useMotion([expanded ? 1 : 0], 850);
+  const collapsedTop = (height - layerHeight) / 2 + index * 7;
+  const expandedTop = 40 + index * (layerHeight + 14);
+  return <FrameView frameStyle={() => {
+    "worklet";
+
+    return [styles.layer, {
+      top: collapsedTop + (expandedTop - collapsedTop) * motion.value[0],
+      height: Math.max(40, layerHeight),
+      backgroundColor: layer.color ?? "#153044",
+      zIndex: count - index,
+      transform: [{ perspective: 1200 }, { rotateX: `${motion.value[0] * 12}deg` },
+        { translateX: (index - (count - 1) / 2) * 22 * motion.value[0] }]
+    }];
+  }}>
+    <Text style={styles.layerLabel}>{layer.label}</Text><View style={{ flex: 1 }}>{layer.content}</View>
+  </FrameView>;
+}
 export function ExplodedLayers({
   expanded,
   layers,
@@ -145,7 +174,6 @@ export function ExplodedLayers({
   layers: ExplodedLayer[];
   style?: StyleProp<ViewStyle>;
 }) {
-  const motion = useMotion([expanded ? 1 : 0], 850);
   const [height, setHeight] = useState(580);
   const available = Math.max(0, height - 80);
   const layerHeight = Math.min(130, available / Math.max(1, layers.length) - 14);
@@ -154,31 +182,8 @@ export function ExplodedLayers({
       layout
     }
   }) => setHeight(layout.height)}>
-    {layers.map((layer, index) => {
-      const collapsedTop = (height - layerHeight) / 2 + index * 7;
-      const expandedTop = 40 + index * (layerHeight + 14);
-      return <FrameView key={layer.id} frameStyle={() => {
-        "worklet";
-
-        return [styles.layer, {
-          top: collapsedTop + (expandedTop - collapsedTop) * motion.value[0],
-          height: Math.max(40, layerHeight),
-          backgroundColor: layer.color ?? "#153044",
-          zIndex: layers.length - index,
-          transform: [{
-            perspective: 1200
-          }, {
-            rotateX: `${motion.value[0] * 12}deg`
-          }, {
-            translateX: (index - (layers.length - 1) / 2) * 22 * motion.value[0]
-          }]
-        }];
-      }}>
-        <Text style={styles.layerLabel}>{layer.label}</Text><View style={{
-          flex: 1
-        }}>{layer.content}</View>
-      </FrameView>;
-    })}
+    {layers.map((layer, index) => <ExplodedLayerView key={layer.id} expanded={expanded} layer={layer}
+      index={index} count={layers.length} height={height} layerHeight={layerHeight} />)}
   </View>;
 }
 const styles = StyleSheet.create({

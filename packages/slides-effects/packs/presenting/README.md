@@ -71,7 +71,7 @@ controlled by props, not draggable. Supply aligned, noninteractive illustrations
 
 Line numbers are one-based and inclusive. The selected lines remain bright;
 others fade to 25% opacity. Omitting `lines` shows the complete source. The code
-pane scrolls to each selected range; `height` defaults to 580. This is a
+pane scrolls to each selected range; `height` defaults to 580 and `fontSize` to 25. This is a
 monospaced source viewer with line emphasis, not a token syntax highlighter.
 
 ## Exploded layers

@@ -55,8 +55,9 @@ const previews = path.join(docs, "docs/public/slides/effects/previews", slug);
 const localEffect = JSON.parse(fs.readFileSync(path.join(sources, "catalog.json"), "utf8")).effects.find((entry: { slug: string }) => entry.slug === slug);
 if (!localEffect) throw new Error(`No local catalog entry for ${slug}.`);
 const profile = localEffect.recording;
+const posterAt = profile?.posterAt;
 const seconds = Number(option("--seconds") ?? profile?.seconds ?? 8);
-const steps = Number(option("--steps") ?? exampleStepPresses(exampleSource));
+const steps = Number(option("--steps") ?? profile?.steps ?? exampleStepPresses(exampleSource));
 const cropTop = Number(option("--crop-top") ?? 0);
 const width = Number(option("--width") ?? 1280);
 const reserve = option("--reserve-bytes") ?? "50000000000";
@@ -71,6 +72,7 @@ function checkDisk(directory: string) {
 checkDisk("/System/Volumes/Data");
 checkDisk(os.tmpdir());
 const schedule = recordingSchedule(seconds, steps);
+if (posterAt !== undefined && (!Number.isFinite(posterAt) || posterAt < 0 || posterAt >= seconds)) throw new Error("Invalid posterAt in recording profile.");
 const explicitMotion = args.flatMap((value, index) => value === "--motion" ? [args[index + 1] ?? ""] : []);
 let motion = recordingMotionIntervals(seconds, schedule, explicitMotion.length ? explicitMotion : profile?.motion);
 if (!Number.isSafeInteger(cropTop) || cropTop < 0) throw new Error("--crop-top must be a nonnegative integer.");
@@ -107,7 +109,6 @@ function listWindows(): RecordingWindow[] {
 
 const buildRecord = path.join(repo, `shell/.legend/spark/slides/.spark/${release ? "release" : "dev"}-build.json`);
 const appPath = fs.existsSync(buildRecord) ? JSON.parse(fs.readFileSync(buildRecord, "utf8")).app as string : undefined;
-const running = () => run("pgrep", ["-f", "LegendSlides.app/Contents/MacOS/"], { allowFail: true }).stdout.trim();
 
 // Preflight: everything that can fail before touching the app.
 listWindows();
@@ -125,7 +126,6 @@ if (flag("--apply")) {
   assertPreviewHashes(hashes, { exampleSha256: effect.example.sha256, packSha256: pack.versions[pack.latest].sha256 });
 }
 if (flag("--preflight")) { console.log(JSON.stringify({ ok: true, recorder, app: appPath, example, previews, steps, seconds })); process.exit(0); }
-if (running()) throw new Error("Legend Slides is already running. Save and quit it first; this script only quits the instance it launches.");
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);
@@ -187,7 +187,13 @@ try {
   if (!target) throw new Error("The Legend Slides audience window did not appear within 20 s after starting the presentation.");
   const keyboard = audienceKeyboardScripts(target.pid, target.title);
   // Focus before capture begins; raising a window during recording can invalidate its ScreenCaptureKit stream.
-  run("osascript", ["-e", keyboard.activate]);
+  let focused = false;
+  for (let attempt = 0; attempt < 5 && !focused; attempt++) {
+    focused = run("osascript", ["-e", keyboard.activate], { allowFail: true }).status === 0;
+    if (!focused) await sleep(1000);
+  }
+  if (!focused) throw new Error("Could not focus the Legend Slides audience window.");
+  await sleep(1000);
   target = audienceTarget(listWindows(), deckWindow.pid, pattern);
   if (!target) throw new Error("The Legend Slides audience window disappeared while preparing recording focus.");
   // Windowed audiences include a title bar; recorder window dimensions are in points.
@@ -204,6 +210,7 @@ try {
   void exitedEarly.catch(() => {});
   // Leave the blank lead-in only once native capture is producing frames.
   const advanceAudience = keyboard.advance;
+  await Promise.race([sleep(500), exitedEarly]);
   run("osascript", ["-e", advanceAudience]);
   const startedAt = performance.now();
   const navigationSeconds = (startedAt - readyAt) / 1000;
@@ -211,7 +218,7 @@ try {
   if (playbackOffset >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
   for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
-    // Keep the already-focused audience active without raising it during the capture.
+    // Keep the already-focused audience active without raising it during capture.
     run("osascript", ["-e", advanceAudience]);
     actualSchedule.push(performance.now() - startedAt);
   }
@@ -241,11 +248,11 @@ try {
 }
 if (!fs.existsSync(raw)) throw new Error("The recorder produced no video.");
 
-// Export: apply any explicit crop, scale, H.264 without audio; poster from the last second.
+// Export: apply any explicit crop, scale, H.264 without audio; default poster is from the last second.
 const video = path.join(work, "preview.mp4"), poster = path.join(work, "poster.png");
 const totalCropTop = cropTop + automaticCrop;
 run("ffmpeg", recordingExportArgs(raw, video, playbackOffset, seconds, totalCropTop, width));
-run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-sseof", "-1", "-i", video, "-frames:v", "1", poster]);
+run("ffmpeg", ["-hide_banner", "-loglevel", "error", ...(posterAt === undefined ? ["-sseof", "-1"] : ["-ss", String(posterAt)]), "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");
 const dimensions = JSON.parse(run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", video]).stdout).streams[0];
 const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), ...(profile?.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]), ...(profile?.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });

@@ -5,9 +5,10 @@ title: Animated title
 import { View, Text } from "react-native";
 import { AnimatedTitle } from "slides:typography/AnimatedTitle";
 
+export const recommended = ["soft-rise", "word-lift", "split-arrival", "wipe"];
 
 # Animated title
 
-<View style={{ width: 1696, height: 650 }}>
-<AnimatedTitle effect="word-lift" width={1696} fontSize={104}>Make an entrance</AnimatedTitle>
+<View style={{ width: 1696, height: 650, justifyContent: "center" }}>
+<Steps count={4}>{step => <View><Text style={{ color: "#67e8f9", fontSize: 35, marginBottom: 28, textAlign: "center" }}>{recommended[step]}</Text><AnimatedTitle effect={recommended[step]} width={1696} fontSize={104}>Make an entrance</AnimatedTitle></View>}</Steps>
 </View>

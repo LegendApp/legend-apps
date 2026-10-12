@@ -11,3 +11,7 @@ outgoing poses and re-entry. The implementation has no JavaScript frame loop.
 and `chromatic-glitch`. `TitleEntrances` exposes their worklet pose functions for
 custom title compositions. Text and word/letter ordering come from the caller;
 captured liquid text, bylines and glyph absorption remain talk-specific.
+
+For a concise deck vocabulary, start with `soft-rise`, `word-lift`,
+`split-arrival` and `wipe`. The other 12 presets remain available for
+stronger or more specialized entrances.

@@ -1,6 +1,7 @@
 import { atmosphereCommon } from "./common";
 import { Atmosphere, type AtmosphereProps } from "./Atmosphere";
 export const fluidSource = atmosphereCommon + `
+    uniform float effectIntensity;
     half4 main(float2 position) {
       float2 uv = position / resolution;
       float2 p = (uv - 0.5) * float2(resolution.x / resolution.y, 1.0) * 3.0;
@@ -11,7 +12,7 @@ export const fluidSource = atmosphereCommon + `
       float ridge = pow(max(0.0, folds), 14.0);
       float sheen = pow(max(0.0, sin(field * 27.0 + q.x * 4.0 + 0.5)), 4.0);
       float3 color = float3(0.035, 0.09, 0.14) * (0.3 + field);
-      color += float3(0.20, 0.38, 0.49) * ridge + float3(0.05, 0.13, 0.19) * sheen;
+      color += (float3(0.20, 0.38, 0.49) * ridge + float3(0.05, 0.13, 0.19) * sheen) * effectIntensity;
       return half4(color * edges(uv) * brightness, 1.0);
     }
   `;

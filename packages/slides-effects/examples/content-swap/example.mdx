@@ -5,9 +5,11 @@ title: Content swap
 import { View, Text } from "react-native";
 import { ContentSwap } from "slides:presenting/Composition";
 
+export function Evidence() { return <View style={{ padding: 70, gap: 30 }}><Text style={{ color: "#e0f2fe", fontSize: 70 }}>The evidence</Text><Text style={{ color: "white", fontSize: 110 }}>7 steps → 2 steps</Text><Text style={{ color: "#94a3b8", fontSize: 42 }}>Same outcome, less work</Text></View>; }
+export function Takeaway() { return <View style={{ padding: 70, gap: 28 }}><Text style={{ color: "#67e8f9", fontSize: 70 }}>The takeaway</Text><Text style={{ color: "white", fontSize: 110 }}>Simpler wins.</Text><Text style={{ color: "#94a3b8", fontSize: 42 }}>Keep the path people actually use.</Text></View>; }
 
 # Content swap
 
 <View style={{ width: 1696, height: 650 }}>
-<Steps count={3}>{step => <ContentSwap active={step > 0} before={<Text style={{color: "white",fontSize: 100}}>The evidence</Text>} after={<Text style={{color: "#67e8f9",fontSize: 100}}>The takeaway</Text>} style={{width: 1696,height: 580}} />}</Steps>
+<Steps count={3}>{step => <ContentSwap active={step > 0} before={<Evidence />} after={<Takeaway />} style={{ width: 1696, height: 580 }} />}</Steps>
 </View>

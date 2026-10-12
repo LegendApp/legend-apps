@@ -18,7 +18,9 @@ export const subtleFaultTiming = distortionTiming({
   intervalSeconds: 4.25,
 });
 
-export const prismaticTear = `
+export function createPrismaticTearShader(intensity = 1) {
+  if (!Number.isFinite(intensity) || intensity < 0 || intensity > 1) throw new Error("Invalid distortion intensity");
+  return `
   uniform shader image;
   uniform float2 resolution;
   uniform float time;
@@ -40,8 +42,8 @@ export const prismaticTear = `
     float noise = fract(sin(band * 91.7 + cycle * 37.3) * 43758.5);
     float pulse = step(0.86, noise) * event;
     float envelope = smoothstep(0.04, 0.18, uv.y) * (1.0 - smoothstep(0.82, 0.96, uv.y));
-    float offset = pulse * sin(band * 3.1 + localTime * 28.0) * strength * envelope;
-    float split = pulse * strength * 0.12;
+    float offset = pulse * sin(band * 3.1 + localTime * 28.0) * strength * ${intensity} * envelope;
+    float split = pulse * strength * ${intensity} * 0.12;
     half4 red = image.eval(clamp(position + float2(offset + split, 0.0), float2(0.0), resolution - 1.0));
     half4 green = image.eval(clamp(position + float2(offset, 0.0), float2(0.0), resolution - 1.0));
     half4 blue = image.eval(clamp(position + float2(offset - split, 0.0), float2(0.0), resolution - 1.0));
@@ -49,8 +51,13 @@ export const prismaticTear = `
     return mix(image.eval(position), distorted, event);
   }
 `;
+}
 
-export const softRipple = `
+export const prismaticTear = createPrismaticTearShader();
+
+export function createSoftRippleShader(intensity = 1) {
+  if (!Number.isFinite(intensity) || intensity < 0 || intensity > 1) throw new Error("Invalid distortion intensity");
+  return `
   uniform shader image;
   uniform float2 resolution;
   uniform float time;
@@ -62,6 +69,9 @@ export const softRipple = `
     float2 direction = delta / max(distanceFromCenter, 1.0);
     float wave = sin(distanceFromCenter * 0.045 - time * 4.0);
     float envelope = 1.0 - smoothstep(0.0, length(resolution) * 0.5, distanceFromCenter);
-    return image.eval(position + direction * wave * strength * envelope);
+    return image.eval(position + direction * wave * strength * ${intensity} * envelope);
   }
 `;
+}
+
+export const softRipple = createSoftRippleShader();
