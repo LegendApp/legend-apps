@@ -28,7 +28,8 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
   const hash = createHash("sha256");
   hash.update(JSON.stringify(process.versions.bun));
   const files = new Set([path.join(project, "package.json")]);
-  if (includeLock) files.add(path.join(project, "bun.lock"));
+  const lock = path.join(project, "bun.lock");
+  if (includeLock && fs.existsSync(lock)) files.add(lock);
   const pkg = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
   const sdk = pkg.dependencies["@legendapp/spark"] as string;
   if (sdk.startsWith("file:")) {
@@ -63,7 +64,7 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
   }
   for (const file of [...files].sort()) {
     hash.update(JSON.stringify(path.relative(repoRoot, file)));
-    if (file !== path.join(project, "bun.lock") || fs.existsSync(file)) hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
+    hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
   }
   return hash.digest("hex");
 }
@@ -235,7 +236,7 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
   const sdk = await import(pathToFileURL(path.join(dist, "project.js")).href);
   const native = await import(pathToFileURL(path.join(dist, "native-preparation.js")).href);
   sdk.prepareConfig(project);
-  const all = sdk.nativePackages(project, { applyExcludes: mode !== "release" });
+  const all = sdk.nativePackages(project);
   let chosen = { included: all };
   if (mode === "release") {
     const { analyze } = await import(pathToFileURL(path.join(dist, "build.js")).href);

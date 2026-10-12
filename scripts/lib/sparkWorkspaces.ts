@@ -164,7 +164,7 @@ function sparkPackage(manifest: AppManifest) {
     const dir = path.join(rootDir, "packages", entry);
     if (fs.existsSync(path.join(dir, "package.json"))) localPackages.add(json(path.join(dir, "package.json")).name);
   }
-  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = localPackages.has(pkg.name) ? "workspace:*" : json(path.join(pkg.root, "package.json")).version;
+  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = json(path.join(pkg.root, "package.json")).version;
   for (const name of Object.keys(dependencies)) dependencies[name] = localPackages.has(name) ? "workspace:*" : overrides[name] ?? dependencies[name];
   return { repo, app, active, dependencies, overrides };
 }
