@@ -228,6 +228,13 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
     },
     markdownStyle: {
       blockquote: {
+        admonitions: {
+          note: { color: colors.link ?? colors.primary, backgroundColor: colors.blockquoteBackground },
+          tip: { backgroundColor: colors.blockquoteBackground },
+          important: { backgroundColor: colors.blockquoteBackground },
+          warning: { backgroundColor: colors.blockquoteBackground },
+          caution: { color: colors.danger, backgroundColor: colors.blockquoteBackground },
+        },
         backgroundColor: colors.blockquoteBackground,
         borderColor: colors.blockquoteBorder,
         borderWidth: 3,
@@ -337,6 +344,10 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
         borderColor: colors.muted,
         checkedColor: colors.primary,
         checkedTextColor: colors.muted,
+      },
+      video: {
+        backgroundColor: colors.code,
+        borderRadius: 6,
       },
     },
   };
