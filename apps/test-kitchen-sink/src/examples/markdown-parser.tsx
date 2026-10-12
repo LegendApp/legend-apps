@@ -1,4 +1,5 @@
 import { openFileDialog } from "@legendapp/spark/dialogs";
+import { MarkdownImageViewer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor/src/MarkdownImageViewer";
 import {
   loadMarkdownFile,
   type MarkdownDocument,
@@ -267,6 +268,7 @@ function MarkdownBlockRow({
   item,
   onCommitMarkdown,
   onFinishEditing,
+  onImagePress,
   onStartEditing,
 }: LegendListRenderItemProps<number> & {
   blockCache: Map<number, MarkdownRenderBlock>;
@@ -275,6 +277,7 @@ function MarkdownBlockRow({
   editingSelection: number;
   onCommitMarkdown: (block: MarkdownRenderBlock, markdown: string) => void;
   onFinishEditing: (block: MarkdownRenderBlock) => void;
+  onImagePress: (image: MarkdownViewerImage) => void;
   onStartEditing: (block: MarkdownRenderBlock, selection: number) => void;
 }) {
   const [rowWidth, setRowWidth] = useState(700);
@@ -312,6 +315,7 @@ function MarkdownBlockRow({
           flavor="github"
           markdown={block.markdown}
           markdownStyle={markdownViewerStyle}
+          onImagePress={onImagePress}
           onLinkPress={(event) => {
             void Linking.openURL(event.url);
           }}
@@ -323,6 +327,7 @@ function MarkdownBlockRow({
 }
 
 export function MarkdownParserExample() {
+  const [viewerImage, setViewerImage] = useState<MarkdownViewerImage | null>(null);
   const blockCacheRef = useRef(new Map<number, MarkdownRenderBlock>());
   const documentVersionRef = useRef(0);
   const hydrateFrameRef = useRef<number | undefined>(undefined);
@@ -456,6 +461,7 @@ export function MarkdownParserExample() {
 
   return (
     <View style={styles.markdownViewerPanel}>
+      <MarkdownImageViewer image={viewerImage} onClose={() => setViewerImage(null)} />
       <View style={styles.markdownViewerHeader}>
         <Text style={styles.panelTitle}>Markdown Parser</Text>
         <Text style={styles.bodyText}>{status}</Text>
@@ -483,6 +489,7 @@ export function MarkdownParserExample() {
             document={document}
             editingBlockId={editingBlockId}
             editingSelection={editingSelection}
+            onImagePress={setViewerImage}
             onCommitMarkdown={commitBlockMarkdown}
             onFinishEditing={(block) => {
               setEditingBlockId((currentId) => (currentId === block.id ? undefined : currentId));

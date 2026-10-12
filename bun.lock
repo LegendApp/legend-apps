@@ -33,6 +33,7 @@
       "version": "0.0.2",
       "dependencies": {
         "@legend-apps/chat-history": "workspace:*",
+        "@legend-apps/markdown-block-editor": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/theme": "workspace:*",
         "@legendapp/list": "catalog:",

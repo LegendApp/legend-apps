@@ -1,4 +1,5 @@
 import { addAppListener } from "@legendapp/spark/app";
+import { MarkdownImageViewer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor/src/MarkdownImageViewer";
 import { batch, ObservableHint, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
 import { SidebarSplitView, } from "@legendapp/spark/ui/split-view";
@@ -200,6 +201,7 @@ function TranscriptList({ dataKey, document, loadImages, onBenchmarkEvent, opene
     const demoMessageSequenceRef = useRef(0);
     const streamingDocumentIdRef = useRef<string | undefined>(undefined);
     const [activeTimers] = useState(() => new Set<ReturnType<typeof setTimeout>>());
+    const [viewerImage, setViewerImage] = useState<MarkdownViewerImage | null>(null);
     const [anchor, setAnchor] = useState<{
         documentId: string;
         index: number;
@@ -298,7 +300,7 @@ function TranscriptList({ dataKey, document, loadImages, onBenchmarkEvent, opene
         if (item !== undefined && document) {
             row = isDemoTranscriptMessage(item)
                 ? <DemoTranscriptRow message={item}/>
-                : (<TranscriptRow document={document} index={item} loadImages={loadImages} metadata={transcriptDataSource!.getRowMetadata(item)} onLayout={phase && item === lastDocumentRowIndex ? handleInitialTailLayout : undefined}/>);
+                : (<TranscriptRow document={document} index={item} loadImages={loadImages} metadata={transcriptDataSource!.getRowMetadata(item)} onImagePress={setViewerImage} onLayout={phase && item === lastDocumentRowIndex ? handleInitialTailLayout : undefined}/>);
         }
         return row;
     }, [document, handleInitialTailLayout, lastDocumentRowIndex, loadImages, phase, transcriptDataSource]);
@@ -366,6 +368,7 @@ function TranscriptList({ dataKey, document, loadImages, onBenchmarkEvent, opene
         document?.releaseNativeResources();
     }, [activeTimers, document]);
     return (<View className="flex-1 bg-background">
+      <MarkdownImageViewer image={viewerImage} onClose={() => setViewerImage(null)} />
       <LegendList anchoredEndSpace={anchoredEndSpace} contentContainerStyle={listContentStyle} dataKey={dataKey} dataSource={dataSource} estimatedItemSize={500} estimatedListSize={CHAT_HISTORY_INITIAL_LIST_SIZE} getItemType={getItemType} initialScrollAtEnd onFirstVisibleItemChanged={phase === "initial" ? handleFirstVisibleItemChanged : undefined} onLoad={document?.rowCount === 0 && phase ? handleInitialTailLayout : undefined} recycleItems ref={listRef} renderItem={renderItem} style={styles.list} viewabilityConfig={chatHistoryListViewabilityConfig}/>
       <View pointerEvents="box-none" style={styles.composerOverlay}>
         <ChatComposer disabled={!document || isStreaming} onHeightChange={setComposerHeight} onSend={handleSendDemoMessage} transcriptId={dataKey}/>

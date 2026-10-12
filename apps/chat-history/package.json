@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@legend-apps/chat-history": "workspace:*",
+    "@legend-apps/markdown-block-editor": "0.0.0",
     "@legend-apps/theme": "workspace:*",
     "@legendapp/list": "catalog:",
     "react-native-enriched-markdown": "1.1.1",

@@ -1,7 +1,7 @@
 import { MarkdownEditorHostCommands } from "@legend-apps/markdown-block-editor";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { Text, View } from "react-native";
+import { Image, Modal, Platform, Pressable, Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
 import { MarkdownBlockRow, MarkdownRowEditorInput } from "../MarkdownBlockRow";
@@ -1786,6 +1786,40 @@ describe("MarkdownDocument native row editor", () => {
     });
 
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
+  });
+
+  it.each(["ios", "macos"] as const)("opens and closes an image viewer on %s without activating the editor", async (platform) => {
+    const platformMock = jest.replaceProperty(Platform, "OS", platform);
+    try {
+      const adapter = new NativeOverlayAdapter(snapshot([
+        block("d1:b0", 0, "![Sample](file:///sample.png)"),
+      ]));
+      let renderer!: TestRenderer.ReactTestRenderer;
+
+      await act(async () => {
+        renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+      });
+      const image = { url: "file:///sample.png", altText: "Sample" };
+      await act(async () => {
+        activationView(renderer, "d1:b0").findByType(EnrichedMarkdownText).props.onImagePress(image);
+      });
+
+      if (platform === "macos") {
+        expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+      } else {
+        expect(renderer.root.findByType(Modal).props.visible).toBe(true);
+      }
+      expect(renderer.root.findByType(Image).props.source).toEqual({ uri: image.url });
+      expect(renderer.root.findAllByProps({ testID: "markdown-editor-input" })).toHaveLength(0);
+      await act(async () => {
+        renderer.root.findAllByType(Pressable).find((node) => node.props.accessibilityLabel === "Close image viewer")!.props.onPress();
+      });
+      expect(renderer.root.findAllByType(Image)).toHaveLength(0);
+      expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+      await act(async () => renderer.unmount());
+    } finally {
+      platformMock.restore();
+    }
   });
 
   it("keeps rendered markdown mounted with the editor inside the active native row", async () => {

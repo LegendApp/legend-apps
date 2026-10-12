@@ -18,6 +18,8 @@ jest.mock("react-native", () => {
       select: (values) => values.ios ?? values.default,
     },
     Pressable: createComponent("Pressable"),
+    Image: createComponent("Image"),
+    Modal: createComponent("Modal"),
     StyleSheet: {
       create: (styles) => styles,
       flatten: (style) => {
@@ -135,6 +137,7 @@ jest.mock("@legend-apps/markdown-block-editor", () => {
   const { EnrichedMarkdownText } = require("react-native-enriched-markdown");
 
   return {
+    MarkdownImageViewer: require("../markdown-block-editor/src/MarkdownImageViewer").MarkdownImageViewer,
     MarkdownEditorHostCommands: { beginKeyboardHandoff: jest.fn(), cancelKeyboardHandoff: jest.fn(), completeKeyboardHandoff: jest.fn(), writeSelectionClipboard: jest.fn(), setSelectionAfterMarkdown: jest.fn() },
     MarkdownBlockActivationView: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)

@@ -7,7 +7,7 @@ import {
 } from "@legendapp/list/react-native";
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { MarkdownEditorHost, MarkdownEditorHostCommands } from "@legend-apps/markdown-block-editor";
+import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
@@ -480,6 +480,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const containerRef = useRef<View>(null);
     const listRef = useRef<LegendListRef | null>(null);
     const activeInputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
+    const [viewerImage, setViewerImage] = useState<MarkdownViewerImage | null>(null);
     const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const commitQueueRef = useRef(Promise.resolve());
     const saveRef = useRef<(() => Promise<void>) | undefined>(undefined);
@@ -3369,6 +3370,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
+          onImagePress={setViewerImage}
           onEditorReady={handleEditorReady}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
@@ -3595,6 +3597,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const documentContent = (
       <>
+        <MarkdownImageViewer image={viewerImage} onClose={() => setViewerImage(null)} />
         <MarkdownBlockSelectionInput
           inputRef={blockSelectionInputRef}
           inputText$={blockSelectionInputText$}

@@ -7,6 +7,7 @@ import {
   EnrichedMarkdownText,
   EnrichedMarkdownTextInput,
   type EnrichedMarkdownTextInputInstance,
+  type ImagePressEvent,
 } from "react-native-enriched-markdown";
 import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
@@ -253,6 +254,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   getBlockIdAtIndex,
   getBlockMetadata,
   onActivate,
+  onImagePress,
   onEditorReady,
   onBlurRef,
   onChangeMarkdownRef,
@@ -276,6 +278,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
+  onImagePress: (image: ImagePressEvent) => void;
   onEditorReady?: (blockId: string) => void;
   onBlurRef: RefObject<(blockId: string) => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
@@ -357,6 +360,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       blockId={block.id}
       containerStyle={styles.renderedText}
       markdownStyle={markdownStyle}
+      onImagePress={onImagePress}
       onLinkPress={(event) => {
         Linking.openURL(event.url).catch(() => {});
       }}
@@ -371,6 +375,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       flavor="github"
       markdown={markdown}
       markdownStyle={markdownStyle}
+      onImagePress={onImagePress}
       onLinkPress={(event) => {
         Linking.openURL(event.url).catch(() => {});
       }}

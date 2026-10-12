@@ -3,7 +3,7 @@ import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useRecyclingState } from "@legendapp/list/react-native";
 import { useEffect } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
-import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
+import { EnrichedMarkdownText, type ImagePressEvent, type MarkdownStyle } from "react-native-enriched-markdown";
 import { useUniwind } from "uniwind";
 
 const TOOL_PREVIEW_BYTES = 64 * 1024;
@@ -118,11 +118,12 @@ function MessageImage({ image }: { image: ChatImageMetadata }) {
   return content;
 }
 
-function MessageRow({ document, index, loadImages, metadata, onLayout }: {
+function MessageRow({ document, index, loadImages, metadata, onImagePress, onLayout }: {
   document: ChatDocument;
   index: number;
   loadImages: boolean;
   metadata: ChatRowMetadata;
+  onImagePress?: (image: ImagePressEvent) => void;
   onLayout?: ViewProps["onLayout"];
 }) {
   const isUser = metadata.kind === "user";
@@ -151,6 +152,7 @@ function MessageRow({ document, index, loadImages, metadata, onLayout }: {
             flavor="github"
             markdownStyle={markdownStyle}
             nativeMarkdownBlockId={metadata.markdownBlockId}
+            onImagePress={onImagePress}
             onLinkPress={openLink}
             selectable
           />
@@ -282,12 +284,14 @@ export function TranscriptRow({
   index,
   loadImages = true,
   metadata,
+  onImagePress,
   onLayout,
 }: {
   document: ChatDocument;
   index: number;
   loadImages?: boolean;
   metadata: ChatRowMetadata;
+  onImagePress?: (image: ImagePressEvent) => void;
   onLayout?: ViewProps["onLayout"];
 }) {
   let row = (
@@ -296,6 +300,7 @@ export function TranscriptRow({
       index={index}
       loadImages={loadImages}
       metadata={metadata}
+      onImagePress={onImagePress}
       onLayout={onLayout}
     />
   );
