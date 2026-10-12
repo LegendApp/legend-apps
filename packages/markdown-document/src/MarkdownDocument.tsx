@@ -1848,7 +1848,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     const replaceActiveBlockMarkdown = useCallback(
-      async (markdown: string, insertionPrefix?: string) => {
+      async (markdown: string, insertionPrefix?: string, selection?: { start: number; end: number }) => {
         const documentState = documentState$.peek();
         const activeBlockIdValue = activeEditor$.blockId.peek();
         if (documentState.status !== "loaded" || !adapter.applyTransaction || !activeBlockIdValue) {
@@ -1902,11 +1902,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
           markDirty();
           if (nextActiveBlock) {
-            setActiveBlock(nextActiveBlock, 0, pasteCaret ? "nativePointer" : "programmatic");
+            const activationMode = selection
+              ? activeEditor$.activationMode.peek()
+              : pasteCaret ? "nativePointer" : "programmatic";
+            setActiveBlock(nextActiveBlock, selection?.start ?? 0, activationMode);
+            if (selection) activeInputSelectionRef.current = selection;
             const activeInput = activeInputRef.current;
             if (activeInput && nextActiveBlock.id === activeBlockIdValue) {
               activeInput.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
-              if (!pasteCaret) activeInput.setSelection(0, 0);
+              if (!pasteCaret) activeInput.setSelection(selection?.start ?? 0, selection?.end ?? 0);
             }
             if (pasteCaret && containerRef.current) {
               MarkdownEditorHostCommands.setSelectionAfterMarkdown(
@@ -2152,7 +2156,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
 
           if (activeEditor$.blockId.peek()) {
-            await replaceActiveBlockMarkdown(transform(draftMarkdown$.peek()));
+            await replaceActiveBlockMarkdown(transform(draftMarkdown$.peek()), undefined, activeInputSelectionRef.current);
           }
         }
 

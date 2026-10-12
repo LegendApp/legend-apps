@@ -3,6 +3,7 @@
 #import "RenderedMarkdownSegment.h"
 #import "ENRMInputScrolling.h"
 #import "ENRMInputMeasurement.h"
+#import "ENRMInputParser.h"
 
 #define ENRMPlatformTextView NSTextView
 #define ENRMSetNeedsDisplay(view) [(view) setNeedsDisplay:YES]
@@ -32,13 +33,68 @@ static NSAttributedString *ENRMGetAttributedText(NSTextView *view) { return view
 @end
 
 static void ENRMSetContentSize(InputView *text, CGSize size) {}
+static NSString *ENRMGetPlainText(NSTextView *view) { return view.string; }
+static void ENRMSetPlainText(NSTextView *view, NSString *text) { view.string = text; }
 #include "InputRefresh.inc"
+
+// Keep the real phase gate and parser; probe the formatter calls without React
+// props or the unrelated renderer dependencies.
+typedef NS_ENUM(NSInteger, ENRMEditPhase) {
+  ENRMEditPhaseIdle, ENRMEditPhaseProcessing, ENRMEditPhaseFormatting, ENRMEditPhaseImporting,
+};
+@interface InputSession : NSObject {
+  ENRMEditPhase _phase;
+}
+@property (readonly) BOOL shouldSuppressFormatting;
+@property BOOL isComposing;
+- (void)enterPhase:(ENRMEditPhase)phase;
+- (void)exitPhase;
+@end
+@implementation InputSession
+#include "InputSession.inc"
+@end
+
+@interface FormattingProbe : NSObject
+@property NSArray *allRanges;
+@property NSArray<ENRMBlockRange *> *appliedBlocks;
+@property NSUInteger formattingPasses;
+- (void)setRanges:(NSArray *)ranges;
+- (void)applyFormattingRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
+- (void)applyBlockRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
+- (void)refreshAllStyling;
+@end
+@implementation FormattingProbe
+- (void)setRanges:(NSArray *)ranges { self.allRanges = ranges; }
+- (void)applyFormattingRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope {}
+- (void)applyBlockRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope
+{
+  self.appliedBlocks = ranges;
+  ++_formattingPasses;
+}
+- (void)refreshAllStyling {}
+@end
+
+@protocol ImportEvents
+- (void)emitOnChangeText;
+- (void)emitOnChangeSelection;
+- (void)emitOnChangeState;
+@end
+
 @interface InputHost : NSView {
   NSView *_scrollContainerView;
   NSScrollView *_scrollView;
   InputView *_textView;
+  InputSession *_editSession;
+  FormattingProbe *_formattingStore, *_blockStore, *_formatter, *_detectorPipeline;
+  id _formatterStyle;
+  id<ImportEvents> _inputEventEmitter;
+  NSUInteger _lastTextLength;
+  NSRange _lastSelectedRange;
 }
 @property (readonly) InputView *textView;
+@property (readonly) FormattingProbe *formatter;
+- (void)setValue:(NSString *)markdown;
+- (void)setValuePreservingSelection:(NSString *)markdown;
 - (void)applyTextViewLayout;
 - (void)scheduleRelayoutIfNeeded;
 - (void)_performRelayout;
@@ -59,11 +115,26 @@ static void ENRMSetContentSize(InputView *text, CGSize size) {}
     [_textView.textContainer replaceLayoutManager:[InputLayoutManager new]];
     ENRMConfigureInputScrolling(_scrollContainerView, _scrollView, _textView, NO);
     [self addSubview:_scrollContainerView];
+    _editSession = [InputSession new];
+    _formattingStore = [FormattingProbe new];
+    _blockStore = [FormattingProbe new];
+    _formatter = [FormattingProbe new];
+    _detectorPipeline = [FormattingProbe new];
   }
   return self;
 }
 - (InputView *)textView { return _textView; }
+- (FormattingProbe *)formatter { return _formatter; }
+- (NSString *)blockStyleMarkdownForMarkdown:(NSString *)markdown { return markdown; }
+- (BOOL)applyBlockStyleForMarkdown:(NSString *)markdown { return NO; }
+- (void)resetBaseTypingAttributes { _textView.typingAttributes = @{}; }
+- (void)refreshHangingMarkdownPrefixForMarkdown:(NSString *)markdown {}
+- (void)updatePlaceholderVisibility {}
+- (void)applyWritingDirection {}
+- (void)applyParagraphBaselineOffset {}
+- (void)requestHeightUpdate {}
 #include "InputLayout.inc"
+#include "InputImport.inc"
 @end
 
 // The activation wrapper only needs the renderer's native-touch ownership contract.
@@ -144,6 +215,26 @@ int main()
     InputView *input = host.textView;
     InputLayoutManager *layout = (InputLayoutManager *)input.layoutManager;
     input.layoutManager.allowsNonContiguousLayout = YES;
+    // setValue must reach the formatter immediately after replacing its stores,
+    // even when the same input remains mounted across every toolbar conversion.
+    NSArray *markdowns = @[@"# Heading", @"- Heading", @"1. Heading", @"# Heading"];
+    NSArray *types = @[@(ENRMInputBlockTypeHeading1), @(ENRMInputBlockTypeUnorderedListItem),
+                      @(ENRMInputBlockTypeOrderedListItem), @(ENRMInputBlockTypeHeading1)];
+    for (NSUInteger cycle = 0; cycle < 3; ++cycle) {
+      for (NSUInteger index = 0; index < markdowns.count; ++index) {
+        NSUInteger before = host.formatter.formattingPasses;
+        [host setValue:markdowns[index]];
+        require([input.string isEqualToString:@"Heading"], @"toolbar import must hide heading/list markup immediately");
+        require(host.formatter.formattingPasses == before + 1, @"import phase must not suppress the new formatting pass");
+        require(host.formatter.appliedBlocks.count == 1 && host.formatter.appliedBlocks[0].type == [types[index] integerValue],
+                @"formatter must receive the new heading/bullet/numbered block instead of stale ranges");
+        for (NSValue *selection in @[[NSValue valueWithRange:NSMakeRange(3, 0)], [NSValue valueWithRange:NSMakeRange(1, 4)]]) {
+          input.selectedRange = selection.rangeValue;
+          [host setValuePreservingSelection:markdowns[index]];
+          require(NSEqualRanges(input.selectedRange, selection.rangeValue), @"native import must retain a caret or selection");
+        }
+      }
+    }
     // Shortcuts remove their prefix and apply these paragraph metrics. Exercise
     // transient empty list anchors, wrapped items, and a return to heading size.
     for (NSUInteger cycle = 0; cycle < 50; ++cycle) {
@@ -187,6 +278,6 @@ int main()
         }
       }
     }
-    NSLog(@"PASS math segments, image hits/activation, and 600 deferred heading/list layouts with stable frames");
+    NSLog(@"PASS toolbar import formatting/selection, math segments, image hits/activation, and 600 deferred heading/list layouts with stable frames");
   }
 }

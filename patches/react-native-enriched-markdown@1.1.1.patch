@@ -5580,8 +5580,8 @@ index 7e72cff..ce96cd5 100644
 -
 -  [_editSession exitPhase];
 +  [self applyBlockStyleForMarkdown:blockStyleMarkdown];
-   [self applyFormatting];
 +  [_editSession exitPhase];
+   [self applyFormatting];
 +#if TARGET_OS_OSX
 +  [self refreshHangingMarkdownPrefixForMarkdown:markdown ?: @""];
 +#endif

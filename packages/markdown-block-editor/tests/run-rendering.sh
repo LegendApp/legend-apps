@@ -27,12 +27,25 @@ source = (b/'ios/input/EnrichedMarkdownTextInput.mm').read_text()
 (out/'InputRefresh.inc').write_text(extract((b/'ios/utils/ENRMUIKit.h').read_text(), 'static inline void ENRMRefreshTextViewLayout'))
 (out/'InputLayout.inc').write_text('\n'.join(extract(source, method) for method in [
     '- (void)applyTextViewLayout', '- (void)scheduleRelayoutIfNeeded', '- (void)_performRelayout', '- (CGSize)measureSize']))
+(out/'InputImport.inc').write_text('\n'.join(extract(source, method) for method in [
+    '- (void)importMarkdown:', '- (void)applyFormatting\n', '- (void)applyFormattingScopedToRange:',
+    '- (void)setValue:', '- (void)setValuePreservingSelection:']))
+session = (b/'ios/input/ENRMEditSession.mm').read_text()
+(out/'InputSession.inc').write_text('\n'.join(extract(session, method) for method in [
+    '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
 (out/'TextHitTest.inc').write_text((b/'ios/utils/ENRMTextHitTest.m').read_text().replace('#import "ENRMTextHitTest.h"', ''))
 PY
+clang -c "$markdown_dependency_dir/cpp/md4c/md4c.c" -o "$markdown_rendering_dir/parser.o"
 clang++ -x objective-c++ -std=c++20 -fobjc-arc -framework AppKit -DENRICHED_MARKDOWN_MATH=1 -DENRICHED_MARKDOWN_VIDEO=1 \
   -I"$markdown_rendering_dir" -I"$markdown_dependency_dir/ios/utils" -I"$markdown_dependency_dir/ios/parser" -I"$markdown_dependency_dir/ios/segments" \
+  -I"$markdown_dependency_dir/ios/input" -I"$markdown_dependency_dir/cpp/md4c" \
+  "$markdown_dependency_dir/ios/input/ENRMInputParser.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMInputRemend.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMInputStyledRange.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockRange.mm" \
   "$markdown_dependency_dir/ios/parser/MarkdownASTNode.m" \
   "$markdown_dependency_dir/ios/segments/RenderedMarkdownSegment.m" \
-  "$markdown_editor_dir/tests/MarkdownRendering.test.mm" -o "$markdown_rendering_dir/test"
+  "$markdown_editor_dir/tests/MarkdownRendering.test.mm" -x none "$markdown_rendering_dir/parser.o" -o "$markdown_rendering_dir/test"
 "$markdown_rendering_dir/test"

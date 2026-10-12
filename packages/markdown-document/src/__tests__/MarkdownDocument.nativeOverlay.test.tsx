@@ -1208,6 +1208,39 @@ describe("MarkdownDocument native row editor", () => {
     expect(headingMarkerText(renderer!)).toEqual(["H", "2"]);
   });
 
+  it.each([{ start: 3, end: 3 }, { start: 1, end: 5 }])("refreshes focused toolbar cycles while retaining selection %j", async (selection) => {
+    const adapter = new NativeOverlayAdapter(snapshot([headingBlock("b", 0, "# Heading", 1)]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "b", markdown: "# Heading", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    await flushPromises();
+    const input = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    await act(async () => editorInput(renderer).props.onChangeSelection(selection));
+    for (let cycle = 0; cycle < 3; cycle++) {
+      for (const [command, markdown] of [
+        [() => commands.current!.toggleUnorderedList(), "- Heading"],
+        [() => commands.current!.toggleOrderedList(), "1. Heading"],
+        [() => commands.current!.setHeading(1), "# Heading"],
+      ] as const) {
+        input.setSelection.mockClear();
+        await act(async () => command());
+        await flushPromises();
+        expect(adapter.sourceMarkdown).toBe(markdown);
+        expect(nativeHost(renderer).props.activeBlockId).toBe("b");
+        expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)).toBe(input);
+        expect(input.setValue).toHaveBeenLastCalledWith(markdown);
+        expect(input.setSelection).toHaveBeenLastCalledWith(selection.start, selection.end);
+      }
+    }
+    await act(async () => renderer.unmount());
+  });
+
   it("reduces heading level on native backspace at the editable start", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([
       headingBlock("d1:b0", 0, "### Heading", 3),
