@@ -214,6 +214,7 @@ export const isLegendThemeFile = isLegendDisplayThemeFile;
 
 function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayTheme {
   const { colors } = theme;
+  const isLight = getAppearance(theme) === "light";
   const bodyFontFamily = theme.fonts?.bodyFontFamily;
   const codeFontFamily = theme.fonts?.codeFontFamily ?? "Menlo";
 
@@ -314,12 +315,12 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
       },
       linkVariants: {
         "^https?://github\\.com/[^/?#]+/[^/?#]+/(?:issues|pull)/[0-9]+(?:[/?#]|$)": {
-          backgroundColor: colors.surfaceMuted,
+          backgroundColor: isLight ? colors.border : colors.surfaceMuted,
           underline: false,
         },
         "^(?:mention|user):": {
           color: colors.primary,
-          backgroundColor: colors.blockquoteBackground,
+          backgroundColor: isLight ? `${colors.primary.slice(0, 7)}1f` : colors.blockquoteBackground,
           underline: false,
         },
       },
@@ -625,9 +626,12 @@ function getRelativeLuminance(hexColor: string) {
   return 0.2126 * (channels[0] ?? 0) + 0.7152 * (channels[1] ?? 0) + 0.0722 * (channels[2] ?? 0);
 }
 
-export function getLegendDisplayThemeAppearance(themeName: string | null | undefined): LegendDisplayThemeAppearance {
-  const theme = getLegendDisplayTheme(themeName);
+function getAppearance(theme: LegendDisplayThemeFile): LegendDisplayThemeAppearance {
   return theme.appearance ?? (getRelativeLuminance(theme.colors.background) < 0.5 ? "dark" : "light");
+}
+
+export function getLegendDisplayThemeAppearance(themeName: string | null | undefined): LegendDisplayThemeAppearance {
+  return getAppearance(getLegendDisplayTheme(themeName));
 }
 
 export const getLegendThemeAppearance = getLegendDisplayThemeAppearance;
