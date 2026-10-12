@@ -312,6 +312,17 @@ function createLegendDisplayTheme(theme: LegendDisplayThemeFile): LegendDisplayT
         color: colors.link ?? colors.primary,
         underline: true,
       },
+      linkVariants: {
+        "^https?://github\\.com/[^/?#]+/[^/?#]+/(?:issues|pull)/[0-9]+(?:[/?#]|$)": {
+          backgroundColor: colors.surfaceMuted,
+          underline: false,
+        },
+        "^(?:mention|user):": {
+          color: colors.primary,
+          backgroundColor: colors.blockquoteBackground,
+          underline: false,
+        },
+      },
       list: {
         color: colors.foreground,
         fontFamily: bodyFontFamily,
