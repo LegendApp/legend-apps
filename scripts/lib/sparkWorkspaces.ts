@@ -1,23 +1,23 @@
 import fs from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { SparkApplicationConfig } from "@legendapp/spark/config";
 import path from "node:path";
-import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
+import { appIds, appsDir, rootDir, shellDir, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import type { AppManifest } from "./types";
 import { sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
 
-export const sparkWorkspace = (appId: string) => path.join(shellDir, ".legend", "spark", appId);
+export const sharedSparkWorkspace = path.join(shellDir, ".legend", "spark");
+export const sparkWorkspace = (appId: string, mode: "dev" | "release" = "dev") => path.join(sharedSparkWorkspace, mode === "release" ? `${appId}-release` : appId);
 
 export function sparkMetroBlockList(appId: string) {
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return [
     "/shell/\\.legend/.*/(?:macos|ios|android|\\.spark)/",
     `${escape(path.join(shellDir, ".legend"))}/(?!spark(?:/|$))[^/]+(?:/|$)`,
-    // Each consumer owns its dependency installation. Crawling siblings races
-    // their installs and multiplies Metro startup work for every generated app.
-    `${escape(path.join(shellDir, ".legend", "spark"))}/(?!${escape(appId)}(?:/|$))[^/]+(?:/|$)`,
+    // Keep the shared install visible while excluding other generated projects.
+    `${escape(path.join(shellDir, ".legend", "spark"))}/(?!(?:${escape(appId)}|node_modules)(?:/|$))[^/]+(?:/|$)`,
   ];
 }
 
@@ -27,7 +27,11 @@ function json(file: string) {
 
 function write(file: string, value: string | object) {
   const content = typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}\n`;
-  if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== content) fs.writeFileSync(file, content);
+  if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== content) {
+    const temporary = `${file}.${randomUUID()}`;
+    fs.writeFileSync(temporary, content);
+    fs.renameSync(temporary, file);
+  }
 }
 
 /** Translate app identity and the explicit native module graph into Spark config. */
@@ -123,12 +127,11 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
   } satisfies SparkApplicationConfig;
 }
 
-export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
-  const project = sparkWorkspace(manifest.id);
+function sparkPackage(manifest: AppManifest) {
   const repo = json(path.join(rootDir, "package.json"));
   const localFile = path.join(rootDir, "spark.local.json");
-  const sdk = fs.existsSync(localFile) ? json(localFile).sdk : repo.catalog["@legendapp/spark"];
-  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in spark.local.json or the workspace catalog.");
+  const sdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync(localFile) ? json(localFile).sdk : repo.catalog["@legendapp/spark"]);
+  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in LEGEND_SPARK_SDK, spark.local.json or the workspace catalog.");
   const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(rootDir, sdk.slice(5))}` : sdk;
   const template = json(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
   const app = json(path.join(appsDir, manifest.id, "package.json"));
@@ -156,13 +159,58 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   }
   overrides["@legendapp/spark"] = selectedSdk;
   dependencies["@legendapp/spark"] = selectedSdk;
-  // Keep app libraries as source dependencies while Spark owns the host.
+  const localPackages = new Set<string>();
   for (const entry of fs.readdirSync(path.join(rootDir, "packages"))) {
     const dir = path.join(rootDir, "packages", entry);
-    if (fs.existsSync(path.join(dir, "package.json"))) overrides[json(path.join(dir, "package.json")).name] = `file:${dir}`;
+    if (fs.existsSync(path.join(dir, "package.json"))) localPackages.add(json(path.join(dir, "package.json")).name);
   }
-  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = `file:${pkg.root}`;
-  for (const name of Object.keys(dependencies)) if (overrides[name]) dependencies[name] = overrides[name];
+  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = localPackages.has(pkg.name) ? "workspace:*" : json(path.join(pkg.root, "package.json")).version;
+  for (const name of Object.keys(dependencies)) dependencies[name] = localPackages.has(name) ? "workspace:*" : overrides[name] ?? dependencies[name];
+  return { repo, app, active, dependencies, overrides };
+}
+
+export async function prepareSharedSparkInstall() {
+  const repo = json(path.join(rootDir, "package.json"));
+  const dependencies: Record<string, string> = {};
+  let overrides: Record<string, string> = {};
+  for (const appId of appIds) {
+    const manifest = await loadAppManifest(appId);
+    if (!manifest.platforms.includes("macos")) continue;
+    const pkg = sparkPackage(manifest);
+    for (const [name, version] of Object.entries(pkg.dependencies)) {
+      if (dependencies[name] && dependencies[name] !== version) throw new Error(`Conflicting shared Spark dependency ${name}: ${dependencies[name]} and ${version}`);
+      dependencies[name] = version;
+    }
+    overrides = pkg.overrides;
+  }
+  fs.mkdirSync(sharedSparkWorkspace, { recursive: true });
+  write(path.join(sharedSparkWorkspace, "package.json"), {
+    name: "legend-spark-shared", private: true, packageManager: "bun@1.3.14",
+    workspaces: ["../../../packages/*"], catalog: repo.catalog,
+    dependencies, overrides, trustedDependencies: repo.trustedDependencies,
+    patchedDependencies: Object.fromEntries(Object.entries(repo.patchedDependencies ?? {}).map(([name, file]) => [name, path.relative(sharedSparkWorkspace, path.resolve(rootDir, file as string))])),
+    "enriched-markdown": repo["enriched-markdown"],
+  });
+  return sharedSparkWorkspace;
+}
+
+export function preservePreviousSparkInstall(project: string) {
+  for (const name of ["node_modules", "bun.lock"]) {
+    const previous = path.join(project, name);
+    if (!fs.existsSync(previous)) continue;
+    if (name === "node_modules" && fs.readdirSync(previous).every(entry => entry === ".cache")) continue;
+    const backup = path.join(path.dirname(project), ".legacy-installs", path.basename(project), name);
+    if (fs.existsSync(backup)) throw new Error(`Cannot preserve old Spark install: ${backup} already exists. Move ${previous} before preparing this app.`);
+    fs.mkdirSync(path.dirname(backup), { recursive: true });
+    fs.renameSync(previous, backup);
+    if (name === "node_modules") fs.rmSync(path.join(project, ".spark/native-selection.json"), { force: true });
+  }
+}
+
+export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
+  const project = sparkWorkspace(manifest.id, mode);
+  const { repo, app, active, dependencies, overrides } = sparkPackage(manifest);
+  preservePreviousSparkInstall(project);
   fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
   const settings = path.join(project, ".spark/settings.json");
@@ -170,7 +218,7 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   write(path.join(project, "package.json"), {
     name: `legend-spark-${manifest.id}`, version: app.version, private: true,
     main: "index.ts", packageManager: "bun@1.3.14", catalog: repo.catalog,
-    dependencies, overrides,
+    dependencies, overrides: { ...overrides, ...dependencies },
     patchedDependencies: Object.fromEntries(Object.entries(repo.patchedDependencies ?? {}).map(([name, file]) => [name, path.relative(project, path.resolve(rootDir, file as string))])),
     ...(active.some(pkg => pkg.name === "react-native-enriched-markdown")
       ? { "enriched-markdown": repo["enriched-markdown"] } : {}),
@@ -193,11 +241,13 @@ config.resolver.useWatchman = false;
 const existingBlockList = config.resolver.blockList;
 config.resolver.blockList = [
   ...(Array.isArray(existingBlockList) ? existingBlockList : existingBlockList ? [existingBlockList] : []),
-  ...${JSON.stringify(sparkMetroBlockList(manifest.id))}.map(pattern => new RegExp(pattern)),
+  ...${JSON.stringify(sparkMetroBlockList(path.basename(project)))}.map(pattern => new RegExp(pattern)),
 ];
+const sourceRoots = ${JSON.stringify([appsDir, path.join(rootDir, "packages"), path.join(shellDir, "src")])};
 const resolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, name, platform) => {
   if (name === "@legendapp/spark" || name.startsWith("@legendapp/spark/")) return context.resolveRequest({ ...context, originModulePath: path.join(__dirname, "index.ts") }, name, platform);
+  if (!name.startsWith(".") && !path.isAbsolute(name) && sourceRoots.some(root => context.originModulePath.startsWith(root + path.sep))) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
   if (/^(react|react-native|react-native-nitro-modules|react-native-worklets|react-native-reanimated|uniwind|@legendapp\\/state)(\\/|$)/.test(name)) context = { ...context, originModulePath: path.join(__dirname, "index.ts") };
   return resolveRequest ? resolveRequest(context, name, platform) : context.resolveRequest(context, name, platform);
 };

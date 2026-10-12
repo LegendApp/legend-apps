@@ -2,7 +2,18 @@
 
 The default macOS app commands use the Spark SDK selected in the workspace
 catalog and generate consumers under
-`shell/.legend/spark/<app>`. The `bun run spark <app> ...` commands expose the same
+`shell/.legend/spark/<app>` for dev and `<app>-release` for release. Both use
+one union install at `shell/.legend/spark/`; generated projects retain each app's
+native dependencies and exclusions and are not Bun workspaces. Local `packages/*`
+are live workspace links, so new source files resolve without reinstalling.
+Old per-app installs are preserved under `.legacy-installs/` and excluded from
+Metro; remove them only after reviewing the backup.
+
+`bun run spark:warm` installs once and prepares all macOS apps. Unchanged inputs
+skip installation; `--reinstall` forces it. `LEGEND_OFFLINE=1` or `--offline`
+requires a current shared stamp and fails before network-capable preparation.
+
+The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
@@ -13,8 +24,8 @@ local artifact, create the gitignored root `spark.local.json`:
 {"sdk": "file:../legend-spark/artifacts/packages/<tgz>"}
 ```
 
-Generated hosts use this override when present, resolving file paths from the repo
-root; otherwise they use the catalog. The selected SDK flows into generated
+Generated hosts prefer `LEGEND_SPARK_SDK`, then this override, resolving `file:`
+paths from the repo root; otherwise they use the catalog. The selected SDK flows into generated
 `package.json` dependencies and overrides, so changing or removing the override
 invalidates the install hash. Archive contents are also hashed. Do not commit
 local SDK paths in `package.json` or `bun.lock`.
@@ -65,6 +76,10 @@ bun run spark code install
 bun run spark code build
 bun run spark code start
 ```
+
+Packaging smoke-launches the copied release app for 20 seconds before signing;
+`--skip-smoke` explicitly bypasses that check. Exits and new crash reports stop
+packaging with diagnostics.
 
 `build` makes a debug app. `analyze` checks the production JavaScript/native graph
 without a native release build. `install` uses Bun's hoisted linker. The wrapper

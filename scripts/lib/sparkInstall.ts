@@ -24,10 +24,11 @@ function localDependencies(pkg: Record<string, Record<string, string>>) {
     .filter(value => value.startsWith("file:")).map(value => value.slice(5));
 }
 
-export function sparkInstallHash(project: string, appId: string, repoRoot = rootDir) {
+export function sparkInstallHash(project: string, repoRoot = rootDir, includeLock = true) {
   const hash = createHash("sha256");
   hash.update(JSON.stringify(process.versions.bun));
-  const files = new Set([path.join(project, "package.json"), path.join(repoRoot, "bun.lock")]);
+  const files = new Set([path.join(project, "package.json")]);
+  if (includeLock) files.add(path.join(project, "bun.lock"));
   const pkg = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
   const sdk = pkg.dependencies["@legendapp/spark"] as string;
   if (sdk.startsWith("file:")) {
@@ -40,9 +41,14 @@ export function sparkInstallHash(project: string, appId: string, repoRoot = root
     }
   }
   for (const patch of Object.values(pkg.patchedDependencies ?? {}) as string[]) files.add(path.resolve(project, patch));
-  // file: links snapshot filenames. Source edits need no install, but added or
-  // removed files (including the app sources exposed by Metro) need new links.
-  const local = new Set([path.join(repoRoot, "apps", appId), ...localDependencies(pkg).map(file => path.resolve(project, file))]);
+  for (const workspace of pkg.workspaces ?? []) {
+    const directory = path.resolve(project, workspace.replace(/\/\*$/, ""));
+    for (const entry of fs.readdirSync(directory)) {
+      const manifest = path.join(directory, entry, "package.json");
+      if (fs.existsSync(manifest)) files.add(manifest);
+    }
+  }
+  const local = new Set(localDependencies(pkg).map(file => path.resolve(project, file)));
   for (const location of local) {
     if (!fs.statSync(location).isDirectory()) {
       files.add(location);
@@ -57,7 +63,7 @@ export function sparkInstallHash(project: string, appId: string, repoRoot = root
   }
   for (const file of [...files].sort()) {
     hash.update(JSON.stringify(path.relative(repoRoot, file)));
-    hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
+    if (file !== path.join(project, "bun.lock") || fs.existsSync(file)) hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
   }
   return hash.digest("hex");
 }
@@ -157,7 +163,7 @@ export function installSparkWorkspace(options: InstallOptions, execute = runInst
 
 function installUnlocked(options: InstallOptions, execute: typeof runInstall): "skipped" | "installed" {
   const { project, appId } = options;
-  const hash = sparkInstallHash(project, appId, options.repoRoot);
+  const hash = sparkInstallHash(project, options.repoRoot);
   const nodeModules = path.join(project, "node_modules");
   const stamp = path.join(nodeModules, ".legend-install-stamp");
   if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash) {
@@ -165,15 +171,16 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
     return "skipped";
   }
   if (options.offline) {
-    const retry = options.force ? `spark ${appId} install --reinstall` : "spark:warm";
+    const retry = options.force ? appId === "shared Spark" ? "spark:warm --reinstall" : `spark ${appId} install --reinstall` : "spark:warm";
     throw new SparkInstallError(`${appId}: ${options.force ? "cannot reinstall offline" : "dependencies changed or install stamp missing"}; Bun has no offline install. Reconnect and run LEGEND_OFFLINE=0 bun run ${retry} (without --offline).`);
   }
   // A failed install must not leave a previously valid stamp behind.
   fs.rmSync(stamp, { force: true });
+  const inputs = sparkInstallHash(project, options.repoRoot, false);
   try {
     execute(["install", "--linker", "hoisted"], options);
     fs.mkdirSync(nodeModules, { recursive: true });
-    fs.writeFileSync(stamp, `${hash}\n`);
+    fs.writeFileSync(stamp, `${inputs === sparkInstallHash(project, options.repoRoot, false) ? sparkInstallHash(project, options.repoRoot) : hash}\n`);
   } catch (error) {
     fs.rmSync(stamp, { force: true });
     throw error;
@@ -228,7 +235,7 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
   const sdk = await import(pathToFileURL(path.join(dist, "project.js")).href);
   const native = await import(pathToFileURL(path.join(dist, "native-preparation.js")).href);
   sdk.prepareConfig(project);
-  const all = sdk.nativePackages(project);
+  const all = sdk.nativePackages(project, { applyExcludes: mode !== "release" });
   let chosen = { included: all };
   if (mode === "release") {
     const { analyze } = await import(pathToFileURL(path.join(dist, "build.js")).href);

@@ -8,7 +8,7 @@ import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { expandSparkSubpath } from "./sparkSubpaths";
-import { prepareSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { prepareSharedSparkInstall, prepareSparkWorkspace, preservePreviousSparkInstall, sharedSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { sparkSdkPackages } from "./sparkSdk";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
@@ -48,7 +48,7 @@ test("all workspace consumers resolve the locally selected or catalog Spark SDK"
   assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
   assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
   const localFile = path.join(root, "spark.local.json");
-  const sdk = fs.existsSync(localFile) ? JSON.parse(fs.readFileSync(localFile, "utf8")).sdk : repo.catalog["@legendapp/spark"];
+  const sdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync(localFile) ? JSON.parse(fs.readFileSync(localFile, "utf8")).sdk : repo.catalog["@legendapp/spark"]);
   const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(root, sdk.slice(5))}` : sdk;
   const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
   const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
@@ -74,6 +74,8 @@ test("Metro excludes sibling consumer installs while retaining its dependencies 
   assert.equal(blocked(path.resolve("shell/.legend/workspaces/dev/code/node_modules/react/index.js")), true);
   assert.equal(blocked(path.join(sparkWorkspace("code"), "node_modules/react/index.js")), false);
   assert.equal(blocked(path.join(sparkWorkspace("code"), ".spark/products/app")), true);
+  assert.equal(blocked(path.join(sharedSparkWorkspace, "node_modules/react/index.js")), false);
+  assert.equal(blocked(path.join(sharedSparkWorkspace, ".legacy-installs/code/node_modules/react/index.js")), true);
   assert.equal(blocked(path.resolve("packages/source-editor/src/index.tsx")), false);
   assert.equal(blocked(path.resolve("apps/code/src/App.tsx")), false);
 });
@@ -95,7 +97,11 @@ test("Metro resolves animation runtimes and their self-imports from the native h
   for (const name of ["react-native-worklets", "react-native-worklets/src/index", "react-native-reanimated", "react-native-reanimated/lib/module/index"]) {
     assert.equal(module.exports.resolver.resolveRequest(context, name, "macos"), path.join(project, "index.ts"));
   }
-  assert.equal(module.exports.resolver.resolveRequest(context, "react-native-worklets-other", "macos"), context.originModulePath);
+  const libraryContext = { originModulePath: path.resolve("packages/presentation/src/index.tsx") };
+  assert.equal(module.exports.resolver.resolveRequest(libraryContext, "@shopify/react-native-skia", "macos"), path.join(project, "index.ts"));
+  assert.equal(module.exports.resolver.resolveRequest(libraryContext, "./local", "macos"), libraryContext.originModulePath);
+  const vendorContext = { originModulePath: path.join(sharedSparkWorkspace, "node_modules/vendor/index.js") };
+  assert.equal(module.exports.resolver.resolveRequest(vendorContext, "vendor-peer", "macos"), vendorContext.originModulePath);
 });
 
 test("generated native config loads the current Spark native API", async () => {
@@ -105,7 +111,6 @@ test("generated native config loads the current Spark native API", async () => {
   for (const name of sparkConfig(manifest).expo.autolinking.exclude) {
     assert.equal(config.dependencies[name]?.platforms?.macos, null, name);
   }
-  assert.equal(typeof config.dependencies["@legendapp/spark-desktop-app"].root, "string");
 });
 
 test("unknown declared native modules cannot be silently excluded", async () => {
@@ -315,3 +320,47 @@ for (const appId of ["slides", "code", "diff", "markdown", "chat-history", "phot
     }
   });
 }
+
+test("shared install holds every app dependency while projects keep their native selection", async () => {
+  const shared = await prepareSharedSparkInstall();
+  const pkg = JSON.parse(fs.readFileSync(path.join(shared, "package.json"), "utf8"));
+  assert.deepEqual(pkg.workspaces, ["../../../packages/*"]);
+  for (const appId of appIds) {
+    const manifest = await loadAppManifest(appId);
+    const project = prepareSparkWorkspace(manifest);
+    const app = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
+    assert.equal(app.workspaces, undefined);
+    for (const [name, version] of Object.entries(app.dependencies)) assert.equal(pkg.dependencies[name], version, name);
+    for (const native of getExcludedNativePackages(manifest, "macos")) assert.equal(app.dependencies[native.name], undefined, `${appId}: ${native.name}`);
+  }
+  assert.equal(pkg.dependencies["@legend-apps/source-editor"], "workspace:*");
+  const hello = await loadAppManifest("hello-world");
+  assert.equal(prepareSparkWorkspace(hello, "release"), sparkWorkspace("hello-world", "release"));
+  assert.notEqual(sparkWorkspace("hello-world"), sparkWorkspace("hello-world", "release"));
+});
+
+test("preparing a shared consumer preserves old installs without leaving a shadowing node_modules", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "spark-previous-install-"));
+  const project = path.join(root, "example");
+  try {
+    fs.mkdirSync(path.join(project, "node_modules"), { recursive: true });
+    fs.writeFileSync(path.join(project, "node_modules/source.js"), "old source");
+    fs.writeFileSync(path.join(project, "bun.lock"), "old lock");
+    fs.mkdirSync(path.join(project, ".spark"));
+    fs.writeFileSync(path.join(project, ".spark/native-selection.json"), "stale native roots");
+    preservePreviousSparkInstall(project);
+    preservePreviousSparkInstall(project);
+    const backup = path.join(root, ".legacy-installs/example");
+    assert.equal(fs.existsSync(path.join(project, "node_modules")), false);
+    assert.equal(fs.existsSync(path.join(project, ".spark/native-selection.json")), false);
+    assert.equal(fs.readFileSync(path.join(backup, "node_modules/source.js"), "utf8"), "old source");
+    assert.equal(fs.readFileSync(path.join(backup, "bun.lock"), "utf8"), "old lock");
+    fs.mkdirSync(path.join(project, "node_modules/.cache"), { recursive: true });
+    fs.writeFileSync(path.join(project, "node_modules/.cache/metro"), "cache");
+    preservePreviousSparkInstall(project);
+    assert.equal(fs.readFileSync(path.join(project, "node_modules/.cache/metro"), "utf8"), "cache");
+    fs.writeFileSync(path.join(project, "node_modules/source.js"), "another install");
+    assert.throws(() => preservePreviousSparkInstall(project), /already exists/);
+    assert.ok(fs.existsSync(path.join(project, "node_modules")));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

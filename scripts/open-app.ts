@@ -63,7 +63,7 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
 
   const mode = readMode(runnerArgs);
   const buildMode = mode === "Release" ? "release" : "dev";
-  const record = path.join(sparkWorkspace(appId), `.spark/${buildMode}-build.json`);
+  const record = path.join(sparkWorkspace(appId, buildMode), `.spark/${buildMode}-build.json`);
   if (!fs.existsSync(record)) throw new Error(`Build the Spark app first: bun run ${appId} build macos${mode === "Debug" ? " --dev" : ""}`);
   const built = JSON.parse(fs.readFileSync(record, "utf8"));
   const appPath = built.app as string;

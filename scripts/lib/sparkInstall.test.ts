@@ -17,7 +17,7 @@ function fixture(t: TestContext) {
     fs.mkdirSync(path.dirname(location), { recursive: true });
     fs.writeFileSync(location, typeof content === "string" ? content : JSON.stringify(content));
   };
-  write("bun.lock", "root lock");
+  write("project/bun.lock", "shared lock");
   write("apps/example/package.json", { name: "example" });
   write("apps/example/src/index.ts", "app source");
   write("packages/local/package.json", { name: "local", dependencies: { nested: "file:../nested" } });
@@ -33,12 +33,12 @@ function fixture(t: TestContext) {
     patchedDependencies: { local: "../patches/local.patch" },
   });
   const options = { project, appId, repoRoot };
-  const hash = () => sparkInstallHash(project, appId, repoRoot);
+  const hash = () => sparkInstallHash(project, repoRoot);
   const stamp = path.join(project, "node_modules/.legend-install-stamp");
   return { repoRoot, project, write, options, hash, stamp };
 }
 
-for (const file of ["project/package.json", "bun.lock", "sdk/spark.tgz", "sdk/companion.tgz", "sdk/manifest.json", "patches/local.patch", "packages/local/package.json"]) {
+for (const file of ["project/package.json", "project/bun.lock", "sdk/spark.tgz", "sdk/companion.tgz", "sdk/manifest.json", "patches/local.patch", "packages/local/package.json"]) {
   test(`install hash tracks content changes to ${file}`, t => {
     const f = fixture(t);
     const before = f.hash();
@@ -47,7 +47,7 @@ for (const file of ["project/package.json", "bun.lock", "sdk/spark.tgz", "sdk/co
   });
 }
 
-for (const directory of ["apps/example", "packages/local", "packages/nested"]) {
+for (const directory of ["packages/local", "packages/nested"]) {
   test(`install hash tracks file additions and removals in ${directory}`, t => {
     const f = fixture(t);
     const before = f.hash();
@@ -119,14 +119,12 @@ test("file snapshots are sorted independently of directory enumeration order", t
 test("install hash tracks payload additions in build and dist directories", t => {
   const f = fixture(t);
   for (const directory of ["build", ".build", "dist", ".spark", ".expo", ".gradle", "Pods", "DerivedData", "target"]) {
-    for (const root of ["packages/local", "apps/example"]) {
-      const before = f.hash();
-      const file = `${root}/${directory}/new.js`;
-      f.write(file, "payload");
-      assert.notEqual(f.hash(), before, file);
-      fs.rmSync(path.join(f.repoRoot, file));
-      assert.equal(f.hash(), before);
-    }
+    const before = f.hash();
+    const file = `packages/local/${directory}/new.js`;
+    f.write(file, "payload");
+    assert.notEqual(f.hash(), before, file);
+    fs.rmSync(path.join(f.repoRoot, file));
+    assert.equal(f.hash(), before);
   }
 });
 
@@ -150,7 +148,7 @@ test("plain install writes a stamp, skips unchanged inputs, and reinstalls chang
   assert.equal(fs.readFileSync(f.stamp, "utf8").trim(), f.hash());
   assert.equal(installSparkWorkspace(f.options, execute), "skipped");
   assert.deepEqual(calls, [["install", "--linker", "hoisted"]]);
-  f.write("apps/example/src/new.ts", "new");
+  f.write("packages/local/src/new.ts", "new");
   assert.equal(installSparkWorkspace(f.options, execute), "installed");
   assert.equal(calls.length, 2);
   fs.rmSync(path.join(f.project, "node_modules"), { recursive: true });
@@ -289,7 +287,7 @@ console.log(installSparkWorkspace({ ...${JSON.stringify(f.options)}, offline: pr
   assert.ok(fs.existsSync(marker), "first installer acquired the lock");
   // This source addition must be seen by the waiting stamp check, rather than
   // hashed before acquiring the lock. It therefore cannot use the old stamp.
-  f.write("apps/example/src/new.ts", "new");
+  f.write("packages/local/src/new.ts", "new");
   const second = launch(["--offline"]);
   const [installed, refused] = await Promise.all([first, second]);
   assert.equal(installed.code, 0, installed.output);
@@ -323,7 +321,7 @@ for (const offline of ["flag", "env"] as const) {
     assert.throws(() => installSparkWorkspace({ ...options, force: true }, execute), /cannot reinstall offline.*LEGEND_OFFLINE=0 bun run spark example install --reinstall/);
     assert.equal(fs.readFileSync(f.stamp, "utf8"), stamp);
     assert.equal(installSparkWorkspace(options, execute), "skipped");
-    f.write("apps/example/src/new.ts", "new");
+    f.write("packages/local/src/new.ts", "new");
     assert.throws(() => installSparkWorkspace(options, execute), /dependencies changed/);
     assert.equal(fs.readFileSync(f.stamp, "utf8"), stamp);
   });
@@ -350,6 +348,8 @@ export function assertSupportedPlatform() {}
   f.write("scripts/lib/sparkWorkspaces.ts", `import fs from "node:fs";
 import path from "node:path";
 import { rootDir } from "./apps";
+export async function prepareSharedSparkInstall() { return rootDir; }
+export function sparkWorkspace(id) { return path.join(rootDir, id); }
 export function prepareSparkWorkspace(manifest) {
   fs.appendFileSync(path.join(rootDir, "prepared"), manifest.id + "\\n");
   return path.join(rootDir, manifest.id);
@@ -364,6 +364,7 @@ fs.appendFileSync(${JSON.stringify(path.join(f.repoRoot, "attempts"))}, JSON.str
 process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 23 : 0);
 `);
   fs.chmodSync(path.join(f.repoRoot, "bin/bun"), 0o755);
+  f.write("package.json", { dependencies: { "@legendapp/spark": "0.0.1" } });
   for (const id of appIds) {
     f.write(`${id}/package.json`, { dependencies: { "@legendapp/spark": "0.0.1" } });
     f.write(`apps/${id}/package.json`, { name: id });
@@ -378,7 +379,7 @@ process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 2
 }
 
 function nativeFixture(f: ReturnType<typeof cliFixture>) {
-  const sdk = "example/node_modules/@legendapp/spark";
+  const sdk = "node_modules/@legendapp/spark";
   const dist = `${sdk}/vendor/node_modules/@legendapp/spark-cli/dist`;
   f.write(`${sdk}/package.json`, { name: "@legendapp/spark", exports: { "./cli": "./bin/spark.cjs" } });
   f.write(`${sdk}/bin/spark.cjs`, "");
@@ -424,18 +425,15 @@ export const findGo = () => fs.existsSync(${JSON.stringify(path.join(f.repoRoot,
   return { fingerprint, projectFingerprint };
 }
 
-test("warm continues after failure, retains Bun status, and preserves stamps offline", { timeout: 30_000 }, t => {
+test("warm installs once, retains Bun status, and preserves stamps offline", { timeout: 30_000 }, t => {
   const f = cliFixture(t, ["example", "unsupported", "last"]);
   f.write("fail", "");
   const failed = f.invoke("spark-warm", []);
   assert.equal(failed.status, 23, failed.stderr);
   assert.match(failed.stderr, /Bun install failed.*23/);
   assert.doesNotMatch(failed.stderr, /at .*sparkInstall|cache|retry/);
-  assert.equal(fs.readFileSync(path.join(f.repoRoot, "prepared"), "utf8"), "example\nlast\n");
-  assert.deepEqual(f.attempts(), [
-    ["example", ["install", "--linker", "hoisted"]],
-    ["last", ["install", "--linker", "hoisted"]],
-  ]);
+  assert.equal(fs.existsSync(path.join(f.repoRoot, "prepared")), false);
+  assert.equal(f.attempts().length, 1);
   fs.rmSync(path.join(f.repoRoot, "fail"));
   assert.equal(f.invoke("spark-warm", []).status, 0);
   const before = f.attempts();
@@ -443,7 +441,7 @@ test("warm continues after failure, retains Bun status, and preserves stamps off
     const args = offlineEnv ? [] : ["--offline"];
     const skipped = f.invoke("spark-warm", args, offlineEnv);
     assert.equal(skipped.status, 0, skipped.stderr);
-    assert.match(skipped.stdout, /last: dependencies unchanged; skipping/);
+    assert.match(skipped.stdout, /shared Spark: dependencies unchanged; skipping/);
     const refused = f.invoke("spark-warm", [...args, "--reinstall"], offlineEnv);
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /cannot reinstall offline/);
@@ -471,7 +469,7 @@ export async function runSparkDevServer(options) { runCommand("dev", options.run
 `);
   const { fingerprint, projectFingerprint } = nativeFixture(f);
   const app = (action: string, args: string[] = [], offlineEnv = false) => f.invoke("spark-app", ["example", action, ...args], offlineEnv);
-  const stamp = path.join(f.repoRoot, "example/node_modules/.legend-install-stamp");
+  const stamp = path.join(f.repoRoot, "node_modules/.legend-install-stamp");
   const commands = () => fs.existsSync(path.join(f.repoRoot, "commands"))
     ? fs.readFileSync(path.join(f.repoRoot, "commands"), "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
   return { ...f, fingerprint, projectFingerprint, app, stamp, commands };
@@ -508,7 +506,7 @@ test("spark-app forwards only the analyze action tail to the CLI and offline gua
     `export function assertSparkOfflineArgs(args: string[]) {
   fs.writeFileSync(${JSON.stringify(offlineArgsFile)}, JSON.stringify(args));`,
   ));
-  const cli = fs.realpathSync(path.join(f.repoRoot, "example/node_modules/@legendapp/spark/bin/spark.cjs"));
+  const cli = fs.realpathSync(path.join(f.repoRoot, "node_modules/@legendapp/spark/bin/spark.cjs"));
   for (const tail of [[], ["--help"], ["--help", "--", "--offline", "--reinstall"]]) {
     for (const mode of ["online", "flag", "env"]) {
       const result = mode === "flag"
@@ -665,3 +663,35 @@ for (const offlineEnv of [false, true]) {
     assert.equal(f.attempts().length, 1);
   });
 }
+
+test("live workspaces invalidate on package metadata, not new source files", t => {
+  const f = fixture(t);
+  f.write("project/package.json", { dependencies: { "@legendapp/spark": "0.0.1" }, workspaces: ["../packages/*"] });
+  installSparkWorkspace(f.options, () => {});
+  f.write("packages/local/src/new.ts", "new live source");
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => { throw new Error("must skip"); }), "skipped");
+  f.write("packages/nested/package.json", { name: "nested", version: "2.0.0" });
+  assert.throws(() => installSparkWorkspace({ ...f.options, offline: true }, () => {}), /dependencies changed/);
+});
+
+test("stamp includes the lock Bun writes during installation", t => {
+  const f = fixture(t);
+  fs.rmSync(path.join(f.project, "bun.lock"));
+  installSparkWorkspace(f.options, () => f.write("project/bun.lock", "installed lock"));
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => { throw new Error("must skip"); }), "skipped");
+});
+
+test("Bun links external workspaces live through a per-app project", t => {
+  const f = fixture(t);
+  f.write("project/package.json", { name: "shared", private: true, workspaces: ["../packages/*"], dependencies: { local: "workspace:*" } });
+  f.write("packages/local/package.json", { name: "local", version: "1.0.0" });
+  f.write("project/example/package.json", { name: "example", dependencies: { local: "workspace:*" } });
+  const result = spawnSync(process.execPath, ["install", "--linker", "hoisted", "--ignore-scripts"], { cwd: f.project, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(fs.lstatSync(path.join(f.project, "node_modules/local")).isSymbolicLink());
+  f.write("packages/local/src/new.js", "module.exports = 42;");
+  const resolved = spawnSync(process.execPath, ["-e", 'console.log(require("local/src/new.js"))'], { cwd: path.join(f.project, "example"), encoding: "utf8" });
+  assert.equal(resolved.status, 0, resolved.stderr);
+  assert.equal(resolved.stdout.trim(), "42");
+  assert.equal(fs.existsSync(path.join(f.project, "example/node_modules")), false);
+});

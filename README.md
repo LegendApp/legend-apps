@@ -213,7 +213,9 @@ bun run test:markdown-e2e
 - `packages/` contains shared TypeScript libraries and React Native native
   modules.
 - `shell/` contains the shared JavaScript entrypoint and mobile native host.
-  Spark generates the macOS consumers under `shell/.legend/spark/<app>`.
+  Spark generates macOS dev consumers under `shell/.legend/spark/<app>` and
+  release consumers under `<app>-release`, sharing one install in
+  `shell/.legend/spark/node_modules`.
 - `scripts/` contains app selection, configuration generation, verification,
   build, package, and release tooling.
 - `patches/` contains Bun `patchedDependencies` applied during installation.

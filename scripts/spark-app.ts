@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { assertSupportedPlatform, loadAppManifest } from "./lib/apps";
 import { runSparkDevServer } from "./lib/sparkDevServer";
 import { assertSparkOfflineArgs, assertSparkOfflineBuild, assertSparkOfflineStart, installSparkWorkspace, parseSparkInstallArgs, SparkInstallError, sparkOfflineHelp } from "./lib/sparkInstall";
-import { prepareSparkWorkspace } from "./lib/sparkWorkspaces";
+import { prepareSharedSparkInstall, prepareSparkWorkspace, sparkWorkspace } from "./lib/sparkWorkspaces";
 import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 
 const { extra, ...installOptions } = parseSparkInstallArgs(process.argv.slice(2));
@@ -18,7 +18,9 @@ if (!appId) throw new Error(`Usage: bun scripts/spark-app.ts <app> <prepare|inst
 if (!["prepare", "install", "build", "build-release", "run", "start", "analyze"].includes(action)) throw new Error(`Unknown Spark action: ${action}`);
 const manifest = await loadAppManifest(appId);
 assertSupportedPlatform(manifest, "macos");
-const project = prepareSparkWorkspace(manifest, action === "build-release" ? "release" : "dev");
+const sharedProject = await prepareSharedSparkInstall();
+const mode = action === "build-release" ? "release" : "dev";
+const project = sparkWorkspace(manifest.id, mode);
 const env = {
   LEGEND_APP: appId, LEGEND_PLATFORM: "macos", SPARK_PLATFORM: "macos",
   ...(installOptions.offline ? { LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } : {}),
@@ -33,7 +35,8 @@ let cli = "";
 const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : actionTail)];
 try {
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
-  if (["install", "build", "build-release", "run", "start"].includes(action)) installSparkWorkspace({ project, appId, env, ...installOptions });
+  if (["install", "build", "build-release", "run", "start"].includes(action)) installSparkWorkspace({ project: sharedProject, appId, env, ...installOptions });
+  prepareSparkWorkspace(manifest, mode);
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
   if (installOptions.offline && ["build", "build-release", "run"].includes(action)) {
     await assertSparkOfflineBuild(project, cli, buildArgs);

@@ -13,7 +13,7 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
     fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
     fs.cpSync(path.join(source, "scripts/lib"), path.join(root, "scripts/lib"), { recursive: true });
     fs.symlinkSync(path.join(source, "node_modules"), path.join(root, "node_modules"));
-    fs.mkdirSync(path.join(root, "packages"));
+    fs.symlinkSync(path.join(source, "packages"), path.join(root, "packages"));
     fs.symlinkSync(path.join(source, "patches"), path.join(root, "patches"));
     fs.copyFileSync(path.join(source, "bun.lock"), path.join(root, "bun.lock"));
     for (const app of fs.readdirSync(path.join(source, "apps"))) {
@@ -33,8 +33,8 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
     for (const archive of ["sdk.tgz", "other.tgz"]) fs.writeFileSync(path.join(workspace, archive), "preparation fixture");
     const localFile = path.join(root, "spark.local.json");
     const hashes: string[] = [];
-    const prepare = () => spawnSync(process.execPath, ["-e", 'import { loadAppManifest } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const project = prepareSparkWorkspace(await loadAppManifest("hello-world")); console.log(sparkInstallHash(project, "hello-world"));'], {
-      cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_ROOT: path.join(workspace, "absent-spark-checkout") },
+    const prepare = (envSdk?: string) => spawnSync(process.execPath, ["-e", 'import { loadAppManifest } from "./scripts/lib/apps.ts"; import { prepareSharedSparkInstall, prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = await prepareSharedSparkInstall(); console.log(sparkInstallHash(shared, process.cwd()));'], {
+      cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_ROOT: path.join(workspace, "absent-spark-checkout"), LEGEND_SPARK_SDK: envSdk },
     });
     for (const sdk of [undefined, "file:../sdk.tgz", "file:../other.tgz", undefined]) {
       if (sdk) fs.writeFileSync(localFile, JSON.stringify({ sdk }));
@@ -54,6 +54,9 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
     assert.notEqual(hashes[0], hashes[1], "adding a local override must invalidate the install");
     assert.notEqual(hashes[1], hashes[2], "changing the override must invalidate the install");
     assert.equal(hashes[0], hashes[3], "removing the override restores the published install inputs");
+    fs.writeFileSync(localFile, JSON.stringify({ sdk: "file:../sdk.tgz" }));
+    assert.equal(prepare("file:../other.tgz").status, 0);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, "shell/.legend/spark/package.json"), "utf8")).dependencies["@legendapp/spark"], `file:${path.join(workspace, "other.tgz")}`);
     for (const [content, error] of [["{}", /Select a Spark SDK version/], [JSON.stringify({ sdk: "file:../missing.tgz" }), /archive is missing/], ["{", /JSON/]] as const) {
       fs.writeFileSync(localFile, content);
       const result = prepare();

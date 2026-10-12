@@ -22,7 +22,7 @@ When the user explicitly asks for React Native macOS app runtime debugging, do n
 
 Use the normal `agent-device logs clear --restart` / `mark before` / repro / `mark after` / `logs path` loop above, with these extra checks when logs are empty or confusing:
 
-- Verify there is exactly one current debug app process, and that it comes from `shell/.legend/spark/<app>/.spark/products/macos-<arch>/dev/...`, not `shell/.legend/spark/<app>/.spark/products/macos-<arch>/release/...`.
+- Verify there is exactly one current debug app process, and that it comes from `shell/.legend/spark/<app>/.spark/products/macos-<arch>/dev/...`, not `shell/.legend/spark/<app>-release/.spark/products/macos-<arch>/release/...`.
 - Bind with `agent-device open <bundle-id-or-app-name> --session <name> --platform macos --surface app` and verify the process path separately. Avoid `--surface frontmost-app` unless the user is explicitly asking to inspect whichever app is currently frontmost.
 - If `app.log` only contains `agent-device` markers, confirm `logs path` reports `active=true`, the debug prefix was emitted after `logs clear --restart`, and the session is bound to the correct app.
 - For temporary instrumentation that must be visible in `agent-device logs` on macOS, prefer native unified logging with the app bundle id subsystem, for example `os_log_create("so.legend.markdown.macos", "debug-category")`. Plain `NSLog` can be missed by the app-scoped filter.
@@ -37,11 +37,11 @@ For current-code testing, launch the app with the repo scripts before binding `a
 
 Before a native rebuild/relaunch, close the running app first. If the app is already running, the build/run script may only focus the old process, so the rebuilt native code will not be loaded.
 
-Do not rely on `agent-device open <bundle-id>` as the primary way to launch current code. For generated macOS apps it can bind to a stale release build under `shell/.legend/spark/<app>/.spark/products/macos-<arch>/release/...`, which will not contain current JS/native changes. After launching, verify the running process when behavior or logs look stale:
+Do not rely on `agent-device open <bundle-id>` as the primary way to launch current code. For generated macOS apps it can bind to a stale release build under `shell/.legend/spark/<app>-release/.spark/products/macos-<arch>/release/...`, which will not contain current JS/native changes. After launching, verify the running process when behavior or logs look stale:
 
 - `ps -axo pid,lstart,command | rg "legendapp-shell-macos|Legend Markdown|Legend Music|so.legend.(music|markdown)"`
 - Debug/current builds should run from Xcode `shell/.legend/spark/<app>/.spark/products/macos-<arch>/dev/<AppName>.app/...`.
-- Stale release builds usually run from `shell/.legend/spark/<app>/.spark/products/macos-<arch>/release/<AppName>.app/...`.
+- Stale release builds usually run from `shell/.legend/spark/<app>-release/.spark/products/macos-<arch>/release/<AppName>.app/...`.
 
 The app-specific Metro ports are defined in `scripts/lib/apps.ts`; do not assume `8081`:
 

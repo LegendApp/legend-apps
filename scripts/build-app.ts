@@ -136,7 +136,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
       cwd: rootDir,
       env: { SPARK_MACOS_ARCH: arch === "arm" ? "arm64" : "x64" },
     });
-    const appPath = JSON.parse(fs.readFileSync(path.join(sparkWorkspace(appId), ".spark/release-build.json"), "utf8")).app as string;
+    const appPath = JSON.parse(fs.readFileSync(path.join(sparkWorkspace(appId, "release"), ".spark/release-build.json"), "utf8")).app as string;
     if (appId === "diff") {
       const helper = path.join(appPath, "Contents/Helpers/diff-customizer.helper");
       runCommand("bun", ["scripts/package-diff-customizer.mjs", helper, arch === "arm" ? "arm64" : "x64"], { cwd: rootDir });

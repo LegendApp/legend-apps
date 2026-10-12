@@ -21,6 +21,7 @@ import {
   getReleaseAssetStem,
 } from "./lib/release";
 import { validateMacOSReleaseApp, validateMacOSReleaseArchive } from "./lib/macosReleaseValidation";
+import { smokeLaunchMacOSApp } from "./lib/macosSmoke";
 import type { MacOSReleaseArch } from "./lib/types";
 
 type MacOSPackageArch = MacOSReleaseArch | "all";
@@ -31,6 +32,7 @@ type PackageOptions = {
   skipBuild: boolean;
   skipNotarize: boolean;
   skipSign: boolean;
+  skipSmoke: boolean;
 };
 
 function runCommand(command: string, args: string[], options: { cwd?: string } = {}) {
@@ -52,6 +54,7 @@ function parseOptions(args: string[]): PackageOptions {
     skipBuild: false,
     skipNotarize: false,
     skipSign: false,
+    skipSmoke: false,
   };
 
   for (const arg of args) {
@@ -69,6 +72,8 @@ function parseOptions(args: string[]): PackageOptions {
       options.skipNotarize = true;
     } else if (arg === "--skip-sign") {
       options.skipSign = true;
+    } else if (arg === "--skip-smoke") {
+      options.skipSmoke = true;
     } else {
       throw new Error(`Unexpected package option "${arg}".`);
     }
@@ -187,7 +192,7 @@ function notarizeApp(appPath: string, safeAppName: string, options: PackageOptio
 
 function getGenerateAppcastPath(appId: string) {
   const workspaceToolPath = path.join(
-    sparkWorkspace(appId),
+    sparkWorkspace(appId, "release"),
     "macos",
     "Pods",
     "Sparkle",
@@ -207,7 +212,7 @@ function getGenerateAppcastPath(appId: string) {
   throw new Error(`Could not find Sparkle generate_appcast at ${workspaceToolPath} or ${sharedToolPath}.`);
 }
 
-function packageArchitecture(
+async function packageArchitecture(
   appId: string,
   manifest: Awaited<ReturnType<typeof loadAppManifest>>,
   appPackage: ReturnType<typeof loadAppPackageMetadata>,
@@ -218,8 +223,8 @@ function packageArchitecture(
     runCommand("bun", ["scripts/build-app.ts", appId, "macos", arch], { cwd: rootDir });
   }
 
-  const workspaceDir = path.join(sparkWorkspace(appId), "macos");
-  const products = path.join(sparkWorkspace(appId), `.spark/products/macos-${arch === "arm" ? "arm64" : "x64"}/release`);
+  const workspaceDir = path.join(sparkWorkspace(appId, "release"), "macos");
+  const products = path.join(sparkWorkspace(appId, "release"), `.spark/products/macos-${arch === "arm" ? "arm64" : "x64"}/release`);
   const product = fs.existsSync(products) ? fs.readdirSync(products).find(name => name.endsWith(".app")) : undefined;
   const appWrapperName = getMacOSAppWrapperName(manifest.displayName);
   const builtAppPath = path.join(products, product ?? appWrapperName);
@@ -238,6 +243,18 @@ function packageArchitecture(
   fs.mkdirSync(distDir, { recursive: true });
   fs.rmSync(distAppPath, { recursive: true, force: true });
   runCommand("ditto", [builtAppPath, distAppPath]);
+
+  if (options.skipSmoke) {
+    console.warn("Skipping release smoke launch because --skip-smoke was passed.");
+  } else {
+    const info = spawnSync("plutil", ["-extract", "CFBundleExecutable", "raw", "-o", "-", path.join(distAppPath, "Contents/Info.plist")], { encoding: "utf8" });
+    if (info.status !== 0) throw new Error(`Could not read release executable: ${info.stderr}`);
+    await smokeLaunchMacOSApp({
+      executablePath: path.join(distAppPath, "Contents/MacOS", info.stdout.trim()),
+      appId,
+      arch,
+    });
+  }
 
   signApp(distAppPath, entitlementsPath, options);
   notarizeApp(distAppPath, `${manifest.id}-${arch}`, options);
@@ -329,7 +346,7 @@ function generateArchitectureAppcast(
 async function main() {
   const [appId, ...args] = process.argv.slice(2);
   if (!appId) {
-    throw new Error("Usage: bun scripts/package-macos-app.ts <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize]");
+    throw new Error("Usage: bun scripts/package-macos-app.ts <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize] [--skip-smoke]");
   }
 
   loadEnvFile(path.join(rootDir, ".env"));
@@ -346,7 +363,7 @@ async function main() {
   const appPackage = loadAppPackageMetadata(appId);
   const architectures = getPackageArchitectures(options.arch);
   for (const arch of architectures) {
-    packageArchitecture(appId, manifest, appPackage, options, arch);
+    await packageArchitecture(appId, manifest, appPackage, options, arch);
   }
 
   if (!options.skipAppcast) {
