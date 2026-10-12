@@ -173,7 +173,7 @@ support, not needed for ordinary deck components.
 ## Local effect packs (not installed host components)
 
 The source checkout contains `../legend-talks/react-native-desktop/effects.mdx`,
-a 40-slide gallery. Its `packs/` directory and `PresentingDemos.tsx` are reusable
+a 39-slide gallery. Its `packs/` directory and `PresentingDemos.tsx` are reusable
 source, not built-in names. To use them outside that directory, copy the necessary
 modules/assets beneath the new deck and update relative imports. `slides:` package
 names in prototype notes are proposals, not a working import resolver.
@@ -182,7 +182,7 @@ names in prototype notes are proposals, not a working import resolver.
 | --- | --- |
 | Background / distortion / glass | AmbientAurora, prismaticTear, liquidGlass, MaterialSampler |
 | Reveal / transform | NativeLayerPeel, ComponentXRay, FocusSpotlight, CodeToUI, CodeToPixels, PlatformMetamorphosis |
-| Data / GPU | NativeDataWindow, gpuConstellation, gpuInterfaceReveal, sidebarStorm |
+| Data / GPU | NativeDataWindow, gpuConstellation, gpuInterfaceReveal |
 | Motion / depth / interaction | PhysicsLayout, InfiniteDesktop, MagneticCursor |
 | Performance / charts | BenchmarkArrival, LatencyRace, MemoryGravity, FrameBudget, ThreadPressure |
 | Other | AgentDeviceScan, NativeOrbitLottie, WindowPortal, ChromeConveyor, ShaderTypography |
