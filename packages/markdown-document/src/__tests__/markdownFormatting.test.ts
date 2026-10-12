@@ -1,4 +1,36 @@
-import { setParagraphMarkdown, toggleCodeBlockMarkdown, toggleInlineMarkdown, linkSelectedMarkdown } from "../markdownFormatting";
+import {
+  setHeadingMarkdown,
+  setParagraphMarkdown,
+  toggleCodeBlockMarkdown,
+  toggleInlineMarkdown,
+  toggleOrderedListMarkdown,
+  toggleUnorderedListMarkdown,
+  linkSelectedMarkdown,
+} from "../markdownFormatting";
+
+describe("heading and list formatting", () => {
+  it("keeps heading text clean through repeated heading and list toggles", () => {
+    let markdown = "# Heading";
+    for (let index = 0; index < 3; index += 1) {
+      markdown = toggleUnorderedListMarkdown(markdown);
+      expect(markdown).toBe("- Heading");
+      markdown = toggleOrderedListMarkdown(markdown);
+      expect(markdown).toBe("1. Heading");
+      markdown = setHeadingMarkdown(markdown, 1);
+      expect(markdown).toBe("# Heading");
+    }
+  });
+
+  it("replaces heading and list markers when switching list types", () => {
+    expect(toggleOrderedListMarkdown("# Heading")).toBe("1. Heading");
+    expect(toggleOrderedListMarkdown("- Heading")).toBe("1. Heading");
+    expect(toggleUnorderedListMarkdown("1. Heading")).toBe("- Heading");
+  });
+
+  it.each(["- Heading", "* Heading", "1. Heading"])("removes %s when switching a list to a heading", (markdown) => {
+    expect(setHeadingMarkdown(markdown, 1)).toBe("# Heading");
+  });
+});
 
 describe("code fence formatting", () => {
   it.each([

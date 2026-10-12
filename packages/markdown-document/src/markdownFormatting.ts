@@ -27,6 +27,7 @@ const blockquoteContinuationPattern = /^(\s{0,3}>\s?)(.*)$/;
 const unorderedListContinuationPattern = /^(\s*)([-*+])(?:\s+(.*)|\s*)$/;
 const orderedListContinuationPattern = /^(\s*)(\d+)([.)])(?:\s+(.*)|\s*)$/;
 const taskListContinuationPattern = /^(\s*)([-*+])\s+\[[ xX]\](?:\s+(.*)|\s*)$/;
+const listItemStrippedPrefixKinds: LinePrefixKind[] = ["heading", "taskList", "orderedList", "unorderedList"];
 
 function splitLines(markdown: string) {
   return markdown.split(/\r?\n/);
@@ -150,7 +151,7 @@ export function toggleUnorderedListMarkdown(markdown: string) {
     if (isUnorderedList) {
       return line.replace(unorderedListPrefixPattern, "");
     }
-    return `- ${stripLinePrefix(line, ["taskList", "orderedList", "unorderedList"])}`;
+    return `- ${stripLinePrefix(line, listItemStrippedPrefixKinds)}`;
   });
 }
 
@@ -160,7 +161,7 @@ export function toggleOrderedListMarkdown(markdown: string) {
     if (isOrderedList) {
       return line.replace(orderedListPrefixPattern, "");
     }
-    return `${index + 1}. ${stripLinePrefix(line, ["taskList", "orderedList", "unorderedList"])}`;
+    return `${index + 1}. ${stripLinePrefix(line, listItemStrippedPrefixKinds)}`;
   });
 }
 

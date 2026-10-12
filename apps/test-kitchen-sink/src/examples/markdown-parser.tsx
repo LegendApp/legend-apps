@@ -227,6 +227,7 @@ function MarkdownBlockEditor({
       autoFocus
       cursorColor="#2563eb"
       defaultValue={block.markdown}
+      markdownShortcuts
       markdownStyle={markdownEditorStyle}
       onBlur={() => {
         const input = inputRef.current;

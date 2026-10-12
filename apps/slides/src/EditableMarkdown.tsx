@@ -299,7 +299,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
               style={{ position: "absolute", left: 0, right: 0, top: region.y, height: region.height, overflow: "hidden", backgroundColor }}>
               <View style={{ position: "absolute", top: -region.y, left: 0, right: 0 }}>
                 <EnrichedMarkdownTextInput key={document} accessible={false} defaultValue={speakerNotesEditorMarkdown(document)} editable={false}
-                  markdownStyle={activeMarkdownStyle} multiline scrollEnabled={false}
+                  markdownShortcuts markdownStyle={activeMarkdownStyle} multiline scrollEnabled={false}
                   style={{ ...styles.editor, ...textStyle, color: textColor, minHeight: 0 }} />
               </View>
             </View>
@@ -343,7 +343,7 @@ function NotesText({ markdown, editable, markdownStyle, placeholder, textStyle, 
   }, [value, width, textStyle.fontSize, finishedEdit]);
   return <EnrichedMarkdownTextInput ref={input}
     onLayout={event => setWidth(event.nativeEvent.layout.width)} defaultValue={value} editable={editable}
-    markdownStyle={markdownStyle} multiline scrollEnabled={false}
+    markdownShortcuts markdownStyle={markdownStyle} multiline scrollEnabled={false}
     cursorColor="#93c5fd" selectionColor="#3b82f680"
     placeholder={placeholder} placeholderTextColor="#71717a"
     onFocus={() => { focused.current = editable; onFocus(input.current); }}

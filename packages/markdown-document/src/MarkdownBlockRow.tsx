@@ -80,6 +80,7 @@ export const MarkdownEditorInput = memo(
         ref={activeInputRef}
         autoFocus
         defaultValue={initialMarkdown}
+        markdownShortcuts
         markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
         multiline
         onBlur={() => onBlurRef.current(block.id)}
@@ -165,6 +166,7 @@ export const MarkdownRowEditorInput = memo(
         ref={activeInputRef}
         autoFocus
         defaultValue={block.markdown}
+        markdownShortcuts
         markdownStyle={inputStyleFromMarkdownStyle(markdownStyle)}
         multiline
         onBlur={() => onBlurRef.current(blockRef.current.id)}
