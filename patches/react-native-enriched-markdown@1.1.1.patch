@@ -8663,3 +8663,68 @@ diff --git a/ios/segments/ENRMMathContainerView.m b/ios/segments/ENRMMathContain
  
  - (void)drawRect:(CGRect)rect
  {
+diff --git a/cpp/parser/MD4CParser.cpp b/cpp/parser/MD4CParser.cpp
+--- a/cpp/parser/MD4CParser.cpp
++++ b/cpp/parser/MD4CParser.cpp
+@@ -423,6 +423,14 @@
+       if (impl->inHtmlBlock) {
+         impl->htmlBlockContent.append(text, size);
+       }
++      return 0;
++    }
++
++    if (type == MD_TEXT_ENTITY) {
++      auto node = std::make_shared<MarkdownASTNode>(NodeType::Text);
++      node->content.assign(text, size);
++      node->setAttribute("htmlEntity", "true");
++      impl->addInlineNode(node);
+       return 0;
+     }
+ 
+diff --git a/ios/parser/MarkdownParserBridge.mm b/ios/parser/MarkdownParserBridge.mm
+--- a/ios/parser/MarkdownParserBridge.mm
++++ b/ios/parser/MarkdownParserBridge.mm
+@@ -3,6 +3,7 @@
+ #import "MarkdownASTNode.h"
+ #include "MarkdownASTNode.hpp"
+ #import <React/RCTLog.h>
++#import <libxml/HTMLparser.h>
+ 
+ // Convert C++ AST node to Objective-C AST node
+ static MarkdownASTNode *convertCppASTToObjC(std::shared_ptr<Markdown::MarkdownASTNode> cppNode)
+@@ -122,7 +123,19 @@
+ 
+   // Convert content
+   if (!cppNode->content.empty()) {
+-    objcNode.content = [NSString stringWithUTF8String:cppNode->content.c_str()];
++    NSString *content = [NSString stringWithUTF8String:cppNode->content.c_str()];
++    if (cppNode->attributes.count("htmlEntity")) {
++      NSString *name = [content substringWithRange:NSMakeRange(1, content.length - 2)];
++      const htmlEntityDesc *entity = htmlEntityLookup((const xmlChar *)name.UTF8String);
++      if (entity) {
++        UTF32Char value = entity->value;
++        content = [[NSString alloc] initWithBytes:&value length:sizeof(value) encoding:NSUTF32LittleEndianStringEncoding];
++      } else {
++        content = CFBridgingRelease(CFXMLCreateStringByUnescapingEntities(kCFAllocatorDefault,
++                                                                         (__bridge CFStringRef)content, NULL));
++      }
++    }
++    objcNode.content = content;
+   }
+ 
+   // Convert attributes
+diff --git a/ReactNativeEnrichedMarkdown.podspec b/ReactNativeEnrichedMarkdown.podspec
+--- a/ReactNativeEnrichedMarkdown.podspec
++++ b/ReactNativeEnrichedMarkdown.podspec
+@@ -126,8 +126,11 @@
+     s.resource_bundles = { 'RaTeXCoreFonts' => ['ios/vendor/Fonts/*.ttf'] }
+   end
+ 
++  s.libraries = "xml2"
++
+   pod_xcconfig = {
+     'HEADER_SEARCH_PATHS' => ([
++      '"$(SDKROOT)/usr/include/libxml2"',
+       "\"#{cpp_root}/md4c\"", "\"#{cpp_root}/parser\"", "\"#{cpp_root}/highlight\"",
+       "\"$(PODS_TARGET_SRCROOT)/ios/internals\"", "\"$(PODS_TARGET_SRCROOT)/ios/input/internals\""
+     ] + code_highlight[:header_paths].map { |p| "\"$(PODS_TARGET_SRCROOT)/#{p}\"" }).join(" "),
