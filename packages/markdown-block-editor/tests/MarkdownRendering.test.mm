@@ -175,9 +175,38 @@ static NSString *textContent(MarkdownASTNode *node)
   return text;
 }
 
+@protocol ENRMImageLayoutObserver
+- (void)imageAttachmentDidResolveLayout;
+@end
+@interface ImageLayoutHost : NSTextView <ENRMImageLayoutObserver>
+@property NSUInteger notifications;
+- (id<ENRMImageLayoutObserver>)enrm_imageLayoutObserver;
+@end
+@implementation ImageLayoutHost
+- (id<ENRMImageLayoutObserver>)enrm_imageLayoutObserver { return self; }
+- (void)imageAttachmentDidResolveLayout { ++_notifications; }
+@end
+@interface ImageLayoutProbe : NSObject
+@property CGFloat cachedMaxHeight;
+@property CGFloat cachedAspectRatio;
+- (void)notifyImageLayoutObserver:(ImageLayoutHost *)textView;
+@end
+@implementation ImageLayoutProbe
+#include "ImageLayoutNotification.inc"
+@end
+
 int main()
 {
   @autoreleasepool {
+    ImageLayoutHost *imageHost = [ImageLayoutHost new];
+    ImageLayoutProbe *imageLayout = [ImageLayoutProbe new];
+    [imageLayout notifyImageLayoutObserver:imageHost];
+    require(imageHost.notifications == 0, @"image re-measure must not re-enter the active layout pass");
+    NSDate *imageDeadline = [NSDate dateWithTimeIntervalSinceNow:1];
+    while (imageHost.notifications == 0 && imageDeadline.timeIntervalSinceNow > 0) {
+      [[NSRunLoop mainRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    }
+    require(imageHost.notifications == 1, @"macOS fixed-height images must re-measure after their placeholder loads");
     ENRMMarkdownParser *parser = [ENRMMarkdownParser new];
     require([textContent([parser parseMarkdown:@"&amp; &#169; &#x1F600; &copy; &unknown;"])
              isEqualToString:@"& © 😀 © &unknown;"], @"named, decimal, hex, and unknown entities");

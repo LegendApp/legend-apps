@@ -35,6 +35,7 @@ session = (b/'ios/input/ENRMEditSession.mm').read_text()
 (out/'InputSession.inc').write_text('\n'.join(extract(session, method) for method in [
     '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
+(out/'ImageLayoutNotification.inc').write_text(extract((b/'ios/attachments/ENRMImageAttachment.m').read_text(), '- (void)notifyImageLayoutObserver:').replace('UITextView *', 'ImageLayoutHost *'))
 (out/'TextHitTest.inc').write_text((b/'ios/utils/ENRMTextHitTest.m').read_text().replace('#import "ENRMTextHitTest.h"', ''))
 (out/'React').mkdir()
 (out/'React/RCTLog.h').write_text('#define RCTLogError(...) NSLog(__VA_ARGS__)\n')

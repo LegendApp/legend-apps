@@ -2476,6 +2476,22 @@ index f17cfb02..ab433b0e 100644
    while (view && ![view conformsToProtocol:@protocol(ENRMImageLayoutObserver)]) {
      view = view.superview;
    }
+@@ -358,10 +358,13 @@ - (void)notifyImageLayoutObserver:(UITextView *)textView
+ // re-measuring would re-enter the layout manager.
+ - (void)notifyImageLayoutObserver:(UITextView *)textView
+ {
+-  // Only maxHeight/aspectRatio boxes can change height after load; a fixed
+-  // height box (legacy or explicit resizeMode) never needs a re-measure.
++#if !TARGET_OS_OSX
++  // Only maxHeight/aspectRatio boxes can change height after load on iOS.
+   if (self.cachedMaxHeight <= 0 && self.cachedAspectRatio <= 0)
+     return;
++#endif
++  // AppKit can measure the unloaded placeholder at one pixel even for a
++  // fixed-height image, so its host must re-measure after loading.
+ 
+   id<ENRMImageLayoutObserver> observer = [textView enrm_imageLayoutObserver];
+   if (!observer)
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 index 1b1b9623..8af4e24a 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
