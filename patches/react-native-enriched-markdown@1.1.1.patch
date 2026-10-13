@@ -8645,3 +8645,21 @@ index 67110b6f..02d3bdf2 100644
 +  windowX: number;
 +  windowY: number;
 +}
+diff --git a/ios/segments/ENRMMathContainerView.m b/ios/segments/ENRMMathContainerView.m
+--- a/ios/segments/ENRMMathContainerView.m
++++ b/ios/segments/ENRMMathContainerView.m
+@@ -26,6 +26,14 @@
+ @end
+ 
+ @implementation ENRMRaTeXCanvasView
++
++#if TARGET_OS_OSX
++- (BOOL)isFlipped
++{
++  // RaTeX draws with a top-left origin, like UIKit.
++  return YES;
++}
++#endif
+ 
+ - (void)drawRect:(CGRect)rect
+ {
