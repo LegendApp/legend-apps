@@ -22,7 +22,7 @@ export const markdownMenuConfig: MenuRootItem[] = [
         },
       { type: "action",
         id: "save",
-        target: { role: "save" }, label: "Save",
+        target: { role: "save" }, label: "Save", shortcut: "Cmd+s",
         disabled: true,
       },
       { type: "action",
