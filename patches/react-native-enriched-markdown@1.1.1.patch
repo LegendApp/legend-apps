@@ -4977,10 +4977,9 @@ index f82e72b3..35962b4f 100644
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
  
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
-index a5391c7..5ba71ea 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
-@@ -135,6 +135,12 @@ - (void)drawRect:(CGRect)rect
+@@ -135,8 +135,21 @@
  
  #else // TARGET_OS_OSX
  
@@ -4992,8 +4991,17 @@ index a5391c7..5ba71ea 100644
 +
  @implementation ENRMInputTextView {
    CGFloat _lastLayoutWidth;
++}
++
++// Inline editors draw their own colors; AppKit vibrancy can schedule another
++// window display while TextKit fills layout holes inside drawRect:.
++- (BOOL)allowsVibrancy
++{
++  return NO;
  }
-@@ -197,14 +203,185 @@ - (BOOL)acceptsFirstResponder
+ 
+ - (void)copy:(id)sender
+@@ -197,12 +210,183 @@
    return self.isEditable;
  }
  
@@ -5109,8 +5117,8 @@ index a5391c7..5ba71ea 100644
    }
 +  [self enrmStartSelectionDragPolling];
    [super mouseDown:event];
- }
- 
++}
++
 +- (CGFloat)enrmTopOriginWindowYForWindowPoint:(NSPoint)windowPoint
 +{
 +  NSView *contentView = self.window.contentView;
@@ -5174,11 +5182,9 @@ index a5391c7..5ba71ea 100644
 +    self.enrmSelectionDragOutsideEmitted = YES;
 +    [self.markdownTextInput emitSelectionDragOutsideWithDirection:@"up" windowX:windowX windowY:windowY];
 +  }
-+}
-+
+ }
+ 
  - (NSMenu *)menuForEvent:(NSEvent *)event
- {
-   NSMenu *menu = [super menuForEvent:event];
 diff --git a/ios/input/ENRMInputTypingAttributesController.mm b/ios/input/ENRMInputTypingAttributesController.mm
 index 8acb7c09..1fc9dfd5 100644
 --- a/ios/input/ENRMInputTypingAttributesController.mm
