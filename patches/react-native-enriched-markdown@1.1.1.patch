@@ -6310,10 +6310,16 @@ index 2b517afd..474c93ee 100644
  
  } // namespace facebook::react
 diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
-index 8f7b4400..508acdbb 100644
 --- a/ios/internals/ENRMViewFreeMeasurement.h
 +++ b/ios/internals/ENRMViewFreeMeasurement.h
-@@ -107,6 +107,8 @@ template <typename PropsT>
+@@ -1,4 +1,6 @@
+ #pragma once
++
++#import "EnrichedMarkdown.h"
+ 
+ #import "ENRMBlockquoteContainerView.h"
+ #import "ENRMCodeBlockContainerView.h"
+@@ -107,6 +109,8 @@
  static inline StyleConfig *ENRMStyleConfigFromProps(const PropsT &typedProps, CGFloat fontScale)
  {
    StyleConfig *config = [[StyleConfig alloc] init];
@@ -6322,7 +6328,7 @@ index 8f7b4400..508acdbb 100644
    using StyleT = std::remove_cv_t<std::remove_reference_t<decltype(typedProps.markdownStyle)>>;
    static const StyleT kDefaultStyle{};
    applyMarkdownStyleToConfig(config, typedProps.markdownStyle, kDefaultStyle);
-@@ -170,16 +172,15 @@ static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text,
+@@ -170,16 +174,15 @@
   * empty render output — the same fallback `measureSize:` produced.
   */
  template <typename PropsT>
@@ -6335,15 +6341,17 @@ index 8f7b4400..508acdbb 100644
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
-+    if (markdown.length == 0) {
-       return fallback;
-     }
+-      return fallback;
+-    }
 -
 -    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
++    if (markdown.length == 0) {
++      return fallback;
++    }
      StyleConfig *config = ENRMStyleConfigFromProps(typedProps, fontScale);
  
      ENRMMd4cFlags *flags = ENRMMd4cFlagsFromProps(typedProps.md4cFlags);
-@@ -231,18 +232,16 @@ static inline CGSize ENRMMeasureMarkdownViewFree(const PropsT &typedProps, CGFlo
+@@ -231,17 +234,15 @@
   * (maxWidth × system-16 line height) fallback for empty/failed content.
   */
  template <typename PropsT>
@@ -6356,15 +6364,16 @@ index 8f7b4400..508acdbb 100644
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
-+    if (markdown.length == 0) {
-       return fallback;
-     }
- 
--    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
+-      return fallback;
+-    }
 -
+-    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
++    if (markdown.length == 0) {
++      return fallback;
++    }
+ 
      if (typedProps.streamingAnimation) {
        NSString *tableModeStr = [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.tableMode.c_str()];
-       ENRMTableStreamingMode tableStreamingMode =
 diff --git a/ios/internals/EnrichedMarkdownShadowNode.mm b/ios/internals/EnrichedMarkdownShadowNode.mm
 index 056225f5..3973c2e1 100644
 --- a/ios/internals/EnrichedMarkdownShadowNode.mm
