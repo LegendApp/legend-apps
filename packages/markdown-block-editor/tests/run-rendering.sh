@@ -22,8 +22,9 @@ def extract(source, start):
 (out/'SplitSegments.inc').write_text(extract((b/'ios/segments/SegmentRenderer.m').read_text(), 'static NSArray *ENRMSplitASTIntoSegments'))
 source = (b/'ios/input/ENRMInputTextView.mm').read_text()
 # Include any display override so regressions cannot hide behind the test host.
-(out/'InputPreDraw.inc').write_text(extract(source, '- (void)viewWillDraw') if '- (void)viewWillDraw' in source else '')
+(out/'InputPreDraw.inc').write_text((extract(source[source.index('#else // TARGET_OS_OSX'):], '- (BOOL)allowsVibrancy') if '- (BOOL)allowsVibrancy' in source else '') + (extract(source, '- (void)viewWillDraw') if '- (void)viewWillDraw' in source else ''))
 source = (b/'ios/input/EnrichedMarkdownTextInput.mm').read_text()
+(out/'InputWidth.inc').write_text(next(line for line in source.splitlines() if '_textView.textContainer.widthTracksTextView =' in line))
 (out/'InputRefresh.inc').write_text(extract((b/'ios/utils/ENRMUIKit.h').read_text(), 'static inline void ENRMRefreshTextViewLayout'))
 (out/'InputLayout.inc').write_text('\n'.join(extract(source, method) for method in [
     '- (void)applyTextViewLayout', '- (void)scheduleRelayoutIfNeeded', '- (void)_performRelayout', '- (CGSize)measureSize']))
@@ -35,9 +36,12 @@ session = (b/'ios/input/ENRMEditSession.mm').read_text()
     '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
 (out/'TextHitTest.inc').write_text((b/'ios/utils/ENRMTextHitTest.m').read_text().replace('#import "ENRMTextHitTest.h"', ''))
+(out/'React').mkdir()
+(out/'React/RCTLog.h').write_text('#define RCTLogError(...) NSLog(__VA_ARGS__)\n')
 PY
 clang -c "$markdown_dependency_dir/cpp/md4c/md4c.c" -o "$markdown_rendering_dir/parser.o"
 clang++ -x objective-c++ -std=c++20 -fobjc-arc -framework AppKit -DENRICHED_MARKDOWN_MATH=1 -DENRICHED_MARKDOWN_VIDEO=1 \
+  -I"$(xcrun --show-sdk-path)/usr/include/libxml2" -I"$markdown_dependency_dir/cpp/parser" \
   -I"$markdown_rendering_dir" -I"$markdown_dependency_dir/ios/utils" -I"$markdown_dependency_dir/ios/parser" -I"$markdown_dependency_dir/ios/segments" \
   -I"$markdown_dependency_dir/ios/input" -I"$markdown_dependency_dir/cpp/md4c" \
   "$markdown_dependency_dir/ios/input/ENRMInputParser.mm" \
@@ -46,6 +50,9 @@ clang++ -x objective-c++ -std=c++20 -fobjc-arc -framework AppKit -DENRICHED_MARK
   "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMBlockRange.mm" \
   "$markdown_dependency_dir/ios/parser/MarkdownASTNode.m" \
+  "$markdown_dependency_dir/cpp/parser/MD4CParser.cpp" \
+  "$markdown_dependency_dir/ios/parser/MarkdownParserBridge.mm" \
+  "$markdown_dependency_dir/ios/parser/ENRMMarkdownParser.mm" \
   "$markdown_dependency_dir/ios/segments/RenderedMarkdownSegment.m" \
-  "$markdown_editor_dir/tests/MarkdownRendering.test.mm" -x none "$markdown_rendering_dir/parser.o" -o "$markdown_rendering_dir/test"
+  "$markdown_editor_dir/tests/MarkdownRendering.test.mm" -lxml2 -x none "$markdown_rendering_dir/parser.o" -o "$markdown_rendering_dir/test"
 "$markdown_rendering_dir/test"

@@ -401,6 +401,8 @@ void testRegisteredBlockReadsDuringStructuralEdits() {
   LoadedDocument loaded("Hello world\n\nTail\n");
   const auto blockId = loaded.document->getBlockKey(0);
   const auto tailId = loaded.document->getBlockKey(1);
+  expectEqual(pathForRegisteredBlockId(blockId), loaded.file.path, "rendering uses the owning document path");
+  expectEqual(pathForRegisteredBlockId("missing"), "", "unregistered blocks have no image base path");
   std::atomic<size_t> readCount = 0;
   std::atomic<bool> invalidRead = false;
   {
@@ -861,6 +863,7 @@ void testExternalFileConflicts() {
   expectEqual(status(), "changed", "atomic external replacement");
   TempFile copy;
   document->saveAs(copy.path);
+  expectEqual(pathForRegisteredBlockId(document->getBlockKey(0)), copy.path, "Save As updates the image base path");
   expectEqual(readDisk(), "Replacement", "save separately preserves external version");
   expectEqual(status(), "unchanged", "save separately changes baseline and path");
   std::remove(copy.path.c_str());

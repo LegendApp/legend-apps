@@ -2213,13 +2213,13 @@ index 650f0151..69e6e6df 100644
          'cpp/highlight/vendor/tree-sitter/include',
          generated_rel,
 diff --git a/ios/EnrichedMarkdown.h b/ios/EnrichedMarkdown.h
+index 99ea444f..0b92d2fb 100644
 --- a/ios/EnrichedMarkdown.h
 +++ b/ios/EnrichedMarkdown.h
-@@ -6,6 +6,15 @@
- #define EnrichedMarkdownNativeComponent_h
+@@ -7,6 +7,15 @@
  
  NS_ASSUME_NONNULL_BEGIN
-+
+ 
 +typedef NSString *_Nonnull (^ENRMNativeMarkdownProvider)(NSString *blockId);
 +
 +typedef NSURL *_Nullable (^ENRMNativeImageBaseURLProvider)(NSString *blockId);
@@ -2228,13 +2228,15 @@ diff --git a/ios/EnrichedMarkdown.h b/ios/EnrichedMarkdown.h
 +
 +void ENRMSetNativeMarkdownProvider(ENRMNativeMarkdownProvider _Nullable provider);
 +NSString *ENRMMarkdownForNativeBlockId(NSString *blockId);
- 
++
  @interface EnrichedMarkdown : RCTViewComponentView
  @property (nonatomic, strong) StyleConfig *config;
+ - (CGSize)measureSize:(CGFloat)maxWidth;
 diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
+index b7edde7a..5981086f 100644
 --- a/ios/EnrichedMarkdown.mm
 +++ b/ios/EnrichedMarkdown.mm
-@@ -74,6 +74,51 @@
+@@ -74,6 +74,51 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
    ENRMDirtyRender = 1 << 2,
  };
  
@@ -2286,7 +2288,7 @@ diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
  static char kENRMSegmentFadeAnimatorKey;
  
  @interface EnrichedMarkdown () <RCTEnrichedMarkdownViewProtocol, UITextViewDelegate, ENRMImageLayoutObserver>
-@@ -930,6 +975,20 @@
+@@ -930,6 +975,20 @@ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderRe
      return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
                                       @[ baseMenu ], customItems, strongSelf -> _selectionMenuConfig);
    }];
@@ -2307,7 +2309,7 @@ diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
  #endif
  
    return view;
-@@ -1064,7 +1123,10 @@
+@@ -1064,7 +1123,10 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
    const auto &oldViewProps = *std::static_pointer_cast<EnrichedMarkdownProps const>(_props);
    const auto &newViewProps = *std::static_pointer_cast<EnrichedMarkdownProps const>(props);
  
@@ -2319,17 +2321,17 @@ diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
    if (markdownChanged) {
      _dirtyFlags |= ENRMDirtyRender;
    }
-@@ -1073,6 +1135,9 @@
-     _config = [[StyleConfig alloc] init];
+@@ -1074,6 +1136,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      [_config setFontScaleMultiplier:_fontScaleObserver.effectiveFontScale];
    }
-+
+ 
 +  _config.imageBaseURL = ENRMImageBaseURLForNativeBlockId(
 +      [NSString stringWithUTF8String:newViewProps.nativeMarkdownBlockId.c_str()]);
- 
++
    if (applyMarkdownStyleToConfig(_config, newViewProps.markdownStyle, oldViewProps.markdownStyle)) {
      _dirtyFlags |= ENRMDirtyForceHeight | ENRMDirtyRender;
-@@ -1254,7 +1319,7 @@
+     if (!markdownChanged) {
+@@ -1254,7 +1319,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
    if (_dirtyFlags & ENRMDirtyRender) {
      _pendingStyleFingerprint =
          computeStyleFingerprint(newViewProps.markdownStyle) ^ std::hash<bool>{}(newViewProps.allowTrailingMargin);
@@ -2338,7 +2340,7 @@ diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
-@@ -1429,7 +1494,11 @@
+@@ -1429,7 +1494,11 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
  {
    auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(_eventEmitter);
    if (emitter)
@@ -2352,6 +2354,7 @@ diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
  
  - (void)emitCopyPress:(NSString *)code language:(NSString *)language
 diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
+index 1b384171..7b896657 100644
 --- a/ios/EnrichedMarkdownText.mm
 +++ b/ios/EnrichedMarkdownText.mm
 @@ -8,6 +8,7 @@
@@ -2362,11 +2365,10 @@ diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
  #import "ENRMSpoilerOverlayManager.h"
  #import "ENRMSpoilerTapUtils.h"
  #import "ENRMTailFadeInAnimator.h"
-@@ -48,6 +49,15 @@
-   ENRMDirtyNone = 0,
+@@ -49,6 +50,15 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
    ENRMDirtyRender = 1 << 0,
  };
-+
+ 
 +static NSString *ENRMMarkdownTextForProps(const EnrichedMarkdownTextProps &props)
 +{
 +  if (!props.nativeMarkdownBlockId.empty()) {
@@ -2375,10 +2377,11 @@ diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
 +  }
 +  return [[NSString alloc] initWithUTF8String:props.markdown.c_str()] ?: @"";
 +}
- 
++
  @interface EnrichedMarkdownText () <RCTEnrichedMarkdownTextViewProtocol, UITextViewDelegate, ENRMImageLayoutObserver>
  + (ENRMMd4cFlags *)flagsFromProps:(const EnrichedMarkdownTextMd4cFlagsStruct &)props;
-@@ -369,6 +379,20 @@
+ - (void)setupTextView;
+@@ -369,6 +379,20 @@ - (void)setupTextView
                                       strongSelf->_config, @[ baseMenu ], customItems,
                                       strongSelf -> _selectionMenuConfig);
    };
@@ -2399,7 +2402,7 @@ diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
  #endif
  
    ENRMTapRecognizer *tapRecognizer = [[ENRMTapRecognizer alloc] initWithTarget:self action:@selector(textTapped:)];
-@@ -576,7 +600,9 @@
+@@ -576,7 +600,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
    const auto &oldViewProps = *std::static_pointer_cast<EnrichedMarkdownTextProps const>(_props);
    const auto &newViewProps = *std::static_pointer_cast<EnrichedMarkdownTextProps const>(props);
  
@@ -2410,17 +2413,17 @@ diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
      _dirtyFlags |= ENRMDirtyRender;
    }
  
-@@ -585,6 +611,9 @@
-     [_config setFontScaleMultiplier:_fontScaleObserver.effectiveFontScale];
+@@ -586,6 +612,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      _spoilerManager = [[ENRMSpoilerOverlayManager alloc] initWithTextView:_textView config:_config];
    }
-+
+ 
 +  _config.imageBaseURL = ENRMImageBaseURLForNativeBlockId(
 +      [NSString stringWithUTF8String:newViewProps.nativeMarkdownBlockId.c_str()]);
- 
++
    if (applyMarkdownStyleToConfig(_config, newViewProps.markdownStyle, oldViewProps.markdownStyle)) {
      _forceHeightUpdateOnNextRender = YES;
-@@ -749,7 +778,7 @@
+     _dirtyFlags |= ENRMDirtyRender;
+@@ -749,7 +778,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
    if (_dirtyFlags & ENRMDirtyRender) {
      _pendingStyleFingerprint =
          computeStyleFingerprint(newViewProps.markdownStyle) ^ std::hash<bool>{}(newViewProps.allowTrailingMargin);
@@ -2429,7 +2432,7 @@ diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
-@@ -871,7 +900,11 @@
+@@ -871,7 +900,11 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
  {
    auto emitter = std::static_pointer_cast<EnrichedMarkdownTextEventEmitter const>(_eventEmitter);
    if (emitter)
@@ -5010,9 +5013,10 @@ index f82e72b3..35962b4f 100644
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
  
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
+index a5391c7e..08c30a40 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
-@@ -135,8 +135,21 @@
+@@ -135,10 +135,23 @@ - (void)drawRect:(CGRect)rect
  
  #else // TARGET_OS_OSX
  
@@ -5024,17 +5028,19 @@ diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
 +
  @implementation ENRMInputTextView {
    CGFloat _lastLayoutWidth;
-+}
-+
+ }
+ 
 +// Inline editors draw their own colors; AppKit vibrancy can schedule another
 +// window display while TextKit fills layout holes inside drawRect:.
 +- (BOOL)allowsVibrancy
 +{
 +  return NO;
- }
- 
++}
++
  - (void)copy:(id)sender
-@@ -197,12 +210,183 @@
+ {
+   NSRange selection = self.selectedRange;
+@@ -197,14 +210,185 @@ - (BOOL)acceptsFirstResponder
    return self.isEditable;
  }
  
@@ -5150,8 +5156,8 @@ diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
    }
 +  [self enrmStartSelectionDragPolling];
    [super mouseDown:event];
-+}
-+
+ }
+ 
 +- (CGFloat)enrmTopOriginWindowYForWindowPoint:(NSPoint)windowPoint
 +{
 +  NSView *contentView = self.window.contentView;
@@ -5215,9 +5221,11 @@ diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
 +    self.enrmSelectionDragOutsideEmitted = YES;
 +    [self.markdownTextInput emitSelectionDragOutsideWithDirection:@"up" windowX:windowX windowY:windowY];
 +  }
- }
- 
++}
++
  - (NSMenu *)menuForEvent:(NSEvent *)event
+ {
+   NSMenu *menu = [super menuForEvent:event];
 diff --git a/ios/input/ENRMInputTypingAttributesController.mm b/ios/input/ENRMInputTypingAttributesController.mm
 index 8acb7c09..1fc9dfd5 100644
 --- a/ios/input/ENRMInputTypingAttributesController.mm
@@ -5279,6 +5287,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
+index 7e72cff2..b4e040e3 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -5305,7 +5314,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  #import <ReactNativeEnrichedMarkdown/EnrichedMarkdownTextInputComponentDescriptor.h>
  #import <ReactNativeEnrichedMarkdown/EventEmitters.h>
  #import <ReactNativeEnrichedMarkdown/Props.h>
-@@ -60,6 +63,13 @@
+@@ -60,6 +63,13 @@ @interface EnrichedMarkdownTextInput () <RCTEnrichedMarkdownTextInputViewProtoco
  - (void)setupTextView;
  - (void)applyFormatting;
  - (void)applyFormattingScopedToEditAtLocation:(NSUInteger)editLocation insertedLength:(NSUInteger)insertedLength;
@@ -5319,23 +5328,21 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)applyFormattingScopedFromParagraphAtLocation:(NSUInteger)editLocation;
  - (void)toggleInlineStyle:(ENRMInputStyleType)styleType;
  - (void)resetBaseTypingAttributes;
-@@ -99,9 +109,13 @@
+@@ -99,9 +109,13 @@ @implementation EnrichedMarkdownTextInput {
    BOOL _preEditReplacedNewline;
  
  #if TARGET_OS_OSX
 +  NSView *_scrollContainerView;
    NSScrollView *_scrollView;
--#endif
--
 +  NSString *_blockStyleMarkdownOverride;
 +  NSInteger _hangingPrefixLength;
-+#endif
-+
+ #endif
+ 
 +  BOOL _usesParagraphBaselineOffset;
    NSArray<NSString *> *_contextMenuItemTexts;
    NSArray<NSString *> *_contextMenuItemIcons;
    ENRMAutoLinkDetector *_autoLinkDetector;
-@@ -245,6 +259,9 @@
+@@ -245,6 +259,9 @@ - (void)setupTextView
  #else
    _textView.selectable = YES;
  
@@ -5345,7 +5352,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    _scrollView = [[NSScrollView alloc] initWithFrame:CGRectZero];
    _scrollView.backgroundColor = [RCTUIColor clearColor];
    _scrollView.drawsBackground = NO;
-@@ -253,13 +270,12 @@
+@@ -253,13 +270,12 @@ - (void)setupTextView
    _scrollView.hasVerticalRuler = NO;
    _scrollView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
  
@@ -5353,18 +5360,17 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 -  _textView.horizontallyResizable = YES;
    _textView.textContainer.containerSize = NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX);
 -  _textView.textContainer.widthTracksTextView = YES;
--
--  _scrollView.documentView = _textView;
--  self.contentView = _scrollView;
 +  // Fabric supplies the width; NSTextView must not replace it during edits.
 +  _textView.textContainer.widthTracksTextView = NO;
-+
+ 
+-  _scrollView.documentView = _textView;
+-  self.contentView = _scrollView;
 +  ENRMConfigureInputScrolling(_scrollContainerView, _scrollView, _textView, NO);
 +  self.contentView = _scrollContainerView;
  #endif
  
    _placeholderLabel = ENRMCreatePlaceholderLabel(_textView, _formatterStyle.baseFont);
-@@ -316,7 +332,14 @@
+@@ -316,7 +332,14 @@ - (void)updateState:(const facebook::react::State::Shared &)state
  
  - (void)requestHeightUpdate
  {
@@ -5379,32 +5385,44 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  /// Yoga-resolved direction inherited from any ancestor `direction` style.
-@@ -338,40 +361,102 @@
+@@ -338,40 +361,102 @@ - (void)updateLayoutMetrics:(const LayoutMetrics &)layoutMetrics
      _resolvedLayoutDirection = resolved;
      if (_writingDirectionMode == ENRMWritingDirectionModeFirstStrong && _textView.textStorage.length > 0) {
        [self applyFormatting];
--    }
--  }
--}
--
--#pragma mark - Measurement
 +      [self requestHeightUpdate];
-+    }
-+  }
-+}
-+
+     }
+   }
+ }
+ 
+-#pragma mark - Measurement
+-
+-- (CGSize)measureSize:(CGFloat)maxWidth
 +#if TARGET_OS_OSX
 +- (void)applyParagraphBaselineOffset
-+{
+ {
+-  NSMutableAttributedString *measuredText =
+-      [[NSMutableAttributedString alloc] initWithAttributedString:ENRMGetAttributedText(_textView)];
 +  ENRMApplyInputParagraphBaselineOffset(_textView.textStorage, _usesParagraphBaselineOffset);
 +}
-+
+ 
+-  // Empty input should still be the height of a single line.
+-  // Use typingAttributes so the measurement matches the actual configured font.
+-  if (measuredText.length == 0) {
+-    [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
+-                                                                         attributes:_textView.typingAttributes]];
 +- (void)applyTextViewLayout
 +{
 +  if (_scrollContainerView == nil || _scrollView == nil || _textView == nil) {
 +    return;
-+  }
-+
+   }
+ 
+-  // Trailing newlines are not counted by boundingRectWithSize — append
+-  // a mock character so the extra line is included in the height.
+-  if (measuredText.length > 0) {
+-    unichar lastChar = [measuredText.string characterAtIndex:measuredText.length - 1];
+-    if ([[NSCharacterSet newlineCharacterSet] characterIsMember:lastChar]) {
+-      [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
+-                                                                           attributes:_textView.typingAttributes]];
 +  NSRect bounds = self.bounds;
 +  CGFloat width = MAX(0, NSWidth(bounds));
 +  CGFloat height = MAX(0, NSHeight(bounds));
@@ -5433,9 +5451,9 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +                                                                   range:NSMakeRange(0, markdown.length)];
 +    if (match != nil) {
 +      prefixLength = (NSInteger)NSMaxRange(match.range);
-+    }
-+  }
-+
+     }
+   }
+ 
 +  return prefixLength;
 +}
 +
@@ -5466,28 +5484,9 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +{
 +}
 +#endif
- 
- - (CGSize)measureSize:(CGFloat)maxWidth
- {
--  NSMutableAttributedString *measuredText =
--      [[NSMutableAttributedString alloc] initWithAttributedString:ENRMGetAttributedText(_textView)];
--
--  // Empty input should still be the height of a single line.
--  // Use typingAttributes so the measurement matches the actual configured font.
--  if (measuredText.length == 0) {
--    [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
--                                                                         attributes:_textView.typingAttributes]];
--  }
--
--  // Trailing newlines are not counted by boundingRectWithSize — append
--  // a mock character so the extra line is included in the height.
--  if (measuredText.length > 0) {
--    unichar lastChar = [measuredText.string characterAtIndex:measuredText.length - 1];
--    if ([[NSCharacterSet newlineCharacterSet] characterIsMember:lastChar]) {
--      [measuredText appendAttributedString:[[NSAttributedString alloc] initWithString:@"I"
--                                                                           attributes:_textView.typingAttributes]];
--    }
--  }
++
++- (CGSize)measureSize:(CGFloat)maxWidth
++{
 +  NSAttributedString *measuredText = ENRMInputTextForMeasurement(ENRMGetAttributedText(_textView),
 +                                                                   _textView.typingAttributes);
 +
@@ -5495,7 +5494,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  return CGSizeMake(maxWidth, ENRMInputTextHeight(measuredText, maxWidth));
 +#else
 +  CGFloat measurementWidth = maxWidth;
- 
++
    CGRect boundingBox =
 -      [measuredText boundingRectWithSize:CGSizeMake(maxWidth, CGFLOAT_MAX)
 +      [measuredText boundingRectWithSize:CGSizeMake(measurementWidth, CGFLOAT_MAX)
@@ -5507,7 +5506,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  #pragma mark - Props
-@@ -393,7 +478,9 @@
+@@ -393,7 +478,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
        .orderedList = newViewProps.markdownShortcuts.orderedList,
    };
  
@@ -5518,7 +5517,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    if (newViewProps.scrollEnabled != oldViewProps.scrollEnabled) {
      _textView.scrollEnabled = newViewProps.scrollEnabled;
    }
-@@ -515,28 +602,44 @@
+@@ -515,28 +602,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      writingDirectionChanged = YES;
    }
  
@@ -5561,16 +5560,14 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 -  } else if (writingDirectionChanged && _textView.textStorage.length > 0) {
 +  } else if (writingDirectionChanged) {
      [self applyFormatting];
--  }
--
--  [super updateProps:props oldProps:oldProps];
 +    [self requestHeightUpdate];
-+  }
-+
+   }
+ 
+-  [super updateProps:props oldProps:oldProps];
  }
  
  #pragma mark - Relayout
-@@ -544,6 +647,7 @@
+@@ -544,6 +647,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -5578,7 +5575,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    [self performSelector:@selector(_performRelayout) withObject:nil afterDelay:0];
  }
  
-@@ -555,6 +659,8 @@
+@@ -555,6 +659,8 @@ - (void)_performRelayout
  
    NSUInteger textLength = _textView.textStorage.length;
    if (textLength == 0) {
@@ -5587,7 +5584,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      return;
    }
  
-@@ -563,12 +669,18 @@
+@@ -563,12 +669,18 @@ - (void)_performRelayout
    [_textView.layoutManager ensureLayoutForTextContainer:_textView.textContainer];
    [_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
  
@@ -5607,7 +5604,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  }
  
-@@ -580,6 +692,9 @@
+@@ -580,6 +692,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -5617,7 +5614,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -673,6 +788,7 @@
+@@ -673,6 +788,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -5625,7 +5622,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -688,9 +804,12 @@
+@@ -688,9 +804,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -5639,7 +5636,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -758,6 +877,20 @@
+@@ -758,6 +877,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -5660,7 +5657,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -802,12 +935,43 @@
+@@ -802,12 +935,43 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -5708,7 +5705,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)applyFormatting
-@@ -864,6 +1028,7 @@
+@@ -864,6 +1028,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
@@ -5716,7 +5713,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -872,6 +1037,9 @@
+@@ -872,6 +1037,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
    [self applyWritingDirection];
@@ -5726,7 +5723,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -914,6 +1082,23 @@
+@@ -914,6 +1082,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -5750,12 +5747,10 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -922,6 +1107,121 @@
-   _textView.selectedRange = NSMakeRange((NSUInteger)clampedStart, (NSUInteger)(clampedEnd - clampedStart));
-   [_inputEventEmitter emitOnChangeSelection];
+@@ -924,6 +1109,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
-+}
-+
+ }
+ 
 +#if TARGET_OS_OSX
 +- (NSUInteger)characterIndexForVerticalNavigationDirection:(NSString *)direction preferredX:(CGFloat)preferredX
 +{
@@ -5869,10 +5864,12 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  [_inputEventEmitter emitOnChangeSelection];
 +  [_inputEventEmitter emitOnChangeState];
 +#endif
- }
- 
++}
++
  - (void)toggleBold
-@@ -1412,9 +1712,31 @@
+ {
+   [self toggleInlineStyle:ENRMInputStyleTypeStrong];
+@@ -1412,9 +1712,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -5905,7 +5902,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  }
  
  - (void)copyToClipboard
-@@ -1448,14 +1770,51 @@
+@@ -1448,16 +1770,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -5933,8 +5930,8 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
    }
  #endif
    return caretRect;
-+}
-+
+ }
+ 
 +// Query layout without changing focus, selection, or scroll position.
 +- (void)requestParagraphLayouts:(NSInteger)requestId
 +{
@@ -5959,10 +5956,12 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
 +  NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 +  emitter->onRequestMarkdownResult({ .requestId = static_cast<int>(requestId),
 +      .markdown = std::string([json UTF8String] ?: "[]") });
- }
- 
++}
++
  - (void)requestCaretRect:(NSInteger)requestId
-@@ -1575,6 +1934,32 @@
+ {
+   [_inputEventEmitter requestCaretRect:requestId];
+@@ -1575,6 +1934,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -5995,7 +5994,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1749,7 +2134,14 @@
+@@ -1749,7 +2134,14 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -6011,7 +6010,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
      [self applyFormattingScopedFromParagraphAtLocation:editLocation];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1764,6 +2156,9 @@
+@@ -1764,6 +2156,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -6021,7 +6020,7 @@ diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdown
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1826,6 +2221,12 @@
+@@ -1826,6 +2221,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -6311,9 +6310,10 @@ index 2b517afd..474c93ee 100644
  
  } // namespace facebook::react
 diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
+index 8f7b4400..508acdbb 100644
 --- a/ios/internals/ENRMViewFreeMeasurement.h
 +++ b/ios/internals/ENRMViewFreeMeasurement.h
-@@ -107,6 +107,8 @@
+@@ -107,6 +107,8 @@ template <typename PropsT>
  static inline StyleConfig *ENRMStyleConfigFromProps(const PropsT &typedProps, CGFloat fontScale)
  {
    StyleConfig *config = [[StyleConfig alloc] init];
@@ -6322,7 +6322,7 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    using StyleT = std::remove_cv_t<std::remove_reference_t<decltype(typedProps.markdownStyle)>>;
    static const StyleT kDefaultStyle{};
    applyMarkdownStyleToConfig(config, typedProps.markdownStyle, kDefaultStyle);
-@@ -170,16 +172,15 @@
+@@ -170,16 +172,15 @@ static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text,
   * empty render output — the same fallback `measureSize:` produced.
   */
  template <typename PropsT>
@@ -6335,17 +6335,15 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
--      return fallback;
--    }
++    if (markdown.length == 0) {
+       return fallback;
+     }
 -
 -    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
-+    if (markdown.length == 0) {
-+      return fallback;
-+    }
      StyleConfig *config = ENRMStyleConfigFromProps(typedProps, fontScale);
  
      ENRMMd4cFlags *flags = ENRMMd4cFlagsFromProps(typedProps.md4cFlags);
-@@ -231,17 +232,15 @@
+@@ -231,18 +232,16 @@ static inline CGSize ENRMMeasureMarkdownViewFree(const PropsT &typedProps, CGFlo
   * (maxWidth × system-16 line height) fallback for empty/failed content.
   */
  template <typename PropsT>
@@ -6358,16 +6356,15 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
--      return fallback;
--    }
--
--    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
 +    if (markdown.length == 0) {
-+      return fallback;
-+    }
+       return fallback;
+     }
  
+-    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
+-
      if (typedProps.streamingAnimation) {
        NSString *tableModeStr = [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.tableMode.c_str()];
+       ENRMTableStreamingMode tableStreamingMode =
 diff --git a/ios/internals/EnrichedMarkdownShadowNode.mm b/ios/internals/EnrichedMarkdownShadowNode.mm
 index 056225f5..3973c2e1 100644
 --- a/ios/internals/EnrichedMarkdownShadowNode.mm
@@ -8690,13 +8687,13 @@ index 67110b6f..02d3bdf2 100644
 +  windowY: number;
 +}
 diff --git a/ios/segments/ENRMMathContainerView.m b/ios/segments/ENRMMathContainerView.m
+index 89f1570a..1185b844 100644
 --- a/ios/segments/ENRMMathContainerView.m
 +++ b/ios/segments/ENRMMathContainerView.m
-@@ -26,6 +26,14 @@
- @end
+@@ -27,6 +27,14 @@ @interface ENRMRaTeXCanvasView : RCTUIView
  
  @implementation ENRMRaTeXCanvasView
-+
+ 
 +#if TARGET_OS_OSX
 +- (BOOL)isFlipped
 +{
@@ -8704,28 +8701,31 @@ diff --git a/ios/segments/ENRMMathContainerView.m b/ios/segments/ENRMMathContain
 +  return YES;
 +}
 +#endif
- 
++
  - (void)drawRect:(CGRect)rect
  {
+   if (!_renderResult) {
 diff --git a/cpp/parser/MD4CParser.cpp b/cpp/parser/MD4CParser.cpp
+index c99a52d9..ac3d858c 100644
 --- a/cpp/parser/MD4CParser.cpp
 +++ b/cpp/parser/MD4CParser.cpp
-@@ -423,6 +423,14 @@
-       if (impl->inHtmlBlock) {
-         impl->htmlBlockContent.append(text, size);
-       }
-+      return 0;
-+    }
-+
+@@ -426,6 +426,14 @@ public:
+       return 0;
+     }
+ 
 +    if (type == MD_TEXT_ENTITY) {
 +      auto node = std::make_shared<MarkdownASTNode>(NodeType::Text);
 +      node->content.assign(text, size);
 +      node->setAttribute("htmlEntity", "true");
 +      impl->addInlineNode(node);
-       return 0;
-     }
- 
++      return 0;
++    }
++
+     // Handle text content (normal text, code text, LaTeX math, etc.)
+     if (type == MD_TEXT_NORMAL || type == MD_TEXT_CODE || type == MD_TEXT_LATEXMATH) {
+       impl->currentText.append(text, size);
 diff --git a/ios/parser/MarkdownParserBridge.mm b/ios/parser/MarkdownParserBridge.mm
+index e700fcee..e517812c 100644
 --- a/ios/parser/MarkdownParserBridge.mm
 +++ b/ios/parser/MarkdownParserBridge.mm
 @@ -3,6 +3,7 @@
@@ -8758,9 +8758,10 @@ diff --git a/ios/parser/MarkdownParserBridge.mm b/ios/parser/MarkdownParserBridg
  
    // Convert attributes
 diff --git a/ReactNativeEnrichedMarkdown.podspec b/ReactNativeEnrichedMarkdown.podspec
+index aa878306..f733d7c9 100644
 --- a/ReactNativeEnrichedMarkdown.podspec
 +++ b/ReactNativeEnrichedMarkdown.podspec
-@@ -126,8 +126,11 @@
+@@ -126,8 +126,11 @@ Pod::Spec.new do |s|
      s.resource_bundles = { 'RaTeXCoreFonts' => ['ios/vendor/Fonts/*.ttf'] }
    end
  
@@ -8773,9 +8774,10 @@ diff --git a/ReactNativeEnrichedMarkdown.podspec b/ReactNativeEnrichedMarkdown.p
        "\"$(PODS_TARGET_SRCROOT)/ios/internals\"", "\"$(PODS_TARGET_SRCROOT)/ios/input/internals\""
      ] + code_highlight[:header_paths].map { |p| "\"$(PODS_TARGET_SRCROOT)/#{p}\"" }).join(" "),
 diff --git a/ios/styles/StyleConfig.h b/ios/styles/StyleConfig.h
+index c1e5ce73..d3da5cfd 100644
 --- a/ios/styles/StyleConfig.h
 +++ b/ios/styles/StyleConfig.h
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
  @end
  
  @interface StyleConfig : NSObject <NSCopying>
@@ -8784,9 +8786,10 @@ diff --git a/ios/styles/StyleConfig.h b/ios/styles/StyleConfig.h
  - (CGFloat)fontScaleMultiplier;
  - (void)setFontScaleMultiplier:(CGFloat)newValue;
 diff --git a/ios/styles/StyleConfig.mm b/ios/styles/StyleConfig.mm
+index 9b106500..f77de443 100644
 --- a/ios/styles/StyleConfig.mm
 +++ b/ios/styles/StyleConfig.mm
-@@ -347,6 +347,7 @@
+@@ -347,6 +347,7 @@ - (id)copyWithZone:(NSZone *)zone
    // -init creates fresh ENRMFontSlot instances with needsRecreation = YES,
    // so all cached fonts will be rebuilt from the copied params below.
    StyleConfig *copy = [[[self class] allocWithZone:zone] init];
@@ -8795,16 +8798,17 @@ diff --git a/ios/styles/StyleConfig.mm b/ios/styles/StyleConfig.mm
    copy->_maxFontSizeMultiplier = _maxFontSizeMultiplier;
    copy->_primaryColor = [_primaryColor copy];
 diff --git a/ios/renderer/ENRMImageRenderer.m b/ios/renderer/ENRMImageRenderer.m
+index 32edfcce..88385ab6 100644
 --- a/ios/renderer/ENRMImageRenderer.m
 +++ b/ios/renderer/ENRMImageRenderer.m
-@@ -17,6 +17,10 @@
-   NSString *imageURL = node.attributes[@"url"];
-   if (!imageURL || imageURL.length == 0) {
+@@ -19,6 +19,10 @@ - (void)renderNodeContent:(MarkdownASTNode *)node
      return;
-+  }
-+
-+  if (_config.imageBaseURL && ![NSURL URLWithString:imageURL].scheme && ![imageURL hasPrefix:@"/"]) {
-+    imageURL = [NSURL URLWithString:imageURL relativeToURL:_config.imageBaseURL].absoluteURL.absoluteString;
    }
  
++  if (_config.imageBaseURL && ![NSURL URLWithString:imageURL].scheme && ![imageURL hasPrefix:@"/"]) {
++    imageURL = [NSURL URLWithString:imageURL relativeToURL:_config.imageBaseURL].absoluteURL.absoluteString;
++  }
++
    BOOL isInline = [self isInlineImageInOutput:output];
+   ENRMImageAttachment *attachment = [ENRMImageAttachment attachmentForURL:imageURL config:_config isInline:isInline];
+ 

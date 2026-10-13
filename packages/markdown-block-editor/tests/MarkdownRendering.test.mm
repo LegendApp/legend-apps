@@ -4,6 +4,7 @@
 #import "ENRMInputScrolling.h"
 #import "ENRMInputMeasurement.h"
 #import "ENRMInputParser.h"
+#import "ENRMMarkdownParser.h"
 
 #define ENRMPlatformTextView NSTextView
 #define ENRMSetNeedsDisplay(view) [(view) setNeedsDisplay:YES]
@@ -111,7 +112,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
     _textView.horizontallyResizable = YES;
     _textView.textContainerInset = NSZeroSize;
     _textView.textContainer.lineFragmentPadding = 0;
-    _textView.textContainer.widthTracksTextView = YES;
+#include "InputWidth.inc"
     [_textView.textContainer replaceLayoutManager:[InputLayoutManager new]];
     ENRMConfigureInputScrolling(_scrollContainerView, _scrollView, _textView, NO);
     [self addSubview:_scrollContainerView];
@@ -167,9 +168,21 @@ static void require(BOOL condition, NSString *message)
   if (!condition) { NSLog(@"FAIL %@", message); exit(1); }
 }
 
+static NSString *textContent(MarkdownASTNode *node)
+{
+  NSMutableString *text = [node.content mutableCopy] ?: [NSMutableString new];
+  for (MarkdownASTNode *child in node.children) [text appendString:textContent(child)];
+  return text;
+}
+
 int main()
 {
   @autoreleasepool {
+    ENRMMarkdownParser *parser = [ENRMMarkdownParser new];
+    require([textContent([parser parseMarkdown:@"&amp; &#169; &#x1F600; &copy; &unknown;"])
+             isEqualToString:@"& © 😀 © &unknown;"], @"named, decimal, hex, and unknown entities");
+    require([textContent([parser parseMarkdown:@"`&amp;` \\&amp;"]) isEqualToString:@"&amp; &amp;"],
+            @"code and escaped entity source must remain literal");
     MarkdownASTNode *root = [[MarkdownASTNode alloc] initWithType:MarkdownNodeTypeDocument];
     MarkdownASTNode *before = [[MarkdownASTNode alloc] initWithType:MarkdownNodeTypeParagraph];
     MarkdownASTNode *math = [[MarkdownASTNode alloc] initWithType:MarkdownNodeTypeLatexMathDisplay];
@@ -213,6 +226,8 @@ int main()
 
     InputHost *host = [[InputHost alloc] initWithFrame:NSMakeRect(0, 0, 180, 54)];
     InputView *input = host.textView;
+    require(!input.allowsVibrancy, @"inline editor must not invalidate window vibrancy during drawing");
+    require(!input.textContainer.widthTracksTextView, @"Fabric owns the editor container width");
     InputLayoutManager *layout = (InputLayoutManager *)input.layoutManager;
     input.layoutManager.allowsNonContiguousLayout = YES;
     // setValue must reach the formatter immediately after replacing its stores,
@@ -275,6 +290,7 @@ int main()
           [input viewWillDraw];
           require(layout.layoutPasses == before + 1, @"display callbacks must not force another layout pass");
           require(NSEqualRects(input.frame, expectedFrame), @"drawing must not displace the editor");
+          require(input.textContainer.containerSize.width == 180, @"editing must retain the supplied text width");
         }
       }
     }
