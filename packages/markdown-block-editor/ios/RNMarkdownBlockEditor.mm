@@ -465,6 +465,13 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 + (void)load
 {
   registerNativeMarkdownProvider();
+  [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidFinishLaunchingNotification
+                                                 object:nil queue:nil usingBlock:^(NSNotification *notification) {
+    if ([NSBundle.mainBundle.infoDictionary[@"LegendAppId"] isEqual:@"markdown"]) {
+      NSMenuItem *formatMenu = [NSApp.mainMenu itemWithTitle:@"Format"];
+      if (formatMenu) [NSApp.mainMenu removeItem:formatMenu];
+    }
+  }];
 }
 
 - (instancetype)init

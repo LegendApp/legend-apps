@@ -342,10 +342,6 @@ static NSView *LegendCreateMusicGlassHostView(NSRect frame, NSView **contentView
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
-  if ([LegendCurrentAppId() isEqualToString:@"markdown"]) {
-    NSMenuItem *formatMenu = [NSApp.mainMenu itemWithTitle:@"Format"];
-    if (formatMenu) [NSApp.mainMenu removeItem:formatMenu];
-  }
   self.moduleName = @"main";
   self.initialProps = @{
     @"launchArguments": [[NSProcessInfo processInfo] arguments] ?: @[],
