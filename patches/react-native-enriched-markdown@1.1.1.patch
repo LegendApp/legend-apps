@@ -6310,16 +6310,18 @@ index 2b517afd..474c93ee 100644
  
  } // namespace facebook::react
 diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
+index 8f7b4400..a4a730a8 100644
 --- a/ios/internals/ENRMViewFreeMeasurement.h
 +++ b/ios/internals/ENRMViewFreeMeasurement.h
-@@ -1,4 +1,6 @@
+@@ -1,5 +1,7 @@
  #pragma once
-+
-+#import "EnrichedMarkdown.h"
  
++#import "EnrichedMarkdown.h"
++
  #import "ENRMBlockquoteContainerView.h"
  #import "ENRMCodeBlockContainerView.h"
-@@ -107,6 +109,8 @@
+ #import "ENRMFeatureFlags.h"
+@@ -107,6 +109,8 @@ template <typename PropsT>
  static inline StyleConfig *ENRMStyleConfigFromProps(const PropsT &typedProps, CGFloat fontScale)
  {
    StyleConfig *config = [[StyleConfig alloc] init];
@@ -6328,7 +6330,7 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    using StyleT = std::remove_cv_t<std::remove_reference_t<decltype(typedProps.markdownStyle)>>;
    static const StyleT kDefaultStyle{};
    applyMarkdownStyleToConfig(config, typedProps.markdownStyle, kDefaultStyle);
-@@ -170,16 +174,15 @@
+@@ -170,16 +174,15 @@ static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text,
   * empty render output — the same fallback `measureSize:` produced.
   */
  template <typename PropsT>
@@ -6341,17 +6343,15 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
--      return fallback;
--    }
++    if (markdown.length == 0) {
+       return fallback;
+     }
 -
 -    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
-+    if (markdown.length == 0) {
-+      return fallback;
-+    }
      StyleConfig *config = ENRMStyleConfigFromProps(typedProps, fontScale);
  
      ENRMMd4cFlags *flags = ENRMMd4cFlagsFromProps(typedProps.md4cFlags);
-@@ -231,17 +234,15 @@
+@@ -231,18 +234,16 @@ static inline CGSize ENRMMeasureMarkdownViewFree(const PropsT &typedProps, CGFlo
   * (maxWidth × system-16 line height) fallback for empty/failed content.
   */
  template <typename PropsT>
@@ -6364,16 +6364,15 @@ diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFre
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
--      return fallback;
--    }
--
--    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
 +    if (markdown.length == 0) {
-+      return fallback;
-+    }
+       return fallback;
+     }
  
+-    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
+-
      if (typedProps.streamingAnimation) {
        NSString *tableModeStr = [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.tableMode.c_str()];
+       ENRMTableStreamingMode tableStreamingMode =
 diff --git a/ios/internals/EnrichedMarkdownShadowNode.mm b/ios/internals/EnrichedMarkdownShadowNode.mm
 index 056225f5..3973c2e1 100644
 --- a/ios/internals/EnrichedMarkdownShadowNode.mm
