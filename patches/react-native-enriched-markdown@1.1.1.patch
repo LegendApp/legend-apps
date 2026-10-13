@@ -2213,26 +2213,28 @@ index 650f0151..69e6e6df 100644
          'cpp/highlight/vendor/tree-sitter/include',
          generated_rel,
 diff --git a/ios/EnrichedMarkdown.h b/ios/EnrichedMarkdown.h
-index 99ea444f..6ac0021e 100644
 --- a/ios/EnrichedMarkdown.h
 +++ b/ios/EnrichedMarkdown.h
-@@ -7,6 +7,11 @@
+@@ -6,6 +6,15 @@
+ #define EnrichedMarkdownNativeComponent_h
  
  NS_ASSUME_NONNULL_BEGIN
- 
++
 +typedef NSString *_Nonnull (^ENRMNativeMarkdownProvider)(NSString *blockId);
++
++typedef NSURL *_Nullable (^ENRMNativeImageBaseURLProvider)(NSString *blockId);
++void ENRMSetNativeImageBaseURLProvider(ENRMNativeImageBaseURLProvider provider);
++NSURL *_Nullable ENRMImageBaseURLForNativeBlockId(NSString *blockId);
 +
 +void ENRMSetNativeMarkdownProvider(ENRMNativeMarkdownProvider _Nullable provider);
 +NSString *ENRMMarkdownForNativeBlockId(NSString *blockId);
-+
+ 
  @interface EnrichedMarkdown : RCTViewComponentView
  @property (nonatomic, strong) StyleConfig *config;
- - (CGSize)measureSize:(CGFloat)maxWidth;
 diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
-index b7edde7a..9ba66097 100644
 --- a/ios/EnrichedMarkdown.mm
 +++ b/ios/EnrichedMarkdown.mm
-@@ -74,6 +74,39 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
+@@ -74,6 +74,51 @@
    ENRMDirtyRender = 1 << 2,
  };
  
@@ -2260,6 +2262,18 @@ index b7edde7a..9ba66097 100644
 +  return @"";
 +}
 +
++static ENRMNativeImageBaseURLProvider nativeImageBaseURLProvider;
++
++void ENRMSetNativeImageBaseURLProvider(ENRMNativeImageBaseURLProvider provider)
++{
++  nativeImageBaseURLProvider = [provider copy];
++}
++
++NSURL *ENRMImageBaseURLForNativeBlockId(NSString *blockId)
++{
++  return nativeImageBaseURLProvider && blockId.length > 0 ? nativeImageBaseURLProvider(blockId) : nil;
++}
++
 +static NSString *ENRMMarkdownForProps(const EnrichedMarkdownProps &props)
 +{
 +  if (!props.nativeMarkdownBlockId.empty()) {
@@ -2272,7 +2286,7 @@ index b7edde7a..9ba66097 100644
  static char kENRMSegmentFadeAnimatorKey;
  
  @interface EnrichedMarkdown () <RCTEnrichedMarkdownViewProtocol, UITextViewDelegate, ENRMImageLayoutObserver>
-@@ -930,6 +963,20 @@ - (EnrichedMarkdownInternalText *)createTextViewForRenderedSegment:(ENRMRenderRe
+@@ -930,6 +975,20 @@
      return buildEditMenuForSelection(textView.textStorage, textView.selectedRange, segmentMarkdown, strongSelf->_config,
                                       @[ baseMenu ], customItems, strongSelf -> _selectionMenuConfig);
    }];
@@ -2293,7 +2307,7 @@ index b7edde7a..9ba66097 100644
  #endif
  
    return view;
-@@ -1064,7 +1111,10 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -1064,7 +1123,10 @@
    const auto &oldViewProps = *std::static_pointer_cast<EnrichedMarkdownProps const>(_props);
    const auto &newViewProps = *std::static_pointer_cast<EnrichedMarkdownProps const>(props);
  
@@ -2305,7 +2319,17 @@ index b7edde7a..9ba66097 100644
    if (markdownChanged) {
      _dirtyFlags |= ENRMDirtyRender;
    }
-@@ -1254,7 +1304,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -1073,6 +1135,9 @@
+     _config = [[StyleConfig alloc] init];
+     [_config setFontScaleMultiplier:_fontScaleObserver.effectiveFontScale];
+   }
++
++  _config.imageBaseURL = ENRMImageBaseURLForNativeBlockId(
++      [NSString stringWithUTF8String:newViewProps.nativeMarkdownBlockId.c_str()]);
+ 
+   if (applyMarkdownStyleToConfig(_config, newViewProps.markdownStyle, oldViewProps.markdownStyle)) {
+     _dirtyFlags |= ENRMDirtyForceHeight | ENRMDirtyRender;
+@@ -1254,7 +1319,7 @@
    if (_dirtyFlags & ENRMDirtyRender) {
      _pendingStyleFingerprint =
          computeStyleFingerprint(newViewProps.markdownStyle) ^ std::hash<bool>{}(newViewProps.allowTrailingMargin);
@@ -2314,7 +2338,7 @@ index b7edde7a..9ba66097 100644
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
-@@ -1429,7 +1479,11 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
+@@ -1429,7 +1494,11 @@
  {
    auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(_eventEmitter);
    if (emitter)
@@ -2328,7 +2352,6 @@ index b7edde7a..9ba66097 100644
  
  - (void)emitCopyPress:(NSString *)code language:(NSString *)language
 diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
-index 1b384171..246b2a24 100644
 --- a/ios/EnrichedMarkdownText.mm
 +++ b/ios/EnrichedMarkdownText.mm
 @@ -8,6 +8,7 @@
@@ -2339,10 +2362,11 @@ index 1b384171..246b2a24 100644
  #import "ENRMSpoilerOverlayManager.h"
  #import "ENRMSpoilerTapUtils.h"
  #import "ENRMTailFadeInAnimator.h"
-@@ -49,6 +50,15 @@ typedef NS_OPTIONS(NSUInteger, ENRMDirtyFlags) {
+@@ -48,6 +49,15 @@
+   ENRMDirtyNone = 0,
    ENRMDirtyRender = 1 << 0,
  };
- 
++
 +static NSString *ENRMMarkdownTextForProps(const EnrichedMarkdownTextProps &props)
 +{
 +  if (!props.nativeMarkdownBlockId.empty()) {
@@ -2351,11 +2375,10 @@ index 1b384171..246b2a24 100644
 +  }
 +  return [[NSString alloc] initWithUTF8String:props.markdown.c_str()] ?: @"";
 +}
-+
+ 
  @interface EnrichedMarkdownText () <RCTEnrichedMarkdownTextViewProtocol, UITextViewDelegate, ENRMImageLayoutObserver>
  + (ENRMMd4cFlags *)flagsFromProps:(const EnrichedMarkdownTextMd4cFlagsStruct &)props;
- - (void)setupTextView;
-@@ -369,6 +379,20 @@ - (void)setupTextView
+@@ -369,6 +379,20 @@
                                       strongSelf->_config, @[ baseMenu ], customItems,
                                       strongSelf -> _selectionMenuConfig);
    };
@@ -2376,7 +2399,7 @@ index 1b384171..246b2a24 100644
  #endif
  
    ENRMTapRecognizer *tapRecognizer = [[ENRMTapRecognizer alloc] initWithTarget:self action:@selector(textTapped:)];
-@@ -576,7 +600,9 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -576,7 +600,9 @@
    const auto &oldViewProps = *std::static_pointer_cast<EnrichedMarkdownTextProps const>(_props);
    const auto &newViewProps = *std::static_pointer_cast<EnrichedMarkdownTextProps const>(props);
  
@@ -2387,7 +2410,17 @@ index 1b384171..246b2a24 100644
      _dirtyFlags |= ENRMDirtyRender;
    }
  
-@@ -749,7 +775,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -585,6 +611,9 @@
+     [_config setFontScaleMultiplier:_fontScaleObserver.effectiveFontScale];
+     _spoilerManager = [[ENRMSpoilerOverlayManager alloc] initWithTextView:_textView config:_config];
+   }
++
++  _config.imageBaseURL = ENRMImageBaseURLForNativeBlockId(
++      [NSString stringWithUTF8String:newViewProps.nativeMarkdownBlockId.c_str()]);
+ 
+   if (applyMarkdownStyleToConfig(_config, newViewProps.markdownStyle, oldViewProps.markdownStyle)) {
+     _forceHeightUpdateOnNextRender = YES;
+@@ -749,7 +778,7 @@
    if (_dirtyFlags & ENRMDirtyRender) {
      _pendingStyleFingerprint =
          computeStyleFingerprint(newViewProps.markdownStyle) ^ std::hash<bool>{}(newViewProps.allowTrailingMargin);
@@ -2396,7 +2429,7 @@ index 1b384171..246b2a24 100644
      [self renderMarkdownContent:markdownString];
      _dirtyFlags &= ~ENRMDirtyRender;
    }
-@@ -871,7 +897,11 @@ - (void)emitTaskListItemPress:(NSInteger)index checked:(BOOL)checked text:(NSStr
+@@ -871,7 +900,11 @@
  {
    auto emitter = std::static_pointer_cast<EnrichedMarkdownTextEventEmitter const>(_eventEmitter);
    if (emitter)
@@ -6278,10 +6311,18 @@ index 2b517afd..474c93ee 100644
  
  } // namespace facebook::react
 diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
-index 8f7b4400..0d164a5d 100644
 --- a/ios/internals/ENRMViewFreeMeasurement.h
 +++ b/ios/internals/ENRMViewFreeMeasurement.h
-@@ -170,16 +170,15 @@ static inline CGSize ENRMMeasureAttributedTextViewFree(NSAttributedString *text,
+@@ -107,6 +107,8 @@
+ static inline StyleConfig *ENRMStyleConfigFromProps(const PropsT &typedProps, CGFloat fontScale)
+ {
+   StyleConfig *config = [[StyleConfig alloc] init];
++  config.imageBaseURL = ENRMImageBaseURLForNativeBlockId(
++      [NSString stringWithUTF8String:typedProps.nativeMarkdownBlockId.c_str()]);
+   using StyleT = std::remove_cv_t<std::remove_reference_t<decltype(typedProps.markdownStyle)>>;
+   static const StyleT kDefaultStyle{};
+   applyMarkdownStyleToConfig(config, typedProps.markdownStyle, kDefaultStyle);
+@@ -170,16 +172,15 @@
   * empty render output — the same fallback `measureSize:` produced.
   */
  template <typename PropsT>
@@ -6294,15 +6335,17 @@ index 8f7b4400..0d164a5d 100644
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
-+    if (markdown.length == 0) {
-       return fallback;
-     }
+-      return fallback;
+-    }
 -
 -    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
++    if (markdown.length == 0) {
++      return fallback;
++    }
      StyleConfig *config = ENRMStyleConfigFromProps(typedProps, fontScale);
  
      ENRMMd4cFlags *flags = ENRMMd4cFlagsFromProps(typedProps.md4cFlags);
-@@ -231,18 +230,16 @@ static inline CGSize ENRMMeasureMarkdownViewFree(const PropsT &typedProps, CGFlo
+@@ -231,17 +232,15 @@
   * (maxWidth × system-16 line height) fallback for empty/failed content.
   */
  template <typename PropsT>
@@ -6315,15 +6358,16 @@ index 8f7b4400..0d164a5d 100644
    @autoreleasepool {
      CGSize fallback = CGSizeMake(maxWidth, UIFontLineHeight([UIFont systemFontOfSize:16.0]));
 -    if (typedProps.markdown.empty()) {
-+    if (markdown.length == 0) {
-       return fallback;
-     }
- 
--    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
+-      return fallback;
+-    }
 -
+-    NSString *markdown = [[NSString alloc] initWithUTF8String:typedProps.markdown.c_str()];
++    if (markdown.length == 0) {
++      return fallback;
++    }
+ 
      if (typedProps.streamingAnimation) {
        NSString *tableModeStr = [[NSString alloc] initWithUTF8String:typedProps.streamingConfig.tableMode.c_str()];
-       ENRMTableStreamingMode tableStreamingMode =
 diff --git a/ios/internals/EnrichedMarkdownShadowNode.mm b/ios/internals/EnrichedMarkdownShadowNode.mm
 index 056225f5..3973c2e1 100644
 --- a/ios/internals/EnrichedMarkdownShadowNode.mm
@@ -8728,3 +8772,39 @@ diff --git a/ReactNativeEnrichedMarkdown.podspec b/ReactNativeEnrichedMarkdown.p
        "\"#{cpp_root}/md4c\"", "\"#{cpp_root}/parser\"", "\"#{cpp_root}/highlight\"",
        "\"$(PODS_TARGET_SRCROOT)/ios/internals\"", "\"$(PODS_TARGET_SRCROOT)/ios/input/internals\""
      ] + code_highlight[:header_paths].map { |p| "\"$(PODS_TARGET_SRCROOT)/#{p}\"" }).join(" "),
+diff --git a/ios/styles/StyleConfig.h b/ios/styles/StyleConfig.h
+--- a/ios/styles/StyleConfig.h
++++ b/ios/styles/StyleConfig.h
+@@ -17,6 +17,7 @@
+ @end
+ 
+ @interface StyleConfig : NSObject <NSCopying>
++@property (nonatomic, strong, nullable) NSURL *imageBaseURL;
+ - (instancetype)init;
+ - (CGFloat)fontScaleMultiplier;
+ - (void)setFontScaleMultiplier:(CGFloat)newValue;
+diff --git a/ios/styles/StyleConfig.mm b/ios/styles/StyleConfig.mm
+--- a/ios/styles/StyleConfig.mm
++++ b/ios/styles/StyleConfig.mm
+@@ -347,6 +347,7 @@
+   // -init creates fresh ENRMFontSlot instances with needsRecreation = YES,
+   // so all cached fonts will be rebuilt from the copied params below.
+   StyleConfig *copy = [[[self class] allocWithZone:zone] init];
++  copy.imageBaseURL = self.imageBaseURL;
+   copy->_allowFontScaling = _allowFontScaling;
+   copy->_maxFontSizeMultiplier = _maxFontSizeMultiplier;
+   copy->_primaryColor = [_primaryColor copy];
+diff --git a/ios/renderer/ENRMImageRenderer.m b/ios/renderer/ENRMImageRenderer.m
+--- a/ios/renderer/ENRMImageRenderer.m
++++ b/ios/renderer/ENRMImageRenderer.m
+@@ -17,6 +17,10 @@
+   NSString *imageURL = node.attributes[@"url"];
+   if (!imageURL || imageURL.length == 0) {
+     return;
++  }
++
++  if (_config.imageBaseURL && ![NSURL URLWithString:imageURL].scheme && ![imageURL hasPrefix:@"/"]) {
++    imageURL = [NSURL URLWithString:imageURL relativeToURL:_config.imageBaseURL].absoluteURL.absoluteString;
+   }
+ 
+   BOOL isInline = [self isInlineImageInOutput:output];

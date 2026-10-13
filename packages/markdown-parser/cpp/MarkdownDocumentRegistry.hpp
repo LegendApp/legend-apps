@@ -11,6 +11,7 @@ struct RegisteredMarkdownBlockMetadata {
 };
 
 RegisteredMarkdownBlockMetadata metadataForRegisteredBlockId(const std::string& blockId);
+std::string pathForRegisteredBlockId(const std::string& blockId);
 std::string markdownForRegisteredBlockId(const std::string& blockId);
 
 } // namespace margelo::nitro::legendapps::markdownparser

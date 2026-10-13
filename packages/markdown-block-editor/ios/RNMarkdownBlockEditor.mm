@@ -420,6 +420,12 @@ static void registerNativeMarkdownProvider()
 {
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
+    ENRMSetNativeImageBaseURLProvider(^NSURL *(NSString *blockId) {
+      const std::string path = margelo::nitro::legendapps::markdownparser::pathForRegisteredBlockId(blockId.UTF8String);
+      if (path.empty()) return nil;
+      NSString *filename = [NSString stringWithUTF8String:path.c_str()];
+      return [NSURL fileURLWithPath:filename.stringByDeletingLastPathComponent isDirectory:YES];
+    });
     ENRMSetNativeMarkdownProvider(^NSString *(NSString *blockId) {
       return nativeMarkdownForBlockId(blockId);
     });

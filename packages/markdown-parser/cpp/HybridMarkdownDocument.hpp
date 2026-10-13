@@ -79,6 +79,7 @@ public:
   void overwrite() override;
   void save() override;
   void saveAs(const std::string& filePath) override;
+  std::string filePath() const;
   const std::string& documentId() const noexcept;
   std::string markdownForBlockId(const std::string& blockId) const;
 

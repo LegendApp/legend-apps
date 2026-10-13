@@ -697,6 +697,11 @@ RegisteredMarkdownBlockMetadata metadataForRegisteredBlockId(const std::string& 
   }
 }
 
+std::string pathForRegisteredBlockId(const std::string& blockId) {
+  auto document = registeredDocumentForBlockId(blockId);
+  return document ? document->filePath() : "";
+}
+
 std::string markdownForRegisteredBlockId(const std::string& blockId) {
   std::shared_ptr<HybridMarkdownDocument> document = registeredDocumentForBlockId(blockId);
   return document ? document->markdownForBlockId(blockId) : "";
@@ -903,6 +908,11 @@ void HybridMarkdownDocument::saveAs(const std::string& filePath) {
 
 const std::string& HybridMarkdownDocument::documentId() const noexcept {
   return documentId_;
+}
+
+std::string HybridMarkdownDocument::filePath() const {
+  std::lock_guard<std::mutex> lock(documentMutex_);
+  return filePath_;
 }
 
 std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockId) const {
