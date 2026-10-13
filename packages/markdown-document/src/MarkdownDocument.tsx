@@ -2626,6 +2626,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       blockDataSourceRef.current = null;
       setBlockDataSource(null);
       blockDataRevision$.set(0);
+      setViewerImage(null);
       documentState$.set({ status: "loading" });
       documentRenderState$.rowStatesById.set(new Map());
       setActiveBlockId(null);
