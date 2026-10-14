@@ -56,11 +56,12 @@ export type MoveBlockRangeHistoryEntry = {
   inversePlacement: "before" | "after";
 };
 
-export type HistoryEntry =
+export type HistoryEntry = (
   | UpdateBlockHistoryEntry
   | ReplaceBlockRangeHistoryEntry
   | SplitBlockHistoryEntry
-  | MoveBlockRangeHistoryEntry;
+  | MoveBlockRangeHistoryEntry
+) & { savedBefore?: boolean; savedAfter?: boolean };
 
 export type BlockSelectionState = {
   anchorBlockId: string;

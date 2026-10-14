@@ -791,6 +791,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       typingHistoryGroupRef.current = undefined;
     }, []);
 
+    const pushHistoryEntry = useCallback((entry: HistoryEntry) => {
+      entry.savedBefore = undoStackRef.current.at(-1)?.savedAfter
+        ?? redoStackRef.current.at(-1)?.savedAfter
+        ?? (undoStackRef.current.length === 0 && redoStackRef.current.length === 0);
+      undoStackRef.current.push(entry);
+    }, []);
+
     const pushUpdateBlockHistoryEntry = useCallback(
       (entry: UpdateBlockHistoryEntry, options: { groupTyping?: boolean } = {}) => {
         if (suppressHistoryRef.current) {
@@ -813,14 +820,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return;
         }
 
-        undoStackRef.current.push(entry);
+        pushHistoryEntry(entry);
         redoStackRef.current = [];
         typingHistoryGroupRef.current = options.groupTyping
           ? { entry, updatedAt: now }
           : undefined;
         publishCommandState();
       },
-      [publishCommandState],
+      [publishCommandState, pushHistoryEntry],
     );
 
     const publishTextSelectionAnchor = useCallback((anchor: MarkdownSelectionAnchor | null) => {
@@ -1111,7 +1118,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         } else if (firstChangedBlockId) {
           if (lastChangedBlockId) {
             clearTypingHistoryGroup();
-            undoStackRef.current.push({
+            pushHistoryEntry({
               type: "replaceBlockRange",
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
@@ -1170,6 +1177,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       documentState$,
       onErrorRef,
       publishCommandState,
+      pushHistoryEntry,
       pushUpdateBlockHistoryEntry,
       updateRenderedBlockMarkdown,
       validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown]);
@@ -1448,7 +1456,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                 if (beforeMarkdown.length > 0 || afterMarkdown.length > 0) {
                   historyEntry.inverseSplit = { afterMarkdown, beforeMarkdown };
                 }
-                undoStackRef.current.push(historyEntry);
+                pushHistoryEntry(historyEntry);
                 redoStackRef.current = [];
                 publishCommandState();
               }
@@ -1558,6 +1566,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+      pushHistoryEntry,
         pushUpdateBlockHistoryEntry,
         updateRenderedBlockMarkdown,
         validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
@@ -1788,7 +1797,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             }
 
             if (nextHistoryEntry) {
-              undoStackRef.current.push(nextHistoryEntry);
+              pushHistoryEntry(nextHistoryEntry);
               redoStackRef.current = [];
               publishCommandState();
             }
@@ -1842,6 +1851,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+      pushHistoryEntry,
         validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
 
@@ -1868,7 +1878,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
           if (result.changedRange.blockIds.length > 1) {
             clearTypingHistoryGroup();
-            undoStackRef.current.push({
+            pushHistoryEntry({
               type: "replaceBlockRange",
               startBlockId: result.changedRange.blockIds[0]!,
               endBlockId: result.changedRange.blockIds[result.changedRange.blockIds.length - 1]!,
@@ -1934,6 +1944,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         applyTransactionResult,
         clearTypingHistoryGroup,
         publishCommandState,
+      pushHistoryEntry,
         documentState$,
         markDirty,
         onErrorRef,
@@ -1991,7 +2002,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const firstChangedBlockId = result.changedRange.blockIds[0];
           const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
           if (!suppressHistoryRef.current && firstChangedBlockId && lastChangedBlockId) {
-            undoStackRef.current.push({
+            pushHistoryEntry({
               type: "replaceBlockRange",
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
@@ -2074,6 +2085,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+      pushHistoryEntry,
         pushUpdateBlockHistoryEntry,
         updateRenderedBlockMarkdown,
         validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
@@ -2227,7 +2239,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockSelectionGestureRef.current = null;
           setNextBlockSelection(nextBlockSelection);
           if (!suppressHistoryRef.current) {
-            undoStackRef.current.push({
+            pushHistoryEntry({
               type: "moveBlockRange",
               startBlockId,
               endBlockId,
@@ -2270,6 +2282,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         markDirty,
         onErrorRef,
         publishCommandState,
+      pushHistoryEntry,
         setNextBlockSelection,
         validateTransactionResult, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
@@ -2731,6 +2744,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onLoadErrorRef,
       onLoadedRef,
       publishCommandState,
+      pushHistoryEntry,
       reportAsyncError,
       setActiveBlock,
       setNextSaveState,
@@ -2808,6 +2822,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           clearAutosaveTimer();
           conflictRef.current = false;
           onConflictChangeRef.current?.(null);
+          clearTypingHistoryGroup();
+          for (const entry of [...undoStackRef.current, ...redoStackRef.current]) {
+            entry.savedBefore = false;
+            entry.savedAfter = false;
+          }
+          const lastUndo = undoStackRef.current.at(-1);
+          const lastRedo = redoStackRef.current.at(-1);
+          if (lastUndo) lastUndo.savedAfter = true;
+          if (lastRedo) lastRedo.savedAfter = true;
           savedRevisionRef.current = savingRevision;
           setNextSaveState("idle");
           isDirtyRef.current = false;
@@ -2845,6 +2868,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [
         adapter,
         clearAutosaveTimer,
+        clearTypingHistoryGroup,
         commitActiveBlock,
         documentState$,
         onDirtyChangeRef,
@@ -2932,6 +2956,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
         suppressHistoryRef.current = true;
         const finishHistoryEntry = (nextEntry: HistoryEntry | null) => {
+          if (nextEntry) {
+            nextEntry.savedBefore = entry.savedAfter;
+            nextEntry.savedAfter = entry.savedBefore;
+            if (entry.savedBefore) {
+              clearAutosaveTimer();
+              isDirtyRef.current = false;
+              onDirtyChangeRef.current?.(false);
+            }
+          }
           suppressHistoryRef.current = false;
           return nextEntry;
         };
@@ -3138,7 +3171,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return finishHistoryEntry(null);
         }
       },
-      [adapter, applyTransactionResult, documentState$, getBlockIndexById, markDirty, onErrorRef, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
+      [adapter, applyTransactionResult, clearAutosaveTimer, documentState$, getBlockIndexById, markDirty, onDirtyChangeRef, onErrorRef, activeEditor$, draftMarkdown$, documentRenderState$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
     );
 
     const releaseHistoryKeyboard = useCallback(() => {

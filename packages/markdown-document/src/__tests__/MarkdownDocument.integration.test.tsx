@@ -4489,6 +4489,23 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("clears dirty state when redo restores the saved bytes and keeps subsequent typing undoable", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Alpha beta gamma.")]));
+    const onDirtyChange = jest.fn();
+    const { commandsRef, renderer } = await renderDocument({ adapter, onDirtyChange });
+    await changeText(editorInput(renderer), "Alpha BETA gamma.");
+    await act(async () => { await commandsRef.current?.save(); });
+    await undo(commandsRef);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    await redo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Alpha BETA gamma.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+    await changeText(editorInput(renderer), "Alpha BETA! gamma.");
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Alpha BETA gamma.");
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("undoes and redoes a paragraph split", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const { commandsRef, onError, renderer } = await renderDocument({ adapter });
