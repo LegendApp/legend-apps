@@ -101,7 +101,8 @@
     "test:markdown-regression": "bun run test:markdown-editing && bun run test:markdown-native && bun run test:legend-list && bun run typecheck && bun markdown verify macos",
     "test:markdown-e2e:large-document": "MARKDOWN_E2E_SCENARIO=editor-large-document bun scripts/test-markdown-e2e.ts",
     "photos": "bun scripts/run-app.ts photos",
-    "test:photos": "bun test apps/photos/tests"
+    "test:photos": "bun test apps/photos/tests",
+    "test:workspace": "jest --config packages/workspace/jest.config.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",

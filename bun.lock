@@ -834,6 +834,18 @@
         "react-native": "catalog:",
       },
     },
+    "packages/workspace": {
+      "name": "@legend-apps/workspace",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/list": "catalog:",
+        "@legendapp/spark": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
     "shell": {
       "name": "shell",
       "version": "0.0.0",
@@ -1378,6 +1390,8 @@
     "@legend-apps/window-manager": ["@legend-apps/window-manager@workspace:packages/window-manager"],
 
     "@legend-apps/windows": ["@legend-apps/windows@workspace:packages/windows"],
+
+    "@legend-apps/workspace": ["@legend-apps/workspace@workspace:packages/workspace"],
 
     "@legendapp/list": ["@legendapp/list@workspace:packages/legend-list-sparse-layout"],
 
