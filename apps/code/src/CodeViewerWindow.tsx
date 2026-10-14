@@ -6,7 +6,7 @@ import { ownRegistration } from "@legend-apps/runtime-utils";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { DocumentTabBar, getDocumentTabs, useDocumentWindow, useWorkspaceWindow, WorkspaceSidebar } from "@legend-apps/workspace";
+import { DocumentTabBar, useDocumentWindow, useWorkspaceWindow, WorkspaceSidebar } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -152,13 +152,13 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   const content = (
     <View style={styles.root}>
       <DocumentTabBar
-        activeKey={tabs.active}
+        activePath={tabs.active}
         colors={workspaceColors}
         onClose={closeFile}
         onSelect={openTab}
         onToggleSidebar={workspace.toggleSidebar}
         sidebarOpen={sidebarOpen}
-        tabs={getDocumentTabs(tabs.paths)}
+        paths={tabs.paths}
       />
       {error ? <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{error}</Text> : null}
       <View style={styles.list}>

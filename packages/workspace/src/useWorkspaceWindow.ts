@@ -73,7 +73,6 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
   }, [persistFolders, update]);
 
   return {
-    addFolders,
     chooseFiles,
     chooseFolders: useCallback(() => { chooseFolders().then(paths => { if (paths.length > 0) addFolders(paths); }).catch(onError); }, [addFolders, onError]),
     closeTab,
