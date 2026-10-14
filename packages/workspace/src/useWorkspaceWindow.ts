@@ -52,17 +52,15 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
   }, [onError, persistFolders, update]);
 
   /** Adds chosen files to the sidebar and resolves with them, so the caller can open one through its own document flow. */
-  const chooseFiles = useCallback(async (): Promise<string[]> => {
-    try {
-      const result = await openFileDialog({ filters: fileTypes.length > 0 ? [{ extensions: fileTypes }] : [], multiple: true, selection: "files" });
+  const chooseFiles = useCallback(() => openFileDialog({ filters: fileTypes.length > 0 ? [{ extensions: fileTypes }] : [], multiple: true, selection: "files" })
+    .then((result): string[] => {
       if (result.canceled) return [];
       update(({ files }) => ({ files: addUniquePaths(files, result.paths), sidebarOpen: true }));
       return result.paths;
-    } catch (error) {
+    }, (error: unknown) => {
       onError(error);
       return [];
-    }
-  }, [fileTypes, onError, update]);
+    }), [fileTypes, onError, update]);
 
   /** Saves the folders as a workspace in app data, creating the file on first save. */
   const saveWorkspace = useCallback(async () => {
