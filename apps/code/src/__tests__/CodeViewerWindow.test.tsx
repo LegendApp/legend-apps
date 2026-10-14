@@ -15,6 +15,7 @@ import { setCodeViewerWindowOptions } from "../codeWindows";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { WorkspaceSidebar } from "@legend-apps/workspace";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 const mockEditorCommand = jest.fn(async () => true);
 jest.mock("@legendapp/spark/app/documents", () => ({
     createDocumentTransitionGuard: jest.requireActual("@legendapp/spark/app/documents").createDocumentTransitionGuard,
@@ -24,6 +25,7 @@ jest.mock("@legendapp/spark/app/documents", () => ({
     noteRecentDocument: jest.fn(),
 }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
+jest.mock("@legendapp/spark/shortcuts/commands", () => ({ createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
 jest.mock("@legendapp/spark/app", () => ({ beforeQuit: jest.fn(async () => ({ remove: async () => {} })) }));
 jest.mock("@legendapp/spark/windows", () => ({
     addWindowListener: jest.fn(async () => ({ remove: async () => {} })),
@@ -278,6 +280,13 @@ describe("Code default editor", () => {
         await act(async () => menu("automaticPairs"));
         expect(editor().props.automaticPairs).toBe(false);
         expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(true);
+        const shortcut = jest.mocked(useRoutedHotkeys).mock.lastCall![0];
+        expect(shortcut.scope).toEqual({ kind: "window", windowId: "code-viewer" });
+        expect(shortcut.definitions).toEqual([{ id: "toggleSidebar", title: "Toggle Sidebar", defaultBindings: ["Cmd+Ctrl+s"] }]);
+        const toggleSidebarShortcut = shortcut.handlers.toggleSidebar!;
+        await act(async () => { toggleSidebarShortcut({} as any); });
+        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
+        await act(async () => { toggleSidebarShortcut({} as any); });
         await act(async () => menu("toggleSidebar"));
         expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
     });
