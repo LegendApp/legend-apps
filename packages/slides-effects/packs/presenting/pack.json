@@ -1,6 +1,6 @@
 {
   "id": "presenting",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "hostApiVersion": 1,
   "exports": {
     "Attention": "./Attention.tsx",

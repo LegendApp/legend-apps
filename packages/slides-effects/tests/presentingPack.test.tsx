@@ -21,6 +21,34 @@ function loadComponent(file, overrides = {}) {
   return module.exports;
 }
 
+test("code walkthrough scroll offsets match row heights at different font sizes", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const offsets = [];
+  const ScrollView = React.forwardRef((props, ref) => {
+    React.useImperativeHandle(ref, () => ({ scrollTo: offset => offsets.push(offset.y) }));
+    return <scroll-view {...props} />;
+  });
+  const { CodeWalkthrough } = loadComponent("CodeWalkthrough", {
+    "react-native": { ...await import("react-native"), ScrollView },
+    "./Motion": { useMotion: target => ({ value: target }) },
+    "./FrameView": { FrameView: "frame-view" },
+  });
+  let tree;
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const source = Array.from({ length: 80 }, (_, index) => `line ${index + 1}`).join("\n");
+    for (const fontSize of [16, 25, 32]) {
+      const content = <CodeWalkthrough source={source} fontSize={fontSize} lines={[50, 50]} />;
+      await act(() => { if (tree) tree.update(content); else tree = create(content); });
+      const row = tree.root.findAllByType("frame-view")[49];
+      const height = Object.assign({}, ...row.props.frameStyle()).minHeight;
+      expect(height).toBe(fontSize * 1.68);
+      expect(offsets.at(-1)).toBe(48 * height);
+      expect(24 + 49 * height - offsets.at(-1)).toBeLessThan(580);
+    }
+  } finally { if (tree) await act(() => tree.unmount()); log.mockRestore(); }
+});
+
 test("attention measurements remove viewport scale and keep labels inside the stage", () => {
   const target = relativeBounds({ x: 500, y: 260, width: 400, height: 200 },
     { x: 100, y: 60, width: 2000, height: 1000 }, { width: 1000, height: 500 });

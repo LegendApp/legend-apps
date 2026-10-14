@@ -37,6 +37,7 @@ export function CodeWalkthrough({
         "worklet";
 
         return [styles.line, {
+          minHeight: lineHeight,
           opacity: opacity.value[index] ?? 1,
           backgroundColor: lines && index + 1 >= start && index + 1 <= end ? "#123444" : "transparent"
         }];
@@ -62,7 +63,6 @@ const styles = StyleSheet.create({
   },
   line: {
     flexDirection: "row",
-    minHeight: 42,
     alignItems: "center",
     borderRadius: 6
   },
