@@ -17,6 +17,7 @@ mp4 and a PNG poster into legend-docs/docs/public/slides/effects/previews/<slug>
   --seconds N        recording length (default: catalog profile or 8)
   --motion START:END expected motion in effect playback seconds (repeatable; default: catalog profile or brief entry/reveal intervals)
   --steps N          right-arrow presses after the lead-in (default: literal <Step>/<Steps count={n}> states)
+                     must not exceed the example's step states
   --port N           Metro port for the development build
   --release          launch the release build (default: dev build; start Metro with bun run slides first)
   --window REGEX     audience window title filter (never selects presenter chrome)
