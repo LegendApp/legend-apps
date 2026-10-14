@@ -1,5 +1,5 @@
 import type { ViewProps, ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
 
 function flatten(value: any): ViewStyle {
   "worklet";
@@ -7,6 +7,7 @@ function flatten(value: any): ViewStyle {
   return Object.assign({}, ...value.map(flatten));
 }
 export function FrameView({ frameStyle, ...props }: ViewProps & { frameStyle(): unknown }) {
-  const style = useAnimatedStyle(() => flatten(frameStyle()));
+  const frame = useDerivedValue(frameStyle);
+  const style = useAnimatedStyle(() => flatten(frame.value));
   return <Animated.View {...props} style={[props.style, style]} />;
 }

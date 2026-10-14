@@ -10,11 +10,11 @@ import { PresentationProvider } from "@legend-apps/presentation";
 import "../../../apps/slides/src/__tests__/nativeMock";
 import { relativeBounds, calloutBounds } from "../packs/presenting/geometry";
 
-function loadComponent(file, overrides = {}) {
+function loadComponent(file, overrides = {}, plugins = []) {
   const filename = `${import.meta.dir}/../packs/presenting/${file}.tsx`;
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
-    filename, babelrc: false, configFile: false, presets: [require.resolve("@react-native/babel-preset")],
+    filename, babelrc: false, configFile: false, plugins, presets: [require.resolve("@react-native/babel-preset")],
   });
   const module = { exports: {} };
   new Function("require", "module", "exports", code)((name) => overrides[name] ?? require(name), module, module.exports);
@@ -133,4 +133,39 @@ test("progressive detail has zero layout width when collapsed", async () => {
     expect(detail().props.style[1].value.width).toBe("63%");
     expect(detail().props.pointerEvents).toBe("auto");
   } finally { if (tree) await act(() => tree.unmount()); log.mockRestore(); }
+});
+
+test("frame styles follow UI shared values hidden inside a callback closure", () => {
+  const mutable = value => {
+    const listeners = [];
+    return { _isReanimatedSharedValue: true, get value() { return value; },
+      set value(next) { value = next; listeners.forEach(listener => listener()); }, listeners };
+  };
+  function inputs(value) {
+    if (Array.isArray(value)) return value.flatMap(inputs);
+    if (value?._isReanimatedSharedValue) return [value];
+    // Native mappers traverse plain objects, not a worklet function's closure.
+    return value && Object.getPrototypeOf(value) === Object.prototype ? Object.values(value).flatMap(inputs) : [];
+  }
+  function derived(read) {
+    const output = mutable(read());
+    for (const input of inputs(Object.values(read.__closure ?? {}))) {
+      input.listeners.push(() => { output.value = read(); });
+    }
+    return output;
+  }
+  const { FrameView } = loadComponent("FrameView", {
+    "react-native-reanimated": { __esModule: true, default: { View: "animated-view" },
+      useDerivedValue: derived, useAnimatedStyle: derived },
+  }, [createRequire(`${import.meta.dir}/../../presentation/package.json`).resolve("react-native-worklets/plugin")]);
+  const motion = mutable(0);
+  const frameStyle = Object.assign(() => [{ overflow: "hidden" }, { width: `${motion.value * 63}%`, opacity: motion.value }],
+    { __closure: { motion } });
+  const view = FrameView({ frameStyle });
+  const style = view.props.style[1];
+  expect(style.value).toEqual({ overflow: "hidden", width: "0%", opacity: 0 });
+  for (const progress of [0.5, 1, 0.25, 0]) {
+    motion.value = progress;
+    expect(style.value).toEqual({ overflow: "hidden", width: `${progress * 63}%`, opacity: progress });
+  }
 });
