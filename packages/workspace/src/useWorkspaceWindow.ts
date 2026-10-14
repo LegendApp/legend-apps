@@ -51,21 +51,18 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
     persistFolders(folders).catch(onError);
   }, [onError, persistFolders, update]);
 
-  const removeFolder = useCallback((path: string) => {
-    const folders = stateRef.current.folders.filter(folder => folder !== path);
-    update(() => ({ folders }));
-    persistFolders(folders).catch(onError);
-  }, [onError, persistFolders, update]);
-
-  const addFiles = useCallback((paths: readonly string[]) => {
-    update(({ files, tabs }) => ({ files: addUniquePaths(files, paths), sidebarOpen: true, tabs: paths.reduce(openDocumentTab, tabs) }));
-  }, [update]);
-
-  const chooseFiles = useCallback(async () => {
-    const result = await openFileDialog({ filters: fileTypes.length > 0 ? [{ extensions: fileTypes }] : [], multiple: true, selection: "files" });
-    if (!result.canceled) addFiles(result.paths);
-  }, [addFiles, fileTypes]);
-
+  /** Adds chosen files to the sidebar and resolves with them, so the caller can open one through its own document flow. */
+  const chooseFiles = useCallback(async (): Promise<string[]> => {
+    try {
+      const result = await openFileDialog({ filters: fileTypes.length > 0 ? [{ extensions: fileTypes }] : [], multiple: true, selection: "files" });
+      if (result.canceled) return [];
+      update(({ files }) => ({ files: addUniquePaths(files, result.paths), sidebarOpen: true }));
+      return result.paths;
+    } catch (error) {
+      onError(error);
+      return [];
+    }
+  }, [fileTypes, onError, update]);
 
   /** Saves the folders as a workspace in app data, creating the file on first save. */
   const saveWorkspace = useCallback(async () => {
@@ -76,13 +73,11 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
   }, [persistFolders, update]);
 
   return {
-    addFiles,
     addFolders,
-    chooseFiles: useCallback(() => { chooseFiles().catch(onError); }, [chooseFiles, onError]),
+    chooseFiles,
     chooseFolders: useCallback(() => { chooseFolders().then(paths => { if (paths.length > 0) addFolders(paths); }).catch(onError); }, [addFolders, onError]),
     closeTab,
     openTab,
-    removeFolder,
     renameTab,
     saveWorkspace,
     state,
