@@ -57,7 +57,7 @@ export function useDocumentWindow(windowId: string) {
   useEffect(() => trackDocumentWindow(windowId), [windowId]);
 }
 
-/** Per-window targets for app-level menus and open requests, resolved by focus order. */
+/** Per-window targets for app-level menus and open requests, resolved by focus order, then registration order. */
 export function createDocumentWindowRegistry<T>() {
   const targets = new Map<string, T>();
   return {
@@ -66,9 +66,10 @@ export function createDocumentWindowRegistry<T>() {
         const target = targets.get(focusOrder[index]);
         if (target) return target;
       }
-      return undefined;
+      return [...targets.values()].pop();
     },
     register(windowId: string, target: T) {
+      targets.delete(windowId);
       targets.set(windowId, target);
       return () => { if (targets.get(windowId) === target) targets.delete(windowId); };
     },

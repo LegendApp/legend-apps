@@ -51,6 +51,8 @@ describe("document windows", () => {
     expect(registry.active()).toBe("target-a");
 
     cleanups.forEach(cleanup => cleanup());
-    expect(registry.active()).toBeUndefined();
+    expect(registry.active()).toBe("target-a");
+    registry.register("c", "target-c");
+    expect(registry.active()).toBe("target-c");
   });
 });
