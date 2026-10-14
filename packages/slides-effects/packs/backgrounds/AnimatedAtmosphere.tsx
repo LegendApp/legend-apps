@@ -5,7 +5,7 @@ import { Wireframe } from "./Wireframe";
 import type { AtmosphereProps } from "./Atmosphere";
 export type { AtmosphereProps } from "./Atmosphere";
 export type AtmosphereVariant = "fluid" | "wireframe" | "glass" | "droplets";
-export function AnimatedAtmosphere({ variant = "fluid", ...props }: AtmosphereProps & { variant?: AtmosphereVariant }) {
+export function AnimatedAtmosphere({ variant = "fluid", ...props }: AtmosphereProps & ({ variant?: Exclude<AtmosphereVariant, "droplets"> } | { variant: "droplets"; intensity?: never })) {
   const Component = variant === "droplets" ? Droplets : variant === "glass" ? GlassAtmosphere : variant === "wireframe" ? Wireframe : Fluid;
   return <Component {...props} />;
 }

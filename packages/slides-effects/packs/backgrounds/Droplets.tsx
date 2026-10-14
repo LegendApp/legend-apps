@@ -42,4 +42,4 @@ export const dropletsSource = atmosphereCommon + `
       return half4(color * brightness, 1.0);
     }
   `;
-export function Droplets(props: AtmosphereProps) { return <Atmosphere {...props} source={dropletsSource} persistentBackground={true} />; }
+export function Droplets(props: Omit<AtmosphereProps, "intensity">) { return <Atmosphere {...props} source={dropletsSource} persistentBackground={true} />; }

@@ -1,6 +1,6 @@
 {
   "id": "backgrounds",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "hostApiVersion": 1,
   "exports": {
     "AmbientAurora": "./AmbientAurora.tsx",
