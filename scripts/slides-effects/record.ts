@@ -126,6 +126,7 @@ if (flag("--apply")) {
   assertPreviewHashes(hashes, { exampleSha256: effect.example.sha256, packSha256: pack.versions[pack.latest].sha256 });
 }
 if (flag("--preflight")) { console.log(JSON.stringify({ ok: true, recorder, app: appPath, example, previews, steps, seconds })); process.exit(0); }
+if (run("pgrep", ["-f", "LegendSlides.app/Contents/MacOS/"], { allowFail: true }).stdout.trim()) throw new Error("Legend Slides is already running. Save and quit it first; this script only quits the instance it launches.");
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);

@@ -212,9 +212,12 @@ test.skipIf(!videoSkill)("every recording profile rejects a frozen export with t
     expect(encoded.status).toBe(0);
     const { effects } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/catalog.json"), "utf8"));
     for (const effect of effects.filter(effect => effect.recording || effect.slug === "bar-row")) {
-      const profile = effect.recording ?? { motion: recordingMotionIntervals(8, recordingSchedule(8, 1)) };
+      const profile = effect.recording ?? {};
+      const seconds = profile.seconds ?? 8;
+      const source = fs.readFileSync(path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${effect.slug}/example.mdx`), "utf8");
+      const motion = recordingMotionIntervals(seconds, recordingSchedule(seconds, profile.steps ?? exampleStepPresses(source)), profile.motion);
       const verified = spawnSync("python3", [path.join(videoSkill, "scripts/verify-video.py"), video,
-        ...profile.motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(effect.slug, 320, 180),
+        ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(effect.slug, 320, 180),
         ...(profile.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]),
         ...(profile.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]),
       ], { encoding: "utf8" });
