@@ -63,6 +63,8 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
+jest.mock("@legendapp/spark/shortcuts/commands", () => ({ createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
+
 jest.mock("@legendapp/spark/files", () => ({
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));

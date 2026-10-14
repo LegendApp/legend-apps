@@ -1,9 +1,12 @@
 import { addWindowListener, openWindow, type AsyncRegistration, type NavigatorWindowOptions, type WindowOpenOptions } from "@legendapp/spark/windows";
 import { useEffect } from "react";
+import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import type { WorkspaceWindowProps } from "./workspaceState";
 
 const liveWindowIds = new Set<string>();
 const focusOrder: string[] = [];
+const documentWindowHotkeyRouter = createHotkeyRouter();
+const sidebarHotkeyDefinitions = [{ id: "toggleSidebar", title: "Toggle Sidebar", defaultBindings: ["Cmd+Ctrl+s"] }];
 
 function noteFocus(windowId: string) {
   const index = focusOrder.indexOf(windowId);
@@ -52,8 +55,15 @@ export function trackDocumentWindow(windowId: string) {
   };
 }
 
-export function useDocumentWindow(windowId: string) {
+export function useDocumentWindow(windowId: string, onToggleSidebar: () => void) {
   useEffect(() => trackDocumentWindow(windowId), [windowId]);
+  useRoutedHotkeys({
+    definitions: sidebarHotkeyDefinitions,
+    handlers: { toggleSidebar: onToggleSidebar },
+    router: documentWindowHotkeyRouter,
+    scope: { kind: "window", windowId },
+    onError: console.error,
+  });
 }
 
 /** Per-window targets for app-level menus and open requests, resolved by focus order, then registration order. */

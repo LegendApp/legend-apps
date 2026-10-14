@@ -63,7 +63,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   const borderColor = displayTheme.colors.border;
   const workspaceColors = useMemo(() => ({ ...displayTheme.colors, foreground: foregroundColor }), [displayTheme.colors, foregroundColor]);
   const activeKey = tabs.active ? tabDocuments[tabs.active]?.key : undefined;
-  useDocumentWindow(windowId);
+  useDocumentWindow(windowId, workspace.toggleSidebar);
 
   const openFile = useCallback((path: string) => {
     setError(null);

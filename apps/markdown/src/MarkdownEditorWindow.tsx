@@ -114,7 +114,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onFileOpened: openTab,
     onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
   });
-  useDocumentWindow(windowId);
+  useDocumentWindow(windowId, workspace.toggleSidebar);
   useEffect(() => { reportWorkspaceError.current = session.handleError; }, [session.handleError]);
   const [findVisible, setFindVisible] = useState(false);
   const [findQuery, setFindQuery] = useState("");
