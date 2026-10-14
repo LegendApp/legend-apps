@@ -747,7 +747,7 @@
           "description": "Set code text size; defaults to 25."
         }
       ],
-      "snippet": "---\ntitle: Code walkthrough\n---\n\nimport { View, Text } from \"react-native\";\nimport { CodeWalkthrough } from \"slides:presenting/CodeWalkthrough\";\n\nexport const code = `async function showResults(query) {\n  const rows = await search(query);\n  const visible = rows.slice(0, 20);\n  setResults(visible);\n  announce(visible.length);\n}`;\nexport const highlights = [2, 3, 3];\nexport const notes = [\"Fetch matching rows\", \"Keep the visible rows\", \"Keep the visible rows\"];\n\n# Code walkthrough\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <CodeWalkthrough source={code} lines={[highlights[step], highlights[step]]} fontSize={34} explanation={<Text style={{ color: \"white\", fontSize: 52 }}>{notes[step]}</Text>} />}</Steps>\n</View>\n",
+      "snippet": "---\ntitle: Code walkthrough\n---\n\nimport { View, Text } from \"react-native\";\nimport { CodeWalkthrough } from \"slides:presenting/CodeWalkthrough\";\n\nexport const code = `async function showResults(query) {\n  const rows = await search(query);\n  const visible = rows.slice(0, 20);\n  setResults(visible);\n  announce(visible.length);\n}`;\nexport const highlights = [2, 3, 4];\nexport const notes = [\"Fetch matching rows\", \"Keep the visible rows\", \"Publish the results\"];\n\n# Code walkthrough\n\n<View style={{ width: 1696, height: 650 }}>\n<Steps count={3}>{step => <CodeWalkthrough source={code} lines={[highlights[step], highlights[step]]} fontSize={34} explanation={<Text style={{ color: \"white\", fontSize: 52 }}>{notes[step]}</Text>} />}</Steps>\n</View>\n",
       "recording": {
         "seconds": 8,
         "motion": [
