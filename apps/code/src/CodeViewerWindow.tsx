@@ -65,6 +65,10 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   const activeKey = tabs.active ? tabDocuments[tabs.active]?.key : undefined;
   useDocumentWindow(windowId, workspace.toggleSidebar);
 
+  useEffect(() => {
+    void (activeKey ? editors.current.get(activeKey) : undefined)?.command("focus").catch(reportError);
+  }, [activeKey, reportError]);
+
   const openFile = useCallback((path: string) => {
     setError(null);
     if (!tabDocuments[path]) {
