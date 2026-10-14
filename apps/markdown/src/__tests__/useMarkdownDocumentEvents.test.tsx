@@ -179,3 +179,22 @@ describe("useMarkdownAppExit", () => {
     expect(openSelectedFile).not.toHaveBeenCalled();
   });
 });
+
+it("keeps one window close guard while autosave and close callbacks change", async () => {
+  const remove = jest.fn(async () => {});
+  jest.mocked(beforeWindowClose).mockResolvedValue({ remove });
+  const first = jest.fn(async () => true), second = jest.fn(async () => false);
+  const handleError = jest.fn();
+  function CloseHarness({ autosaveEnabled, prepare }: { autosaveEnabled: boolean; prepare: typeof first }) {
+    useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose: prepare, windowId: "markdown-editor" });
+    return null;
+  }
+  const view = await render(<CloseHarness autosaveEnabled={false} prepare={first} />);
+  await view.rerender(<CloseHarness autosaveEnabled prepare={second} />);
+  expect(beforeWindowClose).toHaveBeenCalledTimes(1);
+  expect(await jest.mocked(beforeWindowClose).mock.calls[0][1]()).toBe(false);
+  expect(second).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+  expect(first).not.toHaveBeenCalled();
+  await view.unmount();
+  expect(remove).toHaveBeenCalledTimes(1);
+});
