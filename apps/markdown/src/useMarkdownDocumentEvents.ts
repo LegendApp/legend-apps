@@ -84,17 +84,35 @@ export function useRecentMarkdownDocumentOpener({
 }
 
 export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
+  const latest = useRef({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
+  latest.current = { autosaveEnabled, handleError, prepareCurrentDocumentForClose };
+  const teardown = useRef(Promise.resolve());
   useEffect(() => {
     let active = true;
-    const subscription = ownRegistration(beforeQuit(() => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "quit" }) : false, { onError: handleError }), handleError);
-    return () => { active = false; void subscription.remove().catch(handleError); };
-  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
+    const onError = (error: unknown) => latest.current.handleError(error);
+    const subscription = ownRegistration(teardown.current.then(() => beforeQuit(() => active
+      ? latest.current.prepareCurrentDocumentForClose({ autosaveEnabled: latest.current.autosaveEnabled, reason: "quit" })
+      : false, { onError })), onError);
+    return () => {
+      active = false;
+      teardown.current = subscription.remove().catch(onError);
+    };
+  }, []);
 }
 
 export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
+  const latest = useRef({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
+  latest.current = { autosaveEnabled, handleError, prepareCurrentDocumentForClose };
+  const teardown = useRef(Promise.resolve());
   useEffect(() => {
     let active = true;
-    const subscription = ownRegistration(beforeWindowClose(editorWindowIdentifier, () => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "close" }) : false, { onError: handleError }), handleError);
-    return () => { active = false; void subscription.remove().catch(handleError); };
-  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
+    const onError = (error: unknown) => latest.current.handleError(error);
+    const subscription = ownRegistration(teardown.current.then(() => beforeWindowClose(editorWindowIdentifier, () => active
+      ? latest.current.prepareCurrentDocumentForClose({ autosaveEnabled: latest.current.autosaveEnabled, reason: "close" })
+      : false, { onError })), onError);
+    return () => {
+      active = false;
+      teardown.current = subscription.remove().catch(onError);
+    };
+  }, []);
 }

@@ -1,12 +1,13 @@
 import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
+import { beforeWindowClose } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import {
   getLastMarkdownDocumentPath,
   getMarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
-import { useMarkdownAppExit, useMarkdownStartupDocument } from "../useMarkdownDocumentEvents";
+import { useMarkdownAppExit, useMarkdownWindowCloseRequest, useMarkdownStartupDocument } from "../useMarkdownDocumentEvents";
 
 const mockAddAppExitListener = beforeQuit as jest.MockedFunction<typeof beforeQuit>;
 const mockGetLastMarkdownDocumentPath = getLastMarkdownDocumentPath as jest.MockedFunction<typeof getLastMarkdownDocumentPath>;
@@ -21,7 +22,7 @@ jest.mock("@legendapp/spark/app/documents", () => ({
 }));
 
 jest.mock("@legendapp/spark/windows", () => ({
-  addWindowCloseRequestedListener: jest.fn(),
+  beforeWindowClose: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
 jest.mock("../appMetadata", () => ({
@@ -75,6 +76,7 @@ function StartupHarness({
 
 describe("useMarkdownAppExit", () => {
   beforeEach(() => {
+    (beforeWindowClose as jest.Mock).mockClear();
     mockAddAppExitListener.mockReset();
     mockAddAppExitListener.mockResolvedValue({ remove: jest.fn(async () => {}) });
     mockGetLastMarkdownDocumentPath.mockReturnValue(null);
@@ -101,6 +103,60 @@ describe("useMarkdownAppExit", () => {
       });
     });
     expect(handleError).not.toHaveBeenCalled();
+  });
+
+  it.each(["close", "quit"] as const)("keeps the %s guard across Autosave changes and saves the exact latest draft", async (reason) => {
+    const savedBytes = "Autosave sentinel ALPHA.\r\n";
+    const draftBytes = "Autosave sentinel CLOSE.\r\n";
+    let diskBytes = savedBytes;
+    const prepare = jest.fn(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
+      if (autosaveEnabled) diskBytes = draftBytes;
+      return autosaveEnabled;
+    });
+    const handleError = jest.fn();
+    function Harness({ enabled }: { enabled: boolean }) {
+      const options = { autosaveEnabled: enabled, handleError, prepareCurrentDocumentForClose: prepare };
+      if (reason === "close") useMarkdownWindowCloseRequest(options);
+      else useMarkdownAppExit(options);
+      return null;
+    }
+    const registration = (reason === "close" ? beforeWindowClose : beforeQuit) as jest.Mock;
+    registration.mockClear();
+    const view = await render(<Harness enabled={false} />);
+    await view.rerender(<Harness enabled />);
+    expect(registration).toHaveBeenCalledTimes(1);
+    const guard = registration.mock.calls[0][reason === "close" ? 1 : 0];
+    expect(await guard()).toBe(true);
+    expect(diskBytes).toBe(draftBytes);
+    await view.rerender(<Harness enabled={false} />);
+    expect(await guard()).toBe(false);
+    expect(registration).toHaveBeenCalledTimes(1);
+    expect(handleError).not.toHaveBeenCalled();
+  });
+
+  it("serializes close-guard teardown during a development remount", async () => {
+    const registration = beforeWindowClose as jest.Mock;
+    let claimed = false;
+    registration.mockImplementation(async () => {
+      if (claimed) throw new Error("Window already has a close guard");
+      claimed = true;
+      return { remove: async () => { await Promise.resolve(); claimed = false; } };
+    });
+    const handleError = jest.fn();
+    const bytes = "Close sentinel EXACT.\r\n";
+    let disk = "";
+    function Harness() {
+      useMarkdownWindowCloseRequest({ autosaveEnabled: true, handleError,
+        prepareCurrentDocumentForClose: async () => { disk = bytes; return true; } });
+      return null;
+    }
+    const view = await render(<React.StrictMode><Harness /></React.StrictMode>);
+    await waitFor(() => expect(registration).toHaveBeenCalledTimes(2));
+    expect(await registration.mock.calls.at(-1)![1]()).toBe(true);
+    expect(disk).toBe(bytes);
+    expect(handleError).not.toHaveBeenCalled();
+    await view.unmount();
+    registration.mockImplementation(async () => ({ remove: jest.fn(async () => {}) }));
   });
 
   it("opens an untitled document when the new-document launch hint is present", async () => {
