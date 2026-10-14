@@ -12,6 +12,15 @@ jest.mock("@legendapp/spark/windows", () => ({
 }));
 
 describe("document windows", () => {
+  it("omits absent optional props before opening a native window", async () => {
+    await openDocumentWindow("optional", { files: ["/file.ts"], folders: undefined, preparedDocumentId: undefined, workspacePath: undefined }, {});
+    expect(openWindow).toHaveBeenLastCalledWith({
+      component: "spark.window.optional",
+      id: "optional",
+      props: { files: ["/file.ts"], windowId: "optional" },
+    });
+  });
+
   it("opens numbered instances of the base window component", async () => {
     const untrack = trackDocumentWindow("editor");
     await openDocumentWindow("editor", { folders: ["/repo"] }, { title: "Editor" });

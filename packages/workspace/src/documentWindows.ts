@@ -24,7 +24,9 @@ export async function openDocumentWindow(
   for (let count = 2; liveWindowIds.has(windowId); count++) windowId = `${baseId}-${count}`;
   liveWindowIds.add(windowId);
   try {
-    return await openWindow({ ...options, component: `spark.window.${baseId}`, id: windowId, props: { ...props, windowId } } as WindowOpenOptions);
+    // Optional props must be absent rather than undefined at the native JSON boundary.
+    const windowProps = Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
+    return await openWindow({ ...options, component: `spark.window.${baseId}`, id: windowId, props: { ...windowProps, windowId } } as WindowOpenOptions);
   } catch (error) {
     liveWindowIds.delete(windowId);
     throw error;
