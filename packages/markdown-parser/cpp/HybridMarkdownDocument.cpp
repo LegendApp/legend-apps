@@ -739,8 +739,8 @@ HybridMarkdownDocument::HybridMarkdownDocument(
   // The parser omits blank source; the editor still needs a stable insertion target.
   if (blocks.empty()) {
     MarkdownBlockRange block;
-    block.markdownEnd = source ? source->size() : 0;
-    block.contentEnd = block.markdownEnd;
+    // Blank source belongs to the untouched separator, not the editable input.
+    // Importing it into NSTextView normalizes its line endings on the first edit.
     updateBlockSyntax(block, "");
     blocks.push_back(block);
     nextBlockNumber_ = blocks.size();
@@ -1125,6 +1125,21 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRangeIncrementally
     newWindowSource.replace(sourceStart, sourceEnd - sourceStart, replacementSource);
 
     newWindowBlocks = parseMarkdownBlocks(newWindowSource);
+    if (hasReplacement) {
+      const size_t editedEnd = sourceStart + replacementSource.size();
+      size_t separatorEnd = editedEnd;
+      while (separatorEnd < newWindowSource.size() &&
+             std::isspace(static_cast<unsigned char>(newWindowSource[separatorEnd]))) separatorEnd += 1;
+      // Parsing must not pull untouched separator whitespace into the editable
+      // block: a later keystroke or undo would then replace those source bytes.
+      for (auto& block : newWindowBlocks) {
+        if (block.markdownStart <= editedEnd && block.markdownEnd > editedEnd && block.markdownEnd <= separatorEnd) {
+          block.markdownEnd = editedEnd;
+          block.contentStart = std::min(block.contentStart, editedEnd);
+          block.contentEnd = std::min(block.contentEnd, editedEnd);
+        }
+      }
+    }
     newWindowMarkdown.clear();
     newWindowMarkdown.reserve(newWindowBlocks.size());
     for (const auto& block : newWindowBlocks) {

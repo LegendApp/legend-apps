@@ -276,6 +276,24 @@ void testMixedLineEndingEditPreservesUntouchedBytes() {
   }
 }
 
+void testTypingIntoBlankSourcePreservesWhitespace() {
+  for (const std::string source : {"\t \r\n\r\n", "\n\n", " \t", ""}) {
+    LoadedDocument loaded(source);
+    const auto blocks = blocksFor(loaded.document);
+    expectEqual(blocks[0].markdown, "", "blank source has an empty editor target");
+    expectEqual(savedSourceFor(loaded.document), source, "no-edit blank save bytes");
+    loaded.document->applyTransaction(MarkdownTransaction("updateBlockMarkdown", blocks[0].id, "BLANK EDIT", std::nullopt, std::nullopt));
+    expectEqual(savedSourceFor(loaded.document), "BLANK EDIT" + source, "typing prefixes blank source exactly");
+    expectEqual(blocksFor(loaded.document)[0].markdown, "BLANK EDIT", "untouched whitespace stays outside the editor");
+    loaded.document->applyTransaction(updateBlock(blocks[0].id, "BLANK EDIT@"));
+    expectEqual(savedSourceFor(loaded.document), "BLANK EDIT@" + source, "separate keystrokes preserve blank bytes");
+    loaded.document->applyTransaction(updateBlock(blocks[0].id, ""));
+    expectEqual(savedSourceFor(loaded.document), source, "undo restores the exact blank source");
+    loaded.document->applyTransaction(updateBlock(blocks[0].id, "BLANK EDIT@"));
+    expectEqual(savedSourceFor(loaded.document), "BLANK EDIT@" + source, "redo restores typing without duplicating blank bytes");
+  }
+}
+
 void testSavePreservesPermissions() {
   LoadedDocument loaded("Original");
   for (mode_t mode : {0600, 0640, 0644}) {
@@ -319,7 +337,7 @@ void testEmptyDocumentsRemainEditable() {
     expectEqual(blocks.size(), 1, "blank file has one editable block");
     expectEqual(savedSourceFor(loaded.document), source, "opening preserves blank source");
     loaded.document->applyTransaction(updateBlock(blocks[0].id, "First words"));
-    expectEqual(savedSourceFor(loaded.document), "First words", "can type into blank file");
+    expectEqual(savedSourceFor(loaded.document), "First words" + source, "can type into blank file");
     expectEqual(blocksFor(loaded.document)[0].id, blocks[0].id, "typing retains blank block id");
   }
   HybridMarkdownParser parser;
@@ -901,6 +919,7 @@ int main() {
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"save preserves permissions", testSavePreservesPermissions},
+      {"typing into blank source preserves whitespace", testTypingIntoBlankSourcePreservesWhitespace},
       {"mixed line ending edit preserves untouched bytes", testMixedLineEndingEditPreservesUntouchedBytes},
       {"save preserves document symlinks", testSavePreservesDocumentSymlinks},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
