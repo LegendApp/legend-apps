@@ -228,18 +228,18 @@ try {
   const navigationSeconds = (startedAt - readyAt) / 1000;
   playbackOffset = readyOffset + navigationSeconds;
   if (playbackOffset >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
-  await Promise.race([waitForCounter("Slide 2 of 2, step 1 of "), exitedEarly]);
-  for (const [index, offset] of schedule.entries()) {
+  for (const offset of schedule) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Keep the already-focused audience active without raising it during capture.
     run("osascript", ["-e", advanceAudience]);
     actualSchedule.push(performance.now() - startedAt);
-    await Promise.race([waitForCounter(`Slide 2 of 2, step ${index + 2} of `), exitedEarly]);
   }
   if (!explicitMotion.length && !profile?.motion?.length) motion = recordingMotionIntervals(seconds, actualSchedule);
   const result = await recorderEvents.exited;
   if (result.code !== 0 && fs.existsSync(`${raw}.capture.json`)) console.error(fs.readFileSync(`${raw}.capture.json`, "utf8"));
   assertRecorderSucceeded(result);
+  // Check navigation after capture so accessibility traversal cannot disturb measured motion.
+  await waitForCounter(`Slide 2 of 2, step ${steps + 1} of `);
 } catch (error) {
   console.error(`Recording failed; local artifacts are in ${work} (raw capture: ${raw}).`);
   throw error;
