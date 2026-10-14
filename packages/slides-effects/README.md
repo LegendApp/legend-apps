@@ -74,7 +74,8 @@ during preparation, never on animation frames.
 `bun run effects:record <slug> --apply` uses the catalog entry's optional
 `recording` profile for `seconds`, playback-relative `motion` intervals, optional
 `posterAt` seconds, `still` for poster-only examples, and
-verifier `noiseDb` / `freezeMs`. CLI duration and motion flags take precedence.
+verifier `noiseDb` / `freezeMs`. CLI duration flags take precedence. Motion flags
+override motion profiles; still examples skip motion verification.
 Reveal windows use completed keyboard-command times. Sparse native sample
 timestamps survive export without frame resampling. Step-less defaults skip the
 first 600 ms; finite entrances keep explicit early windows. Freeze-frame checks
