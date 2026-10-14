@@ -21,7 +21,8 @@ function createCodeViewerWindowStyle({ appearance, backgroundColor, includeFrame
         macos: {
             titleBar: {
                 contentLayout: "fullSize" as const,
-                transparent: true
+                transparent: true,
+                titleVisibility: "hidden" as const
             }
         }
     };
@@ -31,7 +32,7 @@ function createCodeViewerWindowOptions() {
         title: "Legend Code",
         ...createCodeViewerWindowStyle({ includeFrame: true }),
         macos: {
-            restoreOnLaunch: true, titleBar: { contentLayout: "fullSize" as const, transparent: true }
+            restoreOnLaunch: true, titleBar: { contentLayout: "fullSize" as const, transparent: true, titleVisibility: "hidden" as const }
         }
     };
 }
