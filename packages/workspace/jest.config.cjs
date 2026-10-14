@@ -4,6 +4,10 @@ module.exports = require("../../scripts/jest/spark.cjs")({
     "<rootDir>/packages/workspace/src/**/*.test.ts",
     "<rootDir>/packages/workspace/src/**/*.test.tsx",
   ],
+  moduleNameMapper: {
+    "^react-native$": "<rootDir>/apps/diff/jest/mocks/reactNativeMock.cjs",
+  },
+  setupFiles: ["<rootDir>/apps/code/jest.setup.cjs"],
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": [
       "babel-jest",
