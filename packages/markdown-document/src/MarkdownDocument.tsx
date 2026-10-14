@@ -1443,12 +1443,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                   endBlockId: lastChangedBlockId,
                   replacementMarkdown: block.markdown,
                   inverseMarkdown: `${beforeMarkdown}\n\n${afterMarkdown}`,
+                  restoredBlockIds: [block.id],
                 };
-                if (block.type === "codeBlock") {
-                  historyEntry.inverseSplit = {
-                    afterMarkdown,
-                    beforeMarkdown,
-                  };
+                if (beforeMarkdown.length > 0 || afterMarkdown.length > 0) {
+                  historyEntry.inverseSplit = { afterMarkdown, beforeMarkdown };
                 }
                 undoStackRef.current.push(historyEntry);
                 redoStackRef.current = [];
@@ -2937,6 +2935,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           suppressHistoryRef.current = false;
           return nextEntry;
         };
+        const remapRestoredBlockIds = (result: MarkdownTransactionResult) => {
+          if (!("restoredBlockIds" in entry) || !entry.restoredBlockIds) return;
+          const ids = new Map(entry.restoredBlockIds.map((id, index) => [id, result.changedRange.blockIds[index] ?? id]));
+          const remap = (id: string) => ids.get(id) ?? id;
+          for (const pending of [...undoStackRef.current, ...redoStackRef.current]) {
+            if (pending.type === "updateBlockMarkdown" || pending.type === "splitBlock") {
+              pending.blockId = remap(pending.blockId);
+            } else {
+              pending.startBlockId = remap(pending.startBlockId);
+              pending.endBlockId = remap(pending.endBlockId);
+              if (pending.type === "moveBlockRange") {
+                pending.targetBlockId = remap(pending.targetBlockId);
+                pending.inverseTargetBlockId = remap(pending.inverseTargetBlockId);
+              }
+            }
+            if ("restoredBlockIds" in pending) pending.restoredBlockIds = pending.restoredBlockIds?.map(remap);
+          }
+        };
         try {
           if (entry.type === "updateBlockMarkdown") {
             const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
@@ -2972,6 +2988,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               beforeMarkdown: entry.beforeMarkdown,
               afterMarkdown: entry.afterMarkdown,
             });
+            remapRestoredBlockIds(result);
             applyTransactionResult(result);
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(null);
@@ -3007,6 +3024,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               endBlockId: lastChangedBlockId,
               replacementMarkdown: entry.replacementMarkdown,
               inverseMarkdown: `${entry.beforeMarkdown}\n\n${entry.afterMarkdown}`,
+              restoredBlockIds: [entry.blockId],
               inverseSplit: {
                 afterMarkdown: entry.afterMarkdown,
                 beforeMarkdown: entry.beforeMarkdown,
@@ -3059,12 +3077,17 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             } satisfies HistoryEntry);
           }
 
+          const startIndex = getBlockIndexById(entry.startBlockId);
+          const endIndex = getBlockIndexById(entry.endBlockId);
+          const replacedBlockIds = Array.from({ length: Math.abs(endIndex - startIndex) + 1 }, (_, offset) =>
+            blockDataSourceRef.current!.getKey(Math.min(startIndex, endIndex) + offset));
           const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
             type: "replaceBlockRange",
             startBlockId: entry.startBlockId,
             endBlockId: entry.endBlockId,
             markdown: entry.replacementMarkdown,
           });
+          remapRestoredBlockIds(result);
           applyTransactionResult(result);
           blockSelectionGestureRef.current = null;
           setNextBlockSelection(null);
@@ -3098,6 +3121,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               beforeMarkdown: entry.inverseSplit.beforeMarkdown,
               afterMarkdown: entry.inverseSplit.afterMarkdown,
               replacementMarkdown: entry.replacementMarkdown,
+              restoredBlockIds: replacedBlockIds,
             } satisfies HistoryEntry);
           }
           return finishHistoryEntry({
@@ -3106,6 +3130,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             endBlockId: lastChangedBlockId,
             replacementMarkdown: entry.inverseMarkdown,
             inverseMarkdown: entry.replacementMarkdown,
+            restoredBlockIds: replacedBlockIds,
           } satisfies HistoryEntry);
         } catch (error) {
           const nextError = error instanceof Error ? error : new Error(String(error));

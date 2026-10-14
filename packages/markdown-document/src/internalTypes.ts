@@ -30,6 +30,7 @@ export type ReplaceBlockRangeHistoryEntry = {
   endBlockId: string;
   replacementMarkdown: string;
   inverseMarkdown: string;
+  restoredBlockIds?: string[];
   inverseSplit?: {
     afterMarkdown: string;
     beforeMarkdown: string;
@@ -42,6 +43,7 @@ export type SplitBlockHistoryEntry = {
   beforeMarkdown: string;
   afterMarkdown: string;
   replacementMarkdown: string;
+  restoredBlockIds?: string[];
 };
 
 export type MoveBlockRangeHistoryEntry = {

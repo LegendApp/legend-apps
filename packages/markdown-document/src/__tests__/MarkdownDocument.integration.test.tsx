@@ -4516,12 +4516,55 @@ describe("MarkdownDocument mounted editing", () => {
       type: "replaceBlockRange",
     });
     expect(adapter.applyTransactions[2]).toMatchObject({
-      markdown: "Original\n\nInserted",
-      type: "replaceBlockRange",
+      beforeMarkdown: "Original",
+      afterMarkdown: "Inserted",
+      type: "splitBlock",
     });
     expect(adapter.sourceMarkdown).toBe("Original\n\nInserted");
     expectActiveBlockExists(renderer, adapter);
     expectUniqueBlockIds(adapter);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("restores typed bytes after undoing and redoing a split with new block ids", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "First.")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+    await changeSelection(editorInput(renderer), 6);
+    await changeText(editorInput(renderer), "First.\n");
+    await changeText(editorInput(renderer), "X");
+    await act(async () => { await commandsRef.current?.save(); });
+    expect(adapter.sourceMarkdown).toBe("First.\n\nX");
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      await undo(commandsRef);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe("First.");
+      await redo(commandsRef);
+      await redo(commandsRef);
+      await act(async () => { await commandsRef.current?.save(); });
+      expect(adapter.sourceMarkdown).toBe("First.\n\nX");
+      expect(onError).not.toHaveBeenCalled();
+    }
+  });
+
+  it("restores every typed block through a long split undo and redo chain", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "First.")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+    let current = "First.";
+    for (let index = 0; index < 10; index += 1) {
+      await changeSelection(editorInput(renderer), current.length);
+      await changeText(editorInput(renderer), `${current}\n`);
+      current = `Typed ${index}`;
+      await changeText(editorInput(renderer), current);
+      await act(async () => { await commandsRef.current?.save(); });
+    }
+    const expected = ["First.", ...Array.from({ length: 10 }, (_, index) => `Typed ${index}`)].join("\n\n");
+    expect(adapter.sourceMarkdown).toBe(expected);
+    for (let index = 0; index < 20; index += 1) await undo(commandsRef);
+    expect(onError).not.toHaveBeenCalled();
+    expect(adapter.sourceMarkdown).toBe("First.");
+    for (let index = 0; index < 20; index += 1) await redo(commandsRef);
+    await act(async () => { await commandsRef.current?.save(); });
+    expect(adapter.sourceMarkdown).toBe(expected);
     expect(onError).not.toHaveBeenCalled();
   });
 
