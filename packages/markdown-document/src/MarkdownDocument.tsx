@@ -524,6 +524,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const conflictRef = useRef(false);
     const saveGenerationRef = useRef(0);
     const fileCheckRequestRef = useRef(0);
+    const findMatchRef = useRef<{ query: string; blockId: string; offset: number } | undefined>(undefined);
     const undoStackRef = useRef<HistoryEntry[]>([]);
     const redoStackRef = useRef<HistoryEntry[]>([]);
     const commandStateRef = useRef<MarkdownDocumentCommandState>({ canCommitAndBlur: false, canRedo: false, canUndo: false });
@@ -3271,6 +3272,41 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectDocument().catch(reportAsyncError);
     }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
 
+    const find = useCallback(async (query: string, backwards = false) => {
+      if (!query) return false;
+      await commitActiveBlock({ updateReactState: true });
+      const count = getBlockCount();
+      if (count === 0) return false;
+      const previous = findMatchRef.current;
+      const continuing = previous?.query === query && getBlockIndexById(previous.blockId) >= 0;
+      const firstIndex = continuing ? getBlockIndexById(previous.blockId) : 0;
+      for (let step = 0; step <= count; step += 1) {
+        const index = (firstIndex + (backwards ? -step : step) + count) % count;
+        const id = getBlockIdAtIndex(index);
+        const block = await loadBlockAtIndex(id, index);
+        if (!block) continue;
+        const text = block.markdown.toLocaleLowerCase();
+        const needle = query.toLocaleLowerCase();
+        const from = step === 0 && continuing ? previous.offset + (backwards ? -1 : query.length) : backwards ? text.length : 0;
+        const offset = backwards ? from < 0 ? -1 : text.lastIndexOf(needle, from) : text.indexOf(needle, from);
+        if (offset < 0) continue;
+        await prepareBlockIndexForKeyboardFocus(index, backwards ? "up" : "down");
+        setNextBlockSelection(null);
+        clearTextSelectionAnchor();
+        setActiveBlock(block, offset, usesNativeEditorOverlay ? "nativePointer" : "programmatic");
+        scrollBlockIntoView(block);
+        if (usesNativeEditorOverlay && containerRef.current) {
+          MarkdownEditorHostCommands.setSelectionForMarkdownRange(containerRef.current, block.id, offset, offset + query.length);
+        } else {
+          activeInputRef.current?.setSelection(offset, offset + query.length);
+        }
+        findMatchRef.current = { query, blockId: block.id, offset };
+        return true;
+      }
+      return false;
+    }, [clearTextSelectionAnchor, commitActiveBlock, getBlockCount, getBlockIdAtIndex, getBlockIndexById,
+      loadBlockAtIndex, prepareBlockIndexForKeyboardFocus, scrollBlockIntoView, setActiveBlock, setNextBlockSelection]);
+
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
         focus() {
@@ -3323,6 +3359,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         save,
         saveAs,
         selectAll,
+        find,
         commitAndBlurActiveBlock,
         moveActiveBlockDown() {
           moveActiveBlock("down");
@@ -3382,6 +3419,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         save,
         saveAs,
         selectAll,
+        find,
         undo, draftMarkdown$],
     );
 

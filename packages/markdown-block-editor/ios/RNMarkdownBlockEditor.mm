@@ -446,6 +446,8 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 @interface RNMarkdownEditorHost () <RCTMarkdownEditorHostViewProtocol>
 - (void)editorFrameDidChangeForBlockView:(RNMarkdownBlockActivationView *)view;
 - (void)installTextSelection;
+- (void)setSelectionForMarkdownRange:(NSString *)blockId start:(double)start end:(double)end;
+
 - (void)applyPendingPasteSelection;
 @end
 
@@ -454,6 +456,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   NSString *_activeBlockId;
   NSString *_pasteSelectionBlockId;
   NSString *_pasteSelectionPrefix;
+  NSUInteger _pasteSelectionSourceLength;
   NSString *_layoutConfigJson;
   MarkdownLayoutSpacingConfig _layoutSpacingConfig;
   NSScrollView *_observedScrollView;
@@ -553,6 +556,18 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 {
   _pasteSelectionBlockId = [blockId copy];
   _pasteSelectionPrefix = [markdownPrefix copy];
+  _pasteSelectionSourceLength = 0;
+  [self applyPendingPasteSelection];
+}
+
+- (void)setSelectionForMarkdownRange:(NSString *)blockId start:(double)start end:(double)end
+{
+  NSString *markdown = nativeMarkdownForBlockId(blockId);
+  NSUInteger last = MIN(markdown.length, MAX(0, end));
+  NSUInteger first = MIN(last, MAX(0, start));
+  _pasteSelectionBlockId = [blockId copy];
+  _pasteSelectionPrefix = [markdown substringToIndex:last];
+  _pasteSelectionSourceLength = last - first;
   [self applyPendingPasteSelection];
 }
 
@@ -565,10 +580,12 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   ENRMInputParser *parser = [ENRMInputParser new];
   NSString *markdown = nativeMarkdownForBlockId(_pasteSelectionBlockId);
   NSInteger selection = [parser parseToPlainTextAndRanges:markdown sourceSelection:_pasteSelectionPrefix.length].selectionOffset;
+  NSInteger first = [parser parseToPlainTextAndRanges:markdown sourceSelection:_pasteSelectionPrefix.length - _pasteSelectionSourceLength].selectionOffset;
   _pasteSelectionBlockId = nil;
   _pasteSelectionPrefix = nil;
+  _pasteSelectionSourceLength = 0;
   void (*send)(id, SEL, NSInteger, NSInteger) = (void (*)(id, SEL, NSInteger, NSInteger))[input methodForSelector:selector];
-  send(input, selector, selection, selection);
+  send(input, selector, first, selection);
 }
 
 - (void)beginKeyboardHandoff {
@@ -1107,6 +1124,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   _activeBlockId = nil;
   _pasteSelectionBlockId = nil;
   _pasteSelectionPrefix = nil;
+  _pasteSelectionSourceLength = 0;
   _layoutConfigJson = nil;
   _layoutSpacingConfig = MarkdownLayoutSpacingConfig();
 }

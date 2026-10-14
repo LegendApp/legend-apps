@@ -3730,6 +3730,19 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("finds document matches in both directions and wraps", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First sentinel"), block("d1:b1", 1, "Second sentinel"),
+    ]));
+    const { commandsRef, renderer } = await renderDocument({ adapter });
+    for (const [backwards, text] of [[false, "First sentinel"], [false, "Second sentinel"], [false, "First sentinel"], [true, "Second sentinel"]] as const) {
+      await act(async () => { expect(await commandsRef.current?.find("sentinel", backwards)).toBe(true); });
+      await flushPromises();
+      expect(editorInput(renderer).props.defaultValue).toBe(text);
+    }
+    await act(async () => { expect(await commandsRef.current?.find("absent")).toBe(false); });
+  });
+
   it("selects every document block with Select All", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"), block("d1:b1", 1, "Second"), block("d1:b2", 2, "Third"),

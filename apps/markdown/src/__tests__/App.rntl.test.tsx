@@ -120,6 +120,15 @@ describe("App markdown shell actions", () => {
         expect(selectAll).toHaveBeenCalledTimes(1);
         unregister();
     });
+    it("routes the native Find menu action to the document", async () => {
+        const find = jest.fn();
+        const unregister = registerMarkdownEditorMenuHandlers({ find });
+        await render(<App />);
+        await waitFor(() => expect(mockUseNativeMenu).toHaveBeenCalled());
+        await act(async () => mockUseNativeMenu.mock.lastCall![0].onAction?.({ type: "action", itemId: "find" }));
+        expect(find).toHaveBeenCalledTimes(1);
+        unregister();
+    });
     it("opens a fresh untitled window for New after the editor closes", async () => {
         const staleNewHandler = jest.fn();
         const unregister = registerMarkdownEditorMenuHandlers({ new: staleNewHandler });

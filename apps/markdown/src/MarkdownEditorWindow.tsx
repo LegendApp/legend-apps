@@ -7,7 +7,7 @@ import {
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -85,6 +85,10 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
 export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const session = useMarkdownDocumentSession();
+  const [findVisible, setFindVisible] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findStatus, setFindStatus] = useState("");
+  const showFind = useCallback(() => setFindVisible(true), []);
   const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const hasObservedLayoutInputsRef = useRef(false);
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
@@ -114,6 +118,12 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     onError: session.handleError,
   });
   const { documentCommandsRef } = session;
+  const find = useCallback(async (backwards = false) => {
+    try {
+      const found = await documentCommandsRef.current?.find(findQuery, backwards);
+      setFindStatus(found ? "Match selected" : "No matches");
+    } catch (error) { session.handleError(error); }
+  }, [documentCommandsRef, findQuery, session.handleError]);
   const insertLink = useCallback(() => {
     setIsLinkPopoverOpen(true);
   }, []);
@@ -175,6 +185,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     documentCommandsRef: session.documentCommandsRef,
     onError: session.handleError,
     onInsertLink: insertLink,
+    onFind: showFind,
     onNewDocument: session.newMarkdownDocument,
     onOpenDocument: session.openMarkdownDialog,
     onOpenSettings: openSettingsWindow,
@@ -214,6 +225,14 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   return (
     <>
       <MarkdownFileWatcher session={session} />
+      {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+        <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
+          value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
+        <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Next match" onPress={() => { void find(); }}><Text className="text-foreground">Next</Text></Pressable>
+        <Text className="text-muted">{findStatus}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
+      </View>}
       <MarkdownEditorSessionContent
         autosaveEnabled={autosave === "enabled"}
         backgroundStyle={backgroundStyle}

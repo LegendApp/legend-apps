@@ -22,6 +22,7 @@ type MarkdownMenuOptions = {
   onOpenDocument: () => Promise<void>;
   onOpenSettings: () => void;
   onInsertLink: () => void;
+  onFind: () => void;
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
   sessionState$: MarkdownDocumentSessionState$;
@@ -38,6 +39,7 @@ const disabledDocumentMenuItems = [
   "undo",
   "redo",
   "selectAll",
+  "find",
   "bold",
   "italic",
   "underline",
@@ -57,6 +59,7 @@ export function useMarkdownMenus({
   onOpenDocument,
   onOpenSettings,
   onInsertLink,
+  onFind,
   onSaveDocument,
   onSaveDocumentAs,
   sessionState$,
@@ -75,6 +78,7 @@ export function useMarkdownMenus({
     },
     redo: () => documentCommandsRef.current?.redo(),
     selectAll: () => documentCommandsRef.current?.selectAll(),
+    find: onFind,
     revealInFinder: () => {
       const currentFilePath = getCurrentFilePath(sessionState$.peek());
       if (currentFilePath) {
@@ -101,6 +105,7 @@ export function useMarkdownMenus({
     onOpenDocument,
     onOpenSettings,
     onInsertLink,
+    onFind,
     onSaveDocument,
     onSaveDocumentAs,
     sessionState$,
@@ -128,6 +133,7 @@ export function useMarkdownMenus({
       { id: "undo", enabled: hasDocument && state.commandState.canUndo },
       { id: "redo", enabled: hasDocument && state.commandState.canRedo },
       { id: "selectAll", enabled: hasDocument },
+      { id: "find", enabled: hasDocument },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
       { id: "underline", enabled: hasDocument },

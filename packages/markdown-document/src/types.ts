@@ -103,6 +103,7 @@ export type MarkdownDocumentCommands = {
   undo(): void;
   redo(): void;
   selectAll(): void;
+  find(query: string, backwards?: boolean): Promise<boolean>;
   commitAndBlurActiveBlock(): boolean;
   extendBlockSelectionDown(): boolean;
   extendBlockSelectionUp(): boolean;
