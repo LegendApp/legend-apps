@@ -53,7 +53,8 @@ export function audienceKeyboardScripts(pid: number, title: string) {
 export function presenterCounterScript(pid: number, title: string) {
   return `tell application "System Events"
   tell (first application process whose unix id is ${pid})
-    repeat with uiElement in entire contents of window ${JSON.stringify(title)}
+    set uiElements to entire contents of window ${JSON.stringify(title)}
+    repeat with uiElement in uiElements
       try
         set labelText to description of uiElement
         if labelText starts with "Slide " and labelText contains ", step " then return labelText

@@ -252,7 +252,8 @@ test("export preserves sparse native sample timestamps instead of resampling to 
 test("navigation acknowledgement reads the launched presenter counter", () => {
   const script = presenterCounterScript(42, "fluid.mdx — Legend Slides");
   expect(script).toContain("unix id is 42");
-  expect(script).toContain('window "fluid.mdx — Legend Slides"');
+  expect(script).toContain('set uiElements to entire contents of window "fluid.mdx — Legend Slides"');
+  expect(script).toContain("repeat with uiElement in uiElements");
   expect(script).not.toContain("frontmost");
   expect(script).toContain('starts with "Slide "');
   expect(script).toContain('contains ", step "');
