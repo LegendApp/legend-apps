@@ -1,4 +1,5 @@
 import { useWatchedDocumentReload } from "@legendapp/spark/app/documents";
+import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import {
   MarkdownDocument,
   nativeMarkdownDocumentAdapter,
@@ -6,6 +7,14 @@ import {
   type MarkdownSelectionAnchor,
 } from "@legend-apps/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
+import {
+  closeDocumentTab,
+  DocumentTabBar,
+  getDocumentTabs,
+  useDocumentWindow,
+  useWorkspaceWindow,
+  WorkspaceSidebar,
+} from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -34,8 +43,13 @@ import {
   useMarkdownEditorWindowOptions,
   useMarkdownSettingsWindow,
 } from "./useMarkdownWindows";
+import { editorWindowIdentifier, markdownFileTypes } from "./appConstants";
+import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
   applyMarkdownThemeSetting,
+  getMarkdownSidebarOpenSetting,
+  setMarkdownSidebarOpenSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
   useMarkdownDisplayThemeSetting,
@@ -50,10 +64,6 @@ import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature"
 import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
-type MarkdownEditorWindowProps = {
-  launchArguments?: string[];
-};
-
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
@@ -83,9 +93,29 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
   return null;
 }
 
-export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowProps) {
+export function MarkdownEditorWindow({ files, folders, launchArguments, windowId = editorWindowIdentifier, workspacePath }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
-  const session = useMarkdownDocumentSession();
+  const [startupArguments] = useState(() => files ?? launchArguments);
+  // The session reports workspace errors once it exists.
+  const reportWorkspaceError = useRef<(error: unknown) => void>(console.error);
+  const workspace = useWorkspaceWindow({
+    files: files ?? [getLaunchMarkdownFile(launchArguments)].filter((path): path is string => path !== null),
+    folders,
+    workspacePath,
+  }, {
+    fileTypes: markdownFileTypes,
+    onError: useCallback((error: unknown) => reportWorkspaceError.current(error), []),
+    onSidebarOpenChange: setMarkdownSidebarOpenSetting,
+    sidebarOpenSetting: getMarkdownSidebarOpenSetting(),
+  });
+  const { openTab, renameTab } = workspace;
+  // Tabs follow the session: opening a file adds its tab and Save As renames it.
+  const session = useMarkdownDocumentSession({
+    onFileOpened: openTab,
+    onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
+  });
+  useDocumentWindow(windowId);
+  useEffect(() => { reportWorkspaceError.current = session.handleError; }, [session.handleError]);
   const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const hasObservedLayoutInputsRef = useRef(false);
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
@@ -145,7 +175,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   }, []);
 
   useMarkdownStartupDocument({
-    launchArguments,
+    launchArguments: startupArguments,
     openSelectedFile: session.openSelectedFile,
     openUntitledDocument: session.openUntitledDocument,
   });
@@ -153,6 +183,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   useRecentMarkdownDocumentOpener({
     flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
     openSelectedFile: session.openSelectedFile,
+    windowId,
   });
 
   useMarkdownAppExit({
@@ -165,6 +196,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     autosaveEnabled: autosave === "enabled",
     handleError: session.handleError,
     prepareCurrentDocumentForClose: session.prepareCurrentDocumentForClose,
+    windowId,
   });
 
   useMarkdownKeyboardShortcuts({
@@ -181,7 +213,10 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     onOpenSettings: openSettingsWindow,
     onSaveDocument: session.saveCurrentDocument,
     onSaveDocumentAs: session.saveCurrentDocumentAs,
+    onSaveWorkspace: workspace.saveWorkspace,
+    onToggleSidebar: workspace.toggleSidebar,
     sessionState$: session.sessionState$,
+    windowId,
   });
 
   useMarkdownEditorWindowOptions({
@@ -189,7 +224,28 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     backgroundColor: displayTheme.colors.windowBackground,
     onError: session.handleError,
     sessionState$: session.sessionState$,
+    windowId,
   });
+
+  const currentFile = useValue(() => session.sessionState$.documentSource.get() === "file" ? session.sessionState$.filename.get() : null);
+  const { prepareCurrentDocumentForClose, openSelectedFile, openUntitledDocument, handleError } = session;
+  const switchToFile = useCallback(async (path: string) => {
+    if (path !== currentFile && await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "open" })) {
+      openSelectedFile(path);
+    }
+  }, [autosave, currentFile, openSelectedFile, prepareCurrentDocumentForClose]);
+  const closeFileTab = useCallback(async (path: string) => {
+    if (path !== currentFile) {
+      workspace.closeTab(path);
+      return;
+    }
+    if (!await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "close" })) return;
+    const next = closeDocumentTab({ active: path, paths: workspace.state.tabs.paths }, path).active;
+    workspace.closeTab(path);
+    if (next) openSelectedFile(next);
+    else openUntitledDocument();
+  }, [autosave, currentFile, openSelectedFile, openUntitledDocument, prepareCurrentDocumentForClose, workspace]);
+  const workspaceColors = displayTheme.colors;
 
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
@@ -212,9 +268,17 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     }
   }
 
-  return (
-    <>
-      <MarkdownFileWatcher session={session} />
+  const content = (
+    <View style={styles.root}>
+      <DocumentTabBar
+        activeKey={currentFile}
+        colors={workspaceColors}
+        onClose={path => { closeFileTab(path).catch(handleError); }}
+        onSelect={path => { switchToFile(path).catch(handleError); }}
+        onToggleSidebar={workspace.toggleSidebar}
+        sidebarOpen={workspace.state.sidebarOpen}
+        tabs={getDocumentTabs(workspace.state.tabs.paths)}
+      />
       <MarkdownEditorSessionContent
         autosaveEnabled={autosave === "enabled"}
         backgroundStyle={backgroundStyle}
@@ -232,7 +296,32 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         session={session}
         theme={displayTheme.markdownDocument}
       />
-    </>
+    </View>
+  );
+
+  return (
+    <View style={[styles.root, backgroundStyle]}>
+      <MarkdownFileWatcher session={session} />
+      <SidebarSplitView
+        appearance={nativeWindowAppearance}
+        content={content}
+        sidebar={(
+          <WorkspaceSidebar
+            activePath={currentFile}
+            colors={workspaceColors}
+            files={workspace.state.files}
+            folders={workspace.state.folders}
+            isDocumentPath={isMarkdownPath}
+            onAddFile={workspace.chooseFiles}
+            onAddFolder={workspace.chooseFolders}
+            onError={handleError}
+            onOpenFile={path => { switchToFile(path).catch(handleError); }}
+          />
+        )}
+        sidebarCollapsed={!workspace.state.sidebarOpen}
+        style={styles.root}
+      />
+    </View>
   );
 }
 

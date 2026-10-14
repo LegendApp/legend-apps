@@ -4,6 +4,7 @@ export const markdownMenuState$ = observable<Record<string, MenuState>>({});
 import {
   type MenuRootItem,
 } from "@legendapp/spark/menus";
+import { workspaceFileMenuItems } from "@legend-apps/workspace";
 
 export const markdownMenuConfig: MenuRootItem[] = [
   { type: "submenu",
@@ -20,6 +21,8 @@ export const markdownMenuConfig: MenuRootItem[] = [
         id: "open",
         target: { role: "open" }, label: "Open…",
         },
+      ...workspaceFileMenuItems,
+      { type: "separator" },
       { type: "action",
         id: "save",
         target: { role: "save" }, label: "Save", shortcut: "Cmd+s",

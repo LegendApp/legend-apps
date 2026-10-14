@@ -102,6 +102,7 @@
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/theme": "workspace:*",
+        "@legend-apps/workspace": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",

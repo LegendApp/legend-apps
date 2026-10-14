@@ -68,7 +68,7 @@ describe("App markdown shell actions", () => {
         await waitFor(() => {
             expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(2);
         });
-        expect(mockOpenMarkdownEditorWindow).toHaveBeenLastCalledWith([newMarkdownDocumentLaunchArgument]);
+        expect(mockOpenMarkdownEditorWindow).toHaveBeenLastCalledWith({ launchArguments: [newMarkdownDocumentLaunchArgument] });
     });
     it("opens a recent file in a fresh editor window when no editor is registered", async () => {
         await render(<App />);
@@ -77,12 +77,12 @@ describe("App markdown shell actions", () => {
         });
         await act(async () => openRecent());
         await waitFor(() => {
-            expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledWith(["/tmp/recent.md"]);
+            expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledWith({ files: ["/tmp/recent.md"] });
         });
     });
     it("opens a recent file in a fresh window after the editor closes", async () => {
         const staleRecentHandler = jest.fn(async () => undefined);
-        const unregister = registerMarkdownEditorRecentDocumentHandler(staleRecentHandler);
+        const unregister = registerMarkdownEditorRecentDocumentHandler("markdown-editor", staleRecentHandler);
         await render(<App />);
         await waitFor(() => {
             expect(mockAddRecentDocumentOpenListener).toHaveBeenCalled();
@@ -94,14 +94,14 @@ describe("App markdown shell actions", () => {
         await act(async () => closeEditor());
         await act(async () => openRecent());
         await waitFor(() => {
-            expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledWith(["/tmp/recent.md"]);
+            expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledWith({ files: ["/tmp/recent.md"] });
         });
         expect(staleRecentHandler).not.toHaveBeenCalled();
         unregister();
     });
     it("delegates menu actions to the registered editor while it is mounted", async () => {
         const editorNew = jest.fn();
-        const unregister = registerMarkdownEditorMenuHandlers({ new: editorNew });
+        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { new: editorNew });
         await render(<App />);
         await waitFor(() => {
             expect(mockUseNativeMenu).toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe("App markdown shell actions", () => {
     });
     it("opens a fresh untitled window for New after the editor closes", async () => {
         const staleNewHandler = jest.fn();
-        const unregister = registerMarkdownEditorMenuHandlers({ new: staleNewHandler });
+        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { new: staleNewHandler });
         await render(<App />);
         await waitFor(() => {
             expect(mockUseNativeMenu).toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe("App markdown shell actions", () => {
         await waitFor(() => {
             expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(2);
         });
-        expect(mockOpenMarkdownEditorWindow).toHaveBeenLastCalledWith([newMarkdownDocumentLaunchArgument]);
+        expect(mockOpenMarkdownEditorWindow).toHaveBeenLastCalledWith({ launchArguments: [newMarkdownDocumentLaunchArgument] });
         expect(staleNewHandler).not.toHaveBeenCalled();
         unregister();
     });

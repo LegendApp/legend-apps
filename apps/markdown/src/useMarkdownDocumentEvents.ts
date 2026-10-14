@@ -1,7 +1,6 @@
 import { beforeQuit } from "@legendapp/spark/app";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { useEffect, useRef } from "react";
-import { editorWindowIdentifier } from "./appConstants";
 import { getRecentMarkdownFiles } from "./appMetadata";
 import { getLaunchMarkdownFile, isMarkdownPath, shouldLaunchNewMarkdownDocument } from "./markdownFiles";
 import { registerMarkdownEditorRecentDocumentHandler } from "./markdownEditorActions";
@@ -18,6 +17,7 @@ type DocumentEventsOptions = {
   openSelectedFile: (path: string) => void;
   openUntitledDocument: () => void;
   prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean; reason?: "close" | "quit" }) => Promise<boolean>;
+  windowId: string;
 };
 
 function getStartupMarkdownPath(launchArguments: string[] | undefined) {
@@ -64,9 +64,10 @@ export function useMarkdownStartupDocument({
 export function useRecentMarkdownDocumentOpener({
   flushCurrentDocumentBeforeTransition,
   openSelectedFile,
-}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "openSelectedFile">) {
+  windowId,
+}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "openSelectedFile" | "windowId">) {
   useEffect(() => {
-    const unregister = registerMarkdownEditorRecentDocumentHandler(async (path: string) => {
+    const unregister = registerMarkdownEditorRecentDocumentHandler(windowId, async (path: string) => {
       if (!isMarkdownPath(path)) {
         return;
       }
@@ -80,7 +81,7 @@ export function useRecentMarkdownDocumentOpener({
     return () => {
       unregister();
     };
-  }, [flushCurrentDocumentBeforeTransition, openSelectedFile]);
+  }, [flushCurrentDocumentBeforeTransition, openSelectedFile, windowId]);
 }
 
 export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
@@ -91,10 +92,10 @@ export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurren
   }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
 }
 
-export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
+export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose" | "windowId"> & { autosaveEnabled: boolean }) {
   useEffect(() => {
     let active = true;
-    const subscription = ownRegistration(beforeWindowClose(editorWindowIdentifier, () => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "close" }) : false, { onError: handleError }), handleError);
+    const subscription = ownRegistration(beforeWindowClose(windowId, () => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "close" }) : false, { onError: handleError }), handleError);
     return () => { active = false; void subscription.remove().catch(handleError); };
-  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose]);
+  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId]);
 }

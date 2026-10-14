@@ -24,7 +24,10 @@ type MarkdownMenuOptions = {
   onInsertLink: () => void;
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
+  onSaveWorkspace: () => Promise<void>;
+  onToggleSidebar: () => void;
   sessionState$: MarkdownDocumentSessionState$;
+  windowId: string;
 };
 
 function getCurrentFilePath(state: MarkdownDocumentSessionState) {
@@ -58,7 +61,10 @@ export function useMarkdownMenus({
   onInsertLink,
   onSaveDocument,
   onSaveDocumentAs,
+  onSaveWorkspace,
+  onToggleSidebar,
   sessionState$,
+  windowId,
 }: MarkdownMenuOptions) {
   const menuHandlers = useMemo<MarkdownMenuHandlers>(() => ({
     bold: () => documentCommandsRef.current?.toggleBold(),
@@ -86,10 +92,14 @@ export function useMarkdownMenus({
     saveAs: () => {
       onSaveDocumentAs().catch(onError);
     },
+    saveWorkspace: () => {
+      onSaveWorkspace().catch(onError);
+    },
     settings: onOpenSettings,
     resetFontSize: resetMarkdownFontSizeSetting,
     spoiler: () => documentCommandsRef.current?.toggleSpoiler(),
     strikethrough: () => documentCommandsRef.current?.toggleStrikethrough(),
+    toggleSidebar: onToggleSidebar,
     underline: () => documentCommandsRef.current?.toggleUnderline(),
     undo: () => documentCommandsRef.current?.undo(),
   }), [
@@ -101,17 +111,19 @@ export function useMarkdownMenus({
     onInsertLink,
     onSaveDocument,
     onSaveDocumentAs,
+    onSaveWorkspace,
+    onToggleSidebar,
     sessionState$,
   ]);
 
   useEffect(() => {
-    const unregister = registerMarkdownEditorMenuHandlers(menuHandlers);
+    const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers);
 
     return () => {
       unregister();
       disableDocumentMenuItems();
     };
-  }, [menuHandlers]);
+  }, [menuHandlers, windowId]);
 
   useObserveEffect(() => {
     const state = sessionState$.get();

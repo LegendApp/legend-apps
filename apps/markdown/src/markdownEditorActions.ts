@@ -1,24 +1,20 @@
 import type { MenuAction } from "@legendapp/spark/menus";
+import { createDocumentWindowRegistry } from "@legend-apps/workspace";
 
 export type MarkdownMenuHandlers = Record<string, (action: MenuAction) => unknown>;
 
 type RecentDocumentHandler = (path: string) => Promise<void>;
 
-let currentMenuHandlers: MarkdownMenuHandlers | null = null;
-let currentRecentDocumentHandler: RecentDocumentHandler | null = null;
+const menuHandlerWindows = createDocumentWindowRegistry<MarkdownMenuHandlers>();
+const recentDocumentWindows = createDocumentWindowRegistry<RecentDocumentHandler>();
 
-export function registerMarkdownEditorMenuHandlers(handlers: MarkdownMenuHandlers) {
-  currentMenuHandlers = handlers;
-
-  return () => {
-    if (currentMenuHandlers === handlers) {
-      currentMenuHandlers = null;
-    }
-  };
+export function registerMarkdownEditorMenuHandlers(windowId: string, handlers: MarkdownMenuHandlers) {
+  return menuHandlerWindows.register(windowId, handlers);
 }
 
+/** Dispatches to the most recently focused editor window. */
 export function dispatchMarkdownEditorMenuAction(action: MenuAction) {
-  const handler = currentMenuHandlers?.[action.itemId];
+  const handler = menuHandlerWindows.active()?.[action.itemId];
   if (!handler) {
     return false;
   }
@@ -27,16 +23,10 @@ export function dispatchMarkdownEditorMenuAction(action: MenuAction) {
   return true;
 }
 
-export function registerMarkdownEditorRecentDocumentHandler(handler: RecentDocumentHandler) {
-  currentRecentDocumentHandler = handler;
-
-  return () => {
-    if (currentRecentDocumentHandler === handler) {
-      currentRecentDocumentHandler = null;
-    }
-  };
+export function registerMarkdownEditorRecentDocumentHandler(windowId: string, handler: RecentDocumentHandler) {
+  return recentDocumentWindows.register(windowId, handler);
 }
 
 export function getMarkdownEditorRecentDocumentHandler() {
-  return currentRecentDocumentHandler;
+  return recentDocumentWindows.active() ?? null;
 }

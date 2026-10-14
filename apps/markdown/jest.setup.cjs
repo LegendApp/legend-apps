@@ -30,7 +30,7 @@ jest.mock("@legendapp/spark/ui/split-view", () => {
   const { View } = require("react-native");
 
   return {
-    SidebarSplitView: ({ children, ...props }) => React.createElement(View, props, children),
+    SidebarSplitView: ({ children, content, sidebar, ...props }) => React.createElement(View, props, sidebar, content, children),
   };
 });
 
@@ -116,6 +116,7 @@ jest.mock("@legendapp/spark/shortcuts/keyboard", () => ({
 }));
 
 jest.mock("@legendapp/spark/windows", () => ({
+  addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => undefined) })),
   setWindowOptions: jest.fn(async () => undefined),
   setWindowTitle: jest.fn(async () => undefined),
   WindowStyleMask: {

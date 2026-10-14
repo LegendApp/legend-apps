@@ -6,6 +6,7 @@ import {
 import type { MenuAction } from "@legendapp/spark/menus";
 import { useValue } from "@legendapp/state/react";
 import { withMenuState } from "@legend-apps/runtime-utils";
+import { createWorkspaceMenuHandlers } from "@legend-apps/workspace";
 import { useEffect } from "react";
 import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId } from "./appConstants";
 import {
@@ -45,7 +46,7 @@ async function openMarkdownEditorForSelectedFile(controller: DocumentAppControll
   });
 
   if (path) {
-    await openMarkdownEditorWindow([path]);
+    await openMarkdownEditorWindow({ files: [path] });
     controller.setDocumentWindowOpen(true);
     return true;
   }
@@ -54,7 +55,7 @@ async function openMarkdownEditorForSelectedFile(controller: DocumentAppControll
 }
 
 async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
-  await openMarkdownEditorWindow([newMarkdownDocumentLaunchArgument]);
+  await openMarkdownEditorWindow({ launchArguments: [newMarkdownDocumentLaunchArgument] });
   controller.setDocumentWindowOpen(true);
 }
 
@@ -63,6 +64,11 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     controller.isDocumentWindowOpen() && dispatchMarkdownEditorMenuAction(action);
 
   return {
+    // New, folder, and workspace windows start on an untitled document rather than the last one.
+    ...createWorkspaceMenuHandlers(async (props) => {
+      await openMarkdownEditorWindow({ launchArguments: [newMarkdownDocumentLaunchArgument], ...props });
+      controller.setDocumentWindowOpen(true);
+    }, reportMarkdownAppControllerError),
     new: (action: MenuAction) => {
       if (!dispatchOpenEditorMenuAction(action)) {
         openNewMarkdownEditorWindow(controller)
@@ -82,6 +88,8 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     },
     save: dispatchOpenEditorMenuAction,
     saveAs: dispatchOpenEditorMenuAction,
+    saveWorkspace: dispatchOpenEditorMenuAction,
+    toggleSidebar: dispatchOpenEditorMenuAction,
     revealInFinder: dispatchOpenEditorMenuAction,
     undo: dispatchOpenEditorMenuAction,
     redo: dispatchOpenEditorMenuAction,
@@ -103,7 +111,7 @@ async function openRecentMarkdownDocument(path: string, controller: DocumentAppC
     if (editorHandler) {
       await editorHandler(path);
     } else {
-      await openMarkdownEditorWindow([path]);
+      await openMarkdownEditorWindow({ files: [path] });
       controller.setDocumentWindowOpen(true);
     }
   }
@@ -113,7 +121,7 @@ async function openInitialMarkdownEditor(launchArguments: string[] | undefined, 
   applyMarkdownThemeSetting();
   console.info("[MarkdownAppController] mounted in hidden host; opening editor window.");
   try {
-    await openMarkdownEditorWindow(launchArguments);
+    await openMarkdownEditorWindow({ launchArguments });
     controller.setDocumentWindowOpen(true);
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "E_ALREADY_EXISTS") {
