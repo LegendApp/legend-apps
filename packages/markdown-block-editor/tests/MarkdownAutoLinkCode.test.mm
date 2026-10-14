@@ -28,6 +28,15 @@ int main() {
       requireEqual([ENRMMarkdownSerializer serializePlainText:text ranges:ranges.allRanges],
                    [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
     }
+    for (NSString *source in @[@"alpha [label](https://example.com \"keep title\") end", @"alpha [label](https://example.com 'title') end"]) {
+      ENRMParseResult *parsed = [[ENRMInputParser new] parseToPlainTextAndRanges:source];
+      ENRMFormattingStore *ranges = [ENRMFormattingStore new];
+      [ranges setRanges:parsed.formattingRanges];
+      [ranges adjustForEditAtLocation:0 deletedLength:5 insertedLength:5];
+      NSString *text = [parsed.plainText stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"];
+      requireEqual([ENRMMarkdownSerializer serializePlainText:text ranges:ranges.allRanges],
+                   [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
+    }
     NSArray<NSString *> *literalCases = @[
       @"```ts\nconsole.log(greeting);\nconst qa = true;\n```",
       @"`console.log`",
