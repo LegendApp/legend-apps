@@ -11,21 +11,18 @@ function noteFocus(windowId: string) {
   focusOrder.push(windowId);
 }
 
-/** Uses the base ID while it is free, so the first window keeps its restored state, else a numbered instance. */
-export function claimDocumentWindowId(baseId: string) {
-  let windowId = baseId;
-  for (let count = 2; liveWindowIds.has(windowId); count++) windowId = `${baseId}-${count}`;
-  liveWindowIds.add(windowId);
-  return windowId;
-}
-
-/** Opens another window on the component Spark's navigator registered for `baseId`. */
+/**
+ * Opens another window on the component Spark's navigator registered for `baseId`. The first window takes
+ * the base ID while it is free, so it keeps its restored state; later ones are numbered.
+ */
 export async function openDocumentWindow(
   baseId: string,
   props: WorkspaceWindowProps & Record<string, unknown>,
   options: NavigatorWindowOptions,
 ) {
-  const windowId = claimDocumentWindowId(baseId);
+  let windowId = baseId;
+  for (let count = 2; liveWindowIds.has(windowId); count++) windowId = `${baseId}-${count}`;
+  liveWindowIds.add(windowId);
   try {
     return await openWindow({ ...options, component: `spark.window.${baseId}`, id: windowId, props: { ...props, windowId } } as WindowOpenOptions);
   } catch (error) {

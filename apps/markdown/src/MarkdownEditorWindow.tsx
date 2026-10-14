@@ -11,7 +11,6 @@ import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayo
 import {
   closeDocumentTab,
   DocumentTabBar,
-  getDocumentTabs,
   useDocumentWindow,
   useWorkspaceWindow,
   WorkspaceSidebar,
@@ -283,13 +282,13 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const content = (
     <View style={styles.root}>
       <DocumentTabBar
-        activeKey={currentFile}
+        activePath={currentFile}
         colors={workspaceColors}
         onClose={path => { closeFileTab(path).catch(handleError); }}
         onSelect={path => { switchToFile(path).catch(handleError); }}
         onToggleSidebar={workspace.toggleSidebar}
         sidebarOpen={workspace.state.sidebarOpen}
-        tabs={getDocumentTabs(workspace.state.tabs.paths)}
+        paths={workspace.state.tabs.paths}
       />
       {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
         <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"

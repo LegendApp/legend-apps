@@ -6,7 +6,7 @@ import type { WorkspaceWindowProps } from "./workspaceState";
 /** Workspace settings. Further keys can sit beside `folders`; unknown keys survive a read and write. */
 export type WorkspaceSettings = { folders: string[] };
 
-export const workspaceFileExtension = "json";
+const workspaceFileExtension = "json";
 
 export function parseWorkspaceSettings(text: string): WorkspaceSettings {
   const value: unknown = JSON.parse(text);
@@ -16,7 +16,7 @@ export function parseWorkspaceSettings(text: string): WorkspaceSettings {
 }
 
 /** Workspaces live in the app's data folder rather than beside the user's files. */
-export async function getWorkspacesDirectory() {
+async function getWorkspacesDirectory() {
   const directory = `${(await getDirectory("data")).replace(/\/+$/, "")}/Workspaces`;
   await mkdir(directory, { recursive: true });
   return directory;

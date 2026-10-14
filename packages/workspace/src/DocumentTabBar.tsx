@@ -2,23 +2,17 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getPathName } from "./fileTree";
 import type { WorkspaceColors } from "./WorkspaceSidebar";
 
-export type DocumentTab = { key: string; title: string };
-
 export type DocumentTabBarProps = {
-  activeKey: string | null;
+  activePath: string | null;
   colors: WorkspaceColors;
-  onClose: (key: string) => void;
-  onSelect: (key: string) => void;
+  onClose: (path: string) => void;
+  onSelect: (path: string) => void;
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
-  tabs: readonly DocumentTab[];
+  paths: readonly string[];
 };
 
-export function getDocumentTabs(paths: readonly string[]): DocumentTab[] {
-  return paths.map(path => ({ key: path, title: getPathName(path) }));
-}
-
-export function DocumentTabBar({ activeKey, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, tabs }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths }: DocumentTabBarProps) {
   return (
     // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
     <View style={[styles.root, { borderColor: colors.border, paddingLeft: sidebarOpen ? 8 : 78 }]}>
@@ -31,16 +25,19 @@ export function DocumentTabBar({ activeKey, colors, onClose, onSelect, onToggleS
         <Text style={[styles.toggleText, { color: colors.muted }]}>☰</Text>
       </Pressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {tabs.map(({ key, title }) => (
-          <View key={key} style={[styles.tab, { borderColor: colors.border }, key === activeKey && { backgroundColor: colors.selection }]}>
-            <Pressable accessibilityLabel={title} accessibilityRole="tab" accessibilityState={{ selected: key === activeKey }} onPress={() => onSelect(key)}>
-              <Text numberOfLines={1} style={[styles.title, { color: key === activeKey ? colors.foreground : colors.muted }]}>{title}</Text>
-            </Pressable>
-            <Pressable accessibilityLabel={`Close ${title}`} accessibilityRole="button" hitSlop={4} onPress={() => onClose(key)}>
-              <Text style={[styles.close, { color: colors.muted }]}>×</Text>
-            </Pressable>
-          </View>
-        ))}
+        {paths.map(path => {
+          const title = getPathName(path), active = path === activePath;
+          return (
+            <View key={path} style={[styles.tab, { borderColor: colors.border }, active && { backgroundColor: colors.selection }]}>
+              <Pressable accessibilityLabel={title} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => onSelect(path)}>
+                <Text numberOfLines={1} style={[styles.title, { color: active ? colors.foreground : colors.muted }]}>{title}</Text>
+              </Pressable>
+              <Pressable accessibilityLabel={`Close ${title}`} accessibilityRole="button" hitSlop={4} onPress={() => onClose(path)}>
+                <Text style={[styles.close, { color: colors.muted }]}>×</Text>
+              </Pressable>
+            </View>
+          );
+        })}
       </ScrollView>
     </View>
   );

@@ -115,7 +115,8 @@ describe("WorkspaceSidebar", () => {
     expect(onSidebarOpenChange).not.toHaveBeenCalled();
 
     await act(async () => renderer.update(<Toggle props={{}} />));
-    await act(async () => workspace.addFolders(["/repo"]));
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => workspace.chooseFolders());
     await act(async () => workspace.toggleSidebar());
     expect(onSidebarOpenChange).toHaveBeenCalledWith(false);
     await act(async () => workspace.saveWorkspace());
