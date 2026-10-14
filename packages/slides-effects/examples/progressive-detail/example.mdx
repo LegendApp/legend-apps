@@ -11,5 +11,5 @@ export function Detail() { return <View style={{ width: 920, gap: 24 }}>{["1  Pa
 # Progressive detail
 
 <View style={{ width: 1696, height: 650 }}>
-<Steps count={3}>{step => <ProgressiveDetail expanded={step > 0} summary={<Summary />} detail={<Detail />} style={{ width: 1696, height: 580 }} />}</Steps>
+<Steps count={2}>{step => <ProgressiveDetail expanded={step > 0} summary={<Summary />} detail={<Detail />} style={{ width: 1696, height: 580 }} />}</Steps>
 </View>

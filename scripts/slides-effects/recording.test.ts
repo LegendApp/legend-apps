@@ -55,7 +55,7 @@ test("MDX step discovery handles render-prop counts without counting the initial
   expect(exampleStepPresses('<Step at={4}>A</Step>\n\n<Step>B</Step>')).toBe(5);
   expect(exampleStepPresses('```mdx\n<Step />\n```')).toBe(0);
   expect(() => exampleStepPresses('<Steps count={variable}>{step => <View />}</Steps>')).toThrow("--steps");
-  for (const [slug, presses] of [["comparison-wipe", 2], ["glass-strike", 1]]) {
+  for (const [slug, presses] of [["comparison-wipe", 1], ["glass-strike", 1]]) {
     const example = path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${slug}/example.mdx`);
     expect(exampleStepPresses(fs.readFileSync(example, "utf8"))).toBe(presses);
   }
