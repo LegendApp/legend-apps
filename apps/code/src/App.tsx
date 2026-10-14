@@ -1,5 +1,4 @@
 import {
-  openSelectedDocumentPath,
   useDocumentAppController,
   type DocumentAppController,
 } from "@legendapp/spark/app/documents";
@@ -9,9 +8,9 @@ import { createWorkspaceMenuHandlers } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import { useEffect } from "react";
-import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
+import { codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
 import { installCodeBenchmarkHook } from "./codeBenchmark";
-import { getLaunchCodeFile, isCodePath } from "./codeFiles";
+import { getLaunchCodeFile, isCodePath, openCodeFileDialog } from "./codeFiles";
 import { codeMenuConfig } from "./codeMenus";
 import { focusCodeViewerWindow, openCodeSettingsWindow, openCodeViewerWindow, registerCodeWindows } from "./codeWindows";
 import { requestCodeViewerFile, dispatchCodeViewerMenu, codeAutomaticPairs$ } from "./codeViewerRequests";
@@ -49,11 +48,7 @@ async function openCodeFileInViewer(filePath: string) {
 }
 
 async function openCodeViewerForSelectedFile(controller: DocumentAppController) {
-  const path = await openSelectedDocumentPath({
-    allowedFileTypes: codeFileTypes,
-    invalidSelectionMessage: "Choose a text file.",
-    isDocumentPath: isCodePath,
-  });
+  const path = await openCodeFileDialog();
 
   if (path) {
     await openCodeFileInViewer(path);
