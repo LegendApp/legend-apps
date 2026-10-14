@@ -60,9 +60,6 @@ async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
 }
 
 function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHandlers {
-  const dispatchOpenEditorMenuAction = (action: MenuAction) =>
-    controller.isDocumentWindowOpen() && dispatchMarkdownEditorMenuAction(action);
-
   return {
     // New, folder, and workspace windows start on an untitled document rather than the last one.
     ...createWorkspaceMenuHandlers(async (props) => {
@@ -70,44 +67,44 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
       controller.setDocumentWindowOpen(true);
     }, reportMarkdownAppControllerError),
     new: (action: MenuAction) => {
-      if (!dispatchOpenEditorMenuAction(action)) {
+      if (!dispatchMarkdownEditorMenuAction(action)) {
         openNewMarkdownEditorWindow(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
     open: (action: MenuAction) => {
-      if (!dispatchOpenEditorMenuAction(action)) {
+      if (!dispatchMarkdownEditorMenuAction(action)) {
         openMarkdownEditorForSelectedFile(controller)
           .catch(reportMarkdownAppControllerError);
       }
     },
     settings: (action: MenuAction) => {
-      if (!dispatchOpenEditorMenuAction(action)) {
+      if (!dispatchMarkdownEditorMenuAction(action)) {
         openMarkdownSettingsWindow().catch(reportMarkdownAppControllerError);
       }
     },
-    save: dispatchOpenEditorMenuAction,
-    saveAs: dispatchOpenEditorMenuAction,
-    saveWorkspace: dispatchOpenEditorMenuAction,
-    toggleSidebar: dispatchOpenEditorMenuAction,
-    revealInFinder: dispatchOpenEditorMenuAction,
-    undo: dispatchOpenEditorMenuAction,
-    redo: dispatchOpenEditorMenuAction,
-    bold: dispatchOpenEditorMenuAction,
-    italic: dispatchOpenEditorMenuAction,
-    underline: dispatchOpenEditorMenuAction,
-    strikethrough: dispatchOpenEditorMenuAction,
-    spoiler: dispatchOpenEditorMenuAction,
-    link: dispatchOpenEditorMenuAction,
-    increaseFontSize: dispatchOpenEditorMenuAction,
-    decreaseFontSize: dispatchOpenEditorMenuAction,
-    resetFontSize: dispatchOpenEditorMenuAction,
+    save: dispatchMarkdownEditorMenuAction,
+    saveAs: dispatchMarkdownEditorMenuAction,
+    saveWorkspace: dispatchMarkdownEditorMenuAction,
+    toggleSidebar: dispatchMarkdownEditorMenuAction,
+    revealInFinder: dispatchMarkdownEditorMenuAction,
+    undo: dispatchMarkdownEditorMenuAction,
+    redo: dispatchMarkdownEditorMenuAction,
+    bold: dispatchMarkdownEditorMenuAction,
+    italic: dispatchMarkdownEditorMenuAction,
+    underline: dispatchMarkdownEditorMenuAction,
+    strikethrough: dispatchMarkdownEditorMenuAction,
+    spoiler: dispatchMarkdownEditorMenuAction,
+    link: dispatchMarkdownEditorMenuAction,
+    increaseFontSize: dispatchMarkdownEditorMenuAction,
+    decreaseFontSize: dispatchMarkdownEditorMenuAction,
+    resetFontSize: dispatchMarkdownEditorMenuAction,
   };
 }
 
 async function openRecentMarkdownDocument(path: string, controller: DocumentAppController) {
   if (isMarkdownPath(path)) {
-    const editorHandler = controller.isDocumentWindowOpen() ? getMarkdownEditorRecentDocumentHandler() : null;
+    const editorHandler = getMarkdownEditorRecentDocumentHandler();
     if (editorHandler) {
       await editorHandler(path);
     } else {

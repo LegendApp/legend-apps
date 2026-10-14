@@ -5,9 +5,8 @@ import { revealInFileManager } from "@legendapp/spark/files";
 import type { MarkdownMenuHandlers } from "./markdownEditorActions";
 import { markdownMenuState$ } from "./markdownMenus";
 import { useObserveEffect } from "@legendapp/state/react";
-import { useEffect, useMemo, type RefObject } from "react";
-import { markdownMenuOwnerId } from "./appConstants";
-import { registerMarkdownEditorMenuHandlers } from "./markdownEditorActions";
+import { useCallback, useEffect, useMemo, type RefObject } from "react";
+import { refreshMarkdownEditorMenuState, registerMarkdownEditorMenuHandlers } from "./markdownEditorActions";
 import {
   decreaseMarkdownFontSizeSetting,
   increaseMarkdownFontSizeSetting,
@@ -116,17 +115,8 @@ export function useMarkdownMenus({
     sessionState$,
   ]);
 
-  useEffect(() => {
-    const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers);
-
-    return () => {
-      unregister();
-      disableDocumentMenuItems();
-    };
-  }, [menuHandlers, windowId]);
-
-  useObserveEffect(() => {
-    const state = sessionState$.get();
+  const refreshMenuState = useCallback(() => {
+    const state = sessionState$.peek();
     const hasDocument = state.filename !== null;
     const currentFilePath = getCurrentFilePath(state);
 
@@ -144,5 +134,19 @@ export function useMarkdownMenus({
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
     ].map(({ id, enabled }) => [id, { disabled: !enabled }])));
+  }, [sessionState$]);
+
+  useEffect(() => {
+    const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers, refreshMenuState);
+    refreshMarkdownEditorMenuState();
+    return () => {
+      unregister();
+      if (!refreshMarkdownEditorMenuState()) disableDocumentMenuItems();
+    };
+  }, [menuHandlers, refreshMenuState, windowId]);
+
+  useObserveEffect(() => {
+    sessionState$.get();
+    refreshMarkdownEditorMenuState();
   }, [sessionState$]);
 }

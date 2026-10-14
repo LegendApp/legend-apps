@@ -63,6 +63,7 @@ import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature"
 import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
+import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
 
@@ -113,7 +114,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onFileOpened: openTab,
     onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
   });
-  useDocumentWindow(windowId, workspace.toggleSidebar);
+  useDocumentWindow(windowId, workspace.toggleSidebar, refreshMarkdownEditorMenuState);
   useEffect(() => { reportWorkspaceError.current = session.handleError; }, [session.handleError]);
   const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const hasObservedLayoutInputsRef = useRef(false);

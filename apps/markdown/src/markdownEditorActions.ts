@@ -5,16 +5,22 @@ export type MarkdownMenuHandlers = Record<string, (action: MenuAction) => unknow
 
 type RecentDocumentHandler = (path: string) => Promise<void>;
 
-const menuHandlerWindows = createDocumentWindowRegistry<MarkdownMenuHandlers>();
+const menuHandlerWindows = createDocumentWindowRegistry<{ handlers: MarkdownMenuHandlers; refreshMenuState: () => void }>();
 const recentDocumentWindows = createDocumentWindowRegistry<RecentDocumentHandler>();
 
-export function registerMarkdownEditorMenuHandlers(windowId: string, handlers: MarkdownMenuHandlers) {
-  return menuHandlerWindows.register(windowId, handlers);
+export function registerMarkdownEditorMenuHandlers(windowId: string, handlers: MarkdownMenuHandlers, refreshMenuState: () => void) {
+  return menuHandlerWindows.register(windowId, { handlers, refreshMenuState });
+}
+
+export function refreshMarkdownEditorMenuState() {
+  const target = menuHandlerWindows.active();
+  target?.refreshMenuState();
+  return !!target;
 }
 
 /** Dispatches to the most recently focused editor window. */
 export function dispatchMarkdownEditorMenuAction(action: MenuAction) {
-  const handler = menuHandlerWindows.active()?.[action.itemId];
+  const handler = menuHandlerWindows.active()?.handlers[action.itemId];
   if (!handler) {
     return false;
   }
