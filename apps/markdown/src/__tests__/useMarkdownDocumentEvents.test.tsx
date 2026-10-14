@@ -115,7 +115,7 @@ describe("useMarkdownAppExit", () => {
     });
     const handleError = jest.fn();
     function Harness({ enabled }: { enabled: boolean }) {
-      const options = { autosaveEnabled: enabled, handleError, prepareCurrentDocumentForClose: prepare };
+      const options = { autosaveEnabled: enabled, handleError, prepareCurrentDocumentForClose: prepare, windowId: "markdown-editor" };
       if (reason === "close") useMarkdownWindowCloseRequest(options);
       else useMarkdownAppExit(options);
       return null;
@@ -146,7 +146,7 @@ describe("useMarkdownAppExit", () => {
     const bytes = "Close sentinel EXACT.\r\n";
     let disk = "";
     function Harness() {
-      useMarkdownWindowCloseRequest({ autosaveEnabled: true, handleError,
+      useMarkdownWindowCloseRequest({ autosaveEnabled: true, handleError, windowId: "markdown-editor",
         prepareCurrentDocumentForClose: async () => { disk = bytes; return true; } });
       return null;
     }

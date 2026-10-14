@@ -22,11 +22,13 @@ export function useMarkdownEditorWindowOptions({
   backgroundColor,
   onError,
   sessionState$,
+  windowId,
 }: {
   appearance: "dark" | "light";
   backgroundColor: string;
   onError: (error: unknown) => void;
   sessionState$: MarkdownDocumentSessionState$;
+  windowId: string;
 }) {
   useObserveEffect(() => {
     const state = sessionState$.get();
@@ -41,6 +43,7 @@ export function useMarkdownEditorWindowOptions({
       isDirty: state.isDirty,
       isUntitledDocument: state.documentSource === "untitled",
       saveState: state.saveState,
+      windowId,
     }).catch(onError);
-  }, [appearance, backgroundColor, onError, sessionState$]);
+  }, [appearance, backgroundColor, onError, sessionState$, windowId]);
 }

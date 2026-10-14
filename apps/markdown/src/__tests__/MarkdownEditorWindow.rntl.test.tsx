@@ -131,12 +131,16 @@ jest.mock("../useMarkdownWindows", () => ({
 
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
+  getMarkdownSidebarOpenSetting: () => true,
+  setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
   useMarkdownDisplayThemeSetting: () => "system",
   useMarkdownFormattingToolbarModeSetting: () => "selection",
   useMarkdownLayoutThemeSetting: () => "default",
 }));
+
+jest.mock("@legendapp/list/react-native", () => ({ LegendList: () => null }));
 
 jest.mock("../userThemes", () => ({
   loadMarkdownUserThemesSync: jest.fn(),
@@ -220,7 +224,32 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       autosaveEnabled: true,
       handleError: mockSession.handleError,
       prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
+      windowId: "markdown-editor",
     });
+    await view.unmount();
+  });
+
+  it("switches and closes file tabs through the dirty-document flow", async () => {
+    mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md" });
+    const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+    // Single-file windows start with the sidebar hidden even though the setting is open.
+    expect(view.getByLabelText("Show Sidebar")).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByLabelText("b.md")));
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "open" });
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
+
+    mockSession.prepareCurrentDocumentForClose.mockResolvedValueOnce(false);
+    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+    expect(view.getByLabelText("a.md")).toBeTruthy();
+    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "close" });
+    expect(view.queryByLabelText("a.md")).toBeNull();
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
+
+    await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));
+    expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
+    expect(view.getByLabelText("Add Folder")).toBeTruthy();
     await view.unmount();
   });
 
