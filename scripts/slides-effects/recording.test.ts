@@ -215,7 +215,7 @@ test.skipIf(!videoSkill)("every recording profile rejects a frozen export with t
       const profile = effect.recording ?? {};
       const seconds = profile.seconds ?? 8;
       const source = fs.readFileSync(path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${effect.slug}/example.mdx`), "utf8");
-      const motion = recordingMotionIntervals(seconds, recordingSchedule(seconds, profile.steps ?? exampleStepPresses(source)), profile.motion);
+      const motion = recordingMotionIntervals(seconds, recordingSchedule(seconds, exampleStepPresses(source)), profile.motion);
       const verified = spawnSync("python3", [path.join(videoSkill, "scripts/verify-video.py"), video,
         ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(effect.slug, 320, 180),
         ...(profile.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]),

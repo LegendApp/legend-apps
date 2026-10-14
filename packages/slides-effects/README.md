@@ -73,7 +73,7 @@ during preparation, never on animation frames.
 
 `bun run effects:record <slug> --apply` uses the catalog entry's optional
 `recording` profile for `seconds`, playback-relative `motion` intervals, optional
-`posterAt` seconds, extra `steps` for step-driven decks, and
+`posterAt` seconds, source-derived steps for step-driven decks, and
 verifier `noiseDb` / `freezeMs`. CLI duration and motion flags take precedence.
 Reveal windows use completed keyboard-command times. Sparse native sample
 timestamps survive export without frame resampling. Step-less defaults skip the

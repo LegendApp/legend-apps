@@ -57,7 +57,7 @@ if (!localEffect) throw new Error(`No local catalog entry for ${slug}.`);
 const profile = localEffect.recording;
 const posterAt = profile?.posterAt;
 const seconds = Number(option("--seconds") ?? profile?.seconds ?? 8);
-const steps = Number(option("--steps") ?? profile?.steps ?? exampleStepPresses(exampleSource));
+const steps = Number(option("--steps") ?? exampleStepPresses(exampleSource));
 const cropTop = Number(option("--crop-top") ?? 0);
 const width = Number(option("--width") ?? 1280);
 const reserve = option("--reserve-bytes") ?? "50000000000";
