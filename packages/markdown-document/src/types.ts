@@ -102,6 +102,7 @@ export type MarkdownDocumentCommands = {
   saveAs(filename: string): Promise<void>;
   undo(): void;
   redo(): void;
+  selectAll(): void;
   commitAndBlurActiveBlock(): boolean;
   extendBlockSelectionDown(): boolean;
   extendBlockSelectionUp(): boolean;

@@ -85,6 +85,7 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     revealInFinder: dispatchOpenEditorMenuAction,
     undo: dispatchOpenEditorMenuAction,
     redo: dispatchOpenEditorMenuAction,
+    selectAll: dispatchOpenEditorMenuAction,
     bold: dispatchOpenEditorMenuAction,
     italic: dispatchOpenEditorMenuAction,
     underline: dispatchOpenEditorMenuAction,

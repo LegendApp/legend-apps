@@ -37,6 +37,7 @@ const disabledDocumentMenuItems = [
   "revealInFinder",
   "undo",
   "redo",
+  "selectAll",
   "bold",
   "italic",
   "underline",
@@ -73,6 +74,7 @@ export function useMarkdownMenus({
       onOpenDocument().catch(onError);
     },
     redo: () => documentCommandsRef.current?.redo(),
+    selectAll: () => documentCommandsRef.current?.selectAll(),
     revealInFinder: () => {
       const currentFilePath = getCurrentFilePath(sessionState$.peek());
       if (currentFilePath) {
@@ -125,6 +127,7 @@ export function useMarkdownMenus({
       { id: "settings", enabled: true },
       { id: "undo", enabled: hasDocument && state.commandState.canUndo },
       { id: "redo", enabled: hasDocument && state.commandState.canRedo },
+      { id: "selectAll", enabled: hasDocument },
       { id: "bold", enabled: hasDocument },
       { id: "italic", enabled: hasDocument },
       { id: "underline", enabled: hasDocument },

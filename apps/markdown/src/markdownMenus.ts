@@ -65,6 +65,7 @@ export const markdownMenuConfig: MenuRootItem[] = [
         id: "redo",
         type: "action", target: { role: "redo" }, label: "Redo", disabled: true,
       },
+      { id: "selectAll", type: "action", target: { role: "selectAll" }, label: "Select All", shortcut: "Cmd+a", disabled: true },
     ],
   },
   { type: "submenu",

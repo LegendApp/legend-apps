@@ -3261,6 +3261,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       runRedo().catch(reportAsyncError).finally(releaseHistoryKeyboard);
     }, [applyHistoryEntry, clearTypingHistoryGroup, commitActiveBlock, publishCommandState, releaseHistoryKeyboard, reportAsyncError]);
 
+    const selectAll = useCallback(() => {
+      async function selectDocument() {
+        await commitActiveBlock({ updateReactState: true });
+        const first = getBlockIdAtIndex(0);
+        const last = getBlockIdAtIndex(getBlockCount() - 1);
+        if (first && last) setKeyboardBlockSelection(first, last);
+      }
+      selectDocument().catch(reportAsyncError);
+    }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
+
     const commands = useMemo<MarkdownDocumentCommands>(
       () => ({
         focus() {
@@ -3312,6 +3322,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         reload,
         save,
         saveAs,
+        selectAll,
         commitAndBlurActiveBlock,
         moveActiveBlockDown() {
           moveActiveBlock("down");
@@ -3370,6 +3381,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         runActiveInputCommand,
         save,
         saveAs,
+        selectAll,
         undo, draftMarkdown$],
     );
 

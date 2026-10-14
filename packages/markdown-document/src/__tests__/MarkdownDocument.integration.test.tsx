@@ -3730,6 +3730,16 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("selects every document block with Select All", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "First"), block("d1:b1", 1, "Second"), block("d1:b2", 2, "Third"),
+    ]));
+    const { commandsRef, renderer } = await renderDocument({ adapter });
+    await act(async () => { commandsRef.current?.selectAll(); });
+    await flushPromises();
+    expectBlockSelectionOverlays(renderer, ["d1:b0", "d1:b1", "d1:b2"]);
+  });
+
   it("extends block selection downward from the end of the active block", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "First"),
