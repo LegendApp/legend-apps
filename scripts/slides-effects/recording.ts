@@ -46,7 +46,7 @@ export function audienceKeyboardScripts(pid: number, title: string) {
   const window = `window ${JSON.stringify(title)}`;
   return {
     activate: `${process}\n  set frontmost to true\n  perform action "AXRaise" of ${window}\nend tell`,
-    advance: `${process}\n  key code 124\nend tell`,
+    advance: `${process}\n  set frontmost to true\n  key code 124\nend tell`,
   };
 }
 

@@ -102,7 +102,7 @@ test("audience keyboard focus is established before capture and navigation does 
   expect(scripts.activate).toContain('perform action "AXRaise" of window "Legend Slides — Audience"');
   expect(scripts.advance).toContain("key code 124");
   expect(scripts.advance).not.toContain("AXRaise");
-  expect(scripts.advance).not.toContain("frontmost");
+  expect(scripts.advance).toContain("set frontmost to true");
 });
 
 test("droplets motion verification focuses on its moving region", () => {
