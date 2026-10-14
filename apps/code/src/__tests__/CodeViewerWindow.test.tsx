@@ -6,13 +6,12 @@ import { loadCodeFile } from "@legend-apps/syntax-parser";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
 import { CodeViewerWindow } from "../CodeViewerWindow";
 import { useCodeSyntaxThemeSetting, useCodeSyntaxHighlightingEnabledSetting } from "../codeSettings";
-import { codeViewerFileRequest$, requestCodeViewerFile } from "../codeViewerRequests";
+import { requestCodeViewerFile } from "../codeViewerRequests";
 import { getCodeLanguage, getCodeRepresentedUri, getLaunchCodeFile, isCodePath } from "../codeFiles";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
 import { dispatchCodeViewerMenu } from "../codeViewerRequests";
 import { setCodeViewerWindowOptions } from "../codeWindows";
-import { codeMenuOwnerId, codeViewerWindowIdentifier } from "../appConstants";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
 const mockEditorCommand = jest.fn(async () => true);
 jest.mock("@legendapp/spark/app/documents", () => ({
@@ -24,7 +23,14 @@ jest.mock("@legendapp/spark/app/documents", () => ({
     noteRecentDocument: jest.fn(),
 }));
 jest.mock("@legendapp/spark/app", () => ({ beforeQuit: jest.fn(async () => ({ remove: async () => {} })) }));
-jest.mock("@legendapp/spark/windows", () => ({ beforeWindowClose: jest.fn(async () => ({ remove: async () => {} })) }));
+jest.mock("@legendapp/spark/windows", () => ({
+    addWindowListener: jest.fn(async () => ({ remove: async () => {} })),
+    beforeWindowClose: jest.fn(async () => ({ remove: async () => {} })),
+}));
+jest.mock("@legendapp/spark/ui/split-view", () => {
+    const React = require("react");
+    return { SidebarSplitView: ({ content, sidebar, sidebarCollapsed }: Record<string, unknown>) => React.createElement("SplitView", { sidebarCollapsed }, sidebar, content) };
+});
 jest.mock("@legend-apps/source-editor", () => {
     const React = require("react");
     return { prepareDocument: jest.fn((path: string) => `prepared:${path}`), cancelPreparedDocument: jest.fn(), SourceDocumentEditor: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
@@ -47,6 +53,8 @@ jest.mock("@legend-apps/syntax-parser", () => ({
 }));
 jest.mock("../codeWindows", () => ({ setCodeViewerWindowOptions: jest.fn(async () => { }) }));
 jest.mock("../codeSettings", () => ({
+    getCodeSidebarOpenSetting: () => true,
+    setCodeSidebarOpenSetting: jest.fn(),
     useCodeFontFamilySetting: () => "Menlo",
     useCodeFontSizeSetting: () => 13,
     useCodeSyntaxHighlightingEnabledSetting: jest.fn(() => true),
@@ -64,8 +72,16 @@ jest.mock("@legendapp/list/react-native", () => {
 });
 describe("Code default editor", () => {
     let renderer: ReactTestRenderer;
-    const editor = () => renderer.root.findByType("SourceDocumentEditor" as never);
-    const openButton = () => renderer.root.findAll((node) => node.props.accessibilityRole === "button" && typeof node.props.onPress === "function")[0];
+    // The visible editor belongs to the active tab; inactive tabs stay mounted but hidden.
+    const editors = () => renderer.root.findAllByType("SourceDocumentEditor" as never);
+    const isVisible = (node: ReturnType<typeof editors>[number]) => {
+        for (let parent = node.parent; parent; parent = parent.parent) if (parent.props.style?.display === "none") return false;
+        return true;
+    };
+    const editor = () => editors().find(isVisible)!;
+    const pressable = (label: string) => renderer.root.find((node) => typeof node.type === "string" && node.props.accessibilityLabel === label && typeof node.props.onPress === "function");
+    const openButton = () => pressable("Open File");
+    const tabTitles = () => renderer.root.findAll((node) => typeof node.type === "string" && node.props.accessibilityRole === "tab").map((node) => [node.props.accessibilityLabel, node.props.accessibilityState.selected]);
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
@@ -74,7 +90,6 @@ describe("Code default editor", () => {
         jest.mocked(getLaunchDocumentPath).mockReturnValue(null);
         jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("dark");
         jest.mocked(useCodeSyntaxHighlightingEnabledSetting).mockReturnValue(true);
-        codeViewerFileRequest$.set({ path: null, version: 0 });
     });
     afterEach(async () => {
         if (renderer)
@@ -84,23 +99,22 @@ describe("Code default editor", () => {
     });
     it("opens directly in the editor without loading or mounting the old viewer", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={[]}/>); });
-        expect(renderer.root.findAllByType("Text" as never).map(node => node.props.children)).toEqual(["Open File"]);
+        expect(renderer.root.findAllByType("Text" as never).map(node => node.props.children)).toContain("Open File");
         expect(openButton().props.accessibilityLabel).toBe("Open File");
         expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         expect(prepareDocument).toHaveBeenCalledTimes(1);
         expect(prepareDocument).toHaveBeenCalledWith("/one.ts");
         expect(editor().props.preparedDocumentId).toBe("prepared:/one.ts");
-        expect(codeViewerFileRequest$.path.peek()).toBeNull();
         expect(editor().props.filePath).toBe("/one.ts");
         expect(editor().props.language).toBe("typescript");
         expect(editor().props.syntaxHighlightingEnabled).toBe(true);
         expect(editor().props.syntaxHighlightingMode).toBe("background");
         expect(editor().props.showFileLoadingBanner).toBe(false);
-        expect(renderer.root.findAll((node) => node.props.accessibilityRole === "button")).toHaveLength(0);
+        expect(renderer.root.findAll((node) => node.props.accessibilityLabel === "Open File")).toHaveLength(0);
+        expect(tabTitles()).toEqual([["one.ts", true]]);
         expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
         expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
-        expect(renderer.root.findAllByType("List" as never)).toHaveLength(0);
         expect(loadCodeFile).not.toHaveBeenCalled();
         expect(useWatchedDocumentReload).not.toHaveBeenCalled();
         expect(noteRecentDocument).not.toHaveBeenCalled();
@@ -137,7 +151,7 @@ describe("Code default editor", () => {
     });
     it("preserves the buffer on settings changes and same-file requests", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         const mountedEditor = editor();
         jest.mocked(useCodeSyntaxThemeSetting).mockReturnValue("github-light");
         await act(async () => renderer.update(<CodeViewerWindow />));
@@ -147,95 +161,99 @@ describe("Code default editor", () => {
         await act(async () => renderer.update(<CodeViewerWindow />));
         expect(editor()).toBe(mountedEditor);
         expect(editor().props.syntaxHighlightingEnabled).toBe(false);
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         expect(editor()).toBe(mountedEditor);
         expect(loadCodeFile).not.toHaveBeenCalled();
     });
-    it("replaces the editor only when switching to another file", async () => {
+    it("opens other files as tabs and keeps each editor mounted", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         const first = editor();
-        await act(async () => requestCodeViewerFile("/two.tsx"));
+        await act(async () => { requestCodeViewerFile("/two.tsx"); });
+        expect(editors()).toHaveLength(2);
         expect(editor()).not.toBe(first);
         expect(editor().props.filePath).toBe("/two.tsx");
         expect(editor().props.language).toBe("tsx");
+        expect(tabTitles()).toEqual([["one.ts", false], ["two.tsx", true]]);
+        expect(mockEditorCommand).not.toHaveBeenCalled();
+        await act(async () => pressable("one.ts").props.onPress());
+        expect(editor()).toBe(first);
+        expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/one.ts", windowId: "code-viewer" }));
     });
-    it("keeps a second file open when the window originally launched with a document", async () => {
+    it("keeps launched and later files as tabs without replaying the launch file", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
         expect(editor().props.filePath).toBe("/one.ts");
-        await act(async () => requestCodeViewerFile("/two.tsx"));
+        await act(async () => { requestCodeViewerFile("/two.tsx"); });
         expect(editor().props.filePath).toBe("/two.tsx");
-        expect(mockEditorCommand).toHaveBeenCalledTimes(1);
         const second = editor();
         await act(async () => renderer.update(<CodeViewerWindow launchArguments={["/one.ts"]}/>));
         expect(editor()).toBe(second);
-        expect(editor().props.filePath).toBe("/two.tsx");
-        await act(async () => requestCodeViewerFile("/three.md"));
-        expect(editor().props.filePath).toBe("/three.md");
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/three.md"); });
+        expect(tabTitles()).toEqual([["one.ts", false], ["two.tsx", false], ["three.md", true]]);
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         expect(editor().props.filePath).toBe("/one.ts");
+        expect(editors()).toHaveLength(3);
     });
-    it("preserves edits when opening another file is cancelled or saving fails", async () => {
+    it("keeps a tab open when closing it is cancelled or saving fails", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
-        const first = editor();
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
+        await act(async () => { requestCodeViewerFile("/two.ts"); });
         mockEditorCommand.mockResolvedValueOnce(false);
-        await act(async () => requestCodeViewerFile("/two.ts"));
-        expect(editor()).toBe(first);
-        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
-        jest.mocked(cancelPreparedDocument).mockClear();
+        await act(async () => pressable("Close two.ts").props.onPress());
+        expect(mockEditorCommand).toHaveBeenLastCalledWith("confirmClose");
+        expect(editors()).toHaveLength(2);
         mockEditorCommand.mockRejectedValueOnce(new Error("File changed outside the editor"));
-        await act(async () => requestCodeViewerFile("/two.ts"));
-        expect(editor()).toBe(first);
+        await act(async () => pressable("Close two.ts").props.onPress());
+        expect(editors()).toHaveLength(2);
         expect(JSON.stringify(renderer.toJSON())).toContain("File changed outside the editor");
-        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
+        await act(async () => pressable("Close two.ts").props.onPress());
+        expect(editors()).toHaveLength(1);
+        expect(editor().props.filePath).toBe("/one.ts");
+        await act(async () => pressable("Close one.ts").props.onPress());
+        expect(editors()).toHaveLength(0);
+        expect(openButton()).toBeDefined();
     });
     it("passes a launch preparation through without starting a duplicate read", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token"/>); });
         expect(editor().props.preparedDocumentId).toBe("launch-token");
         expect(prepareDocument).not.toHaveBeenCalled();
-        await act(async () => renderer.unmount());
-        expect(cancelPreparedDocument).toHaveBeenCalledWith("launch-token");
     });
     it("does not replay an old request when the viewer is reopened", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         await act(async () => renderer.unmount());
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/new.ts"]} preparedDocumentId="new-token"/>); });
         expect(editor().props.filePath).toBe("/new.ts");
         expect(editor().props.preparedDocumentId).toBe("new-token");
     });
-    it("disposes an in-flight preparation if the window closes during confirmation", async () => {
-        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
-        let confirm!: (allow: boolean) => void;
-        mockEditorCommand.mockImplementationOnce(() => new Promise((resolve) => { confirm = resolve; }));
-        await act(async () => requestCodeViewerFile("/two.ts"));
-        await act(async () => renderer.unmount());
-        await act(async () => confirm(true));
-        expect(cancelPreparedDocument).toHaveBeenCalledWith("prepared:/two.ts");
-    });
     it("updates the Save As title and language without remounting, then can reopen the original", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         const first = editor();
         await act(async () => editor().props.onDocumentState({ dirty: false, path: "/copy.py" }));
         expect(editor()).toBe(first);
         expect(editor().props.language).toBe("python");
         expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/copy.py" }));
-        await act(async () => requestCodeViewerFile("/copy.py"));
+        expect(tabTitles()).toEqual([["copy.py", true]]);
+        await act(async () => { requestCodeViewerFile("/copy.py"); });
         expect(editor()).toBe(first);
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         expect(editor()).not.toBe(first);
+        expect(tabTitles()).toEqual([["copy.py", false], ["one.ts", true]]);
     });
-    it("guards close and quit, routes menu commands and toggles pairing", async () => {
+    it("guards close and quit for every tab, routes menu commands and toggles pairing", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        await act(async () => requestCodeViewerFile("/one.ts"));
+        await act(async () => { requestCodeViewerFile("/one.ts"); });
         const close = jest.mocked(beforeWindowClose).mock.calls[0][1];
         const quit = jest.mocked(beforeQuit).mock.calls[0][0];
         const menu = dispatchCodeViewerMenu;
         mockEditorCommand.mockResolvedValueOnce(false);
         await act(async () => { expect(await close()).toBe(false); });
         await act(async () => { expect(await close()).toBe(true); });
+        await act(async () => { requestCodeViewerFile("/two.ts"); });
+        mockEditorCommand.mockClear().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        await act(async () => { expect(await close()).toBe(false); });
+        expect(mockEditorCommand).toHaveBeenCalledTimes(2);
         mockEditorCommand.mockResolvedValueOnce(false);
         await act(async () => { expect(await quit()).toBe(false); });
         await act(async () => { expect(await quit()).toBe(true); });
@@ -245,6 +263,9 @@ describe("Code default editor", () => {
         }
         await act(async () => menu("automaticPairs"));
         expect(editor().props.automaticPairs).toBe(false);
+        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(true);
+        await act(async () => menu("toggleSidebar"));
+        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
     });
     it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });

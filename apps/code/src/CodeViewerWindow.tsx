@@ -1,90 +1,122 @@
 import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legendapp/spark/app/documents";
 import { beforeQuit } from "@legendapp/spark/app";
+import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
-import { cancelPreparedDocument, prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
+import { prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
+import { DocumentTabBar, getDocumentTabs, useDocumentWindow, useWorkspaceWindow, WorkspaceSidebar } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeFileTypes, codeMenuOwnerId, codeViewerWindowIdentifier } from "./appConstants";
+import { codeFileTypes, codeViewerWindowIdentifier } from "./appConstants";
 import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "./codeFiles";
 import {
+  getCodeSidebarOpenSetting,
+  setCodeSidebarOpenSetting,
   useCodeFontFamilySetting,
   useCodeFontSizeSetting,
   useCodeSyntaxHighlightingEnabledSetting,
   useCodeSyntaxTheme,
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
-import { codeViewerFileRequest$, consumeCodeViewerFileRequest, subscribeCodeViewerMenu, codeAutomaticPairs$ } from "./codeViewerRequests";
-import { setCodeViewerWindowOptions } from "./codeWindows";
+import { codeAutomaticPairs$, codeViewerWindows } from "./codeViewerRequests";
+import { setCodeViewerWindowOptions, type CodeViewerWindowProps } from "./codeWindows";
 
-type CodeViewerWindowProps = {
-  launchArguments?: string[];
-  preparedDocumentId?: string;
-};
+const editorCommands = ["save", "saveAs", "find", "goToLine", "indent", "outdent", "duplicateLine", "moveLineUp", "moveLineDown", "toggleComment"];
 
-export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPreparedDocumentId }: CodeViewerWindowProps) {
+/** A tab's React key outlives Save As, so renaming its path does not remount the native editor. */
+type CodeTabDocument = { key: string; preparedDocumentId?: string };
+
+/** Removes a tab's document, or moves it to `to` after Save As. */
+function moveTabDocument(documents: Record<string, CodeTabDocument>, from: string, to?: string) {
+  const { [from]: document, ...rest } = documents;
+  return document && to ? { ...rest, [to]: document } : rest;
+}
+
+export function CodeViewerWindow({ files, folders, launchArguments, preparedDocumentId, windowId = codeViewerWindowIdentifier, workspacePath }: CodeViewerWindowProps) {
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
   const syntaxHighlightingEnabled = useCodeSyntaxHighlightingEnabledSetting();
   const syntaxTheme = useCodeSyntaxTheme();
   const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
-  const launchFile = useMemo(() => getLaunchCodeFile(launchArguments), [launchArguments]);
-  const [filePath, setFilePath] = useState<string | null>(launchFile);
-  const [documentKey, setDocumentKey] = useState(0);
-  const [preparedDocumentId, setPreparedDocumentId] = useState(launchPreparedDocumentId);
+  const launchFile = useMemo(() => files?.[0] ?? getLaunchCodeFile(launchArguments), [files, launchArguments]);
   const [error, setError] = useState<string | null>(null);
-  const [documentPath, setDocumentPath] = useState<string | null>(launchFile);
-  const editor = useRef<SourceDocumentEditorHandle>(null);
+  const reportError = useCallback((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)), []);
+  const workspace = useWorkspaceWindow(
+    { files: files ?? (launchFile ? [launchFile] : []), folders, workspacePath },
+    { onError: reportError, onSidebarOpenChange: setCodeSidebarOpenSetting, sidebarOpenSetting: getCodeSidebarOpenSetting() },
+  );
+  const { closeTab, openTab, renameTab } = workspace;
+  const { files: sidebarFiles, folders: sidebarFolders, sidebarOpen, tabs } = workspace.state;
+  const [tabDocuments, setTabDocuments] = useState<Record<string, CodeTabDocument>>(() =>
+    Object.fromEntries(workspace.state.tabs.paths.map(path => [path, { key: path, preparedDocumentId: path === launchFile ? preparedDocumentId : undefined }])));
+  const nextTabKey = useRef(0);
+  const editors = useRef(new Map<string, SourceDocumentEditorHandle>());
   const automaticPairs = useValue(codeAutomaticPairs$);
   const [transition] = useState(createDocumentTransitionGuard);
-  const fileRequest = useValue(codeViewerFileRequest$);
   const loadedLaunchFileRef = useRef(launchFile);
-  const loadedFileRequestVersionRef = useRef(0);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
   const backgroundColor = syntaxTheme.background;
   const foregroundColor = syntaxTheme.foreground;
   const borderColor = displayTheme.colors.border;
+  const workspaceColors = useMemo(() => ({ ...displayTheme.colors, foreground: foregroundColor }), [displayTheme.colors, foregroundColor]);
+  const activeKey = tabs.active ? tabDocuments[tabs.active]?.key : undefined;
+  useDocumentWindow(windowId);
 
-  useEffect(() => () => cancelPreparedDocument(preparedDocumentId), [preparedDocumentId]);
+  const openFile = useCallback((path: string) => {
+    setError(null);
+    if (!tabDocuments[path]) {
+      // Begin I/O before the tab renders; the editor adopts the prepared document.
+      const document = { key: `${path}#${++nextTabKey.current}`, preparedDocumentId: prepareDocument(path) };
+      setTabDocuments(current => ({ ...current, [path]: document }));
+    }
+    openTab(path);
+  }, [openTab, tabDocuments]);
 
-  const openFile = useCallback(async (path: string, preparedId?: string) => {
-    if (path === documentPath) { cancelPreparedDocument(preparedId); return; }
-    let token = preparedId;
-    let accepted = false;
+  const closeFile = useCallback(async (path: string) => {
+    const document = tabDocuments[path];
+    const editor = document ? editors.current.get(document.key) : undefined;
     try {
-      // Begin I/O before prompting/rendering, but never replace the dirty buffer
-      // unless its transition guard approves the open.
-      token ??= prepareDocument(path);
-      accepted = await transition(() => editor.current?.command("confirmClose") ?? Promise.resolve(true), () => {
-        if (!mounted.current) { cancelPreparedDocument(token); return; }
-        setError(null); setPreparedDocumentId(token); setFilePath(path); setDocumentPath(path); setDocumentKey((key) => key + 1);
+      // The mounted editor owns its prepared document, so closing needs no cancellation.
+      await transition(() => editor?.command("confirmClose") ?? Promise.resolve(true), () => {
+        closeTab(path);
+        setTabDocuments(current => moveTabDocument(current, path));
       });
-    } catch (cause) { setError(String(cause)); }
-    finally { if (!accepted) cancelPreparedDocument(token); }
-  }, [documentPath, transition]);
+    } catch (cause) { reportError(cause); }
+  }, [closeTab, reportError, tabDocuments, transition]);
+
+  const renameFile = useCallback((from: string, to: string) => {
+    renameTab(from, to);
+    setTabDocuments(current => moveTabDocument(current, from, to));
+    noteRecentDocument(to);
+  }, [renameTab]);
 
   useEffect(() => {
-    const prepare = () => editor.current?.command("confirmClose") ?? Promise.resolve(true);
+    const prepare = async () => {
+      for (const editor of editors.current.values()) if (!await editor.command("confirmClose")) return false;
+      return true;
+    };
     let active = true;
-    const report = (cause: unknown) => { if (active) setError(String(cause)); else console.error(cause); };
+    const report = (cause: unknown) => { if (active) reportError(cause); else console.error(cause); };
     const approve = () => active ? transition(prepare, () => {}) : Promise.resolve(false);
-    const close = ownRegistration(beforeWindowClose(codeViewerWindowIdentifier, approve, { onError: report }), report);
+    const close = ownRegistration(beforeWindowClose(windowId, approve, { onError: report }), report);
     const quit = ownRegistration(beforeQuit(approve, { onError: report }), report);
-    const unsubscribeMenu = subscribeCodeViewerMenu(itemId => {
+    return () => { active = false; void close.remove().catch(report); void quit.remove().catch(report); };
+  }, [reportError, transition, windowId]);
+
+  useEffect(() => codeViewerWindows.register(windowId, {
+    command: (itemId) => {
       if (itemId === "automaticPairs") codeAutomaticPairs$.set(value => !value);
-      if (["save", "saveAs", "find", "goToLine", "indent", "outdent", "duplicateLine", "moveLineUp", "moveLineDown", "toggleComment"].includes(itemId))
-        void editor.current?.command(itemId).then(completed => { if (active && completed) setError(null); }).catch(report);
-    });
-    return () => { active = false; unsubscribeMenu(); void close.remove().catch(report); void quit.remove().catch(report); };
-  }, [transition]);
+      if (itemId === "toggleSidebar") workspace.toggleSidebar();
+      if (itemId === "saveWorkspace") workspace.saveWorkspace().catch(reportError);
+      if (editorCommands.includes(itemId))
+        void (activeKey ? editors.current.get(activeKey) : undefined)?.command(itemId).then(completed => { if (completed) setError(null); }).catch(reportError);
+    },
+    openFile,
+    windowId,
+  }), [activeKey, openFile, reportError, windowId, workspace]);
 
   const openCodeDialog = useCallback(async () => {
     try {
@@ -95,9 +127,9 @@ export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPr
       });
       if (path) openFile(path);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      reportError(cause);
     }
-  }, [openFile]);
+  }, [openFile, reportError]);
 
   useEffect(() => {
     if (launchFile && loadedLaunchFileRef.current !== launchFile) {
@@ -107,58 +139,54 @@ export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPr
   }, [launchFile, openFile]);
 
   useEffect(() => {
-    if (fileRequest.path && loadedFileRequestVersionRef.current !== fileRequest.version) {
-      const request = consumeCodeViewerFileRequest(fileRequest.version);
-      if (!request?.path) return;
-      loadedFileRequestVersionRef.current = fileRequest.version;
-      // Launch props and later open requests are separate inputs. Updating the
-      // launch marker here would replay the original file after this transition.
-      openFile(request.path, request.preparedDocumentId);
-    }
-  }, [fileRequest.path, fileRequest.version, fileRequest.preparedDocumentId, openFile]);
-
-  // The native editor owns its buffer. Do not reload on settings changes or
-  // filesystem notifications: that would discard unsaved edits and undo history.
-  const onEditorLoad = useCallback(() => {
-    if (filePath) noteRecentDocument(filePath);
-  }, [filePath]);
-
-  useEffect(() => {
     setCodeViewerWindowOptions({
       appearance: syntaxTheme.appearance,
       backgroundColor: syntaxTheme.background,
-      filePath: documentPath,
+      filePath: tabs.active,
+      windowId,
     }).catch((cause: unknown) => {
       console.error(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [documentPath, syntaxTheme.appearance, syntaxTheme.background]);
+  }, [syntaxTheme.appearance, syntaxTheme.background, tabs.active, windowId]);
 
-  return (
-    <View style={[styles.root, { backgroundColor }]}>
+  const content = (
+    <View style={styles.root}>
+      <DocumentTabBar
+        activeKey={tabs.active}
+        colors={workspaceColors}
+        onClose={closeFile}
+        onSelect={openTab}
+        onToggleSidebar={workspace.toggleSidebar}
+        sidebarOpen={sidebarOpen}
+        tabs={getDocumentTabs(tabs.paths)}
+      />
       {error ? <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{error}</Text> : null}
       <View style={styles.list}>
-        {filePath ? (
-          <SourceDocumentEditor
-            ref={editor}
-            automaticPairs={automaticPairs}
-            onDocumentState={(state) => {
-              if (state.path && state.path !== documentPath) { setDocumentPath(state.path); noteRecentDocument(state.path); }
-            }}
-            key={documentKey}
-            filePath={filePath}
-            preparedDocumentId={preparedDocumentId}
-            fontFamily={fontFamily}
-            fontSize={fontSize}
-            foreground={foregroundColor}
-            language={getCodeLanguage(documentPath ?? filePath)}
-            syntaxTheme={selectedSyntaxTheme}
-            syntaxHighlightingEnabled={syntaxHighlightingEnabled}
-            syntaxHighlightingMode="background"
-            showFileLoadingBanner={false}
-            syntaxBackend="tree-sitter"
-            onLoad={onEditorLoad}
-          />
-        ) : (
+        {tabs.paths.map(path => {
+          const document = tabDocuments[path];
+          return document ? (
+            <View key={document.key} style={path === tabs.active ? styles.list : styles.hidden}>
+              <SourceDocumentEditor
+                ref={(editor: SourceDocumentEditorHandle | null) => { if (editor) editors.current.set(document.key, editor); else editors.current.delete(document.key); }}
+                automaticPairs={automaticPairs}
+                onDocumentState={(state) => { if (state.path && state.path !== path) renameFile(path, state.path); }}
+                filePath={path}
+                preparedDocumentId={document.preparedDocumentId}
+                fontFamily={fontFamily}
+                fontSize={fontSize}
+                foreground={foregroundColor}
+                language={getCodeLanguage(path)}
+                syntaxTheme={selectedSyntaxTheme}
+                syntaxHighlightingEnabled={syntaxHighlightingEnabled}
+                syntaxHighlightingMode="background"
+                showFileLoadingBanner={false}
+                syntaxBackend="tree-sitter"
+                onLoad={() => noteRecentDocument(path)}
+              />
+            </View>
+          ) : null;
+        })}
+        {tabs.paths.length === 0 ? (
           <View style={styles.empty}>
             <Pressable
               accessibilityRole="button"
@@ -169,8 +197,31 @@ export function CodeViewerWindow({ launchArguments, preparedDocumentId: launchPr
               <Text style={[styles.openButtonText, { color: foregroundColor }]}>Open File</Text>
             </Pressable>
           </View>
-        )}
+        ) : null}
       </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.root, { backgroundColor }]}>
+      <SidebarSplitView
+        appearance={syntaxTheme.appearance}
+        content={content}
+        sidebar={(
+          <WorkspaceSidebar
+            activePath={tabs.active}
+            colors={workspaceColors}
+            files={sidebarFiles}
+            folders={sidebarFolders}
+            onAddFile={workspace.chooseFiles}
+            onAddFolder={workspace.chooseFolders}
+            onError={reportError}
+            onOpenFile={openFile}
+          />
+        )}
+        sidebarCollapsed={!sidebarOpen}
+        style={styles.root}
+      />
     </View>
   );
 }
@@ -183,6 +234,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
+  },
+  hidden: {
+    display: "none",
   },
   error: {
     fontSize: 13,

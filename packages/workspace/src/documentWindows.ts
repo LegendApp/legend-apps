@@ -22,7 +22,7 @@ export function claimDocumentWindowId(baseId: string) {
 /** Opens another window on the component Spark's navigator registered for `baseId`. */
 export async function openDocumentWindow(
   baseId: string,
-  props: WorkspaceWindowProps,
+  props: WorkspaceWindowProps & Record<string, unknown>,
   options: NavigatorWindowOptions,
 ) {
   const windowId = claimDocumentWindowId(baseId);
