@@ -1,6 +1,6 @@
 import { beforeQuit } from "@legendapp/spark/app";
 import { beforeWindowClose } from "@legendapp/spark/windows";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { getRecentMarkdownFiles } from "./appMetadata";
 import { getLaunchMarkdownFile, isMarkdownPath, shouldLaunchNewMarkdownDocument } from "./markdownFiles";
 import { registerMarkdownEditorRecentDocumentHandler } from "./markdownEditorActions";
@@ -93,9 +93,14 @@ export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurren
 }
 
 export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose" | "windowId"> & { autosaveEnabled: boolean }) {
+  const latest = useRef({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
+  useLayoutEffect(() => { latest.current = { autosaveEnabled, handleError, prepareCurrentDocumentForClose }; });
   useEffect(() => {
     let active = true;
-    const subscription = ownRegistration(beforeWindowClose(windowId, () => active ? prepareCurrentDocumentForClose({ autosaveEnabled, reason: "close" }) : false, { onError: handleError }), handleError);
-    return () => { active = false; void subscription.remove().catch(handleError); };
-  }, [autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId]);
+    const report = (error: unknown) => latest.current.handleError(error);
+    const subscription = ownRegistration(beforeWindowClose(windowId, () => active
+      ? latest.current.prepareCurrentDocumentForClose({ autosaveEnabled: latest.current.autosaveEnabled, reason: "close" })
+      : false, { onError: report }), report);
+    return () => { active = false; void subscription.remove().catch(report); };
+  }, [windowId]);
 }
