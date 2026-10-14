@@ -294,6 +294,23 @@ void testTypingIntoBlankSourcePreservesWhitespace() {
   }
 }
 
+void testSaveRejectsReadOnlyDestination() {
+  LoadedDocument loaded("Original sentinel\n");
+  const auto id = loaded.document->getBlockKey(0);
+  loaded.document->applyTransaction(updateBlock(id, "Original CHANGED"));
+  expect(chmod(loaded.file.path.c_str(), 0444) == 0, "make fixture read-only");
+  for (bool saveAs : {false, true}) {
+    bool rejected = false;
+    try {
+      if (saveAs) loaded.document->saveAs(loaded.file.path); else loaded.document->save();
+    } catch (const std::exception& error) { rejected = std::string(error.what()).find("read-only") != std::string::npos; }
+    expect(rejected, "read-only save must reject");
+    std::ifstream input(loaded.file.path, std::ios::binary);
+    expectEqual(std::string(std::istreambuf_iterator<char>(input), {}), "Original sentinel\n", "read-only source remains byte-exact");
+  }
+  expectEqual(savedSourceFor(loaded.document), "Original CHANGED\n", "failed save retains local draft for Save As");
+}
+
 void testSavePreservesPermissions() {
   LoadedDocument loaded("Original");
   for (mode_t mode : {0600, 0640, 0644}) {
@@ -919,6 +936,7 @@ int main() {
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"save preserves permissions", testSavePreservesPermissions},
+      {"save rejects read-only destination", testSaveRejectsReadOnlyDestination},
       {"typing into blank source preserves whitespace", testTypingIntoBlankSourcePreservesWhitespace},
       {"mixed line ending edit preserves untouched bytes", testMixedLineEndingEditPreservesUntouchedBytes},
       {"save preserves document symlinks", testSavePreservesDocumentSymlinks},

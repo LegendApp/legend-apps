@@ -938,6 +938,10 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, b
   if (!destinationExists && errno != ENOENT) {
     throw std::runtime_error("Failed to read markdown file permissions: " + filePath);
   }
+  if (destinationExists && ((destinationInfo.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) == 0 ||
+                            access(filePath.c_str(), W_OK) != 0)) {
+    throw std::runtime_error("Cannot save read-only markdown file: " + filePath);
+  }
   const auto nextBaseline = std::make_shared<const std::string>(blockSequence_->materializeSource());
   const auto& source = *nextBaseline;
   std::string temporaryPath = filePath + ".tmp.XXXXXX";
