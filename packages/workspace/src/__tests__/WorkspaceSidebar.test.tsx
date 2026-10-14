@@ -29,21 +29,23 @@ jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
 jest.mock("@legendapp/list/react-native", () => {
   const React = require("react");
   return {
-    LegendList: ({ data, renderItem }: { data: unknown[]; renderItem: (info: { item: unknown }) => React.ReactNode }) =>
-      React.createElement("List", null, data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item })))),
+    LegendList: ({ data, extraData, renderItem }: { data: unknown[]; extraData: unknown; renderItem: (info: { item: unknown }) => React.ReactNode }) => {
+      const children = React.useMemo(() => data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item }))), [data, extraData]);
+      return React.createElement("List", null, children);
+    },
   };
 });
 
 const colors = { border: "#ccc", foreground: "#000", muted: "#888", selection: "#ddd" };
 let workspace: ReturnType<typeof useWorkspaceWindow>;
 
-function Harness({ props, sidebarOpenSetting = true }: { props: WorkspaceWindowProps; sidebarOpenSetting?: boolean }) {
+function Harness({ props, sidebarOpenSetting = true, sidebarColors = colors }: { props: WorkspaceWindowProps; sidebarOpenSetting?: boolean; sidebarColors?: typeof colors }) {
   workspace = useWorkspaceWindow(props, { fileTypes: ["md"], onError: error => { throw error; }, sidebarOpenSetting });
   const { files, folders, tabs } = workspace.state;
   return (
     <WorkspaceSidebar
       activePath={tabs.active}
-      colors={colors}
+      colors={sidebarColors}
       files={files}
       folders={folders}
       isDocumentPath={path => path.endsWith(".md")}
@@ -75,6 +77,15 @@ describe("WorkspaceSidebar", () => {
     expect(workspace.state.workspacePath).toBeNull();
     expect(writeText).not.toHaveBeenCalled();
     expect(labels().map(([label]) => label)).toEqual(["Add File", "Add Folder", "repo", "src", "notes.md", "one.md"]);
+  });
+
+  it("refreshes mounted row colors when the theme changes without changing the files", async () => {
+    const props = { files: ["/x/one.md"] };
+    await act(async () => { renderer = create(<Harness props={props} />); });
+    const filenameColor = () => renderer.root.find(node => node.type === ("Text" as never) && node.props.children === "one.md").props.style[1].color;
+    expect(filenameColor()).toBe("#000");
+    await act(async () => renderer.update(<Harness props={props} sidebarColors={{ ...colors, foreground: "#fff" }} />));
+    expect(filenameColor()).toBe("#fff");
   });
 
   it("expands directories lazily and dims files the app cannot open", async () => {
