@@ -1117,10 +1117,6 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRangeIncrementally
     std::string replacementSource;
     if (hasReplacement) {
       replacementSource = *replacementMarkdown;
-      if (hasNextBlock) {
-        sourceEnd = std::min(newWindowSource.size(), sourceEnd + lineEnding_.size());
-        replacementSource += lineEnding_;
-      }
     } else if (hasNextBlock) {
       sourceEnd = std::min(newWindowSource.size(), sourceEnd + lineEnding_.size());
     } else if (hasPreviousBlock) {

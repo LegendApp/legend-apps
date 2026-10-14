@@ -266,6 +266,16 @@ void testSavePreservesDocumentSymlinks() {
   }
 }
 
+void testMixedLineEndingEditPreservesUntouchedBytes() {
+  for (const std::string separator : {"\r\n\n", "\n\r\n", "\r\n\r\n", "\n\n"}) {
+    const std::string source = "alpha first" + separator + "untouched\r\n";
+    LoadedDocument loaded(source);
+    const auto blocks = blocksFor(loaded.document);
+    loaded.document->applyTransaction(MarkdownTransaction("updateBlockMarkdown", blocks[0].id, "ALPHA first", std::nullopt, std::nullopt));
+    expectEqual(savedSourceFor(loaded.document), "ALPHA first" + separator + "untouched\r\n", "mixed ending edit bytes");
+  }
+}
+
 void testSavePreservesPermissions() {
   LoadedDocument loaded("Original");
   for (mode_t mode : {0600, 0640, 0644}) {
@@ -891,6 +901,7 @@ int main() {
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"save preserves permissions", testSavePreservesPermissions},
+      {"mixed line ending edit preserves untouched bytes", testMixedLineEndingEditPreservesUntouchedBytes},
       {"save preserves document symlinks", testSavePreservesDocumentSymlinks},
       {"fence lengths and unclosed blocks", testFenceLengthsAndUnclosedBlocks},
       {"move with empty editable blocks", testMoveWithEmptyEditableBlocks},
