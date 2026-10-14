@@ -79,7 +79,7 @@ describe("Code default editor", () => {
     // The visible editor belongs to the active tab; inactive tabs stay mounted but hidden.
     const editors = () => renderer.root.findAllByType("SourceDocumentEditor" as never);
     const isVisible = (node: ReturnType<typeof editors>[number]) => {
-        for (let parent = node.parent; parent; parent = parent.parent) if (parent.props.style?.display === "none") return false;
+        for (let parent = node.parent; parent; parent = parent.parent) if (parent.props.style?.opacity === 0) return false;
         return true;
     };
     const editor = () => editors().find(isVisible)!;
@@ -181,8 +181,12 @@ describe("Code default editor", () => {
         expect(editor().props.language).toBe("tsx");
         expect(tabTitles()).toEqual([["one.ts", false], ["two.tsx", true]]);
         expect(mockEditorCommand).not.toHaveBeenCalled();
+        expect(first.parent!.parent!.props.pointerEvents).toBe("none");
+        expect(first.parent!.parent!.props.accessibilityElementsHidden).toBe(true);
         await act(async () => pressable("one.ts").props.onPress());
         expect(editor()).toBe(first);
+        expect(first.parent!.parent!.props.pointerEvents).toBe("auto");
+        expect(first.parent!.parent!.props.accessibilityElementsHidden).toBe(false);
         expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/one.ts", windowId: "code-viewer" }));
     });
     it("keeps launched and later files as tabs without replaying the launch file", async () => {

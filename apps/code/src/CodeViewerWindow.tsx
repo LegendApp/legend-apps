@@ -161,7 +161,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
         {tabs.paths.map(path => {
           const document = tabDocuments[path];
           return document ? (
-            <View key={document.key} style={path === tabs.active ? styles.list : styles.hidden}>
+            <View key={document.key} style={path === tabs.active ? styles.list : styles.hidden} pointerEvents={path === tabs.active ? "auto" : "none"} accessibilityElementsHidden={path !== tabs.active}>
               <SourceDocumentEditor
                 ref={(editor: SourceDocumentEditorHandle | null) => { if (editor) editors.current.set(document.key, editor); else editors.current.delete(document.key); }}
                 automaticPairs={automaticPairs}
@@ -232,7 +232,9 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   hidden: {
-    display: "none",
+    // Keep native editors in layout so Fabric preserves their document and undo state.
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
   },
   error: {
     fontSize: 13,
