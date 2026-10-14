@@ -1,5 +1,7 @@
+import { openFileDialog } from "@legendapp/spark/dialogs";
 import { getDirectory, list, mkdir, readText, writeText } from "@legendapp/spark/files";
 import { getPathName } from "./fileTree";
+import type { WorkspaceWindowProps } from "./workspaceState";
 
 /** Workspace settings. Further keys can sit beside `folders`; unknown keys survive a read and write. */
 export type WorkspaceSettings = { folders: string[] };
@@ -43,4 +45,16 @@ async function getNewWorkspacePath(settings: WorkspaceSettings) {
     const name = `${count === 1 ? base : `${base} ${count}`}.${workspaceFileExtension}`;
     if (!taken.has(name)) return `${directory}/${name}`;
   }
+}
+
+export async function chooseFolders() {
+  const result = await openFileDialog({ multiple: true, selection: "directories" });
+  return result.canceled ? [] : result.paths;
+}
+
+/** Picks a saved workspace and returns the props to open its window with. */
+export async function chooseWorkspace(): Promise<WorkspaceWindowProps | null> {
+  const result = await openFileDialog({ defaultPath: await getWorkspacesDirectory(), filters: [{ extensions: [workspaceFileExtension] }], selection: "files" });
+  const workspacePath = result.canceled ? undefined : result.paths[0];
+  return workspacePath ? { folders: (await readWorkspace(workspacePath)).folders, workspacePath } : null;
 }
