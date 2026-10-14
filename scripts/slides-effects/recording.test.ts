@@ -114,7 +114,7 @@ test.skipIf(process.platform !== "darwin")("preflight requires the verifier and 
   const { spawnSync } = await import("node:child_process");
   const skill = fs.mkdtempSync(path.join(os.tmpdir(), "slides-preflight-test-"));
   const script = path.join(import.meta.dirname, "record.ts");
-  const run = () => spawnSync(process.execPath, [script, "glass-strike", "--preflight"], {
+  const run = () => spawnSync(process.execPath, [script, "glass-strike", "--preflight", "--reserve-bytes", "25000000000"], {
     encoding: "utf8", env: { ...process.env, LEGEND_VIDEO_RECORDING_SKILL: skill, PATH: skill },
   });
   try {
