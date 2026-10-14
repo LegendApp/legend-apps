@@ -288,3 +288,25 @@ test("snapshot verification checks transitive dependencies and each required ver
     expect(() => snapshot("changed-transitive")).toThrow('Effect pack "leaf" changed');
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test("capture-slot queuing does not consume the native startup deadline", async () => {
+  const process = child(), observed = observeRecorder(process, 20);
+  process.stdout.write('{"type":"waiting-for-capture-slot"}\n');
+  let settled = false;
+  void observed.started.then(() => { settled = true; }, () => { settled = true; });
+  await new Promise(done => setTimeout(done, 40));
+  expect(settled).toBe(false);
+  process.stdout.write('{"type":"capture-process-start"}\n');
+  process.stdout.write('{"type":"ready","firstFrameHostSeconds":100,"hostSeconds":100.2}\n');
+  expect(await observed.started).toBeCloseTo(0.2);
+  process.emit("exit", 0, null);
+});
+
+test("native startup still times out after the capture slot is granted", async () => {
+  const process = child(), observed = observeRecorder(process, 20);
+  process.stdout.write('{"type":"waiting-for-capture-slot"}\n');
+  process.stdout.write('{"type":"capture-process-start"}\n');
+  process.stdout.write('{"type":"waiting-for-capture-slot"}\n');
+  await expect(observed.started).rejects.toThrow("did not become ready");
+  process.emit("exit", 1, null);
+});

@@ -112,13 +112,25 @@ export function observeRecorder(child: ChildProcess, readyTimeoutMs = 30_000) {
     child.once("error", error => resolve({ code: null, signal: null, error }));
   });
   let timeout: ReturnType<typeof setTimeout>;
+  let launched = false;
   const started = new Promise<number>((resolve, reject) => {
-    timeout = setTimeout(() => reject(new Error("Recorder did not become ready within 30 seconds.")), readyTimeoutMs);
+    const armDeadline = () => {
+      timeout = setTimeout(() => reject(new Error("Recorder did not become ready within 30 seconds.")), readyTimeoutMs);
+    };
+    armDeadline();
     child.stdout!.on("data", chunk => {
       output += String(chunk);
       const lines = output.split("\n");
       output = lines.pop()!;
       for (const line of lines) {
+        // Capture-slot wait is outside the native recorder's startup deadline.
+        if (/"type"\s*:\s*"waiting-for-capture-slot"/.test(line) && !launched) {
+          clearTimeout(timeout);
+        } else if (/"type"\s*:\s*"capture-process-start"/.test(line) && !launched) {
+          launched = true;
+          clearTimeout(timeout);
+          armDeadline();
+        }
         if (/"type"\s*:\s*"ready"/.test(line)) {
           const event = JSON.parse(line);
           const offset = event.hostSeconds - event.firstFrameHostSeconds;
