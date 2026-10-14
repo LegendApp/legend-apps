@@ -1,6 +1,6 @@
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { readText, writeText } from "@legendapp/spark/files";
-import { chooseWorkspace, getWorkspaceName, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
+import { chooseWorkspace, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
 
 jest.mock("@legendapp/spark/files", () => ({
   getDirectory: jest.fn(async () => "/data/app/"),
@@ -22,7 +22,6 @@ describe("workspace files", () => {
     const path = await writeWorkspace({ folders: ["/src/repo", "/src/other"] });
     expect(path).toBe("/data/app/Workspaces/repo 2.json");
     expect(writeText).toHaveBeenCalledWith(path, '{\n  "folders": [\n    "/src/repo",\n    "/src/other"\n  ]\n}\n');
-    expect(getWorkspaceName(path)).toBe("repo 2");
   });
 
   it("rewrites an existing workspace in place", async () => {

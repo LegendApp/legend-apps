@@ -13,6 +13,7 @@ import { beforeQuit } from "@legendapp/spark/app";
 import { dispatchCodeViewerMenu } from "../codeViewerRequests";
 import { setCodeViewerWindowOptions } from "../codeWindows";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
+import { openFileDialog } from "@legendapp/spark/dialogs";
 const mockEditorCommand = jest.fn(async () => true);
 jest.mock("@legendapp/spark/app/documents", () => ({
     createDocumentTransitionGuard: jest.requireActual("@legendapp/spark/app/documents").createDocumentTransitionGuard,
@@ -22,6 +23,7 @@ jest.mock("@legendapp/spark/app/documents", () => ({
     useWatchedDocumentReload: jest.fn(),
     noteRecentDocument: jest.fn(),
 }));
+jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
 jest.mock("@legendapp/spark/app", () => ({ beforeQuit: jest.fn(async () => ({ remove: async () => {} })) }));
 jest.mock("@legendapp/spark/windows", () => ({
     addWindowListener: jest.fn(async () => ({ remove: async () => {} })),
@@ -212,6 +214,17 @@ describe("Code default editor", () => {
         await act(async () => pressable("Close one.ts").props.onPress());
         expect(editors()).toHaveLength(0);
         expect(openButton()).toBeDefined();
+    });
+    it("opens files added from the single-file sidebar as tabs", async () => {
+        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
+        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(true);
+        jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/two.ts", "/three.ts"] });
+        await act(async () => pressable("Add File").props.onPress());
+        expect(openFileDialog).toHaveBeenCalledWith({ filters: [], multiple: true, selection: "files" });
+        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
+        expect(editor().props.filePath).toBe("/two.ts");
+        expect(editor().props.preparedDocumentId).toBe("prepared:/two.ts");
+        expect(tabTitles()).toEqual([["one.ts", false], ["two.ts", true]]);
     });
     it("passes a launch preparation through without starting a duplicate read", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token"/>); });

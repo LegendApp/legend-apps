@@ -22,10 +22,6 @@ export async function getWorkspacesDirectory() {
   return directory;
 }
 
-export function getWorkspaceName(path: string) {
-  return getPathName(path).replace(new RegExp(`\\.${workspaceFileExtension}$`), "");
-}
-
 export async function readWorkspace(path: string) {
   return parseWorkspaceSettings(await readText(path));
 }

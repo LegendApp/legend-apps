@@ -12,7 +12,8 @@ export type WorkspaceSidebarProps = {
   folders: readonly string[];
   /** Rows for other files are shown dimmed and cannot be opened. */
   isDocumentPath?: (path: string) => boolean;
-  onAddFile: () => void;
+  /** Resolves with the added files; the first one opens. */
+  onAddFile: () => Promise<readonly string[]>;
   onAddFolder: () => void;
   onError: (error: unknown) => void;
   onOpenFile: (path: string) => void;
@@ -68,7 +69,7 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
   return (
     <View style={styles.root}>
       <View style={[styles.actions, { borderColor: colors.border }]}>
-        <Pressable accessibilityLabel="Add File" accessibilityRole="button" onPress={onAddFile} style={styles.action}>
+        <Pressable accessibilityLabel="Add File" accessibilityRole="button" onPress={() => { void onAddFile().then(paths => { if (paths[0]) onOpenFile(paths[0]); }); }} style={styles.action}>
           <Text style={[styles.actionText, { color: colors.foreground }]}>Add File</Text>
         </Pressable>
         <Pressable accessibilityLabel="Add Folder" accessibilityRole="button" onPress={onAddFolder} style={styles.action}>

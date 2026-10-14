@@ -100,7 +100,7 @@ describe("WorkspaceSidebar", () => {
     await press("Add File");
     expect(openFileDialog).toHaveBeenLastCalledWith({ filters: [{ extensions: ["md"] }], multiple: true, selection: "files" });
     expect(workspace.state.files).toEqual(["/x/a.md", "/x/b.md"]);
-    expect(workspace.state.tabs).toEqual({ active: "/x/b.md", paths: ["/repo/notes.md", "/x/a.md", "/x/b.md"] });
+    expect(workspace.state.tabs).toEqual({ active: "/x/a.md", paths: ["/repo/notes.md", "/x/a.md"] });
   });
 
   it("saves a new workspace and remembers the sidebar choice only for folders", async () => {
