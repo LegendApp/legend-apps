@@ -50,6 +50,20 @@ export function audienceKeyboardScripts(pid: number, title: string) {
   };
 }
 
+export function presenterCounterScript(pid: number, title: string) {
+  return `tell application "System Events"
+  tell (first application process whose unix id is ${pid})
+    repeat with uiElement in entire contents of window ${JSON.stringify(title)}
+      try
+        set labelText to description of uiElement
+        if labelText starts with "Slide " and labelText contains ", step " then return labelText
+      end try
+    end repeat
+  end tell
+end tell
+return ""`;
+}
+
 export function recordingMotionCrop(slug: string, width: number, height: number) {
   // Slow backgrounds occupy the edges; static text in the center dilutes their frame differences.
   if (slug === "ambientaurora" || slug === "wireframe" || slug === "glassatmosphere") return ["--crop", `0:${Math.round(height * 0.1)}:${Math.round(width * 0.18)}:${Math.round(height * 0.8)}`];

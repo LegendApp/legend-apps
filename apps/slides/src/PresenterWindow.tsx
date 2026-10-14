@@ -89,8 +89,8 @@ function SlideCounter({ index }: {
     const stepCount = useValue(() => getSlideStepCount(slidesState$.slides[index].get()));
     if (total === 0)
         return null;
-    return (<View pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
-      <Text accessibilityLabel={`Slide ${index + 1} of ${total}, step ${step + 1} of ${stepCount}`} className="text-xs font-semibold text-zinc-200" style={{ fontVariant: ["tabular-nums"] }}>
+    return (<View accessible accessibilityLabel={`Slide ${index + 1} of ${total}, step ${step + 1} of ${stepCount}`} pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
+      <Text className="text-xs font-semibold text-zinc-200" style={{ fontVariant: ["tabular-nums"] }}>
         {index + 1} / {total} · Step {step + 1} / {stepCount}
       </Text>
     </View>);

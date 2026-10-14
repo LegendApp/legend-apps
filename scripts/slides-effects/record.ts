@@ -5,7 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterCounterScript, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
 
@@ -164,6 +164,14 @@ try {
   }
   if (!deckWindow) throw new Error(`The deck window did not appear within 60 s. Slides windows: ${JSON.stringify(listWindows().filter(window => window.owner === "Legend Slides"))}. Check compilation and Metro logs.`);
   presenterPid = deckWindow.pid;
+  const counterScript = presenterCounterScript(presenterPid, presenterTitle);
+  const waitForCounter = async (prefix: string) => {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      if (run("osascript", ["-e", counterScript], { allowFail: true }).stdout.trim().startsWith(prefix)) return;
+      await sleep(100);
+    }
+    throw new Error(`Presentation did not acknowledge ${prefix}`);
+  };
   // Scope the toolbar action to this deck and wait until compilation enables Start.
   const startAudience = `tell application "System Events"
     tell (first application process whose unix id is ${deckWindow.pid})
@@ -188,6 +196,7 @@ try {
     target = audienceTarget(listWindows(), deckWindow.pid, pattern);
   }
   if (!target) throw new Error("The Legend Slides audience window did not appear within 20 s after starting the presentation.");
+  await waitForCounter("Slide 1 of 2, step 1 of ");
   const keyboard = audienceKeyboardScripts(target.pid, target.title);
   // Focus before capture begins; raising a window during recording can invalidate its ScreenCaptureKit stream.
   let focused = false;
@@ -219,11 +228,13 @@ try {
   const navigationSeconds = (startedAt - readyAt) / 1000;
   playbackOffset = readyOffset + navigationSeconds;
   if (playbackOffset >= 5) throw new Error("Playback navigation exceeded the recorder's five-second lead-in budget.");
-  for (const offset of schedule) {
+  await Promise.race([waitForCounter("Slide 2 of 2, step 1 of "), exitedEarly]);
+  for (const [index, offset] of schedule.entries()) {
     await Promise.race([sleep(Math.max(0, offset - (performance.now() - startedAt))), exitedEarly]);
     // Keep the already-focused audience active without raising it during capture.
     run("osascript", ["-e", advanceAudience]);
     actualSchedule.push(performance.now() - startedAt);
+    await Promise.race([waitForCounter(`Slide 2 of 2, step ${index + 2} of `), exitedEarly]);
   }
   if (!explicitMotion.length && !profile?.motion?.length) motion = recordingMotionIntervals(seconds, actualSchedule);
   const result = await recorderEvents.exited;

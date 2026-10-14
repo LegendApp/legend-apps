@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, exampleStepPresses, observeRecorder, packArchiveHash, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
+import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, exampleStepPresses, observeRecorder, packArchiveHash, presenterCounterScript, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks } from "./recording";
 
 function child() {
   const process = new EventEmitter();
@@ -247,3 +247,13 @@ test("export preserves sparse native sample timestamps instead of resampling to 
     source.forEach((time, index) => expect(exported[index]).toBeCloseTo(time, 3));
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }, 30_000);
+
+
+test("navigation acknowledgement reads the launched presenter counter", () => {
+  const script = presenterCounterScript(42, "fluid.mdx — Legend Slides");
+  expect(script).toContain("unix id is 42");
+  expect(script).toContain('window "fluid.mdx — Legend Slides"');
+  expect(script).not.toContain("frontmost");
+  expect(script).toContain('starts with "Slide "');
+  expect(script).toContain('contains ", step "');
+});
