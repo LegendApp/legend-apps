@@ -180,11 +180,12 @@ describe("Code default editor", () => {
         expect(editor().props.filePath).toBe("/two.tsx");
         expect(editor().props.language).toBe("tsx");
         expect(tabTitles()).toEqual([["one.ts", false], ["two.tsx", true]]);
-        expect(mockEditorCommand).not.toHaveBeenCalled();
+        expect(mockEditorCommand).toHaveBeenLastCalledWith("focus");
         expect(first.parent!.parent!.props.pointerEvents).toBe("none");
         expect(first.parent!.parent!.props.accessibilityElementsHidden).toBe(true);
         await act(async () => pressable("one.ts").props.onPress());
         expect(editor()).toBe(first);
+        expect(mockEditorCommand).toHaveBeenLastCalledWith("focus");
         expect(first.parent!.parent!.props.pointerEvents).toBe("auto");
         expect(first.parent!.parent!.props.accessibilityElementsHidden).toBe(false);
         expect(setCodeViewerWindowOptions).toHaveBeenLastCalledWith(expect.objectContaining({ filePath: "/one.ts", windowId: "code-viewer" }));

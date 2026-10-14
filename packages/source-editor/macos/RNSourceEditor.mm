@@ -219,6 +219,7 @@ static std::string utf8String(NSString *value) {
     if (self && self->_commandGeneration == generation && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onCommandResult({.id = requestId, .allowed = (bool)allowed, .error = utf8String(error)});
   };
   if ([command isEqual:@"save"] || [command isEqual:@"saveAs"]) [_input saveAs:[command isEqual:@"saveAs"] completion:finish];
+  else if ([command isEqual:@"focus"]) finish([self.window makeFirstResponder:_input], @"");
   else if ([command isEqual:@"confirmClose"]) [_input confirmDiscardWithCompletion:^(BOOL allow) { finish(allow, @""); }];
   else if ([command isEqual:@"find"]) { [_input showFindPanel]; finish(YES, @""); }
   else if ([command isEqual:@"goToLine"]) { [_input showGoToLine]; finish(YES, @""); }
