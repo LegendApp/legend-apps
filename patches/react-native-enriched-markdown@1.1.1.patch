@@ -5080,10 +5080,18 @@ index f82e72b3..5a95fb45 100644
  
    parseResult.plainText = plainText;
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
-index a5391c7e..08c30a40 100644
+index a5391c7e..01db97e0 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
-@@ -135,10 +135,23 @@ - (void)drawRect:(CGRect)rect
+@@ -5,6 +5,7 @@
+ #import "PasteboardUtils.h"
+ #if TARGET_OS_OSX
+ #import <objc/message.h>
++#import "MarkdownExtractor.h"
+ #endif
+ 
+ NSString *const kENRMMarkdownPasteboardType = @"com.swmansion.enriched-markdown.markdown";
+@@ -135,10 +136,23 @@ - (void)drawRect:(CGRect)rect
  
  #else // TARGET_OS_OSX
  
@@ -5107,7 +5115,33 @@ index a5391c7e..08c30a40 100644
  - (void)copy:(id)sender
  {
    NSRange selection = self.selectedRange;
-@@ -197,14 +210,185 @@ - (BOOL)acceptsFirstResponder
+@@ -172,6 +186,15 @@ - (void)paste:(id)sender
+     return;
+   }
+ 
++  NSData *html = [pasteboard dataForType:NSPasteboardTypeHTML];
++  if (html != nil && self.markdownTextInput != nil) {
++    NSString *richMarkdown = extractMarkdownFromHTML(html);
++    if (richMarkdown.length > 0) {
++      [self.markdownTextInput pasteMarkdown:richMarkdown];
++      return;
++    }
++  }
++
+   // External plain text is treated as markdown so pasted syntax ("- ", "#",
+   // "**") formats instead of landing literal; syntax-free text is unchanged.
+   NSString *plainText = [pasteboard stringForType:NSPasteboardTypeString];
+@@ -187,7 +210,8 @@ - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+   if (menuItem.action == @selector(paste:)) {
+     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+     return ([pasteboard stringForType:NSPasteboardTypeString] != nil ||
+-            [pasteboard stringForType:kENRMMarkdownPasteboardType] != nil);
++            [pasteboard stringForType:kENRMMarkdownPasteboardType] != nil ||
++            [pasteboard dataForType:NSPasteboardTypeHTML] != nil);
+   }
+   return [super validateMenuItem:menuItem];
+ }
+@@ -197,14 +221,185 @@ - (BOOL)acceptsFirstResponder
    return self.isEditable;
  }
  
@@ -9106,6 +9140,48 @@ index 8d8569e0..23b712bc 100644
    return copy;
  }
  
+diff --git a/ios/utils/MarkdownExtractor.m b/ios/utils/MarkdownExtractor.m
+index 3c4241c3..d8e473d2 100644
+--- a/ios/utils/MarkdownExtractor.m
++++ b/ios/utils/MarkdownExtractor.m
+@@ -356,3 +356,22 @@ static void extractFontTraits(NSDictionary *attrs, BOOL *isBold, BOOL *isItalic,
+ 
+   return result.length > 0 ? result : nil;
+ }
++
++#if TARGET_OS_OSX
++NSString *_Nullable extractMarkdownFromHTML(NSData *data)
++{
++  NSAttributedString *rich = [[NSAttributedString alloc] initWithData:data
++      options:@{NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType}
++      documentAttributes:nil error:nil];
++  if (rich == nil) return nil;
++  // AppKit appends a paragraph terminator to an HTML fragment.
++  NSUInteger length = rich.length;
++  if (length > 0 && [rich.string characterAtIndex:length - 1] == '\n') length--;
++  NSString *markdown = extractMarkdownFromAttributedString(rich, NSMakeRange(0, length));
++  NSString *html = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
++  NSUInteger end = html.length;
++  while (end > 0 && ([html characterAtIndex:end - 1] == ' ' || [html characterAtIndex:end - 1] == '\t')) end--;
++  NSString *suffix = [html substringFromIndex:end];
++  return suffix.length > 0 && ![markdown hasSuffix:suffix] ? [markdown stringByAppendingString:suffix] : markdown;
++}
++#endif
+diff --git a/ios/utils/MarkdownExtractor.h b/ios/utils/MarkdownExtractor.h
+index 4c97df85..93a2a394 100644
+--- a/ios/utils/MarkdownExtractor.h
++++ b/ios/utils/MarkdownExtractor.h
+@@ -10,6 +10,10 @@ extern "C" {
+ /// Extracts markdown from an attributed string (best-effort reconstruction).
+ NSString *_Nullable extractMarkdownFromAttributedString(NSAttributedString *attributedText, NSRange range);
+ 
++#if TARGET_OS_OSX
++NSString *_Nullable extractMarkdownFromHTML(NSData *data);
++#endif
++
+ #ifdef __cplusplus
+ }
+ #endif
 diff --git a/ios/input/ENRMBlockStore.mm b/ios/input/ENRMBlockStore.mm
 index 14180f77..8189b295 100644
 --- a/ios/input/ENRMBlockStore.mm
