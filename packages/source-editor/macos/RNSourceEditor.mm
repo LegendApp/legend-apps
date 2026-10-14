@@ -81,7 +81,11 @@ static std::string utf8String(NSString *value) {
   _initialSource = str(next.initialSource);
   _preparedDocumentId = str(next.preparedDocumentId);
   _useInitialSource = next.useInitialSource;
-  if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
+  if (![_path isEqualToString:path]) {
+    _path = path;
+    // Save As already moved the loaded document's file session to this path.
+    _loaded = _loaded && [_input.fileSession.path isEqualToString:path];
+  }
   _input.syntaxBackend = str(next.syntaxBackend);
   _input.grammarRevision = next.grammarRevision;
   _input.automaticPairs = next.automaticPairs;
