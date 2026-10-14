@@ -18,6 +18,10 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <cerrno>
+#if defined(__APPLE__)
+#include <copyfile.h>
+#include <fcntl.h>
+#endif
 
 namespace margelo::nitro::legendapps::markdownparser {
 
@@ -956,6 +960,18 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, b
     std::remove(temporaryPath.c_str());
     throw std::runtime_error("Failed to preserve markdown file permissions: " + filePath);
   }
+#if defined(__APPLE__)
+  if (destinationExists) {
+    const int original = open(filePath.c_str(), O_RDONLY);
+    const bool copied = original >= 0 && fcopyfile(original, descriptor, nullptr, COPYFILE_XATTR) == 0;
+    if (original >= 0) close(original);
+    if (!copied) {
+      close(descriptor);
+      std::remove(temporaryPath.c_str());
+      throw std::runtime_error("Failed to preserve markdown file metadata: " + filePath);
+    }
+  }
+#endif
   FILE* output = fdopen(descriptor, "wb");
   if (!output) {
     close(descriptor);

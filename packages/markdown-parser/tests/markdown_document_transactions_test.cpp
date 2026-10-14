@@ -17,6 +17,9 @@
 
 #include <unistd.h>
 #include <sys/stat.h>
+#if defined(__APPLE__)
+#include <sys/xattr.h>
+#endif
 
 using namespace margelo::nitro::legendapps::markdownparser;
 
@@ -309,6 +312,20 @@ void testSaveRejectsReadOnlyDestination() {
     expectEqual(std::string(std::istreambuf_iterator<char>(input), {}), "Original sentinel\n", "read-only source remains byte-exact");
   }
   expectEqual(savedSourceFor(loaded.document), "Original CHANGED\n", "failed save retains local draft for Save As");
+}
+
+void testSavePreservesExtendedAttributes() {
+#if defined(__APPLE__)
+  LoadedDocument loaded("Original\n");
+  const std::string value = "retain metadata";
+  expect(setxattr(loaded.file.path.c_str(), "com.legend.qa", value.data(), value.size(), 0, 0) == 0, "set fixture xattr");
+  loaded.document->applyTransaction(updateBlock(loaded.document->getBlockKey(0), "Edited"));
+  loaded.document->save();
+  char bytes[64];
+  const auto size = getxattr(loaded.file.path.c_str(), "com.legend.qa", bytes, sizeof(bytes), 0, 0);
+  expect(size >= 0, "saved xattr exists");
+  expectEqual(std::string(bytes, static_cast<size_t>(size)), value, "saved xattr bytes");
+#endif
 }
 
 void testSavePreservesPermissions() {
@@ -936,6 +953,7 @@ int main() {
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},
       {"save preserves permissions", testSavePreservesPermissions},
+      {"save preserves extended attributes", testSavePreservesExtendedAttributes},
       {"save rejects read-only destination", testSaveRejectsReadOnlyDestination},
       {"typing into blank source preserves whitespace", testTypingIntoBlankSourcePreservesWhitespace},
       {"mixed line ending edit preserves untouched bytes", testMixedLineEndingEditPreservesUntouchedBytes},
