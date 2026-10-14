@@ -112,7 +112,7 @@ async function setSyntaxAssetFileValue(kind: SyntaxAssetKind, filename: string, 
 
 export const popularSyntaxThemes = [
   { name: "github-dark-dimmed", label: "GitHub Dark Dimmed", appearance: "dark", background: "#22272e", foreground: "#adbac7" },
-  { name: "github-light", label: "GitHub Light", appearance: "light", background: "#fff", foreground: "#24292e" },
+  { name: "github-light", label: "GitHub Light", appearance: "light", background: "#ffffff", foreground: "#24292e" },
   { name: "dark-plus", label: "Dark Plus", appearance: "dark", background: "#1E1E1E", foreground: "#D4D4D4" },
   { name: "light-plus", label: "Light Plus", appearance: "light", background: "#FFFFFF", foreground: "#000000" },
   { name: "catppuccin-mocha", label: "Catppuccin Mocha", appearance: "dark", background: "#1e1e2e", foreground: "#cdd6f4" },
