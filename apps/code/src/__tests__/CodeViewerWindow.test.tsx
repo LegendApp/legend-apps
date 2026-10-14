@@ -14,6 +14,7 @@ import { dispatchCodeViewerMenu } from "../codeViewerRequests";
 import { setCodeViewerWindowOptions } from "../codeWindows";
 import { prepareDocument, cancelPreparedDocument } from "@legend-apps/source-editor";
 import { openFileDialog } from "@legendapp/spark/dialogs";
+import { WorkspaceSidebar } from "@legend-apps/workspace";
 const mockEditorCommand = jest.fn(async () => true);
 jest.mock("@legendapp/spark/app/documents", () => ({
     createDocumentTransitionGuard: jest.requireActual("@legendapp/spark/app/documents").createDocumentTransitionGuard,
@@ -114,6 +115,7 @@ describe("Code default editor", () => {
         expect(editor().props.showFileLoadingBanner).toBe(false);
         expect(renderer.root.findAll((node) => node.props.accessibilityLabel === "Open File")).toHaveLength(0);
         expect(tabTitles()).toEqual([["one.ts", true]]);
+        expect(renderer.root.findByType(WorkspaceSidebar).props.files).toEqual(["/one.ts"]);
         expect(JSON.stringify(renderer.toJSON())).not.toContain("No file open");
         expect(JSON.stringify(renderer.toJSON())).not.toContain("Open scratch editor prototype");
         expect(loadCodeFile).not.toHaveBeenCalled();
