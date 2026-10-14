@@ -56,6 +56,7 @@ const localEffect = JSON.parse(fs.readFileSync(path.join(sources, "catalog.json"
 if (!localEffect) throw new Error(`No local catalog entry for ${slug}.`);
 const profile = localEffect.recording;
 const posterAt = profile?.posterAt;
+const still = profile?.still === true;
 const seconds = Number(option("--seconds") ?? profile?.seconds ?? 8);
 const steps = Number(option("--steps") ?? exampleStepPresses(exampleSource));
 const cropTop = Number(option("--crop-top") ?? 0);
@@ -256,8 +257,9 @@ run("ffmpeg", recordingExportArgs(raw, video, playbackOffset, seconds, totalCrop
 run("ffmpeg", ["-hide_banner", "-loglevel", "error", ...(posterAt === undefined ? ["-sseof", "-1"] : ["-ss", String(posterAt)]), "-i", video, "-frames:v", "1", poster]);
 const report = path.join(work, "quality.json");
 const dimensions = JSON.parse(run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", video]).stdout).streams[0];
-const check = run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), ...(profile?.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]), ...(profile?.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
-const passed = check.status === 0;
+const check = still ? undefined : run("python3", [verifier, video, ...motion.flatMap(interval => ["--motion", interval]), ...recordingMotionCrop(slug, dimensions.width, dimensions.height), ...(profile?.noiseDb === undefined ? [] : ["--noise-db", String(profile.noiseDb)]), ...(profile?.freezeMs === undefined ? [] : ["--freeze-ms", String(profile.freezeMs)]), "--timings", `${raw}.frames.jsonl`, "--timing-offset", String(playbackOffset), "--report", report], { allowFail: true });
+if (still) fs.writeFileSync(report, JSON.stringify({ kind: "still", passed: true, motionChecked: false, poster, capture: `${raw}.capture.json` }) + "\n");
+const passed = still || check!.status === 0;
 
 if (!passed) {
   console.log(JSON.stringify({ slug, passed, quality: report, raw, video, poster, applied: false }, null, 2));
@@ -276,13 +278,13 @@ if (!passed) {
   const posterName = `${sha256(fs.readFileSync(poster))}.png`, videoName = `${sha256(fs.readFileSync(video))}.mp4`;
   const preview = {
     poster: `/slides/effects/previews/${slug}/${posterName}`,
-    video: `/slides/effects/previews/${slug}/${videoName}`,
+    ...(still ? {} : { video: `/slides/effects/previews/${slug}/${videoName}` }),
     renderer: `Legend Slides for macOS (${release ? "release" : "development"} build)`,
     ...hashes,
   };
   fs.mkdirSync(previews, { recursive: true });
   fs.copyFileSync(poster, path.join(previews, posterName));
-  fs.copyFileSync(video, path.join(previews, videoName));
+  if (!still) fs.copyFileSync(video, path.join(previews, videoName));
   if (flag("--apply")) {
     currentEffect.preview = preview;
     fs.writeFileSync(catalogFile, JSON.stringify(currentCatalog, null, 2) + "\n");

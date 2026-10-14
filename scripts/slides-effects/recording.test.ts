@@ -192,7 +192,7 @@ test("the capture deck holds the example after a blank slide and compiles only s
 
 test("catalog recording profiles retain a bounded motion check", () => {
   const { effects } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/catalog.json"), "utf8"));
-  for (const effect of effects.filter(effect => effect.recording)) {
+  for (const effect of effects.filter(effect => effect.recording && !effect.recording.still)) {
     const seconds = effect.recording.seconds ?? 8;
     const source = fs.readFileSync(path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${effect.slug}/example.mdx`), "utf8");
     const intervals = recordingMotionIntervals(seconds, recordingSchedule(seconds, exampleStepPresses(source)), effect.recording.motion);
@@ -211,7 +211,7 @@ test.skipIf(!videoSkill)("every recording profile rejects a frozen export with t
     const encoded = spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x180:r=60", "-vf", "select=eq(n\\,0),loop=loop=-1:size=1:start=0,setpts=N/(60*TB)", "-t", "16", "-c:v", "libx264", "-pix_fmt", "yuv420p", video], { encoding: "utf8" });
     expect(encoded.status).toBe(0);
     const { effects } = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/catalog.json"), "utf8"));
-    for (const effect of effects.filter(effect => effect.recording || effect.slug === "bar-row")) {
+    for (const effect of effects.filter(effect => !effect.recording?.still && (effect.recording || effect.slug === "bar-row"))) {
       const profile = effect.recording ?? {};
       const seconds = profile.seconds ?? 8;
       const source = fs.readFileSync(path.resolve(import.meta.dirname, `../../packages/slides-effects/examples/${effect.slug}/example.mdx`), "utf8");
