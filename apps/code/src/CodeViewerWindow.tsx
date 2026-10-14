@@ -1,4 +1,4 @@
-import { createDocumentTransitionGuard, openSelectedDocumentPath } from "@legendapp/spark/app/documents";
+import { createDocumentTransitionGuard } from "@legendapp/spark/app/documents";
 import { beforeQuit } from "@legendapp/spark/app";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { beforeWindowClose } from "@legendapp/spark/windows";
@@ -10,8 +10,8 @@ import { DocumentTabBar, useDocumentWindow, useWorkspaceWindow, WorkspaceSidebar
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { codeFileTypes, codeViewerWindowIdentifier } from "./appConstants";
-import { getCodeLanguage, getLaunchCodeFile, isCodePath } from "./codeFiles";
+import { codeViewerWindowIdentifier } from "./appConstants";
+import { getCodeLanguage, getLaunchCodeFile, openCodeFileDialog } from "./codeFiles";
 import {
   getCodeSidebarOpenSetting,
   setCodeSidebarOpenSetting,
@@ -120,11 +120,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
 
   const openCodeDialog = useCallback(async () => {
     try {
-      const path = await openSelectedDocumentPath({
-        allowedFileTypes: codeFileTypes,
-        invalidSelectionMessage: "Choose a text file.",
-        isDocumentPath: isCodePath,
-      });
+      const path = await openCodeFileDialog();
       if (path) openFile(path);
     } catch (cause) {
       reportError(cause);

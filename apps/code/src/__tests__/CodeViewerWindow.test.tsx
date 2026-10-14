@@ -1,6 +1,6 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { getLaunchDocumentPath, openSelectedDocumentPath, useWatchedDocumentReload } from "@legendapp/spark/app/documents";
+import { getLaunchDocumentPath, useWatchedDocumentReload } from "@legendapp/spark/app/documents";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { loadCodeFile } from "@legend-apps/syntax-parser";
 import { VirtualizedFixedDocumentList } from "@legend-apps/virtualized-document";
@@ -19,7 +19,6 @@ jest.mock("@legendapp/spark/app/documents", () => ({
     createDocumentTransitionGuard: jest.requireActual("@legendapp/spark/app/documents").createDocumentTransitionGuard,
     getLaunchDocumentPath: jest.fn(() => null),
     getFilename: (path: string) => path.split("/").pop(),
-    openSelectedDocumentPath: jest.fn(),
     useWatchedDocumentReload: jest.fn(),
     noteRecentDocument: jest.fn(),
 }));
@@ -282,15 +281,15 @@ describe("Code default editor", () => {
     });
     it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow />); });
-        jest.mocked(openSelectedDocumentPath).mockResolvedValue(null);
+        jest.mocked(openFileDialog).mockResolvedValue({ canceled: true });
         await act(async () => openButton().props.onPress());
-        expect(openSelectedDocumentPath).toHaveBeenCalledWith(expect.objectContaining({ allowedFileTypes: [] }));
+        expect(openFileDialog).toHaveBeenCalledWith({ selection: "files" });
         expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
-        jest.mocked(openSelectedDocumentPath).mockRejectedValue(new Error("Dialog failed"));
+        jest.mocked(openFileDialog).mockRejectedValue(new Error("Dialog failed"));
         await act(async () => openButton().props.onPress());
         expect(renderer.root.findAllByType("SourceDocumentEditor" as never)).toHaveLength(0);
         expect(JSON.stringify(renderer.toJSON())).toContain("Dialog failed");
-        jest.mocked(openSelectedDocumentPath).mockResolvedValue("/two.ts");
+        jest.mocked(openFileDialog).mockResolvedValue({ canceled: false, paths: ["/two.ts"] });
         await act(async () => openButton().props.onPress());
         expect(editor().props.filePath).toBe("/two.ts");
         expect(JSON.stringify(renderer.toJSON())).not.toContain("Dialog failed");

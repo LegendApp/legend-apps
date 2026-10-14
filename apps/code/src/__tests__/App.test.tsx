@@ -4,6 +4,9 @@ import { useDocumentAppController } from "@legendapp/spark/app/documents";
 import { App } from "../App";
 import { focusCodeViewerWindow, openCodeViewerWindow } from "../codeWindows";
 import { requestCodeViewerFile } from "../codeViewerRequests";
+import { openFileDialog } from "@legendapp/spark/dialogs";
+
+jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
 
 jest.mock("@legendapp/spark/app/documents", () => ({
   getFilename: (path: string) => path.split("/").pop(),
@@ -45,6 +48,12 @@ it("opens folders and new windows from the File menu and routes files to the foc
   expect(openCodeViewerWindow).toHaveBeenLastCalledWith({});
 
   jest.mocked(openCodeViewerWindow).mockClear();
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/tmp/menu.ts"] });
+  jest.mocked(requestCodeViewerFile).mockReturnValueOnce({ windowId: "code-viewer-2" } as any);
+  await act(async () => menu("open"));
+  expect(openFileDialog).toHaveBeenCalledWith({ selection: "files" });
+  expect(requestCodeViewerFile).toHaveBeenLastCalledWith("/tmp/menu.ts");
+  expect(focusCodeViewerWindow).toHaveBeenLastCalledWith("code-viewer-2");
   jest.mocked(requestCodeViewerFile).mockReturnValueOnce({ windowId: "code-viewer-2" } as any);
   await options.onOpenDocument!("/tmp/a.ts", controller as any);
   expect(focusCodeViewerWindow).toHaveBeenLastCalledWith("code-viewer-2");
