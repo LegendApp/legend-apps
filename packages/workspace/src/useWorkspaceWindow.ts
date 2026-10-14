@@ -1,6 +1,6 @@
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { useCallback, useRef, useState } from "react";
-import { readWorkspace, writeWorkspace } from "./workspaceFiles";
+import { chooseFolders, readWorkspace, writeWorkspace } from "./workspaceFiles";
 import {
   addUniquePaths,
   closeDocumentTab,
@@ -66,10 +66,6 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
     if (!result.canceled) addFiles(result.paths);
   }, [addFiles, fileTypes]);
 
-  const chooseFolders = useCallback(async () => {
-    const result = await openFileDialog({ multiple: true, selection: "directories" });
-    if (!result.canceled) addFolders(result.paths);
-  }, [addFolders]);
 
   /** Saves the folders as a workspace in app data, creating the file on first save. */
   const saveWorkspace = useCallback(async () => {
@@ -83,7 +79,7 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
     addFiles,
     addFolders,
     chooseFiles: useCallback(() => { chooseFiles().catch(onError); }, [chooseFiles, onError]),
-    chooseFolders: useCallback(() => { chooseFolders().catch(onError); }, [chooseFolders, onError]),
+    chooseFolders: useCallback(() => { chooseFolders().then(paths => { if (paths.length > 0) addFolders(paths); }).catch(onError); }, [addFolders, onError]),
     closeTab,
     openTab,
     removeFolder,

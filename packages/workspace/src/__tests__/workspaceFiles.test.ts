@@ -1,5 +1,6 @@
-import { writeText } from "@legendapp/spark/files";
-import { getWorkspaceName, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
+import { openFileDialog } from "@legendapp/spark/dialogs";
+import { readText, writeText } from "@legendapp/spark/files";
+import { chooseWorkspace, getWorkspaceName, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
 
 jest.mock("@legendapp/spark/files", () => ({
   getDirectory: jest.fn(async () => "/data/app/"),
@@ -8,6 +9,7 @@ jest.mock("@legendapp/spark/files", () => ({
   readText: jest.fn(),
   writeText: jest.fn(async () => {}),
 }));
+jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
 
 describe("workspace files", () => {
   it("keeps valid folders and future settings keys", () => {
@@ -25,5 +27,15 @@ describe("workspace files", () => {
 
   it("rewrites an existing workspace in place", async () => {
     await expect(writeWorkspace({ folders: [] }, "/data/app/Workspaces/w.json")).resolves.toBe("/data/app/Workspaces/w.json");
+  });
+
+  it("opens saved workspaces from the app data folder", async () => {
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: true });
+    await expect(chooseWorkspace()).resolves.toBeNull();
+    expect(openFileDialog).toHaveBeenCalledWith({ defaultPath: "/data/app/Workspaces", filters: [{ extensions: ["json"] }], selection: "files" });
+
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/data/app/Workspaces/w.json"] });
+    jest.mocked(readText).mockResolvedValueOnce('{"folders":["/a","/b"]}');
+    await expect(chooseWorkspace()).resolves.toEqual({ folders: ["/a", "/b"], workspacePath: "/data/app/Workspaces/w.json" });
   });
 });

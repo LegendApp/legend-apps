@@ -4,5 +4,6 @@ export * from "./fileTree";
 export * from "./gitignore";
 export * from "./useWorkspaceWindow";
 export * from "./workspaceFiles";
+export * from "./workspaceMenus";
 export * from "./WorkspaceSidebar";
 export * from "./workspaceState";
