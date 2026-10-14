@@ -4923,7 +4923,7 @@ index 1f823bd5..206abbf8 100644
  @end
  
 diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
-index f82e72b3..35962b4f 100644
+index f82e72b3..0d5c9dfc 100644
 --- a/ios/input/ENRMInputParser.mm
 +++ b/ios/input/ENRMInputParser.mm
 @@ -8,6 +8,7 @@
@@ -5028,6 +5028,20 @@ index f82e72b3..35962b4f 100644
  
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
  
+@@ -617,6 +647,13 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+     [formattingRanges addObject:formattingRange];
+   }
+ 
++  [escapeIndexes enumerateIndexesUsingBlock:^(NSUInteger index, BOOL *stop) {
++    if (index + 1 < rawLength) {
++      [formattingRanges addObject:[ENRMFormattingRange rangeWithType:ENRMInputStyleTypeEscape
++                                                             range:NSMakeRange(rawToPlainMap[index + 1], 1)]];
++    }
++  }];
++
+   // Map block content ranges (raw-markdown coords) onto plain-text coords. The
+   // block's marker syntax was stripped above, so the content range maps cleanly
+   // onto the post-strip text and the block no longer covers the marker.
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
 index a5391c7e..08c30a40 100644
 --- a/ios/input/ENRMInputTextView.mm
@@ -8836,3 +8850,59 @@ index 32edfcce..88385ab6 100644
    BOOL isInline = [self isInlineImageInOutput:output];
    ENRMImageAttachment *attachment = [ENRMImageAttachment attachmentForURL:imageURL config:_config isInline:isInline];
  
+diff --git a/ios/input/ENRMMarkdownSerializer.mm b/ios/input/ENRMMarkdownSerializer.mm
+index 3eed9c8a..df6c2ed7 100644
+--- a/ios/input/ENRMMarkdownSerializer.mm
++++ b/ios/input/ENRMMarkdownSerializer.mm
+@@ -3,6 +3,8 @@
+ static NSString *openingDelimiterForType(ENRMInputStyleType type)
+ {
+   switch (type) {
++    case ENRMInputStyleTypeEscape:
++      return @"\\";
+     case ENRMInputStyleTypeStrong:
+       return @"**";
+     case ENRMInputStyleTypeEmphasis:
+diff --git a/ios/input/ENRMFormattingStore.mm b/ios/input/ENRMFormattingStore.mm
+index 92a4fbe0..8686c23c 100644
+--- a/ios/input/ENRMFormattingStore.mm
++++ b/ios/input/ENRMFormattingStore.mm
+@@ -169,7 +169,7 @@ - (void)addRange:(ENRMFormattingRange *)newRange
+ 
+   for (NSUInteger idx = 0; idx < _ranges.count; idx++) {
+     ENRMFormattingRange *existing = _ranges[idx];
+-    if (existing.type != newRange.type)
++    if (newRange.type == ENRMInputStyleTypeEscape || existing.type != newRange.type)
+       continue;
+ 
+     NSUInteger existingEnd = NSMaxRange(existing.range);
+@@ -252,7 +252,7 @@ - (void)adjustForEditAtLocation:(NSUInteger)editLocation
+ 
+   for (NSUInteger idx = 0; idx < _ranges.count; idx++) {
+     ENRMFormattingRange *formattingRange = _ranges[idx];
+-    BOOL inheritsReplacement = formattingRange.type != ENRMInputStyleTypeLink;
++    BOOL inheritsReplacement = formattingRange.type != ENRMInputStyleTypeLink && formattingRange.type != ENRMInputStyleTypeEscape;
+     ENRMAdjustedRange adjusted = ENRMAdjustRangeForEdit(formattingRange.range, editLocation, deletedLength,
+                                                         insertedLength, inheritsReplacement, NO);
+     formattingRange.range = adjusted.range;
+@@ -288,7 +288,7 @@ - (void)coalesceAdjacentSameTypeRanges
+     while (next < _ranges.count && _ranges[next].range.location <= NSMaxRange(current.range)) {
+       ENRMFormattingRange *candidate = _ranges[next];
+       BOOL sameUrl = (current.url == candidate.url) || [current.url isEqualToString:candidate.url];
+-      if (candidate.type == current.type && sameUrl) {
++      if (current.type != ENRMInputStyleTypeEscape && candidate.type == current.type && sameUrl) {
+         NSUInteger mergedEnd = MAX(NSMaxRange(current.range), NSMaxRange(candidate.range));
+         current.range = NSMakeRange(current.range.location, mergedEnd - current.range.location);
+         [_ranges removeObjectAtIndex:next];
+diff --git a/ios/input/ENRMInputStyledRange.h b/ios/input/ENRMInputStyledRange.h
+index 41e28ff6..acd3d317 100644
+--- a/ios/input/ENRMInputStyledRange.h
++++ b/ios/input/ENRMInputStyledRange.h
+@@ -11,6 +11,7 @@ typedef NS_ENUM(NSInteger, ENRMInputStyleType) {
+   ENRMInputStyleTypeStrikethrough,
+   ENRMInputStyleTypeLink,
+   ENRMInputStyleTypeSpoiler,
++  ENRMInputStyleTypeEscape,
+ };
+ 
+ @interface ENRMInputStyledRange : NSObject

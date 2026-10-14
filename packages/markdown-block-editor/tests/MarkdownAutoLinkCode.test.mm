@@ -2,6 +2,7 @@
 #import "ENRMAutoLinkDetector.h"
 #import "ENRMDetectorPipeline.h"
 #import "ENRMMarkdownSerializer.h"
+#import "ENRMInputParser.h"
 
 static NSString *serialize(NSTextStorage *storage, ENRMAutoLinkDetector *detector) {
   return [ENRMMarkdownSerializer serializePlainText:storage.string ranges:detector.transientFormattingRanges];
@@ -16,6 +17,17 @@ static void requireEqual(NSString *actual, NSString *expected) {
 
 int main() {
   @autoreleasepool {
+    // Editing adjacent prose must keep source escapes byte-exact, including adjacent escapes.
+    for (NSString *source in @[@"alpha \\*literal\\* \\[bracket\\] \\_under\\_", @"alpha \\*\\* \\\\ end"]) {
+      ENRMParseResult *parsed = [[ENRMInputParser new] parseToPlainTextAndRanges:source];
+      ENRMFormattingStore *ranges = [ENRMFormattingStore new];
+      [ranges setRanges:parsed.formattingRanges];
+      NSMutableString *text = [parsed.plainText mutableCopy];
+      [text replaceCharactersInRange:NSMakeRange(0, 5) withString:@"ALPHA"];
+      [ranges adjustForEditAtLocation:0 deletedLength:5 insertedLength:5];
+      requireEqual([ENRMMarkdownSerializer serializePlainText:text ranges:ranges.allRanges],
+                   [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
+    }
     NSArray<NSString *> *literalCases = @[
       @"```ts\nconsole.log(greeting);\nconst qa = true;\n```",
       @"`console.log`",
