@@ -25,7 +25,8 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         macos: {
             titleBar: {
                 contentLayout: "fullSize" as const,
-                transparent: true
+                transparent: true,
+                titleVisibility: "hidden" as const
             }
         }
     };
@@ -35,7 +36,7 @@ function createMarkdownEditorWindowOptions() {
         title: "Untitled",
         ...createMarkdownEditorWindowStyle({ includeFrame: true }),
         macos: {
-            restoreOnLaunch: true, titleBar: { contentLayout: "fullSize" as const, transparent: true }
+            restoreOnLaunch: true, titleBar: { contentLayout: "fullSize" as const, transparent: true, titleVisibility: "hidden" as const }
         }
     };
 }
