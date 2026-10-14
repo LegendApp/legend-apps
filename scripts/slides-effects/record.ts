@@ -133,7 +133,7 @@ if (run("pgrep", ["-f", "LegendSlides.app/Contents/MacOS/"], { allowFail: true }
 const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);
 const capturePacks = path.join(work, "packs");
-snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack, hashes.packSha256);
+snapshotEffectPacks(path.join(sources, "packs"), capturePacks, localEffect.pack, hashes.packSha256, flag("--apply") ? catalog.packs : undefined);
 fs.writeFileSync(deck, recordingDeckSource(exampleSource));
 const raw = path.join(work, "raw.mp4");
 let playbackOffset = 0;

@@ -257,3 +257,33 @@ test("navigation acknowledgement reads the launched presenter counter", () => {
   expect(script).toContain('starts with "Slide "');
   expect(script).toContain('contains ", step "');
 });
+
+
+test("snapshot verification checks transitive dependencies and each required version", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "slides-record-dependencies-"));
+  const source = path.join(directory, "source");
+  const published = {};
+  function pack(id, dependencies) {
+    fs.mkdirSync(path.join(source, id), { recursive: true });
+    fs.writeFileSync(path.join(source, id, "pack.json"), JSON.stringify({ id, version: "1", dependencies }));
+    fs.writeFileSync(path.join(source, id, "Effect.ts"), `export const name = "${id}";`);
+    published[id] = { versions: { "1": { sha256: packArchiveHash(path.join(source, id)) } } };
+  }
+  try {
+    pack("root", { middle: "1" });
+    pack("middle", { leaf: "1" });
+    pack("leaf", { root: "1" });
+    const hash = published.root.versions["1"].sha256;
+    const snapshot = name => snapshotEffectPacks(source, path.join(directory, name), "root", hash, published);
+    snapshot("valid-cycle");
+    published.root.versions["1"].sha256 = "wrong";
+    expect(() => snapshot("conflicting-cycle")).toThrow('Effect pack "root" changed');
+    published.root.versions["1"].sha256 = hash;
+    const leaf = published.leaf;
+    delete published.leaf;
+    expect(() => snapshot("missing-version")).toThrow('dependency "leaf" version 1 is not published');
+    published.leaf = leaf;
+    fs.appendFileSync(path.join(source, "leaf/Effect.ts"), "\nexport const changed = true;");
+    expect(() => snapshot("changed-transitive")).toThrow('Effect pack "leaf" changed');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

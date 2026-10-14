@@ -167,11 +167,24 @@ export function recordingDeckSource(source: string) {
 }
 
 /** Release and development compilers must consume the same validated sources. */
-export function snapshotEffectPacks(source: string, destination: string, pack: string, expectedHash: string) {
+export function snapshotEffectPacks(source: string, destination: string, pack: string, expectedHash: string,
+  published?: Record<string, { versions: Record<string, { sha256: string }> }>) {
   fs.cpSync(source, destination, { recursive: true });
-  if (packArchiveHash(path.join(destination, pack)) !== expectedHash) {
-    throw new Error("Effect pack changed while preparing capture; record again.");
+  const verified = new Set<string>();
+  function verify(id: string, hash: string) {
+    const directory = path.join(destination, id);
+    if (packArchiveHash(directory) !== hash) throw new Error(`Effect pack "${id}" changed; refresh legend-docs or record again.`);
+    if (verified.has(id)) return;
+    verified.add(id);
+    if (!published) return;
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, "pack.json"), "utf8"));
+    for (const [dependency, version] of Object.entries(manifest.dependencies ?? {})) {
+      const release = published[dependency]?.versions[String(version)];
+      if (!release) throw new Error(`Effect dependency "${dependency}" version ${version} is not published.`);
+      verify(dependency, release.sha256);
+    }
   }
+  verify(pack, expectedHash);
 }
 
 /** Brief motion after entry/reveals; callers can specify longer effect-specific intervals. */
