@@ -1,4 +1,6 @@
-import { useWatchedDocumentReload } from "@legendapp/spark/app/documents";
+import { watch } from "@legendapp/spark/files";
+import { ownRegistration } from "@legend-apps/runtime-utils";
+import { getDirectory } from "./markdownFiles";
 import {
   MarkdownDocument,
   type MarkdownDocumentProps,
@@ -263,7 +265,21 @@ function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) 
   const checkDocument = useCallback(() => {
     session.documentCommandsRef.current?.checkForExternalChanges().catch(session.handleError);
   }, [session.documentCommandsRef, session.handleError]);
-  useWatchedDocumentReload({ onError: console.error, onReload: checkDocument, path: watchedFilePath });
+  useEffect(() => {
+    if (!watchedFilePath) return;
+    let active = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const subscription = ownRegistration(watch(getDirectory(watchedFilePath) ?? "/", () => {
+      if (!active) return;
+      clearTimeout(timeout);
+      timeout = setTimeout(checkDocument, 100);
+    }, { recursive: true }), session.handleError);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      void subscription.remove().catch(session.handleError);
+    };
+  }, [checkDocument, session.handleError, watchedFilePath]);
 
   return null;
 }

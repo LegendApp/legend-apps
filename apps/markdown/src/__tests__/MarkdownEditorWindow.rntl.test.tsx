@@ -259,6 +259,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     jest.useFakeTimers();
     mockSessionState$.assign({ documentSource: "file", filename: "/tmp/test.md", isDirty: true, saveState });
     const view = await render(<MarkdownEditorWindow />);
+    expect(mockWatchFiles).toHaveBeenCalledWith("/tmp", expect.any(Function), { recursive: true });
     const changed = mockWatchFiles.mock.calls[0]?.[1];
     await act(async () => {
       changed?.("/tmp/test.md");
