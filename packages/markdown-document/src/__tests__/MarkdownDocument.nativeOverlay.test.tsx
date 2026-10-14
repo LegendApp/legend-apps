@@ -331,6 +331,23 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it("exits a newly typed single-item list without recreating its marker", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([{ ...block("d1:b0", 0, "- Shortcut item"), type: "unorderedList" }]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />); });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "d1:b0", markdown: "- Shortcut item", height: 25, rowHeight: 25, width: 640, x: 0, y: 0,
+    } }));
+    await act(async () => nativeHost(renderer).props.onEnterPressed({ nativeEvent: {
+      blockId: "d1:b0", beforeMarkdown: "- Shortcut item", afterMarkdown: "",
+    } }));
+    await flushPromises();
+    expect(adapter.applyTransactions.at(-1)).toMatchObject({
+      type: "splitBlock", beforeMarkdown: "- Shortcut item", afterMarkdown: "",
+    });
+  });
+
   it("retains the active editor while a formatting popover owns focus", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "First"), block("b", 1, "Selected text")]));
     const commands = React.createRef<MarkdownDocumentCommands>();

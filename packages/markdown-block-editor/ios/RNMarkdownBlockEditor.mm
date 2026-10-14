@@ -851,6 +851,9 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
           ? [editorInput listBlockForCursorParagraph] : nil;
         NSString *retainedList = isList && cursorList != nil
           ? LEMarkdownListBeforeExit(markdownParts[0], markdownParts[1], cursorList.level) : nil;
+        // The rich editor continues a newly typed list before the document has
+        // multiple lines. Hand off only when its empty item is ready to exit.
+        if (cursorList != nil && retainedList == nil) return event;
         if (retainedList != nil || shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)) {
           [strongSelf->_keyboardHandoff beginFromBlock:activeBlockView.blockId];
           [strongSelf emitEnterPressedWithMarkdownParts:retainedList != nil ? @[retainedList, @""] : markdownParts];

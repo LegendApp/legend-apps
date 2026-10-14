@@ -1624,7 +1624,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         }
 
-        if (block.type !== "codeBlock" && !isFencedCodeMarkdown(markdown)) {
+        const nativeListContinuation = usesNativeEditorOverlay && markdownListLinePattern.test(committedMarkdownRef.current);
+        if (block.type !== "codeBlock" && !isFencedCodeMarkdown(markdown) && !nativeListContinuation) {
           const splitMarkdown = getStructuralSplitMarkdown(markdown, committedMarkdownRef.current, activeInputSelectionRef.current);
           if (splitMarkdown) {
             const continuationMarkdown = getSplitContinuationMarkdown(splitMarkdown.beforeMarkdown, splitMarkdown.afterMarkdown);
@@ -2158,7 +2159,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         if (activeBlock && activeBlock.id === blockId) {
           const markdown = draftMarkdown$.peek();
           if (activeBlock.type !== "codeBlock" && !isFencedCodeMarkdown(markdown)) {
-            const continuationMarkdown = getSplitContinuationMarkdown(beforeMarkdown, afterMarkdown);
+            const isNativeList = activeBlock.type === "orderedList" || activeBlock.type === "unorderedList"
+              || markdownListLinePattern.test(markdown);
+            const continuationMarkdown = isNativeList
+              ? { beforeMarkdown, afterMarkdown }
+              : getSplitContinuationMarkdown(beforeMarkdown, afterMarkdown);
             splitActiveBlock(
               activeBlock,
               continuationMarkdown.beforeMarkdown ?? beforeMarkdown,
