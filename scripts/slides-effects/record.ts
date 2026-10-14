@@ -17,6 +17,7 @@ mp4 and a PNG poster into legend-docs/docs/public/slides/effects/previews/<slug>
   --seconds N        recording length (default: catalog profile or 8)
   --motion START:END expected motion in effect playback seconds (repeatable; default: catalog profile or brief entry/reveal intervals)
   --steps N          right-arrow presses after the lead-in (default: literal <Step>/<Steps count={n}> states)
+  --port N           Metro port for the development build
   --release          launch the release build (default: dev build; start Metro with bun run slides first)
   --window REGEX     audience window title filter (never selects presenter chrome)
   --crop-top PX      pixels to drop from the top of the capture (default 0)
@@ -149,7 +150,7 @@ try {
   const devArgs: string[] = [];
   if (!release) {
     const { resolveDevServerPort } = await import(path.join(repo, "scripts/lib/apps.ts"));
-    const port = resolveDevServerPort("slides", []);
+    const port = resolveDevServerPort("slides", args);
     env.push(`SPARK_BUNDLE_URL=http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`);
     devArgs.push("-RCT_jsLocation", `127.0.0.1:${port}`);
   }
