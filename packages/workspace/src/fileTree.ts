@@ -30,7 +30,10 @@ export function flattenWorkspaceTree(
   expanded: ReadonlySet<string>,
 ) {
   const rows: WorkspaceTreeRow[] = [];
+  const seen = new Set<string>();
   const visit = (entry: WorkspaceEntry, depth: number, parent: string | null) => {
+    if (seen.has(entry.path)) return;
+    seen.add(entry.path);
     const isExpanded = entry.isDirectory && expanded.has(entry.path);
     rows.push({ ...entry, depth, expanded: isExpanded, parent });
     if (isExpanded) for (const child of listings.get(entry.path)?.entries ?? []) visit(child, depth + 1, entry.path);

@@ -37,6 +37,23 @@ describe("listWorkspaceDirectory", () => {
 });
 
 describe("flattenWorkspaceTree", () => {
+  it("keeps row paths unique when added files and folders overlap", async () => {
+    const root = await listWorkspaceDirectory("/repo");
+    const src = await listWorkspaceDirectory("/repo/src", root.scopes);
+    const listings = new Map([["/repo", root], ["/repo/src", src]]);
+    const roots = [
+      { isDirectory: true, name: "repo", path: "/repo" },
+      { isDirectory: true, name: "src", path: "/repo/src" },
+      { isDirectory: false, name: "index.ts", path: "/repo/src/index.ts" },
+    ];
+    expect(flattenWorkspaceTree(roots, listings, new Set(["/repo", "/repo/src"])).map(row => row.path)).toEqual([
+      "/repo", "/repo/src", "/repo/src/.gitignore", "/repo/src/index.ts", "/repo/.gitignore", "/repo/README.md",
+    ]);
+    expect(flattenWorkspaceTree(roots, listings, new Set(["/repo/src"])).map(row => row.path)).toEqual([
+      "/repo", "/repo/src", "/repo/src/.gitignore", "/repo/src/index.ts",
+    ]);
+  });
+
   it("emits rows for expanded directories only", async () => {
     const root = await listWorkspaceDirectory("/repo");
     const listings = new Map([["/repo", root]]);
