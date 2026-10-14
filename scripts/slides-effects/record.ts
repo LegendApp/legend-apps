@@ -110,7 +110,7 @@ function listWindows(): RecordingWindow[] {
   return message.windows ?? [];
 }
 
-const buildRecord = path.join(repo, `shell/.legend/spark/slides/.spark/${release ? "release" : "dev"}-build.json`);
+const buildRecord = path.join(repo, `shell/.legend/spark/slides${release ? "-release" : ""}/.spark/${release ? "release" : "dev"}-build.json`);
 const appPath = fs.existsSync(buildRecord) ? JSON.parse(fs.readFileSync(buildRecord, "utf8")).app as string : undefined;
 
 // Preflight: everything that can fail before touching the app.
