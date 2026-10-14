@@ -5,6 +5,7 @@ import {
 } from "@legendapp/spark/app/documents";
 import type { MenuAction } from "@legendapp/spark/menus";
 import { closeWindow } from "@legendapp/spark/windows";
+import { createWorkspaceMenuHandlers } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import { useEffect } from "react";
@@ -41,13 +42,10 @@ if (__DEV__) {
   };
 }
 
-async function openCodeFileInViewer(filePath: string, isViewerOpen: boolean) {
-  if (isViewerOpen) {
-    requestCodeViewerFile(filePath);
-    await focusCodeViewerWindow();
-  } else {
-    await openCodeViewerWindow([filePath]);
-  }
+async function openCodeFileInViewer(filePath: string) {
+  const viewer = requestCodeViewerFile(filePath);
+  if (viewer) await focusCodeViewerWindow(viewer.windowId);
+  else await openCodeViewerWindow({ files: [filePath] });
 }
 
 async function openCodeViewerForSelectedFile(controller: DocumentAppController) {
@@ -58,7 +56,7 @@ async function openCodeViewerForSelectedFile(controller: DocumentAppController) 
   });
 
   if (path) {
-    await openCodeFileInViewer(path, controller.isDocumentWindowOpen());
+    await openCodeFileInViewer(path);
     controller.setDocumentWindowOpen(true);
     return true;
   }
@@ -68,6 +66,10 @@ async function openCodeViewerForSelectedFile(controller: DocumentAppController) 
 
 function createCodeMenuHandlers(controller: DocumentAppController): MenuHandlers {
   return {
+    ...createWorkspaceMenuHandlers(async (props) => {
+      await openCodeViewerWindow(props);
+      controller.setDocumentWindowOpen(true);
+    }, reportCodeAppControllerError),
     open: () => {
       openCodeViewerForSelectedFile(controller)
         .catch(reportCodeAppControllerError);
@@ -80,7 +82,7 @@ function createCodeMenuHandlers(controller: DocumentAppController): MenuHandlers
 
 async function openRecentCodeDocument(path: string, controller: DocumentAppController) {
   if (isCodePath(path)) {
-    await openCodeFileInViewer(path, controller.isDocumentWindowOpen());
+    await openCodeFileInViewer(path);
     controller.setDocumentWindowOpen(true);
   }
 }
@@ -88,7 +90,7 @@ async function openRecentCodeDocument(path: string, controller: DocumentAppContr
 async function openInitialCodeViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
   const launchFile = getLaunchCodeFile(launchArguments);
   try {
-    await openCodeViewerWindow(launchFile ? [launchFile] : launchArguments);
+    await openCodeViewerWindow({ launchArguments });
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "E_ALREADY_EXISTS") throw error;
     if (launchFile) requestCodeViewerFile(launchFile);
@@ -115,7 +117,7 @@ export function App({ launchArguments }: CodeAppProps) {
   useEffect(() => {
     if (__DEV__ && controller) {
       globalThis.__legendCodeBenchmarkOpenFile = async (filePath: string) => {
-        await openCodeFileInViewer(filePath, controller.isDocumentWindowOpen());
+        await openCodeFileInViewer(filePath);
         controller.setDocumentWindowOpen(true);
       };
     }
