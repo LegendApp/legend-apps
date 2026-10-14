@@ -57,6 +57,8 @@ clang++ -std=c++20 -fobjc-arc -framework AppKit -include AppKit/AppKit.h \
   "$markdown_dependency_dir/ios/input/ENRMDetectorPipeline.mm" \
   "$markdown_dependency_dir/ios/input/ENRMWordsUtils.mm" \
   "$markdown_dependency_dir/ios/input/ENRMFormattingStore.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockStore.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockEditCoordinator.mm" \
   "$markdown_dependency_dir/ios/input/ENRMRangeEditAdjustment.mm" \
   "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMMarkdownSerializer.mm" \

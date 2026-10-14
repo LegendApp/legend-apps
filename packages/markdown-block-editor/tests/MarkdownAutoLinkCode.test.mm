@@ -3,6 +3,8 @@
 #import "ENRMDetectorPipeline.h"
 #import "ENRMMarkdownSerializer.h"
 #import "ENRMInputParser.h"
+#import "ENRMBlockStore.h"
+#import "ENRMBlockEditCoordinator.h"
 
 static NSString *serialize(NSTextStorage *storage, ENRMAutoLinkDetector *detector) {
   return [ENRMMarkdownSerializer serializePlainText:storage.string ranges:detector.transientFormattingRanges];
@@ -51,6 +53,17 @@ int main() {
       NSString *inserted = [NSString stringWithFormat:@"Before %@AFTER.",
                            [ENRMMarkdownSerializer serializePlainText:parsed.plainText ranges:parsed.formattingRanges]];
       requireEqual(inserted, [NSString stringWithFormat:@"Before %@AFTER.", paste]);
+    }
+    ENRMParseResult *list = [[ENRMInputParser new] parseToPlainTextAndRanges:@"+ first\n+ second"];
+    ENRMBlockStore *blocks = [ENRMBlockStore new];
+    [blocks setRanges:list.blockRanges];
+    ENRMBlockEditCoordinator *coordinator = [[ENRMBlockEditCoordinator alloc] initWithBlockStore:blocks];
+    NSUInteger second = [list.plainText rangeOfString:@"second"].location;
+    for (NSNumber *delta in @[@1, @-1]) {
+      [coordinator changeDepthBy:delta.integerValue cursorPosition:second selectionRange:NSMakeRange(second, 0) inText:list.plainText];
+      requireEqual([ENRMMarkdownSerializer serializePlainText:list.plainText ranges:list.formattingRanges blockRanges:blocks.allRanges
+                                         blockPrefixProvider:^NSString *(ENRMBlockRange *block) { return @"- "; }],
+                   delta.integerValue > 0 ? @"+ first\n   + second" : @"+ first\n+ second");
     }
     NSArray<NSString *> *literalCases = @[
       @"```ts\nconsole.log(greeting);\nconst qa = true;\n```",

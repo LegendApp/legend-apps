@@ -5080,7 +5080,7 @@ index f82e72b3..5a95fb45 100644
  
    parseResult.plainText = plainText;
 diff --git a/ios/input/ENRMInputTextView.mm b/ios/input/ENRMInputTextView.mm
-index a5391c7e..01db97e0 100644
+index a5391c7e..941a15ff 100644
 --- a/ios/input/ENRMInputTextView.mm
 +++ b/ios/input/ENRMInputTextView.mm
 @@ -5,6 +5,7 @@
@@ -5131,7 +5131,26 @@ index a5391c7e..01db97e0 100644
    // External plain text is treated as markdown so pasted syntax ("- ", "#",
    // "**") formats instead of landing literal; syntax-free text is unchanged.
    NSString *plainText = [pasteboard stringForType:NSPasteboardTypeString];
-@@ -187,7 +210,8 @@ - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+@@ -182,12 +205,27 @@ - (void)paste:(id)sender
+   }
+ }
+ 
++- (void)insertTab:(id)sender
++{
++  if ([self.markdownTextInput listBlockForCursorParagraph] != nil) [self.markdownTextInput indentList];
++  else [super insertTab:sender];
++}
++
++- (void)insertBacktab:(id)sender
++{
++  ENRMBlockRange *list = [self.markdownTextInput listBlockForCursorParagraph];
++  if (list != nil) {
++    if (list.level > 0) [self.markdownTextInput outdentList];
++  } else [super insertBacktab:sender];
++}
++
+ - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+ {
    if (menuItem.action == @selector(paste:)) {
      NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
      return ([pasteboard stringForType:NSPasteboardTypeString] != nil ||
@@ -5141,7 +5160,7 @@ index a5391c7e..01db97e0 100644
    }
    return [super validateMenuItem:menuItem];
  }
-@@ -197,14 +221,185 @@ - (BOOL)acceptsFirstResponder
+@@ -197,14 +235,185 @@ - (BOOL)acceptsFirstResponder
    return self.isEditable;
  }
  
@@ -5363,10 +5382,18 @@ index 8acb7c09..1fc9dfd5 100644
  }
  
 diff --git a/ios/input/EnrichedMarkdownTextInput+Internal.h b/ios/input/EnrichedMarkdownTextInput+Internal.h
-index a8d35308..7bd83cf1 100644
+index a8d35308..f5dcadbf 100644
 --- a/ios/input/EnrichedMarkdownTextInput+Internal.h
 +++ b/ios/input/EnrichedMarkdownTextInput+Internal.h
-@@ -57,6 +57,8 @@ typedef struct {
+@@ -45,6 +45,7 @@ typedef struct {
+ - (void)toggleHeading:(NSInteger)level;
+ - (void)toggleUnorderedList;
+ - (void)toggleOrderedList;
++- (nullable ENRMBlockRange *)listBlockForCursorParagraph;
+ - (void)indentList;
+ - (void)outdentList;
+ - (BOOL)handleBackspaceAtDocumentStart;
+@@ -57,6 +58,8 @@ typedef struct {
  
  #if TARGET_OS_OSX
  - (NSMenu *)enrichedMenuForEvent:(NSEvent *)event defaultMenu:(NSMenu *)menu textView:(NSTextView *)textView;
@@ -9128,6 +9155,41 @@ index 41e28ff6..acd3d317 100644
  };
  
  @interface ENRMInputStyledRange : NSObject
+diff --git a/ios/input/ENRMBlockEditCoordinator.mm b/ios/input/ENRMBlockEditCoordinator.mm
+index 38c235fa..59547b45 100644
+--- a/ios/input/ENRMBlockEditCoordinator.mm
++++ b/ios/input/ENRMBlockEditCoordinator.mm
+@@ -166,6 +166,8 @@ - (ENRMDepthChangeResult)changeDepthBy:(NSInteger)delta
+     return ENRMDepthChangeResultExitedList;
+   }
+ 
++  NSMutableArray<ENRMBlockRange *> *originals = [NSMutableArray new];
++  for (ENRMBlockRange *block in _blockStore.allRanges) [originals addObject:[block copy]];
+   NSRange paragraphRange = [text paragraphRangeForRange:selection];
+ 
+   if (paragraphRange.length == 0) {
+@@ -188,7 +190,21 @@ - (ENRMDepthChangeResult)changeDepthBy:(NSInteger)delta
+                         }];
+   }
+ 
++  // Retain the edited item's marker spelling while changing only indentation.
++  // setBlockType creates a new range, so capture source prefixes before replacing it.
+   [_blockStore normalizeToLineBoundsInText:text];
++  for (ENRMBlockRange *original in originals) {
++    ENRMBlockRange *changed = [_blockStore blockStartingAtLocation:original.range.location];
++    if (original.sourcePrefix == nil || changed == nil || changed.level == original.level) continue;
++    NSString *prefix = original.sourcePrefix;
++    if (changed.level > original.level) {
++      changed.sourcePrefix = [@"   " stringByAppendingString:prefix];
++    } else {
++      NSUInteger count = 0;
++      while (count < MIN((NSUInteger)3, prefix.length) && [prefix characterAtIndex:count] == ' ') count++;
++      changed.sourcePrefix = [prefix substringFromIndex:count];
++    }
++  }
+   return ENRMDepthChangeResultChanged;
+ }
+ 
 diff --git a/ios/input/ENRMBlockRange.mm b/ios/input/ENRMBlockRange.mm
 index 8d8569e0..23b712bc 100644
 --- a/ios/input/ENRMBlockRange.mm
