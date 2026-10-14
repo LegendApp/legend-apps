@@ -37,12 +37,17 @@ export async function openDocumentWindow(
 }
 
 /** Marks a mounted window live and tracks its focus until the returned cleanup runs. */
-export function trackDocumentWindow(windowId: string) {
+export function trackDocumentWindow(windowId: string, onFocus?: () => void) {
   liveWindowIds.add(windowId);
   noteFocus(windowId);
   let disposed = false;
   let registration: AsyncRegistration | undefined;
-  void addWindowListener(windowId, "focusChanged", event => { if (!disposed && event.focused) noteFocus(windowId); }).then(value => {
+  void addWindowListener(windowId, "focusChanged", event => {
+    if (!disposed && event.focused) {
+      noteFocus(windowId);
+      onFocus?.();
+    }
+  }).then(value => {
     if (disposed) void value.remove().catch(console.error);
     else registration = value;
   }).catch(console.error);
@@ -55,8 +60,8 @@ export function trackDocumentWindow(windowId: string) {
   };
 }
 
-export function useDocumentWindow(windowId: string, onToggleSidebar: () => void) {
-  useEffect(() => trackDocumentWindow(windowId), [windowId]);
+export function useDocumentWindow(windowId: string, onToggleSidebar: () => void, onFocus?: () => void) {
+  useEffect(() => trackDocumentWindow(windowId, onFocus), [onFocus, windowId]);
   useRoutedHotkeys({
     definitions: sidebarHotkeyDefinitions,
     handlers: { toggleSidebar: onToggleSidebar },
