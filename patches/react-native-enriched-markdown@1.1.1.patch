@@ -4923,7 +4923,7 @@ index 1f823bd5..206abbf8 100644
  @end
  
 diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
-index f82e72b3..a167b2c6 100644
+index f82e72b3..5a95fb45 100644
 --- a/ios/input/ENRMInputParser.mm
 +++ b/ios/input/ENRMInputParser.mm
 @@ -8,6 +8,7 @@
@@ -4951,7 +4951,20 @@ index f82e72b3..a167b2c6 100644
    // Byte offsets of backslashes md4c resolved as escape sequences (the '\' of "\*"),
    // stripped from the plain text alongside inline/block delimiters.
    std::vector<size_t> escapeByteOffsets;
-@@ -295,7 +299,7 @@ static int onLeaveSpan(MD_SPANTYPE spanType, void *, void *userdata)
+@@ -170,7 +174,11 @@ static size_t closingDelimiterEndByte(const ParseContext &context, const InlineS
+   // fixed per-type length — keeps stacked closers of co-terminating spans (e.g.
+   // "***", "**~~x~~**") from overlapping and leaking a trailing marker.
+   auto next = std::lower_bound(context.textStartOffsets.begin(), context.textStartOffsets.end(), position);
+-  return (next != context.textStartOffsets.end()) ? *next : context.bufferLength;
++  size_t end = (next != context.textStartOffsets.end()) ? *next : context.bufferLength;
++  // Whitespace after a closer is visible source, including at the paste boundary.
++  while (end > position && (context.buffer[end - 1] == ' ' || context.buffer[end - 1] == '\t' ||
++                            context.buffer[end - 1] == '\r' || context.buffer[end - 1] == '\n')) end--;
++  return end;
+ }
+ 
+ // Block tracking. md4c's enter_block gives no byte offset, so a block's content
+@@ -295,7 +303,7 @@ static int onLeaveSpan(MD_SPANTYPE spanType, void *, void *userdata)
    return 0;
  }
  
@@ -4960,7 +4973,7 @@ index f82e72b3..a167b2c6 100644
  {
    if (!text || size == 0) {
      return 0;
-@@ -317,6 +321,9 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
+@@ -317,6 +325,9 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
    size_t textStart = text - context->buffer;
    size_t textEnd = textStart + size;
    context->textStartOffsets.push_back(textStart);
@@ -4970,7 +4983,7 @@ index f82e72b3..a167b2c6 100644
  
    if (textStart > 0 && context->buffer[textStart - 1] == '\\' && (textStart - 1) >= context->lastTextEnd) {
      context->escapeByteOffsets.push_back(textStart - 1);
-@@ -338,10 +345,10 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
+@@ -338,10 +349,10 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
    return 0;
  }
  
@@ -4984,7 +4997,7 @@ index f82e72b3..a167b2c6 100644
    size_t completedLength = strlen(completedUTF8);
    size_t originalLength = [markdown lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
  
-@@ -468,6 +475,21 @@ static bool runMd4cParse(NSString *markdown, ParseContext &context)
+@@ -468,6 +479,21 @@ static bool runMd4cParse(NSString *markdown, ParseContext &context)
  
  @implementation ENRMInputParser
  
@@ -5006,7 +5019,7 @@ index f82e72b3..a167b2c6 100644
  - (NSArray<ENRMInputStyledRange *> *)parse:(NSString *)markdown
  {
    if (markdown.length == 0) {
-@@ -484,6 +506,11 @@ @implementation ENRMInputParser
+@@ -484,6 +510,11 @@ @implementation ENRMInputParser
  }
  
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
@@ -5018,7 +5031,7 @@ index f82e72b3..a167b2c6 100644
  {
    ENRMParseResult *parseResult = [[ENRMParseResult alloc] init];
  
-@@ -591,6 +618,9 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -591,6 +622,9 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
      }
    }
    rawToPlainMap[rawLength] = plainPosition;
@@ -5028,7 +5041,7 @@ index f82e72b3..a167b2c6 100644
  
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
  
-@@ -614,9 +644,19 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -614,9 +648,19 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
          [ENRMFormattingRange rangeWithType:styledRange.type
                                       range:NSMakeRange(plainStart, plainEnd - plainStart)
                                         url:styledRange.url];
@@ -5048,7 +5061,7 @@ index f82e72b3..a167b2c6 100644
    // Map block content ranges (raw-markdown coords) onto plain-text coords. The
    // block's marker syntax was stripped above, so the content range maps cleanly
    // onto the post-strip text and the block no longer covers the marker.
-@@ -632,9 +672,14 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -632,9 +676,14 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
      if (plainEnd <= plainStart)
        continue;
  

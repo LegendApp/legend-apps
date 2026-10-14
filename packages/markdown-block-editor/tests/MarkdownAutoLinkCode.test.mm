@@ -45,6 +45,13 @@ int main() {
                                          blockPrefixProvider:^NSString *(ENRMBlockRange *block) { return @"- "; }],
                    [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
     }
+    for (NSString *paste in @[@"**bold** ", @"**bold**\t", @"*italic*  ", @"***both*** "]) {
+      ENRMParseResult *parsed = [[ENRMInputParser new] parseToPlainTextAndRanges:paste];
+      requireEqual([ENRMMarkdownSerializer serializePlainText:parsed.plainText ranges:parsed.formattingRanges], paste);
+      NSString *inserted = [NSString stringWithFormat:@"Before %@AFTER.",
+                           [ENRMMarkdownSerializer serializePlainText:parsed.plainText ranges:parsed.formattingRanges]];
+      requireEqual(inserted, [NSString stringWithFormat:@"Before %@AFTER.", paste]);
+    }
     NSArray<NSString *> *literalCases = @[
       @"```ts\nconsole.log(greeting);\nconst qa = true;\n```",
       @"`console.log`",
