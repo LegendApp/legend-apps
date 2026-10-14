@@ -22,6 +22,8 @@ export type UpdateBlockHistoryEntry = {
   blockId: string;
   beforeMarkdown: string;
   afterMarkdown: string;
+  beforeSelection?: { start: number; end: number };
+  afterSelection?: { start: number; end: number };
 };
 
 export type ReplaceBlockRangeHistoryEntry = {

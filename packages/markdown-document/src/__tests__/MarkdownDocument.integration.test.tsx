@@ -4506,6 +4506,23 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 
+  it("restores the middle-word edit caret through undo and redo", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Alpha beta gamma.")]));
+    const { commandsRef, renderer } = await renderDocument({ adapter });
+    await changeSelection(editorInput(renderer), 6, 10);
+    // AppKit sends the advanced selection before its Markdown text event.
+    await changeSelection(editorInput(renderer), 10);
+    await changeText(editorInput(renderer), "Alpha BETA gamma.");
+    await act(async () => { await commandsRef.current?.save(); });
+    await undo(commandsRef);
+    expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)?.setSelection).toHaveBeenLastCalledWith(6, 10);
+    await redo(commandsRef);
+    expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)?.setSelection).toHaveBeenLastCalledWith(10, 10);
+    await changeText(editorInput(renderer), "Alpha BETA@ gamma.");
+    await act(async () => { await commandsRef.current?.save(); });
+    expect(adapter.sourceMarkdown).toBe("Alpha BETA@ gamma.");
+  });
+
   it("undoes and redoes a paragraph split", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const { commandsRef, onError, renderer } = await renderDocument({ adapter });

@@ -490,6 +490,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const blockSelectionInputRef = useRef<TextInput | null>(null);
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
+    const previousInputSelectionRef = useRef({ start: 0, end: 0 });
+    const draftSelectionRef = useRef({ before: { start: 0, end: 0 }, after: { start: 0, end: 0 } });
     const nativeEditingBlockIdRef = useRef<string | null>(null);
     const pendingSplitRef = useRef<{
       afterMarkdown: string;
@@ -814,6 +816,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           now - currentGroup.updatedAt <= typingHistoryGroupTimeoutMs
         ) {
           currentGroup.entry.afterMarkdown = entry.afterMarkdown;
+          currentGroup.entry.afterSelection = entry.afterSelection;
           currentGroup.updatedAt = now;
           redoStackRef.current = [];
           publishCommandState();
@@ -846,6 +849,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
     const updateTextSelectionAnchor = useCallback((selection: { start: number; end: number }) => {
       if (preserveEditingOnBlurRef.current) return;
+      const previous = activeInputSelectionRef.current;
+      if (previous.start !== selection.start || previous.end !== selection.end) {
+        previousInputSelectionRef.current = previous;
+      }
       activeInputSelectionRef.current = selection;
       const requestId = selectionAnchorRequestRef.current + 1;
       selectionAnchorRequestRef.current = requestId;
@@ -1088,6 +1095,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       try {
         const beforeMarkdown = committedMarkdownRef.current;
+        const selection = draftSelectionRef.current;
         const retainedBlock = { blockId: activeBlockIdValue, index: blockDataSourceRef.current!.getIndexForBlockId(activeBlockIdValue) };
         if (updateReactState) {
           updateRenderedBlockMarkdown(activeBlockIdValue, markdown);
@@ -1112,6 +1120,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               blockId: activeBlockIdValue,
               beforeMarkdown,
               afterMarkdown: markdown,
+              beforeSelection: selection.before,
+              afterSelection: selection.after,
             },
             { groupTyping: true },
           );
@@ -1626,6 +1636,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         }
 
+        draftSelectionRef.current = {
+          before: draftMarkdown$.peek() === committedMarkdownRef.current
+            ? { ...previousInputSelectionRef.current }
+            : draftSelectionRef.current.before,
+          after: { ...activeInputSelectionRef.current },
+        };
         draftMarkdown$.set(markdown);
         if (!usesNativeEditorOverlay) {
           setDraftMarkdown(markdown);
@@ -3003,6 +3019,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const activeInput = activeInputRef.current;
               if (activeInput) {
                 activeInput.setValue(activeInputMarkdownForBlock(activeBlockSnapshotRef.current, entry.beforeMarkdown));
+                const selection = entry.beforeSelection;
+                if (selection) {
+                  activeInputSelectionRef.current = selection;
+                  activeInput.setSelection(selection.start, selection.end);
+                }
               }
             }
             markDirty();
@@ -3011,6 +3032,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               blockId: entry.blockId,
               beforeMarkdown: entry.afterMarkdown,
               afterMarkdown: entry.beforeMarkdown,
+              beforeSelection: entry.afterSelection,
+              afterSelection: entry.beforeSelection,
             } satisfies HistoryEntry);
           }
 
