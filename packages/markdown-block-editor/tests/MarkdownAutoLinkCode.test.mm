@@ -37,6 +37,14 @@ int main() {
       requireEqual([ENRMMarkdownSerializer serializePlainText:text ranges:ranges.allRanges],
                    [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
     }
+    for (NSString *source in @[@"7. alpha\n9. untouched", @"+ alpha\n+ untouched\n    * nested", @"* [ ] alpha\n* [x] untouched"]) {
+      ENRMParseResult *parsed = [[ENRMInputParser new] parseToPlainTextAndRanges:source];
+      NSString *text = [parsed.plainText stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"];
+      requireEqual([ENRMMarkdownSerializer serializePlainText:text ranges:parsed.formattingRanges
+                                                 blockRanges:parsed.blockRanges
+                                         blockPrefixProvider:^NSString *(ENRMBlockRange *block) { return @"- "; }],
+                   [source stringByReplacingOccurrencesOfString:@"alpha" withString:@"ALPHA"]);
+    }
     NSArray<NSString *> *literalCases = @[
       @"```ts\nconsole.log(greeting);\nconst qa = true;\n```",
       @"`console.log`",
