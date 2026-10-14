@@ -518,6 +518,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const committedMarkdownRef = useRef("");
     const currentRevisionRef = useRef(0);
     const savedRevisionRef = useRef(0);
+    const savedAsRef = useRef<{ filename: string; reloadVersion: number } | undefined>(undefined);
     const isDirtyRef = useRef(false);
     const autosavePausedRef = useRef(false);
     const conflictRef = useRef(false);
@@ -2611,6 +2612,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     );
 
     useEffect(() => {
+      if (savedAsRef.current?.filename === filename && savedAsRef.current.reloadVersion === reloadVersion) {
+        return;
+      }
+      savedAsRef.current = undefined;
       loadVersionRef.current += 1;
       const loadVersion = loadVersionRef.current;
       conflictRef.current = false;
@@ -2838,6 +2843,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           clearAutosaveTimer();
           conflictRef.current = false;
           onConflictChangeRef.current?.(null);
+          if (saveFilename) savedAsRef.current = { filename: saveFilename, reloadVersion };
           clearTypingHistoryGroup();
           for (const entry of [...undoStackRef.current, ...redoStackRef.current]) {
             entry.savedBefore = false;
@@ -2883,6 +2889,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       },
       [
         adapter,
+        reloadVersion,
         clearAutosaveTimer,
         clearTypingHistoryGroup,
         commitActiveBlock,

@@ -1,7 +1,6 @@
 import { useWatchedDocumentReload } from "@legendapp/spark/app/documents";
 import {
   MarkdownDocument,
-  nativeMarkdownDocumentAdapter,
   type MarkdownDocumentProps,
   type MarkdownSelectionAnchor,
 } from "@legend-apps/markdown-document";
@@ -435,7 +434,7 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
   session,
   theme,
 }: MarkdownDocumentSurfaceProps) {
-  const adapter = isUntitledDocument ? untitledMarkdownAdapter : nativeMarkdownDocumentAdapter;
+  const adapter = untitledMarkdownAdapter;
   const documentStyle = useMemo(() => [styles.document, backgroundStyle], [backgroundStyle]);
   const savePolicy = useMemo(
     () => ({ autosave: !isUntitledDocument && autosaveEnabled }),

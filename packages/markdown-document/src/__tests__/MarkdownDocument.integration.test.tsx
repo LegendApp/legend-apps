@@ -4523,6 +4523,20 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.sourceMarkdown).toBe("Alpha BETA@ gamma.");
   });
 
+  it("retains undo history when Save As updates the document filename", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), "Edited");
+    await act(async () => { await commandsRef.current?.saveAs("renamed.md"); });
+    await act(async () => renderer.update(<MarkdownDocument adapter={adapter} filename="renamed.md"
+      commandsRef={commandsRef} onError={onError} autoFocusFirstBlock savePolicy={{ autosave: false }} />));
+    await flushPromises();
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Original");
+    expect(adapter.closeCount).toBe(0);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it("undoes and redoes a paragraph split", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const { commandsRef, onError, renderer } = await renderDocument({ adapter });
