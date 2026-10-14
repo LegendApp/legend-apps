@@ -79,7 +79,7 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
       <LegendList
         data={rows}
         estimatedItemSize={rowHeight}
-        extraData={activePath}
+        extraData={renderItem}
         keyExtractor={(row: WorkspaceTreeRow) => row.path}
         recycleItems
         renderItem={renderItem}
