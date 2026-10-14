@@ -30,7 +30,10 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { fileTypes = []
     setState(stateRef.current);
   }, []);
 
-  const openTab = useCallback((path: string) => update(({ tabs }) => ({ tabs: openDocumentTab(tabs, path) })), [update]);
+  const openTab = useCallback((path: string) => update(({ files, folders, tabs, workspacePath }) => ({
+    files: files.length === 0 && folders.length === 0 && !workspacePath ? [path] : files,
+    tabs: openDocumentTab(tabs, path),
+  })), [update]);
   const closeTab = useCallback((path: string) => update(({ tabs }) => ({ tabs: closeDocumentTab(tabs, path) })), [update]);
   const renameTab = useCallback((from: string, to: string) => update(({ tabs }) => ({ tabs: renameDocumentTab(tabs, from, to) })), [update]);
 
