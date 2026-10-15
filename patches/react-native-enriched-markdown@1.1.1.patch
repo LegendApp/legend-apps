@@ -3377,7 +3377,26 @@ index 7e72cff2..1cb85342 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1749,7 +2138,14 @@ - (void)handleTextChanged
+@@ -1608,7 +1997,7 @@
+ #pragma mark - Text edit tracking
+ 
+ /// Markdown shortcuts: when the user types a space after `#`…`######`,
+-/// `-`/`*`/`+` or `1.`/`1)` at the start of a plain paragraph, drop the prefix
++/// `-`/`*`/`+` or `1.`/`1)` at the start of a paragraph or heading, drop the prefix
+ /// and make the paragraph that block. Runs after the stores are adjusted for the
+ /// edit and before scoped formatting. Returns YES when it converted, in which
+ /// case the replace path has already reformatted and emitted.
+@@ -1649,7 +2038,8 @@
+   }
+ 
+   NSUInteger lineStart = [text paragraphRangeForRange:NSMakeRange(spaceIndex, 0)].location;
+-  if (spaceIndex == lineStart || [_blockCoordinator blockAtPosition:lineStart inText:text] != nil) {
++  ENRMBlockRange *current = [_blockCoordinator blockAtPosition:lineStart inText:text];
++  if (spaceIndex == lineStart || (current != nil && ENRMHeadingLevelForBlockType(current.type) == 0)) {
+     return NO;
+   }
+ 
+@@ -1749,7 +2139,14 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -3393,7 +3412,7 @@ index 7e72cff2..1cb85342 100644
      [self applyFormattingScopedFromParagraphAtLocation:editLocation];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1764,6 +2160,9 @@ - (void)handleTextChanged
+@@ -1764,6 +2161,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -3403,7 +3422,7 @@ index 7e72cff2..1cb85342 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1826,6 +2225,12 @@ - (void)manageSelectionBasedChanges
+@@ -1826,6 +2226,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;

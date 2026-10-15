@@ -32,6 +32,7 @@ source = (b/'ios/input/EnrichedMarkdownTextInput.mm').read_text()
     '- (void)importMarkdown:', '- (void)applyFormatting\n', '- (void)applyFormattingScopedToRange:',
     '- (void)setValue:', '- (void)setValuePreservingSelection:']))
 session = (b/'ios/input/ENRMEditSession.mm').read_text()
+(out/'InputShortcut.inc').write_text(extract(source, '- (BOOL)applyMarkdownShortcutForEditAtLocation:'))
 (out/'InputSession.inc').write_text('\n'.join(extract(session, method) for method in [
     '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
@@ -50,6 +51,10 @@ clang++ -x objective-c++ -std=c++20 -fobjc-arc -framework AppKit -DENRICHED_MARK
   "$markdown_dependency_dir/ios/input/ENRMInputStyledRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMBlockRange.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockStore.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMBlockEditCoordinator.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMRangeEditAdjustment.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMMarkdownShortcutMatcher.mm" \
   "$markdown_dependency_dir/ios/parser/MarkdownASTNode.m" \
   "$markdown_dependency_dir/cpp/parser/MD4CParser.cpp" \
   "$markdown_dependency_dir/ios/parser/MarkdownParserBridge.mm" \

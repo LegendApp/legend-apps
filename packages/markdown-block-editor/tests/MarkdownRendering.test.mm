@@ -5,6 +5,9 @@
 #import "ENRMInputMeasurement.h"
 #import "ENRMInputParser.h"
 #import "ENRMMarkdownParser.h"
+#import "ENRMMarkdownShortcutMatcher.h"
+#import "ENRMBlockEditCoordinator.h"
+#import "ENRMBlockStore.h"
 
 #define ENRMPlatformTextView NSTextView
 #define ENRMSetNeedsDisplay(view) [(view) setNeedsDisplay:YES]
@@ -136,6 +139,56 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)requestHeightUpdate {}
 #include "InputLayout.inc"
 #include "InputImport.inc"
+@end
+
+// Run the real shortcut method, matcher and block stores; the replacement
+// boundary applies its requested edit without the unrelated view/event plumbing.
+@protocol ShortcutTyping
+- (void)syncWithCursorBlock;
+@end
+
+@interface ShortcutHost : NSObject {
+  NSTextView *_textView;
+  ENRMMarkdownShortcutsConfig _markdownShortcutsConfig;
+  ENRMBlockStore *_blockStore;
+  ENRMBlockEditCoordinator *_blockCoordinator;
+  id<ShortcutTyping> _typingController;
+  NSRange _lastSelectedRange;
+}
+@property (readonly) NSTextView *textView;
+@property (readonly) ENRMBlockStore *blockStore;
+- (instancetype)initWithMarkdown:(NSString *)markdown;
+- (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)location deletedLength:(NSUInteger)deleted insertedLength:(NSUInteger)inserted;
+@end
+@implementation ShortcutHost
+- (instancetype)initWithMarkdown:(NSString *)markdown
+{
+  if (self = [super init]) {
+    ENRMParseResult *parsed = [[ENRMInputParser new] parseToPlainTextAndRanges:markdown];
+    _textView = [NSTextView new];
+    _textView.string = parsed.plainText;
+    _blockStore = [ENRMBlockStore new];
+    [_blockStore setRanges:parsed.blockRanges];
+    _blockCoordinator = [[ENRMBlockEditCoordinator alloc] initWithBlockStore:_blockStore];
+    _markdownShortcutsConfig = {YES, YES, YES};
+  }
+  return self;
+}
+- (NSTextView *)textView { return _textView; }
+- (ENRMBlockStore *)blockStore { return _blockStore; }
+- (void)replaceTextInRange:(NSRange)selection withText:(NSString *)text
+        formattingRanges:(NSArray *)ranges blockRanges:(NSArray<ENRMBlockRange *> *)blocks
+{
+  [_textView.textStorage replaceCharactersInRange:selection withString:text];
+  [_blockStore adjustForEditAtLocation:selection.location deletedLength:selection.length insertedLength:text.length];
+  for (ENRMBlockRange *block in blocks) {
+    [_blockStore setBlockType:block.type level:block.level
+           forParagraphRange:NSMakeRange(selection.location + block.range.location, block.range.length) inText:_textView.string];
+  }
+  [_blockStore normalizeToLineBoundsInText:_textView.string];
+}
+- (void)updateEmptyBulletMarker {}
+#include "InputShortcut.inc"
 @end
 
 // The activation wrapper only needs the renderer's native-touch ownership contract.
@@ -323,6 +376,30 @@ int main()
         }
       }
     }
-    NSLog(@"PASS toolbar import formatting/selection, math segments, image hits/activation, and 600 deferred heading/list layouts with stable frames");
+    for (NSUInteger heading = 1; heading <= 6; heading++) {
+      for (NSString *prefix in @[@"# ", @"## ", @"- ", @"1. "]) {
+        NSString *markdown = [[@"" stringByPaddingToLength:heading withString:@"#" startingAtIndex:0] stringByAppendingString:@" Heading"];
+        ShortcutHost *shortcut = [[ShortcutHost alloc] initWithMarkdown:markdown];
+        [shortcut.textView.textStorage replaceCharactersInRange:NSMakeRange(0, 0) withString:prefix];
+        [shortcut.blockStore adjustForEditAtLocation:0 deletedLength:0 insertedLength:prefix.length];
+        [shortcut.blockStore normalizeToLineBoundsInText:shortcut.textView.string];
+        shortcut.textView.selectedRange = NSMakeRange(prefix.length, 0);
+        require([shortcut applyMarkdownShortcutForEditAtLocation:0 deletedLength:0 insertedLength:prefix.length],
+                [NSString stringWithFormat:@"H%lu must consume typed %@ prefix without blur", heading, prefix]);
+        require([shortcut.textView.string isEqualToString:@"Heading"], @"converted heading must not retain literal markup");
+        require(NSEqualRanges(shortcut.textView.selectedRange, NSMakeRange(0, 0)), @"shortcut must retain the caret after removing markup");
+        ENRMInputBlockType type = [prefix hasPrefix:@"#"] ? ENRMBlockTypeForHeadingLevel(prefix.length - 1)
+          : [prefix hasPrefix:@"1"] ? ENRMInputBlockTypeOrderedListItem : ENRMInputBlockTypeUnorderedListItem;
+        require(shortcut.blockStore.allRanges.count == 1 && shortcut.blockStore.allRanges[0].type == type,
+                @"shortcut must replace the old heading block with the requested block");
+      }
+    }
+    ShortcutHost *list = [[ShortcutHost alloc] initWithMarkdown:@"- Item"];
+    [list.textView.textStorage replaceCharactersInRange:NSMakeRange(0, 0) withString:@"# "];
+    [list.blockStore adjustForEditAtLocation:0 deletedLength:0 insertedLength:2];
+    list.textView.selectedRange = NSMakeRange(2, 0);
+    require(![list applyMarkdownShortcutForEditAtLocation:0 deletedLength:0 insertedLength:2],
+            @"typing inside a list must retain its existing shortcut behavior");
+    NSLog(@"PASS 24 typed heading conversions, list shortcut exclusion, toolbar import formatting/selection, math segments, image hits/activation, and 600 deferred heading/list layouts with stable frames");
   }
 }
