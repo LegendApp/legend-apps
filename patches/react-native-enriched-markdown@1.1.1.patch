@@ -245,10 +245,9 @@ index 3fda20ba..eb29ad8a 100644
  };
  } // namespace facebook::react
 diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.cpp b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.cpp
-index 2d1077e5..c2fa121c 100644
 --- a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.cpp
 +++ b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.cpp
-@@ -20,6 +20,8 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
+@@ -20,6 +20,8 @@
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
  
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
@@ -257,20 +256,7 @@ index 2d1077e5..c2fa121c 100644
      markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
      enableImagePress(convertRawProp(context, rawProps, "enableImagePress", sourceProps.enableImagePress, {false})),
      enableTaskListItemToggle(convertRawProp(context, rawProps, "enableTaskListItemToggle", sourceProps.enableTaskListItemToggle, {true})),
-@@ -41,9 +43,9 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
-     imageRequestHeaders(convertRawProp(context, rawProps, "imageRequestHeaders", sourceProps.imageRequestHeaders, {})),
-     selectionMenuConfig(convertRawProp(context, rawProps, "selectionMenuConfig", sourceProps.selectionMenuConfig, {})),
-     accessibilityLabels(convertRawProp(context, rawProps, "accessibilityLabels", sourceProps.accessibilityLabels, {})),
--    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{"highQuality"}})),
--    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{"none"}})),
--    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{"first-strong"}})),
-+    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{std::string{"highQuality"}}})),
-+    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{std::string{"none"}}})),
-+    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{std::string{"first-strong"}}})),
-     numberOfLines(convertRawProp(context, rawProps, "numberOfLines", sourceProps.numberOfLines, {0})),
-     ellipsizeMode(convertRawProp(context, rawProps, "ellipsizeMode", sourceProps.ellipsizeMode, {std::string{"tail"}})) {}
-     
-@@ -66,6 +68,14 @@ folly::dynamic EnrichedMarkdownProps::getDiffProps(
+@@ -66,6 +68,14 @@
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
@@ -285,7 +271,7 @@ index 2d1077e5..c2fa121c 100644
      
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
-@@ -323,6 +333,8 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
+@@ -323,6 +333,8 @@
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
  
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
@@ -294,20 +280,7 @@ index 2d1077e5..c2fa121c 100644
      markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
      enableImagePress(convertRawProp(context, rawProps, "enableImagePress", sourceProps.enableImagePress, {false})),
      enableTaskListItemToggle(convertRawProp(context, rawProps, "enableTaskListItemToggle", sourceProps.enableTaskListItemToggle, {true})),
-@@ -344,9 +356,9 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
-     imageRequestHeaders(convertRawProp(context, rawProps, "imageRequestHeaders", sourceProps.imageRequestHeaders, {})),
-     selectionMenuConfig(convertRawProp(context, rawProps, "selectionMenuConfig", sourceProps.selectionMenuConfig, {})),
-     accessibilityLabels(convertRawProp(context, rawProps, "accessibilityLabels", sourceProps.accessibilityLabels, {})),
--    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{"highQuality"}})),
--    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{"none"}})),
--    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{"first-strong"}})),
-+    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{std::string{"highQuality"}}})),
-+    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{std::string{"none"}}})),
-+    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{std::string{"first-strong"}}})),
-     numberOfLines(convertRawProp(context, rawProps, "numberOfLines", sourceProps.numberOfLines, {0})),
-     ellipsizeMode(convertRawProp(context, rawProps, "ellipsizeMode", sourceProps.ellipsizeMode, {std::string{"tail"}})) {}
-     
-@@ -369,6 +381,14 @@ folly::dynamic EnrichedMarkdownTextProps::getDiffProps(
+@@ -369,6 +381,14 @@
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
@@ -323,362 +296,9 @@ index 2d1077e5..c2fa121c 100644
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
 diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
-index 06fa054e..35d9cd59 100644
 --- a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
 +++ b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
-@@ -12,7 +12,6 @@
- #include <react/renderer/components/view/ViewProps.h>
- #include <react/renderer/core/PropsParserContext.h>
- #include <react/renderer/core/propsConversions.h>
--#include <react/renderer/debug/DebugStringConvertible.h>
- #include <react/renderer/graphics/Color.h>
- #include <vector>
- 
-@@ -28,7 +27,6 @@ struct EnrichedMarkdownMarkdownStyleParagraphStruct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleParagraphStruct&) const = default;
- 
-@@ -104,7 +102,6 @@ struct EnrichedMarkdownMarkdownStyleH1Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH1Struct&) const = default;
- 
-@@ -180,7 +177,6 @@ struct EnrichedMarkdownMarkdownStyleH2Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH2Struct&) const = default;
- 
-@@ -256,7 +252,6 @@ struct EnrichedMarkdownMarkdownStyleH3Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH3Struct&) const = default;
- 
-@@ -332,7 +327,6 @@ struct EnrichedMarkdownMarkdownStyleH4Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH4Struct&) const = default;
- 
-@@ -408,7 +402,6 @@ struct EnrichedMarkdownMarkdownStyleH5Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH5Struct&) const = default;
- 
-@@ -484,7 +477,6 @@ struct EnrichedMarkdownMarkdownStyleH6Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH6Struct&) const = default;
- 
-@@ -824,7 +816,6 @@ struct EnrichedMarkdownMarkdownStyleBlockquoteStruct {
-   Float padding{0.0};
-   EnrichedMarkdownMarkdownStyleBlockquoteAdmonitionsStruct admonitions{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleBlockquoteStruct&) const = default;
- 
-@@ -937,7 +928,6 @@ struct EnrichedMarkdownMarkdownStyleListStruct {
-   Float marginLeft{0.0};
-   Float itemSpacing{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleListStruct&) const = default;
- 
-@@ -1054,7 +1044,6 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct {
-   SharedColor attribute{};
-   SharedColor embedded{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct&) const = default;
- 
-@@ -1165,7 +1154,6 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockStruct {
-   Float padding{0.0};
-   EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeBlockStruct&) const = default;
- 
-@@ -1262,7 +1250,6 @@ struct EnrichedMarkdownMarkdownStyleLinkStruct {
-   bool underline{false};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleLinkStruct&) const = default;
- 
-@@ -1315,7 +1302,6 @@ struct EnrichedMarkdownMarkdownStyleLinkVariantsStruct {
-   SharedColor backgroundColor{};
-   std::string fontFamily{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleLinkVariantsStruct&) const = default;
- 
-@@ -1381,7 +1367,6 @@ struct EnrichedMarkdownMarkdownStyleStrongStruct {
-   std::string fontWeight{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStrongStruct&) const = default;
- 
-@@ -1427,7 +1412,6 @@ struct EnrichedMarkdownMarkdownStyleEmStruct {
-   std::string fontStyle{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleEmStruct&) const = default;
- 
-@@ -1471,7 +1455,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleEmStru
- struct EnrichedMarkdownMarkdownStyleStrikethroughStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStrikethroughStruct&) const = default;
- 
-@@ -1505,7 +1488,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleStrike
- struct EnrichedMarkdownMarkdownStyleUnderlineStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleUnderlineStruct&) const = default;
- 
-@@ -1543,7 +1525,6 @@ struct EnrichedMarkdownMarkdownStyleCodeStruct {
-   SharedColor backgroundColor{};
-   SharedColor borderColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeStruct&) const = default;
- 
-@@ -1603,7 +1584,6 @@ struct EnrichedMarkdownMarkdownStyleImageStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleImageStruct&) const = default;
- 
-@@ -1725,7 +1705,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleVideoS
- struct EnrichedMarkdownMarkdownStyleInlineImageStruct {
-   Float size{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleInlineImageStruct&) const = default;
- 
-@@ -1762,7 +1741,6 @@ struct EnrichedMarkdownMarkdownStyleThematicBreakStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleThematicBreakStruct&) const = default;
- 
-@@ -1829,7 +1807,6 @@ struct EnrichedMarkdownMarkdownStyleTableStruct {
-   Float horizontalOverflow{0.0};
-   std::string align{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleTableStruct&) const = default;
- 
-@@ -1959,7 +1936,6 @@ struct EnrichedMarkdownMarkdownStyleTaskListStruct {
-   SharedColor checkedTextColor{};
-   bool checkedStrikethrough{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleTaskListStruct&) const = default;
- 
-@@ -2029,7 +2005,6 @@ struct EnrichedMarkdownMarkdownStyleMathStruct {
-   Float marginBottom{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleMathStruct&) const = default;
- 
-@@ -2093,7 +2068,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleMathSt
- struct EnrichedMarkdownMarkdownStyleInlineMathStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleInlineMathStruct&) const = default;
- 
-@@ -2128,7 +2102,6 @@ struct EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct {
-   Float density{0.0};
-   Float speed{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct&) const = default;
- 
-@@ -2167,7 +2140,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleSpoile
- struct EnrichedMarkdownMarkdownStyleSpoilerSolidStruct {
-   Float borderRadius{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerSolidStruct&) const = default;
- 
-@@ -2203,7 +2175,6 @@ struct EnrichedMarkdownMarkdownStyleSpoilerStruct {
-   EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct particles{};
-   EnrichedMarkdownMarkdownStyleSpoilerSolidStruct solid{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerStruct&) const = default;
- 
-@@ -2248,7 +2219,6 @@ struct EnrichedMarkdownMarkdownStyleSuperscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSuperscriptStruct&) const = default;
- 
-@@ -2288,7 +2258,6 @@ struct EnrichedMarkdownMarkdownStyleSubscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSubscriptStruct&) const = default;
- 
-@@ -2328,7 +2297,6 @@ struct EnrichedMarkdownMarkdownStyleHighlightStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleHighlightStruct&) const = default;
- 
-@@ -2395,7 +2363,6 @@ struct EnrichedMarkdownMarkdownStyleStruct {
-   EnrichedMarkdownMarkdownStyleSubscriptStruct subscript{};
-   EnrichedMarkdownMarkdownStyleHighlightStruct highlight{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStruct&) const = default;
- 
-@@ -2576,7 +2543,6 @@ struct EnrichedMarkdownMd4cFlagsStruct {
-   bool preserveBlankLines{false};
-   bool admonitions{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMd4cFlagsStruct&) const = default;
- 
-@@ -2646,7 +2612,6 @@ struct EnrichedMarkdownStreamingConfigStruct {
-   std::string tableMode{};
-   std::string codeBlockMode{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownStreamingConfigStruct&) const = default;
- 
-@@ -2686,7 +2651,6 @@ struct EnrichedMarkdownContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownContextMenuItemsStruct&) const = default;
- 
-@@ -2736,7 +2700,6 @@ struct EnrichedMarkdownImageRequestHeadersStruct {
-   std::string name{};
-   std::string value{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownImageRequestHeadersStruct&) const = default;
- 
-@@ -2791,7 +2754,6 @@ struct EnrichedMarkdownSelectionMenuConfigStruct {
-   std::string copyImageUrlsLabel{};
-   std::vector<std::string> copyImageUrlPluralTemplates{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownSelectionMenuConfigStruct&) const = default;
- 
-@@ -2858,7 +2820,6 @@ struct EnrichedMarkdownAccessibilityLabelsListStruct {
-   std::string orderedItem{};
-   std::string nestedOrderedItem{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsListStruct&) const = default;
- 
-@@ -2908,7 +2869,6 @@ struct EnrichedMarkdownAccessibilityLabelsBlockquoteStruct {
-   std::string quote{};
-   std::string nestedQuote{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsBlockquoteStruct&) const = default;
- 
-@@ -2947,7 +2907,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownAccessibilityLabels
- struct EnrichedMarkdownAccessibilityLabelsTableStruct {
-   std::string row{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsTableStruct&) const = default;
- 
-@@ -2981,7 +2940,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownAccessibilityLabels
- struct EnrichedMarkdownAccessibilityLabelsMathStruct {
-   std::string equation{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsMathStruct&) const = default;
- 
-@@ -3017,7 +2975,6 @@ struct EnrichedMarkdownAccessibilityLabelsRotorStruct {
-   std::string links{};
-   std::string images{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsRotorStruct&) const = default;
- 
-@@ -3065,7 +3022,6 @@ struct EnrichedMarkdownAccessibilityLabelsStruct {
-   EnrichedMarkdownAccessibilityLabelsMathStruct math{};
-   EnrichedMarkdownAccessibilityLabelsRotorStruct rotor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsStruct&) const = default;
- 
-@@ -3123,6 +3079,8 @@ class EnrichedMarkdownProps final : public ViewProps {
+@@ -3123,6 +3123,8 @@
  #pragma mark - Props
  
    std::string markdown{};
@@ -687,61 +307,35 @@ index 06fa054e..35d9cd59 100644
    EnrichedMarkdownMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -3144,9 +3102,9 @@ class EnrichedMarkdownProps final : public ViewProps {
-   std::vector<EnrichedMarkdownImageRequestHeadersStruct> imageRequestHeaders{};
-   EnrichedMarkdownSelectionMenuConfigStruct selectionMenuConfig{};
-   EnrichedMarkdownAccessibilityLabelsStruct accessibilityLabels{};
--  std::string textBreakStrategy{std::string{"highQuality"}};
--  std::string lineBreakStrategyIOS{std::string{"none"}};
--  std::string writingDirection{std::string{"first-strong"}};
-+  std::string textBreakStrategy{std::string{std::string{"highQuality"}}};
-+  std::string lineBreakStrategyIOS{std::string{std::string{"none"}}};
-+  std::string writingDirection{std::string{std::string{"first-strong"}}};
-   int numberOfLines{0};
-   std::string ellipsizeMode{std::string{"tail"}};
- 
-@@ -3155,8 +3113,6 @@ class EnrichedMarkdownProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- struct EnrichedMarkdownTextInputMarkdownShortcutsStruct {
-@@ -3205,248 +3161,324 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSh
+@@ -3205,6 +3207,120 @@
  }
  #endif
  
--struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
 +struct EnrichedMarkdownTextInputMarkdownStyleParagraphStruct {
 +  Float fontSize{0.0};
 +  std::string fontFamily{};
 +  std::string fontWeight{};
-   SharedColor color{};
--
++  SharedColor color{};
 +  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct&) const = default;
++
++#ifdef RN_SERIALIZABLE_STATE
 +  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
 +    result["fontSize"] = fontSize;
 +    result["fontFamily"] = fontFamily;
 +    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
++    result["color"] = ::facebook::react::toDynamic(color);
 +    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStrongStruct &result) {
++    return result;
++  }
++#endif
++};
++
 +static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
++  auto map = (std::unordered_map<std::string, RawValue>)value;
++
 +  auto tmp_fontSize = map.find("fontSize");
 +  if (tmp_fontSize != map.end()) {
 +    fromRawValue(context, tmp_fontSize->second, result.fontSize);
@@ -754,472 +348,42 @@ index 06fa054e..35d9cd59 100644
 +  if (tmp_fontWeight != map.end()) {
 +    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
 +  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
 +  auto tmp_lineHeight = map.find("lineHeight");
 +  if (tmp_lineHeight != map.end()) {
 +    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleStrongStruct]";
++}
++
 +static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &value) {
 +  return "[Object EnrichedMarkdownTextInputMarkdownStyleParagraphStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
++}
++
++#ifdef RN_SERIALIZABLE_STATE
 +static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleEmStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleEmStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH1Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleEmStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH1Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleEmStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH1Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleLinkStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  bool underline{false};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH2Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["underline"] = underline;
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH2Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_underline = map.find("underline");
--  if (tmp_underline != map.end()) {
--    fromRawValue(context, tmp_underline->second, result.underline);
--  }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH2Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct {
--  std::string pattern{};
-+struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  bool underline{false};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH3Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
--    result["pattern"] = pattern;
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["underline"] = underline;
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH3Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_pattern = map.find("pattern");
--  if (tmp_pattern != map.end()) {
--    fromRawValue(context, tmp_pattern->second, result.pattern);
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-   }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_underline = map.find("underline");
--  if (tmp_underline != map.end()) {
--    fromRawValue(context, tmp_underline->second, result.underline);
--  }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH3Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> &result) {
--  auto items = (std::vector<RawValue>)value;
--  for (const auto &item : items) {
--    EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct newItem;
--    fromRawValue(context, item, newItem);
--    result.emplace_back(newItem);
--  }
--}
--
--
--struct EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH4Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH4Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH4Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
-   Float fontSize{0.0};
-+  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH1Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH5Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH1Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH5Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-   auto tmp_fontSize = map.find("fontSize");
-   if (tmp_fontSize != map.end()) {
-     fromRawValue(context, tmp_fontSize->second, result.fontSize);
-   }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-   auto tmp_fontWeight = map.find("fontWeight");
-   if (tmp_fontWeight != map.end()) {
-     fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-@@ -3455,44 +3487,55 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH1Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH5Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
-   Float fontSize{0.0};
-+  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH2Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH6Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH2Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH6Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-   auto tmp_fontSize = map.find("fontSize");
-   if (tmp_fontSize != map.end()) {
-     fromRawValue(context, tmp_fontSize->second, result.fontSize);
-   }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-   auto tmp_fontWeight = map.find("fontWeight");
-   if (tmp_fontWeight != map.end()) {
-     fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-@@ -3501,198 +3544,286 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH2Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH6Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
++  return value.toDynamic();
++}
++#endif
++
 +struct EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct {
-   Float fontSize{0.0};
++  Float fontSize{0.0};
 +  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
++  std::string fontWeight{};
++  SharedColor color{};
 +  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH3Struct&) const = default;
++
++#ifdef RN_SERIALIZABLE_STATE
 +  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
++    result["fontSize"] = fontSize;
 +    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
++    result["fontWeight"] = fontWeight;
++    result["color"] = ::facebook::react::toDynamic(color);
 +    result["lineHeight"] = lineHeight;
 +    return result;
 +  }
@@ -1261,789 +425,265 @@ index 06fa054e..35d9cd59 100644
 +}
 +#endif
 +
-+struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
-+  SharedColor color{};
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct&) const = default;
-+
-+  folly::dynamic toDynamic() const {
-+    folly::dynamic result = folly::dynamic::object();
-+    result["color"] = ::facebook::react::toDynamic(color);
-+    return result;
-+  }
-+#endif
-+};
-+
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStrongStruct &result) {
-+  auto map = (std::unordered_map<std::string, RawValue>)value;
-+
-+  auto tmp_color = map.find("color");
-+  if (tmp_color != map.end()) {
-+    fromRawValue(context, tmp_color->second, result.color);
-+  }
-+}
-+
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleStrongStruct]";
-+}
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
-+  return value.toDynamic();
-+}
-+#endif
-+
-+struct EnrichedMarkdownTextInputMarkdownStyleEmStruct {
-+  SharedColor color{};
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleEmStruct&) const = default;
-+
-+  folly::dynamic toDynamic() const {
-+    folly::dynamic result = folly::dynamic::object();
-+    result["color"] = ::facebook::react::toDynamic(color);
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH3Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleEmStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH3Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleEmStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
-+struct EnrichedMarkdownTextInputMarkdownStyleLinkStruct {
+ struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
    SharedColor color{};
--
-+  bool underline{false};
-+  SharedColor backgroundColor{};
  
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH4Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct&) const = default;
+@@ -3423,8 +3539,10 @@
  
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["underline"] = underline;
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH4Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_underline = map.find("underline");
-+  if (tmp_underline != map.end()) {
-+    fromRawValue(context, tmp_underline->second, result.underline);
-+  }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH4Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
-+struct EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct {
-+  std::string pattern{};
+ struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
    SharedColor color{};
--
-+  bool underline{false};
-+  SharedColor backgroundColor{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH5Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct&) const = default;
- 
+@@ -3433,8 +3551,10 @@
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
-+    result["pattern"] = pattern;
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
      result["color"] = ::facebook::react::toDynamic(color);
-+    result["underline"] = underline;
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    result["lineHeight"] = lineHeight;
      return result;
    }
  #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH5Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  auto tmp_pattern = map.find("pattern");
-+  if (tmp_pattern != map.end()) {
-+    fromRawValue(context, tmp_pattern->second, result.pattern);
-   }
-   auto tmp_color = map.find("color");
+@@ -3455,6 +3575,14 @@
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
-+  auto tmp_underline = map.find("underline");
-+  if (tmp_underline != map.end()) {
-+    fromRawValue(context, tmp_underline->second, result.underline);
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
 +  }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
  }
  
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH5Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct]";
- }
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
+@@ -3469,8 +3597,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
--  SharedColor color{};
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> &result) {
-+  auto items = (std::vector<RawValue>)value;
-+  for (const auto &item : items) {
-+    EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct newItem;
-+    fromRawValue(context, item, newItem);
-+    result.emplace_back(newItem);
-+  }
-+}
-+
- 
-+struct EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct {
-+  SharedColor color{};
-+  SharedColor backgroundColor{};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH6Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct&) const = default;
- 
+@@ -3479,8 +3609,10 @@
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
      result["color"] = ::facebook::react::toDynamic(color);
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    result["lineHeight"] = lineHeight;
      return result;
    }
  #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH6Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
+@@ -3501,6 +3633,14 @@
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
  }
  
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH6Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct]";
- }
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
+@@ -3515,8 +3655,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-   return value.toDynamic();
- }
+@@ -3525,8 +3667,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
  #endif
-@@ -3700,7 +3831,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
- struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
-   Float itemSpacing{0.0};
+@@ -3547,6 +3691,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
  
--
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
+@@ -3561,8 +3713,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
  #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputMarkdownStyleListStruct&) const = default;
+@@ -3571,8 +3725,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3593,6 +3749,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
  
-@@ -3732,36 +3862,39 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
+@@ -3607,8 +3771,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+@@ -3617,8 +3783,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3639,6 +3807,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
+@@ -3653,8 +3829,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+@@ -3663,8 +3841,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3685,6 +3865,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
+@@ -3732,6 +3920,8 @@
  #endif
  
  struct EnrichedMarkdownTextInputMarkdownStyleStruct {
--  EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
--  EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
--  EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
--  std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> linkVariants{};
--  EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct spoiler{};
 +  EnrichedMarkdownTextInputMarkdownStyleParagraphStruct paragraph{};
-   EnrichedMarkdownTextInputMarkdownStyleH1Struct h1{};
-   EnrichedMarkdownTextInputMarkdownStyleH2Struct h2{};
-   EnrichedMarkdownTextInputMarkdownStyleH3Struct h3{};
-   EnrichedMarkdownTextInputMarkdownStyleH4Struct h4{};
-   EnrichedMarkdownTextInputMarkdownStyleH5Struct h5{};
-   EnrichedMarkdownTextInputMarkdownStyleH6Struct h6{};
 +  EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct codeBlock{};
-+  EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
-+  EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
-+  EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-+  std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> linkVariants{};
-+  EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct spoiler{};
-   EnrichedMarkdownTextInputMarkdownStyleListStruct list{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStruct&) const = default;
+   EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
+   EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
+   EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
+@@ -3751,6 +3941,8 @@
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["strong"] = ::facebook::react::toDynamic(strong);
--    result["em"] = ::facebook::react::toDynamic(em);
--    result["link"] = ::facebook::react::toDynamic(link);
--    result["linkVariants"] = ::facebook::react::toDynamic(linkVariants);
--    result["spoiler"] = ::facebook::react::toDynamic(spoiler);
 +    result["paragraph"] = ::facebook::react::toDynamic(paragraph);
-     result["h1"] = ::facebook::react::toDynamic(h1);
-     result["h2"] = ::facebook::react::toDynamic(h2);
-     result["h3"] = ::facebook::react::toDynamic(h3);
-     result["h4"] = ::facebook::react::toDynamic(h4);
-     result["h5"] = ::facebook::react::toDynamic(h5);
-     result["h6"] = ::facebook::react::toDynamic(h6);
 +    result["codeBlock"] = ::facebook::react::toDynamic(codeBlock);
-+    result["strong"] = ::facebook::react::toDynamic(strong);
-+    result["em"] = ::facebook::react::toDynamic(em);
-+    result["link"] = ::facebook::react::toDynamic(link);
-+    result["linkVariants"] = ::facebook::react::toDynamic(linkVariants);
-+    result["spoiler"] = ::facebook::react::toDynamic(spoiler);
-     result["list"] = ::facebook::react::toDynamic(list);
-     return result;
-   }
-@@ -3771,25 +3904,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+     result["strong"] = ::facebook::react::toDynamic(strong);
+     result["em"] = ::facebook::react::toDynamic(em);
+     result["link"] = ::facebook::react::toDynamic(link);
+@@ -3771,6 +3963,14 @@
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
--  auto tmp_strong = map.find("strong");
--  if (tmp_strong != map.end()) {
--    fromRawValue(context, tmp_strong->second, result.strong);
--  }
--  auto tmp_em = map.find("em");
--  if (tmp_em != map.end()) {
--    fromRawValue(context, tmp_em->second, result.em);
--  }
--  auto tmp_link = map.find("link");
--  if (tmp_link != map.end()) {
--    fromRawValue(context, tmp_link->second, result.link);
--  }
--  auto tmp_linkVariants = map.find("linkVariants");
--  if (tmp_linkVariants != map.end()) {
--    fromRawValue(context, tmp_linkVariants->second, result.linkVariants);
--  }
--  auto tmp_spoiler = map.find("spoiler");
--  if (tmp_spoiler != map.end()) {
--    fromRawValue(context, tmp_spoiler->second, result.spoiler);
 +  auto tmp_paragraph = map.find("paragraph");
 +  if (tmp_paragraph != map.end()) {
 +    fromRawValue(context, tmp_paragraph->second, result.paragraph);
-   }
-   auto tmp_h1 = map.find("h1");
-   if (tmp_h1 != map.end()) {
-@@ -3815,6 +3932,30 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_h6 != map.end()) {
-     fromRawValue(context, tmp_h6->second, result.h6);
-   }
++  }
 +  auto tmp_codeBlock = map.find("codeBlock");
 +  if (tmp_codeBlock != map.end()) {
 +    fromRawValue(context, tmp_codeBlock->second, result.codeBlock);
 +  }
-+  auto tmp_strong = map.find("strong");
-+  if (tmp_strong != map.end()) {
-+    fromRawValue(context, tmp_strong->second, result.strong);
-+  }
-+  auto tmp_em = map.find("em");
-+  if (tmp_em != map.end()) {
-+    fromRawValue(context, tmp_em->second, result.em);
-+  }
-+  auto tmp_link = map.find("link");
-+  if (tmp_link != map.end()) {
-+    fromRawValue(context, tmp_link->second, result.link);
-+  }
-+  auto tmp_linkVariants = map.find("linkVariants");
-+  if (tmp_linkVariants != map.end()) {
-+    fromRawValue(context, tmp_linkVariants->second, result.linkVariants);
-+  }
-+  auto tmp_spoiler = map.find("spoiler");
-+  if (tmp_spoiler != map.end()) {
-+    fromRawValue(context, tmp_spoiler->second, result.spoiler);
-+  }
-   auto tmp_list = map.find("list");
-   if (tmp_list != map.end()) {
-     fromRawValue(context, tmp_list->second, result.list);
-@@ -3835,7 +3976,6 @@ struct EnrichedMarkdownTextInputContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputContextMenuItemsStruct&) const = default;
- 
-@@ -3887,7 +4027,6 @@ struct EnrichedMarkdownTextInputSelectionMenuConfigStruct {
-   bool copyAsMarkdown{false};
-   std::string copyAsMarkdownLabel{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputSelectionMenuConfigStruct&) const = default;
- 
-@@ -3947,7 +4086,6 @@ struct EnrichedMarkdownTextInputFormatMenuConfigStruct {
-   bool link{false};
-   std::string linkLabel{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputFormatMenuConfigStruct&) const = default;
- 
-@@ -4040,7 +4178,6 @@ struct EnrichedMarkdownTextInputLinkRegexStruct {
-   bool isDisabled{false};
-   bool isDefault{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputLinkRegexStruct&) const = default;
- 
-@@ -4127,8 +4264,6 @@ class EnrichedMarkdownTextInputProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- struct EnrichedMarkdownTextMarkdownStyleParagraphStruct {
-@@ -4141,7 +4276,6 @@ struct EnrichedMarkdownTextMarkdownStyleParagraphStruct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleParagraphStruct&) const = default;
- 
-@@ -4217,7 +4351,6 @@ struct EnrichedMarkdownTextMarkdownStyleH1Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH1Struct&) const = default;
- 
-@@ -4293,7 +4426,6 @@ struct EnrichedMarkdownTextMarkdownStyleH2Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH2Struct&) const = default;
- 
-@@ -4369,7 +4501,6 @@ struct EnrichedMarkdownTextMarkdownStyleH3Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH3Struct&) const = default;
- 
-@@ -4787,7 +4918,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct&) const = default;
- 
-@@ -4827,7 +4957,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct&) const = default;
- 
-@@ -4870,7 +4999,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct {
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct warning{};
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct caution{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct&) const = default;
- 
-@@ -4937,7 +5065,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteStruct {
-   Float padding{0.0};
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct admonitions{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteStruct&) const = default;
- 
-@@ -5050,7 +5177,6 @@ struct EnrichedMarkdownTextMarkdownStyleListStruct {
-   Float marginLeft{0.0};
-   Float itemSpacing{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleListStruct&) const = default;
- 
-@@ -5167,7 +5293,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct {
-   SharedColor attribute{};
-   SharedColor embedded{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct&) const = default;
- 
-@@ -5278,7 +5403,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockStruct {
-   Float padding{0.0};
-   EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeBlockStruct&) const = default;
- 
-@@ -5375,7 +5499,6 @@ struct EnrichedMarkdownTextMarkdownStyleLinkStruct {
-   bool underline{false};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleLinkStruct&) const = default;
- 
-@@ -5428,7 +5551,6 @@ struct EnrichedMarkdownTextMarkdownStyleLinkVariantsStruct {
-   SharedColor backgroundColor{};
-   std::string fontFamily{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleLinkVariantsStruct&) const = default;
- 
-@@ -5494,7 +5616,6 @@ struct EnrichedMarkdownTextMarkdownStyleStrongStruct {
-   std::string fontWeight{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStrongStruct&) const = default;
- 
-@@ -5540,7 +5661,6 @@ struct EnrichedMarkdownTextMarkdownStyleEmStruct {
-   std::string fontStyle{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleEmStruct&) const = default;
- 
-@@ -5584,7 +5704,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleEm
- struct EnrichedMarkdownTextMarkdownStyleStrikethroughStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStrikethroughStruct&) const = default;
- 
-@@ -5618,7 +5737,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleSt
- struct EnrichedMarkdownTextMarkdownStyleUnderlineStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleUnderlineStruct&) const = default;
- 
-@@ -5656,7 +5774,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeStruct {
-   SharedColor backgroundColor{};
-   SharedColor borderColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeStruct&) const = default;
- 
-@@ -5716,7 +5833,6 @@ struct EnrichedMarkdownTextMarkdownStyleImageStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleImageStruct&) const = default;
- 
-@@ -5838,7 +5954,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleVi
- struct EnrichedMarkdownTextMarkdownStyleInlineImageStruct {
-   Float size{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleInlineImageStruct&) const = default;
- 
-@@ -5875,7 +5990,6 @@ struct EnrichedMarkdownTextMarkdownStyleThematicBreakStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleThematicBreakStruct&) const = default;
- 
-@@ -5942,7 +6056,6 @@ struct EnrichedMarkdownTextMarkdownStyleTableStruct {
-   Float horizontalOverflow{0.0};
-   std::string align{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleTableStruct&) const = default;
- 
-@@ -6072,7 +6185,6 @@ struct EnrichedMarkdownTextMarkdownStyleTaskListStruct {
-   SharedColor checkedTextColor{};
-   bool checkedStrikethrough{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleTaskListStruct&) const = default;
- 
-@@ -6142,7 +6254,6 @@ struct EnrichedMarkdownTextMarkdownStyleMathStruct {
-   Float marginBottom{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleMathStruct&) const = default;
- 
-@@ -6206,7 +6317,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleMa
- struct EnrichedMarkdownTextMarkdownStyleInlineMathStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleInlineMathStruct&) const = default;
- 
-@@ -6241,7 +6351,6 @@ struct EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct {
-   Float density{0.0};
-   Float speed{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct&) const = default;
- 
-@@ -6280,7 +6389,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleSp
- struct EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct {
-   Float borderRadius{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct&) const = default;
- 
-@@ -6316,7 +6424,6 @@ struct EnrichedMarkdownTextMarkdownStyleSpoilerStruct {
-   EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct particles{};
-   EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct solid{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerStruct&) const = default;
- 
-@@ -6361,7 +6468,6 @@ struct EnrichedMarkdownTextMarkdownStyleSuperscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSuperscriptStruct&) const = default;
- 
-@@ -6401,7 +6507,6 @@ struct EnrichedMarkdownTextMarkdownStyleSubscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSubscriptStruct&) const = default;
- 
-@@ -6441,7 +6546,6 @@ struct EnrichedMarkdownTextMarkdownStyleHighlightStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleHighlightStruct&) const = default;
- 
-@@ -6508,7 +6612,6 @@ struct EnrichedMarkdownTextMarkdownStyleStruct {
-   EnrichedMarkdownTextMarkdownStyleSubscriptStruct subscript{};
-   EnrichedMarkdownTextMarkdownStyleHighlightStruct highlight{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStruct&) const = default;
- 
-@@ -6689,7 +6792,6 @@ struct EnrichedMarkdownTextMd4cFlagsStruct {
-   bool preserveBlankLines{false};
-   bool admonitions{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMd4cFlagsStruct&) const = default;
- 
-@@ -6759,7 +6861,6 @@ struct EnrichedMarkdownTextStreamingConfigStruct {
-   std::string tableMode{};
-   std::string codeBlockMode{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextStreamingConfigStruct&) const = default;
- 
-@@ -6799,7 +6900,6 @@ struct EnrichedMarkdownTextContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextContextMenuItemsStruct&) const = default;
- 
-@@ -6849,7 +6949,6 @@ struct EnrichedMarkdownTextImageRequestHeadersStruct {
-   std::string name{};
-   std::string value{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextImageRequestHeadersStruct&) const = default;
- 
-@@ -6904,7 +7003,6 @@ struct EnrichedMarkdownTextSelectionMenuConfigStruct {
-   std::string copyImageUrlsLabel{};
-   std::vector<std::string> copyImageUrlPluralTemplates{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextSelectionMenuConfigStruct&) const = default;
- 
-@@ -6971,7 +7069,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsListStruct {
-   std::string orderedItem{};
-   std::string nestedOrderedItem{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsListStruct&) const = default;
- 
-@@ -7021,7 +7118,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsBlockquoteStruct {
-   std::string quote{};
-   std::string nestedQuote{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsBlockquoteStruct&) const = default;
- 
-@@ -7060,7 +7156,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextAccessibilityLa
- struct EnrichedMarkdownTextAccessibilityLabelsTableStruct {
-   std::string row{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsTableStruct&) const = default;
- 
-@@ -7094,7 +7189,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextAccessibilityLa
- struct EnrichedMarkdownTextAccessibilityLabelsMathStruct {
-   std::string equation{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsMathStruct&) const = default;
- 
-@@ -7130,7 +7224,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsRotorStruct {
-   std::string links{};
-   std::string images{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsRotorStruct&) const = default;
- 
-@@ -7178,7 +7271,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsStruct {
-   EnrichedMarkdownTextAccessibilityLabelsMathStruct math{};
-   EnrichedMarkdownTextAccessibilityLabelsRotorStruct rotor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsStruct&) const = default;
- 
-@@ -7236,6 +7328,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
+   auto tmp_strong = map.find("strong");
+   if (tmp_strong != map.end()) {
+     fromRawValue(context, tmp_strong->second, result.strong);
+@@ -7236,6 +7436,8 @@
  #pragma mark - Props
  
    std::string markdown{};
@@ -2052,28 +692,6 @@ index 06fa054e..35d9cd59 100644
    EnrichedMarkdownTextMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -7257,9 +7351,9 @@ class EnrichedMarkdownTextProps final : public ViewProps {
-   std::vector<EnrichedMarkdownTextImageRequestHeadersStruct> imageRequestHeaders{};
-   EnrichedMarkdownTextSelectionMenuConfigStruct selectionMenuConfig{};
-   EnrichedMarkdownTextAccessibilityLabelsStruct accessibilityLabels{};
--  std::string textBreakStrategy{std::string{"highQuality"}};
--  std::string lineBreakStrategyIOS{std::string{"none"}};
--  std::string writingDirection{std::string{"first-strong"}};
-+  std::string textBreakStrategy{std::string{std::string{"highQuality"}}};
-+  std::string lineBreakStrategyIOS{std::string{std::string{"none"}}};
-+  std::string writingDirection{std::string{std::string{"first-strong"}}};
-   int numberOfLines{0};
-   std::string ellipsizeMode{std::string{"tail"}};
- 
-@@ -7268,8 +7362,6 @@ class EnrichedMarkdownTextProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- } // namespace facebook::react
 diff --git a/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdownManager.kt b/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdownManager.kt
 index 61eed4b3..cec01c65 100644
 --- a/android/src/main/java/com/swmansion/enriched/markdown/EnrichedMarkdownManager.kt
@@ -2656,10 +1274,9 @@ index 3fda20ba..eb29ad8a 100644
  };
  } // namespace facebook::react
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
-index 2d1077e5..c2fa121c 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp
-@@ -20,6 +20,8 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
+@@ -20,6 +20,8 @@
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
  
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
@@ -2668,20 +1285,7 @@ index 2d1077e5..c2fa121c 100644
      markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
      enableImagePress(convertRawProp(context, rawProps, "enableImagePress", sourceProps.enableImagePress, {false})),
      enableTaskListItemToggle(convertRawProp(context, rawProps, "enableTaskListItemToggle", sourceProps.enableTaskListItemToggle, {true})),
-@@ -41,9 +43,9 @@ EnrichedMarkdownProps::EnrichedMarkdownProps(
-     imageRequestHeaders(convertRawProp(context, rawProps, "imageRequestHeaders", sourceProps.imageRequestHeaders, {})),
-     selectionMenuConfig(convertRawProp(context, rawProps, "selectionMenuConfig", sourceProps.selectionMenuConfig, {})),
-     accessibilityLabels(convertRawProp(context, rawProps, "accessibilityLabels", sourceProps.accessibilityLabels, {})),
--    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{"highQuality"}})),
--    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{"none"}})),
--    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{"first-strong"}})),
-+    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{std::string{"highQuality"}}})),
-+    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{std::string{"none"}}})),
-+    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{std::string{"first-strong"}}})),
-     numberOfLines(convertRawProp(context, rawProps, "numberOfLines", sourceProps.numberOfLines, {0})),
-     ellipsizeMode(convertRawProp(context, rawProps, "ellipsizeMode", sourceProps.ellipsizeMode, {std::string{"tail"}})) {}
-     
-@@ -66,6 +68,14 @@ folly::dynamic EnrichedMarkdownProps::getDiffProps(
+@@ -66,6 +68,14 @@
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
@@ -2696,7 +1300,7 @@ index 2d1077e5..c2fa121c 100644
      
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
-@@ -323,6 +333,8 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
+@@ -323,6 +333,8 @@
      const RawProps &rawProps): ViewProps(context, sourceProps, rawProps),
  
      markdown(convertRawProp(context, rawProps, "markdown", sourceProps.markdown, {})),
@@ -2705,20 +1309,7 @@ index 2d1077e5..c2fa121c 100644
      markdownStyle(convertRawProp(context, rawProps, "markdownStyle", sourceProps.markdownStyle, {})),
      enableImagePress(convertRawProp(context, rawProps, "enableImagePress", sourceProps.enableImagePress, {false})),
      enableTaskListItemToggle(convertRawProp(context, rawProps, "enableTaskListItemToggle", sourceProps.enableTaskListItemToggle, {true})),
-@@ -344,9 +356,9 @@ EnrichedMarkdownTextProps::EnrichedMarkdownTextProps(
-     imageRequestHeaders(convertRawProp(context, rawProps, "imageRequestHeaders", sourceProps.imageRequestHeaders, {})),
-     selectionMenuConfig(convertRawProp(context, rawProps, "selectionMenuConfig", sourceProps.selectionMenuConfig, {})),
-     accessibilityLabels(convertRawProp(context, rawProps, "accessibilityLabels", sourceProps.accessibilityLabels, {})),
--    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{"highQuality"}})),
--    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{"none"}})),
--    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{"first-strong"}})),
-+    textBreakStrategy(convertRawProp(context, rawProps, "textBreakStrategy", sourceProps.textBreakStrategy, {std::string{std::string{"highQuality"}}})),
-+    lineBreakStrategyIOS(convertRawProp(context, rawProps, "lineBreakStrategyIOS", sourceProps.lineBreakStrategyIOS, {std::string{std::string{"none"}}})),
-+    writingDirection(convertRawProp(context, rawProps, "writingDirection", sourceProps.writingDirection, {std::string{std::string{"first-strong"}}})),
-     numberOfLines(convertRawProp(context, rawProps, "numberOfLines", sourceProps.numberOfLines, {0})),
-     ellipsizeMode(convertRawProp(context, rawProps, "ellipsizeMode", sourceProps.ellipsizeMode, {std::string{"tail"}})) {}
-     
-@@ -369,6 +381,14 @@ folly::dynamic EnrichedMarkdownTextProps::getDiffProps(
+@@ -369,6 +381,14 @@
    if (markdown != oldProps->markdown) {
      result["markdown"] = markdown;
    }
@@ -2734,362 +1325,9 @@ index 2d1077e5..c2fa121c 100644
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
-index 06fa054e..35d9cd59 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
-@@ -12,7 +12,6 @@
- #include <react/renderer/components/view/ViewProps.h>
- #include <react/renderer/core/PropsParserContext.h>
- #include <react/renderer/core/propsConversions.h>
--#include <react/renderer/debug/DebugStringConvertible.h>
- #include <react/renderer/graphics/Color.h>
- #include <vector>
- 
-@@ -28,7 +27,6 @@ struct EnrichedMarkdownMarkdownStyleParagraphStruct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleParagraphStruct&) const = default;
- 
-@@ -104,7 +102,6 @@ struct EnrichedMarkdownMarkdownStyleH1Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH1Struct&) const = default;
- 
-@@ -180,7 +177,6 @@ struct EnrichedMarkdownMarkdownStyleH2Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH2Struct&) const = default;
- 
-@@ -256,7 +252,6 @@ struct EnrichedMarkdownMarkdownStyleH3Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH3Struct&) const = default;
- 
-@@ -332,7 +327,6 @@ struct EnrichedMarkdownMarkdownStyleH4Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH4Struct&) const = default;
- 
-@@ -408,7 +402,6 @@ struct EnrichedMarkdownMarkdownStyleH5Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH5Struct&) const = default;
- 
-@@ -484,7 +477,6 @@ struct EnrichedMarkdownMarkdownStyleH6Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleH6Struct&) const = default;
- 
-@@ -824,7 +816,6 @@ struct EnrichedMarkdownMarkdownStyleBlockquoteStruct {
-   Float padding{0.0};
-   EnrichedMarkdownMarkdownStyleBlockquoteAdmonitionsStruct admonitions{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleBlockquoteStruct&) const = default;
- 
-@@ -937,7 +928,6 @@ struct EnrichedMarkdownMarkdownStyleListStruct {
-   Float marginLeft{0.0};
-   Float itemSpacing{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleListStruct&) const = default;
- 
-@@ -1054,7 +1044,6 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct {
-   SharedColor attribute{};
-   SharedColor embedded{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct&) const = default;
- 
-@@ -1165,7 +1154,6 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockStruct {
-   Float padding{0.0};
-   EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeBlockStruct&) const = default;
- 
-@@ -1262,7 +1250,6 @@ struct EnrichedMarkdownMarkdownStyleLinkStruct {
-   bool underline{false};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleLinkStruct&) const = default;
- 
-@@ -1315,7 +1302,6 @@ struct EnrichedMarkdownMarkdownStyleLinkVariantsStruct {
-   SharedColor backgroundColor{};
-   std::string fontFamily{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleLinkVariantsStruct&) const = default;
- 
-@@ -1381,7 +1367,6 @@ struct EnrichedMarkdownMarkdownStyleStrongStruct {
-   std::string fontWeight{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStrongStruct&) const = default;
- 
-@@ -1427,7 +1412,6 @@ struct EnrichedMarkdownMarkdownStyleEmStruct {
-   std::string fontStyle{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleEmStruct&) const = default;
- 
-@@ -1471,7 +1455,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleEmStru
- struct EnrichedMarkdownMarkdownStyleStrikethroughStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStrikethroughStruct&) const = default;
- 
-@@ -1505,7 +1488,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleStrike
- struct EnrichedMarkdownMarkdownStyleUnderlineStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleUnderlineStruct&) const = default;
- 
-@@ -1543,7 +1525,6 @@ struct EnrichedMarkdownMarkdownStyleCodeStruct {
-   SharedColor backgroundColor{};
-   SharedColor borderColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleCodeStruct&) const = default;
- 
-@@ -1603,7 +1584,6 @@ struct EnrichedMarkdownMarkdownStyleImageStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleImageStruct&) const = default;
- 
-@@ -1725,7 +1705,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleVideoS
- struct EnrichedMarkdownMarkdownStyleInlineImageStruct {
-   Float size{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleInlineImageStruct&) const = default;
- 
-@@ -1762,7 +1741,6 @@ struct EnrichedMarkdownMarkdownStyleThematicBreakStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleThematicBreakStruct&) const = default;
- 
-@@ -1829,7 +1807,6 @@ struct EnrichedMarkdownMarkdownStyleTableStruct {
-   Float horizontalOverflow{0.0};
-   std::string align{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleTableStruct&) const = default;
- 
-@@ -1959,7 +1936,6 @@ struct EnrichedMarkdownMarkdownStyleTaskListStruct {
-   SharedColor checkedTextColor{};
-   bool checkedStrikethrough{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleTaskListStruct&) const = default;
- 
-@@ -2029,7 +2005,6 @@ struct EnrichedMarkdownMarkdownStyleMathStruct {
-   Float marginBottom{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleMathStruct&) const = default;
- 
-@@ -2093,7 +2068,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleMathSt
- struct EnrichedMarkdownMarkdownStyleInlineMathStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleInlineMathStruct&) const = default;
- 
-@@ -2128,7 +2102,6 @@ struct EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct {
-   Float density{0.0};
-   Float speed{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct&) const = default;
- 
-@@ -2167,7 +2140,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleSpoile
- struct EnrichedMarkdownMarkdownStyleSpoilerSolidStruct {
-   Float borderRadius{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerSolidStruct&) const = default;
- 
-@@ -2203,7 +2175,6 @@ struct EnrichedMarkdownMarkdownStyleSpoilerStruct {
-   EnrichedMarkdownMarkdownStyleSpoilerParticlesStruct particles{};
-   EnrichedMarkdownMarkdownStyleSpoilerSolidStruct solid{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSpoilerStruct&) const = default;
- 
-@@ -2248,7 +2219,6 @@ struct EnrichedMarkdownMarkdownStyleSuperscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSuperscriptStruct&) const = default;
- 
-@@ -2288,7 +2258,6 @@ struct EnrichedMarkdownMarkdownStyleSubscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleSubscriptStruct&) const = default;
- 
-@@ -2328,7 +2297,6 @@ struct EnrichedMarkdownMarkdownStyleHighlightStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleHighlightStruct&) const = default;
- 
-@@ -2395,7 +2363,6 @@ struct EnrichedMarkdownMarkdownStyleStruct {
-   EnrichedMarkdownMarkdownStyleSubscriptStruct subscript{};
-   EnrichedMarkdownMarkdownStyleHighlightStruct highlight{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMarkdownStyleStruct&) const = default;
- 
-@@ -2576,7 +2543,6 @@ struct EnrichedMarkdownMd4cFlagsStruct {
-   bool preserveBlankLines{false};
-   bool admonitions{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownMd4cFlagsStruct&) const = default;
- 
-@@ -2646,7 +2612,6 @@ struct EnrichedMarkdownStreamingConfigStruct {
-   std::string tableMode{};
-   std::string codeBlockMode{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownStreamingConfigStruct&) const = default;
- 
-@@ -2686,7 +2651,6 @@ struct EnrichedMarkdownContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownContextMenuItemsStruct&) const = default;
- 
-@@ -2736,7 +2700,6 @@ struct EnrichedMarkdownImageRequestHeadersStruct {
-   std::string name{};
-   std::string value{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownImageRequestHeadersStruct&) const = default;
- 
-@@ -2791,7 +2754,6 @@ struct EnrichedMarkdownSelectionMenuConfigStruct {
-   std::string copyImageUrlsLabel{};
-   std::vector<std::string> copyImageUrlPluralTemplates{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownSelectionMenuConfigStruct&) const = default;
- 
-@@ -2858,7 +2820,6 @@ struct EnrichedMarkdownAccessibilityLabelsListStruct {
-   std::string orderedItem{};
-   std::string nestedOrderedItem{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsListStruct&) const = default;
- 
-@@ -2908,7 +2869,6 @@ struct EnrichedMarkdownAccessibilityLabelsBlockquoteStruct {
-   std::string quote{};
-   std::string nestedQuote{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsBlockquoteStruct&) const = default;
- 
-@@ -2947,7 +2907,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownAccessibilityLabels
- struct EnrichedMarkdownAccessibilityLabelsTableStruct {
-   std::string row{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsTableStruct&) const = default;
- 
-@@ -2981,7 +2940,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownAccessibilityLabels
- struct EnrichedMarkdownAccessibilityLabelsMathStruct {
-   std::string equation{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsMathStruct&) const = default;
- 
-@@ -3017,7 +2975,6 @@ struct EnrichedMarkdownAccessibilityLabelsRotorStruct {
-   std::string links{};
-   std::string images{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsRotorStruct&) const = default;
- 
-@@ -3065,7 +3022,6 @@ struct EnrichedMarkdownAccessibilityLabelsStruct {
-   EnrichedMarkdownAccessibilityLabelsMathStruct math{};
-   EnrichedMarkdownAccessibilityLabelsRotorStruct rotor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownAccessibilityLabelsStruct&) const = default;
- 
-@@ -3123,6 +3079,8 @@ class EnrichedMarkdownProps final : public ViewProps {
+@@ -3123,6 +3123,8 @@
  #pragma mark - Props
  
    std::string markdown{};
@@ -3098,61 +1336,35 @@ index 06fa054e..35d9cd59 100644
    EnrichedMarkdownMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -3144,9 +3102,9 @@ class EnrichedMarkdownProps final : public ViewProps {
-   std::vector<EnrichedMarkdownImageRequestHeadersStruct> imageRequestHeaders{};
-   EnrichedMarkdownSelectionMenuConfigStruct selectionMenuConfig{};
-   EnrichedMarkdownAccessibilityLabelsStruct accessibilityLabels{};
--  std::string textBreakStrategy{std::string{"highQuality"}};
--  std::string lineBreakStrategyIOS{std::string{"none"}};
--  std::string writingDirection{std::string{"first-strong"}};
-+  std::string textBreakStrategy{std::string{std::string{"highQuality"}}};
-+  std::string lineBreakStrategyIOS{std::string{std::string{"none"}}};
-+  std::string writingDirection{std::string{std::string{"first-strong"}}};
-   int numberOfLines{0};
-   std::string ellipsizeMode{std::string{"tail"}};
- 
-@@ -3155,8 +3113,6 @@ class EnrichedMarkdownProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- struct EnrichedMarkdownTextInputMarkdownShortcutsStruct {
-@@ -3205,248 +3161,324 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSh
+@@ -3205,6 +3207,120 @@
  }
  #endif
  
--struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
 +struct EnrichedMarkdownTextInputMarkdownStyleParagraphStruct {
 +  Float fontSize{0.0};
 +  std::string fontFamily{};
 +  std::string fontWeight{};
-   SharedColor color{};
--
++  SharedColor color{};
 +  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct&) const = default;
++
++#ifdef RN_SERIALIZABLE_STATE
 +  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
 +    result["fontSize"] = fontSize;
 +    result["fontFamily"] = fontFamily;
 +    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
++    result["color"] = ::facebook::react::toDynamic(color);
 +    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStrongStruct &result) {
++    return result;
++  }
++#endif
++};
++
 +static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
++  auto map = (std::unordered_map<std::string, RawValue>)value;
++
 +  auto tmp_fontSize = map.find("fontSize");
 +  if (tmp_fontSize != map.end()) {
 +    fromRawValue(context, tmp_fontSize->second, result.fontSize);
@@ -3165,472 +1377,42 @@ index 06fa054e..35d9cd59 100644
 +  if (tmp_fontWeight != map.end()) {
 +    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
 +  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
 +  auto tmp_lineHeight = map.find("lineHeight");
 +  if (tmp_lineHeight != map.end()) {
 +    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleStrongStruct]";
++}
++
 +static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &value) {
 +  return "[Object EnrichedMarkdownTextInputMarkdownStyleParagraphStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
++}
++
++#ifdef RN_SERIALIZABLE_STATE
 +static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleParagraphStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleEmStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleEmStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH1Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleEmStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH1Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleEmStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH1Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleLinkStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  bool underline{false};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH2Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["underline"] = underline;
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH2Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_underline = map.find("underline");
--  if (tmp_underline != map.end()) {
--    fromRawValue(context, tmp_underline->second, result.underline);
--  }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH2Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct {
--  std::string pattern{};
-+struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  bool underline{false};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH3Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
--    result["pattern"] = pattern;
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["underline"] = underline;
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH3Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_pattern = map.find("pattern");
--  if (tmp_pattern != map.end()) {
--    fromRawValue(context, tmp_pattern->second, result.pattern);
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-   }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_underline = map.find("underline");
--  if (tmp_underline != map.end()) {
--    fromRawValue(context, tmp_underline->second, result.underline);
--  }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH3Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> &result) {
--  auto items = (std::vector<RawValue>)value;
--  for (const auto &item : items) {
--    EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct newItem;
--    fromRawValue(context, item, newItem);
--    result.emplace_back(newItem);
--  }
--}
--
--
--struct EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
-+  Float fontSize{0.0};
-+  std::string fontFamily{};
-+  std::string fontWeight{};
-   SharedColor color{};
--  SharedColor backgroundColor{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH4Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-+    result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-+    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
--    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH4Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-+  auto tmp_fontSize = map.find("fontSize");
-+  if (tmp_fontSize != map.end()) {
-+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
-+  }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-+  auto tmp_fontWeight = map.find("fontWeight");
-+  if (tmp_fontWeight != map.end()) {
-+    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
--  auto tmp_backgroundColor = map.find("backgroundColor");
--  if (tmp_backgroundColor != map.end()) {
--    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH4Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
-   Float fontSize{0.0};
-+  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH1Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH5Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH1Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH5Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-   auto tmp_fontSize = map.find("fontSize");
-   if (tmp_fontSize != map.end()) {
-     fromRawValue(context, tmp_fontSize->second, result.fontSize);
-   }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-   auto tmp_fontWeight = map.find("fontWeight");
-   if (tmp_fontWeight != map.end()) {
-     fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-@@ -3455,44 +3487,55 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH1Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH5Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
-+struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
-   Float fontSize{0.0};
-+  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
-+  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH2Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH6Struct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
-+    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["lineHeight"] = lineHeight;
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH2Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH6Struct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
-   auto tmp_fontSize = map.find("fontSize");
-   if (tmp_fontSize != map.end()) {
-     fromRawValue(context, tmp_fontSize->second, result.fontSize);
-   }
-+  auto tmp_fontFamily = map.find("fontFamily");
-+  if (tmp_fontFamily != map.end()) {
-+    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
-+  }
-   auto tmp_fontWeight = map.find("fontWeight");
-   if (tmp_fontWeight != map.end()) {
-     fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-@@ -3501,198 +3544,286 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_lineHeight = map.find("lineHeight");
-+  if (tmp_lineHeight != map.end()) {
-+    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH2Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleH6Struct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
++  return value.toDynamic();
++}
++#endif
++
 +struct EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct {
-   Float fontSize{0.0};
++  Float fontSize{0.0};
 +  std::string fontFamily{};
-   std::string fontWeight{};
-   SharedColor color{};
--
++  std::string fontWeight{};
++  SharedColor color{};
 +  Float lineHeight{0.0};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH3Struct&) const = default;
++
++#ifdef RN_SERIALIZABLE_STATE
 +  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct&) const = default;
- 
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
-     result["fontSize"] = fontSize;
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
++    result["fontSize"] = fontSize;
 +    result["fontFamily"] = fontFamily;
-     result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
++    result["fontWeight"] = fontWeight;
++    result["color"] = ::facebook::react::toDynamic(color);
 +    result["lineHeight"] = lineHeight;
 +    return result;
 +  }
@@ -3672,789 +1454,265 @@ index 06fa054e..35d9cd59 100644
 +}
 +#endif
 +
-+struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
-+  SharedColor color{};
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct&) const = default;
-+
-+  folly::dynamic toDynamic() const {
-+    folly::dynamic result = folly::dynamic::object();
-+    result["color"] = ::facebook::react::toDynamic(color);
-+    return result;
-+  }
-+#endif
-+};
-+
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStrongStruct &result) {
-+  auto map = (std::unordered_map<std::string, RawValue>)value;
-+
-+  auto tmp_color = map.find("color");
-+  if (tmp_color != map.end()) {
-+    fromRawValue(context, tmp_color->second, result.color);
-+  }
-+}
-+
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleStrongStruct]";
-+}
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleStrongStruct &value) {
-+  return value.toDynamic();
-+}
-+#endif
-+
-+struct EnrichedMarkdownTextInputMarkdownStyleEmStruct {
-+  SharedColor color{};
-+
-+#ifdef RN_SERIALIZABLE_STATE
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleEmStruct&) const = default;
-+
-+  folly::dynamic toDynamic() const {
-+    folly::dynamic result = folly::dynamic::object();
-+    result["color"] = ::facebook::react::toDynamic(color);
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH3Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleEmStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH3Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleEmStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleEmStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
-+struct EnrichedMarkdownTextInputMarkdownStyleLinkStruct {
+ struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
    SharedColor color{};
--
-+  bool underline{false};
-+  SharedColor backgroundColor{};
  
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH4Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct&) const = default;
+@@ -3423,8 +3539,10 @@
  
-   folly::dynamic toDynamic() const {
-     folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
-     result["color"] = ::facebook::react::toDynamic(color);
-+    result["underline"] = underline;
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
-     return result;
-   }
- #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH4Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
-   if (tmp_color != map.end()) {
-     fromRawValue(context, tmp_color->second, result.color);
-   }
-+  auto tmp_underline = map.find("underline");
-+  if (tmp_underline != map.end()) {
-+    fromRawValue(context, tmp_underline->second, result.underline);
-+  }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
-+  }
- }
- 
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH4Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkStruct]";
- }
- 
- #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
-+struct EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct {
-+  std::string pattern{};
+ struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
    SharedColor color{};
--
-+  bool underline{false};
-+  SharedColor backgroundColor{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH5Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct&) const = default;
- 
+@@ -3433,8 +3551,10 @@
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
-+    result["pattern"] = pattern;
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
      result["color"] = ::facebook::react::toDynamic(color);
-+    result["underline"] = underline;
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    result["lineHeight"] = lineHeight;
      return result;
    }
  #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH5Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
-+  auto tmp_pattern = map.find("pattern");
-+  if (tmp_pattern != map.end()) {
-+    fromRawValue(context, tmp_pattern->second, result.pattern);
-   }
-   auto tmp_color = map.find("color");
+@@ -3455,6 +3575,14 @@
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
-+  auto tmp_underline = map.find("underline");
-+  if (tmp_underline != map.end()) {
-+    fromRawValue(context, tmp_underline->second, result.underline);
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
 +  }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
  }
  
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH5Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct]";
- }
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
+@@ -3469,8 +3597,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct &value) {
-   return value.toDynamic();
- }
- #endif
- 
--struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
--  Float fontSize{0.0};
--  std::string fontWeight{};
--  SharedColor color{};
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> &result) {
-+  auto items = (std::vector<RawValue>)value;
-+  for (const auto &item : items) {
-+    EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct newItem;
-+    fromRawValue(context, item, newItem);
-+    result.emplace_back(newItem);
-+  }
-+}
-+
- 
-+struct EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct {
-+  SharedColor color{};
-+  SharedColor backgroundColor{};
- 
- #ifdef RN_SERIALIZABLE_STATE
--  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleH6Struct&) const = default;
-+  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct&) const = default;
- 
+@@ -3479,8 +3609,10 @@
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["fontSize"] = fontSize;
--    result["fontWeight"] = fontWeight;
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
      result["color"] = ::facebook::react::toDynamic(color);
-+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    result["lineHeight"] = lineHeight;
      return result;
    }
  #endif
- };
- 
--static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleH6Struct &result) {
-+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &result) {
-   auto map = (std::unordered_map<std::string, RawValue>)value;
- 
--  auto tmp_fontSize = map.find("fontSize");
--  if (tmp_fontSize != map.end()) {
--    fromRawValue(context, tmp_fontSize->second, result.fontSize);
--  }
--  auto tmp_fontWeight = map.find("fontWeight");
--  if (tmp_fontWeight != map.end()) {
--    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
--  }
-   auto tmp_color = map.find("color");
+@@ -3501,6 +3633,14 @@
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
-+  auto tmp_backgroundColor = map.find("backgroundColor");
-+  if (tmp_backgroundColor != map.end()) {
-+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
 +  }
  }
  
--static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
--  return "[Object EnrichedMarkdownTextInputMarkdownStyleH6Struct]";
-+static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-+  return "[Object EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct]";
- }
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
+@@ -3515,8 +3655,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
  
  #ifdef RN_SERIALIZABLE_STATE
--static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct &value) {
-   return value.toDynamic();
- }
+@@ -3525,8 +3667,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
  #endif
-@@ -3700,7 +3831,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
- struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
-   Float itemSpacing{0.0};
+@@ -3547,6 +3691,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
  
--
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
+@@ -3561,8 +3713,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
  #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputMarkdownStyleListStruct&) const = default;
+@@ -3571,8 +3725,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3593,6 +3749,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
  
-@@ -3732,36 +3862,39 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
+@@ -3607,8 +3771,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+@@ -3617,8 +3783,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3639,6 +3807,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
+@@ -3653,8 +3829,10 @@
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
+   Float fontSize{0.0};
++  std::string fontFamily{};
+   std::string fontWeight{};
+   SharedColor color{};
++  Float lineHeight{0.0};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+@@ -3663,8 +3841,10 @@
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
+     result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
+     result["fontWeight"] = fontWeight;
+     result["color"] = ::facebook::react::toDynamic(color);
++    result["lineHeight"] = lineHeight;
+     return result;
+   }
+ #endif
+@@ -3685,6 +3865,14 @@
+   if (tmp_color != map.end()) {
+     fromRawValue(context, tmp_color->second, result.color);
+   }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
+@@ -3732,6 +3920,8 @@
  #endif
  
  struct EnrichedMarkdownTextInputMarkdownStyleStruct {
--  EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
--  EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
--  EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
--  std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> linkVariants{};
--  EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct spoiler{};
 +  EnrichedMarkdownTextInputMarkdownStyleParagraphStruct paragraph{};
-   EnrichedMarkdownTextInputMarkdownStyleH1Struct h1{};
-   EnrichedMarkdownTextInputMarkdownStyleH2Struct h2{};
-   EnrichedMarkdownTextInputMarkdownStyleH3Struct h3{};
-   EnrichedMarkdownTextInputMarkdownStyleH4Struct h4{};
-   EnrichedMarkdownTextInputMarkdownStyleH5Struct h5{};
-   EnrichedMarkdownTextInputMarkdownStyleH6Struct h6{};
 +  EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct codeBlock{};
-+  EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
-+  EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
-+  EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-+  std::vector<EnrichedMarkdownTextInputMarkdownStyleLinkVariantsStruct> linkVariants{};
-+  EnrichedMarkdownTextInputMarkdownStyleSpoilerStruct spoiler{};
-   EnrichedMarkdownTextInputMarkdownStyleListStruct list{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputMarkdownStyleStruct&) const = default;
+   EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
+   EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
+   EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
+@@ -3751,6 +3941,8 @@
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
--    result["strong"] = ::facebook::react::toDynamic(strong);
--    result["em"] = ::facebook::react::toDynamic(em);
--    result["link"] = ::facebook::react::toDynamic(link);
--    result["linkVariants"] = ::facebook::react::toDynamic(linkVariants);
--    result["spoiler"] = ::facebook::react::toDynamic(spoiler);
 +    result["paragraph"] = ::facebook::react::toDynamic(paragraph);
-     result["h1"] = ::facebook::react::toDynamic(h1);
-     result["h2"] = ::facebook::react::toDynamic(h2);
-     result["h3"] = ::facebook::react::toDynamic(h3);
-     result["h4"] = ::facebook::react::toDynamic(h4);
-     result["h5"] = ::facebook::react::toDynamic(h5);
-     result["h6"] = ::facebook::react::toDynamic(h6);
 +    result["codeBlock"] = ::facebook::react::toDynamic(codeBlock);
-+    result["strong"] = ::facebook::react::toDynamic(strong);
-+    result["em"] = ::facebook::react::toDynamic(em);
-+    result["link"] = ::facebook::react::toDynamic(link);
-+    result["linkVariants"] = ::facebook::react::toDynamic(linkVariants);
-+    result["spoiler"] = ::facebook::react::toDynamic(spoiler);
-     result["list"] = ::facebook::react::toDynamic(list);
-     return result;
-   }
-@@ -3771,25 +3904,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+     result["strong"] = ::facebook::react::toDynamic(strong);
+     result["em"] = ::facebook::react::toDynamic(em);
+     result["link"] = ::facebook::react::toDynamic(link);
+@@ -3771,6 +3963,14 @@
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
--  auto tmp_strong = map.find("strong");
--  if (tmp_strong != map.end()) {
--    fromRawValue(context, tmp_strong->second, result.strong);
--  }
--  auto tmp_em = map.find("em");
--  if (tmp_em != map.end()) {
--    fromRawValue(context, tmp_em->second, result.em);
--  }
--  auto tmp_link = map.find("link");
--  if (tmp_link != map.end()) {
--    fromRawValue(context, tmp_link->second, result.link);
--  }
--  auto tmp_linkVariants = map.find("linkVariants");
--  if (tmp_linkVariants != map.end()) {
--    fromRawValue(context, tmp_linkVariants->second, result.linkVariants);
--  }
--  auto tmp_spoiler = map.find("spoiler");
--  if (tmp_spoiler != map.end()) {
--    fromRawValue(context, tmp_spoiler->second, result.spoiler);
 +  auto tmp_paragraph = map.find("paragraph");
 +  if (tmp_paragraph != map.end()) {
 +    fromRawValue(context, tmp_paragraph->second, result.paragraph);
-   }
-   auto tmp_h1 = map.find("h1");
-   if (tmp_h1 != map.end()) {
-@@ -3815,6 +3932,30 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
-   if (tmp_h6 != map.end()) {
-     fromRawValue(context, tmp_h6->second, result.h6);
-   }
++  }
 +  auto tmp_codeBlock = map.find("codeBlock");
 +  if (tmp_codeBlock != map.end()) {
 +    fromRawValue(context, tmp_codeBlock->second, result.codeBlock);
 +  }
-+  auto tmp_strong = map.find("strong");
-+  if (tmp_strong != map.end()) {
-+    fromRawValue(context, tmp_strong->second, result.strong);
-+  }
-+  auto tmp_em = map.find("em");
-+  if (tmp_em != map.end()) {
-+    fromRawValue(context, tmp_em->second, result.em);
-+  }
-+  auto tmp_link = map.find("link");
-+  if (tmp_link != map.end()) {
-+    fromRawValue(context, tmp_link->second, result.link);
-+  }
-+  auto tmp_linkVariants = map.find("linkVariants");
-+  if (tmp_linkVariants != map.end()) {
-+    fromRawValue(context, tmp_linkVariants->second, result.linkVariants);
-+  }
-+  auto tmp_spoiler = map.find("spoiler");
-+  if (tmp_spoiler != map.end()) {
-+    fromRawValue(context, tmp_spoiler->second, result.spoiler);
-+  }
-   auto tmp_list = map.find("list");
-   if (tmp_list != map.end()) {
-     fromRawValue(context, tmp_list->second, result.list);
-@@ -3835,7 +3976,6 @@ struct EnrichedMarkdownTextInputContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputContextMenuItemsStruct&) const = default;
- 
-@@ -3887,7 +4027,6 @@ struct EnrichedMarkdownTextInputSelectionMenuConfigStruct {
-   bool copyAsMarkdown{false};
-   std::string copyAsMarkdownLabel{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputSelectionMenuConfigStruct&) const = default;
- 
-@@ -3947,7 +4086,6 @@ struct EnrichedMarkdownTextInputFormatMenuConfigStruct {
-   bool link{false};
-   std::string linkLabel{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputFormatMenuConfigStruct&) const = default;
- 
-@@ -4040,7 +4178,6 @@ struct EnrichedMarkdownTextInputLinkRegexStruct {
-   bool isDisabled{false};
-   bool isDefault{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextInputLinkRegexStruct&) const = default;
- 
-@@ -4127,8 +4264,6 @@ class EnrichedMarkdownTextInputProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- struct EnrichedMarkdownTextMarkdownStyleParagraphStruct {
-@@ -4141,7 +4276,6 @@ struct EnrichedMarkdownTextMarkdownStyleParagraphStruct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleParagraphStruct&) const = default;
- 
-@@ -4217,7 +4351,6 @@ struct EnrichedMarkdownTextMarkdownStyleH1Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH1Struct&) const = default;
- 
-@@ -4293,7 +4426,6 @@ struct EnrichedMarkdownTextMarkdownStyleH2Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH2Struct&) const = default;
- 
-@@ -4369,7 +4501,6 @@ struct EnrichedMarkdownTextMarkdownStyleH3Struct {
-   Float lineHeight{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleH3Struct&) const = default;
- 
-@@ -4787,7 +4918,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct&) const = default;
- 
-@@ -4827,7 +4957,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct&) const = default;
- 
-@@ -4870,7 +4999,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct {
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsWarningStruct warning{};
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsCautionStruct caution{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct&) const = default;
- 
-@@ -4937,7 +5065,6 @@ struct EnrichedMarkdownTextMarkdownStyleBlockquoteStruct {
-   Float padding{0.0};
-   EnrichedMarkdownTextMarkdownStyleBlockquoteAdmonitionsStruct admonitions{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleBlockquoteStruct&) const = default;
- 
-@@ -5050,7 +5177,6 @@ struct EnrichedMarkdownTextMarkdownStyleListStruct {
-   Float marginLeft{0.0};
-   Float itemSpacing{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleListStruct&) const = default;
- 
-@@ -5167,7 +5293,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct {
-   SharedColor attribute{};
-   SharedColor embedded{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct&) const = default;
- 
-@@ -5278,7 +5403,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockStruct {
-   Float padding{0.0};
-   EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeBlockStruct&) const = default;
- 
-@@ -5375,7 +5499,6 @@ struct EnrichedMarkdownTextMarkdownStyleLinkStruct {
-   bool underline{false};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleLinkStruct&) const = default;
- 
-@@ -5428,7 +5551,6 @@ struct EnrichedMarkdownTextMarkdownStyleLinkVariantsStruct {
-   SharedColor backgroundColor{};
-   std::string fontFamily{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleLinkVariantsStruct&) const = default;
- 
-@@ -5494,7 +5616,6 @@ struct EnrichedMarkdownTextMarkdownStyleStrongStruct {
-   std::string fontWeight{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStrongStruct&) const = default;
- 
-@@ -5540,7 +5661,6 @@ struct EnrichedMarkdownTextMarkdownStyleEmStruct {
-   std::string fontStyle{};
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleEmStruct&) const = default;
- 
-@@ -5584,7 +5704,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleEm
- struct EnrichedMarkdownTextMarkdownStyleStrikethroughStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStrikethroughStruct&) const = default;
- 
-@@ -5618,7 +5737,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleSt
- struct EnrichedMarkdownTextMarkdownStyleUnderlineStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleUnderlineStruct&) const = default;
- 
-@@ -5656,7 +5774,6 @@ struct EnrichedMarkdownTextMarkdownStyleCodeStruct {
-   SharedColor backgroundColor{};
-   SharedColor borderColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleCodeStruct&) const = default;
- 
-@@ -5716,7 +5833,6 @@ struct EnrichedMarkdownTextMarkdownStyleImageStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleImageStruct&) const = default;
- 
-@@ -5838,7 +5954,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleVi
- struct EnrichedMarkdownTextMarkdownStyleInlineImageStruct {
-   Float size{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleInlineImageStruct&) const = default;
- 
-@@ -5875,7 +5990,6 @@ struct EnrichedMarkdownTextMarkdownStyleThematicBreakStruct {
-   Float marginTop{0.0};
-   Float marginBottom{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleThematicBreakStruct&) const = default;
- 
-@@ -5942,7 +6056,6 @@ struct EnrichedMarkdownTextMarkdownStyleTableStruct {
-   Float horizontalOverflow{0.0};
-   std::string align{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleTableStruct&) const = default;
- 
-@@ -6072,7 +6185,6 @@ struct EnrichedMarkdownTextMarkdownStyleTaskListStruct {
-   SharedColor checkedTextColor{};
-   bool checkedStrikethrough{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleTaskListStruct&) const = default;
- 
-@@ -6142,7 +6254,6 @@ struct EnrichedMarkdownTextMarkdownStyleMathStruct {
-   Float marginBottom{0.0};
-   std::string textAlign{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleMathStruct&) const = default;
- 
-@@ -6206,7 +6317,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleMa
- struct EnrichedMarkdownTextMarkdownStyleInlineMathStruct {
-   SharedColor color{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleInlineMathStruct&) const = default;
- 
-@@ -6241,7 +6351,6 @@ struct EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct {
-   Float density{0.0};
-   Float speed{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct&) const = default;
- 
-@@ -6280,7 +6389,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleSp
- struct EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct {
-   Float borderRadius{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct&) const = default;
- 
-@@ -6316,7 +6424,6 @@ struct EnrichedMarkdownTextMarkdownStyleSpoilerStruct {
-   EnrichedMarkdownTextMarkdownStyleSpoilerParticlesStruct particles{};
-   EnrichedMarkdownTextMarkdownStyleSpoilerSolidStruct solid{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSpoilerStruct&) const = default;
- 
-@@ -6361,7 +6468,6 @@ struct EnrichedMarkdownTextMarkdownStyleSuperscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSuperscriptStruct&) const = default;
- 
-@@ -6401,7 +6507,6 @@ struct EnrichedMarkdownTextMarkdownStyleSubscriptStruct {
-   Float fontScale{0.0};
-   Float baselineOffsetScale{0.0};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleSubscriptStruct&) const = default;
- 
-@@ -6441,7 +6546,6 @@ struct EnrichedMarkdownTextMarkdownStyleHighlightStruct {
-   SharedColor color{};
-   SharedColor backgroundColor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleHighlightStruct&) const = default;
- 
-@@ -6508,7 +6612,6 @@ struct EnrichedMarkdownTextMarkdownStyleStruct {
-   EnrichedMarkdownTextMarkdownStyleSubscriptStruct subscript{};
-   EnrichedMarkdownTextMarkdownStyleHighlightStruct highlight{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMarkdownStyleStruct&) const = default;
- 
-@@ -6689,7 +6792,6 @@ struct EnrichedMarkdownTextMd4cFlagsStruct {
-   bool preserveBlankLines{false};
-   bool admonitions{false};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextMd4cFlagsStruct&) const = default;
- 
-@@ -6759,7 +6861,6 @@ struct EnrichedMarkdownTextStreamingConfigStruct {
-   std::string tableMode{};
-   std::string codeBlockMode{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextStreamingConfigStruct&) const = default;
- 
-@@ -6799,7 +6900,6 @@ struct EnrichedMarkdownTextContextMenuItemsStruct {
-   std::string text{};
-   std::string icon{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextContextMenuItemsStruct&) const = default;
- 
-@@ -6849,7 +6949,6 @@ struct EnrichedMarkdownTextImageRequestHeadersStruct {
-   std::string name{};
-   std::string value{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextImageRequestHeadersStruct&) const = default;
- 
-@@ -6904,7 +7003,6 @@ struct EnrichedMarkdownTextSelectionMenuConfigStruct {
-   std::string copyImageUrlsLabel{};
-   std::vector<std::string> copyImageUrlPluralTemplates{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextSelectionMenuConfigStruct&) const = default;
- 
-@@ -6971,7 +7069,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsListStruct {
-   std::string orderedItem{};
-   std::string nestedOrderedItem{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsListStruct&) const = default;
- 
-@@ -7021,7 +7118,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsBlockquoteStruct {
-   std::string quote{};
-   std::string nestedQuote{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsBlockquoteStruct&) const = default;
- 
-@@ -7060,7 +7156,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextAccessibilityLa
- struct EnrichedMarkdownTextAccessibilityLabelsTableStruct {
-   std::string row{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsTableStruct&) const = default;
- 
-@@ -7094,7 +7189,6 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextAccessibilityLa
- struct EnrichedMarkdownTextAccessibilityLabelsMathStruct {
-   std::string equation{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsMathStruct&) const = default;
- 
-@@ -7130,7 +7224,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsRotorStruct {
-   std::string links{};
-   std::string images{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsRotorStruct&) const = default;
- 
-@@ -7178,7 +7271,6 @@ struct EnrichedMarkdownTextAccessibilityLabelsStruct {
-   EnrichedMarkdownTextAccessibilityLabelsMathStruct math{};
-   EnrichedMarkdownTextAccessibilityLabelsRotorStruct rotor{};
- 
--
- #ifdef RN_SERIALIZABLE_STATE
-   bool operator==(const EnrichedMarkdownTextAccessibilityLabelsStruct&) const = default;
- 
-@@ -7236,6 +7328,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
+   auto tmp_strong = map.find("strong");
+   if (tmp_strong != map.end()) {
+     fromRawValue(context, tmp_strong->second, result.strong);
+@@ -7236,6 +7436,8 @@
  #pragma mark - Props
  
    std::string markdown{};
@@ -4463,28 +1721,6 @@ index 06fa054e..35d9cd59 100644
    EnrichedMarkdownTextMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -7257,9 +7351,9 @@ class EnrichedMarkdownTextProps final : public ViewProps {
-   std::vector<EnrichedMarkdownTextImageRequestHeadersStruct> imageRequestHeaders{};
-   EnrichedMarkdownTextSelectionMenuConfigStruct selectionMenuConfig{};
-   EnrichedMarkdownTextAccessibilityLabelsStruct accessibilityLabels{};
--  std::string textBreakStrategy{std::string{"highQuality"}};
--  std::string lineBreakStrategyIOS{std::string{"none"}};
--  std::string writingDirection{std::string{"first-strong"}};
-+  std::string textBreakStrategy{std::string{std::string{"highQuality"}}};
-+  std::string lineBreakStrategyIOS{std::string{std::string{"none"}}};
-+  std::string writingDirection{std::string{std::string{"first-strong"}}};
-   int numberOfLines{0};
-   std::string ellipsizeMode{std::string{"tail"}};
- 
-@@ -7268,8 +7362,6 @@ class EnrichedMarkdownTextProps final : public ViewProps {
- 
-   folly::dynamic getDiffProps(const Props* prevProps) const override;
-   #endif
--
--  
- };
- 
- } // namespace facebook::react
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 index 58b4356d..1add886c 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
