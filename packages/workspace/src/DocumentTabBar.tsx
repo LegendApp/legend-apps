@@ -24,7 +24,7 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
       >
         <Text style={[styles.toggleText, { color: colors.muted }]}>☰</Text>
       </Pressable>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.tabs}>
         {paths.map(path => {
           const title = getPathName(path), active = path === activePath;
           return (
@@ -39,11 +39,21 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
           );
         })}
       </ScrollView>
+      <View style={styles.dragSpace} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  dragSpace: {
+    alignSelf: "stretch",
+    flex: 1,
+    minWidth: 36,
+  },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   close: {
     fontSize: 13,
     paddingHorizontal: 2,
