@@ -30,7 +30,6 @@ const viewerMarkdownStyle: MarkdownStyle = {
   h1: { color: "#d1d5db", fontSize: 22, fontWeight: "700", lineHeight: 28, marginBottom: 6 },
   h2: { color: "#d1d5db", fontSize: 20, fontWeight: "700", lineHeight: 26, marginBottom: 6 },
   h3: { color: "#d1d5db", fontSize: 18, fontWeight: "700", lineHeight: 24, marginBottom: 4 },
-  link: { color: "#93c5fd", underline: true },
   list: { color: "#d1d5db", fontSize: 17, gapWidth: 8, lineHeight: 17 * notesLineHeightRatio, markerColor: "#a1a1aa" },
   paragraph: { color: "#d1d5db", fontSize: 17, lineHeight: 17 * notesLineHeightRatio, marginBottom: 5 },
   strong: { color: "#d1d5db" },
