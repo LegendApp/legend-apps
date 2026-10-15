@@ -25,6 +25,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) void (^onAction)(NSString *action);
 @property (nonatomic, copy) void (^onCollapse)(NSString *blockId, NSPoint windowPoint);
 - (void)setSelectionJSON:(NSString *)json;
+- (nullable NSValue *)codeSelectionForBlock:(NSString *)blockId atPoint:(NSPoint)point clickCount:(NSInteger)clickCount;
 - (void)refresh;
 - (void)invalidate;
 @end

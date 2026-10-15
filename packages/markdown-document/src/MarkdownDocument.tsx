@@ -420,6 +420,10 @@ function isFencedCodeMarkdown(markdown: string) {
   return markdownFenceStartPattern.test(markdown.split(markdownLineBreakPattern)[0] ?? "");
 }
 
+function getCodeBlockBodyStart(markdown: string) {
+  return /^ {0,3}(?:`{3,}|~{3,})[^\r\n]*\r?\n/.exec(markdown)?.[0].length ?? 0;
+}
+
 function getStructuralSplitMarkdown(
   markdown: string,
   committedMarkdown: string,
@@ -1207,6 +1211,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selection: number,
       activationMode: ActiveBlockRenderState["activationMode"] = "programmatic",
     ) => {
+      if (activationMode === "programmatic" && block.type === "codeBlock" && selection === 0) {
+        selection = getCodeBlockBodyStart(block.markdown);
+      }
       activeBlockSnapshotRef.current = block;
       nativeEditingBlockIdRef.current = block.id;
       activeEditor$.blockId.set(block.id);
@@ -1519,16 +1526,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               frame: initialEditorFrame,
             };
           }
-          activeBlockSnapshotRef.current = nextActiveBlockSnapshot;
-          activeEditor$.blockId.set(nextActiveBlockId);
-          nativeEditingBlockIdRef.current = nextActiveBlockId;
-          draftMarkdown$.set(nextActiveBlockSnapshot.markdown);
-          committedMarkdownRef.current = nextActiveBlockSnapshot.markdown;
-          setDraftMarkdown(nextActiveBlockSnapshot.markdown);
-          setActiveActivationMode("programmatic");
-          activeInputSelectionRef.current = { start: 0, end: 0 };
-          setActiveSelection(0);
-          setActiveBlockId(nextActiveBlockId);
+          setActiveBlock(nextActiveBlockSnapshot, 0);
 
           if (pendingAfterMarkdown !== nextActiveBlockSnapshot.markdown) {
             updateRenderedBlockMarkdown(nextActiveBlockId, pendingAfterMarkdown);
@@ -1580,8 +1578,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         publishCommandState,
       pushHistoryEntry,
         pushUpdateBlockHistoryEntry,
+        setActiveBlock,
         updateRenderedBlockMarkdown,
-        validateTransactionResult, activeEditor$, draftMarkdown$, setActiveActivationMode, setActiveSelection, setActiveBlockId, setDraftMarkdown],
+        validateTransactionResult, draftMarkdown$, setActiveSelection, setDraftMarkdown],
     );
 
     const handleChangeMarkdown = useCallback(
@@ -2159,18 +2158,16 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const { afterMarkdown, beforeMarkdown, blockId } = event.nativeEvent;
         if (activeBlock && activeBlock.id === blockId) {
           const markdown = draftMarkdown$.peek();
-          if (activeBlock.type !== "codeBlock" && !isFencedCodeMarkdown(markdown)) {
-            const isNativeList = activeBlock.type === "orderedList" || activeBlock.type === "unorderedList"
-              || markdownListLinePattern.test(markdown);
-            const continuationMarkdown = isNativeList
-              ? { beforeMarkdown, afterMarkdown }
-              : getSplitContinuationMarkdown(beforeMarkdown, afterMarkdown);
-            splitActiveBlock(
-              activeBlock,
-              continuationMarkdown.beforeMarkdown ?? beforeMarkdown,
-              continuationMarkdown.afterMarkdown,
-            ).catch(reportAsyncError);
-          }
+          const isNativeList = activeBlock.type === "orderedList" || activeBlock.type === "unorderedList"
+            || markdownListLinePattern.test(markdown);
+          const continuationMarkdown = isNativeList
+            ? { beforeMarkdown, afterMarkdown }
+            : getSplitContinuationMarkdown(beforeMarkdown, afterMarkdown);
+          splitActiveBlock(
+            activeBlock,
+            continuationMarkdown.beforeMarkdown ?? beforeMarkdown,
+            continuationMarkdown.afterMarkdown,
+          ).catch(reportAsyncError);
         }
       },
       [reportAsyncError, splitActiveBlock, draftMarkdown$],
@@ -2488,9 +2485,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const selection = activeInputSelectionRef.current;
         const selectionStart = Math.min(selection.start, selection.end);
         const selectionEnd = Math.max(selection.start, selection.end);
+        const markdown = draftMarkdown$.peek();
         const isAtSelectionBoundary = direction === "up"
-          ? selectionStart === 0
-          : selectionEnd === draftMarkdown$.peek().length;
+          ? selectionStart === 0 || (activeBlockSnapshotRef.current?.type === "codeBlock" && selectionStart === getCodeBlockBodyStart(markdown))
+          : selectionEnd === markdown.length;
         const targetBlockId = getBlockIdAtIndex(direction === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1);
         if (activeBlockIdValue && activeBlockIndex >= 0 && isAtSelectionBoundary && targetBlockId) {
           const shouldCommitBeforeSelecting = (

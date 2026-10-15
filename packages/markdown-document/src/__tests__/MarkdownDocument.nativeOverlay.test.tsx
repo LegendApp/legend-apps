@@ -220,7 +220,7 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
         sourceEndByte: transaction.afterMarkdown.length,
         sourceStartByte: 0,
         textRevision: 0,
-        type: afterHeadingLevel > 0 ? "heading" : "paragraph",
+        type: afterHeadingLevel > 0 ? "heading" : transaction.afterMarkdown === originalBlock.markdown ? originalBlock.type : "paragraph",
       } satisfies MarkdownBlockSnapshot;
 
       this.blocks.splice(index, 1, beforeBlock, afterBlock);
@@ -331,6 +331,86 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe("native document text selection", () => {
+  it.each(["```ts\n", "~~~~swift\n", "  ```js\r\n"])("extends block selection upward from the code body after %j", async (opening) => {
+    const markdown = `${opening}const selected = true;\n${opening.trim().startsWith("~") ? "~~~~" : "```"}`;
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("before", 0, "Before"), { ...block("code", 1, markdown), type: "codeBlock" },
+    ]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        ref={commands} savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      blockId: "code", height: 80, rowHeight: 80, width: 640, x: 40, y: 80, markdown,
+    } }));
+    await flushPromises();
+    await act(async () => editorInput(renderer).props.onChangeSelection({ start: opening.length + 1, end: opening.length + 1 }));
+    expect(commands.current?.extendBlockSelectionUp()).toBe(false);
+    await act(async () => editorInput(renderer).props.onChangeSelection({ start: opening.length, end: opening.length }));
+    let handled = false;
+    await act(async () => { handled = commands.current?.extendBlockSelectionUp() ?? false; });
+    expect(handled).toBe(true);
+    expect(renderer.root.findAllByType(MarkdownRowEditorInput)).toHaveLength(0);
+    expect(adapter.applyTransactions).toEqual([]);
+    await act(async () => renderer.unmount());
+  });
+
+  it("focuses the code body after a native Enter splits before its opening fence", async () => {
+    const markdown = "```ts\nconst selected = true;\n```";
+    const adapter = new NativeOverlayAdapter(snapshot([{ ...block("code", 0, markdown), type: "codeBlock" }]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        autoFocusFirstBlock savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => nativeHost(renderer).props.onEnterPressed({ nativeEvent: {
+      blockId: "code", beforeMarkdown: "", afterMarkdown: markdown,
+    } }));
+    await flushPromises();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const input = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    expect(input.setSelection).toHaveBeenLastCalledWith(6, 6);
+    const edited = markdown.replace("const", "typed const");
+    await act(async () => editorInput(renderer).props.onChangeMarkdown(edited));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe(`\n\n${edited}`);
+    expect(adapter.applyTransactions.map((transaction) => transaction.type)).toEqual(["splitBlock", "updateBlockMarkdown"]);
+    await act(async () => renderer.unmount());
+  });
+
+  it.each(["```ts\n", "~~~~swift\n", "  ```js\r\n"])("focuses the code body after %j before newline typing", async (opening) => {
+    const markdown = `${opening}const selected = true;\n${opening.trim().startsWith("~") ? "~~~~" : "```"}`;
+    const adapter = new NativeOverlayAdapter(snapshot([{ ...block("code", 0, markdown), type: "codeBlock" }]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        autoFocusFirstBlock savePolicy={{ autosave: false }} />);
+    });
+    await flushPromises();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const input = __enrichedMarkdownTestHooks.inputInstances().at(-1)!;
+    expect(input.setSelection).toHaveBeenLastCalledWith(opening.length, opening.length);
+    input.setValue.mockClear();
+    input.setSelection.mockClear();
+    const nextMarkdown = `${opening}\nconst edited = true;const selected = true;\n${opening.trim().startsWith("~") ? "~~~~" : "```"}`;
+    await act(async () => {
+      editorInput(renderer).props.onChangeSelection({ start: opening.length + 1, end: opening.length + 1 });
+      editorInput(renderer).props.onChangeMarkdown(`${opening}\n${markdown.slice(opening.length)}`);
+    });
+    await flushPromises();
+    await act(async () => editorInput(renderer).props.onChangeMarkdown(nextMarkdown));
+    await flushPromises();
+    expect(adapter.sourceMarkdown).toBe(nextMarkdown);
+    expect(adapter.applyTransactions.every((transaction) => transaction.type === "updateBlockMarkdown")).toBe(true);
+    expect(input.setValue).not.toHaveBeenCalled();
+    expect(input.setSelection).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
   it("exits a newly typed single-item list without recreating its marker", async () => {
     const adapter = new NativeOverlayAdapter(snapshot([{ ...block("d1:b0", 0, "- Shortcut item"), type: "unorderedList" }]));
     let renderer!: TestRenderer.ReactTestRenderer;

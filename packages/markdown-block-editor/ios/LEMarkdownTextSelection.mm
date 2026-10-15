@@ -3,6 +3,34 @@
 @implementation LEMarkdownSelectionBlock
 @end
 
+@protocol LECodePreviewGeometry
+@property (nonatomic, readonly) NSAttributedString *attributedCode;
+@property (nonatomic, readonly) NSPoint textOrigin;
+@end
+
+static NSView<LECodePreviewGeometry> *codePreview(NSView *view) {
+  if (view.hidden) return nil;
+  if ([view respondsToSelector:@selector(attributedCode)] && [view respondsToSelector:@selector(textOrigin)]) {
+    return (NSView<LECodePreviewGeometry> *)view;
+  }
+  for (NSView *child in view.subviews) {
+    NSView<LECodePreviewGeometry> *preview = codePreview(child);
+    if (preview) return preview;
+  }
+  return nil;
+}
+
+static NSUInteger characterOffset(NSTextView *view, NSPoint point) {
+  [view.layoutManager ensureLayoutForTextContainer:view.textContainer];
+  CGFloat fraction = 0;
+  NSUInteger offset = [view.layoutManager characterIndexForPoint:point inTextContainer:view.textContainer fractionOfDistanceBetweenInsertionPoints:&fraction];
+  if (offset < view.string.length) {
+    NSRange composed = [view.string rangeOfComposedCharacterSequenceAtIndex:offset];
+    if (offset != composed.location) offset = fraction < 0.5 ? composed.location : NSMaxRange(composed);
+  }
+  return MIN(offset, view.string.length);
+}
+
 static NSUInteger textLength(LEMarkdownSelectionBlock *block) {
   NSUInteger length = 0;
   for (NSTextView *view in block.textViews) length += view.string.length;
@@ -49,14 +77,7 @@ static NSUInteger hitOffset(LEMarkdownSelectionBlock *block, NSPoint windowPoint
       bestDistance = distance;
       NSPoint origin = textOrigin(view);
       point.x -= origin.x; point.y -= origin.y;
-      [view.layoutManager ensureLayoutForTextContainer:view.textContainer];
-      CGFloat fraction = 0;
-      NSUInteger offset = [view.layoutManager characterIndexForPoint:point inTextContainer:view.textContainer fractionOfDistanceBetweenInsertionPoints:&fraction];
-      if (offset < view.string.length) {
-        NSRange composed = [view.string rangeOfComposedCharacterSequenceAtIndex:offset];
-        if (offset != composed.location) offset = fraction < 0.5 ? composed.location : NSMaxRange(composed);
-      }
-      bestOffset = base + MIN(offset, view.string.length);
+      bestOffset = base + characterOffset(view, point);
     }
     base += view.string.length;
   }
@@ -177,6 +198,49 @@ static NSUInteger hitOffset(LEMarkdownSelectionBlock *block, NSPoint windowPoint
   [self setSelectionJSON:@""];
   if (self.onChange) self.onChange(@"", NO);
   if (self.onCollapse) self.onCollapse(block.blockId, point);
+}
+- (NSValue *)codeSelectionForBlock:(NSString *)blockId atPoint:(NSPoint)point clickCount:(NSInteger)clickCount {
+  LEMarkdownSelectionBlock *block = [self blockWithId:blockId];
+  if (block.input || ![block.type isEqual:@"codeBlock"]) return nil;
+  NSRange newline = [block.markdown rangeOfString:@"\n"];
+  if (newline.location == NSNotFound) return nil;
+  NSString *opening = [[block.markdown substringToIndex:newline.location] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+  if (![opening hasPrefix:@"```"] && ![opening hasPrefix:@"~~~"]) return nil;
+  // Resolve against the preview before it is replaced by an editor with fences
+  // and different padding. Window coordinates cannot survive that layout change.
+  NSTextView *textView = block.textViews.count == 1 ? block.textViews.firstObject : nil;
+  NSUInteger offset;
+  if (textView) {
+    offset = hitOffset(block, point);
+  } else {
+    // The code renderer draws into a custom view instead of an NSTextView.
+    NSView<LECodePreviewGeometry> *preview = codePreview(block.view);
+    if (!preview.attributedCode) return nil;
+    textView = [[NSTextView alloc] initWithFrame:preview.bounds];
+    textView.textContainer.widthTracksTextView = NO;
+    textView.textContainer.containerSize = NSMakeSize(CGFLOAT_MAX, CGFLOAT_MAX);
+    textView.textContainer.lineFragmentPadding = 0;
+    textView.layoutManager.usesFontLeading = NO;
+    [textView.textStorage setAttributedString:preview.attributedCode];
+    NSPoint local = [preview convertPoint:point fromView:nil];
+    NSPoint origin = preview.textOrigin;
+    offset = characterOffset(textView, NSMakePoint(local.x - origin.x, local.y - origin.y));
+  }
+  NSRange range = NSMakeRange(offset, 0);
+  if (clickCount > 1) {
+    range = [textView selectionRangeForProposedRange:range granularity:NSSelectByWord];
+  }
+  // The renderer normalizes CRLF to LF; the raw input keeps both characters.
+  NSUInteger start = NSMaxRange(newline), end = start;
+  for (NSUInteger index = 0; index < NSMaxRange(range) && end < block.markdown.length; index++) {
+    if (index == range.location) start = end;
+    if ([block.markdown characterAtIndex:end] == '\r' && end + 1 < block.markdown.length &&
+        [block.markdown characterAtIndex:end + 1] == '\n') end++;
+    end++;
+  }
+  if (range.length == 0) start = end;
+  range = NSMakeRange(start, end - start);
+  return [NSValue valueWithRange:range];
 }
 - (NSEvent *)handleEvent:(NSEvent *)event {
   if (!_host.window || event.window != _host.window) return event;

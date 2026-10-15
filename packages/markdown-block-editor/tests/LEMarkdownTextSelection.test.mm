@@ -11,6 +11,12 @@
 @implementation TestMarkdownCanvas
 - (BOOL)isFlipped { return YES; }
 @end
+@interface TestMarkdownCodePreview : TestMarkdownCanvas
+@property (nonatomic, copy) NSAttributedString *attributedCode;
+@property (nonatomic) NSPoint textOrigin;
+@end
+@implementation TestMarkdownCodePreview
+@end
 
 static LEMarkdownSelectionBlock *makeBlock(NSView *host, NSInteger index, NSString *text, CGFloat y) {
   NSTextView *view = [[NSTextView alloc] initWithFrame:NSMakeRect(10, y, 220, 60)];
@@ -109,6 +115,48 @@ int main() {
     assert(controller.hasSelection);
     assert([selection[@"anchor"][@"offset"] integerValue] == 4);
     assert([selection[@"focus"][@"blockId"] isEqualToString:@"b1"]);
+    // A preview's code body has no fences and sits below a language header.
+    // Resolve its click before an editor with different geometry replaces it.
+    LEMarkdownSelectionBlock *code = makeBlock(host, 2, @"const café = '🌍';\nsecond line", 200);
+    code.type = @"codeBlock";
+    // Production code previews draw their attributed text without an NSTextView.
+    TestMarkdownCodePreview *preview = [[TestMarkdownCodePreview alloc] initWithFrame:NSMakeRect(20, 200, 220, 90)];
+    preview.attributedCode = [code.textViews.firstObject.textStorage copy];
+    preview.textOrigin = NSMakePoint(17, 13);
+    preview.bounds = NSMakeRect(8, 0, 80, 90);
+    [host addSubview:preview];
+    LEMarkdownSelectionBlock *drawnCode = [LEMarkdownSelectionBlock new];
+    drawnCode.blockId = code.blockId; drawnCode.type = @"codeBlock";
+    drawnCode.view = preview; drawnCode.textViews = @[];
+    NSPoint (^codePoint)(NSUInteger, BOOL) = ^NSPoint(NSUInteger offset, BOOL drawn) {
+      NSPoint point = pointAt(code, offset);
+      if (!drawn) return point;
+      point = [code.textViews.firstObject convertPoint:point fromView:nil];
+      point.x += preview.textOrigin.x; point.y += preview.textOrigin.y;
+      return [preview convertPoint:point toView:nil];
+    };
+    for (NSString *opening in @[@"```ts\n", @"~~~~swift\n", @"  ```js\r\n"]) {
+      BOOL crlf = [opening hasSuffix:@"\r\n"];
+      NSString *body = [code.textViews.firstObject.string stringByReplacingOccurrencesOfString:@"\n" withString:crlf ? @"\r\n" : @"\n"];
+      code.markdown = [NSString stringWithFormat:@"%@%@\n%@", opening, body, [opening hasPrefix:@"~"] ? @"~~~~" : @"```"];
+      drawnCode.markdown = code.markdown;
+      for (LEMarkdownSelectionBlock *rendered in @[code, drawnCode]) {
+        blocks = @[rendered];
+        for (NSNumber *offset in @[@0, @6, @21]) {
+          NSValue *value = [controller codeSelectionForBlock:code.blockId atPoint:codePoint(offset.unsignedIntegerValue, rendered == drawnCode) clickCount:1];
+          NSUInteger precedingCRs = crlf ? [[code.textViews.firstObject.string substringToIndex:offset.unsignedIntegerValue] componentsSeparatedByString:@"\n"].count - 1 : 0;
+          assert(value && NSEqualRanges(value.rangeValue, NSMakeRange(opening.length + offset.unsignedIntegerValue + precedingCRs, 0)));
+        }
+        NSRange word = [controller codeSelectionForBlock:code.blockId atPoint:codePoint(7, rendered == drawnCode) clickCount:2].rangeValue;
+        assert([[code.markdown substringWithRange:word] isEqual:@"café"]);
+      }
+    }
+    blocks = @[code];
+    code.input = code.textViews.firstObject;
+    assert(![controller codeSelectionForBlock:code.blockId atPoint:pointAt(code, 6) clickCount:1]);
+    code.input = nil;
+    code.type = @"paragraph";
+    assert(![controller codeSelectionForBlock:code.blockId atPoint:pointAt(code, 6) clickCount:1]);
     [controller invalidate];
     std::cout << "Markdown native selection tests passed\n";
   }

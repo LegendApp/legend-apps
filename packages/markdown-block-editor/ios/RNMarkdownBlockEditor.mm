@@ -440,6 +440,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 @interface RNMarkdownBlockActivationView () <RCTMarkdownBlockActivationViewViewProtocol>
 @property (nonatomic, readonly, nullable) id editorInput;
+@property (nonatomic, strong, nullable) NSValue *pendingCodeSelection;
 - (void)activateEditorWithEvent:(nullable NSEvent *)event;
 @end
 
@@ -510,7 +511,6 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     for (RNMarkdownBlockActivationView *view in self->_activationViews.objectEnumerator) {
       NSMutableArray<NSTextView *> *textViews = [NSMutableArray new];
       collectSelectionTextViews(view, textViews);
-      if (!textViews.count) continue;
       [textViews sortUsingComparator:^NSComparisonResult(NSTextView *left, NSTextView *right) {
         CGFloat a = [left convertRect:left.bounds toView:self].origin.y;
         CGFloat b = [right convertRect:right.bounds toView:self].origin.y;
@@ -522,6 +522,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
       block.markdown = view.currentMarkdown; block.textViews = textViews;
       const auto metadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(stringForNSString(view.blockId));
       block.type = [NSString stringWithUTF8String:metadata.type.c_str()];
+      if (!textViews.count && ![block.type isEqual:@"codeBlock"]) continue;
       if ([view.blockId isEqual:self->_activeBlockId]) block.input = view.editorInput;
       __weak LEMarkdownSelectionBlock *weakBlock = block;
       block.markdownForRange = ^NSString *(NSRange range) { return markdownFragment(weakBlock, range); };
@@ -864,6 +865,8 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
         const auto metadata = margelo::nitro::legendapps::markdownparser::metadataForRegisteredBlockId(
           std::string([activeBlockView.blockId UTF8String] ?: ""));
         BOOL isList = metadata.type == "orderedList" || metadata.type == "unorderedList";
+        BOOL isCodeBoundary = metadata.type == "codeBlock" &&
+          ([markdownParts[0] length] == 0 || [markdownParts[1] length] == 0);
         ENRMBlockRange *cursorList = [editorInput respondsToSelector:@selector(listBlockForCursorParagraph)]
           ? [editorInput listBlockForCursorParagraph] : nil;
         NSString *retainedList = isList && cursorList != nil
@@ -871,7 +874,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
         // The rich editor continues a newly typed list before the document has
         // multiple lines. Hand off only when its empty item is ready to exit.
         if (cursorList != nil && retainedList == nil) return event;
-        if (retainedList != nil || shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)) {
+        if (retainedList != nil || isCodeBoundary || shouldInterceptStructuralEnterForBlock(activeBlockView.blockId, markdown)) {
           [strongSelf->_keyboardHandoff beginFromBlock:activeBlockView.blockId];
           [strongSelf emitEnterPressedWithMarkdownParts:retainedList != nil ? @[retainedList, @""] : markdownParts];
           return nil;
@@ -1000,6 +1003,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     [self showActiveBlockContents];
   }
 
+  view.pendingCodeSelection = [_textSelection codeSelectionForBlock:view.blockId atPoint:event.locationInWindow clickCount:event.clickCount];
   _activeBlockId = [view.blockId copy];
   [self setBlockView:view contentsHidden:YES];
   [self observeScrollViewForBlockView:view];
@@ -1241,6 +1245,15 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   _pendingActivationWindowPoint = nil;
   _pendingActivationClickCount = 0;
   if (pendingWindowPoint != nil) {
+    NSValue *codeSelection = self.pendingCodeSelection;
+    self.pendingCodeSelection = nil;
+    if (codeSelection != nil) {
+      SEL selector = NSSelectorFromString(@"setSelection:end:");
+      void (*send)(id, SEL, NSInteger, NSInteger) = (void (*)(id, SEL, NSInteger, NSInteger))[_editorInput methodForSelector:selector];
+      NSRange range = codeSelection.rangeValue;
+      send(_editorInput, selector, range.location, NSMaxRange(range));
+      return;
+    }
     NSPoint selectionPoint = pendingWindowPoint.pointValue;
     NSPoint localPoint = [self convertPoint:selectionPoint fromView:nil];
     NSRect contentBounds = self.contentBounds;
@@ -1483,6 +1496,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   _previousBlockId = @"";
   _editorInput = nil;
   _pendingActivationWindowPoint = nil;
+  self.pendingCodeSelection = nil;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
