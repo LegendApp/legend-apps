@@ -254,3 +254,23 @@ test("presenter colors follow the current step and editing without replacing the
     }
   } finally { if (tree) await act(() => tree.unmount()); }
 });
+
+test("notes retain shared dark link styles while fading steps and editing", async () => {
+  const { getLegendDisplayTheme } = await import("../../../../packages/theme/src");
+  const shared = getLegendDisplayTheme("dark").markdownStyle;
+  let tree;
+  try {
+    await act(() => { tree = create(<EditableMarkdown editable currentStep={0}
+      markdown={"1. [Issue](https://github.com/owner/repo/issues/1)\n\n2. [Jay](mention:jay) [External](https://example.com)"}
+      placeholder="Notes" onSave={async () => {}} />); });
+    const check = node => {
+      expect(node.props.markdownStyle.linkVariants).toBe(shared.linkVariants);
+      expect(node.props.markdownStyle.link).toBe(shared.link);
+    };
+    check(tree.root.findByType("editor"));
+    await act(async () => tree.root.findByType("editor").props.onLayout({ nativeEvent: { layout: { width: 600 } } }));
+    tree.root.findAllByType("note-color-overlay").forEach(check);
+    await act(() => tree.root.findByType("editor").props.onFocus());
+    check(tree.root.findByType("editor"));
+  } finally { if (tree) await act(() => tree.unmount()); }
+});

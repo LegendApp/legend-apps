@@ -17,6 +17,8 @@ const numeric = (value) => typeof value === "number" ? value : value.__getValue(
 
 mock.module("react-native", () => ({
   Platform: { OS: "macos" },
+  Appearance: { getColorScheme: () => "dark" },
+  useColorScheme: () => "dark",
   View: "view", Text: "text", Image: "image", TextInput: "input", Pressable: "pressable", PixelRatio: { get: () => 2 },
   StyleSheet: { flatten: value => Array.isArray(value) ? Object.assign({}, ...value) : value, create: (styles) => styles, absoluteFillObject: {}, absoluteFill: {} },
   Easing: { linear: (value) => value, inOut: (easing) => easing, cubic: (value) => value, out: (easing) => easing },

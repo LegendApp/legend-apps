@@ -1,4 +1,5 @@
 import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
+import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { SpeakerNotesConflictError } from "@legend-apps/presentation";
 import type { NotesDrafts } from "./notesDrafts";
 import { speakerNotesEditorMarkdown, splitSpeakerNoteSteps } from "./speakerNoteSteps";
@@ -47,6 +48,10 @@ function createNotesMarkdownStyle(fontSize: number, color: string): MarkdownStyl
       lineHeight: base.fontSize! * scale * notesLineHeightRatio,
     };
   }
+  // Presenter notes use a fixed dark surface, independent of system appearance.
+  const sharedStyle = getLegendDisplayTheme("dark").markdownStyle;
+  style.link = sharedStyle.link;
+  style.linkVariants = sharedStyle.linkVariants;
   return style;
 }
 
