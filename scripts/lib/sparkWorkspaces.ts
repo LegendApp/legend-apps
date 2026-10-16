@@ -2,11 +2,16 @@ import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import type { SparkApplicationConfig } from "@legendapp/spark/config";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { appIds, appsDir, rootDir, shellDir, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import type { AppManifest } from "./types";
 import { sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
+
+const { installedRelease, packageSources, materializeReleasePackages, verifyMaterializedReleasePackages } = await import(
+  pathToFileURL(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.js")).href
+);
 
 export const sharedSparkWorkspace = path.join(shellDir, ".legend", "spark");
 export const sparkWorkspace = (appId: string, mode: "dev" | "release" = "dev") => path.join(sharedSparkWorkspace, mode === "release" ? `${appId}-release` : appId);
@@ -156,6 +161,14 @@ function sparkPackage(manifest: AppManifest) {
       overrides[name] = location;
       if (name in dependencies) dependencies[name] = location;
     }
+  } else {
+    const sources: Record<string, string> = packageSources();
+    for (const [name, source] of Object.entries(sources)) {
+      if (name === "@legendapp/spark") continue;
+      const location = `file:${path.resolve(sharedSparkWorkspace, source.slice(5))}`;
+      overrides[name] = location;
+      if (name in dependencies) dependencies[name] = location;
+    }
   }
   overrides["@legendapp/spark"] = selectedSdk;
   dependencies["@legendapp/spark"] = selectedSdk;
@@ -192,6 +205,14 @@ export async function prepareSharedSparkInstall() {
     "enriched-markdown": repo["enriched-markdown"],
   });
   return sharedSparkWorkspace;
+}
+
+/** Use the SDK's verified release inputs before hashing or installing the shared workspace. */
+export async function prepareSparkReleasePackages(project: string, offline: boolean) {
+  if (json(path.join(project, "package.json")).dependencies["@legendapp/spark"].startsWith("file:")) return;
+  const release = installedRelease();
+  if (!offline) await materializeReleasePackages(release, project);
+  verifyMaterializedReleasePackages(release, project);
 }
 
 export function preservePreviousSparkInstall(project: string) {

@@ -31,6 +31,15 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
     const repoSource = JSON.stringify(repo);
     fs.writeFileSync(path.join(root, "package.json"), repoSource);
     for (const archive of ["sdk.tgz", "other.tgz"]) fs.writeFileSync(path.join(workspace, archive), "preparation fixture");
+    // This fixture exercises input hashing, without downloading release archives.
+    const sdkRoot = fs.realpathSync(path.join(source, "node_modules/@legendapp/spark"));
+    const { packageSources } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.js"));
+    for (const archive of Object.values(packageSources()) as string[]) {
+      if (!archive.startsWith("file:")) continue;
+      const file = path.resolve(root, "shell/.legend/spark", archive.slice(5));
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "release archive input fixture");
+    }
     const localFile = path.join(root, "spark.local.json");
     const hashes: string[] = [];
     const prepare = (envSdk?: string) => spawnSync(process.execPath, ["-e", 'import { loadAppManifest } from "./scripts/lib/apps.ts"; import { prepareSharedSparkInstall, prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = await prepareSharedSparkInstall(); console.log(sparkInstallHash(shared, process.cwd()));'], {

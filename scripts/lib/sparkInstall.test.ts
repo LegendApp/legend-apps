@@ -349,6 +349,7 @@ export function assertSupportedPlatform() {}
 import path from "node:path";
 import { rootDir } from "./apps";
 export async function prepareSharedSparkInstall() { return rootDir; }
+export async function prepareSparkReleasePackages() {}
 export function sparkWorkspace(id) { return path.join(rootDir, id); }
 export function prepareSparkWorkspace(manifest) {
   fs.appendFileSync(path.join(rootDir, "prepared"), manifest.id + "\\n");

@@ -8,7 +8,7 @@ import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
 import { expandSparkSubpath } from "./sparkSubpaths";
-import { prepareSharedSparkInstall, prepareSparkWorkspace, preservePreviousSparkInstall, sharedSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { prepareSharedSparkInstall, prepareSparkReleasePackages, prepareSparkWorkspace, preservePreviousSparkInstall, sharedSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { sparkSdkPackages } from "./sparkSdk";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
@@ -64,6 +64,35 @@ test("all workspace consumers resolve the locally selected or catalog Spark SDK"
     const dependency = JSON.parse(fs.readFileSync(file, "utf8")).dependencies?.["@legendapp/spark"];
     if (dependency) assert.equal(dependency, "catalog:", `${folder}/${name} must share the current SDK`);
   }
+});
+
+test("published SDK consumers use the release native archives in the shared install", async () => {
+  const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
+  const shared = await prepareSharedSparkInstall();
+  const project = prepareSparkWorkspace(await loadAppManifest("markdown"));
+  for (const directory of [shared, project]) {
+    const pkg = JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8"));
+    for (const [name, asset] of Object.entries(release.packages) as [string, { sha256: string }][]) {
+      const archive = path.join(shared, "spark-packages", `${name.replace(/^@/, "").replaceAll("/", "-")}-${asset.sha256}.tgz`);
+      assert.equal(pkg.overrides[name], `file:${archive}`, name);
+      if (name in pkg.dependencies) assert.equal(pkg.dependencies[name], `file:${archive}`, name);
+    }
+  }
+});
+
+test("offline release preparation verifies archives without downloading", async () => {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), "spark-release-offline-"));
+  try {
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "0.0.1-next.3" } }));
+    await assert.rejects(prepareSparkReleasePackages(project, true), /archive is missing/);
+    const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
+    const [name, asset] = Object.entries(release.packages)[0] as [string, { sha256: string }];
+    fs.mkdirSync(path.join(project, "spark-packages"));
+    fs.writeFileSync(path.join(project, "spark-packages", `${name.replace(/^@/, "").replaceAll("/", "-")}-${asset.sha256}.tgz`), "corrupt");
+    await assert.rejects(prepareSparkReleasePackages(project, true), /archive changed/);
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "file:local.tgz" } }));
+    await prepareSparkReleasePackages(project, true);
+  } finally { fs.rmSync(project, { recursive: true, force: true }); }
 });
 
 test("Metro excludes sibling consumer installs while retaining its dependencies and shared source", () => {

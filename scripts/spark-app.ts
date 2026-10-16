@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { assertSupportedPlatform, loadAppManifest } from "./lib/apps";
 import { runSparkDevServer } from "./lib/sparkDevServer";
 import { assertSparkOfflineArgs, assertSparkOfflineBuild, assertSparkOfflineStart, installSparkWorkspace, parseSparkInstallArgs, SparkInstallError, sparkOfflineHelp } from "./lib/sparkInstall";
-import { prepareSharedSparkInstall, prepareSparkWorkspace, sparkWorkspace } from "./lib/sparkWorkspaces";
+import { prepareSharedSparkInstall, prepareSparkReleasePackages, prepareSparkWorkspace, sparkWorkspace } from "./lib/sparkWorkspaces";
 import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 
 const { extra, ...installOptions } = parseSparkInstallArgs(process.argv.slice(2));
@@ -35,7 +35,10 @@ let cli = "";
 const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : actionTail)];
 try {
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
-  if (["install", "build", "build-release", "run", "start"].includes(action)) installSparkWorkspace({ project: sharedProject, appId, env, ...installOptions });
+  if (["install", "build", "build-release", "run", "start"].includes(action)) {
+    await prepareSparkReleasePackages(sharedProject, installOptions.offline);
+    installSparkWorkspace({ project: sharedProject, appId, env, ...installOptions });
+  }
   prepareSparkWorkspace(manifest, mode);
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
   if (installOptions.offline && ["build", "build-release", "run"].includes(action)) {
