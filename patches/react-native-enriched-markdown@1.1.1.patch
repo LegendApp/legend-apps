@@ -2,7 +2,7 @@ diff --git a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMark
 index 4f647a69..2c247c65 100644
 --- a/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownManagerDelegate.java
 +++ b/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownManagerDelegate.java
-@@ -29,6 +29,12 @@ public class EnrichedMarkdownManagerDelegate<T extends View, U extends BaseViewM
+@@ -29,6 +29,12 @@ public class EnrichedMarkdownTextManagerDelegate<T extends View, U extends BaseV
        case "markdown":
          mViewManager.setMarkdown(view, value == null ? null : (String) value);
          break;
@@ -1725,7 +1725,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentVie
 index 58b4356d..1add886c 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/RCTComponentViewHelpers.h
-@@ -22,6 +22,7 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -22,6 +22,7 @@ - (id)copyWithZone:(NSZone *)zone
  - (void)blur;
  - (void)setValue:(NSString *)markdown;
  - (void)setSelection:(NSInteger)start end:(NSInteger)end;
@@ -2651,7 +2651,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 7e72cff2..1cb85342 100644
+index 7e72cff2..0b22971d 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -3435,6 +3435,20 @@ index 7e72cff2..1cb85342 100644
            _textView.typingAttributes = attrs;
          }
        }
+@@ -2044,13 +2450,6 @@ - (void)textInputDidChange
+ - (void)textInputDidChangeSelection
+ {
+   NSRange newSelection = _textView.selectedRange;
+-  if (!_editSession.shouldSuppressSelectionSideEffects && !_editSession.isComposing) {
+-    NSRange adjusted = [_formattingStore selectionAdjustedForAtomicLinks:newSelection];
+-    if (!NSEqualRanges(adjusted, newSelection)) {
+-      _textView.selectedRange = adjusted;
+-      return;
+-    }
+-  }
+   NSRange previousSelection = _lastSelectedRange;
+   _lastSelectedRange = newSelection;
+ 
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
 index 1d28946d..49075e33 100644
 --- a/ios/input/InputStylePropsUtils.h

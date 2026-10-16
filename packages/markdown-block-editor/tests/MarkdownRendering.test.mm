@@ -50,11 +50,13 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
   ENRMEditPhase _phase;
 }
 @property (readonly) BOOL shouldSuppressFormatting;
+@property (readonly) BOOL shouldSuppressSelectionSideEffects;
 @property BOOL isComposing;
 - (void)enterPhase:(ENRMEditPhase)phase;
 - (void)exitPhase;
 @end
 @implementation InputSession
+- (BOOL)shouldSuppressSelectionSideEffects { return NO; }
 #include "InputSession.inc"
 @end
 
@@ -65,7 +67,9 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)setRanges:(NSArray *)ranges;
 - (void)applyFormattingRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
 - (void)applyBlockRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
+- (void)resetForSelectionChange;
 - (void)refreshAllStyling;
+- (NSRange)selectionAdjustedForAtomicLinks:(NSRange)selection;
 @end
 @implementation FormattingProbe
 - (void)setRanges:(NSArray *)ranges { self.allRanges = ranges; }
@@ -75,13 +79,20 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
   self.appliedBlocks = ranges;
   ++_formattingPasses;
 }
+- (void)resetForSelectionChange {}
 - (void)refreshAllStyling {}
+- (NSRange)selectionAdjustedForAtomicLinks:(NSRange)selection
+{
+  // Model the atomic-link policy that the native delegate used to apply.
+  return NSMakeRange(18, 0);
+}
 @end
 
 @protocol ImportEvents
 - (void)emitOnChangeText;
 - (void)emitOnChangeSelection;
 - (void)emitOnChangeState;
+- (void)emitCaretRectChangeIfNeeded;
 @end
 
 @interface InputHost : NSView {
@@ -92,6 +103,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
   FormattingProbe *_formattingStore, *_blockStore, *_formatter, *_detectorPipeline;
   id _formatterStyle;
   id<ImportEvents> _inputEventEmitter;
+  FormattingProbe *_typingController;
   NSUInteger _lastTextLength;
   NSRange _lastSelectedRange;
 }
@@ -137,6 +149,8 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)applyWritingDirection {}
 - (void)applyParagraphBaselineOffset {}
 - (void)requestHeightUpdate {}
+- (void)updateActiveMention {}
+#include "InputSelection.inc"
 #include "InputLayout.inc"
 #include "InputImport.inc"
 @end
@@ -339,6 +353,15 @@ int main()
           require(NSEqualRanges(input.selectedRange, selection.rangeValue), @"native import must retain a caret or selection");
         }
       }
+    }
+    [host setValue:@"[editable link text](https://example.com)"];
+    for (NSValue *range in @[[NSValue valueWithRange:NSMakeRange(1, 0)],
+                             [NSValue valueWithRange:NSMakeRange(5, 0)],
+                             [NSValue valueWithRange:NSMakeRange(2, 4)]]) {
+      input.selectedRange = range.rangeValue;
+      [host textInputDidChangeSelection];
+      require(NSEqualRanges(input.selectedRange, range.rangeValue),
+              @"link clicks, arrow movement and partial selections must retain their native character range");
     }
     // Shortcuts remove their prefix and apply these paragraph metrics. Exercise
     // transient empty list anchors, wrapped items, and a return to heading size.

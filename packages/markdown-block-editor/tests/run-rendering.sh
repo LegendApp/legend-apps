@@ -32,6 +32,7 @@ source = (b/'ios/input/EnrichedMarkdownTextInput.mm').read_text()
     '- (void)importMarkdown:', '- (void)applyFormatting\n', '- (void)applyFormattingScopedToRange:',
     '- (void)setValue:', '- (void)setValuePreservingSelection:']))
 session = (b/'ios/input/ENRMEditSession.mm').read_text()
+(out/'InputSelection.inc').write_text(extract(source, '- (void)textInputDidChangeSelection'))
 (out/'InputShortcut.inc').write_text(extract(source, '- (BOOL)applyMarkdownShortcutForEditAtLocation:'))
 (out/'InputSession.inc').write_text('\n'.join(extract(session, method) for method in [
     '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
