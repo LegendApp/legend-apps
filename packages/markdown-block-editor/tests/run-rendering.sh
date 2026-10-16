@@ -38,6 +38,7 @@ session = (b/'ios/input/ENRMEditSession.mm').read_text()
 (out/'InputSession.inc').write_text('\n'.join(extract(session, method) for method in [
     '- (void)enterPhase:', '- (void)exitPhase', '- (BOOL)shouldSuppressFormatting']))
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
+(out/'ImagePlaceholder.inc').write_text('\n'.join(extract((b/'ios/attachments/ENRMImageAttachment.m').read_text(), method) for method in ['- (void)setupPlaceholder', '- (CGFloat)resolvedBoxHeightForWidth:', '- (CGRect)attachmentBoundsForTextContainer:']))
 (out/'ImageLayoutNotification.inc').write_text(extract((b/'ios/attachments/ENRMImageAttachment.m').read_text(), '- (void)notifyImageLayoutObserver:').replace('UITextView *', 'ImageLayoutHost *'))
 (out/'HeadingBaseline.inc').write_text('#undef ENRICHED_MARKDOWN_MATH\n#define ENRICHED_MARKDOWN_MATH 0\n' + extract((b/'ios/utils/ParagraphStyleUtils.m').read_text(), 'void applyBaselineOffset(') + '\n' + extract((b/'ios/input/ENRMInputMeasurementStyle.h').read_text(), 'static inline void ENRMApplyInputParagraphBaselineOffset('))
 for kind in ['Unordered', 'Ordered']:

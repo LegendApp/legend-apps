@@ -1242,7 +1242,7 @@ index b0247d7c..97a38570 100644
   * Nearest ancestor (self included) adopting ENRMImageLayoutObserver, walking up
   * the superview chain. Returns nil when none is found.
 diff --git a/ios/attachments/ENRMImageAttachment.m b/ios/attachments/ENRMImageAttachment.m
-index f17cfb02..ab433b0e 100644
+index f17cfb02..58470c11 100644
 --- a/ios/attachments/ENRMImageAttachment.m
 +++ b/ios/attachments/ENRMImageAttachment.m
 @@ -18,11 +18,11 @@ static inline NSUInteger ENRMImageByteCost(RCTUIImage *image)
@@ -1259,7 +1259,7 @@ index f17cfb02..ab433b0e 100644
    while (view && ![view conformsToProtocol:@protocol(ENRMImageLayoutObserver)]) {
      view = view.superview;
    }
-@@ -358,10 +358,13 @@ - (void)notifyImageLayoutObserver:(UITextView *)textView
+@@ -358,10 +358,13 @@ - (void)refreshDisplay
  // re-measuring would re-enter the layout manager.
  - (void)notifyImageLayoutObserver:(UITextView *)textView
  {
@@ -1275,6 +1275,17 @@ index f17cfb02..ab433b0e 100644
  
    id<ENRMImageLayoutObserver> observer = [textView enrm_imageLayoutObserver];
    if (!observer)
+@@ -386,6 +389,10 @@ - (void)setupPlaceholder
+   self.bounds = CGRectMake(0, 0, size, size);
+   RCTUIGraphicsImageRenderer *renderer = [[RCTUIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(1, 1)];
+   self.placeholderImage = [renderer imageWithActions:^(RCTUIGraphicsImageRendererContext *ctx){}];
++#if TARGET_OS_OSX
++  // View-free TextKit layout skips attachmentBoundsForTextContainer while image is nil.
++  self.image = self.placeholderImage;
++#endif
+ }
+ 
+ - (NSRange)findAttachmentRangeInText:(NSAttributedString *)attributedString
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp
 index 1b1b9623..8af4e24a 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/EventEmitters.cpp

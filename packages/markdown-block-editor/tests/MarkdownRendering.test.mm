@@ -32,10 +32,31 @@ NSString *const ENRMBlockTypeAttributeName = @"ENRMBlockType";
 #define UIFontDescriptor NSFontDescriptor
 #define UIFontDescriptorTraitBold NSFontDescriptorTraitBold
 static CGFloat UIFontLineHeight(NSFont *font) { return ceil(font.ascender - font.descender + font.leading); }
+// Placeholder raster contents do not affect TextKit sizing; preserve the real
+// renderer's requested image size without pulling in the React graphics bridge.
+#define RCTUIImage NSImage
+#define RCTUIGraphicsImageRenderer ImagePlaceholderRenderer
+#define RCTUIGraphicsImageRendererContext NSObject
+@interface ImagePlaceholderRenderer : NSObject
+@property CGSize size;
+- (instancetype)initWithSize:(CGSize)size;
+- (NSImage *)imageWithActions:(void (^)(NSObject *))actions;
+@end
+@implementation ImagePlaceholderRenderer
+- (instancetype)initWithSize:(CGSize)size { if ((self = [super init])) _size = size; return self; }
+- (NSImage *)imageWithActions:(void (^)(NSObject *))actions { return [[NSImage alloc] initWithSize:_size]; }
+@end
 @interface ENRMImageAttachment : NSTextAttachment
 @property BOOL isInline;
+@property CGFloat cachedHeight;
+@property CGFloat cachedMaxHeight;
+@property CGFloat cachedAspectRatio;
+@property NSImage *originalImage;
+@property NSImage *placeholderImage;
+- (void)setupPlaceholder;
 @end
 @implementation ENRMImageAttachment
+#include "ImagePlaceholder.inc"
 @end
 #include "HeadingBaseline.inc"
 
@@ -441,6 +462,25 @@ int main()
             @"checkbox gutter must retain its task toggle click even outside the text glyphs");
     require(!isPointOnInteractiveElement(taskView, NSMakePoint(28, 12), NO, NO),
             @"task body text must enter editing instead of consuming a checkbox action");
+    for (NSInteger imageKind = 0; imageKind < 4; ++imageKind) {
+      ENRMImageAttachment *pendingImage = [ENRMImageAttachment new];
+      pendingImage.cachedHeight = imageKind == 1 ? 24 : 200;
+      pendingImage.isInline = imageKind == 1;
+      pendingImage.cachedAspectRatio = imageKind == 2 ? 2 : 0;
+      pendingImage.cachedMaxHeight = imageKind == 3 ? 256 : 0;
+      [pendingImage setupPlaceholder];
+      NSTextContainer *container = [[NSTextContainer alloc] initWithSize:NSMakeSize(560, CGFLOAT_MAX)];
+      container.lineFragmentPadding = 0;
+      NSLayoutManager *layout = [NSLayoutManager new];
+      [layout addTextContainer:container];
+      NSTextStorage *storage = [[NSTextStorage alloc] initWithAttributedString:[NSAttributedString attributedStringWithAttachment:pendingImage]];
+      [storage addLayoutManager:layout];
+      [layout ensureLayoutForTextContainer:container];
+      CGFloat expectedHeight = imageKind == 1 ? 24 : imageKind == 2 ? 280 : imageKind == 3 ? 256 : 200;
+      require([layout usedRectForTextContainer:container].size.height >= expectedHeight,
+              @"view-free measurement must reserve the image box before downloading finishes");
+    }
+
     ImageLayoutHost *imageHost = [ImageLayoutHost new];
     ImageLayoutProbe *imageLayout = [ImageLayoutProbe new];
     [imageLayout notifyImageLayoutObserver:imageHost];
