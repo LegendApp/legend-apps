@@ -1918,6 +1918,26 @@ describe("MarkdownDocument native row editor", () => {
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
   });
 
+  it("persists rendered task checkbox changes with undo and redo without opening the editor", async () => {
+    const original = "- [ ] First\n- [x] Second";
+    const adapter = new NativeOverlayAdapter(snapshot([{ ...block("d1:b0", 0, original), markdownLength: original.length }]), { metadataOnlySyncBlocks: true });
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    await act(async () => {
+      await activationView(renderer, "d1:b0").findByType(EnrichedMarkdownText).props.onTaskListItemPress({ index: 0, checked: true, text: "First" });
+    });
+    expect(adapter.sourceMarkdown).toBe("- [x] First\n- [x] Second");
+    expect(renderer.root.findAllByProps({ testID: "markdown-editor-input" })).toHaveLength(0);
+    await act(async () => commands.current!.undo());
+    expect(adapter.sourceMarkdown).toBe(original);
+    await act(async () => commands.current!.redo());
+    expect(adapter.sourceMarkdown).toBe("- [x] First\n- [x] Second");
+    await act(async () => renderer.unmount());
+  });
+
   it.each(["ios", "macos"] as const)("opens and closes an image viewer on %s without activating the editor", async (platform) => {
     const platformMock = jest.replaceProperty(Platform, "OS", platform);
     try {

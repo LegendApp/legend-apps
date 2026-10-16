@@ -255,6 +255,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   getBlockMetadata,
   onActivate,
   onImagePress,
+  onTaskListItemPress,
   onEditorReady,
   onBlurRef,
   onChangeMarkdownRef,
@@ -279,6 +280,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onImagePress: (image: ImagePressEvent) => void;
+  onTaskListItemPress: (blockId: string, index: number, checked: boolean) => void;
   onEditorReady?: (blockId: string) => void;
   onBlurRef: RefObject<(blockId: string) => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
@@ -361,6 +363,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       containerStyle={styles.renderedText}
       markdownStyle={markdownStyle}
       onImagePress={onImagePress}
+      onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
       onLinkPress={(event) => {
         Linking.openURL(event.url).catch(() => {});
       }}
@@ -376,6 +379,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       markdown={markdown}
       markdownStyle={markdownStyle}
       onImagePress={onImagePress}
+      onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
       onLinkPress={(event) => {
         Linking.openURL(event.url).catch(() => {});
       }}

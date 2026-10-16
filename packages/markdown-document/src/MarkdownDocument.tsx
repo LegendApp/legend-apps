@@ -3521,6 +3521,37 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       () => [styles.blockSelectionOverlay, { backgroundColor: resolveSelectionColor(theme?.selectionColor) }],
       [theme?.selectionColor],
     );
+    const handleTaskListItemPress = useCallback(async (blockId: string, taskIndex: number, checked: boolean) => {
+      if (!adapter.applyTransaction) return;
+      try {
+        await commitActiveBlock({ updateReactState: true, throwOnError: true });
+        const state = documentState$.peek();
+        if (state.status !== "loaded") return;
+        const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
+        if (!block) return;
+        let index = 0;
+        const markdown = block.markdown.replace(/^([ \t]*[-*+][ \t]+\[)[ xX](\])/gm, (match, prefix, suffix) => (
+          index++ === taskIndex ? `${prefix}${checked ? "x" : " "}${suffix}` : match
+        ));
+        if (markdown === block.markdown) return;
+        const result = await adapter.applyTransaction(state.snapshot.documentId, {
+          type: "updateBlockMarkdown",
+          blockId,
+          markdown,
+        });
+        validateTransactionResult(result);
+        pushUpdateBlockHistoryEntry({
+          type: "updateBlockMarkdown",
+          blockId,
+          beforeMarkdown: block.markdown,
+          afterMarkdown: markdown,
+        });
+        applyTransactionResult(result);
+        markDirty();
+      } catch (error) {
+        reportAsyncError(error);
+      }
+    }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, reportAsyncError, pushUpdateBlockHistoryEntry, validateTransactionResult]);
     const handleEditorReady = useCallback((blockId: string) => {
       const host = containerRef.current;
       if (host) MarkdownEditorHostCommands.completeKeyboardHandoff(host, blockId);
@@ -3539,6 +3570,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
           onImagePress={setViewerImage}
+          onTaskListItemPress={handleTaskListItemPress}
           onEditorReady={handleEditorReady}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
@@ -3552,6 +3584,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [
         activateBlock,
         handleEditorReady,
+        handleTaskListItemPress,
         documentRenderState$,
         getBlockCount,
         getBlockIdAtIndex,
