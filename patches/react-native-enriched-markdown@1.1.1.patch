@@ -296,9 +296,10 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
 diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
+index 06fa054e..129e6beb 100644
 --- a/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
 +++ b/android/generated/jni/react/renderer/components/EnrichedMarkdownTextSpec/Props.h
-@@ -3123,6 +3123,8 @@
+@@ -3123,6 +3123,8 @@ class EnrichedMarkdownProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -307,7 +308,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
    EnrichedMarkdownMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -3205,6 +3207,120 @@
+@@ -3205,6 +3207,120 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSh
  }
  #endif
  
@@ -428,7 +429,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
    SharedColor color{};
  
-@@ -3423,8 +3539,10 @@
+@@ -3423,8 +3539,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
    Float fontSize{0.0};
@@ -439,7 +440,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3433,8 +3551,10 @@
+@@ -3433,8 +3551,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -450,7 +451,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3455,6 +3575,14 @@
+@@ -3455,6 +3575,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -465,7 +466,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-@@ -3469,8 +3597,10 @@
+@@ -3469,8 +3597,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
    Float fontSize{0.0};
@@ -476,7 +477,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3479,8 +3609,10 @@
+@@ -3479,8 +3609,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -487,7 +488,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3501,6 +3633,14 @@
+@@ -3501,6 +3633,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -502,7 +503,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-@@ -3515,8 +3655,10 @@
+@@ -3515,8 +3655,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
    Float fontSize{0.0};
@@ -513,7 +514,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3525,8 +3667,10 @@
+@@ -3525,8 +3667,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -524,7 +525,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3547,6 +3691,14 @@
+@@ -3547,6 +3691,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -539,7 +540,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-@@ -3561,8 +3713,10 @@
+@@ -3561,8 +3713,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
    Float fontSize{0.0};
@@ -550,7 +551,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3571,8 +3725,10 @@
+@@ -3571,8 +3725,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -561,7 +562,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3593,6 +3749,14 @@
+@@ -3593,6 +3749,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -576,7 +577,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-@@ -3607,8 +3771,10 @@
+@@ -3607,8 +3771,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
    Float fontSize{0.0};
@@ -587,7 +588,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3617,8 +3783,10 @@
+@@ -3617,8 +3783,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -598,7 +599,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3639,6 +3807,14 @@
+@@ -3639,6 +3807,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -613,7 +614,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-@@ -3653,8 +3829,10 @@
+@@ -3653,8 +3829,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
    Float fontSize{0.0};
@@ -624,7 +625,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3663,8 +3841,10 @@
+@@ -3663,8 +3841,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -635,7 +636,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      return result;
    }
  #endif
-@@ -3685,6 +3865,14 @@
+@@ -3685,6 +3865,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -650,7 +651,112 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-@@ -3731,7 +3919,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+@@ -3698,6 +3886,20 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ #endif
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
++  Float fontSize{0.0};
++  std::string fontFamily{};
++  std::string fontWeight{};
++  SharedColor color{};
++  Float marginTop{0.0};
++  Float marginBottom{0.0};
++  Float lineHeight{0.0};
++  SharedColor bulletColor{};
++  Float bulletSize{0.0};
++  Float markerMinWidth{0.0};
++  SharedColor markerColor{};
++  std::string markerFontWeight{};
++  Float gapWidth{0.0};
++  Float marginLeft{0.0};
+   Float itemSpacing{0.0};
+ 
+ 
+@@ -3706,6 +3908,20 @@ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
+ 
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
++    result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
++    result["fontWeight"] = fontWeight;
++    result["color"] = ::facebook::react::toDynamic(color);
++    result["marginTop"] = marginTop;
++    result["marginBottom"] = marginBottom;
++    result["lineHeight"] = lineHeight;
++    result["bulletColor"] = ::facebook::react::toDynamic(bulletColor);
++    result["bulletSize"] = bulletSize;
++    result["markerMinWidth"] = markerMinWidth;
++    result["markerColor"] = ::facebook::react::toDynamic(markerColor);
++    result["markerFontWeight"] = markerFontWeight;
++    result["gapWidth"] = gapWidth;
++    result["marginLeft"] = marginLeft;
+     result["itemSpacing"] = itemSpacing;
+     return result;
+   }
+@@ -3715,6 +3931,62 @@ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
+ static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleListStruct &result) {
+   auto map = (std::unordered_map<std::string, RawValue>)value;
+ 
++  auto tmp_fontSize = map.find("fontSize");
++  if (tmp_fontSize != map.end()) {
++    fromRawValue(context, tmp_fontSize->second, result.fontSize);
++  }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_fontWeight = map.find("fontWeight");
++  if (tmp_fontWeight != map.end()) {
++    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
++  }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
++  auto tmp_marginTop = map.find("marginTop");
++  if (tmp_marginTop != map.end()) {
++    fromRawValue(context, tmp_marginTop->second, result.marginTop);
++  }
++  auto tmp_marginBottom = map.find("marginBottom");
++  if (tmp_marginBottom != map.end()) {
++    fromRawValue(context, tmp_marginBottom->second, result.marginBottom);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
++  auto tmp_bulletColor = map.find("bulletColor");
++  if (tmp_bulletColor != map.end()) {
++    fromRawValue(context, tmp_bulletColor->second, result.bulletColor);
++  }
++  auto tmp_bulletSize = map.find("bulletSize");
++  if (tmp_bulletSize != map.end()) {
++    fromRawValue(context, tmp_bulletSize->second, result.bulletSize);
++  }
++  auto tmp_markerMinWidth = map.find("markerMinWidth");
++  if (tmp_markerMinWidth != map.end()) {
++    fromRawValue(context, tmp_markerMinWidth->second, result.markerMinWidth);
++  }
++  auto tmp_markerColor = map.find("markerColor");
++  if (tmp_markerColor != map.end()) {
++    fromRawValue(context, tmp_markerColor->second, result.markerColor);
++  }
++  auto tmp_markerFontWeight = map.find("markerFontWeight");
++  if (tmp_markerFontWeight != map.end()) {
++    fromRawValue(context, tmp_markerFontWeight->second, result.markerFontWeight);
++  }
++  auto tmp_gapWidth = map.find("gapWidth");
++  if (tmp_gapWidth != map.end()) {
++    fromRawValue(context, tmp_gapWidth->second, result.gapWidth);
++  }
++  auto tmp_marginLeft = map.find("marginLeft");
++  if (tmp_marginLeft != map.end()) {
++    fromRawValue(context, tmp_marginLeft->second, result.marginLeft);
++  }
+   auto tmp_itemSpacing = map.find("itemSpacing");
+   if (tmp_itemSpacing != map.end()) {
+     fromRawValue(context, tmp_itemSpacing->second, result.itemSpacing);
+@@ -3731,7 +4003,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  }
  #endif
  
@@ -713,7 +819,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
    EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
    EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
    EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-@@ -3751,6 +3994,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -3751,6 +4078,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
@@ -723,7 +829,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
      result["strong"] = ::facebook::react::toDynamic(strong);
      result["em"] = ::facebook::react::toDynamic(em);
      result["link"] = ::facebook::react::toDynamic(link);
-@@ -3771,6 +4017,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -3771,6 +4101,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
@@ -742,7 +848,7 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
    auto tmp_strong = map.find("strong");
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
-@@ -7236,6 +7494,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
+@@ -7236,6 +7578,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -1384,9 +1490,10 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.cpp b/ios
    if (markdownStyle != oldProps->markdownStyle) {
      result["markdownStyle"] = toDynamic(markdownStyle);
 diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
+index 06fa054e..129e6beb 100644
 --- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
 +++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
-@@ -3123,6 +3123,8 @@
+@@ -3123,6 +3123,8 @@ class EnrichedMarkdownProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -1395,7 +1502,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
    EnrichedMarkdownMarkdownStyleStruct markdownStyle{};
    bool enableImagePress{false};
    bool enableTaskListItemToggle{true};
-@@ -3205,6 +3207,120 @@
+@@ -3205,6 +3207,120 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSh
  }
  #endif
  
@@ -1516,7 +1623,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  struct EnrichedMarkdownTextInputMarkdownStyleStrongStruct {
    SharedColor color{};
  
-@@ -3423,8 +3539,10 @@
+@@ -3423,8 +3539,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
    Float fontSize{0.0};
@@ -1527,7 +1634,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3433,8 +3551,10 @@
+@@ -3433,8 +3551,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH1Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1538,7 +1645,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3455,6 +3575,14 @@
+@@ -3455,6 +3575,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1553,7 +1660,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH1Struct &value) {
-@@ -3469,8 +3597,10 @@
+@@ -3469,8 +3597,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
    Float fontSize{0.0};
@@ -1564,7 +1671,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3479,8 +3609,10 @@
+@@ -3479,8 +3609,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH2Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1575,7 +1682,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3501,6 +3633,14 @@
+@@ -3501,6 +3633,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1590,7 +1697,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH2Struct &value) {
-@@ -3515,8 +3655,10 @@
+@@ -3515,8 +3655,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
    Float fontSize{0.0};
@@ -1601,7 +1708,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3525,8 +3667,10 @@
+@@ -3525,8 +3667,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH3Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1612,7 +1719,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3547,6 +3691,14 @@
+@@ -3547,6 +3691,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1627,7 +1734,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH3Struct &value) {
-@@ -3561,8 +3713,10 @@
+@@ -3561,8 +3713,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
    Float fontSize{0.0};
@@ -1638,7 +1745,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3571,8 +3725,10 @@
+@@ -3571,8 +3725,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH4Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1649,7 +1756,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3593,6 +3749,14 @@
+@@ -3593,6 +3749,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1664,7 +1771,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH4Struct &value) {
-@@ -3607,8 +3771,10 @@
+@@ -3607,8 +3771,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
    Float fontSize{0.0};
@@ -1675,7 +1782,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3617,8 +3783,10 @@
+@@ -3617,8 +3783,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH5Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1686,7 +1793,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3639,6 +3807,14 @@
+@@ -3639,6 +3807,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1701,7 +1808,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH5Struct &value) {
-@@ -3653,8 +3829,10 @@
+@@ -3653,8 +3829,10 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  
  struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
    Float fontSize{0.0};
@@ -1712,7 +1819,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  
  
  #ifdef RN_SERIALIZABLE_STATE
-@@ -3663,8 +3841,10 @@
+@@ -3663,8 +3841,10 @@ struct EnrichedMarkdownTextInputMarkdownStyleH6Struct {
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
      result["fontSize"] = fontSize;
@@ -1723,7 +1830,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      return result;
    }
  #endif
-@@ -3685,6 +3865,14 @@
+@@ -3685,6 +3865,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
    if (tmp_color != map.end()) {
      fromRawValue(context, tmp_color->second, result.color);
    }
@@ -1738,7 +1845,112 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-@@ -3731,7 +3919,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+@@ -3698,6 +3886,20 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ #endif
+ 
+ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
++  Float fontSize{0.0};
++  std::string fontFamily{};
++  std::string fontWeight{};
++  SharedColor color{};
++  Float marginTop{0.0};
++  Float marginBottom{0.0};
++  Float lineHeight{0.0};
++  SharedColor bulletColor{};
++  Float bulletSize{0.0};
++  Float markerMinWidth{0.0};
++  SharedColor markerColor{};
++  std::string markerFontWeight{};
++  Float gapWidth{0.0};
++  Float marginLeft{0.0};
+   Float itemSpacing{0.0};
+ 
+ 
+@@ -3706,6 +3908,20 @@ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
+ 
+   folly::dynamic toDynamic() const {
+     folly::dynamic result = folly::dynamic::object();
++    result["fontSize"] = fontSize;
++    result["fontFamily"] = fontFamily;
++    result["fontWeight"] = fontWeight;
++    result["color"] = ::facebook::react::toDynamic(color);
++    result["marginTop"] = marginTop;
++    result["marginBottom"] = marginBottom;
++    result["lineHeight"] = lineHeight;
++    result["bulletColor"] = ::facebook::react::toDynamic(bulletColor);
++    result["bulletSize"] = bulletSize;
++    result["markerMinWidth"] = markerMinWidth;
++    result["markerColor"] = ::facebook::react::toDynamic(markerColor);
++    result["markerFontWeight"] = markerFontWeight;
++    result["gapWidth"] = gapWidth;
++    result["marginLeft"] = marginLeft;
+     result["itemSpacing"] = itemSpacing;
+     return result;
+   }
+@@ -3715,6 +3931,62 @@ struct EnrichedMarkdownTextInputMarkdownStyleListStruct {
+ static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleListStruct &result) {
+   auto map = (std::unordered_map<std::string, RawValue>)value;
+ 
++  auto tmp_fontSize = map.find("fontSize");
++  if (tmp_fontSize != map.end()) {
++    fromRawValue(context, tmp_fontSize->second, result.fontSize);
++  }
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_fontWeight = map.find("fontWeight");
++  if (tmp_fontWeight != map.end()) {
++    fromRawValue(context, tmp_fontWeight->second, result.fontWeight);
++  }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
++  auto tmp_marginTop = map.find("marginTop");
++  if (tmp_marginTop != map.end()) {
++    fromRawValue(context, tmp_marginTop->second, result.marginTop);
++  }
++  auto tmp_marginBottom = map.find("marginBottom");
++  if (tmp_marginBottom != map.end()) {
++    fromRawValue(context, tmp_marginBottom->second, result.marginBottom);
++  }
++  auto tmp_lineHeight = map.find("lineHeight");
++  if (tmp_lineHeight != map.end()) {
++    fromRawValue(context, tmp_lineHeight->second, result.lineHeight);
++  }
++  auto tmp_bulletColor = map.find("bulletColor");
++  if (tmp_bulletColor != map.end()) {
++    fromRawValue(context, tmp_bulletColor->second, result.bulletColor);
++  }
++  auto tmp_bulletSize = map.find("bulletSize");
++  if (tmp_bulletSize != map.end()) {
++    fromRawValue(context, tmp_bulletSize->second, result.bulletSize);
++  }
++  auto tmp_markerMinWidth = map.find("markerMinWidth");
++  if (tmp_markerMinWidth != map.end()) {
++    fromRawValue(context, tmp_markerMinWidth->second, result.markerMinWidth);
++  }
++  auto tmp_markerColor = map.find("markerColor");
++  if (tmp_markerColor != map.end()) {
++    fromRawValue(context, tmp_markerColor->second, result.markerColor);
++  }
++  auto tmp_markerFontWeight = map.find("markerFontWeight");
++  if (tmp_markerFontWeight != map.end()) {
++    fromRawValue(context, tmp_markerFontWeight->second, result.markerFontWeight);
++  }
++  auto tmp_gapWidth = map.find("gapWidth");
++  if (tmp_gapWidth != map.end()) {
++    fromRawValue(context, tmp_gapWidth->second, result.gapWidth);
++  }
++  auto tmp_marginLeft = map.find("marginLeft");
++  if (tmp_marginLeft != map.end()) {
++    fromRawValue(context, tmp_marginLeft->second, result.marginLeft);
++  }
+   auto tmp_itemSpacing = map.find("itemSpacing");
+   if (tmp_itemSpacing != map.end()) {
+     fromRawValue(context, tmp_itemSpacing->second, result.itemSpacing);
+@@ -3731,7 +4003,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
  }
  #endif
  
@@ -1801,7 +2013,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
    EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
    EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
    EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-@@ -3751,6 +3994,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -3751,6 +4078,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
@@ -1811,7 +2023,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
      result["strong"] = ::facebook::react::toDynamic(strong);
      result["em"] = ::facebook::react::toDynamic(em);
      result["link"] = ::facebook::react::toDynamic(link);
-@@ -3771,6 +4017,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
+@@ -3771,6 +4101,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
@@ -1830,7 +2042,7 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
    auto tmp_strong = map.find("strong");
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
-@@ -7236,6 +7494,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
+@@ -7236,6 +7578,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -2187,10 +2399,18 @@ index 82807755..e4f10b45 100644
  
  /// Applies `blockFont` over `range` while preserving the symbolic traits already
 diff --git a/ios/input/ENRMInputFormatterStyle.h b/ios/input/ENRMInputFormatterStyle.h
-index c09a3cbc..ce0fc850 100644
+index c09a3cbc..80be70c9 100644
 --- a/ios/input/ENRMInputFormatterStyle.h
 +++ b/ios/input/ENRMInputFormatterStyle.h
-@@ -20,6 +20,11 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #import "ENRMUIKit.h"
++#import "StyleConfig.h"
+ #import <Foundation/Foundation.h>
+ 
+ NS_ASSUME_NONNULL_BEGIN
+@@ -20,6 +21,11 @@ NS_ASSUME_NONNULL_BEGIN
  /// Base text properties
  @property (nonatomic, strong) UIFont *baseFont;
  @property (nonatomic, strong) RCTUIColor *baseTextColor;
@@ -2202,20 +2422,32 @@ index c09a3cbc..ce0fc850 100644
  
  /// Bold — color override (nil = inherit baseTextColor)
  @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
+@@ -40,7 +46,8 @@ NS_ASSUME_NONNULL_BEGIN
+ /// Vertical spacing (points) added above each list item via the paragraph
+ /// style's paragraphSpacingBefore, so bullets read as separate rows. Configured
+ /// from the `markdownStyle.list.itemSpacing` prop; defaults to 0 (items pack tightly).
+-@property (nonatomic, assign) CGFloat listItemSpacing;
++@property (nonatomic, readonly) CGFloat listItemSpacing;
++@property (nonatomic, strong) StyleConfig *listStyleConfig;
+ 
+ /// Per-level heading config, indexed by level 1-6. A nil/0 entry means the level
+ /// uses a built-in default derived from the base font. Configured from the
 diff --git a/ios/input/ENRMInputFormatterStyle.mm b/ios/input/ENRMInputFormatterStyle.mm
-index 46259c56..955d6d1b 100644
+index 46259c56..0365fa9b 100644
 --- a/ios/input/ENRMInputFormatterStyle.mm
 +++ b/ios/input/ENRMInputFormatterStyle.mm
-@@ -18,6 +18,8 @@ - (instancetype)init
+@@ -18,7 +18,10 @@ - (instancetype)init
    if (self = [super init]) {
      _baseFont = [UIFont systemFontOfSize:16.0];
      _baseTextColor = [RCTUIColor labelColor];
 +    _baseLineHeight = 0;
 +    _inlineCodeFont = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
      _linkVariants = @[];
++    _listStyleConfig = [StyleConfig new];
      _fontCache = [NSMutableDictionary dictionary];
      for (NSInteger level = 0; level <= 6; level++) {
-@@ -34,6 +36,10 @@ - (id)copyWithZone:(NSZone *)zone
+       _headingFontSizes[level] = 0.0;
+@@ -34,6 +37,10 @@ - (id)copyWithZone:(NSZone *)zone
    ENRMInputFormatterStyle *copy = [[ENRMInputFormatterStyle allocWithZone:zone] init];
    copy.baseFont = _baseFont;
    copy.baseTextColor = _baseTextColor;
@@ -2226,9 +2458,30 @@ index 46259c56..955d6d1b 100644
    copy.boldColor = _boldColor;
    copy.italicColor = _italicColor;
    copy.linkColor = _linkColor;
+@@ -42,7 +49,7 @@ - (id)copyWithZone:(NSZone *)zone
+   copy.linkVariants = [_linkVariants copy];
+   copy.spoilerColor = _spoilerColor;
+   copy.spoilerBackgroundColor = _spoilerBackgroundColor;
+-  copy.listItemSpacing = _listItemSpacing;
++  copy.listStyleConfig = [_listStyleConfig copy];
+   for (NSInteger level = 1; level <= 6; level++) {
+     [copy setHeadingFontSize:_headingFontSizes[level] forLevel:level];
+     [copy setHeadingFontWeight:_headingFontWeights[level] forLevel:level];
+@@ -51,6 +58,11 @@ - (id)copyWithZone:(NSZone *)zone
+   return copy;
+ }
+ 
++- (CGFloat)listItemSpacing
++{
++  return [_listStyleConfig listStyleItemSpacing];
++}
++
+ - (BOOL)isValidHeadingLevel:(NSInteger)level
+ {
+   return level >= 1 && level <= 6;
 diff --git a/ios/input/ENRMInputMeasurementStyle.h b/ios/input/ENRMInputMeasurementStyle.h
 new file mode 100755
-index 00000000..5e094e3e
+index 00000000..226400a4
 --- /dev/null
 +++ b/ios/input/ENRMInputMeasurementStyle.h
 @@ -0,0 +1,30 @@
@@ -2257,7 +2510,7 @@ index 00000000..5e094e3e
 +  }
 +  [storage enumerateAttribute:ENRMBlockTypeAttributeName inRange:NSMakeRange(0, storage.length) options:0
 +                   usingBlock:^(NSNumber *type, NSRange range, BOOL *stop) {
-+    if (type == nil || type.integerValue <= ENRMInputBlockTypeHeading6) {
++    if (type == nil || type.integerValue <= ENRMInputBlockTypeOrderedListItem) {
 +      applyBaselineOffset(storage, range);
 +    }
 +  }];
@@ -2803,7 +3056,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 7e72cff2..1828a869 100644
+index 7e72cff2..749ac990 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -3033,7 +3286,15 @@ index 7e72cff2..1828a869 100644
    if (newViewProps.scrollEnabled != oldViewProps.scrollEnabled) {
      _textView.scrollEnabled = newViewProps.scrollEnabled;
    }
-@@ -515,28 +602,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -507,6 +594,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+   }
+ 
+   BOOL styleChanged = applyInputStyleProps(_formatterStyle, newViewProps, oldViewProps);
++  _layoutManager.listMarkerDrawer.listStyleConfig = _formatterStyle.listStyleConfig;
+ 
+   BOOL writingDirectionChanged = NO;
+   if (newViewProps.writingDirection != oldViewProps.writingDirection) {
+@@ -515,28 +603,44 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
      writingDirectionChanged = YES;
    }
  
@@ -3083,7 +3344,7 @@ index 7e72cff2..1828a869 100644
  }
  
  #pragma mark - Relayout
-@@ -544,6 +647,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+@@ -544,6 +648,7 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
  - (void)scheduleRelayoutIfNeeded
  {
    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(_performRelayout) object:nil];
@@ -3091,7 +3352,7 @@ index 7e72cff2..1828a869 100644
    [self performSelector:@selector(_performRelayout) withObject:nil afterDelay:0];
  }
  
-@@ -555,6 +659,8 @@ - (void)_performRelayout
+@@ -555,6 +660,8 @@ - (void)_performRelayout
  
    NSUInteger textLength = _textView.textStorage.length;
    if (textLength == 0) {
@@ -3100,7 +3361,7 @@ index 7e72cff2..1828a869 100644
      return;
    }
  
-@@ -563,12 +669,18 @@ - (void)_performRelayout
+@@ -563,12 +670,18 @@ - (void)_performRelayout
    [_textView.layoutManager ensureLayoutForTextContainer:_textView.textContainer];
    [_textView.layoutManager invalidateDisplayForCharacterRange:wholeRange];
  
@@ -3120,7 +3381,7 @@ index 7e72cff2..1828a869 100644
    }
  }
  
-@@ -580,6 +692,9 @@ - (void)didMoveToWindow
+@@ -580,6 +693,9 @@ - (void)didMoveToWindow
  
    if (self.window) {
      // Don't override the contentView frame set by RCTViewComponentView.
@@ -3130,7 +3391,7 @@ index 7e72cff2..1828a869 100644
      ENRMRefreshTextViewLayout(_textView);
  
      [self applyFormatting];
-@@ -673,6 +788,7 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -673,6 +789,7 @@ - (void)importMarkdown:(NSString *)markdown
  {
    ENRMInputParser *parser = [[ENRMInputParser alloc] init];
    ENRMParseResult *parsed = [parser parseToPlainTextAndRanges:markdown];
@@ -3138,7 +3399,7 @@ index 7e72cff2..1828a869 100644
  
    [_editSession enterPhase:ENRMEditPhaseImporting];
  
-@@ -688,9 +804,12 @@ - (void)importMarkdown:(NSString *)markdown
+@@ -688,9 +805,12 @@ - (void)importMarkdown:(NSString *)markdown
    [_blockStore setRanges:parsed.blockRanges];
    _lastTextLength = parsed.plainText.length;
    _lastSelectedRange = _textView.selectedRange;
@@ -3152,7 +3413,7 @@ index 7e72cff2..1828a869 100644
    [self updatePlaceholderVisibility];
  
    if (parsed.plainText.length == 0) {
-@@ -758,6 +877,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
+@@ -758,6 +878,20 @@ - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray<ENRMF
  /// omitting) newlines in the string.
  - (void)pasteMarkdown:(NSString *)markdown
  {
@@ -3173,7 +3434,7 @@ index 7e72cff2..1828a869 100644
    NSUInteger lead = 0;
    while (lead < markdown.length && [markdown characterAtIndex:lead] == '\n') {
      lead++;
-@@ -787,12 +920,16 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -787,12 +921,16 @@ - (void)pasteMarkdown:(NSString *)markdown
        [NSMutableArray arrayWithCapacity:parsed.formattingRanges.count];
    for (ENRMFormattingRange *range in parsed.formattingRanges) {
      NSRange shifted = NSMakeRange(range.range.location + lead, range.range.length);
@@ -3192,7 +3453,7 @@ index 7e72cff2..1828a869 100644
    }
    [self replaceTextInRange:_textView.selectedRange
                    withText:plainText
-@@ -802,12 +939,43 @@ - (void)pasteMarkdown:(NSString *)markdown
+@@ -802,12 +940,43 @@ - (void)pasteMarkdown:(NSString *)markdown
  
  #pragma mark - Formatting
  
@@ -3240,7 +3501,7 @@ index 7e72cff2..1828a869 100644
  }
  
  - (void)applyFormatting
-@@ -864,6 +1032,8 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -864,6 +1033,8 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
@@ -3249,7 +3510,7 @@ index 7e72cff2..1828a869 100644
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -871,7 +1041,32 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -871,7 +1042,32 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
                        scopedToRange:scope];
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
@@ -3282,7 +3543,7 @@ index 7e72cff2..1828a869 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -914,6 +1109,23 @@ - (void)setValue:(NSString *)markdown
+@@ -914,6 +1110,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -3306,7 +3567,7 @@ index 7e72cff2..1828a869 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -924,6 +1136,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -924,6 +1137,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -3428,7 +3689,28 @@ index 7e72cff2..1828a869 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1412,9 +1739,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1225,7 +1553,9 @@ - (void)updateEmptyBulletMarker
+       // flush left; stamp the list style so caret and marker indent immediately.
+       // (A trailing empty line uses the extra line fragment instead.)
+       if (paragraphRange.length > 0) {
+-        CGFloat indent = (depth + 1) * kENRMListIndentPerDepth;
++        StyleConfig *config = _formatterStyle.listStyleConfig;
++        CGFloat markerWidth = ordered ? [config effectiveListMarginLeftForNumber] : [config effectiveListMarginLeftForBullet];
++        CGFloat indent = markerWidth + [config effectiveListGapWidth] + depth * [config listStyleMarginLeft];
+         NSTextStorage *storage = _textView.textStorage;
+         NSParagraphStyle *existing = [storage attribute:NSParagraphStyleAttributeName
+                                                 atIndex:paragraphRange.location
+@@ -1252,8 +1582,7 @@ - (void)updateEmptyBulletMarker
+   listDrawer.emptyBulletOrdered = ordered;
+   listDrawer.emptyBulletOrdinal = ordinal;
+   listDrawer.emptyBulletLocation = location;
+-  listDrawer.emptyBulletFont = _formatterStyle.baseFont;
+-  listDrawer.emptyBulletColor = _formatterStyle.baseTextColor;
++  listDrawer.emptyBulletFont = [_formatterStyle.listStyleConfig listStyleFont];
+   listDrawer.emptyBulletRTL = [self emptyListLineIsRTL];
+   listDrawer.listItemSpacing = _formatterStyle.listItemSpacing;
+ 
+@@ -1412,9 +1741,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -3461,7 +3743,7 @@ index 7e72cff2..1828a869 100644
  }
  
  - (void)copyToClipboard
-@@ -1448,16 +1797,53 @@ - (CGRect)computeCaretRect
+@@ -1448,16 +1799,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -3520,7 +3802,7 @@ index 7e72cff2..1828a869 100644
  - (void)requestCaretRect:(NSInteger)requestId
  {
    [_inputEventEmitter requestCaretRect:requestId];
-@@ -1575,6 +1961,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1575,6 +1963,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -3553,7 +3835,7 @@ index 7e72cff2..1828a869 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1608,7 +2020,7 @@ - (ENRMInputTypingAttributesController *)typingController
+@@ -1608,7 +2022,7 @@ - (ENRMInputTypingAttributesController *)typingController
  #pragma mark - Text edit tracking
  
  /// Markdown shortcuts: when the user types a space after `#`…`######`,
@@ -3562,7 +3844,7 @@ index 7e72cff2..1828a869 100644
  /// and make the paragraph that block. Runs after the stores are adjusted for the
  /// edit and before scoped formatting. Returns YES when it converted, in which
  /// case the replace path has already reformatted and emitted.
-@@ -1649,7 +2061,8 @@ - (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)editLocation
+@@ -1649,7 +2063,8 @@ - (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)editLocation
    }
  
    NSUInteger lineStart = [text paragraphRangeForRange:NSMakeRange(spaceIndex, 0)].location;
@@ -3572,7 +3854,7 @@ index 7e72cff2..1828a869 100644
      return NO;
    }
  
-@@ -1749,7 +2162,14 @@ - (void)handleTextChanged
+@@ -1749,7 +2164,14 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -3588,7 +3870,7 @@ index 7e72cff2..1828a869 100644
      [self applyFormattingScopedFromParagraphAtLocation:editLocation];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1764,6 +2184,9 @@ - (void)handleTextChanged
+@@ -1764,6 +2186,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -3598,7 +3880,7 @@ index 7e72cff2..1828a869 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1826,6 +2249,12 @@ - (void)manageSelectionBasedChanges
+@@ -1826,6 +2251,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -3611,7 +3893,7 @@ index 7e72cff2..1828a869 100644
            _textView.typingAttributes = attrs;
          }
        }
-@@ -2016,9 +2445,6 @@ - (BOOL)textInputShouldSubmitOnReturn
+@@ -2016,9 +2447,6 @@ - (BOOL)textInputShouldSubmitOnReturn
  - (nullable NSString *)textInputShouldChangeText:(NSString *)text inRange:(NSRange)range
  {
    [_inputEventEmitter emitOnKeyPress:text];
@@ -3621,7 +3903,7 @@ index 7e72cff2..1828a869 100644
    _preEditSelectedRange = _lastSelectedRange;
    // Capture the same pre-edit block state the iOS path does — otherwise these
    // ivars carry stale values from a previous edit into reconcileBlockContinuation.
-@@ -2044,13 +2470,6 @@ - (void)textInputDidChange
+@@ -2044,13 +2472,6 @@ - (void)textInputDidChange
  - (void)textInputDidChangeSelection
  {
    NSRange newSelection = _textView.selectedRange;
@@ -3636,10 +3918,18 @@ index 7e72cff2..1828a869 100644
    _lastSelectedRange = newSelection;
  
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index 1d28946d..b5d1cd4e 100644
+index 1d28946d..a8ba586b 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
-@@ -92,6 +92,25 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -3,6 +3,7 @@
+ #import "ENRMInputFormatter.h"
+ #import "ENRMUIKit.h"
+ #import "FontUtils.h"
++#import "StylePropsUtils.h"
+ #import <React/RCTConversions.h>
+ 
+ #if !TARGET_OS_OSX
+@@ -92,6 +93,25 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
      changed = YES;
    }
  
@@ -3665,7 +3955,19 @@ index 1d28946d..b5d1cd4e 100644
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
-@@ -183,3 +202,100 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -169,10 +189,7 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+     changed = YES;
+   }
+ 
+-  if (newProps.markdownStyle.list.itemSpacing != oldProps.markdownStyle.list.itemSpacing) {
+-    style.listItemSpacing = newProps.markdownStyle.list.itemSpacing;
+-    changed = YES;
+-  }
++  changed |= applyMarkdownListStyleToConfig(style.listStyleConfig, newProps.markdownStyle, oldProps.markdownStyle);
+ 
+   changed |= applyHeadingLevelProps(style, 1, newProps.markdownStyle.h1, oldProps.markdownStyle.h1);
+   changed |= applyHeadingLevelProps(style, 2, newProps.markdownStyle.h2, oldProps.markdownStyle.h2);
+@@ -183,3 +200,100 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
  
    return changed;
  }
@@ -4836,7 +5138,7 @@ index 5b348e8f..2cde2636 100644
      onInputKeyPress: onKeyPress,
      onLinkDetected: handleLinkDetected,
 diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec261..6da2c234 100644
+index c2fec261..a78bc324 100644
 --- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -8,13 +8,21 @@ import {
@@ -4867,7 +5169,7 @@ index c2fec261..6da2c234 100644
    strong: {
      color?: ColorValue;
    };
-@@ -38,15 +46,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -38,21 +46,28 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -4880,25 +5182,38 @@ index c2fec261..6da2c234 100644
 -  h4: HeadingStyleInternal;
 -  h5: HeadingStyleInternal;
 -  h6: HeadingStyleInternal;
-   list: {
-     // Vertical spacing (points) added above each list item. iOS applies it via
-     // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
-@@ -55,6 +54,14 @@ interface MarkdownTextInputStyleInternal {
-   };
- }
- 
+-  list: {
+-    // Vertical spacing (points) added above each list item. iOS applies it via
+-    // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
+-    // every other spacing value in the library.
+-    itemSpacing: CodegenTypes.Float;
+-  };
++  list: ListStyleInternal;
++}
++
++interface ListStyleInternal extends InputBlockStyleInternal {
++  marginTop: CodegenTypes.Float;
++  marginBottom: CodegenTypes.Float;
++  bulletColor: ColorValue;
++  bulletSize: CodegenTypes.Float;
++  markerMinWidth: CodegenTypes.Float;
++  markerColor: ColorValue;
++  markerFontWeight: string;
++  gapWidth: CodegenTypes.Float;
++  marginLeft: CodegenTypes.Float;
++  itemSpacing: CodegenTypes.Float;
++}
++
 +interface InputBlockStyleInternal {
 +  fontSize: CodegenTypes.Float;
 +  fontFamily: string;
 +  fontWeight: string;
 +  color: ColorValue;
 +  lineHeight: CodegenTypes.Float;
-+}
-+
- interface TargetedEvent {
-   target: CodegenTypes.Int32;
  }
-@@ -76,6 +83,17 @@ export interface OnChangeSelectionEvent {
+ 
+ interface TargetedEvent {
+@@ -76,6 +91,17 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -4916,7 +5231,7 @@ index c2fec261..6da2c234 100644
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -303,6 +321,8 @@ export interface NativeProps extends ViewProps {
+@@ -303,6 +329,8 @@ export interface NativeProps extends ViewProps {
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
    onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -4925,7 +5240,7 @@ index c2fec261..6da2c234 100644
    onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
    onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
    onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -330,6 +350,11 @@ interface NativeCommands {
+@@ -330,6 +358,11 @@ interface NativeCommands {
      start: CodegenTypes.Int32,
      end: CodegenTypes.Int32
    ) => void;
@@ -4937,7 +5252,7 @@ index c2fec261..6da2c234 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -361,6 +386,7 @@ interface NativeCommands {
+@@ -361,6 +394,7 @@ interface NativeCommands {
    ) => void;
    removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
    copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -4945,7 +5260,7 @@ index c2fec261..6da2c234 100644
    requestMarkdown: (
      viewRef: React.ElementRef<ComponentType>,
      requestId: CodegenTypes.Int32
-@@ -377,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -377,6 +411,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -4953,7 +5268,7 @@ index c2fec261..6da2c234 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
-@@ -395,6 +422,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -395,6 +430,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'removeLink',
      'copyToClipboard',
      'requestMarkdown',
@@ -5061,7 +5376,7 @@ index ab5f4a79..0b35b76d 100644
      ellipsizeMode,
      ...rest
 diff --git a/lib/module/normalizeMarkdownTextInputStyle.js b/lib/module/normalizeMarkdownTextInputStyle.js
-index 90562c8e..f7f9e70f 100644
+index 90562c8e..96bddc57 100644
 --- a/lib/module/normalizeMarkdownTextInputStyle.js
 +++ b/lib/module/normalizeMarkdownTextInputStyle.js
 @@ -2,24 +2,30 @@
@@ -5107,7 +5422,7 @@ index 90562c8e..f7f9e70f 100644
    strong: {
      color: undefined
    },
-@@ -36,24 +42,10 @@ const defaultInternal = Object.freeze({
+@@ -36,24 +42,8 @@ const defaultInternal = Object.freeze({
      color: processColor(DEFAULT_SPOILER_COLOR),
      backgroundColor: processColor(DEFAULT_SPOILER_BG_COLOR)
    },
@@ -5117,9 +5432,10 @@ index 90562c8e..f7f9e70f 100644
 -  h4: defaultHeadingInternal('h4'),
 -  h5: defaultHeadingInternal('h5'),
 -  h6: defaultHeadingInternal('h6'),
-   list: {
-     itemSpacing: 0
-   }
+-  list: {
+-    itemSpacing: 0
+-  }
++  list: defaultMarkdownStyle.list
  });
 -const normalizeHeadingStyle = (key, style) => {
 -  const fallback = defaultInternal[key];
@@ -5132,7 +5448,7 @@ index 90562c8e..f7f9e70f 100644
  let cachedInput;
  let cachedResult;
  function normalizeInputLinkStyle(style, fallback) {
-@@ -71,7 +63,17 @@ export const normalizeMarkdownTextInputStyle = style => {
+@@ -71,7 +61,17 @@ export const normalizeMarkdownTextInputStyle = style => {
      return cachedResult;
    }
    const linkBase = normalizeInputLinkStyle(style.link, defaultInternal.link);
@@ -5150,7 +5466,7 @@ index 90562c8e..f7f9e70f 100644
      strong: {
        color: normalizeColor(style.strong?.color)
      },
-@@ -89,12 +91,6 @@ export const normalizeMarkdownTextInputStyle = style => {
+@@ -89,15 +89,7 @@ export const normalizeMarkdownTextInputStyle = style => {
        color: normalizeColor(style.spoiler?.color) ?? defaultInternal.spoiler.color,
        backgroundColor: normalizeColor(style.spoiler?.backgroundColor) ?? defaultInternal.spoiler.backgroundColor
      },
@@ -5160,9 +5476,13 @@ index 90562c8e..f7f9e70f 100644
 -    h4: normalizeHeadingStyle('h4', style.h4),
 -    h5: normalizeHeadingStyle('h5', style.h5),
 -    h6: normalizeHeadingStyle('h6', style.h6),
-     list: {
-       itemSpacing: style.list?.itemSpacing ?? defaultInternal.list.itemSpacing
-     }
+-    list: {
+-      itemSpacing: style.list?.itemSpacing ?? defaultInternal.list.itemSpacing
+-    }
++    list: normalizedBlockStyle.list
+   };
+   cachedInput = style;
+   cachedResult = result;
 diff --git a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
 index 56e42c81..4d6e3998 100644
 --- a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
@@ -5309,7 +5629,7 @@ index 631fb19b..3f0308e9 100644
  //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index 6f9148cf..cbbd1936 100644
+index 6f9148cf..b5356e1c 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 @@ -1,11 +1,20 @@
@@ -5338,7 +5658,7 @@ index 6f9148cf..cbbd1936 100644
      strong: {
          color?: ColorValue;
      };
-@@ -27,16 +36,17 @@ interface MarkdownTextInputStyleInternal {
+@@ -27,15 +36,26 @@ interface MarkdownTextInputStyleInternal {
          color: ColorValue;
          backgroundColor: ColorValue;
      };
@@ -5348,21 +5668,33 @@ index 6f9148cf..cbbd1936 100644
 -    h4: HeadingStyleInternal;
 -    h5: HeadingStyleInternal;
 -    h6: HeadingStyleInternal;
-     list: {
-         itemSpacing: CodegenTypes.Float;
-     };
- }
+-    list: {
+-        itemSpacing: CodegenTypes.Float;
+-    };
++    list: ListStyleInternal;
++}
++interface ListStyleInternal extends InputBlockStyleInternal {
++  marginTop: CodegenTypes.Float;
++  marginBottom: CodegenTypes.Float;
++  bulletColor: ColorValue;
++  bulletSize: CodegenTypes.Float;
++  markerMinWidth: CodegenTypes.Float;
++  markerColor: ColorValue;
++  markerFontWeight: string;
++  gapWidth: CodegenTypes.Float;
++  marginLeft: CodegenTypes.Float;
++  itemSpacing: CodegenTypes.Float;
++}
 +interface InputBlockStyleInternal {
 +    fontSize: CodegenTypes.Float;
 +    fontFamily: string;
 +    fontWeight: string;
 +    color: ColorValue;
 +    lineHeight: CodegenTypes.Float;
-+}
+ }
  interface TargetedEvent {
      target: CodegenTypes.Int32;
- }
-@@ -53,6 +63,15 @@ export interface OnChangeSelectionEvent {
+@@ -53,6 +73,15 @@ export interface OnChangeSelectionEvent {
      start: CodegenTypes.Int32;
      end: CodegenTypes.Int32;
  }
@@ -5378,7 +5710,7 @@ index 6f9148cf..cbbd1936 100644
  export interface OnChangeStateEvent {
      bold: {
          isActive: boolean;
-@@ -297,6 +316,8 @@ export interface NativeProps extends ViewProps {
+@@ -297,6 +326,8 @@ export interface NativeProps extends ViewProps {
      onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
      onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
      onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -5387,7 +5719,7 @@ index 6f9148cf..cbbd1936 100644
      onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
      onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
      onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -315,6 +336,7 @@ interface NativeCommands {
+@@ -315,6 +346,7 @@ interface NativeCommands {
      blur: (viewRef: React.ElementRef<ComponentType>) => void;
      setValue: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
      setSelection: (viewRef: React.ElementRef<ComponentType>, start: CodegenTypes.Int32, end: CodegenTypes.Int32) => void;
@@ -5395,7 +5727,7 @@ index 6f9148cf..cbbd1936 100644
      toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -332,6 +354,7 @@ interface NativeCommands {
+@@ -332,6 +364,7 @@ interface NativeCommands {
      startMention: (viewRef: React.ElementRef<ComponentType>, indicator: string) => void;
      removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
      copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -5461,10 +5793,15 @@ index 6a1c672c..141776c2 100644
  //# sourceMappingURL=EnrichedMarkdownText.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
-index a306bfd8..d4b046cc 100644
+index a306bfd8..2f579c75 100644
 --- a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
 +++ b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
-@@ -6,12 +6,28 @@ interface LinkVariantEntryInternal {
+@@ -1,3 +1,4 @@
++import type { MarkdownStyleInternal } from './types/MarkdownStyleInternal';
+ import { type ColorValue } from 'react-native';
+ import type { MarkdownTextInputStyle } from './EnrichedMarkdownTextInput';
+ interface LinkVariantEntryInternal {
+@@ -6,12 +7,28 @@ interface LinkVariantEntryInternal {
      underline: boolean;
      backgroundColor: ColorValue;
  }
@@ -5494,7 +5831,7 @@ index a306bfd8..d4b046cc 100644
      strong: {
          color?: ColorValue;
      };
-@@ -28,12 +44,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -28,15 +45,7 @@ interface MarkdownTextInputStyleInternal {
          color: ColorValue;
          backgroundColor: ColorValue;
      };
@@ -5504,9 +5841,13 @@ index a306bfd8..d4b046cc 100644
 -    h4: HeadingStyleInternal;
 -    h5: HeadingStyleInternal;
 -    h6: HeadingStyleInternal;
-     list: {
-         itemSpacing: number;
-     };
+-    list: {
+-        itemSpacing: number;
+-    };
++    list: MarkdownStyleInternal['list'];
+ }
+ export declare const normalizeMarkdownTextInputStyle: (style?: MarkdownTextInputStyle) => MarkdownTextInputStyleInternal;
+ export {};
 diff --git a/lib/typescript/src/types/MarkdownTextProps.d.ts b/lib/typescript/src/types/MarkdownTextProps.d.ts
 index 379af3df..fbd92f5f 100644
 --- a/lib/typescript/src/types/MarkdownTextProps.d.ts
@@ -5782,7 +6123,7 @@ index 4100c709..55cee928 100644
        onInputKeyPress={onKeyPress as NativeProps['onInputKeyPress']}
        onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
 diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec261..6da2c234 100644
+index c2fec261..a78bc324 100644
 --- a/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -8,13 +8,21 @@ import {
@@ -5813,7 +6154,7 @@ index c2fec261..6da2c234 100644
    strong: {
      color?: ColorValue;
    };
-@@ -38,15 +46,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -38,21 +46,28 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -5826,25 +6167,38 @@ index c2fec261..6da2c234 100644
 -  h4: HeadingStyleInternal;
 -  h5: HeadingStyleInternal;
 -  h6: HeadingStyleInternal;
-   list: {
-     // Vertical spacing (points) added above each list item. iOS applies it via
-     // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
-@@ -55,6 +54,14 @@ interface MarkdownTextInputStyleInternal {
-   };
- }
- 
+-  list: {
+-    // Vertical spacing (points) added above each list item. iOS applies it via
+-    // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
+-    // every other spacing value in the library.
+-    itemSpacing: CodegenTypes.Float;
+-  };
++  list: ListStyleInternal;
++}
++
++interface ListStyleInternal extends InputBlockStyleInternal {
++  marginTop: CodegenTypes.Float;
++  marginBottom: CodegenTypes.Float;
++  bulletColor: ColorValue;
++  bulletSize: CodegenTypes.Float;
++  markerMinWidth: CodegenTypes.Float;
++  markerColor: ColorValue;
++  markerFontWeight: string;
++  gapWidth: CodegenTypes.Float;
++  marginLeft: CodegenTypes.Float;
++  itemSpacing: CodegenTypes.Float;
++}
++
 +interface InputBlockStyleInternal {
 +  fontSize: CodegenTypes.Float;
 +  fontFamily: string;
 +  fontWeight: string;
 +  color: ColorValue;
 +  lineHeight: CodegenTypes.Float;
-+}
-+
- interface TargetedEvent {
-   target: CodegenTypes.Int32;
  }
-@@ -76,6 +83,17 @@ export interface OnChangeSelectionEvent {
+ 
+ interface TargetedEvent {
+@@ -76,6 +91,17 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -5862,7 +6216,7 @@ index c2fec261..6da2c234 100644
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -303,6 +321,8 @@ export interface NativeProps extends ViewProps {
+@@ -303,6 +329,8 @@ export interface NativeProps extends ViewProps {
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
    onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -5871,7 +6225,7 @@ index c2fec261..6da2c234 100644
    onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
    onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
    onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -330,6 +350,11 @@ interface NativeCommands {
+@@ -330,6 +358,11 @@ interface NativeCommands {
      start: CodegenTypes.Int32,
      end: CodegenTypes.Int32
    ) => void;
@@ -5883,7 +6237,7 @@ index c2fec261..6da2c234 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -361,6 +386,7 @@ interface NativeCommands {
+@@ -361,6 +394,7 @@ interface NativeCommands {
    ) => void;
    removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
    copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -5891,7 +6245,7 @@ index c2fec261..6da2c234 100644
    requestMarkdown: (
      viewRef: React.ElementRef<ComponentType>,
      requestId: CodegenTypes.Int32
-@@ -377,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -377,6 +411,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -5899,7 +6253,7 @@ index c2fec261..6da2c234 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
-@@ -395,6 +422,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -395,6 +430,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'removeLink',
      'copyToClipboard',
      'requestMarkdown',
@@ -6018,10 +6372,11 @@ index 267a2463..85642d0c 100644
      ellipsizeMode,
      ...rest,
 diff --git a/src/normalizeMarkdownTextInputStyle.ts b/src/normalizeMarkdownTextInputStyle.ts
-index 240cd3e5..d7ca90c5 100644
+index 240cd3e5..c9fcb06e 100644
 --- a/src/normalizeMarkdownTextInputStyle.ts
 +++ b/src/normalizeMarkdownTextInputStyle.ts
-@@ -1,16 +1,11 @@
+@@ -1,16 +1,12 @@
++import type { MarkdownStyleInternal } from './types/MarkdownStyleInternal';
  import { processColor, type ColorValue } from 'react-native';
  import type {
 -  HeadingStyle,
@@ -6039,7 +6394,7 @@ index 240cd3e5..d7ca90c5 100644
  
  interface LinkVariantEntryInternal {
    pattern: string;
-@@ -19,13 +14,28 @@ interface LinkVariantEntryInternal {
+@@ -19,13 +15,28 @@ interface LinkVariantEntryInternal {
    backgroundColor: ColorValue;
  }
  
@@ -6070,7 +6425,7 @@ index 240cd3e5..d7ca90c5 100644
    strong: {
      color?: ColorValue;
    };
-@@ -42,12 +52,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -42,15 +53,7 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -6080,10 +6435,14 @@ index 240cd3e5..d7ca90c5 100644
 -  h4: HeadingStyleInternal;
 -  h5: HeadingStyleInternal;
 -  h6: HeadingStyleInternal;
-   list: {
-     itemSpacing: number;
-   };
-@@ -58,18 +62,31 @@ const DEFAULT_LINK_BG_COLOR = 'transparent';
+-  list: {
+-    itemSpacing: number;
+-  };
++  list: MarkdownStyleInternal['list'];
+ }
+ 
+ const DEFAULT_LINK_COLOR = '#2563EB';
+@@ -58,18 +61,31 @@ const DEFAULT_LINK_BG_COLOR = 'transparent';
  const DEFAULT_SPOILER_COLOR = '#374151';
  const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
  
@@ -6125,7 +6484,7 @@ index 240cd3e5..d7ca90c5 100644
    strong: {
      color: undefined,
    },
-@@ -86,29 +103,11 @@ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
+@@ -86,29 +102,9 @@ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
      color: processColor(DEFAULT_SPOILER_COLOR)!,
      backgroundColor: processColor(DEFAULT_SPOILER_BG_COLOR)!,
    },
@@ -6135,9 +6494,10 @@ index 240cd3e5..d7ca90c5 100644
 -  h4: defaultHeadingInternal('h4'),
 -  h5: defaultHeadingInternal('h5'),
 -  h6: defaultHeadingInternal('h6'),
-   list: {
-     itemSpacing: 0,
-   },
+-  list: {
+-    itemSpacing: 0,
+-  },
++  list: defaultMarkdownStyle.list,
  });
  
 -const normalizeHeadingStyle = (
@@ -6155,7 +6515,7 @@ index 240cd3e5..d7ca90c5 100644
  let cachedInput: MarkdownTextInputStyle | undefined;
  let cachedResult: MarkdownTextInputStyleInternal | undefined;
  
-@@ -136,7 +135,17 @@ export const normalizeMarkdownTextInputStyle = (
+@@ -136,7 +132,17 @@ export const normalizeMarkdownTextInputStyle = (
    }
  
    const linkBase = normalizeInputLinkStyle(style.link, defaultInternal.link);
@@ -6173,7 +6533,7 @@ index 240cd3e5..d7ca90c5 100644
      strong: {
        color: normalizeColor(style.strong?.color),
      },
-@@ -161,12 +170,6 @@ export const normalizeMarkdownTextInputStyle = (
+@@ -161,15 +167,7 @@ export const normalizeMarkdownTextInputStyle = (
          normalizeColor(style.spoiler?.backgroundColor) ??
          defaultInternal.spoiler.backgroundColor,
      },
@@ -6183,9 +6543,13 @@ index 240cd3e5..d7ca90c5 100644
 -    h4: normalizeHeadingStyle('h4', style.h4),
 -    h5: normalizeHeadingStyle('h5', style.h5),
 -    h6: normalizeHeadingStyle('h6', style.h6),
-     list: {
-       itemSpacing: style.list?.itemSpacing ?? defaultInternal.list.itemSpacing,
-     },
+-    list: {
+-      itemSpacing: style.list?.itemSpacing ?? defaultInternal.list.itemSpacing,
+-    },
++    list: normalizedBlockStyle.list,
+   };
+ 
+   cachedInput = style;
 diff --git a/src/types/MarkdownTextProps.ts b/src/types/MarkdownTextProps.ts
 index c088b59d..ece23099 100644
 --- a/src/types/MarkdownTextProps.ts
@@ -6838,3 +7202,537 @@ index c9ec5dec..2ea2e4d1 100644
      // Link URL parentheses are a special two-character transition from "]("
      if (c == ']' && !inLinkParen && i + 1 < length && [markdown characterAtIndex:i + 1] == '(') {
        NSUInteger bracketIndex = NSNotFound;
+diff --git a/ios/utils/StylePropsUtils.h b/ios/utils/StylePropsUtils.h
+index bfb60058..633cf000 100644
+--- a/ios/utils/StylePropsUtils.h
++++ b/ios/utils/StylePropsUtils.h
+@@ -15,6 +15,96 @@
+ #import "StyleConfig.h"
+ #import <React/RCTConversions.h>
+ 
++template <typename MarkdownStyle>
++BOOL applyMarkdownListStyleToConfig(StyleConfig *config, const MarkdownStyle &newStyle, const MarkdownStyle &oldStyle)
++{
++  BOOL changed = NO;
++  // ── List ───────────────────────────────────────────────────────────────────
++
++  if (newStyle.list.fontSize != oldStyle.list.fontSize) {
++    [config setListStyleFontSize:newStyle.list.fontSize];
++    changed = YES;
++  }
++
++  if (newStyle.list.fontFamily != oldStyle.list.fontFamily) {
++    NSString *fontFamily = [[NSString alloc] initWithUTF8String:newStyle.list.fontFamily.c_str()];
++    [config setListStyleFontFamily:fontFamily];
++    changed = YES;
++  }
++
++  if (newStyle.list.fontWeight != oldStyle.list.fontWeight) {
++    NSString *fontWeight = [[NSString alloc] initWithUTF8String:newStyle.list.fontWeight.c_str()];
++    [config setListStyleFontWeight:fontWeight];
++    changed = YES;
++  }
++
++  if (newStyle.list.color != oldStyle.list.color) {
++    RCTUIColor *listColor = RCTUIColorFromSharedColor(newStyle.list.color);
++    [config setListStyleColor:listColor];
++    changed = YES;
++  }
++
++  if (newStyle.list.marginTop != oldStyle.list.marginTop) {
++    [config setListStyleMarginTop:newStyle.list.marginTop];
++    changed = YES;
++  }
++
++  if (newStyle.list.marginBottom != oldStyle.list.marginBottom) {
++    [config setListStyleMarginBottom:newStyle.list.marginBottom];
++    changed = YES;
++  }
++
++  if (newStyle.list.lineHeight != oldStyle.list.lineHeight) {
++    [config setListStyleLineHeight:newStyle.list.lineHeight];
++    changed = YES;
++  }
++
++  if (newStyle.list.bulletColor != oldStyle.list.bulletColor) {
++    RCTUIColor *bulletColor = RCTUIColorFromSharedColor(newStyle.list.bulletColor);
++    [config setListStyleBulletColor:bulletColor];
++    changed = YES;
++  }
++
++  if (newStyle.list.bulletSize != oldStyle.list.bulletSize) {
++    [config setListStyleBulletSize:newStyle.list.bulletSize];
++    changed = YES;
++  }
++
++  if (newStyle.list.markerMinWidth != oldStyle.list.markerMinWidth) {
++    [config setListStyleMarkerMinWidth:newStyle.list.markerMinWidth];
++    changed = YES;
++  }
++
++  if (newStyle.list.markerColor != oldStyle.list.markerColor) {
++    RCTUIColor *markerColor = RCTUIColorFromSharedColor(newStyle.list.markerColor);
++    [config setListStyleMarkerColor:markerColor];
++    changed = YES;
++  }
++
++  if (newStyle.list.markerFontWeight != oldStyle.list.markerFontWeight) {
++    NSString *markerFontWeight = [[NSString alloc] initWithUTF8String:newStyle.list.markerFontWeight.c_str()];
++    [config setListStyleMarkerFontWeight:markerFontWeight];
++    changed = YES;
++  }
++
++  if (newStyle.list.gapWidth != oldStyle.list.gapWidth) {
++    [config setListStyleGapWidth:newStyle.list.gapWidth];
++    changed = YES;
++  }
++
++  if (newStyle.list.marginLeft != oldStyle.list.marginLeft) {
++    [config setListStyleMarginLeft:newStyle.list.marginLeft];
++    changed = YES;
++  }
++
++  if (newStyle.list.itemSpacing != oldStyle.list.itemSpacing) {
++    [config setListStyleItemSpacing:newStyle.list.itemSpacing];
++    changed = YES;
++  }
++
++  return changed;
++}
++
+ template <typename MarkdownStyle>
+ BOOL applyMarkdownStyleToConfig(StyleConfig *config, const MarkdownStyle &newStyle, const MarkdownStyle &oldStyle)
+ {
+@@ -796,88 +886,7 @@ BOOL applyMarkdownStyleToConfig(StyleConfig *config, const MarkdownStyle &newSty
+     changed = YES;
+   }
+ 
+-  // ── List ───────────────────────────────────────────────────────────────────
+-
+-  if (newStyle.list.fontSize != oldStyle.list.fontSize) {
+-    [config setListStyleFontSize:newStyle.list.fontSize];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.fontFamily != oldStyle.list.fontFamily) {
+-    NSString *fontFamily = [[NSString alloc] initWithUTF8String:newStyle.list.fontFamily.c_str()];
+-    [config setListStyleFontFamily:fontFamily];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.fontWeight != oldStyle.list.fontWeight) {
+-    NSString *fontWeight = [[NSString alloc] initWithUTF8String:newStyle.list.fontWeight.c_str()];
+-    [config setListStyleFontWeight:fontWeight];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.color != oldStyle.list.color) {
+-    RCTUIColor *listColor = RCTUIColorFromSharedColor(newStyle.list.color);
+-    [config setListStyleColor:listColor];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.marginTop != oldStyle.list.marginTop) {
+-    [config setListStyleMarginTop:newStyle.list.marginTop];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.marginBottom != oldStyle.list.marginBottom) {
+-    [config setListStyleMarginBottom:newStyle.list.marginBottom];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.lineHeight != oldStyle.list.lineHeight) {
+-    [config setListStyleLineHeight:newStyle.list.lineHeight];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.bulletColor != oldStyle.list.bulletColor) {
+-    RCTUIColor *bulletColor = RCTUIColorFromSharedColor(newStyle.list.bulletColor);
+-    [config setListStyleBulletColor:bulletColor];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.bulletSize != oldStyle.list.bulletSize) {
+-    [config setListStyleBulletSize:newStyle.list.bulletSize];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.markerMinWidth != oldStyle.list.markerMinWidth) {
+-    [config setListStyleMarkerMinWidth:newStyle.list.markerMinWidth];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.markerColor != oldStyle.list.markerColor) {
+-    RCTUIColor *markerColor = RCTUIColorFromSharedColor(newStyle.list.markerColor);
+-    [config setListStyleMarkerColor:markerColor];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.markerFontWeight != oldStyle.list.markerFontWeight) {
+-    NSString *markerFontWeight = [[NSString alloc] initWithUTF8String:newStyle.list.markerFontWeight.c_str()];
+-    [config setListStyleMarkerFontWeight:markerFontWeight];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.gapWidth != oldStyle.list.gapWidth) {
+-    [config setListStyleGapWidth:newStyle.list.gapWidth];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.marginLeft != oldStyle.list.marginLeft) {
+-    [config setListStyleMarginLeft:newStyle.list.marginLeft];
+-    changed = YES;
+-  }
+-
+-  if (newStyle.list.itemSpacing != oldStyle.list.itemSpacing) {
+-    [config setListStyleItemSpacing:newStyle.list.itemSpacing];
+-    changed = YES;
+-  }
++  changed |= applyMarkdownListStyleToConfig(config, newStyle, oldStyle);
+ 
+   // ── Code Block ─────────────────────────────────────────────────────────────
+ 
+diff --git a/ios/utils/ListMarkerDrawer.h b/ios/utils/ListMarkerDrawer.h
+index 52890636..d0badc31 100644
+--- a/ios/utils/ListMarkerDrawer.h
++++ b/ios/utils/ListMarkerDrawer.h
+@@ -12,4 +12,7 @@
+                    textContainer:(NSTextContainer *)textContainer
+                          atPoint:(CGPoint)origin;
+ 
++- (void)drawBulletAtX:(CGFloat)x centerY:(CGFloat)y depth:(NSInteger)depth;
++- (void)drawOrderedMarkerAtX:(CGFloat)x number:(NSInteger)number baselineY:(CGFloat)baselineY isRTL:(BOOL)isRTL;
++
+ @end
+diff --git a/ios/input/styles/ENRMOrderedListBlockHandler.mm b/ios/input/styles/ENRMOrderedListBlockHandler.mm
+index fd3eac2c..80efd98b 100644
+--- a/ios/input/styles/ENRMOrderedListBlockHandler.mm
++++ b/ios/input/styles/ENRMOrderedListBlockHandler.mm
+@@ -25,12 +25,16 @@ - (void)applyAttributesToParagraphStyle:(NSMutableParagraphStyle *)paragraphStyl
+     depth = kENRMMaxListDepth;
+   }
+ 
+-  // Same indent column as the bullet handler so mixed lists align; wrapped
+-  // lines hang under the text, not under the number.
+-  CGFloat indent = (depth + 1) * kENRMListIndentPerDepth;
++  // Match the rendered number column; wrapped lines hang under the text.
++  StyleConfig *config = style.listStyleConfig;
++  CGFloat indent = [config effectiveListMarginLeftForNumber] + [config effectiveListGapWidth] + depth * [config listStyleMarginLeft];
+   paragraphStyle.firstLineHeadIndent = indent;
+   paragraphStyle.headIndent = indent;
+-  paragraphStyle.paragraphSpacingBefore = style.listItemSpacing;
++  paragraphStyle.paragraphSpacingBefore = blockRange.ordinal > 1 ? style.listItemSpacing : 0;
++  paragraphStyle.minimumLineHeight = [config listStyleLineHeight];
++  paragraphStyle.maximumLineHeight = [config listStyleLineHeight];
++  attributes[NSFontAttributeName] = [config listStyleFont];
++  attributes[NSForegroundColorAttributeName] = [config listStyleColor];
+ }
+ 
+ - (NSString *)markdownLinePrefixForBlockRange:(ENRMBlockRange *)blockRange
+diff --git a/ios/input/styles/ENRMUnorderedListBlockHandler.mm b/ios/input/styles/ENRMUnorderedListBlockHandler.mm
+index 73639e2d..f4b35c85 100644
+--- a/ios/input/styles/ENRMUnorderedListBlockHandler.mm
++++ b/ios/input/styles/ENRMUnorderedListBlockHandler.mm
+@@ -28,10 +28,15 @@ - (void)applyAttributesToParagraphStyle:(NSMutableParagraphStyle *)paragraphStyl
+   // Reserve a marker column per nesting level. Both the first (marker) line and
+   // wrapped continuation lines align to the same text inset so wrapped text
+   // hangs under the text, not under the bullet.
+-  CGFloat indent = (depth + 1) * kENRMListIndentPerDepth;
++  StyleConfig *config = style.listStyleConfig;
++  CGFloat indent = [config effectiveListMarginLeftForBullet] + [config effectiveListGapWidth] + depth * [config listStyleMarginLeft];
+   paragraphStyle.firstLineHeadIndent = indent;
+   paragraphStyle.headIndent = indent;
+-  paragraphStyle.paragraphSpacingBefore = style.listItemSpacing;
++  paragraphStyle.paragraphSpacingBefore = blockRange.ordinal > 1 ? style.listItemSpacing : 0;
++  paragraphStyle.minimumLineHeight = [config listStyleLineHeight];
++  paragraphStyle.maximumLineHeight = [config listStyleLineHeight];
++  attributes[NSFontAttributeName] = [config listStyleFont];
++  attributes[NSForegroundColorAttributeName] = [config listStyleColor];
+ }
+ 
+ - (NSString *)markdownLinePrefixForBlockRange:(ENRMBlockRange *)blockRange
+diff --git a/ios/input/ENRMInputListMarkerDrawer.h b/ios/input/ENRMInputListMarkerDrawer.h
+index 8440372c..87c4c3af 100644
+--- a/ios/input/ENRMInputListMarkerDrawer.h
++++ b/ios/input/ENRMInputListMarkerDrawer.h
+@@ -2,6 +2,7 @@
+ 
+ #import "ENRMInputDecorationDrawer.h"
+ #import "ENRMUIKit.h"
++@class StyleConfig;
+ 
+ NS_ASSUME_NONNULL_BEGIN
+ 
+@@ -13,9 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
+ @property (nonatomic, assign) NSInteger emptyBulletOrdinal;
+ @property (nonatomic, assign) NSUInteger emptyBulletLocation;
+ @property (nonatomic, strong, nullable) UIFont *emptyBulletFont;
+-@property (nonatomic, strong, nullable) RCTUIColor *emptyBulletColor;
+ @property (nonatomic, assign) BOOL emptyBulletRTL;
+ @property (nonatomic, assign) CGFloat listItemSpacing;
++@property (nonatomic, strong) StyleConfig *listStyleConfig;
+ 
+ #if !TARGET_OS_OSX
+ /// Shows or updates a subview overlay that draws the trailing empty line's
+diff --git a/ios/input/ENRMInputListMarkerDrawer.mm b/ios/input/ENRMInputListMarkerDrawer.mm
+index ec26198d..58c362d3 100644
+--- a/ios/input/ENRMInputListMarkerDrawer.mm
++++ b/ios/input/ENRMInputListMarkerDrawer.mm
+@@ -1,17 +1,14 @@
+ #import "ENRMInputListMarkerDrawer.h"
+ #import "ENRMInputBlockType.h"
+ #import "ParagraphStyleUtils.h"
++#import "ListMarkerDrawer.h"
++#import "StyleConfig.h"
+ 
+ static UIFont *ENRMFallbackFont(void)
+ {
+   return [UIFont systemFontOfSize:16];
+ }
+ 
+-static RCTUIColor *ENRMFallbackColor(void)
+-{
+-  return [RCTUIColor labelColor];
+-}
+-
+ static CGFloat ENRMTrailingMarkerX(CGPoint origin, NSTextContainer *container, CGFloat leadingOffset)
+ {
+   return origin.x + container.size.width - leadingOffset;
+@@ -47,6 +44,7 @@ - (void)drawRect:(CGRect)rect
+ 
+ @implementation ENRMInputListMarkerDrawer {
+   NSMutableSet<NSNumber *> *_drawnParagraphLocations;
++  ListMarkerDrawer *_rendererDrawer;
+ #if !TARGET_OS_OSX
+   ENRMTrailingBulletView *_trailingBulletView;
+   __weak NSTextContainer *_trailingBulletTextContainer;
+@@ -64,65 +62,11 @@ - (instancetype)init
+   return self;
+ }
+ 
+-#pragma mark - Primitive Drawing
+-
+-- (void)drawBulletAtX:(CGFloat)markerX
+-              centerY:(CGFloat)centerY
+-                depth:(NSInteger)depth
+-                 font:(UIFont *)font
+-                color:(RCTUIColor *)color
++- (void)setListStyleConfig:(StyleConfig *)config
+ {
+-  CGContextRef ctx = UIGraphicsGetCurrentContext();
+-  if (!ctx || isnan(markerX) || isnan(centerY)) {
+-    return;
+-  }
+-
+-  CGFloat size = MAX(4.0, font.pointSize * 0.30);
+-  CGRect bulletRect = CGRectMake(markerX - size / 2.0, centerY - size / 2.0, size, size);
+-
+-  CGContextSaveGState(ctx);
+-  NSInteger style = depth >= 2 ? 2 : depth;
+-  switch (style) {
+-    case 0:
+-      [color setFill];
+-      CGContextFillEllipseInRect(ctx, bulletRect);
+-      break;
+-    case 1: {
+-      CGFloat lineWidth = MAX(1.0, size * 0.15);
+-      [color setStroke];
+-      CGContextSetLineWidth(ctx, lineWidth);
+-      CGContextStrokeEllipseInRect(ctx, CGRectInset(bulletRect, lineWidth / 2.0, lineWidth / 2.0));
+-      break;
+-    }
+-    default:
+-      [color setFill];
+-      CGContextFillRect(ctx, bulletRect);
+-      break;
+-  }
+-  CGContextRestoreGState(ctx);
+-}
+-
+-- (void)drawOrderedMarkerEndingAtX:(CGFloat)markerRight
+-                         baselineY:(CGFloat)baselineY
+-                           ordinal:(NSInteger)ordinal
+-                              font:(UIFont *)font
+-                             color:(RCTUIColor *)color
+-{
+-  NSString *label = [NSString stringWithFormat:@"%ld.", (long)MAX(ordinal, (NSInteger)1)];
+-  NSDictionary *attrs = @{NSFontAttributeName : font, NSForegroundColorAttributeName : color};
+-  CGSize labelSize = [label sizeWithAttributes:attrs];
+-  [label drawAtPoint:CGPointMake(markerRight - labelSize.width, baselineY - font.ascender) withAttributes:attrs];
+-}
+-
+-- (void)drawOrderedMarkerStartingAtX:(CGFloat)markerLeft
+-                           baselineY:(CGFloat)baselineY
+-                             ordinal:(NSInteger)ordinal
+-                                font:(UIFont *)font
+-                               color:(RCTUIColor *)color
+-{
+-  NSString *label = [NSString stringWithFormat:@".%ld", (long)MAX(ordinal, (NSInteger)1)];
+-  NSDictionary *attrs = @{NSFontAttributeName : font, NSForegroundColorAttributeName : color};
+-  [label drawAtPoint:CGPointMake(markerLeft, baselineY - font.ascender) withAttributes:attrs];
++  if (_listStyleConfig == config) return;
++  _listStyleConfig = config;
++  _rendererDrawer = [[ListMarkerDrawer alloc] initWithConfig:config];
+ }
+ 
+ #pragma mark - Composite Marker
+@@ -136,25 +80,18 @@ - (void)drawListMarkerOrdered:(BOOL)isOrdered
+                      usedRect:(CGRect)usedRect
+                     container:(NSTextContainer *)container
+                          font:(UIFont *)font
+-                        color:(RCTUIColor *)color
+ {
+-  CGFloat leadingOffset = container.lineFragmentPadding + (depth + 1) * kENRMListIndentPerDepth;
+-
++  StyleConfig *config = self.listStyleConfig;
++  CGFloat gap = [config effectiveListGapWidth];
++  CGFloat markerWidth = isOrdered ? [config effectiveListMarginLeftForNumber] : [config effectiveListMarginLeftForBullet];
++  CGFloat leadingOffset = container.lineFragmentPadding + markerWidth + gap + depth * [config listStyleMarginLeft];
++  CGFloat markerX = isRTL ? ENRMTrailingMarkerX(origin, container, leadingOffset) + gap
++                          : origin.x + usedRect.origin.x - gap;
+   if (isOrdered) {
+-    if (isRTL) {
+-      CGFloat anchorX = ENRMTrailingMarkerX(origin, container, leadingOffset) + kENRMListBulletGap / 2.0;
+-      [self drawOrderedMarkerStartingAtX:anchorX baselineY:baselineY ordinal:ordinal font:font color:color];
+-    } else {
+-      CGFloat anchorX = origin.x + usedRect.origin.x - kENRMListBulletGap / 2.0;
+-      [self drawOrderedMarkerEndingAtX:anchorX baselineY:baselineY ordinal:ordinal font:font color:color];
+-    }
+-    return;
++    [_rendererDrawer drawOrderedMarkerAtX:markerX number:ordinal baselineY:baselineY isRTL:isRTL];
++  } else {
++    [_rendererDrawer drawBulletAtX:markerX centerY:baselineY - (font.xHeight + font.capHeight) / 4.0 depth:depth];
+   }
+-
+-  CGFloat markerX = isRTL ? ENRMTrailingMarkerX(origin, container, leadingOffset) + kENRMListBulletGap
+-                          : origin.x + usedRect.origin.x - kENRMListBulletGap;
+-  CGFloat centerY = baselineY - (font.xHeight + font.capHeight) / 4.0;
+-  [self drawBulletAtX:markerX centerY:centerY depth:depth font:font color:color];
+ }
+ 
+ #pragma mark - Attribute Resolution
+@@ -186,28 +123,15 @@ - (BOOL)readListAttributesAtIndex:(NSUInteger)charIndex
+   return YES;
+ }
+ 
+-- (void)resolveMarkerFont:(out UIFont **)outFont
+-                    color:(out RCTUIColor **)outColor
+-                  atIndex:(NSUInteger)charIndex
+-                  storage:(NSTextStorage *)storage
+-          isEmptyListLine:(BOOL)isEmptyListLine
++- (UIFont *)markerFontAtIndex:(NSUInteger)charIndex
++                     storage:(NSTextStorage *)storage
++             isEmptyListLine:(BOOL)isEmptyListLine
+ {
+-  UIFont *font = nil;
+-  RCTUIColor *color = nil;
+-
+-  if (isEmptyListLine) {
+-    font = self.emptyBulletFont;
+-    color = self.emptyBulletColor;
+-  }
++  UIFont *font = isEmptyListLine ? self.emptyBulletFont : nil;
+   if (!font && charIndex < storage.length) {
+     font = [storage attribute:NSFontAttributeName atIndex:charIndex effectiveRange:NULL];
+   }
+-  if (!color && charIndex < storage.length) {
+-    color = [storage attribute:NSForegroundColorAttributeName atIndex:charIndex effectiveRange:NULL];
+-  }
+-
+-  *outFont = font ?: ENRMFallbackFont();
+-  *outColor = color ?: ENRMFallbackColor();
++  return font ?: ENRMFallbackFont();
+ }
+ 
+ #pragma mark - Fragment Processing
+@@ -256,13 +180,7 @@ - (void)processLineFragmentRect:(CGRect)rect
+   }
+   [_drawnParagraphLocations addObject:@(paraRange.location)];
+ 
+-  UIFont *font;
+-  RCTUIColor *color;
+-  [self resolveMarkerFont:&font
+-                    color:&color
+-                  atIndex:charRange.location
+-                  storage:storage
+-          isEmptyListLine:isEmptyListLine];
++  UIFont *font = [self markerFontAtIndex:charRange.location storage:storage isEmptyListLine:isEmptyListLine];
+ 
+   CGFloat baselineOffset = isEmptyListLine ? self.listItemSpacing + font.ascender
+                                            : [layoutManager locationForGlyphAtIndex:glyphRange.location].y;
+@@ -281,8 +199,7 @@ - (void)processLineFragmentRect:(CGRect)rect
+                        origin:origin
+                      usedRect:usedRect
+                     container:container
+-                         font:font
+-                        color:color];
++                         font:font];
+ }
+ 
+ #pragma mark - ENRMInputDecorationDrawer
+@@ -312,7 +229,7 @@ - (void)drawDecorationsForGlyphRange:(NSRange)glyphRange
+   if (self.emptyBulletDepth >= 0 && self.emptyBulletLocation >= storage.length &&
+       layoutManager.extraLineFragmentTextContainer != nil) {
+     UIFont *font = self.emptyBulletFont ?: ENRMFallbackFont();
+-    RCTUIColor *color = self.emptyBulletColor ?: ENRMFallbackColor();
++
+     CGRect used = layoutManager.extraLineFragmentUsedRect;
+     CGFloat baselineY = origin.y + used.origin.y + font.ascender;
+     [self drawListMarkerOrdered:self.emptyBulletOrdered
+@@ -323,8 +240,7 @@ - (void)drawDecorationsForGlyphRange:(NSRange)glyphRange
+                          origin:origin
+                        usedRect:used
+                       container:layoutManager.extraLineFragmentTextContainer
+-                           font:font
+-                          color:color];
++                           font:font];
+   }
+ #endif
+ }
+@@ -336,11 +252,14 @@ - (void)drawEmptyEditorDecorationsWithInset:(UIEdgeInsets)inset layoutManager:(N
+   }
+ 
+   UIFont *font = self.emptyBulletFont ?: ENRMFallbackFont();
+-  RCTUIColor *color = self.emptyBulletColor ?: ENRMFallbackColor();
++
+   NSTextContainer *container = layoutManager.textContainers.firstObject;
+   BOOL isRTL = self.emptyBulletRTL && container != nil;
+ 
+-  CGFloat headIndent = (self.emptyBulletDepth + 1) * kENRMListIndentPerDepth;
++  CGFloat markerWidth = self.emptyBulletOrdered ? [self.listStyleConfig effectiveListMarginLeftForNumber]
++                                               : [self.listStyleConfig effectiveListMarginLeftForBullet];
++  CGFloat headIndent = markerWidth + [self.listStyleConfig effectiveListGapWidth] +
++                       self.emptyBulletDepth * [self.listStyleConfig listStyleMarginLeft];
+   CGFloat padding = container ? container.lineFragmentPadding : 0;
+   CGRect syntheticUsedRect = CGRectMake(padding + headIndent, 0, 0, 0);
+   CGPoint syntheticOrigin = CGPointMake(inset.left, 0);
+@@ -356,8 +275,7 @@ - (void)drawEmptyEditorDecorationsWithInset:(UIEdgeInsets)inset layoutManager:(N
+                        origin:syntheticOrigin
+                      usedRect:syntheticUsedRect
+                     container:drawContainer
+-                         font:font
+-                        color:color];
++                         font:font];
+ }
+ 
+ #if !TARGET_OS_OSX
+@@ -371,7 +289,7 @@ - (void)drawTrailingBulletMarkerInRect:(CGRect)bounds
+   }
+ 
+   UIFont *font = self.emptyBulletFont ?: ENRMFallbackFont();
+-  RCTUIColor *color = self.emptyBulletColor ?: ENRMFallbackColor();
++
+ 
+   CGRect usedRect = CGRectMake(_trailingBulletHeadIndent, 0, 0, bounds.size.height);
+   CGPoint origin = CGPointMake(_trailingBulletInsetLeft, 0);
+@@ -384,8 +302,7 @@ - (void)drawTrailingBulletMarkerInRect:(CGRect)bounds
+                        origin:origin
+                      usedRect:usedRect
+                     container:_trailingBulletTextContainer
+-                         font:font
+-                        color:color];
++                         font:font];
+ }
+ 
+ - (void)showTrailingBulletInTextView:(UITextView *)textView

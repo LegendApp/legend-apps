@@ -117,13 +117,47 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)emitCaretRectChangeIfNeeded;
 @end
 
+@interface StyleConfig : NSObject
+- (CGFloat)effectiveListMarginLeftForBullet;
+- (CGFloat)effectiveListMarginLeftForNumber;
+- (CGFloat)effectiveListGapWidth;
+- (CGFloat)listStyleMarginLeft;
+- (CGFloat)listStyleLineHeight;
+- (NSFont *)listStyleFont;
+- (NSColor *)listStyleColor;
+@end
+@implementation StyleConfig
+- (CGFloat)effectiveListMarginLeftForBullet { return 3; }
+- (CGFloat)effectiveListMarginLeftForNumber { return [@"99." sizeWithAttributes:@{NSFontAttributeName: [self listStyleFont]}].width; }
+- (CGFloat)effectiveListGapWidth { return 8; }
+- (CGFloat)listStyleMarginLeft { return 24; }
+- (CGFloat)listStyleLineHeight { return 25; }
+- (NSFont *)listStyleFont { return [NSFont systemFontOfSize:16]; }
+- (NSColor *)listStyleColor { return NSColor.textColor; }
+@end
+
 @interface InlineCodeStyle : NSObject
 @property NSFont *inlineCodeFont;
+@property StyleConfig *listStyleConfig;
+@property CGFloat listItemSpacing;
 @property NSColor *inlineCodeColor;
 @property NSColor *inlineCodeBackgroundColor;
 @end
 @implementation InlineCodeStyle
 @end
+
+#define ENRMInputFormatterStyle InlineCodeStyle
+@interface UnorderedListStyle : NSObject
+@end
+@implementation UnorderedListStyle
+#include "UnorderedListStyle.inc"
+@end
+@interface OrderedListStyle : NSObject
+@end
+@implementation OrderedListStyle
+#include "OrderedListStyle.inc"
+@end
+#undef ENRMInputFormatterStyle
 
 @interface InputHost : NSView {
   NSView *_scrollContainerView;
@@ -346,6 +380,28 @@ int main()
       require([[editing attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL]
                 isEqual:[rendered attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL]],
               @"H1-H6 editing must use the rendered heading baseline");
+    }
+    InlineCodeStyle *listStyle = [InlineCodeStyle new];
+    listStyle.listStyleConfig = [StyleConfig new];
+    for (NSInteger ordered = 0; ordered <= 1; ++ordered) {
+      for (NSInteger depth = 0; depth < 3; ++depth) {
+        ENRMBlockRange *range = [ENRMBlockRange rangeWithType:ordered ? ENRMInputBlockTypeOrderedListItem : ENRMInputBlockTypeUnorderedListItem
+            range:NSMakeRange(0, 4) level:depth];
+        range.ordinal = 1;
+        NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
+        NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+        id handler = ordered ? [OrderedListStyle new] : [UnorderedListStyle new];
+        [handler applyAttributesToParagraphStyle:paragraph attributes:attrs blockRange:range style:listStyle];
+        CGFloat marker = ordered ? [listStyle.listStyleConfig effectiveListMarginLeftForNumber] : 3;
+        require(paragraph.headIndent == marker + 8 + depth * 24 && paragraph.firstLineHeadIndent == paragraph.headIndent,
+                @"list editor text must use the renderer's marker width, gap and nesting indent");
+        attrs[NSParagraphStyleAttributeName] = paragraph;
+        attrs[ENRMBlockTypeAttributeName] = @(range.type);
+        NSTextStorage *editing = [[NSTextStorage alloc] initWithString:@"Item" attributes:attrs];
+        ENRMApplyInputParagraphBaselineOffset(editing, YES);
+        require([[editing attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL] doubleValue] == 3,
+                @"list editing must retain the renderer's three-point baseline offset");
+      }
     }
     NSTextView *taskView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 200, 25)];
     taskView.textContainerInset = NSZeroSize;

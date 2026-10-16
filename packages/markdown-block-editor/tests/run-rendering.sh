@@ -40,6 +40,8 @@ session = (b/'ios/input/ENRMEditSession.mm').read_text()
 (out/'ImageActivation.inc').write_text(extract((editor/'ios/RNMarkdownBlockEditor.mm').read_text(), '- (nullable NSView *)hitTest:'))
 (out/'ImageLayoutNotification.inc').write_text(extract((b/'ios/attachments/ENRMImageAttachment.m').read_text(), '- (void)notifyImageLayoutObserver:').replace('UITextView *', 'ImageLayoutHost *'))
 (out/'HeadingBaseline.inc').write_text('#undef ENRICHED_MARKDOWN_MATH\n#define ENRICHED_MARKDOWN_MATH 0\n' + extract((b/'ios/utils/ParagraphStyleUtils.m').read_text(), 'void applyBaselineOffset(') + '\n' + extract((b/'ios/input/ENRMInputMeasurementStyle.h').read_text(), 'static inline void ENRMApplyInputParagraphBaselineOffset('))
+for kind in ['Unordered', 'Ordered']:
+    (out/f'{kind}ListStyle.inc').write_text(extract((b/f'ios/input/styles/ENRM{kind}ListBlockHandler.mm').read_text(), '- (void)applyAttributesToParagraphStyle:'))
 (out/'TaskHitTest.inc').write_text('\n'.join(extract((b/'ios/utils/TaskListTapUtils.m').read_text(), method) for method in ['NSRange taskListItemFullRange(', 'TaskListHitTestResult taskListHitTestAtPoint(']))
 (out/'InteractiveHitTest.inc').write_text(extract((b/'ios/utils/LinkTapUtils.m').read_text(), 'BOOL isPointOnInteractiveElement('))
 (out/'TextHitTest.inc').write_text((b/'ios/utils/ENRMTextHitTest.m').read_text().replace('#import "ENRMTextHitTest.h"', ''))
