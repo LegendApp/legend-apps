@@ -24,7 +24,7 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
       >
         <Text style={[styles.toggleText, { color: colors.muted }]}>☰</Text>
       </Pressable>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.tabs}>
+      <ScrollView horizontal showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.tabs}>
         {paths.map(path => {
           const title = getPathName(path), active = path === activePath;
           return (
