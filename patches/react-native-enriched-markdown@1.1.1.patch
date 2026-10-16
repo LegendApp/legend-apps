@@ -3056,7 +3056,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 7e72cff2..749ac990 100644
+index 7e72cff2..e701d8ff 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -3510,14 +3510,16 @@ index 7e72cff2..749ac990 100644
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -871,7 +1042,32 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -871,7 +1042,34 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
                        scopedToRange:scope];
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
 +  for (ENRMFormattingRange *range in _formattingStore.allRanges) {
-+    if (range.type != ENRMInputStyleTypeCode) continue;
 +    NSRange clipped = NSIntersectionRange(range.range, scope);
 +    if (clipped.length == 0) continue;
++    [[_formatter handlerForStyleType:range.type] applyNonFontAttributesToTextStorage:_textView.textStorage
++        range:clipped formattingRange:range style:_formatterStyle];
++    if (range.type != ENRMInputStyleTypeCode) continue;
 +    UIFont *codeFont = _formatterStyle.inlineCodeFont;
 +    UIFont *blockFont = [_textView.textStorage attribute:NSFontAttributeName atIndex:clipped.location effectiveRange:NULL];
 +    if (blockFont.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) {
@@ -3543,7 +3545,7 @@ index 7e72cff2..749ac990 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -914,6 +1110,23 @@ - (void)setValue:(NSString *)markdown
+@@ -914,6 +1112,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -3567,7 +3569,7 @@ index 7e72cff2..749ac990 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -924,6 +1137,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -924,6 +1139,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -3689,7 +3691,7 @@ index 7e72cff2..749ac990 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1225,7 +1553,9 @@ - (void)updateEmptyBulletMarker
+@@ -1225,7 +1555,9 @@ - (void)updateEmptyBulletMarker
        // flush left; stamp the list style so caret and marker indent immediately.
        // (A trailing empty line uses the extra line fragment instead.)
        if (paragraphRange.length > 0) {
@@ -3700,7 +3702,7 @@ index 7e72cff2..749ac990 100644
          NSTextStorage *storage = _textView.textStorage;
          NSParagraphStyle *existing = [storage attribute:NSParagraphStyleAttributeName
                                                  atIndex:paragraphRange.location
-@@ -1252,8 +1582,7 @@ - (void)updateEmptyBulletMarker
+@@ -1252,8 +1584,7 @@ - (void)updateEmptyBulletMarker
    listDrawer.emptyBulletOrdered = ordered;
    listDrawer.emptyBulletOrdinal = ordinal;
    listDrawer.emptyBulletLocation = location;
@@ -3710,7 +3712,7 @@ index 7e72cff2..749ac990 100644
    listDrawer.emptyBulletRTL = [self emptyListLineIsRTL];
    listDrawer.listItemSpacing = _formatterStyle.listItemSpacing;
  
-@@ -1412,9 +1741,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1412,9 +1743,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -3743,7 +3745,7 @@ index 7e72cff2..749ac990 100644
  }
  
  - (void)copyToClipboard
-@@ -1448,16 +1799,53 @@ - (CGRect)computeCaretRect
+@@ -1448,16 +1801,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -3802,7 +3804,7 @@ index 7e72cff2..749ac990 100644
  - (void)requestCaretRect:(NSInteger)requestId
  {
    [_inputEventEmitter requestCaretRect:requestId];
-@@ -1575,6 +1963,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1575,6 +1965,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -3835,7 +3837,7 @@ index 7e72cff2..749ac990 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1608,7 +2022,7 @@ - (ENRMInputTypingAttributesController *)typingController
+@@ -1608,7 +2024,7 @@ - (ENRMInputTypingAttributesController *)typingController
  #pragma mark - Text edit tracking
  
  /// Markdown shortcuts: when the user types a space after `#`…`######`,
@@ -3844,7 +3846,7 @@ index 7e72cff2..749ac990 100644
  /// and make the paragraph that block. Runs after the stores are adjusted for the
  /// edit and before scoped formatting. Returns YES when it converted, in which
  /// case the replace path has already reformatted and emitted.
-@@ -1649,7 +2063,8 @@ - (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)editLocation
+@@ -1649,7 +2065,8 @@ - (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)editLocation
    }
  
    NSUInteger lineStart = [text paragraphRangeForRange:NSMakeRange(spaceIndex, 0)].location;
@@ -3854,7 +3856,7 @@ index 7e72cff2..749ac990 100644
      return NO;
    }
  
-@@ -1749,7 +2164,14 @@ - (void)handleTextChanged
+@@ -1749,7 +2166,14 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -3870,7 +3872,7 @@ index 7e72cff2..749ac990 100644
      [self applyFormattingScopedFromParagraphAtLocation:editLocation];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1764,6 +2186,9 @@ - (void)handleTextChanged
+@@ -1764,6 +2188,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -3880,7 +3882,7 @@ index 7e72cff2..749ac990 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1826,6 +2251,12 @@ - (void)manageSelectionBasedChanges
+@@ -1826,6 +2253,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -3893,7 +3895,7 @@ index 7e72cff2..749ac990 100644
            _textView.typingAttributes = attrs;
          }
        }
-@@ -2016,9 +2447,6 @@ - (BOOL)textInputShouldSubmitOnReturn
+@@ -2016,9 +2449,6 @@ - (BOOL)textInputShouldSubmitOnReturn
  - (nullable NSString *)textInputShouldChangeText:(NSString *)text inRange:(NSRange)range
  {
    [_inputEventEmitter emitOnKeyPress:text];
@@ -3903,7 +3905,7 @@ index 7e72cff2..749ac990 100644
    _preEditSelectedRange = _lastSelectedRange;
    // Capture the same pre-edit block state the iOS path does — otherwise these
    // ivars carry stale values from a previous edit into reconcileBlockContinuation.
-@@ -2044,13 +2472,6 @@ - (void)textInputDidChange
+@@ -2044,13 +2474,6 @@ - (void)textInputDidChange
  - (void)textInputDidChangeSelection
  {
    NSRange newSelection = _textView.selectedRange;

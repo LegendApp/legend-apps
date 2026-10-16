@@ -13,6 +13,7 @@
 #define ENRMPlatformTextView NSTextView
 #define ENRMSetNeedsDisplay(view) [(view) setNeedsDisplay:YES]
 #define RCTUITextView NSTextView
+#define RCTUIColor NSColor
 #define ENRMTapRecognizer NSClickGestureRecognizer
 static NSAttributedString *ENRMGetAttributedText(NSTextView *view) { return view.textStorage; }
 #include "TextHitTest.inc"
@@ -85,6 +86,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 @property NSArray *allRanges;
 @property NSArray<ENRMBlockRange *> *appliedBlocks;
 @property NSUInteger formattingPasses;
+@property BOOL overwritesInlineColor;
 - (void)setRanges:(NSArray *)ranges;
 - (void)applyFormattingRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
 - (void)applyBlockRanges:(NSArray *)ranges toTextView:(NSTextView *)view style:(id)style scopedToRange:(NSRange)scope;
@@ -99,6 +101,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 {
   self.appliedBlocks = ranges;
   ++_formattingPasses;
+  if (self.overwritesInlineColor) [view.textStorage addAttribute:NSForegroundColorAttributeName value:NSColor.redColor range:scope];
 }
 - (void)resetForSelectionChange {}
 - (void)refreshAllStyling {}
@@ -136,8 +139,19 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (NSColor *)listStyleColor { return NSColor.textColor; }
 @end
 
+@interface ENRMInputLinkVariantStyle : NSObject
+@property NSRegularExpression *regex;
+@property NSColor *color;
+@property BOOL underline;
+@property NSColor *backgroundColor;
+@end
+
 @interface InlineCodeStyle : NSObject
 @property NSFont *inlineCodeFont;
+@property NSColor *linkColor;
+@property BOOL linkUnderline;
+@property NSColor *linkBackgroundColor;
+@property NSArray<ENRMInputLinkVariantStyle *> *linkVariants;
 @property StyleConfig *listStyleConfig;
 @property CGFloat listItemSpacing;
 @property NSColor *inlineCodeColor;
@@ -147,6 +161,15 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 @end
 
 #define ENRMInputFormatterStyle InlineCodeStyle
+@interface LinkStyleProbe : NSObject
+@end
+#include "LinkStyle.inc"
+@interface FormattingProbe (InlineStyles)
+- (id)handlerForStyleType:(ENRMInputStyleType)type;
+@end
+@implementation FormattingProbe (InlineStyles)
+- (id)handlerForStyleType:(ENRMInputStyleType)type { return type == ENRMInputStyleTypeLink ? [LinkStyleProbe new] : nil; }
+@end
 @interface UnorderedListStyle : NSObject
 @end
 @implementation UnorderedListStyle
@@ -202,6 +225,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
     _blockStore = [FormattingProbe new];
     _formatter = [FormattingProbe new];
     _formatterStyle = [InlineCodeStyle new];
+    _formatterStyle.linkColor = NSColor.blueColor;
     _formatterStyle.inlineCodeFont = [NSFont monospacedSystemFontOfSize:14 weight:NSFontWeightRegular];
     _detectorPipeline = [FormattingProbe new];
   }
@@ -520,6 +544,11 @@ int main()
         }
       }
     }
+    host.formatter.overwritesInlineColor = YES;
+    [host setValue:@"### Heading with [link](https://example.com)"];
+    require([[input.textStorage attribute:NSForegroundColorAttributeName atIndex:input.string.length - 1 effectiveRange:NULL] isEqual:NSColor.blueColor],
+            @"block text color must not overwrite a link's own inline style on focus");
+    host.formatter.overwritesInlineColor = NO;
     [host setValue:@"### Heading with `code`"];
     NSFont *inlineFont = [input.textStorage attribute:NSFontAttributeName atIndex:input.string.length - 1 effectiveRange:NULL];
     require([input.string isEqual:@"Heading with code"] && inlineFont.pointSize == 14,
