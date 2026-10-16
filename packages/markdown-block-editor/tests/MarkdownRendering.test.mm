@@ -15,6 +15,14 @@
 #define ENRMTapRecognizer NSClickGestureRecognizer
 static NSAttributedString *ENRMGetAttributedText(NSTextView *view) { return view.textStorage; }
 #include "TextHitTest.inc"
+NSString *const SpoilerAttributeName = @"Spoiler";
+typedef struct { BOOL found; NSInteger index; BOOL checked; NSRange itemRange; } TaskListHitTestResult;
+NSString *const TaskItemAttribute = @"TaskItem";
+NSString *const TaskIndexAttribute = @"TaskIndex";
+NSString *const TaskCheckedAttribute = @"TaskChecked";
+static BOOL ENRMParagraphIsRTL(NSParagraphStyle *style) { return style.baseWritingDirection == NSWritingDirectionRightToLeft; }
+#include "TaskHitTest.inc"
+#include "InteractiveHitTest.inc"
 #include "SplitSegments.inc"
 
 NSString *const ENRMBlockTypeAttributeName = @"ENRMBlockType";
@@ -289,6 +297,20 @@ int main()
                 isEqual:[rendered attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL]],
               @"H1-H6 editing must use the rendered heading baseline");
     }
+    NSTextView *taskView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 200, 25)];
+    taskView.textContainerInset = NSZeroSize;
+    taskView.textContainer.lineFragmentPadding = 0;
+    NSMutableParagraphStyle *taskParagraph = [NSMutableParagraphStyle new];
+    taskParagraph.firstLineHeadIndent = taskParagraph.headIndent = 22;
+    taskParagraph.minimumLineHeight = 25;
+    [taskView.textStorage setAttributedString:[[NSAttributedString alloc] initWithString:@"Task unchecked"
+        attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:16], NSParagraphStyleAttributeName: taskParagraph,
+                     @"TaskItem": @YES, @"TaskIndex": @0, @"TaskChecked": @NO}]];
+    [taskView.layoutManager ensureLayoutForTextContainer:taskView.textContainer];
+    require(isPointOnInteractiveElement(taskView, NSMakePoint(6, 12), NO, NO),
+            @"checkbox gutter must retain its task toggle click even outside the text glyphs");
+    require(!isPointOnInteractiveElement(taskView, NSMakePoint(28, 12), NO, NO),
+            @"task body text must enter editing instead of consuming a checkbox action");
     ImageLayoutHost *imageHost = [ImageLayoutHost new];
     ImageLayoutProbe *imageLayout = [ImageLayoutProbe new];
     [imageLayout notifyImageLayoutObserver:imageHost];

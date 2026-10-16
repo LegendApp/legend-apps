@@ -6423,3 +6423,78 @@ index 14180f77..8189b295 100644
      counters[depth]++;
      blockRange.ordinal = counters[depth];
      prevEnd = (NSInteger)NSMaxRange(blockRange.range);
+diff --git a/ios/utils/TaskListTapUtils.h b/ios/utils/TaskListTapUtils.h
+index 2d42c180..4cf33925 100644
+--- a/ios/utils/TaskListTapUtils.h
++++ b/ios/utils/TaskListTapUtils.h
+@@ -17,6 +17,8 @@ typedef struct {
+   NSRange itemRange;
+ } TaskListHitTestResult;
+ 
++TaskListHitTestResult taskListHitTestAtPoint(ENRMPlatformTextView *textView, CGPoint point);
++
+ TaskListHitTestResult taskListHitTest(ENRMPlatformTextView *textView, ENRMTapRecognizer *recognizer);
+ 
+ NSRange taskListItemFullRange(ENRMPlatformTextView *textView, NSInteger taskIndex);
+diff --git a/ios/utils/TaskListTapUtils.m b/ios/utils/TaskListTapUtils.m
+index d15bfbdd..cb29922f 100644
+--- a/ios/utils/TaskListTapUtils.m
++++ b/ios/utils/TaskListTapUtils.m
+@@ -6,15 +6,15 @@
+ #import "StyleConfig.h"
+ #include <TargetConditionals.h>
+ 
+-TaskListHitTestResult taskListHitTest(ENRMPlatformTextView *textView, ENRMTapRecognizer *recognizer)
++TaskListHitTestResult taskListHitTestAtPoint(ENRMPlatformTextView *textView, CGPoint tapPoint)
+ {
+   const TaskListHitTestResult notFound = {.found = NO, .index = 0, .checked = NO, .itemRange = {0, 0}};
+ 
+   NSLayoutManager *layoutManager = textView.layoutManager;
+   NSTextContainer *textContainer = textView.textContainer;
+-  CGPoint tapPoint = [recognizer locationInView:textView];
+ 
+   NSUInteger glyphIndex = [layoutManager glyphIndexForPoint:tapPoint inTextContainer:textContainer];
++  if (glyphIndex >= layoutManager.numberOfGlyphs) return notFound;
+   NSUInteger charIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
+ 
+   NSAttributedString *attrText = ENRMGetAttributedText(textView);
+@@ -58,6 +58,11 @@ TaskListHitTestResult taskListHitTest(ENRMPlatformTextView *textView, ENRMTapRec
+                                  .itemRange = fullItemRange};
+ }
+ 
++TaskListHitTestResult taskListHitTest(ENRMPlatformTextView *textView, ENRMTapRecognizer *recognizer)
++{
++  return taskListHitTestAtPoint(textView, [recognizer locationInView:textView]);
++}
++
+ NSRange taskListItemFullRange(ENRMPlatformTextView *textView, NSInteger taskIndex)
+ {
+   NSAttributedString *attrText = ENRMGetAttributedText(textView);
+diff --git a/ios/utils/LinkTapUtils.m b/ios/utils/LinkTapUtils.m
+index ff3ee939..53cacf40 100644
+--- a/ios/utils/LinkTapUtils.m
++++ b/ios/utils/LinkTapUtils.m
+@@ -1,6 +1,7 @@
+ #import "LinkTapUtils.h"
+ #import "ENRMSpoilerTapUtils.h"
+ #import "ENRMTextHitTest.h"
++#import "TaskListTapUtils.h"
+ 
+ NSString *_Nullable linkURLAtTapLocation(ENRMPlatformTextView *textView, ENRMTapRecognizer *recognizer)
+ {
+@@ -59,12 +60,14 @@
+ BOOL isPointOnInteractiveElement(ENRMPlatformTextView *textView, CGPoint point, BOOL includeImages,
+                                  BOOL includeCodeBlock)
+ {
++  if (taskListHitTestAtPoint(textView, point).found) return YES;
++
+   NSUInteger charIndex = ENRMCharacterIndexAtPoint(textView, point);
+   if (charIndex == NSNotFound)
+     return NO;
+ 
+   NSDictionary *attrs = [ENRMGetAttributedText(textView) attributesAtIndex:charIndex effectiveRange:NULL];
+-  if (attrs[@"linkURL"] != nil || [attrs[@"TaskItem"] boolValue] || attrs[SpoilerAttributeName] != nil)
++  if (attrs[@"linkURL"] != nil || attrs[SpoilerAttributeName] != nil)
+     return YES;
+ 
+   if (includeImages && attrs[@"imageURL"] != nil)
