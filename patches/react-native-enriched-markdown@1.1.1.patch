@@ -2803,7 +2803,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 7e72cff2..5e35cdc7 100644
+index 7e72cff2..1828a869 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -3611,7 +3611,17 @@ index 7e72cff2..5e35cdc7 100644
            _textView.typingAttributes = attrs;
          }
        }
-@@ -2044,13 +2473,6 @@ - (void)textInputDidChange
+@@ -2016,9 +2445,6 @@ - (BOOL)textInputShouldSubmitOnReturn
+ - (nullable NSString *)textInputShouldChangeText:(NSString *)text inRange:(NSRange)range
+ {
+   [_inputEventEmitter emitOnKeyPress:text];
+-  if ([self deleteLinkForReplacementRange:range replacementText:text]) {
+-    return nil;
+-  }
+   _preEditSelectedRange = _lastSelectedRange;
+   // Capture the same pre-edit block state the iOS path does — otherwise these
+   // ivars carry stale values from a previous edit into reconcileBlockContinuation.
+@@ -2044,13 +2470,6 @@ - (void)textInputDidChange
  - (void)textInputDidChangeSelection
  {
    NSRange newSelection = _textView.selectedRange;

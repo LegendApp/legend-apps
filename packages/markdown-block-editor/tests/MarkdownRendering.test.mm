@@ -110,6 +110,7 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 @end
 
 @protocol ImportEvents
+- (void)emitOnKeyPress:(NSString *)text;
 - (void)emitOnChangeText;
 - (void)emitOnChangeSelection;
 - (void)emitOnChangeState;
@@ -134,8 +135,10 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
   id<ImportEvents> _inputEventEmitter;
   FormattingProbe *_typingController;
   NSUInteger _lastTextLength;
-  NSRange _lastSelectedRange;
+  NSRange _lastSelectedRange, _preEditSelectedRange;
+  BOOL _preEditParagraphWasEmpty, _preEditReplacedNewline;
 }
+@property BOOL deletedAtomicLink;
 @property (readonly) InputView *textView;
 @property (readonly) FormattingProbe *formatter;
 - (void)setValue:(NSString *)markdown;
@@ -181,6 +184,15 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)applyParagraphBaselineOffset {}
 - (void)requestHeightUpdate {}
 - (void)updateActiveMention {}
+- (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *)text
+{
+  self.deletedAtomicLink = YES;
+  return YES;
+}
+- (void)capturePreEditBlockForRange:(NSRange)range {}
+- (BOOL)preEditParagraphWasEmpty:(NSRange)range { return NO; }
+- (BOOL)replacedRangeTouchesNewline:(NSRange)range { return NO; }
+#include "InputDeletion.inc"
 #include "InputSelection.inc"
 #include "InputLayout.inc"
 #include "InputImport.inc"
@@ -459,6 +471,8 @@ int main()
     require([[[input textStorage] attribute:NSKernAttributeName atIndex:12 effectiveRange:NULL] doubleValue] == 3,
             @"inline code must keep the renderer spacing before its first glyph");
     [host setValue:@"[editable link text](https://example.com)"];
+    require([[host textInputShouldChangeText:@"" inRange:NSMakeRange(2, 1)] isEqual:@""] && !host.deletedAtomicLink,
+            @"backspace inside link text must retain the native character deletion rather than recursively deleting the whole link");
     for (NSValue *range in @[[NSValue valueWithRange:NSMakeRange(1, 0)],
                              [NSValue valueWithRange:NSMakeRange(5, 0)],
                              [NSValue valueWithRange:NSMakeRange(2, 4)]]) {
