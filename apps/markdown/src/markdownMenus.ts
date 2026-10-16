@@ -75,14 +75,17 @@ export const markdownMenuConfig: MenuRootItem[] = [
     items: [
       {
         id: "bold",
+        shortcut: "Cmd+b",
         type: "action", label: "Bold", disabled: true,
       },
       {
         id: "italic",
+        shortcut: "Cmd+i",
         type: "action", label: "Italic", disabled: true,
       },
       {
         id: "underline",
+        shortcut: "Cmd+u",
         type: "action", label: "Underline", disabled: true,
       },
       { type: "separator" },

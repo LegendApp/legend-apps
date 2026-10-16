@@ -6,6 +6,7 @@ import { addAppListener } from "@legendapp/spark/app";
 import { editorWindowIdentifier } from "../appConstants";
 import { App } from "../App";
 import { registerMarkdownEditorMenuHandlers, registerMarkdownEditorRecentDocumentHandler } from "../markdownEditorActions";
+import { markdownMenuConfig } from "../markdownMenus";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import { openMarkdownEditorWindow, showMarkdownEditorWindow } from "../markdownWindows";
 const mockAddRecentDocumentOpenListener = subscribeToOpenRequests as jest.MockedFunction<typeof subscribeToOpenRequests>;
@@ -109,6 +110,23 @@ describe("App markdown shell actions", () => {
         await act(async () => dispatchNew());
         expect(editorNew).toHaveBeenCalledTimes(1);
         expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(1);
+        unregister();
+    });
+    it.each([
+        ["bold", "Cmd+b"],
+        ["italic", "Cmd+i"],
+        ["underline", "Cmd+u"],
+        ["link", "Cmd+k"],
+    ])("registers %s in the main menu and routes its shortcut to the editor", async (itemId, shortcut) => {
+        const command = jest.fn();
+        const unregister = registerMarkdownEditorMenuHandlers({ [itemId]: command });
+        const format = markdownMenuConfig.find(item => item.id === "format");
+        expect(format?.type === "submenu" && format.items.find(item => item.type !== "separator" && item.id === itemId))
+            .toMatchObject({ shortcut });
+        await render(<App />);
+        await waitFor(() => expect(mockUseNativeMenu).toHaveBeenCalled());
+        await act(async () => mockUseNativeMenu.mock.lastCall![0].onAction?.({ type: "action", itemId }));
+        expect(command).toHaveBeenCalledTimes(1);
         unregister();
     });
     it("routes the native Select All menu action to the document", async () => {
