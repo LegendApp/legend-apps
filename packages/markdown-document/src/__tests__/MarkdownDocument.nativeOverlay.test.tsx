@@ -1918,6 +1918,32 @@ describe("MarkdownDocument native row editor", () => {
     expect(__legendListTestHooks.setItemSize).not.toHaveBeenCalled();
   });
 
+  it("restores the visible block and offset after global measurement invalidation resets scrolling", async () => {
+    const { __legendListTestHooks: hooks } = jest.requireMock("@legendapp/list/react-native") as {
+      __legendListTestHooks: { clearCaches: jest.Mock; scrollToIndex: jest.Mock; viewport: { override: unknown } };
+    };
+    const adapter = new NativeOverlayAdapter(snapshot([block("d1:b0", 0, "First"), block("d1:b1", 1, "Second")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+    });
+    hooks.viewport.override = { start: 1, scroll: 80 };
+    hooks.clearCaches.mockImplementationOnce(() => { hooks.viewport.override = { start: 0, scroll: 0 }; });
+    hooks.scrollToIndex.mockClear();
+    try {
+      await act(async () => {
+        commands.current!.invalidateLayoutMeasurements();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(hooks.scrollToIndex).toHaveBeenCalledWith({ animated: false, index: 1, viewOffset: -7, viewPosition: 0 });
+      expect(adapter.sourceMarkdown).toBe("First\n\nSecond");
+    } finally {
+      hooks.viewport.override = undefined;
+      await act(async () => renderer.unmount());
+    }
+  });
+
   it("persists rendered task checkbox changes with undo and redo without opening the editor", async () => {
     const original = "- [ ] First\n- [x] Second";
     const adapter = new NativeOverlayAdapter(snapshot([{ ...block("d1:b0", 0, original), markdownLength: original.length }]), { metadataOnlySyncBlocks: true });

@@ -3349,7 +3349,21 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           }
         },
         invalidateLayoutMeasurements() {
-          listRef.current?.clearCaches({ mode: "sizes" });
+          const list = listRef.current;
+          if (!list) return;
+          const state = list.getState();
+          const blockId = getBlockIdAtIndex(state.start);
+          const layout = getBlockLayoutFromListState(state, state.start);
+          const viewOffset = layout ? layout.y + resolvedContentVerticalPadding - state.scroll : 0;
+          list.clearCaches({ mode: "sizes" });
+          if (blockId) {
+            requestAnimationFrame(() => {
+              const index = getBlockIndexById(blockId);
+              if (index >= 0) {
+                listRef.current?.scrollToIndex({ animated: false, index, viewOffset, viewPosition: 0 }).catch(reportAsyncError);
+              }
+            });
+          }
         },
         insertThematicBreak() {
           formatCurrentBlockRange(thematicBreakMarkdown);
@@ -3426,6 +3440,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         undo,
       }),
       [commitAndBlurActiveBlock,
+        getBlockIdAtIndex,
+        getBlockIndexById,
+        reportAsyncError,
+        resolvedContentVerticalPadding,
         extendBlockSelection,
         focusAdjacentBlock,
         focusBoundaryBlock,
