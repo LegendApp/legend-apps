@@ -2101,7 +2101,7 @@ index 46259c56..e8d59e2d 100644
    copy.linkColor = _linkColor;
 diff --git a/ios/input/ENRMInputMeasurementStyle.h b/ios/input/ENRMInputMeasurementStyle.h
 new file mode 100755
-index 00000000..5cd74521
+index 00000000..5e094e3e
 --- /dev/null
 +++ b/ios/input/ENRMInputMeasurementStyle.h
 @@ -0,0 +1,30 @@
@@ -2130,7 +2130,7 @@ index 00000000..5cd74521
 +  }
 +  [storage enumerateAttribute:ENRMBlockTypeAttributeName inRange:NSMakeRange(0, storage.length) options:0
 +                   usingBlock:^(NSNumber *type, NSRange range, BOOL *stop) {
-+    if (type == nil || type.integerValue == ENRMInputBlockTypeParagraph) {
++    if (type == nil || type.integerValue <= ENRMInputBlockTypeHeading6) {
 +      applyBaselineOffset(storage, range);
 +    }
 +  }];
@@ -3450,7 +3450,7 @@ index 7e72cff2..0b22971d 100644
    _lastSelectedRange = newSelection;
  
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index 1d28946d..49075e33 100644
+index 1d28946d..24c193fb 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
 @@ -92,6 +92,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
@@ -3465,7 +3465,7 @@ index 1d28946d..49075e33 100644
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
-@@ -183,3 +188,101 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -183,3 +188,100 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
  
    return changed;
  }
@@ -3535,7 +3535,6 @@ index 1d28946d..49075e33 100644
 +                                                                  options:0
 +                                                                    range:NSMakeRange(0, trimmedMarkdown.length)];
 +    if (headingMatch != nil) {
-+      *usesParagraphBaselineOffset = NO;
 +      NSUInteger headingLevel = headingMatch.range.length - 1;
 +      switch (headingLevel) {
 +        case 1:

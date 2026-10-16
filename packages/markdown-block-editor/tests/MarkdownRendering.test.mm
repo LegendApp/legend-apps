@@ -17,6 +17,16 @@ static NSAttributedString *ENRMGetAttributedText(NSTextView *view) { return view
 #include "TextHitTest.inc"
 #include "SplitSegments.inc"
 
+NSString *const ENRMBlockTypeAttributeName = @"ENRMBlockType";
+#define UIFont NSFont
+static CGFloat UIFontLineHeight(NSFont *font) { return ceil(font.ascender - font.descender + font.leading); }
+@interface ENRMImageAttachment : NSTextAttachment
+@property BOOL isInline;
+@end
+@implementation ENRMImageAttachment
+@end
+#include "HeadingBaseline.inc"
+
 @interface InputLayoutManager : NSLayoutManager
 @property NSUInteger layoutPasses;
 @end
@@ -265,6 +275,20 @@ static NSString *textContent(MarkdownASTNode *node)
 int main()
 {
   @autoreleasepool {
+    for (NSInteger level = 1; level <= 6; ++level) {
+      NSFont *font = [NSFont boldSystemFontOfSize:26 - level * 2];
+      NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
+      paragraph.minimumLineHeight = paragraph.maximumLineHeight = UIFontLineHeight(font) + 8;
+      NSDictionary *attrs = @{NSFontAttributeName: font, NSParagraphStyleAttributeName: paragraph,
+                               ENRMBlockTypeAttributeName: @(ENRMBlockTypeForHeadingLevel(level))};
+      NSTextStorage *editing = [[NSTextStorage alloc] initWithString:@"Heading with inline text" attributes:attrs];
+      NSMutableAttributedString *rendered = [[NSMutableAttributedString alloc] initWithAttributedString:editing];
+      applyBaselineOffset(rendered, NSMakeRange(0, rendered.length));
+      ENRMApplyInputParagraphBaselineOffset(editing, YES);
+      require([[editing attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL]
+                isEqual:[rendered attribute:NSBaselineOffsetAttributeName atIndex:0 effectiveRange:NULL]],
+              @"H1-H6 editing must use the rendered heading baseline");
+    }
     ImageLayoutHost *imageHost = [ImageLayoutHost new];
     ImageLayoutProbe *imageLayout = [ImageLayoutProbe new];
     [imageLayout notifyImageLayoutObserver:imageHost];
