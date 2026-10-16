@@ -1455,7 +1455,8 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
     return hitView;
   }
   for (NSView *view = hitView; view != nil && view != self; view = view.superview) {
-    if ([view isKindOfClass:NSClassFromString(@"ENRMVideoContainerView")]) {
+    if ([view isKindOfClass:NSControl.class] ||
+        [view isKindOfClass:NSClassFromString(@"ENRMVideoContainerView")]) {
       return hitView;
     }
     if (![view isKindOfClass:[NSTextView class]]) {

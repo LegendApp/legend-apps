@@ -306,6 +306,14 @@ int main()
     }
     require(ENRMCharacterIndexAtPoint(text, NSMakePoint(450, 350)) == NSNotFound, @"blank space must not open an image");
 
+    // Native controls inside a preview own their clicks; the code body still edits.
+    NSButton *copyButton = [[NSButton alloc] initWithFrame:NSMakeRect(420, 340, 48, 36)];
+    [renderer addSubview:copyButton];
+    require([activation hitTest:NSMakePoint(440, 355)] == copyButton,
+            @"copy button must receive physical clicks through the activation wrapper");
+    require([activation hitTest:NSMakePoint(380, 355)] == activation,
+            @"clicking elsewhere in the code block must still start editing");
+
     InputHost *host = [[InputHost alloc] initWithFrame:NSMakeRect(0, 0, 180, 54)];
     InputView *input = host.textView;
     require(!input.allowsVibrancy, @"inline editor must not invalidate window vibrancy during drawing");
