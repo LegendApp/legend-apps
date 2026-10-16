@@ -344,6 +344,20 @@ int main()
     }
     require(ENRMCharacterIndexAtPoint(text, NSMakePoint(450, 350)) == NSNotFound, @"blank space must not open an image");
 
+    for (NSString *attribute in @[@"linkURL", @"TaskItem", @"Spoiler"]) {
+      [text.textStorage setAttributedString:[[NSAttributedString alloc] initWithString:@"Interactive text"
+          attributes:@{NSFontAttributeName: [NSFont systemFontOfSize:16], attribute: @YES}]];
+      [text.layoutManager ensureLayoutForTextContainer:text.textContainer];
+      NSRect glyph = [text.layoutManager boundingRectForGlyphRange:NSMakeRange(0, 1) inTextContainer:text.textContainer];
+      NSPoint local = NSMakePoint(NSMidX(glyph) + text.textContainerOrigin.x, NSMidY(glyph) + text.textContainerOrigin.y);
+      NSPoint point = [text convertPoint:local toView:parent];
+      require([activation hitTest:point] == text, @"renderer-owned links, checkboxes and spoilers must receive physical clicks");
+      renderer.imagePressEnabled = NO;
+      require([activation hitTest:point] == activation, @"ordinary text must still start editing");
+      renderer.imagePressEnabled = YES;
+    }
+
+    renderer.imagePressEnabled = NO;
     // Native controls inside a preview own their clicks; the code body still edits.
     NSButton *copyButton = [[NSButton alloc] initWithFrame:NSMakeRect(420, 340, 48, 36)];
     [renderer addSubview:copyButton];
