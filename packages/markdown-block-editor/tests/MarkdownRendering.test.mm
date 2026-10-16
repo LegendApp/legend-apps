@@ -4,6 +4,7 @@
 #import "ENRMInputScrolling.h"
 #import "ENRMInputMeasurement.h"
 #import "ENRMInputParser.h"
+#import "ENRMMarkdownSerializer.h"
 #import "ENRMMarkdownParser.h"
 #import "ENRMMarkdownShortcutMatcher.h"
 #import "ENRMBlockEditCoordinator.h"
@@ -27,6 +28,8 @@ static BOOL ENRMParagraphIsRTL(NSParagraphStyle *style) { return style.baseWriti
 
 NSString *const ENRMBlockTypeAttributeName = @"ENRMBlockType";
 #define UIFont NSFont
+#define UIFontDescriptor NSFontDescriptor
+#define UIFontDescriptorTraitBold NSFontDescriptorTraitBold
 static CGFloat UIFontLineHeight(NSFont *font) { return ceil(font.ascender - font.descender + font.leading); }
 @interface ENRMImageAttachment : NSTextAttachment
 @property BOOL isInline;
@@ -113,13 +116,21 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
 - (void)emitCaretRectChangeIfNeeded;
 @end
 
+@interface InlineCodeStyle : NSObject
+@property NSFont *inlineCodeFont;
+@property NSColor *inlineCodeColor;
+@property NSColor *inlineCodeBackgroundColor;
+@end
+@implementation InlineCodeStyle
+@end
+
 @interface InputHost : NSView {
   NSView *_scrollContainerView;
   NSScrollView *_scrollView;
   InputView *_textView;
   InputSession *_editSession;
   FormattingProbe *_formattingStore, *_blockStore, *_formatter, *_detectorPipeline;
-  id _formatterStyle;
+  InlineCodeStyle *_formatterStyle;
   id<ImportEvents> _inputEventEmitter;
   FormattingProbe *_typingController;
   NSUInteger _lastTextLength;
@@ -153,6 +164,8 @@ typedef NS_ENUM(NSInteger, ENRMEditPhase) {
     _formattingStore = [FormattingProbe new];
     _blockStore = [FormattingProbe new];
     _formatter = [FormattingProbe new];
+    _formatterStyle = [InlineCodeStyle new];
+    _formatterStyle.inlineCodeFont = [NSFont monospacedSystemFontOfSize:14 weight:NSFontWeightRegular];
     _detectorPipeline = [FormattingProbe new];
   }
   return self;
@@ -283,6 +296,31 @@ static NSString *textContent(MarkdownASTNode *node)
 int main()
 {
   @autoreleasepool {
+    ENRMInputParser *inlineParser = [ENRMInputParser new];
+    for (NSDictionary *sample in @[
+      @{@"source": @"### Heading with `calculateItemsInView`", @"plain": @"Heading with calculateItemsInView"},
+      @{@"source": @"Before ``a`b`` after", @"plain": @"Before a`b after"},
+      @{@"source": @"**bold `x`**", @"plain": @"bold x"},
+      @{@"source": @"`&amp; **literal**`", @"plain": @"&amp; **literal**"},
+      @{@"source": @"` padded `", @"plain": @"padded"},
+    ]) {
+      ENRMParseResult *parsed = [inlineParser parseToPlainTextAndRanges:sample[@"source"]];
+      require([parsed.plainText isEqual:sample[@"plain"]], @"inline code must hide only its source delimiters while editing");
+      NSString *roundTrip = [ENRMMarkdownSerializer serializePlainText:parsed.plainText ranges:parsed.formattingRanges
+          blockRanges:parsed.blockRanges blockPrefixProvider:^NSString *(ENRMBlockRange *block) {
+            NSString *prefix = [@"" stringByPaddingToLength:block.level withString:@"#" startingAtIndex:0];
+            return [prefix stringByAppendingString:@" "];
+          }];
+      require([roundTrip isEqual:sample[@"source"]], @"editing inline code must preserve its backticks, padding and nesting on serialization");
+    }
+    for (NSString *edited in @[@"co`de", @"`code", @"code`", @" code ", @"   "]) {
+      ENRMParseResult *parsed = [inlineParser parseToPlainTextAndRanges:@"`code`"];
+      parsed.formattingRanges[0].range = NSMakeRange(0, edited.length);
+      NSString *serialized = [ENRMMarkdownSerializer serializePlainText:edited ranges:parsed.formattingRanges];
+      require([[[inlineParser parseToPlainTextAndRanges:serialized] plainText] isEqual:edited],
+              [NSString stringWithFormat:@"typing code %@ must round trip through %@, got %@", edited, serialized,
+               [[inlineParser parseToPlainTextAndRanges:serialized] plainText]]);
+    }
     for (NSInteger level = 1; level <= 6; ++level) {
       NSFont *font = [NSFont boldSystemFontOfSize:26 - level * 2];
       NSMutableParagraphStyle *paragraph = [NSMutableParagraphStyle new];
@@ -414,6 +452,12 @@ int main()
         }
       }
     }
+    [host setValue:@"### Heading with `code`"];
+    NSFont *inlineFont = [input.textStorage attribute:NSFontAttributeName atIndex:input.string.length - 1 effectiveRange:NULL];
+    require([input.string isEqual:@"Heading with code"] && inlineFont.pointSize == 14,
+            @"rich heading input must hide backticks and apply the configured code font after block styling");
+    require([[[input textStorage] attribute:NSKernAttributeName atIndex:12 effectiveRange:NULL] doubleValue] == 3,
+            @"inline code must keep the renderer spacing before its first glyph");
     [host setValue:@"[editable link text](https://example.com)"];
     for (NSValue *range in @[[NSValue valueWithRange:NSMakeRange(1, 0)],
                              [NSValue valueWithRange:NSMakeRange(5, 0)],

@@ -52,6 +52,7 @@ clang++ -x objective-c++ -std=c++20 -fobjc-arc -framework AppKit -DENRICHED_MARK
   -I"$markdown_dependency_dir/ios/input" -I"$markdown_dependency_dir/cpp/md4c" \
   "$markdown_dependency_dir/ios/input/ENRMInputParser.mm" \
   "$markdown_dependency_dir/ios/input/ENRMInputRemend.mm" \
+  "$markdown_dependency_dir/ios/input/ENRMMarkdownSerializer.mm" \
   "$markdown_dependency_dir/ios/input/ENRMInputStyledRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMFormattingRange.mm" \
   "$markdown_dependency_dir/ios/input/ENRMBlockRange.mm" \

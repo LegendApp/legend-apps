@@ -650,25 +650,80 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-@@ -3732,6 +3920,8 @@
+@@ -3731,7 +3919,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ }
  #endif
  
++struct EnrichedMarkdownTextInputMarkdownStyleCodeStruct {
++  std::string fontFamily{};
++  Float fontSize{0.0};
++  SharedColor color{};
++  SharedColor backgroundColor{};
++
++
++#ifdef RN_SERIALIZABLE_STATE
++  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct&) const = default;
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
++    result["fontFamily"] = fontFamily;
++    result["fontSize"] = fontSize;
++    result["color"] = ::facebook::react::toDynamic(color);
++    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    return result;
++  }
++#endif
++};
++
++static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleCodeStruct &result) {
++  auto map = (std::unordered_map<std::string, RawValue>)value;
++
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_fontSize = map.find("fontSize");
++  if (tmp_fontSize != map.end()) {
++    fromRawValue(context, tmp_fontSize->second, result.fontSize);
++  }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
++  auto tmp_backgroundColor = map.find("backgroundColor");
++  if (tmp_backgroundColor != map.end()) {
++    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  }
++}
++
++static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct &value) {
++  return "[Object EnrichedMarkdownTextInputMarkdownStyleCodeStruct]";
++}
++
++#ifdef RN_SERIALIZABLE_STATE
++static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct &value) {
++  return value.toDynamic();
++}
++#endif
++
  struct EnrichedMarkdownTextInputMarkdownStyleStruct {
 +  EnrichedMarkdownTextInputMarkdownStyleParagraphStruct paragraph{};
 +  EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct codeBlock{};
++  EnrichedMarkdownTextInputMarkdownStyleCodeStruct code{};
    EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
    EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
    EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-@@ -3751,6 +3941,8 @@
+@@ -3751,6 +3994,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
 +    result["paragraph"] = ::facebook::react::toDynamic(paragraph);
 +    result["codeBlock"] = ::facebook::react::toDynamic(codeBlock);
++    result["code"] = ::facebook::react::toDynamic(code);
      result["strong"] = ::facebook::react::toDynamic(strong);
      result["em"] = ::facebook::react::toDynamic(em);
      result["link"] = ::facebook::react::toDynamic(link);
-@@ -3771,6 +3963,14 @@
+@@ -3771,6 +4017,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
@@ -680,10 +735,14 @@ diff --git a/android/generated/jni/react/renderer/components/EnrichedMarkdownTex
 +  if (tmp_codeBlock != map.end()) {
 +    fromRawValue(context, tmp_codeBlock->second, result.codeBlock);
 +  }
++  auto tmp_code = map.find("code");
++  if (tmp_code != map.end()) {
++    fromRawValue(context, tmp_code->second, result.code);
++  }
    auto tmp_strong = map.find("strong");
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
-@@ -7236,6 +7436,8 @@
+@@ -7236,6 +7494,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -1679,25 +1738,80 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
  }
  
  static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleH6Struct &value) {
-@@ -3732,6 +3920,8 @@
+@@ -3731,7 +3919,62 @@ static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownSt
+ }
  #endif
  
++struct EnrichedMarkdownTextInputMarkdownStyleCodeStruct {
++  std::string fontFamily{};
++  Float fontSize{0.0};
++  SharedColor color{};
++  SharedColor backgroundColor{};
++
++
++#ifdef RN_SERIALIZABLE_STATE
++  bool operator==(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct&) const = default;
++
++  folly::dynamic toDynamic() const {
++    folly::dynamic result = folly::dynamic::object();
++    result["fontFamily"] = fontFamily;
++    result["fontSize"] = fontSize;
++    result["color"] = ::facebook::react::toDynamic(color);
++    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
++    return result;
++  }
++#endif
++};
++
++static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleCodeStruct &result) {
++  auto map = (std::unordered_map<std::string, RawValue>)value;
++
++  auto tmp_fontFamily = map.find("fontFamily");
++  if (tmp_fontFamily != map.end()) {
++    fromRawValue(context, tmp_fontFamily->second, result.fontFamily);
++  }
++  auto tmp_fontSize = map.find("fontSize");
++  if (tmp_fontSize != map.end()) {
++    fromRawValue(context, tmp_fontSize->second, result.fontSize);
++  }
++  auto tmp_color = map.find("color");
++  if (tmp_color != map.end()) {
++    fromRawValue(context, tmp_color->second, result.color);
++  }
++  auto tmp_backgroundColor = map.find("backgroundColor");
++  if (tmp_backgroundColor != map.end()) {
++    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
++  }
++}
++
++static inline std::string toString(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct &value) {
++  return "[Object EnrichedMarkdownTextInputMarkdownStyleCodeStruct]";
++}
++
++#ifdef RN_SERIALIZABLE_STATE
++static inline folly::dynamic toDynamic(const EnrichedMarkdownTextInputMarkdownStyleCodeStruct &value) {
++  return value.toDynamic();
++}
++#endif
++
  struct EnrichedMarkdownTextInputMarkdownStyleStruct {
 +  EnrichedMarkdownTextInputMarkdownStyleParagraphStruct paragraph{};
 +  EnrichedMarkdownTextInputMarkdownStyleCodeBlockStruct codeBlock{};
++  EnrichedMarkdownTextInputMarkdownStyleCodeStruct code{};
    EnrichedMarkdownTextInputMarkdownStyleStrongStruct strong{};
    EnrichedMarkdownTextInputMarkdownStyleEmStruct em{};
    EnrichedMarkdownTextInputMarkdownStyleLinkStruct link{};
-@@ -3751,6 +3941,8 @@
+@@ -3751,6 +3994,9 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  
    folly::dynamic toDynamic() const {
      folly::dynamic result = folly::dynamic::object();
 +    result["paragraph"] = ::facebook::react::toDynamic(paragraph);
 +    result["codeBlock"] = ::facebook::react::toDynamic(codeBlock);
++    result["code"] = ::facebook::react::toDynamic(code);
      result["strong"] = ::facebook::react::toDynamic(strong);
      result["em"] = ::facebook::react::toDynamic(em);
      result["link"] = ::facebook::react::toDynamic(link);
-@@ -3771,6 +3963,14 @@
+@@ -3771,6 +4017,18 @@ struct EnrichedMarkdownTextInputMarkdownStyleStruct {
  static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextInputMarkdownStyleStruct &result) {
    auto map = (std::unordered_map<std::string, RawValue>)value;
  
@@ -1709,10 +1823,14 @@ diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/g
 +  if (tmp_codeBlock != map.end()) {
 +    fromRawValue(context, tmp_codeBlock->second, result.codeBlock);
 +  }
++  auto tmp_code = map.find("code");
++  if (tmp_code != map.end()) {
++    fromRawValue(context, tmp_code->second, result.code);
++  }
    auto tmp_strong = map.find("strong");
    if (tmp_strong != map.end()) {
      fromRawValue(context, tmp_strong->second, result.strong);
-@@ -7236,6 +7436,8 @@
+@@ -7236,6 +7494,8 @@ class EnrichedMarkdownTextProps final : public ViewProps {
  #pragma mark - Props
  
    std::string markdown{};
@@ -1804,7 +1922,7 @@ index 58b4356d..1add886c 100644
  #if RCT_DEBUG
    if ([args count] != 1) {
 diff --git a/ios/input/ENRMAutoLinkDetector.mm b/ios/input/ENRMAutoLinkDetector.mm
-index 2d1bb66a..9ff062cd 100644
+index 2d1bb66a..143c88b9 100644
 --- a/ios/input/ENRMAutoLinkDetector.mm
 +++ b/ios/input/ENRMAutoLinkDetector.mm
 @@ -1,6 +1,7 @@
@@ -1842,7 +1960,7 @@ index 2d1bb66a..9ff062cd 100644
                             ENRMFormattingRange *fmtRange = [ENRMFormattingRange rangeWithType:ENRMInputStyleTypeLink
                                                                                          range:range
                                                                                            url:value];
-@@ -102,6 +105,22 @@ - (void)clearAutoLinkInRange:(NSRange)range
+@@ -102,6 +105,23 @@ - (void)clearAutoLinkInRange:(NSRange)range
  
  #pragma mark - Link matching
  
@@ -1850,6 +1968,7 @@ index 2d1bb66a..9ff062cd 100644
 +// punctuation heuristics, and recheck transient ranges when only delimiters changed.
 +- (BOOL)intersectsCodeRange:(NSRange)range
 +{
++  if ([_formattingStore isStyleActive:ENRMInputStyleTypeCode inRange:range]) return YES;
 +  NSString *text = _textStorage.string ?: @"";
 +  if (![_codeRangeText isEqualToString:text]) {
 +    _codeRangeText = [text copy];
@@ -1865,7 +1984,7 @@ index 2d1bb66a..9ff062cd 100644
  - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
                                       inText:(NSString *)word
                                 matchedRange:(NSRange *)outMatchedRange
-@@ -132,7 +151,7 @@ - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
+@@ -132,7 +152,7 @@ - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
    }
  
    NSRange localMatch = NSMakeRange(NSNotFound, 0);
@@ -1874,7 +1993,7 @@ index 2d1bb66a..9ff062cd 100644
  
    if (matchedUrl == nil || localMatch.location == NSNotFound) {
      [self clearAutoLinkInRange:wordRange];
-@@ -169,7 +188,7 @@ - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
+@@ -169,7 +189,7 @@ - (nullable NSString *)detectNewLinkAtRange:(NSRange)wordRange
    return matchedUrl;
  }
  
@@ -1883,7 +2002,7 @@ index 2d1bb66a..9ff062cd 100644
  {
    if (outRange != NULL) {
      *outRange = NSMakeRange(NSNotFound, 0);
-@@ -190,16 +209,17 @@ - (nullable NSString *)tryMatchWord:(NSString *)word matchedRange:(NSRange *)out
+@@ -190,16 +210,17 @@ - (nullable NSString *)tryMatchWord:(NSString *)word matchedRange:(NSRange *)out
      return nil;
    }
  
@@ -2068,34 +2187,42 @@ index 82807755..e4f10b45 100644
  
  /// Applies `blockFont` over `range` while preserving the symbolic traits already
 diff --git a/ios/input/ENRMInputFormatterStyle.h b/ios/input/ENRMInputFormatterStyle.h
-index c09a3cbc..e1009111 100644
+index c09a3cbc..ce0fc850 100644
 --- a/ios/input/ENRMInputFormatterStyle.h
 +++ b/ios/input/ENRMInputFormatterStyle.h
-@@ -20,6 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -20,6 +20,11 @@ NS_ASSUME_NONNULL_BEGIN
  /// Base text properties
  @property (nonatomic, strong) UIFont *baseFont;
  @property (nonatomic, strong) RCTUIColor *baseTextColor;
 +@property (nonatomic, assign) CGFloat baseLineHeight;
++
++@property (nonatomic, strong) UIFont *inlineCodeFont;
++@property (nonatomic, strong, nullable) RCTUIColor *inlineCodeColor;
++@property (nonatomic, strong, nullable) RCTUIColor *inlineCodeBackgroundColor;
  
  /// Bold — color override (nil = inherit baseTextColor)
  @property (nonatomic, strong, nullable) RCTUIColor *boldColor;
 diff --git a/ios/input/ENRMInputFormatterStyle.mm b/ios/input/ENRMInputFormatterStyle.mm
-index 46259c56..e8d59e2d 100644
+index 46259c56..955d6d1b 100644
 --- a/ios/input/ENRMInputFormatterStyle.mm
 +++ b/ios/input/ENRMInputFormatterStyle.mm
-@@ -18,6 +18,7 @@ - (instancetype)init
+@@ -18,6 +18,8 @@ - (instancetype)init
    if (self = [super init]) {
      _baseFont = [UIFont systemFontOfSize:16.0];
      _baseTextColor = [RCTUIColor labelColor];
 +    _baseLineHeight = 0;
++    _inlineCodeFont = [UIFont monospacedSystemFontOfSize:14 weight:UIFontWeightRegular];
      _linkVariants = @[];
      _fontCache = [NSMutableDictionary dictionary];
      for (NSInteger level = 0; level <= 6; level++) {
-@@ -34,6 +35,7 @@ - (id)copyWithZone:(NSZone *)zone
+@@ -34,6 +36,10 @@ - (id)copyWithZone:(NSZone *)zone
    ENRMInputFormatterStyle *copy = [[ENRMInputFormatterStyle allocWithZone:zone] init];
    copy.baseFont = _baseFont;
    copy.baseTextColor = _baseTextColor;
 +  copy.baseLineHeight = _baseLineHeight;
++  copy.inlineCodeFont = _inlineCodeFont;
++  copy.inlineCodeColor = _inlineCodeColor;
++  copy.inlineCodeBackgroundColor = _inlineCodeBackgroundColor;
    copy.boldColor = _boldColor;
    copy.italicColor = _italicColor;
    copy.linkColor = _linkColor;
@@ -2159,7 +2286,7 @@ index 1f823bd5..206abbf8 100644
  @end
  
 diff --git a/ios/input/ENRMInputParser.mm b/ios/input/ENRMInputParser.mm
-index f82e72b3..5a95fb45 100644
+index f82e72b3..2c514332 100644
 --- a/ios/input/ENRMInputParser.mm
 +++ b/ios/input/ENRMInputParser.mm
 @@ -8,6 +8,7 @@
@@ -2170,7 +2297,15 @@ index f82e72b3..5a95fb45 100644
  @property (nonatomic, strong, readwrite) NSArray<ENRMFormattingRange *> *formattingRanges;
  @property (nonatomic, strong, readwrite) NSArray<ENRMBlockRange *> *blockRanges;
  @end
-@@ -98,6 +99,8 @@ static NSInteger resolveBlockLevel(MD_BLOCKTYPE blockType, void *detail)
+@@ -27,6 +28,7 @@ @implementation ENRMParseResult
+ static const SpanTypeMapping kSupportedSpans[] = {
+     {MD_SPAN_STRONG, ENRMInputStyleTypeStrong}, {MD_SPAN_EM, ENRMInputStyleTypeEmphasis},
+     {MD_SPAN_U, ENRMInputStyleTypeUnderline},   {MD_SPAN_DEL, ENRMInputStyleTypeStrikethrough},
++    {MD_SPAN_CODE, ENRMInputStyleTypeCode},
+     {MD_SPAN_A, ENRMInputStyleTypeLink},        {MD_SPAN_SPOILER, ENRMInputStyleTypeSpoiler},
+ };
+ static const size_t kSupportedSpanCount = sizeof(kSupportedSpans) / sizeof(kSupportedSpans[0]);
+@@ -98,6 +100,8 @@ static NSInteger resolveBlockLevel(MD_BLOCKTYPE blockType, void *detail)
  };
  
  struct ParseContext {
@@ -2179,7 +2314,7 @@ index f82e72b3..5a95fb45 100644
    const char *buffer;
    size_t bufferLength;
    size_t originalLength;
-@@ -106,6 +109,7 @@ static NSInteger resolveBlockLevel(MD_BLOCKTYPE blockType, void *detail)
+@@ -106,6 +110,7 @@ static NSInteger resolveBlockLevel(MD_BLOCKTYPE blockType, void *detail)
    std::vector<BlockInfo> openBlockStack;
    std::vector<BlockInfo> resolvedBlocks;
    std::vector<size_t> textStartOffsets;
@@ -2187,7 +2322,20 @@ index f82e72b3..5a95fb45 100644
    // Byte offsets of backslashes md4c resolved as escape sequences (the '\' of "\*"),
    // stripped from the plain text alongside inline/block delimiters.
    std::vector<size_t> escapeByteOffsets;
-@@ -170,7 +174,11 @@ static size_t closingDelimiterEndByte(const ParseContext &context, const InlineS
+@@ -158,6 +163,12 @@ static size_t closingDelimiterEndByte(const ParseContext &context, const InlineS
+ {
+   size_t position = span.contentEndByteOffset;
+ 
++  if (span.type == ENRMInputStyleTypeCode) {
++    while (position < context.bufferLength && context.buffer[position] != '`') position++;
++    while (position < context.bufferLength && context.buffer[position] == '`') position++;
++    return position;
++  }
++
+   if (span.type == ENRMInputStyleTypeLink) {
+     while (position < context.bufferLength && context.buffer[position] != ')') {
+       position++;
+@@ -170,7 +181,11 @@ static size_t closingDelimiterEndByte(const ParseContext &context, const InlineS
    // fixed per-type length — keeps stacked closers of co-terminating spans (e.g.
    // "***", "**~~x~~**") from overlapping and leaking a trailing marker.
    auto next = std::lower_bound(context.textStartOffsets.begin(), context.textStartOffsets.end(), position);
@@ -2200,7 +2348,7 @@ index f82e72b3..5a95fb45 100644
  }
  
  // Block tracking. md4c's enter_block gives no byte offset, so a block's content
-@@ -295,7 +303,7 @@ static int onLeaveSpan(MD_SPANTYPE spanType, void *, void *userdata)
+@@ -295,7 +310,7 @@ static int onLeaveSpan(MD_SPANTYPE spanType, void *, void *userdata)
    return 0;
  }
  
@@ -2209,7 +2357,7 @@ index f82e72b3..5a95fb45 100644
  {
    if (!text || size == 0) {
      return 0;
-@@ -317,6 +325,9 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
+@@ -317,6 +332,9 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
    size_t textStart = text - context->buffer;
    size_t textEnd = textStart + size;
    context->textStartOffsets.push_back(textStart);
@@ -2219,7 +2367,7 @@ index f82e72b3..5a95fb45 100644
  
    if (textStart > 0 && context->buffer[textStart - 1] == '\\' && (textStart - 1) >= context->lastTextEnd) {
      context->escapeByteOffsets.push_back(textStart - 1);
-@@ -338,10 +349,10 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
+@@ -338,10 +356,10 @@ static int onText(MD_TEXTTYPE, const MD_CHAR *text, MD_SIZE size, void *userdata
    return 0;
  }
  
@@ -2233,7 +2381,7 @@ index f82e72b3..5a95fb45 100644
    size_t completedLength = strlen(completedUTF8);
    size_t originalLength = [markdown lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
  
-@@ -468,6 +479,21 @@ static bool runMd4cParse(NSString *markdown, ParseContext &context)
+@@ -468,6 +486,21 @@ static bool runMd4cParse(NSString *markdown, ParseContext &context)
  
  @implementation ENRMInputParser
  
@@ -2255,7 +2403,7 @@ index f82e72b3..5a95fb45 100644
  - (NSArray<ENRMInputStyledRange *> *)parse:(NSString *)markdown
  {
    if (markdown.length == 0) {
-@@ -484,6 +510,11 @@ @implementation ENRMInputParser
+@@ -484,6 +517,11 @@ @implementation ENRMInputParser
  }
  
  - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
@@ -2267,7 +2415,7 @@ index f82e72b3..5a95fb45 100644
  {
    ENRMParseResult *parseResult = [[ENRMParseResult alloc] init];
  
-@@ -591,6 +622,9 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -591,6 +629,9 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
      }
    }
    rawToPlainMap[rawLength] = plainPosition;
@@ -2277,12 +2425,16 @@ index f82e72b3..5a95fb45 100644
  
    NSMutableArray<ENRMFormattingRange *> *formattingRanges = [NSMutableArray arrayWithCapacity:styledRanges.count];
  
-@@ -614,9 +648,19 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -614,9 +655,23 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
          [ENRMFormattingRange rangeWithType:styledRange.type
                                       range:NSMakeRange(plainStart, plainEnd - plainStart)
                                         url:styledRange.url];
-+    if (styledRange.type == ENRMInputStyleTypeLink) {
++    if (styledRange.type == ENRMInputStyleTypeLink || styledRange.type == ENRMInputStyleTypeCode) {
 +      formattingRange.sourceClosingDelimiter = [markdown substringWithRange:styledRange.syntaxRanges.lastObject.rangeValue];
++    }
++    if (styledRange.type == ENRMInputStyleTypeCode) {
++      NSString *opening = [markdown substringWithRange:styledRange.syntaxRanges.firstObject.rangeValue];
++      formattingRange.sourceOpeningDelimiter = [opening substringFromIndex:[opening rangeOfString:@"`"].location];
 +    }
      [formattingRanges addObject:formattingRange];
    }
@@ -2297,7 +2449,7 @@ index f82e72b3..5a95fb45 100644
    // Map block content ranges (raw-markdown coords) onto plain-text coords. The
    // block's marker syntax was stripped above, so the content range maps cleanly
    // onto the post-strip text and the block no longer covers the marker.
-@@ -632,9 +676,14 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
+@@ -632,9 +687,14 @@ - (ENRMParseResult *)parseToPlainTextAndRanges:(NSString *)markdown
      if (plainEnd <= plainStart)
        continue;
  
@@ -2651,7 +2803,7 @@ index 231d841f..a244fa2f 100644
  - (void)pasteMarkdown:(NSString *)markdown;
  - (void)replaceSelectedTextWith:(NSString *)text formattingRanges:(NSArray *)ranges;
 diff --git a/ios/input/EnrichedMarkdownTextInput.mm b/ios/input/EnrichedMarkdownTextInput.mm
-index 7e72cff2..0b22971d 100644
+index 7e72cff2..5e35cdc7 100644
 --- a/ios/input/EnrichedMarkdownTextInput.mm
 +++ b/ios/input/EnrichedMarkdownTextInput.mm
 @@ -1,4 +1,5 @@
@@ -3088,17 +3240,41 @@ index 7e72cff2..0b22971d 100644
  }
  
  - (void)applyFormatting
-@@ -864,6 +1032,7 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -864,6 +1032,8 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
    [_editSession enterPhase:ENRMEditPhaseFormatting];
  
    NSRange savedSelection = _textView.selectedRange;
 +  [_textView.textStorage removeAttribute:NSBaselineOffsetAttributeName range:scope];
++  [_textView.textStorage removeAttribute:NSKernAttributeName range:scope];
  
    [_formatter applyFormattingRanges:_formattingStore.allRanges
                           toTextView:_textView
-@@ -872,6 +1041,9 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+@@ -871,7 +1041,32 @@ - (void)applyFormattingScopedToRange:(NSRange)scope
+                       scopedToRange:scope];
    [_formatter applyBlockRanges:_blockStore.allRanges toTextView:_textView style:_formatterStyle scopedToRange:scope];
    [_detectorPipeline refreshAllStyling];
++  for (ENRMFormattingRange *range in _formattingStore.allRanges) {
++    if (range.type != ENRMInputStyleTypeCode) continue;
++    NSRange clipped = NSIntersectionRange(range.range, scope);
++    if (clipped.length == 0) continue;
++    UIFont *codeFont = _formatterStyle.inlineCodeFont;
++    UIFont *blockFont = [_textView.textStorage attribute:NSFontAttributeName atIndex:clipped.location effectiveRange:NULL];
++    if (blockFont.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) {
++      UIFontDescriptor *descriptor = [codeFont.fontDescriptor fontDescriptorWithSymbolicTraits:
++          codeFont.fontDescriptor.symbolicTraits | UIFontDescriptorTraitBold];
++      if (descriptor) codeFont = [UIFont fontWithDescriptor:descriptor size:0];
++    }
++    [_textView.textStorage addAttribute:NSFontAttributeName value:codeFont range:clipped];
++    if (range.range.location > 0) {
++      [_textView.textStorage addAttribute:NSKernAttributeName value:@3 range:NSMakeRange(range.range.location - 1, 1)];
++    }
++    if (_formatterStyle.inlineCodeColor) {
++      [_textView.textStorage addAttribute:NSForegroundColorAttributeName value:_formatterStyle.inlineCodeColor range:clipped];
++    }
++    if (_formatterStyle.inlineCodeBackgroundColor) {
++      [_textView.textStorage addAttribute:NSBackgroundColorAttributeName value:_formatterStyle.inlineCodeBackgroundColor range:clipped];
++    }
++  }
    [self applyWritingDirection];
 +#if TARGET_OS_OSX
 +  [self applyParagraphBaselineOffset];
@@ -3106,7 +3282,7 @@ index 7e72cff2..0b22971d 100644
  
    NSUInteger textLen = ENRMGetPlainText(_textView).length;
    if (savedSelection.location + savedSelection.length <= textLen) {
-@@ -914,6 +1086,23 @@ - (void)setValue:(NSString *)markdown
+@@ -914,6 +1109,23 @@ - (void)setValue:(NSString *)markdown
    [self requestHeightUpdate];
  }
  
@@ -3130,7 +3306,7 @@ index 7e72cff2..0b22971d 100644
  - (void)setSelection:(NSInteger)start end:(NSInteger)end
  {
    NSInteger textLen = (NSInteger)ENRMGetPlainText(_textView).length;
-@@ -924,6 +1113,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
+@@ -924,6 +1136,121 @@ - (void)setSelection:(NSInteger)start end:(NSInteger)end
    [_inputEventEmitter emitOnChangeState];
  }
  
@@ -3252,7 +3428,7 @@ index 7e72cff2..0b22971d 100644
  - (void)toggleBold
  {
    [self toggleInlineStyle:ENRMInputStyleTypeStrong];
-@@ -1412,9 +1716,31 @@ - (NSString *)serializeText:(NSString *)text
+@@ -1412,9 +1739,31 @@ - (NSString *)serializeText:(NSString *)text
    return [_clipboardCoordinator serializeText:text ranges:ranges blockRanges:blockRanges];
  }
  
@@ -3285,7 +3461,7 @@ index 7e72cff2..0b22971d 100644
  }
  
  - (void)copyToClipboard
-@@ -1448,16 +1774,53 @@ - (CGRect)computeCaretRect
+@@ -1448,16 +1797,53 @@ - (CGRect)computeCaretRect
  #else
    NSRange selection = _textView.selectedRange;
    if (selection.location != NSNotFound) {
@@ -3344,7 +3520,7 @@ index 7e72cff2..0b22971d 100644
  - (void)requestCaretRect:(NSInteger)requestId
  {
    [_inputEventEmitter requestCaretRect:requestId];
-@@ -1575,6 +1938,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
+@@ -1575,6 +1961,32 @@ - (BOOL)deleteLinkForReplacementRange:(NSRange)range replacementText:(NSString *
    return YES;
  }
  
@@ -3377,7 +3553,7 @@ index 7e72cff2..0b22971d 100644
  - (NSArray<NSString *> *)contextMenuItemTexts
  {
    return _contextMenuItemTexts ?: @[];
-@@ -1608,7 +1997,7 @@
+@@ -1608,7 +2020,7 @@ - (ENRMInputTypingAttributesController *)typingController
  #pragma mark - Text edit tracking
  
  /// Markdown shortcuts: when the user types a space after `#`…`######`,
@@ -3386,7 +3562,7 @@ index 7e72cff2..0b22971d 100644
  /// and make the paragraph that block. Runs after the stores are adjusted for the
  /// edit and before scoped formatting. Returns YES when it converted, in which
  /// case the replace path has already reformatted and emitted.
-@@ -1649,7 +2038,8 @@
+@@ -1649,7 +2061,8 @@ - (BOOL)applyMarkdownShortcutForEditAtLocation:(NSUInteger)editLocation
    }
  
    NSUInteger lineStart = [text paragraphRangeForRange:NSMakeRange(spaceIndex, 0)].location;
@@ -3396,7 +3572,7 @@ index 7e72cff2..0b22971d 100644
      return NO;
    }
  
-@@ -1749,7 +2139,14 @@ - (void)handleTextChanged
+@@ -1749,7 +2162,14 @@ - (void)handleTextChanged
    }
  #endif
  
@@ -3412,7 +3588,7 @@ index 7e72cff2..0b22971d 100644
      [self applyFormattingScopedFromParagraphAtLocation:editLocation];
    } else {
      [self applyFormattingScopedToEditAtLocation:editLocation insertedLength:insertedLength];
-@@ -1764,6 +2161,9 @@ - (void)handleTextChanged
+@@ -1764,6 +2184,9 @@ - (void)handleTextChanged
    } else if (_textView.typingAttributes[NSParagraphStyleAttributeName] != nil) {
      [_typingController clearListParagraphStyle];
    }
@@ -3422,7 +3598,7 @@ index 7e72cff2..0b22971d 100644
  
    [_editPipeline detectLinksAtLocation:editLocation insertedLength:insertedLength];
  
-@@ -1826,6 +2226,12 @@ - (void)manageSelectionBasedChanges
+@@ -1826,6 +2249,12 @@ - (void)manageSelectionBasedChanges
            NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
            attrs[NSFontAttributeName] = _formatterStyle.baseFont;
            attrs[NSForegroundColorAttributeName] = _formatterStyle.baseTextColor;
@@ -3435,7 +3611,7 @@ index 7e72cff2..0b22971d 100644
            _textView.typingAttributes = attrs;
          }
        }
-@@ -2044,13 +2450,6 @@ - (void)textInputDidChange
+@@ -2044,13 +2473,6 @@ - (void)textInputDidChange
  - (void)textInputDidChangeSelection
  {
    NSRange newSelection = _textView.selectedRange;
@@ -3450,10 +3626,10 @@ index 7e72cff2..0b22971d 100644
    _lastSelectedRange = newSelection;
  
 diff --git a/ios/input/InputStylePropsUtils.h b/ios/input/InputStylePropsUtils.h
-index 1d28946d..24c193fb 100644
+index 1d28946d..b5d1cd4e 100644
 --- a/ios/input/InputStylePropsUtils.h
 +++ b/ios/input/InputStylePropsUtils.h
-@@ -92,6 +92,11 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -92,6 +92,25 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
      changed = YES;
    }
  
@@ -3462,10 +3638,24 @@ index 1d28946d..24c193fb 100644
 +    changed = YES;
 +  }
 +
++  const auto &code = newProps.markdownStyle.code;
++  const auto &oldCode = oldProps.markdownStyle.code;
++  if (code.fontFamily != oldCode.fontFamily || code.fontSize != oldCode.fontSize) {
++    CGFloat size = code.fontSize > 0 ? code.fontSize : 14;
++    UIFont *font = code.fontFamily.empty() ? nil : [UIFont fontWithName:[NSString stringWithUTF8String:code.fontFamily.c_str()] size:size];
++    style.inlineCodeFont = font ?: [UIFont monospacedSystemFontOfSize:size weight:UIFontWeightRegular];
++    changed = YES;
++  }
++  if (code.color != oldCode.color || code.backgroundColor != oldCode.backgroundColor) {
++    style.inlineCodeColor = isColorMeaningful(code.color) ? RCTUIColorFromSharedColor(code.color) : nil;
++    style.inlineCodeBackgroundColor = isColorMeaningful(code.backgroundColor) ? RCTUIColorFromSharedColor(code.backgroundColor) : nil;
++    changed = YES;
++  }
++
    if (newProps.markdownStyle.strong.color != oldProps.markdownStyle.strong.color) {
      if (isColorMeaningful(newProps.markdownStyle.strong.color)) {
        style.boldColor = RCTUIColorFromSharedColor(newProps.markdownStyle.strong.color);
-@@ -183,3 +188,100 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
+@@ -183,3 +202,100 @@ BOOL applyInputStyleProps(ENRMInputFormatterStyle *style, const InputProps &newP
  
    return changed;
  }
@@ -4636,10 +4826,10 @@ index 5b348e8f..2cde2636 100644
      onInputKeyPress: onKeyPress,
      onLinkDetected: handleLinkDetected,
 diff --git a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec261..70a9f473 100644
+index c2fec261..6da2c234 100644
 --- a/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-@@ -8,13 +8,15 @@ import {
+@@ -8,13 +8,21 @@ import {
  } from 'react-native';
  import type React from 'react';
  
@@ -4658,10 +4848,16 @@ index c2fec261..70a9f473 100644
 +  h5: InputBlockStyleInternal;
 +  h6: InputBlockStyleInternal;
 +  codeBlock: InputBlockStyleInternal;
++  code: {
++    fontFamily: string;
++    fontSize: CodegenTypes.Float;
++    color: ColorValue;
++    backgroundColor: ColorValue;
++  };
    strong: {
      color?: ColorValue;
    };
-@@ -38,15 +40,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -38,15 +46,6 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -4677,7 +4873,7 @@ index c2fec261..70a9f473 100644
    list: {
      // Vertical spacing (points) added above each list item. iOS applies it via
      // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
-@@ -55,6 +48,14 @@ interface MarkdownTextInputStyleInternal {
+@@ -55,6 +54,14 @@ interface MarkdownTextInputStyleInternal {
    };
  }
  
@@ -4692,7 +4888,7 @@ index c2fec261..70a9f473 100644
  interface TargetedEvent {
    target: CodegenTypes.Int32;
  }
-@@ -76,6 +77,17 @@ export interface OnChangeSelectionEvent {
+@@ -76,6 +83,17 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -4710,7 +4906,7 @@ index c2fec261..70a9f473 100644
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -303,6 +315,8 @@ export interface NativeProps extends ViewProps {
+@@ -303,6 +321,8 @@ export interface NativeProps extends ViewProps {
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
    onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -4719,7 +4915,7 @@ index c2fec261..70a9f473 100644
    onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
    onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
    onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -330,6 +344,11 @@ interface NativeCommands {
+@@ -330,6 +350,11 @@ interface NativeCommands {
      start: CodegenTypes.Int32,
      end: CodegenTypes.Int32
    ) => void;
@@ -4731,7 +4927,7 @@ index c2fec261..70a9f473 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -361,6 +380,7 @@ interface NativeCommands {
+@@ -361,6 +386,7 @@ interface NativeCommands {
    ) => void;
    removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
    copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -4739,7 +4935,7 @@ index c2fec261..70a9f473 100644
    requestMarkdown: (
      viewRef: React.ElementRef<ComponentType>,
      requestId: CodegenTypes.Int32
-@@ -377,6 +397,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -377,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -4747,7 +4943,7 @@ index c2fec261..70a9f473 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
-@@ -395,6 +416,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -395,6 +422,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'removeLink',
      'copyToClipboard',
      'requestMarkdown',
@@ -4855,10 +5051,10 @@ index ab5f4a79..0b35b76d 100644
      ellipsizeMode,
      ...rest
 diff --git a/lib/module/normalizeMarkdownTextInputStyle.js b/lib/module/normalizeMarkdownTextInputStyle.js
-index 90562c8e..147c559a 100644
+index 90562c8e..f7f9e70f 100644
 --- a/lib/module/normalizeMarkdownTextInputStyle.js
 +++ b/lib/module/normalizeMarkdownTextInputStyle.js
-@@ -2,24 +2,29 @@
+@@ -2,24 +2,30 @@
  
  import { processColor } from 'react-native';
  import { normalizeLinkVariantEntries } from "./linkVariantUtils.js";
@@ -4897,10 +5093,11 @@ index 90562c8e..147c559a 100644
 +  h5: pickInputBlockStyle(defaultMarkdownStyle.h5),
 +  h6: pickInputBlockStyle(defaultMarkdownStyle.h6),
 +  codeBlock: pickInputBlockStyle(defaultMarkdownStyle.codeBlock),
++  code: defaultMarkdownStyle.code,
    strong: {
      color: undefined
    },
-@@ -36,24 +41,10 @@ const defaultInternal = Object.freeze({
+@@ -36,24 +42,10 @@ const defaultInternal = Object.freeze({
      color: processColor(DEFAULT_SPOILER_COLOR),
      backgroundColor: processColor(DEFAULT_SPOILER_BG_COLOR)
    },
@@ -4925,7 +5122,7 @@ index 90562c8e..147c559a 100644
  let cachedInput;
  let cachedResult;
  function normalizeInputLinkStyle(style, fallback) {
-@@ -71,7 +62,16 @@ export const normalizeMarkdownTextInputStyle = style => {
+@@ -71,7 +63,17 @@ export const normalizeMarkdownTextInputStyle = style => {
      return cachedResult;
    }
    const linkBase = normalizeInputLinkStyle(style.link, defaultInternal.link);
@@ -4939,10 +5136,11 @@ index 90562c8e..147c559a 100644
 +    h5: pickInputBlockStyle(normalizedBlockStyle.h5),
 +    h6: pickInputBlockStyle(normalizedBlockStyle.h6),
 +    codeBlock: pickInputBlockStyle(normalizedBlockStyle.codeBlock),
++    code: normalizedBlockStyle.code,
      strong: {
        color: normalizeColor(style.strong?.color)
      },
-@@ -89,12 +89,6 @@ export const normalizeMarkdownTextInputStyle = style => {
+@@ -89,12 +91,6 @@ export const normalizeMarkdownTextInputStyle = style => {
        color: normalizeColor(style.spoiler?.color) ?? defaultInternal.spoiler.color,
        backgroundColor: normalizeColor(style.spoiler?.backgroundColor) ?? defaultInternal.spoiler.backgroundColor
      },
@@ -5101,10 +5299,10 @@ index 631fb19b..3f0308e9 100644
  //# sourceMappingURL=EnrichedMarkdownTextInput.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-index 6f9148cf..170acaf4 100644
+index 6f9148cf..cbbd1936 100644
 --- a/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 +++ b/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
-@@ -1,11 +1,14 @@
+@@ -1,11 +1,20 @@
  import { type ViewProps, type ColorValue, type HostComponent, type CodegenTypes } from 'react-native';
  import type React from 'react';
 -interface HeadingStyleInternal {
@@ -5121,10 +5319,16 @@ index 6f9148cf..170acaf4 100644
 +    h5: InputBlockStyleInternal;
 +    h6: InputBlockStyleInternal;
 +    codeBlock: InputBlockStyleInternal;
++    code: {
++      fontFamily: string;
++      fontSize: CodegenTypes.Float;
++      color: ColorValue;
++      backgroundColor: ColorValue;
++    };
      strong: {
          color?: ColorValue;
      };
-@@ -27,16 +30,17 @@ interface MarkdownTextInputStyleInternal {
+@@ -27,16 +36,17 @@ interface MarkdownTextInputStyleInternal {
          color: ColorValue;
          backgroundColor: ColorValue;
      };
@@ -5148,7 +5352,7 @@ index 6f9148cf..170acaf4 100644
  interface TargetedEvent {
      target: CodegenTypes.Int32;
  }
-@@ -53,6 +57,15 @@ export interface OnChangeSelectionEvent {
+@@ -53,6 +63,15 @@ export interface OnChangeSelectionEvent {
      start: CodegenTypes.Int32;
      end: CodegenTypes.Int32;
  }
@@ -5164,7 +5368,7 @@ index 6f9148cf..170acaf4 100644
  export interface OnChangeStateEvent {
      bold: {
          isActive: boolean;
-@@ -297,6 +310,8 @@ export interface NativeProps extends ViewProps {
+@@ -297,6 +316,8 @@ export interface NativeProps extends ViewProps {
      onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
      onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
      onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -5173,7 +5377,7 @@ index 6f9148cf..170acaf4 100644
      onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
      onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
      onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -315,6 +330,7 @@ interface NativeCommands {
+@@ -315,6 +336,7 @@ interface NativeCommands {
      blur: (viewRef: React.ElementRef<ComponentType>) => void;
      setValue: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
      setSelection: (viewRef: React.ElementRef<ComponentType>, start: CodegenTypes.Int32, end: CodegenTypes.Int32) => void;
@@ -5181,7 +5385,7 @@ index 6f9148cf..170acaf4 100644
      toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
      toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -332,6 +348,7 @@ interface NativeCommands {
+@@ -332,6 +354,7 @@ interface NativeCommands {
      startMention: (viewRef: React.ElementRef<ComponentType>, indicator: string) => void;
      removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
      copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -5247,10 +5451,10 @@ index 6a1c672c..141776c2 100644
  //# sourceMappingURL=EnrichedMarkdownText.d.ts.map
 \ No newline at end of file
 diff --git a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
-index a306bfd8..f1d5b302 100644
+index a306bfd8..d4b046cc 100644
 --- a/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
 +++ b/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
-@@ -6,12 +6,22 @@ interface LinkVariantEntryInternal {
+@@ -6,12 +6,28 @@ interface LinkVariantEntryInternal {
      underline: boolean;
      backgroundColor: ColorValue;
  }
@@ -5271,10 +5475,16 @@ index a306bfd8..f1d5b302 100644
 +    h5: InputBlockStyleInternal;
 +    h6: InputBlockStyleInternal;
 +    codeBlock: InputBlockStyleInternal;
++    code: {
++      fontSize: number;
++      fontFamily: string;
++      color: ColorValue;
++      backgroundColor: ColorValue;
++    };
      strong: {
          color?: ColorValue;
      };
-@@ -28,12 +38,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -28,12 +44,6 @@ interface MarkdownTextInputStyleInternal {
          color: ColorValue;
          backgroundColor: ColorValue;
      };
@@ -5562,10 +5772,10 @@ index 4100c709..55cee928 100644
        onInputKeyPress={onKeyPress as NativeProps['onInputKeyPress']}
        onLinkDetected={handleLinkDetected as NativeProps['onLinkDetected']}
 diff --git a/src/EnrichedMarkdownTextInputNativeComponent.ts b/src/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec261..70a9f473 100644
+index c2fec261..6da2c234 100644
 --- a/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/src/EnrichedMarkdownTextInputNativeComponent.ts
-@@ -8,13 +8,15 @@ import {
+@@ -8,13 +8,21 @@ import {
  } from 'react-native';
  import type React from 'react';
  
@@ -5584,10 +5794,16 @@ index c2fec261..70a9f473 100644
 +  h5: InputBlockStyleInternal;
 +  h6: InputBlockStyleInternal;
 +  codeBlock: InputBlockStyleInternal;
++  code: {
++    fontFamily: string;
++    fontSize: CodegenTypes.Float;
++    color: ColorValue;
++    backgroundColor: ColorValue;
++  };
    strong: {
      color?: ColorValue;
    };
-@@ -38,15 +40,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -38,15 +46,6 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -5603,7 +5819,7 @@ index c2fec261..70a9f473 100644
    list: {
      // Vertical spacing (points) added above each list item. iOS applies it via
      // paragraphSpacingBefore; Android via a LineHeightSpan. Float for parity with
-@@ -55,6 +48,14 @@ interface MarkdownTextInputStyleInternal {
+@@ -55,6 +54,14 @@ interface MarkdownTextInputStyleInternal {
    };
  }
  
@@ -5618,7 +5834,7 @@ index c2fec261..70a9f473 100644
  interface TargetedEvent {
    target: CodegenTypes.Int32;
  }
-@@ -76,6 +77,17 @@ export interface OnChangeSelectionEvent {
+@@ -76,6 +83,17 @@ export interface OnChangeSelectionEvent {
    end: CodegenTypes.Int32;
  }
  
@@ -5636,7 +5852,7 @@ index c2fec261..70a9f473 100644
  export interface OnChangeStateEvent {
    bold: { isActive: boolean };
    italic: { isActive: boolean };
-@@ -303,6 +315,8 @@ export interface NativeProps extends ViewProps {
+@@ -303,6 +321,8 @@ export interface NativeProps extends ViewProps {
    onChangeMarkdown?: CodegenTypes.DirectEventHandler<OnChangeMarkdownEvent>;
    onChangeSelection?: CodegenTypes.DirectEventHandler<OnChangeSelectionEvent>;
    onInputKeyPress?: CodegenTypes.DirectEventHandler<OnKeyPressEvent>;
@@ -5645,7 +5861,7 @@ index c2fec261..70a9f473 100644
    onChangeState?: CodegenTypes.DirectEventHandler<OnChangeStateEvent>;
    onInputFocus?: CodegenTypes.DirectEventHandler<TargetedEvent>;
    onInputBlur?: CodegenTypes.DirectEventHandler<TargetedEvent>;
-@@ -330,6 +344,11 @@ interface NativeCommands {
+@@ -330,6 +350,11 @@ interface NativeCommands {
      start: CodegenTypes.Int32,
      end: CodegenTypes.Int32
    ) => void;
@@ -5657,7 +5873,7 @@ index c2fec261..70a9f473 100644
    toggleBold: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleItalic: (viewRef: React.ElementRef<ComponentType>) => void;
    toggleUnderline: (viewRef: React.ElementRef<ComponentType>) => void;
-@@ -361,6 +380,7 @@ interface NativeCommands {
+@@ -361,6 +386,7 @@ interface NativeCommands {
    ) => void;
    removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
    copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
@@ -5665,7 +5881,7 @@ index c2fec261..70a9f473 100644
    requestMarkdown: (
      viewRef: React.ElementRef<ComponentType>,
      requestId: CodegenTypes.Int32
-@@ -377,6 +397,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -377,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'blur',
      'setValue',
      'setSelection',
@@ -5673,7 +5889,7 @@ index c2fec261..70a9f473 100644
      'toggleBold',
      'toggleItalic',
      'toggleUnderline',
-@@ -395,6 +416,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -395,6 +422,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
      'removeLink',
      'copyToClipboard',
      'requestMarkdown',
@@ -5792,7 +6008,7 @@ index 267a2463..85642d0c 100644
      ellipsizeMode,
      ...rest,
 diff --git a/src/normalizeMarkdownTextInputStyle.ts b/src/normalizeMarkdownTextInputStyle.ts
-index 240cd3e5..a7f058ef 100644
+index 240cd3e5..d7ca90c5 100644
 --- a/src/normalizeMarkdownTextInputStyle.ts
 +++ b/src/normalizeMarkdownTextInputStyle.ts
 @@ -1,16 +1,11 @@
@@ -5813,7 +6029,7 @@ index 240cd3e5..a7f058ef 100644
  
  interface LinkVariantEntryInternal {
    pattern: string;
-@@ -19,13 +14,22 @@ interface LinkVariantEntryInternal {
+@@ -19,13 +14,28 @@ interface LinkVariantEntryInternal {
    backgroundColor: ColorValue;
  }
  
@@ -5835,10 +6051,16 @@ index 240cd3e5..a7f058ef 100644
 +  h5: InputBlockStyleInternal;
 +  h6: InputBlockStyleInternal;
 +  codeBlock: InputBlockStyleInternal;
++  code: {
++    fontSize: number;
++    fontFamily: string;
++    color: ColorValue;
++    backgroundColor: ColorValue;
++  };
    strong: {
      color?: ColorValue;
    };
-@@ -42,12 +46,6 @@ interface MarkdownTextInputStyleInternal {
+@@ -42,12 +52,6 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      backgroundColor: ColorValue;
    };
@@ -5851,7 +6073,7 @@ index 240cd3e5..a7f058ef 100644
    list: {
      itemSpacing: number;
    };
-@@ -58,18 +56,30 @@ const DEFAULT_LINK_BG_COLOR = 'transparent';
+@@ -58,18 +62,31 @@ const DEFAULT_LINK_BG_COLOR = 'transparent';
  const DEFAULT_SPOILER_COLOR = '#374151';
  const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
  
@@ -5889,10 +6111,11 @@ index 240cd3e5..a7f058ef 100644
 +  h5: pickInputBlockStyle(defaultMarkdownStyle.h5),
 +  h6: pickInputBlockStyle(defaultMarkdownStyle.h6),
 +  codeBlock: pickInputBlockStyle(defaultMarkdownStyle.codeBlock),
++  code: defaultMarkdownStyle.code,
    strong: {
      color: undefined,
    },
-@@ -86,29 +96,11 @@ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
+@@ -86,29 +103,11 @@ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
      color: processColor(DEFAULT_SPOILER_COLOR)!,
      backgroundColor: processColor(DEFAULT_SPOILER_BG_COLOR)!,
    },
@@ -5922,7 +6145,7 @@ index 240cd3e5..a7f058ef 100644
  let cachedInput: MarkdownTextInputStyle | undefined;
  let cachedResult: MarkdownTextInputStyleInternal | undefined;
  
-@@ -136,7 +128,16 @@ export const normalizeMarkdownTextInputStyle = (
+@@ -136,7 +135,17 @@ export const normalizeMarkdownTextInputStyle = (
    }
  
    const linkBase = normalizeInputLinkStyle(style.link, defaultInternal.link);
@@ -5936,10 +6159,11 @@ index 240cd3e5..a7f058ef 100644
 +    h5: pickInputBlockStyle(normalizedBlockStyle.h5),
 +    h6: pickInputBlockStyle(normalizedBlockStyle.h6),
 +    codeBlock: pickInputBlockStyle(normalizedBlockStyle.codeBlock),
++    code: normalizedBlockStyle.code,
      strong: {
        color: normalizeColor(style.strong?.color),
      },
-@@ -161,12 +162,6 @@ export const normalizeMarkdownTextInputStyle = (
+@@ -161,12 +170,6 @@ export const normalizeMarkdownTextInputStyle = (
          normalizeColor(style.spoiler?.backgroundColor) ??
          defaultInternal.spoiler.backgroundColor,
      },
@@ -6144,7 +6368,7 @@ index 6dc010fe..7122c12f 100644
  + (instancetype)rangeWithType:(ENRMInputBlockType)type range:(NSRange)range;
  + (instancetype)rangeWithType:(ENRMInputBlockType)type range:(NSRange)range level:(NSInteger)level;
 diff --git a/ios/input/ENRMMarkdownSerializer.mm b/ios/input/ENRMMarkdownSerializer.mm
-index 3eed9c8a..1fc683b1 100644
+index 3eed9c8a..e523fe12 100644
 --- a/ios/input/ENRMMarkdownSerializer.mm
 +++ b/ios/input/ENRMMarkdownSerializer.mm
 @@ -3,6 +3,8 @@
@@ -6156,15 +6380,16 @@ index 3eed9c8a..1fc683b1 100644
      case ENRMInputStyleTypeStrong:
        return @"**";
      case ENRMInputStyleTypeEmphasis:
-@@ -66,6 +68,7 @@ static int nestingPriorityForType(ENRMInputStyleType type)
+@@ -66,6 +68,8 @@ static int nestingPriorityForType(ENRMInputStyleType type)
    BOOL isOpening;
    ENRMInputStyleType type;
    NSString *__unsafe_unretained url;
++  NSString *__unsafe_unretained sourceOpeningDelimiter;
 +  NSString *__unsafe_unretained sourceClosingDelimiter;
  } BoundaryEvent;
  
  static int compareBoundaryEvents(const void *first, const void *second)
-@@ -127,9 +130,9 @@ static int compareBoundaryEvents(const void *first, const void *second)
+@@ -127,9 +131,9 @@ static int compareBoundaryEvents(const void *first, const void *second)
        }
  
        if (segEnd > segStart) {
@@ -6177,31 +6402,81 @@ index 3eed9c8a..1fc683b1 100644
        }
  
        segStart = (segEnd < rangeEnd && segEnd + 1 < rangeEnd && [text characterAtIndex:segEnd] == '\n' &&
-@@ -181,12 +184,14 @@ + (NSString *)serializePlainText:(NSString *)text ranges:(NSArray<ENRMFormatting
+@@ -161,32 +165,56 @@ + (NSString *)serializePlainText:(NSString *)text ranges:(NSArray<ENRMFormatting
+ 
+   NSCharacterSet *ws = whitespaceSet();
+   NSUInteger eventIndex = 0;
++  // Keep generated code delimiters alive while the C boundary events reference them.
++  __attribute__((objc_precise_lifetime)) NSMutableArray<NSString *> *codeDelimiters = nil;
+   for (ENRMFormattingRange *formattingRange in splitRanges) {
+     NSUInteger start = MIN(formattingRange.range.location, textLength);
+     NSUInteger end = MIN(NSMaxRange(formattingRange.range), textLength);
+ 
+-    while (start < end && [ws characterIsMember:[text characterAtIndex:start]]) {
+-      start++;
+-    }
+-    while (end > start && [ws characterIsMember:[text characterAtIndex:end - 1]]) {
+-      end--;
++    if (formattingRange.type != ENRMInputStyleTypeCode) {
++      while (start < end && [ws characterIsMember:[text characterAtIndex:start]]) {
++        start++;
++      }
++      while (end > start && [ws characterIsMember:[text characterAtIndex:end - 1]]) {
++        end--;
++      }
+     }
+ 
+     if (start >= end) {
+       continue;
+     }
+ 
++    NSString *opening = formattingRange.sourceOpeningDelimiter;
++    NSString *closing = formattingRange.sourceClosingDelimiter;
++    if (formattingRange.type == ENRMInputStyleTypeCode) {
++      NSString *content = [text substringWithRange:NSMakeRange(start, end - start)];
++      NSString *fence = [(opening ?: @"`") stringByTrimmingCharactersInSet:ws];
++      while ([content containsString:fence]) fence = [fence stringByAppendingString:@"`"];
++      BOOL allSpaces = [content stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" "]].length == 0;
++      BOOL padded = [content hasPrefix:@"`"] || [content hasSuffix:@"`"] ||
++                    (!allSpaces && [content hasPrefix:@" "] && [content hasSuffix:@" "]);
++      BOOL sourcePadding = [opening hasSuffix:@" "];
++      opening = [fence stringByAppendingString:padded || sourcePadding ? @" " : @""];
++      closing = [(padded || sourcePadding ? @" " : @"") stringByAppendingString:fence];
++      if (codeDelimiters == nil) codeDelimiters = [NSMutableArray new];
++      [codeDelimiters addObjectsFromArray:@[opening, closing]];
++    }
++
+     events[eventIndex++] = (BoundaryEvent){
+         .position = start,
          .isOpening = YES,
          .type = formattingRange.type,
          .url = formattingRange.url,
-+        .sourceClosingDelimiter = formattingRange.sourceClosingDelimiter,
++        .sourceOpeningDelimiter = opening,
++        .sourceClosingDelimiter = closing,
      };
      events[eventIndex++] = (BoundaryEvent){
          .position = end,
          .isOpening = NO,
          .type = formattingRange.type,
          .url = formattingRange.url,
-+        .sourceClosingDelimiter = formattingRange.sourceClosingDelimiter,
++        .sourceOpeningDelimiter = opening,
++        .sourceClosingDelimiter = closing,
      };
    }
  
-@@ -207,7 +212,7 @@ + (NSString *)serializePlainText:(NSString *)text ranges:(NSArray<ENRMFormatting
+@@ -205,9 +233,9 @@ + (NSString *)serializePlainText:(NSString *)text ranges:(NSArray<ENRMFormatting
+     }
+ 
      if (event.isOpening) {
-       [markdown appendString:openingDelimiterForType(event.type)];
+-      [markdown appendString:openingDelimiterForType(event.type)];
++      [markdown appendString:event.sourceOpeningDelimiter ?: openingDelimiterForType(event.type)];
      } else {
 -      [markdown appendString:closingDelimiterForType(event.type, event.url)];
 +      [markdown appendString:event.sourceClosingDelimiter ?: closingDelimiterForType(event.type, event.url)];
      }
    }
  
-@@ -258,7 +263,7 @@ + (NSString *)serializePlainText:(NSString *)text
+@@ -258,7 +286,7 @@ + (NSString *)serializePlainText:(NSString *)text
    }
  
    for (ENRMBlockRange *blockRange in blockRanges) {
@@ -6211,13 +6486,14 @@ index 3eed9c8a..1fc683b1 100644
        continue;
      }
 diff --git a/ios/input/ENRMFormattingRange.h b/ios/input/ENRMFormattingRange.h
-index 903d8a7c..b2785e6c 100644
+index 903d8a7c..05f64f65 100644
 --- a/ios/input/ENRMFormattingRange.h
 +++ b/ios/input/ENRMFormattingRange.h
-@@ -10,6 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
  @property (nonatomic, assign) ENRMInputStyleType type;
  @property (nonatomic, assign) NSRange range;
  @property (nonatomic, strong, nullable) NSString *url;
++@property (nonatomic, copy, nullable) NSString *sourceOpeningDelimiter;
 +@property (nonatomic, copy, nullable) NSString *sourceClosingDelimiter;
  
  + (instancetype)rangeWithType:(ENRMInputStyleType)type range:(NSRange)range;
@@ -6296,26 +6572,28 @@ index d3440fe2..f411f3b5 100644
  
    return [self serializeText:selectedText ranges:clippedRanges blockRanges:clippedBlockRanges];
 diff --git a/ios/input/ENRMFormattingRange.mm b/ios/input/ENRMFormattingRange.mm
-index f7fb715e..14e96999 100644
+index f7fb715e..ba7227f5 100644
 --- a/ios/input/ENRMFormattingRange.mm
 +++ b/ios/input/ENRMFormattingRange.mm
-@@ -22,6 +22,7 @@ - (id)copyWithZone:(NSZone *)zone
+@@ -22,6 +22,8 @@ - (id)copyWithZone:(NSZone *)zone
    copy.type = _type;
    copy.range = _range;
    copy.url = [_url copy];
++  copy.sourceOpeningDelimiter = _sourceOpeningDelimiter;
 +  copy.sourceClosingDelimiter = _sourceClosingDelimiter;
    return copy;
  }
  
 diff --git a/ios/input/ENRMInputStyledRange.h b/ios/input/ENRMInputStyledRange.h
-index 41e28ff6..acd3d317 100644
+index 41e28ff6..b6c03c85 100644
 --- a/ios/input/ENRMInputStyledRange.h
 +++ b/ios/input/ENRMInputStyledRange.h
-@@ -11,6 +11,7 @@ typedef NS_ENUM(NSInteger, ENRMInputStyleType) {
+@@ -11,6 +11,8 @@ typedef NS_ENUM(NSInteger, ENRMInputStyleType) {
    ENRMInputStyleTypeStrikethrough,
    ENRMInputStyleTypeLink,
    ENRMInputStyleTypeSpoiler,
 +  ENRMInputStyleTypeEscape,
++  ENRMInputStyleTypeCode,
  };
  
  @interface ENRMInputStyledRange : NSObject
@@ -6498,3 +6776,55 @@ index ff3ee939..53cacf40 100644
      return YES;
  
    if (includeImages && attrs[@"imageURL"] != nil)
+diff --git a/ios/input/ENRMInputRemend.mm b/ios/input/ENRMInputRemend.mm
+index c9ec5dec..2ea2e4d1 100644
+--- a/ios/input/ENRMInputRemend.mm
++++ b/ios/input/ENRMInputRemend.mm
+@@ -11,7 +11,7 @@
+ 
+ static const ENRMDelimiterPair kDelimiterPairs[] = {
+     {@"***", @"***", YES, YES}, {@"**", @"**", YES, YES}, {@"*", @"*", YES, YES}, {@"_", @"_", YES, YES},
+-    {@"~~", @"~~", YES, YES},   {@"||", @"||", YES, NO},  {@"`", @"`", YES, NO},  {@"[", @"]", NO, NO},
++    {@"~~", @"~~", YES, YES},   {@"||", @"||", YES, NO},   {@"[", @"]", NO, NO},
+ };
+ static const NSUInteger kDelimiterPairCount = sizeof(kDelimiterPairs) / sizeof(kDelimiterPairs[0]);
+ 
+@@ -67,17 +67,37 @@ static BOOL isEmphasisOpener(NSString *markdown, NSUInteger start, NSString *ope
+ 
+   NSMutableArray<NSString *> *stack = [[NSMutableArray alloc] init];
+   BOOL inLinkParen = NO;
++  NSString *codeDelimiter = nil;
+   NSUInteger length = markdown.length;
+   NSUInteger i = 0;
+ 
+   while (i < length) {
+     unichar c = [markdown characterAtIndex:i];
+ 
+-    if (c == '\\' && i + 1 < length) {
++    if (codeDelimiter == nil && c == '\\' && i + 1 < length) {
+       i += 2;
+       continue;
+     }
+ 
++    if (c == '`' && !inLinkParen) {
++      NSUInteger end = i + 1;
++      while (end < length && [markdown characterAtIndex:end] == '`') end++;
++      NSString *delimiter = [markdown substringWithRange:NSMakeRange(i, end - i)];
++      if (codeDelimiter == nil) {
++        codeDelimiter = delimiter;
++        [stack addObject:delimiter];
++      } else if ([delimiter isEqualToString:codeDelimiter]) {
++        [stack removeLastObject];
++        codeDelimiter = nil;
++      }
++      i = end;
++      continue;
++    }
++    if (codeDelimiter != nil) {
++      i++;
++      continue;
++    }
++
+     // Link URL parentheses are a special two-character transition from "]("
+     if (c == ']' && !inLinkParen && i + 1 < length && [markdown characterAtIndex:i + 1] == '(') {
+       NSUInteger bracketIndex = NSNotFound;
