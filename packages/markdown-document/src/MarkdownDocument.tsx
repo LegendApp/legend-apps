@@ -491,6 +491,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
     const loadedSnapshotRef = useRef<MarkdownDocumentSnapshot | null>(null);
     const activeBlockSnapshotRef = useRef<MarkdownBlockSnapshot | undefined>(undefined);
+    const absorbedSourceRef = useRef<{
+      documentId: string;
+      blockId: string;
+      markdown: string;
+      suffix: string;
+    } | null>(null);
     const blockSelectionInputRef = useRef<TextInput | null>(null);
     const blockSelectionGestureRef = useRef<BlockSelectionState | null>(null);
     const activeInputSelectionRef = useRef({ start: 0, end: 0 });
@@ -1100,7 +1106,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
 
       try {
-        const beforeMarkdown = committedMarkdownRef.current;
+        const previousMarkdown = committedMarkdownRef.current;
+        const absorbedSource = absorbedSourceRef.current;
+        const sourceSuffix = absorbedSource?.documentId === documentState.snapshot.documentId &&
+          absorbedSource.blockId === activeBlockIdValue && absorbedSource.markdown === previousMarkdown
+          ? absorbedSource.suffix : "";
         const selection = draftSelectionRef.current;
         const retainedBlock = { blockId: activeBlockIdValue, index: blockDataSourceRef.current!.getIndexForBlockId(activeBlockIdValue) };
         if (updateReactState) {
@@ -1109,10 +1119,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         const result = await adapter.applyTransaction(documentState.snapshot.documentId, {
           type: "updateBlockMarkdown",
           blockId: activeBlockIdValue,
-          markdown,
+          markdown: markdown + sourceSuffix,
         });
         if (loadVersion !== loadVersionRef.current) return;
         validateTransactionResult(result);
+        const nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue)
+          ?? result.changedBlocks[0];
+        // An incomplete fence can absorb following source. Preserve it in later
+        // transactions without rewriting the native input during typing.
+        const nextSourceSuffix = nextActiveBlock?.id === activeBlockIdValue && nextActiveBlock.markdown.startsWith(markdown)
+          ? nextActiveBlock.markdown.slice(markdown.length) : "";
+        const newlyAbsorbedSource = nextSourceSuffix.slice(sourceSuffix.length);
+        const beforeMarkdown = previousMarkdown + sourceSuffix + newlyAbsorbedSource;
+        const afterMarkdown = markdown + sourceSuffix + newlyAbsorbedSource;
         const firstChangedBlockId = result.changedRange.blockIds[0];
         const lastChangedBlockId = result.changedRange.blockIds[result.changedRange.blockIds.length - 1];
         let isSingleActiveBlockChange = false;
@@ -1125,7 +1144,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               type: "updateBlockMarkdown",
               blockId: activeBlockIdValue,
               beforeMarkdown,
-              afterMarkdown: markdown,
+              afterMarkdown,
               beforeSelection: selection.before,
               afterSelection: selection.after,
             },
@@ -1139,32 +1158,35 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               startBlockId: firstChangedBlockId,
               endBlockId: lastChangedBlockId,
               replacementMarkdown: beforeMarkdown,
-              inverseMarkdown: markdown,
+              inverseMarkdown: afterMarkdown,
             });
             redoStackRef.current = [];
             publishCommandState();
           }
         }
         if (activeEditor$.blockId.peek() === activeBlockIdValue) {
-          let nextActiveBlock = result.changedBlocks.find((candidate) => candidate.id === activeBlockIdValue);
-          if (!nextActiveBlock) {
-            nextActiveBlock = result.changedBlocks[0];
-          }
           if (nextActiveBlock) {
             const hasNewerDraft = draftMarkdown$.peek() !== markdown;
+            const nextMarkdown = nextSourceSuffix ? markdown : nextActiveBlock.markdown;
+            absorbedSourceRef.current = nextSourceSuffix ? {
+              documentId: documentState.snapshot.documentId,
+              blockId: nextActiveBlock.id,
+              markdown: nextMarkdown,
+              suffix: nextSourceSuffix,
+            } : null;
             activeBlockSnapshotRef.current = nextActiveBlock;
             activeEditor$.blockId.set(nextActiveBlock.id);
             nativeEditingBlockIdRef.current = nextActiveBlock.id;
-            if (!hasNewerDraft) draftMarkdown$.set(nextActiveBlock.markdown);
-            committedMarkdownRef.current = nextActiveBlock.markdown;
+            if (!hasNewerDraft) draftMarkdown$.set(nextMarkdown);
+            committedMarkdownRef.current = nextMarkdown;
             if (!hasNewerDraft && (updateReactState || !usesNativeEditorOverlay)) {
-              setDraftMarkdown(nextActiveBlock.markdown);
+              setDraftMarkdown(nextMarkdown);
               setActiveActivationMode("programmatic");
-              setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextActiveBlock.markdown.length));
+              setActiveSelection(Math.min(activeInputSelectionRef.current.start, nextMarkdown.length));
             }
             setActiveBlockId(nextActiveBlock.id);
             if (!hasNewerDraft && !isSingleActiveBlockChange) {
-              activeInputRef.current?.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextActiveBlock.markdown));
+              activeInputRef.current?.setValue(activeInputMarkdownForBlock(nextActiveBlock, nextMarkdown));
             }
           } else {
             committedMarkdownRef.current = markdown;

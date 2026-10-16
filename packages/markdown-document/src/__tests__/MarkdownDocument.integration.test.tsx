@@ -22,6 +22,7 @@ const { __enrichedMarkdownTestHooks } = jest.requireMock("react-native-enriched-
       insertLink: jest.Mock;
       setSelectionForVerticalNavigation: jest.Mock;
       setSelection: jest.Mock;
+      setValue: jest.Mock;
     }>;
     inputRenderCount: (value: string) => number;
     textRenderCount: (markdown: string) => number;
@@ -1902,6 +1903,37 @@ describe("MarkdownDocument mounted editing", () => {
       },
     ]);
     expect(adapter.blockIds).toEqual(["d1:b0"]);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("preserves a parser-absorbed suffix in the code editor (pending typing: %s)", async pendingTyping => {
+    const original = "```ts\nconst value = 1;\n```";
+    const incomplete = "```ts\nconst value = 1;\nnext```";
+    const suffix = "\n\n| Feature | Expected |\n| --- | --- |\n| Table | Visible |";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, original)]));
+    // An incomplete fence makes the parser absorb following document content.
+    adapter.mutateNextTransactionResult = result => {
+      result.changedBlocks[0]!.markdown += suffix;
+      return result;
+    };
+    const gate = pendingTyping ? adapter.deferNextTransaction() : undefined;
+    const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+    await changeText(editorInput(renderer), incomplete);
+    const latest = pendingTyping ? incomplete.replace("next", "next line") : incomplete;
+    if (gate) {
+      await changeText(editorInput(renderer), latest);
+      await act(async () => { gate.resolve(); });
+      await flushPromises();
+    }
+
+    expect(__enrichedMarkdownTestHooks.inputInstances()[0]!.setValue).not.toHaveBeenCalled();
+    const complete = latest.replace(/([^\n])```$/, "$1\n```");
+    // Native typing still contains only the code editor's original text range.
+    await changeText(editorInput(renderer), complete);
+    await act(async () => commandsRef.current!.save());
+    expect(adapter.sourceMarkdown).toBe(complete + suffix);
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe(original + suffix);
     expect(onError).not.toHaveBeenCalled();
   });
 
