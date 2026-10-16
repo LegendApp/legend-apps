@@ -49,9 +49,10 @@ export function MarkdownLinkPopover({
           autoFocus
           className="border"
           onChangeText={setUrl}
-          onSubmitEditing={() => {
-            if (canSubmit) {
-              onSubmit(trimmedURL);
+          onSubmitEditing={(event) => {
+            const submittedURL = event.nativeEvent.text.trim();
+            if (submittedURL.length > 0) {
+              onSubmit(submittedURL);
             }
           }}
           placeholder={defaultLinkURL}

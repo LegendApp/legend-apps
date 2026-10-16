@@ -16,6 +16,23 @@ describe("MarkdownLinkPopover", () => {
     await view.unmount();
   });
 
+  it.each([
+    ["https://example", " https://example.com ", "https://example.com"],
+    ["https://example.com", "   ", undefined],
+  ])("submits the native input text instead of stale rendered state", async (renderedURL, nativeText, expected) => {
+    const onSubmit = jest.fn();
+    const view = await render(<MarkdownLinkPopover onCancel={jest.fn()} onSubmit={onSubmit} />);
+    const input = view.getByLabelText("Link URL");
+    await fireEvent.changeText(input, renderedURL);
+    await fireEvent(input, "submitEditing", { nativeEvent: { text: nativeText } });
+    if (expected) {
+      expect(onSubmit).toHaveBeenCalledWith(expected);
+    } else {
+      expect(onSubmit).not.toHaveBeenCalled();
+    }
+    await view.unmount();
+  });
+
   it("cancels without submitting", async () => {
     const onCancel = jest.fn();
     const onSubmit = jest.fn();
