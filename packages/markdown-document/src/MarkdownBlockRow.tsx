@@ -32,6 +32,7 @@ import {
 } from "./markdownLayout";
 import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
 import { useLatestRef } from "./useLatestRef";
+import { parseRichFence } from "../../markdown-block-editor/src/richBlockSyntax";
 
 function isMarkdownBlockSnapshot(block: MarkdownBlockMetadata): block is MarkdownBlockSnapshot {
   return typeof (block as Partial<MarkdownBlockSnapshot>).markdown === "string";
@@ -256,6 +257,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   onActivate,
   onImagePress,
   onTaskListItemPress,
+  onQuestionAnswer,
+  getQuestionError,
   onEditorReady,
   onBlurRef,
   onChangeMarkdownRef,
@@ -281,6 +284,8 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onImagePress: (image: ImagePressEvent) => void;
   onTaskListItemPress: (blockId: string, index: number, checked: boolean) => void;
+  onQuestionAnswer?: (id: string, answer: string | string[]) => Promise<void>;
+  getQuestionError?: (id: string) => string | undefined;
   onEditorReady?: (blockId: string) => void;
   onBlurRef: RefObject<(blockId: string) => void>;
   onChangeMarkdownRef: RefObject<ChangeMarkdownHandler>;
@@ -370,6 +375,9 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
       renderRevision={renderRevision}
       sourceMarkdown={markdown}
+      onQuestionAnswer={onQuestionAnswer}
+      getQuestionError={getQuestionError}
+      onEditSource={() => { if (isMarkdownBlockSnapshot(block)) onActivate(block, 0); }}
       selectable
     />
   ) : (
@@ -413,6 +421,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           blockId={block.id}
           blockIndex={index}
           contentsHidden={isActive}
+          interactiveContents={!isActive && parseRichFence(markdown)?.language === "question"}
           nextBlockId={getBlockIdAtIndex(index + 1) ?? ""}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);

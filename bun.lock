@@ -470,6 +470,9 @@
     "packages/markdown-block-editor": {
       "name": "@legend-apps/markdown-block-editor",
       "version": "0.0.0",
+      "dependencies": {
+        "yaml": "^2.8.1",
+      },
       "peerDependencies": {
         "@legend-apps/markdown-parser": "workspace:*",
         "react": "catalog:",

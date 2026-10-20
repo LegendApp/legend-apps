@@ -24,5 +24,7 @@
     "react-native": "catalog:",
     "react-native-enriched-markdown": "*"
   },
-  "dependencies": {}
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
 }

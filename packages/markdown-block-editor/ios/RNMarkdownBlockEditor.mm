@@ -1143,6 +1143,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   NSString *_registeredBlockId;
   __weak RNMarkdownEditorHost *_registeredHost;
   BOOL _contentsHidden;
+  BOOL _interactiveContents;
   RCTUIView<RCTComponentViewProtocol> *_editorInput;
   NSValue *_pendingActivationWindowPoint;
   NSInteger _pendingActivationClickCount;
@@ -1415,6 +1416,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   const auto &newViewProps = *std::static_pointer_cast<MarkdownBlockActivationViewProps const>(props);
 
   NSString *nextBlockId = [NSString stringWithUTF8String:newViewProps.blockId.c_str()];
+  _interactiveContents = newViewProps.interactiveContents;
   self.blockIndex = (NSInteger)newViewProps.blockIndex;
   if (![_blockId isEqualToString:nextBlockId]) {
     [self setContentsHidden:NO];
@@ -1450,7 +1452,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   if (hitView == nil) {
     return nil;
   }
-  if (_contentsHidden && _editorInput != nil && !_editorInput.hidden) {
+  if (_interactiveContents || (_contentsHidden && _editorInput != nil && !_editorInput.hidden)) {
     return hitView;
   }
   for (NSView *view = hitView; view != nil && view != self; view = view.superview) {
@@ -1471,6 +1473,7 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 - (void)prepareForRecycle
 {
+  _interactiveContents = NO;
   [self unregisterFromHost];
   [super prepareForRecycle];
   [self setContentsHidden:NO];

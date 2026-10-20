@@ -6,6 +6,7 @@ export interface NativeProps extends ViewProps {
   blockId?: string;
   blockIndex?: Double;
   contentsHidden?: boolean;
+  interactiveContents?: boolean;
   nextBlockId?: string;
   previousBlockId?: string;
   renderRevision?: Double;
