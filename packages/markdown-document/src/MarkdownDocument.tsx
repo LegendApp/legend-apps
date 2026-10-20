@@ -977,7 +977,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return initialBlock?.id === blockId ? initialBlock : undefined;
       }
 
-      return block;
+      // Only rich-block candidates need their source on the JS render path.
+      return (block.type === "codeBlock" || block.type === "quote")
+        ? adapter.getBlockSync?.(snapshot.documentId, blockId) ?? block
+        : block;
     }, [adapter, getBlockIndexById]);
 
     const getMarkdownBlockItemType = useCallback((blockId: string | undefined, index: number) => {

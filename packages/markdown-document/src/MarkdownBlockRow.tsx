@@ -369,6 +369,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       }}
       onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
       renderRevision={renderRevision}
+      sourceMarkdown={markdown}
       selectable
     />
   ) : (
