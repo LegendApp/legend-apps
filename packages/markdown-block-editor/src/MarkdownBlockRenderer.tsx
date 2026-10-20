@@ -5,6 +5,8 @@ import { MarkdownQuestion } from "./MarkdownQuestion";
 import { parseQuestion, type QuestionAnswer } from "./richQuestions";
 import { useState, type ReactNode } from "react";
 import { MarkdownMermaid } from "./MarkdownMermaid";
+import { MarkdownChart } from "./MarkdownChart";
+import { parseChart, type ChartData } from "./richCharts";
 
 type MarkdownBlockRendererProps = Omit<
   EnrichedMarkdownTextProps,
@@ -46,9 +48,17 @@ export function MarkdownBlockRenderer({
     />
   );
   if (fence?.language === "mermaid") {
-    return <MarkdownDiagram key={sourceMarkdown} source={fence.body} code={code} />;
+    return <MarkdownGraphic key={sourceMarkdown} source={fence.body} code={code} />;
   }
   let error: string | undefined;
+  if (fence?.language === "chart") {
+    try {
+      const chart = parseChart(fence.body);
+      return <MarkdownGraphic key={sourceMarkdown} chart={chart} source={fence.body} code={code} color={rest.markdownStyle?.paragraph?.color} />;
+    } catch (cause) {
+      error = `Invalid chart: ${cause instanceof Error ? cause.message.split("\n")[0] : String(cause)}`;
+    }
+  }
   if (fence?.language === "question") {
     try {
       const question = parseQuestion(fence.body);
@@ -75,11 +85,11 @@ function BlockError({ message }: { message: string }) {
   return <Text accessibilityRole="alert" style={{ color: "#dc2626", fontSize: 12 }}>{message}</Text>;
 }
 
-function MarkdownDiagram({ source, code }: { source: string; code: ReactNode }) {
+function MarkdownGraphic({ source, chart, code, color }: { source: string; chart?: ChartData; code: ReactNode; color?: string }) {
   const [error, setError] = useState("");
   return error ? (
-    <View>{code}<BlockError message={`Invalid mermaid: ${error}`} /></View>
+    <View>{code}<BlockError message={`Invalid ${chart ? "chart" : "mermaid"}: ${error.split("\n")[0]}`} /></View>
   ) : (
-    <View pointerEvents="none"><MarkdownMermaid source={source} onError={setError} /></View>
+    <View pointerEvents="none">{chart ? <MarkdownChart chart={chart} color={color} onError={setError} /> : <MarkdownMermaid source={source} onError={setError} />}</View>
   );
 }
