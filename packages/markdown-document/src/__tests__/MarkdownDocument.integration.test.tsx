@@ -887,6 +887,18 @@ describe("MarkdownDocument mounted editing", () => {
     expect(adapter.sourceMarkdown).toContain('answer: "Tomorrow" # pending');
   });
 
+  it("rejects question answers when an invalid question shares the same id", async () => {
+    const source = "```question\nid: date\nprompt: Pick\noptions: [Today, Tomorrow]\n```";
+    const duplicate = "```question\nid: date\nprompt: Missing options\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, source), codeBlock("d1:b1", 1, duplicate)]));
+    const { renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+    const row = renderer.root.findAll((node) => typeof node.props.onQuestionAnswer === "function")[0]!;
+    expect(row.props.getQuestionError("date")).toContain("must be unique");
+    await act(async () => { await expect(row.props.onQuestionAnswer("date", "Tomorrow")).rejects.toThrow("must be unique"); });
+    expect(adapter.saveCount).toBe(0);
+    expect(adapter.sourceMarkdown).not.toContain("answeredAt:");
+  });
+
   it("relocates question answers by id after loading an external edit", async () => {
     const source = "```question\nid: date\nprompt: Pick\noptions: [Today, Tomorrow]\n```";
     const blocks = [codeBlock("d1:b0", 0, source)];

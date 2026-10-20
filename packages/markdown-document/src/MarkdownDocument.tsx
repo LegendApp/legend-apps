@@ -7,7 +7,7 @@ import {
 } from "@legendapp/list/react-native";
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, parseQuestion, questionFences, writeQuestionAnswer, type QuestionAnswer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
+import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, getQuestionId, questionFences, writeQuestionAnswer, type QuestionAnswer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
@@ -3611,11 +3611,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const block = adapter.getBlockSync?.(documentId, metadata.id) ?? (isMarkdownBlockSnapshot(metadata) ? metadata : undefined);
           if (!block) continue;
           for (const fence of questionFences(block.markdown)) {
-            try {
-              const question = parseQuestion(fence.body);
-              counts.set(question.id, (counts.get(question.id) ?? 0) + 1);
+            const questionId = getQuestionId(fence.body);
+            if (questionId) {
+              counts.set(questionId, (counts.get(questionId) ?? 0) + 1);
               blockIds.add(block.id);
-            } catch { /* Body validation is shown by the block renderer. */ }
+            }
           }
         }
         questionIndex = { documentId, revision: currentRevisionRef.current, counts, blockIds };
@@ -3655,9 +3655,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         for (const block of blocks) {
           if (block.type !== "codeBlock") continue;
           for (const fence of questionFences(block.markdown)) {
-            try {
-              if (parseQuestion(fence.body).id === id) matches.push(block);
-            } catch { /* Invalid questions remain editable code blocks. */ }
+            if (getQuestionId(fence.body) === id) matches.push(block);
           }
         }
       }

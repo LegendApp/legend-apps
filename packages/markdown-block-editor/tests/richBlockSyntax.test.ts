@@ -1,3 +1,4 @@
+// @ts-expect-error Bun test types are not part of the application TypeScript project.
 import { expect, test } from "bun:test";
 import { parseCallout, parseRichFence } from "../src/richBlockSyntax";
 

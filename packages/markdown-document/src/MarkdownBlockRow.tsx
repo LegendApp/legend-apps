@@ -1,7 +1,7 @@
 import type { LegendListDataSourceRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { MarkdownBlockActivationView, MarkdownBlockRenderer } from "@legend-apps/markdown-block-editor";
+import { MarkdownBlockActivationView, MarkdownBlockRenderer, parseQuestion, parseRichFence } from "@legend-apps/markdown-block-editor";
 import { memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
@@ -32,7 +32,6 @@ import {
 } from "./markdownLayout";
 import type { MarkdownBlockMetadata, MarkdownBlockSnapshot, MarkdownDocumentLayout, MarkdownDocumentProps, MarkdownSelectionAnchor } from "./types";
 import { useLatestRef } from "./useLatestRef";
-import { parseRichFence } from "../../markdown-block-editor/src/richBlockSyntax";
 
 function isMarkdownBlockSnapshot(block: MarkdownBlockMetadata): block is MarkdownBlockSnapshot {
   return typeof (block as Partial<MarkdownBlockSnapshot>).markdown === "string";
@@ -359,6 +358,13 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const isEmptyParagraph = block.type === "paragraph" && markdownLength === 0;
   const renderRevision = block.textRevision * 1000000 + (rowState?.renderRevision ?? 0);
   const markdown = isMarkdownBlockSnapshot(block) ? block.markdown : "";
+  let interactiveQuestion = false;
+  const fence = parseRichFence(markdown);
+  if (onQuestionAnswer && fence?.language === "question") {
+    try {
+      interactiveQuestion = !getQuestionError?.(parseQuestion(fence.body).id);
+    } catch { /* Invalid questions use the normal source editor. */ }
+  }
   const renderedMarkdown = isEmptyParagraph ? (
     <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
   ) : usesNativeEditorOverlay ? (
@@ -421,7 +427,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           blockId={block.id}
           blockIndex={index}
           contentsHidden={isActive}
-          interactiveContents={!isActive && parseRichFence(markdown)?.language === "question"}
+          interactiveContents={!isActive && interactiveQuestion}
           nextBlockId={getBlockIdAtIndex(index + 1) ?? ""}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);

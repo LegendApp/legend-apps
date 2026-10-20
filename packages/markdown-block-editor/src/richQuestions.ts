@@ -1,4 +1,4 @@
-import { parseDocument } from "yaml";
+import { isMap, parseDocument } from "yaml";
 
 export type QuestionAnswer = string | string[];
 export type QuestionData = {
@@ -10,6 +10,13 @@ export type QuestionData = {
   answer?: QuestionAnswer;
   answeredAt?: string;
 };
+
+export function getQuestionId(body: string): string | undefined {
+  const document = parseDocument(body);
+  if (document.errors.length || !isMap(document.contents)) return undefined;
+  const id = document.get("id");
+  return typeof id === "string" && id.trim() ? id : undefined;
+}
 
 export function parseQuestion(body: string): QuestionData {
   const document = parseDocument(body);
@@ -67,4 +74,3 @@ export function questionFences(markdown: string) {
   }
   return fences;
 }
-

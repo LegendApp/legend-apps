@@ -17,7 +17,6 @@ export function MarkdownMermaid({ source, onError }: MarkdownMermaidProps) {
     <WebView
       source={document}
       containerStyle={{ height, flex: 0 }}
-      containerStyle={{ height, flex: 0 }}
       style={{ backgroundColor: "transparent" }}
       scrollEnabled={false}
       originWhitelist={["about:*"]}

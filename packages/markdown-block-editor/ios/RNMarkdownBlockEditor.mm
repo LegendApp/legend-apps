@@ -1437,6 +1437,10 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 
 - (void)mouseDown:(NSEvent *)event
 {
+  if (_interactiveContents) {
+    [super mouseDown:event];
+    return;
+  }
   RNMarkdownEditorHost *host = [self editorHost];
   if (host == nil) {
     [super mouseDown:event];

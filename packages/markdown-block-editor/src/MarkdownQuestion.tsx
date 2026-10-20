@@ -65,7 +65,7 @@ export function MarkdownQuestion({ question, onAnswer }: {
                 key={option}
                 onPress={() => toggle(option)}
               >
-                <Text className="text-base text-foreground">{chosen ? "● " : "○ "}{option}</Text>
+                <Text className="text-base text-foreground">{question.type === "multi" ? chosen ? "☑ " : "☐ " : chosen ? "● " : "○ "}{option}</Text>
               </Pressable>
             );
           })}
@@ -74,7 +74,7 @@ export function MarkdownQuestion({ question, onAnswer }: {
           ) : (
             <View className="gap-2">
               <Pressable accessibilityRole={question.type === "multi" ? "checkbox" : "radio"} accessibilityState={{ checked: otherSelected }} disabled={busy} onPress={() => toggle(other)}>
-                <Text className="text-base text-foreground">{otherSelected ? "● " : "○ "}Other</Text>
+                <Text className="text-base text-foreground">{question.type === "multi" ? otherSelected ? "☑ " : "☐ " : otherSelected ? "● " : "○ "}Other</Text>
               </Pressable>
               <TextInput
                 accessibilityLabel="Other answer"

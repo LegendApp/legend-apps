@@ -7,7 +7,7 @@ const calloutColors = {
 };
 
 export function parseCallout(markdown: string) {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const lines = markdown.replace(/\r\n|\r/g, "\n").split("\n");
   const marker = /^ {0,3}>[ \t]?\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:[ \t]+(.*))?$/i.exec(lines[0] ?? "");
   if (!marker) return null;
   const type = marker[1]!.toUpperCase() as keyof typeof calloutColors;
@@ -23,7 +23,7 @@ export function parseRichFence(markdown: string) {
   const opening = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)(?:\r\n|\n|\r)/.exec(markdown);
   if (!opening) return null;
   const marker = opening[1]!;
-  const close = new RegExp(`(?:^|\\r?\\n) {0,3}${marker[0]}{${marker.length},}[ \\t]*(?:\\r?\\n)?$`).exec(markdown.slice(opening[0].length));
+  const close = new RegExp(`(?:^|\\r\\n|\\n|\\r) {0,3}${marker[0]}{${marker.length},}[ \\t]*(?:\\r\\n|\\n|\\r)?$`).exec(markdown.slice(opening[0].length));
   if (!close) return null;
   return { language: opening[2]!.trim(), body: markdown.slice(opening[0].length, opening[0].length + close.index) };
 }

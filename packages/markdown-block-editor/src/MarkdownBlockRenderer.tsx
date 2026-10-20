@@ -82,7 +82,7 @@ export function MarkdownBlockRenderer({
 }
 
 function BlockError({ message }: { message: string }) {
-  return <Text accessibilityRole="alert" style={{ color: "#dc2626", fontSize: 12 }}>{message}</Text>;
+  return <Text accessibilityRole="alert" numberOfLines={1} style={{ color: "#dc2626", fontSize: 12 }}>{message}</Text>;
 }
 
 function MarkdownGraphic({ source, chart, code, color }: { source: string; chart?: ChartData; code: ReactNode; color?: string }) {
