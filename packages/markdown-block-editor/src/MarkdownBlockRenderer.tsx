@@ -3,6 +3,8 @@ import { Pressable, Text, View } from "react-native";
 import { parseCallout, parseRichFence } from "./richBlockSyntax";
 import { MarkdownQuestion } from "./MarkdownQuestion";
 import { parseQuestion, type QuestionAnswer } from "./richQuestions";
+import { useState, type ReactNode } from "react";
+import { MarkdownMermaid } from "./MarkdownMermaid";
 
 type MarkdownBlockRendererProps = Omit<
   EnrichedMarkdownTextProps,
@@ -35,6 +37,17 @@ export function MarkdownBlockRenderer({
     );
   }
   const fence = sourceMarkdown ? parseRichFence(sourceMarkdown) : null;
+  const code = (
+    <EnrichedMarkdownText
+      {...rest}
+      flavor="github"
+      nativeMarkdownBlockId={blockId}
+      nativeMarkdownRevision={renderRevision}
+    />
+  );
+  if (fence?.language === "mermaid") {
+    return <MarkdownDiagram key={sourceMarkdown} source={fence.body} code={code} />;
+  }
   let error: string | undefined;
   if (fence?.language === "question") {
     try {
@@ -55,15 +68,18 @@ export function MarkdownBlockRenderer({
       error = `Invalid question: ${cause instanceof Error ? cause.message.split("\n")[0] : String(cause)}`;
     }
   }
-  return (
-    <View>
-    <EnrichedMarkdownText
-      {...rest}
-      flavor="github"
-      nativeMarkdownBlockId={blockId}
-      nativeMarkdownRevision={renderRevision}
-    />
-    {error ? <Text accessibilityRole="alert" style={{ color: "#dc2626", fontSize: 12 }}>{error}</Text> : null}
-    </View>
+  return error ? <View>{code}<BlockError message={error} /></View> : code;
+}
+
+function BlockError({ message }: { message: string }) {
+  return <Text accessibilityRole="alert" style={{ color: "#dc2626", fontSize: 12 }}>{message}</Text>;
+}
+
+function MarkdownDiagram({ source, code }: { source: string; code: ReactNode }) {
+  const [error, setError] = useState("");
+  return error ? (
+    <View>{code}<BlockError message={`Invalid mermaid: ${error}`} /></View>
+  ) : (
+    <View pointerEvents="none"><MarkdownMermaid source={source} onError={setError} /></View>
   );
 }

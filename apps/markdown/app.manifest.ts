@@ -32,6 +32,7 @@ const manifest = {
       "@legendapp/spark/menus",
       "@legendapp/spark/windows",
       "react-native-enriched-markdown",
+      "react-native-webview",
     ],
     ios: [],
     android: [],
