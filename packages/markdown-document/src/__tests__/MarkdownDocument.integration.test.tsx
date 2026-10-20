@@ -872,6 +872,65 @@ describe("MarkdownDocument mounted editing", () => {
     jest.useRealTimers();
   });
 
+  it("saves question answers through normal history and restores source on undo", async () => {
+    const source = "```question\nid: date\nprompt: Pick\noptions: [Today, Tomorrow]\nanswer: # pending\n```";
+    const adapter = new MountedEditorAdapter(snapshot([codeBlock("d1:b0", 0, source)]));
+    const { renderer, commandsRef } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+    const answer = renderer.root.findAll((node) => typeof node.props.onQuestionAnswer === "function")[0]!.props.onQuestionAnswer;
+    await act(async () => { await answer("date", "Tomorrow"); });
+    expect(adapter.sourceMarkdown).toContain('answer: "Tomorrow" # pending');
+    expect(adapter.sourceMarkdown).toContain("answeredAt:");
+    expect(adapter.saveCount).toBe(1);
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe(source);
+    await redo(commandsRef);
+    expect(adapter.sourceMarkdown).toContain('answer: "Tomorrow" # pending');
+  });
+
+  it("relocates question answers by id after loading an external edit", async () => {
+    const source = "```question\nid: date\nprompt: Pick\noptions: [Today, Tomorrow]\n```";
+    const blocks = [codeBlock("d1:b0", 0, source)];
+    const documentSnapshot = snapshot(blocks);
+    const adapter = new MountedEditorAdapter(documentSnapshot, blocks);
+    const { renderer } = await renderDocument({ adapter, autoFocusFirstBlock: false });
+    const answer = renderer.root.findAll((node) => typeof node.props.onQuestionAnswer === "function")[0]!.props.onQuestionAnswer;
+    blocks.unshift(block("d1:external", 0, "External introduction"));
+    documentSnapshot.blockCount = blocks.length;
+    adapter.fileStatus = "changed";
+    const load = adapter.load.bind(adapter);
+    jest.spyOn(adapter, "load").mockImplementation(async () => {
+      adapter.fileStatus = "unchanged";
+      return load();
+    });
+    let pending: Promise<void>;
+    await act(async () => { pending = answer("date", "Tomorrow"); await Promise.resolve(); });
+    await act(async () => { await pending!; });
+    expect(adapter.sourceMarkdown.startsWith("External introduction")).toBe(true);
+    expect(adapter.sourceMarkdown).toContain('answer: "Tomorrow"');
+    expect(adapter.saveCount).toBe(1);
+  });
+
+  it("preserves concurrent local edits while checking disk changes for question answers", async () => {
+    const source = "```question\nid: date\nprompt: Pick\noptions: [Today, Tomorrow]\n```";
+    const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original"), codeBlock("d1:b1", 1, source)]));
+    const { renderer, commandsRef } = await renderDocument({ adapter });
+    const load = jest.spyOn(adapter, "load");
+    const status = new Deferred<string>();
+    jest.spyOn(adapter, "getFileStatus").mockImplementationOnce(() => status.promise);
+    const answer = renderer.root.findAll((node) => typeof node.props.onQuestionAnswer === "function")[0]!.props.onQuestionAnswer;
+    let pending: Promise<unknown>;
+    await act(async () => { pending = answer("date", "Tomorrow").catch((error: unknown) => error); await Promise.resolve(); });
+    await changeText(editorInput(renderer), "Concurrent local edit");
+    let error: unknown;
+    await act(async () => { status.resolve("changed"); error = await pending; });
+    expect(String(error)).toContain("Resolve the conflict");
+    expect(load).not.toHaveBeenCalled();
+    expect(adapter.saveCount).toBe(0);
+    await act(async () => { await commandsRef.current!.save(); });
+    expect(adapter.sourceMarkdown).toContain("Concurrent local edit");
+    expect(adapter.sourceMarkdown).not.toContain("answeredAt:");
+  });
+
   it("reloads genuine external changes immediately but preserves history for own saves", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const load = jest.spyOn(adapter, "load");

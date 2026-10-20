@@ -24,7 +24,7 @@ export function parseQuestion(body: string): QuestionData {
   if (type !== "text" && (!Array.isArray(data.options) || !data.options.length || data.options.some((option: unknown) => typeof option !== "string" || !option.trim()))) {
     throw new Error("options must be a non-empty array of strings");
   }
-  if (data.options && (!Array.isArray(data.options) || data.options.some((option: unknown) => typeof option !== "string"))) throw new Error("options must be an array of strings");
+  if (data.options !== undefined && (!Array.isArray(data.options) || data.options.some((option: unknown) => typeof option !== "string"))) throw new Error("options must be an array of strings");
   if (data.options && new Set(data.options).size !== data.options.length) throw new Error("options must be unique");
   if (data.allowOther !== undefined && typeof data.allowOther !== "boolean") throw new Error("allowOther must be a boolean");
   const question: QuestionData = { id: data.id, prompt: data.prompt, type, options: data.options, allowOther: data.allowOther };

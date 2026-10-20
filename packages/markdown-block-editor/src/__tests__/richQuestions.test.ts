@@ -1,3 +1,4 @@
+// @ts-expect-error Bun test types are supplied by the test runner.
 import { describe, expect, test } from "bun:test";
 import { parseQuestion, questionFences } from "../richQuestions";
 

@@ -7,7 +7,7 @@ import {
 } from "@legendapp/list/react-native";
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
+import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, parseQuestion, questionFences, writeQuestionAnswer, type QuestionAnswer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
@@ -480,6 +480,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     // React Compiler does not yet support the editor's async transaction control flow.
 
     const loadVersionRef = useRef(0);
+    const questionIndexRef = useRef<{ documentId: string; revision: number; counts: Map<string, number>; blockIds: Set<string> } | undefined>(undefined);
+    const pendingQuestionAnswerRef = useRef<{
+      id: string;
+      filename: string;
+      answer: QuestionAnswer;
+      resolve: () => void;
+      reject: (error: unknown) => void;
+    } | undefined>(undefined);
+    const questionAnswerHandlerRef = useRef<((id: string, answer: QuestionAnswer) => Promise<void>) | undefined>(undefined);
     const hydrateFrameRef = useRef<number | undefined>(undefined);
     const containerRef = useRef<View>(null);
     const listRef = useRef<LegendListRef | null>(null);
@@ -1044,6 +1053,12 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       }
       dataSource.applyTransactionResult(result, move, retainedBlock);
       currentRevisionRef.current = result.revision;
+      const questionIndex = questionIndexRef.current;
+      if (questionIndex && (result.changedBlocks.some((block) => block.type === "codeBlock" && questionFences(block.markdown).length > 0) || [...result.retiredBlockIds, ...result.changedRange.blockIds].some((id) => questionIndex.blockIds.has(id)))) {
+        questionIndex.blockIds.forEach((id) => {
+          if (!result.retiredBlockIds.includes(id)) bumpBlockRowRenderRevision(id);
+        });
+      }
       bumpTransactionRowRenderRevisions(result);
 
       documentState$.set((previousDocumentState) => {
@@ -1063,7 +1078,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           },
         };
       });
-    }, [documentState$, bumpTransactionRowRenderRevisions]);
+    }, [documentState$, bumpBlockRowRenderRevision, bumpTransactionRowRenderRevisions]);
 
     const updateRenderedBlockMarkdown = useCallback((blockId: string, markdown: string) => {
       const block = activeBlockSnapshotRef.current?.id === blockId ? activeBlockSnapshotRef.current : undefined;
@@ -2759,6 +2774,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             blockCount: snapshot.blockCount,
             sourceSize: snapshot.sourceSize,
           });
+          const pendingAnswer = pendingQuestionAnswerRef.current;
+          if (pendingAnswer) {
+            pendingQuestionAnswerRef.current = undefined;
+            if (pendingAnswer.filename === snapshot.filename) {
+              questionAnswerHandlerRef.current!(pendingAnswer.id, pendingAnswer.answer).then(pendingAnswer.resolve, pendingAnswer.reject);
+            } else pendingAnswer.reject(new Error("The open document changed while answering. Try again."));
+          }
         })
         .catch((error: unknown) => {
           if (isCanceled || loadVersion !== loadVersionRef.current) {
@@ -2768,6 +2790,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           const nextError = error instanceof Error ? error : new Error(String(error));
           loadedSnapshotRef.current = null;
           documentState$.set({ status: "error", error: nextError });
+          pendingQuestionAnswerRef.current?.reject(nextError);
+          pendingQuestionAnswerRef.current = undefined;
           onLoadErrorRef.current?.(nextError);
           onErrorRef.current?.(nextError);
         });
@@ -3573,6 +3597,90 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         reportAsyncError(error);
       }
     }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, reportAsyncError, pushUpdateBlockHistoryEntry, validateTransactionResult]);
+    const getQuestionError = useCallback((id: string) => {
+      const state = documentState$.peek();
+      if (state.status !== "loaded") return undefined;
+      const { documentId, blockCount, initialBlocks } = state.snapshot;
+      let questionIndex = questionIndexRef.current;
+      if (!questionIndex || questionIndex.documentId !== documentId || questionIndex.revision !== currentRevisionRef.current) {
+        const counts = new Map<string, number>();
+        const blockIds = new Set<string>();
+        for (let index = 0; index < blockCount; index++) {
+          const metadata = adapter.getBlockAtIndexSync?.(documentId, index) ?? initialBlocks[index];
+          if (metadata?.type !== "codeBlock") continue;
+          const block = adapter.getBlockSync?.(documentId, metadata.id) ?? (isMarkdownBlockSnapshot(metadata) ? metadata : undefined);
+          if (!block) continue;
+          for (const fence of questionFences(block.markdown)) {
+            try {
+              const question = parseQuestion(fence.body);
+              counts.set(question.id, (counts.get(question.id) ?? 0) + 1);
+              blockIds.add(block.id);
+            } catch { /* Body validation is shown by the block renderer. */ }
+          }
+        }
+        questionIndex = { documentId, revision: currentRevisionRef.current, counts, blockIds };
+        questionIndexRef.current = questionIndex;
+      }
+      return (questionIndex.counts.get(id) ?? 0) > 1 ? `Question id must be unique: ${id}` : undefined;
+    }, [adapter, documentState$]);
+    const handleQuestionAnswer = useCallback(async (id: string, answer: QuestionAnswer): Promise<void> => {
+      if (!adapter.applyTransaction) throw new Error("This document is read-only.");
+      await commitActiveBlock({ updateReactState: true, throwOnError: true });
+      const state = documentState$.peek();
+      if (state.status !== "loaded") throw new Error("The document is still loading.");
+      const loadVersion = loadVersionRef.current;
+      const wasDirty = isDirtyRef.current;
+      const revision = currentRevisionRef.current;
+      const hasPendingDraft = () => Boolean(activeEditor$.blockId.peek() && draftMarkdown$.peek() !== committedMarkdownRef.current);
+      const relocateAfterReload = () => new Promise<void>((resolve, reject) => {
+        if (pendingQuestionAnswerRef.current) {
+          reject(new Error("The document is already reloading. Try again."));
+        } else {
+          pendingQuestionAnswerRef.current = { id, filename: state.snapshot.filename, answer, resolve, reject };
+          reload();
+        }
+      });
+      if (adapter.getFileStatus) {
+        const status = await adapter.getFileStatus(state.snapshot.documentId);
+        if (loadVersion !== loadVersionRef.current) throw new Error("The document changed while answering. Try again.");
+        if (status === "missing") throw new Error("The document is missing on disk.");
+        if (status === "changed") {
+          if (isDirtyRef.current || hasPendingDraft() || currentRevisionRef.current !== revision) throw new Error("The file changed on disk. Resolve the conflict before answering.");
+          return relocateAfterReload();
+        }
+      }
+      const matches: MarkdownBlockSnapshot[] = [];
+      for (let start = 0; start < state.snapshot.blockCount; start += hydrateChunkSize) {
+        const blocks = await adapter.getBlocks(state.snapshot.documentId, start, hydrateChunkSize);
+        for (const block of blocks) {
+          if (block.type !== "codeBlock") continue;
+          for (const fence of questionFences(block.markdown)) {
+            try {
+              if (parseQuestion(fence.body).id === id) matches.push(block);
+            } catch { /* Invalid questions remain editable code blocks. */ }
+          }
+        }
+      }
+      if (matches.length !== 1) throw new Error(matches.length ? `Question id must be unique: ${id}` : `Question not found: ${id}`);
+      if (loadVersion !== loadVersionRef.current) throw new Error("The document changed while answering. Try again.");
+      if (currentRevisionRef.current !== revision || hasPendingDraft()) throw new Error("The document was edited while answering. Try again.");
+      const block = matches[0]!;
+      const markdown = writeQuestionAnswer(block.markdown, id, answer);
+      const result = await adapter.applyTransaction(state.snapshot.documentId, { type: "updateBlockMarkdown", blockId: block.id, markdown });
+      validateTransactionResult(result);
+      pushUpdateBlockHistoryEntry({ type: "updateBlockMarkdown", blockId: block.id, beforeMarkdown: block.markdown, afterMarkdown: markdown });
+      applyTransactionResult(result);
+      markDirty();
+      try {
+        await saveDocument();
+      } catch (error) {
+        // A file edit racing the save can be retried by id if this answer is
+        // the only unsaved edit. Never discard unrelated local changes.
+        if (!wasDirty && isMarkdownFileConflictError(error) && currentRevisionRef.current === result.revision && !hasPendingDraft()) return relocateAfterReload();
+        throw error;
+      }
+    }, [activeEditor$, adapter, applyTransactionResult, commitActiveBlock, documentState$, draftMarkdown$, markDirty, pushUpdateBlockHistoryEntry, reload, saveDocument, validateTransactionResult]);
+    questionAnswerHandlerRef.current = handleQuestionAnswer;
     const handleEditorReady = useCallback((blockId: string) => {
       const host = containerRef.current;
       if (host) MarkdownEditorHostCommands.completeKeyboardHandoff(host, blockId);
@@ -3592,6 +3700,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           onActivate={activateBlock}
           onImagePress={setViewerImage}
           onTaskListItemPress={handleTaskListItemPress}
+          onQuestionAnswer={handleQuestionAnswer}
+          getQuestionError={getQuestionError}
           onEditorReady={handleEditorReady}
           onBlurRef={handleEditorBlurRef}
           onChangeMarkdownRef={handleChangeMarkdownRef}
@@ -3606,6 +3716,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activateBlock,
         handleEditorReady,
         handleTaskListItemPress,
+        handleQuestionAnswer,
+        getQuestionError,
         documentRenderState$,
         getBlockCount,
         getBlockIdAtIndex,

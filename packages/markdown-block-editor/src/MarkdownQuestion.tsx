@@ -16,7 +16,7 @@ export function MarkdownQuestion({ question, onAnswer }: {
   const [error, setError] = useState("");
   const answered = question.answer !== undefined && !editing;
   const selected = Array.isArray(answer) ? answer : [answer];
-  const otherSelected = selected.some((value) => !question.options?.includes(value));
+  const otherSelected = selected.some((value) => value !== "" && !question.options?.includes(value));
   const canSave = Array.isArray(answer) ? answer.length > 0 && answer.every((value) => value.trim()) : Boolean(answer.trim());
 
   async function save() {
@@ -73,7 +73,7 @@ export function MarkdownQuestion({ question, onAnswer }: {
             other ? <Text className="text-base text-foreground">Other: {other}</Text> : null
           ) : (
             <View className="gap-2">
-              <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: otherSelected }} disabled={busy} onPress={() => toggle(other)}>
+              <Pressable accessibilityRole={question.type === "multi" ? "checkbox" : "radio"} accessibilityState={{ checked: otherSelected }} disabled={busy} onPress={() => toggle(other)}>
                 <Text className="text-base text-foreground">{otherSelected ? "● " : "○ "}Other</Text>
               </Pressable>
               <TextInput
