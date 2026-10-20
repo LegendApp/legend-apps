@@ -2,6 +2,7 @@
 import { expect, mock, test } from "bun:test";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 
+mock.module("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "Symbol" }));
 mock.module("react-native", () => ({ Pressable: "Pressable", Text: "Text", View: "View", TextInput: "TextInput" }));
 mock.module("react-native-enriched-markdown", () => ({ EnrichedMarkdownText: "Code" }));
 mock.module("../src/MarkdownMermaid", () => ({ MarkdownMermaid: "Diagram" }));

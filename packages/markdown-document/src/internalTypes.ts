@@ -108,6 +108,7 @@ export type ActiveBlockRenderState = {
 };
 
 export type MarkdownBlockRowRenderState = {
+  failedRichSource?: string;
   commentAnchor: MarkdownSelectionAnchor | null;
   renderRevision: number;
 };

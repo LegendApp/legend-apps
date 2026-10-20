@@ -1,7 +1,7 @@
 import type { LegendListDataSourceRenderItemProps } from "@legendapp/list/react-native";
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
-import { MarkdownBlockActivationView, MarkdownBlockRenderer, parseQuestion, parseRichFence } from "@legend-apps/markdown-block-editor";
+import { MarkdownBlockActivationView, MarkdownBlockRenderer, parseRichBlock } from "@legend-apps/markdown-block-editor";
 import { memo, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
   EnrichedMarkdownText,
@@ -254,6 +254,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   getBlockIdAtIndex,
   getBlockMetadata,
   onActivate,
+  onSelect,
   onImagePress,
   onTaskListItemPress,
   onQuestionAnswer,
@@ -281,6 +282,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
+  onSelect: (blockId: string) => void;
   onImagePress: (image: ImagePressEvent) => void;
   onTaskListItemPress: (blockId: string, index: number, checked: boolean) => void;
   onQuestionAnswer?: (id: string, answer: string | string[]) => Promise<void>;
@@ -358,13 +360,9 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const isEmptyParagraph = block.type === "paragraph" && markdownLength === 0;
   const renderRevision = block.textRevision * 1000000 + (rowState?.renderRevision ?? 0);
   const markdown = isMarkdownBlockSnapshot(block) ? block.markdown : "";
-  let interactiveQuestion = false;
-  const fence = parseRichFence(markdown);
-  if (onQuestionAnswer && fence?.language === "question") {
-    try {
-      interactiveQuestion = !getQuestionError?.(parseQuestion(fence.body).id);
-    } catch { /* Invalid questions use the normal source editor. */ }
-  }
+  const rich = parseRichBlock(markdown, getQuestionError);
+  const interactiveRichBlock = rich !== null && rich.type !== "error" &&
+    (rich.type !== "question" || onQuestionAnswer !== undefined) && rowState?.failedRichSource !== markdown;
   const renderedMarkdown = isEmptyParagraph ? (
     <View style={[styles.emptyParagraphPlaceholder, emptyParagraphPlaceholderStyle(markdownStyle)]} />
   ) : usesNativeEditorOverlay ? (
@@ -383,6 +381,14 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       sourceMarkdown={markdown}
       onQuestionAnswer={onQuestionAnswer}
       getQuestionError={getQuestionError}
+      selected={isBlockSelected}
+      onSelect={() => onSelect(block.id)}
+      onRenderError={() => {
+        documentRenderState$.rowStatesById.get(blockId).set({
+          ...(documentRenderState$.rowStatesById.get(blockId).peek() ?? { commentAnchor: null, renderRevision: 0 }),
+          failedRichSource: markdown,
+        });
+      }}
       onEditSource={() => { if (isMarkdownBlockSnapshot(block)) onActivate(block, 0); }}
       selectable
     />
@@ -427,7 +433,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
           blockId={block.id}
           blockIndex={index}
           contentsHidden={isActive}
-          interactiveContents={!isActive && interactiveQuestion}
+          interactiveContents={!isActive && interactiveRichBlock}
           nextBlockId={getBlockIdAtIndex(index + 1) ?? ""}
           onLayout={(event) => {
             rowWidth$.set(event.nativeEvent.layout.width);

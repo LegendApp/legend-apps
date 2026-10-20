@@ -7,7 +7,7 @@ import {
 } from "@legendapp/list/react-native";
 import { batch, type Observable } from "@legendapp/state";
 import { useObservable, useObserveEffect, useValue } from "@legendapp/state/react";
-import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, getQuestionId, questionFences, writeQuestionAnswer, type QuestionAnswer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
+import { MarkdownEditorHost, MarkdownEditorHostCommands, MarkdownImageViewer, parseRichBlock, getQuestionId, questionFences, writeQuestionAnswer, type QuestionAnswer, type MarkdownViewerImage } from "@legend-apps/markdown-block-editor";
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   type EnrichedMarkdownTextInputInstance,
@@ -347,6 +347,9 @@ const MarkdownNativeEditorHost = memo(function MarkdownNativeEditorHost({
   );
 });
 
+const blockSelectionArrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+const blockSelectionArrowKeyEvents = blockSelectionArrowKeys.map(key => ({ key }));
+
 const MarkdownBlockSelectionInput = memo(function MarkdownBlockSelectionInput({
   inputRef,
   inputText$,
@@ -362,6 +365,13 @@ const MarkdownBlockSelectionInput = memo(function MarkdownBlockSelectionInput({
       multiline={false}
       onChangeText={onChangeText}
       onKeyPress={onKeyPress}
+      {...(usesNativeEditorOverlay ? {
+        keyDownEvents: blockSelectionArrowKeyEvents,
+        onKeyDown: (event: { nativeEvent: { key: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } }) => {
+          const { key, altKey, ctrlKey, metaKey, shiftKey } = event.nativeEvent;
+          if (!altKey && !ctrlKey && !metaKey && !shiftKey && blockSelectionArrowKeys.includes(key)) onKeyPress(event);
+        },
+      } : {})}
       style={styles.blockSelectionInput}
       value={inputText}
     />
@@ -2394,6 +2404,58 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [applyMoveBlockRange, commitActiveBlock, getBlockIdAtIndex, getBlockIndexById, reportAsyncError, activeEditor$, documentRenderState$],
     );
 
+    const getQuestionError = useCallback((id: string) => {
+      const state = documentState$.peek();
+      if (state.status !== "loaded") return undefined;
+      const { documentId, blockCount, initialBlocks } = state.snapshot;
+      let questionIndex = questionIndexRef.current;
+      if (!questionIndex || questionIndex.documentId !== documentId || questionIndex.revision !== currentRevisionRef.current) {
+        const counts = new Map<string, number>();
+        const blockIds = new Set<string>();
+        for (let index = 0; index < blockCount; index++) {
+          const metadata = adapter.getBlockAtIndexSync?.(documentId, index) ?? initialBlocks[index];
+          if (metadata?.type !== "codeBlock") continue;
+          const block = adapter.getBlockSync?.(documentId, metadata.id) ?? (isMarkdownBlockSnapshot(metadata) ? metadata : undefined);
+          if (!block) continue;
+          for (const fence of questionFences(block.markdown)) {
+            const questionId = getQuestionId(fence.body);
+            if (questionId) {
+              counts.set(questionId, (counts.get(questionId) ?? 0) + 1);
+              blockIds.add(block.id);
+            }
+          }
+        }
+        questionIndex = { documentId, revision: currentRevisionRef.current, counts, blockIds };
+        questionIndexRef.current = questionIndex;
+      }
+      return (questionIndex.counts.get(id) ?? 0) > 1 ? `Question id must be unique: ${id}` : undefined;
+    }, [adapter, documentState$]);
+    const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
+      activeInputRef.current?.blur?.();
+      nativeEditingBlockIdRef.current = null;
+      clearOverlayFrame();
+      activeBlockSnapshotRef.current = undefined;
+      activeEditor$.blockId.set(null);
+      blockSelectionGestureRef.current = null;
+      clearTextSelectionAnchor();
+      setActiveBlockId(null);
+      setActiveActivationMode("programmatic");
+      setActiveSelection(0);
+      setNextBlockSelection({ anchorBlockId, focusBlockId });
+    }, [clearOverlayFrame, clearTextSelectionAnchor, setNextBlockSelection, activeEditor$, setActiveActivationMode, setActiveSelection, setActiveBlockId]);
+
+    const selectRichBlock = useCallback((blockId: string) => {
+      commitActiveBlock({ updateReactState: true }).then(() => {
+        setKeyboardBlockSelection(blockId, blockId);
+      }).catch(reportAsyncError);
+    }, [commitActiveBlock, reportAsyncError, setKeyboardBlockSelection]);
+
+    const isRenderedRichBlock = useCallback((block: MarkdownBlockSnapshot) => {
+      const rich = parseRichBlock(block.markdown, getQuestionError);
+      return rich !== null && rich.type !== "error" &&
+        documentRenderState$.rowStatesById.get(block.id).peek()?.failedRichSource !== block.markdown;
+    }, [documentRenderState$, getQuestionError]);
+
     const focusAdjacentBlock = useCallback(
       (direction: "up" | "down", options?: { preferredX?: number }) => {
         focusAdjacentBlockQueueRef.current.push({ direction, preferredX: options?.preferredX });
@@ -2405,7 +2467,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
               const request = focusAdjacentBlockQueueRef.current.shift();
               if (request) {
                 commitActiveBlock({ updateReactState: true }).catch(reportAsyncError);
-                const activeBlockIdValue = activeEditor$.blockId.peek();
+                const activeBlockIdValue = activeEditor$.blockId.peek() ?? documentRenderState$.blockSelection.peek()?.focusBlockId;
                 if (activeBlockIdValue) {
                   const activeBlockIndex = getBlockIndexById(activeBlockIdValue);
                   const targetBlockIndex = request.direction === "up" ? activeBlockIndex - 1 : activeBlockIndex + 1;
@@ -2421,14 +2483,20 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
                     blockSelectionGestureRef.current = null;
                     setNextBlockSelection(null);
                     clearTextSelectionAnchor();
-                    if (request.preferredX !== undefined) {
-                      pendingVerticalNavigationSelectionRef.current = {
-                        blockId: targetBlock.id,
-                        direction: request.direction,
-                        preferredX: request.preferredX,
-                      };
+                    if (isRenderedRichBlock(targetBlock)) {
+                      await commitActiveBlock({ updateReactState: true });
+                      pendingVerticalNavigationSelectionRef.current = null;
+                      setKeyboardBlockSelection(targetBlock.id, targetBlock.id);
+                    } else {
+                      if (request.preferredX !== undefined) {
+                        pendingVerticalNavigationSelectionRef.current = {
+                          blockId: targetBlock.id,
+                          direction: request.direction,
+                          preferredX: request.preferredX,
+                        };
+                      }
+                      setActiveBlock(targetBlock, targetSelection);
                     }
-                    setActiveBlock(targetBlock, targetSelection);
                     scrollBlockIntoView(targetBlock);
                   }
                 }
@@ -2451,6 +2519,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         prepareBlockIndexForKeyboardFocus,
         reportAsyncError,
         scrollBlockIntoView,
+        isRenderedRichBlock,
+        setKeyboardBlockSelection,
+        documentRenderState$,
         setActiveBlock,
         setNextBlockSelection, activeEditor$],
     );
@@ -2481,29 +2552,19 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
             blockSelectionGestureRef.current = null;
             setNextBlockSelection(null);
             clearTextSelectionAnchor();
-            setActiveBlock(targetBlock, targetSelection);
+            if (isRenderedRichBlock(targetBlock)) {
+              setKeyboardBlockSelection(targetBlock.id, targetBlock.id);
+            } else {
+              setActiveBlock(targetBlock, targetSelection);
+            }
             scrollBlockIntoView(targetBlock);
           }
         }
 
         runFocus().catch(reportAsyncError);
       },
-      [clearTextSelectionAnchor, commitActiveBlock, getBlockCount, getBlockIdAtIndex, loadBlockAtIndex, prepareBlockIndexForKeyboardFocus, reportAsyncError, scrollBlockIntoView, setActiveBlock, setNextBlockSelection],
+      [clearTextSelectionAnchor, commitActiveBlock, getBlockCount, getBlockIdAtIndex, loadBlockAtIndex, prepareBlockIndexForKeyboardFocus, reportAsyncError, scrollBlockIntoView, isRenderedRichBlock, setKeyboardBlockSelection, setActiveBlock, setNextBlockSelection],
     );
-
-    const setKeyboardBlockSelection = useCallback((anchorBlockId: string, focusBlockId: string) => {
-      activeInputRef.current?.blur?.();
-      nativeEditingBlockIdRef.current = null;
-      clearOverlayFrame();
-      activeBlockSnapshotRef.current = undefined;
-      activeEditor$.blockId.set(null);
-      blockSelectionGestureRef.current = null;
-      clearTextSelectionAnchor();
-      setActiveBlockId(null);
-      setActiveActivationMode("programmatic");
-      setActiveSelection(0);
-      setNextBlockSelection({ anchorBlockId, focusBlockId });
-    }, [clearOverlayFrame, clearTextSelectionAnchor, setNextBlockSelection, activeEditor$, setActiveActivationMode, setActiveSelection, setActiveBlockId]);
 
     const extendBlockSelection = useCallback(
       (direction: "up" | "down") => {
@@ -2588,11 +2649,15 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         }
 
         const { key } = event.nativeEvent;
-        if (key === "Backspace" || key === "Delete" || key === "Enter") {
+        if (key === "ArrowUp" || key === "ArrowLeft") {
+          focusAdjacentBlock("up");
+        } else if (key === "ArrowDown" || key === "ArrowRight") {
+          focusAdjacentBlock("down");
+        } else if (key === "Backspace" || key === "Delete" || key === "Enter") {
           replaceBlockSelection("").catch(reportAsyncError);
         }
       },
-      [documentRenderState$, replaceBlockSelection, reportAsyncError],
+      [documentRenderState$, focusAdjacentBlock, replaceBlockSelection, reportAsyncError],
     );
 
     const handleBlockSelectionInputChange = useCallback(
@@ -3597,32 +3662,6 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         reportAsyncError(error);
       }
     }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, reportAsyncError, pushUpdateBlockHistoryEntry, validateTransactionResult]);
-    const getQuestionError = useCallback((id: string) => {
-      const state = documentState$.peek();
-      if (state.status !== "loaded") return undefined;
-      const { documentId, blockCount, initialBlocks } = state.snapshot;
-      let questionIndex = questionIndexRef.current;
-      if (!questionIndex || questionIndex.documentId !== documentId || questionIndex.revision !== currentRevisionRef.current) {
-        const counts = new Map<string, number>();
-        const blockIds = new Set<string>();
-        for (let index = 0; index < blockCount; index++) {
-          const metadata = adapter.getBlockAtIndexSync?.(documentId, index) ?? initialBlocks[index];
-          if (metadata?.type !== "codeBlock") continue;
-          const block = adapter.getBlockSync?.(documentId, metadata.id) ?? (isMarkdownBlockSnapshot(metadata) ? metadata : undefined);
-          if (!block) continue;
-          for (const fence of questionFences(block.markdown)) {
-            const questionId = getQuestionId(fence.body);
-            if (questionId) {
-              counts.set(questionId, (counts.get(questionId) ?? 0) + 1);
-              blockIds.add(block.id);
-            }
-          }
-        }
-        questionIndex = { documentId, revision: currentRevisionRef.current, counts, blockIds };
-        questionIndexRef.current = questionIndex;
-      }
-      return (questionIndex.counts.get(id) ?? 0) > 1 ? `Question id must be unique: ${id}` : undefined;
-    }, [adapter, documentState$]);
     const handleQuestionAnswer = useCallback(async (id: string, answer: QuestionAnswer): Promise<void> => {
       if (!adapter.applyTransaction) throw new Error("This document is read-only.");
       await commitActiveBlock({ updateReactState: true, throwOnError: true });
@@ -3696,6 +3735,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
+          onSelect={selectRichBlock}
           onImagePress={setViewerImage}
           onTaskListItemPress={handleTaskListItemPress}
           onQuestionAnswer={handleQuestionAnswer}
@@ -3712,6 +3752,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       ) : null,
       [
         activateBlock,
+        selectRichBlock,
         handleEditorReady,
         handleTaskListItemPress,
         handleQuestionAnswer,

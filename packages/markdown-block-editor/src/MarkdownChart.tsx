@@ -88,7 +88,6 @@ export function MarkdownChart({ chart, color = "#68707c", onError }: {
       onContentProcessDidTerminate={() => onError?.("Chart renderer stopped")}
       javaScriptEnabled={false}
       scrollEnabled={false}
-      pointerEvents="none"
       accessibilityLabel={`${chart.title ?? `${chart.type} chart`}. ${description}`}
       containerStyle={{ height, flex: 0 }}
       style={{ backgroundColor: "transparent" }}

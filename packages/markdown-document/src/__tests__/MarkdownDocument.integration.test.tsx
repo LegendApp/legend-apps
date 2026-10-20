@@ -3634,6 +3634,51 @@ describe("MarkdownDocument mounted editing", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "> [!NOTE] Note\n> Details",
+    "```question\nid: choice\nprompt: Pick\noptions: [One, Two]\n```",
+    "```mermaid\ngraph TD; A-->B\n```",
+    '```chart\n{"type":"bar","x":["Mon"],"series":[{"name":"a","data":[1]}]}\n```',
+  ])("selects a rich block as a unit on caret navigation: %s", async (markdown) => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Before"),
+      markdownBlock("d1:b1", 1, markdown),
+      block("d1:b2", 2, "After"),
+    ]));
+    const { renderer, onError } = await renderDocument({ adapter });
+    await navigateVerticallyOutside(renderer, "down");
+    expect(editorInputs(renderer)).toHaveLength(0);
+    expectBlockSelectionOverlays(renderer, ["d1:b1"]);
+    await act(async () => blockSelectionInput(renderer).props.onKeyPress({ nativeEvent: { key: "ArrowDown" } }));
+    await flushPromises();
+    expect(editorInput(renderer).props.defaultValue).toBe("After");
+    await navigateVerticallyOutside(renderer, "up");
+    expect(editorInputs(renderer)).toHaveLength(0);
+    expectBlockSelectionOverlays(renderer, ["d1:b1"]);
+    await act(async () => blockSelectionInput(renderer).props.onKeyPress({ nativeEvent: { key: "ArrowUp" } }));
+    await flushPromises();
+    expect(editorInput(renderer).props.defaultValue).toBe("Before");
+    expect(onError).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
+  it.each([
+    "```unknown\nhello\n```",
+    "```chart\n{}\n```",
+    "```question\nid: invalid\n```",
+    "> [!UNKNOWN]\n> hello",
+  ])("keeps invalid or unknown rich blocks editable on caret navigation: %s", async (markdown) => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Before"),
+      markdownBlock("d1:b1", 1, markdown),
+    ]));
+    const { renderer } = await renderDocument({ adapter });
+    await navigateVerticallyOutside(renderer, "down");
+    expect(editorInput(renderer).props.defaultValue).toBe(markdown);
+    expectBlockSelectionOverlays(renderer, []);
+    await act(async () => renderer.unmount());
+  });
+
   it("focuses adjacent blocks when the native editor reports vertical navigation outside", async () => {
     const adapter = new MountedEditorAdapter(snapshot([
       block("d1:b0", 0, "Previous"),
