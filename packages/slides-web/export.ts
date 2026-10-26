@@ -49,6 +49,7 @@ async function buildWebsite(deck: string, output: string) {
     "react-native": path.join(src, "native.tsx"),
     "@shopify/react-native-skia": path.join(src, "skia.tsx"),
     "@legend-apps/scaled-view": path.join(src, "scaled.tsx"),
+    "lottie-react-native": path.join(src, "lottie.tsx"),
   };
   const replacements: Record<string, string> = {
     "NativeVideoView.tsx": "video.tsx",
