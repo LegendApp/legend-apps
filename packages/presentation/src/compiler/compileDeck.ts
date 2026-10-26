@@ -66,7 +66,10 @@ const sourceExtensions = [
   ".js",
   ".json",
 ];
-const assetExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".html"]);
+const assetExtensions = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg", ".html", ".htm",
+  ".ttf", ".otf", ".woff", ".woff2", ".mp4", ".mov", ".webm", ".mp3", ".wav", ".ogg", ".pdf",
+]);
 
 function compileReactSource(source: string, filename: string) {
   // Preserve component and Hook imports until React Compiler has analyzed them.
