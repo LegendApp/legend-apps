@@ -1,12 +1,8 @@
 #!/usr/bin/env bun
 import fs from "node:fs";
 import path from "node:path";
-import { loadAppManifest, rootDir } from "../../../scripts/lib/apps";
-import { getMacOSAppWrapperName } from "../../../scripts/lib/macosShell";
-import {
-  getMacOSReleaseDerivedDataPath,
-  getMacOSReleaseWorkspaceDir,
-} from "../../../scripts/lib/macosWorkspaces";
+import { rootDir } from "../../../scripts/lib/apps";
+import { sparkWorkspace } from "../../../scripts/lib/sparkWorkspaces";
 import { runCommand } from "../../../scripts/lib/run";
 
 type MacOSArch = "arm" | "x86";
@@ -34,8 +30,7 @@ if (arch !== "arm" && arch !== "x86") {
   throw new Error(`Unsupported benchmark architecture: ${arch}`);
 }
 
-// Only this export process and its build child use the isolated benchmark profile.
-// Separate Pods/DerivedData also make --skip-build select a benchmark binary only.
+// Apply the existing benchmark Markdown options to this Release build.
 process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
 
 if (!process.argv.includes("--skip-build")) {
@@ -44,15 +39,14 @@ if (!process.argv.includes("--skip-build")) {
   });
 }
 
-const manifest = await loadAppManifest("chat-history");
-const workspace = getMacOSReleaseWorkspaceDir(manifest.id);
-const source = path.join(
-  getMacOSReleaseDerivedDataPath(workspace, arch),
-  "Build",
-  "Products",
-  "Release",
-  getMacOSAppWrapperName(manifest.displayName),
-);
+const build = JSON.parse(fs.readFileSync(
+  path.join(sparkWorkspace("chat-history", "release"), ".spark/release-build.json"),
+  "utf8",
+));
+if (build.runtime.arch !== (arch === "arm" ? "arm64" : "x64")) {
+  throw new Error(`React Native production build does not match architecture ${arch}`);
+}
+const source = build.app as string;
 if (!fs.existsSync(source)) {
   throw new Error(`Missing React Native production app at ${source}`);
 }

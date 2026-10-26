@@ -368,6 +368,30 @@ test("shared install holds every app dependency while projects keep their native
   assert.notEqual(sparkWorkspace("hello-world"), sparkWorkspace("hello-world", "release"));
 });
 
+test("Spark Release workspaces apply benchmark Markdown options only to Chat History exports", async () => {
+  const previous = process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
+  const manifest = await loadAppManifest("chat-history");
+  const config = (mode: "dev" | "release") => {
+    const project = prepareSparkWorkspace(manifest, mode);
+    return JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"))["enriched-markdown"];
+  };
+  try {
+    delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
+    const regular = config("release");
+    assert.equal(regular.externalCodeHighlightGrammars, undefined);
+    process.env.LEGEND_CHAT_HISTORY_BENCHMARK = "1";
+    const benchmark = config("release");
+    assert.equal(benchmark.externalCodeHighlightGrammars, true);
+    assert.equal(benchmark.codeHighlightLanguages.length, 19);
+    assert.equal(config("dev").externalCodeHighlightGrammars, undefined);
+    delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
+    assert.deepEqual(config("release"), regular);
+  } finally {
+    if (previous === undefined) delete process.env.LEGEND_CHAT_HISTORY_BENCHMARK;
+    else process.env.LEGEND_CHAT_HISTORY_BENCHMARK = previous;
+  }
+});
+
 test("preparing a shared consumer preserves old installs without leaving a shadowing node_modules", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "spark-previous-install-"));
   const project = path.join(root, "example");
