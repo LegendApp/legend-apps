@@ -15,7 +15,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "esbuild": "^0.25.9",
     "react": "catalog:",
-    "react-dom": "19.1.4",
+    "react-dom": "19.2.0",
     "react-native": "catalog:",
     "remark-directive": "^4.0.0",
     "remark-frontmatter": "^5.0.0",

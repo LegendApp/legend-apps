@@ -14,7 +14,7 @@
     "esbuild": "^0.25.9",
     "html-to-image": "^1.11.13",
     "react": "catalog:",
-    "react-dom": "19.1.4",
+    "react-dom": "19.2.0",
     "react-native-web": "^0.21.2",
     "@shopify/react-native-skia": "2.11.1",
     "@babel/core": "^7.29.0",
