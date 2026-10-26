@@ -66,6 +66,12 @@ test("all workspace consumers resolve the locally selected or catalog Spark SDK"
   }
 });
 
+test("generated workspaces record the installed Spark version for its migration gate", async () => {
+  const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
+  const { version } = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8"));
+  assert.equal(fs.readFileSync(path.join(project, ".spark/version"), "utf8"), `${version}\n`);
+});
+
 test("published SDK consumers use the release native archives in the shared install", async () => {
   const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
   const shared = await prepareSharedSparkInstall();
@@ -83,7 +89,7 @@ test("published SDK consumers use the release native archives in the shared inst
 test("offline release preparation verifies archives without downloading", async () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "spark-release-offline-"));
   try {
-    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "0.0.1-next.3" } }));
+    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "0.0.1" } }));
     await assert.rejects(prepareSparkReleasePackages(project, true), /archive is missing/);
     const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
     const [name, asset] = Object.entries(release.packages)[0] as [string, { sha256: string }];

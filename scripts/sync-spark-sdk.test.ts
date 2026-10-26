@@ -34,7 +34,7 @@ function fixture(customSpark = false) {
   }
   write(path.join(devApps, "scripts/sync-spark-sdk.ts"), fs.readFileSync(path.join(import.meta.dirname, "sync-spark-sdk.ts"), "utf8"));
   write(path.join(devApps, ".gitignore"), "spark.local.json\n");
-  write(path.join(devApps, "package.json"), JSON.stringify({ name: "apps", version: "1", catalog: { "@legendapp/spark": "0.0.1-next.2" } }, null, 2) + "\n");
+  write(path.join(devApps, "package.json"), JSON.stringify({ name: "apps", version: "1", catalog: { "@legendapp/spark": "0.0.1-next.9" } }, null, 2) + "\n");
   write(path.join(devSpark, "source.txt"), "first");
   write(path.join(devSpark, "package.json"), JSON.stringify({ name: "spark", packageManager: "bun@1.3.14" }));
   write(path.join(devSpark, "bun.lock"), "fixture Bun lockfile");
@@ -92,7 +92,7 @@ test("pulls dev, uses Spark’s Bun lockfile without an npm lockfile, and instal
   assert.ok(fs.existsSync(path.join(f.spark, "bun.lock")));
   assert.equal(fs.existsSync(path.join(f.spark, "package-lock.json")), false);
   f.ok();
-  assert.equal(f.catalog(), "0.0.1-next.2");
+  assert.equal(f.catalog(), "0.0.1-next.9");
   assert.equal(f.git(f.apps, "status", "--porcelain"), "");
   assert.deepEqual(f.operations(), ["bun install --frozen-lockfile", "bun run pack:local", "bun install --no-save", "bun run spark slides run"]);
   assert.equal(f.pin(), "file:../custom-sdk/artifacts/packages/spark-first.tgz");
@@ -102,14 +102,14 @@ test("pulls dev, uses Spark’s Bun lockfile without an npm lockfile, and instal
   f.commit(f.devSpark);
   const updated = JSON.parse(fs.readFileSync(path.join(f.devApps, "package.json"), "utf8"));
   updated.version = "2";
-  updated.catalog["@legendapp/spark"] = "0.0.1-next.3";
+  updated.catalog["@legendapp/spark"] = "0.0.1";
   f.write(path.join(f.devApps, "package.json"), JSON.stringify(updated, null, 2) + "\n");
   f.commit(f.devApps);
   f.ok(["diff"]);
   assert.equal(f.git(f.spark, "rev-parse", "HEAD"), f.git(f.devSpark, "rev-parse", "HEAD"));
   assert.equal(f.git(f.apps, "rev-parse", "HEAD"), f.git(f.devApps, "rev-parse", "HEAD"));
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.apps, "package.json"), "utf8")).version, "2");
-  assert.equal(f.catalog(), "0.0.1-next.3");
+  assert.equal(f.catalog(), "0.0.1");
   assert.ok((f.pin()).endsWith("spark-second.tgz"));
   assert.deepEqual(f.operations().slice(-4), ["bun install --frozen-lockfile", "bun run pack:local", "bun install --no-save", "bun run spark diff run"]);
 });
@@ -189,7 +189,7 @@ test("a failed local root install restores package.json exactly and preserves th
   const result = f.run(["--skip-pull"], { ROOT_INSTALL_FAIL: "1" });
   assert.notEqual(result.status, 0);
   assert.equal(fs.readFileSync(file, "utf8"), source);
-  assert.equal(f.catalog(), "0.0.1-next.2");
+  assert.equal(f.catalog(), "0.0.1-next.9");
   assert.ok(f.pin().endsWith("spark-first.tgz"));
   assert.equal(f.operations().some(line => line.startsWith("bun run spark ")), false);
 });

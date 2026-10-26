@@ -14,7 +14,7 @@
     "react-native": "catalog:"
   },
   "devDependencies": {
-    "nitrogen": "0.35.6",
-    "react-native-nitro-modules": "0.35.6"
+    "nitrogen": "0.37.0",
+    "react-native-nitro-modules": "0.37.0"
   }
 }
