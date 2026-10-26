@@ -14,7 +14,7 @@ bun scripts/slides-size-budget.ts \
 
 Use a new output ZIP path each time. The script reports JSON and exits 1 if the app ZIP exceeds **25,000,000 bytes** or the optional compiler ZIP exceeds **12,000,000 bytes**. Override these local regression guardrails with `--budget-mb` and `--compiler-budget-mb` (decimal MB). They are not release promises or wired into CI. Check both downloads separately: compiler bytes are deferred until first use, not part of the app download. Read the exact compiler filename from `.spark/compiler/artifact.json`.
 
-The ZIP uses `ditto -c -k --sequesterRsrc --keepParent`, matching the notarization upload archive shape. The check does not sign, notarize, upload, release or bump versions. Signing and stapling can change the final distribution's size. Logical app bytes sum regular files without following symlinks; components partition executable, JS bundle, frameworks/dylibs, assets (including fonts), helpers and metadata. Filesystem allocation and compressed ZIP size are different metrics.
+The ZIP uses `ditto -c -k -rsrc --sequesterRsrc --keepParent`, matching the notarization upload archive shape. The check does not sign, notarize, upload, release or bump versions. Signing and stapling can change the final distribution's size. Logical app bytes sum regular files without following symlinks; components partition executable, JS bundle, frameworks/dylibs, assets (including fonts), helpers and metadata. Filesystem allocation and compressed ZIP size are different metrics.
 
 On the shared build machine, run builds, checks and archiving through the existing heavy queue. Use `~/devroot/scripts/heavy slides --tier release --priority low -- bun run slides build macos` for the low-priority Release lane; the wrapper's explicit tier overrides `APP_LOCK_TIER`. Check available disk before starting and monitor it during builds. Use the repository's supported Node version and cached dependencies; do not install packages manually.
 
@@ -35,9 +35,9 @@ The Spark SDK already requests Release dead-code stripping, thin LTO, size optim
 
 ## Compiler packaging
 
-Compiler package filtering keeps licenses, manifests, runtime TypeScript, CSS and native binaries while omitting development/test/documentation files, declarations and source maps. React's production JSX development-runtime entry remains available for explicit Webview imports. Verify the packaged helper outside the repository with Bun and Node, including CSS generation, worklets, Webviews and effect-pack compilation after any filter change.
+Compiler package filtering keeps licenses, manifests, runtime TypeScript, CSS and native binaries while omitting development/test/documentation files, declarations and source maps. React's production JSX development-runtime entry remains available for explicit Webview imports. The trimmed helper is production-only: `NODE_ENV=development` fails with module-not-found errors for removed development builds. Verify the packaged helper outside the repository with Bun and Node, including CSS generation, worklets, Webviews and effect-pack compilation after any filter change.
 
-The compiler-on-demand branch supplies the separate download contract; see [compiler downloads](slides-compiler-download.md). The unmerged [HTML export action](https://github.com/LegendApp/legend-apps/pull/6) adds a browser runtime dependency closure to the helper. This work does not depend on that PR; remeasure its combined compiler artifact after integration rather than carrying this branch's optional-download number forward.
+The compiler-on-demand branch supplies the separate download contract; see [compiler downloads](slides-compiler-download.md). The unmerged [HTML export action](https://github.com/LegendApp/legend-apps/pull/6) adds a browser runtime dependency closure to the helper. This work does not depend on that PR. When it lands, the 12 MB compiler budget is expected to be re-baselined upward after measuring the combined artifact; preserve HTML export and other real features rather than trimming them to fit the current budget.
 
 ## Fresh arm64 Release measurement (2026-10-26)
 

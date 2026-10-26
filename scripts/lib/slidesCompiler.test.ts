@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import { isCompilerRuntimeFile, isPackageRuntimeFile } from "./slidesCompiler";
 
 test("compiler packaging omits development files while retaining runtime TypeScript and native modules", () => {
-  for (const name of ["index.js.map", "index.d.ts", "index.d.mts", "index.d.cts", "index.d.ts.map", "index.js.flow", "README.md", "readme", "CHANGELOG.txt", "CHANGES.md", "HISTORY.rst", "test", "tests/unit.js", "lib/__tests__/index.js", "__mocks__/native.js"]) {
+  for (const name of ["index.js.map", "index.d.ts", "index.d.mts", "index.d.cts", "index.d.ts.map", "index.js.flow", "README.md", "readme", "CHANGELOG.txt", "CHANGES.md", "HISTORY.rst", "tests/unit.js", "lib/__tests__/index.js", "__mocks__/native.js"]) {
     expect(isCompilerRuntimeFile(name)).toBe(false);
   }
-  for (const name of ["src/compileVirtual.ts", "index.mjs", "index.cjs", "lightningcss.node", "package.json", "LICENSE", "LICENSE.md", "NOTICE.txt", "theme.css", "lib/test-utils.js"]) {
+  for (const name of ["src/compileVirtual.ts", "index.mjs", "index.cjs", "lightningcss.node", "package.json", "LICENSE", "LICENSE.md", "NOTICE.txt", "theme.css", "lib/test-utils.js", "test", "tests", "lib/__tests__", "lib/__mocks__"]) {
     expect(isCompilerRuntimeFile(name)).toBe(true);
   }
 });

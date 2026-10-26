@@ -81,10 +81,10 @@ if (import.meta.main) {
     const budgetBytes = budget(values["budget-mb"]!);
     const compilerBudgetBytes = budget(values["compiler-budget-mb"]!);
     if (fs.existsSync(zip)) throw new Error("ZIP output already exists; choose a new path.");
-    const result = spawnSync("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, zip], { encoding: "utf8" });
+    const result = spawnSync("/usr/bin/ditto", ["-c", "-k", "-rsrc", "--sequesterRsrc", "--keepParent", app, zip], { encoding: "utf8" });
     if (result.error || result.status !== 0) throw new Error(`ditto failed: ${result.error?.message ?? result.stderr}`);
     const zipBytes = fs.statSync(zip).size;
-    const compiler = values.compiler ? { zipBytes: fs.statSync(values.compiler).size, budgetBytes: compilerBudgetBytes } : undefined;
+    const compiler = values.compiler ? { zipBytes: fs.statSync(path.resolve(values.compiler)).size, budgetBytes: compilerBudgetBytes } : undefined;
     const passed = zipBytes <= budgetBytes && (!compiler || compiler.zipBytes <= compiler.budgetBytes);
     console.log(JSON.stringify({ app, ...appSizes(app), zipBytes, budgetBytes, compiler, passed,
       linkMap: values["link-map"] ? linkMapSummary(fs.readFileSync(values["link-map"], "utf8")) : undefined }, null, 2));

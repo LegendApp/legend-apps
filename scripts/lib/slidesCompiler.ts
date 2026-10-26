@@ -11,7 +11,7 @@ import { bundleSlidesCompiler, slidesCompilerEntry } from "./slidesCompilerBundl
 export function isCompilerRuntimeFile(file: string) {
   const parts = file.split(/[\\/]/);
   return !/\.map$|\.d\.[cm]?ts$|\.flow$/.test(file)
-    && !parts.some(part => /^(?:tests?|__tests__|__mocks__)$/.test(part))
+    && !parts.slice(0, -1).some(part => /^(?:tests?|__tests__|__mocks__)$/.test(part))
     && !/^(?:readme|changelog|changes|history)(?:\.(?:md|markdown|txt|rst))?$/i.test(parts[parts.length - 1]);
 }
 
