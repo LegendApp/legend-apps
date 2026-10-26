@@ -4,7 +4,7 @@ macOS Slides downloads its existing compiler helper on first compiler use (openi
 
 ## Local production
 
-`bun run slides build macos` (or `bun scripts/spark-app.ts slides build-release`) packages the helper **before** the app's Metro bundle. The build writes a ZIP and `artifact.json` under `shell/.legend/spark/slides-release/.spark/compiler/`. The ZIP contains the same bundled compiler, stylesheets, browser runtimes and native esbuild/lightningcss/oxide dependencies as the former embedded helper. It is signed before archiving (ad hoc by default; set `LEGEND_DEVELOPER_ID_APPLICATION` for Developer ID). Build each architecture on a matching Mac with that architecture's workspace dependencies. No runtime or package installation is added.
+`bun run slides build macos` (or `bun scripts/spark-app.ts slides build-release`) packages the helper **before** the app's Metro bundle. The build writes a ZIP and `artifact.json` under `shell/.legend/spark/slides-release/.spark/compiler/`. The ZIP contains the same bundled compiler, stylesheets, browser runtimes and native esbuild/lightningcss/oxide dependencies as the former embedded helper. It is signed before archiving using the app’s identity fallback: `LEGEND_DEVELOPER_ID_APPLICATION`, or `Developer ID Application: <LEGEND_TEAM_NAME> (<LEGEND_TEAM_ID>)` when both team variables are set. Without either configuration, signing is ad hoc (`-`). Build each architecture on a matching Mac with that architecture's workspace dependencies. No runtime or package installation is added.
 
 For an artifact-only local build, run `bun scripts/lib/slidesCompiler.ts <output-directory> [arm64|x64]`. This does not build, upload or distribute the app.
 

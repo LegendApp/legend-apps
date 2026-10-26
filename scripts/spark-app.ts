@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
 import path from "node:path";
-import { packageSlidesCompilerArtifact } from "./lib/slidesCompiler";
 import { createRequire } from "node:module";
 import { assertSupportedPlatform, loadAppManifest } from "./lib/apps";
 import { runSparkDevServer } from "./lib/sparkDevServer";
@@ -59,6 +58,7 @@ else if (action !== "install") {
   }
   else if (action === "build-release" || action === "build") {
     if (appId === "slides" && action === "build-release") {
+      const { packageSlidesCompilerArtifact } = await import("./lib/slidesCompiler");
       const arch = process.env.SPARK_MACOS_ARCH ?? process.arch;
       const artifact = await packageSlidesCompilerArtifact(path.join(project, ".spark/compiler"), arch);
       env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = JSON.stringify(artifact);

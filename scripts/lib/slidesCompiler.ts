@@ -160,7 +160,9 @@ export function signSlidesCompiler(directory: string, identity: string) {
 }
 
 /** Produce a local, content-addressed download and the pin embedded by Babel. Never uploads. */
-export async function packageSlidesCompilerArtifact(output: string, arch: string, identity = process.env.LEGEND_DEVELOPER_ID_APPLICATION ?? "-") {
+export async function packageSlidesCompilerArtifact(output: string, arch: string, identity = process.env.LEGEND_DEVELOPER_ID_APPLICATION
+  || (process.env.LEGEND_TEAM_NAME && process.env.LEGEND_TEAM_ID
+    ? `Developer ID Application: ${process.env.LEGEND_TEAM_NAME} (${process.env.LEGEND_TEAM_ID})` : "-")) {
   if (arch !== process.arch) throw new Error(`Build the ${arch} compiler on a matching Mac; installed native compiler dependencies are ${process.arch}.`);
   fs.mkdirSync(output, { recursive: true });
   const scratch = fs.mkdtempSync(path.join(output, ".package-"));
