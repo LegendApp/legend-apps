@@ -28,6 +28,10 @@ export async function loadEffectCatalog(url = effectCatalogURL()) {
 export { resolveInstallation } from "./schema";
 async function installRelease(directory: string, id: string, release: PackRelease, catalogURL: string, onProgress?: (progress: EffectInstallProgress) => void) {
   const destination = pinnedPackDirectory(directory, id, release);
+  const versionDirectory = path.dirname(destination);
+  if (fs.existsSync(versionDirectory)) for (const sibling of fs.readdirSync(versionDirectory)) {
+    if (sibling.startsWith(`${release.sha256}.damaged-`)) fs.rmSync(path.join(versionDirectory, sibling), { recursive: true });
+  }
   try { if (verifyInstalledPack(destination, release)) return; }
   catch { /* A damaged snapshot is replaced only after a verified download. */ }
   ensureEffectSpace(directory, release.bytes * 4);

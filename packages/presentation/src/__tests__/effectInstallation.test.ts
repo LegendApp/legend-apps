@@ -268,6 +268,29 @@ test("catalog content and examples retain same-origin download trust", async () 
   expect(fs.existsSync(path.join(f.directory, "motion/active.json"))).toBe(false);
 });
 
+for (const missing of [true, false]) {
+  test(`reinstall sweeps abandoned damaged snapshots with a ${missing ? "missing" : "valid"} destination`, async () => {
+    const f = fixture();
+    await installEffectPacks(["motion"], f.options);
+    const lockBefore = fs.readFileSync(effectLockPath(f.deck), "utf8");
+    const activeBefore = fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8");
+    const root = pinnedPackDirectory(f.directory, "motion", readEffectLock(f.deck).packs.motion);
+    const abandoned = `${root}.damaged-${crypto.randomUUID()}`;
+    if (missing) fs.renameSync(root, abandoned);
+    else fs.mkdirSync(abandoned);
+    fs.mkdirSync(`${root}.damaged-${crypto.randomUUID()}`);
+    const unrelated = [`${root}.damaged`, path.join(path.dirname(root), `${"a".repeat(64)}.damaged-other`)];
+    for (const directory of unrelated) fs.mkdirSync(directory);
+    const requests = f.requests();
+    await installEffectPacks(["motion"], f.options);
+    expect(f.requests() - requests).toBe(missing ? 2 : 1);
+    expect(fs.readdirSync(path.dirname(root)).sort()).toEqual([root, ...unrelated].map(directory => path.basename(directory)).sort());
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    expect(fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8")).toBe(activeBefore);
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+  });
+}
+
 for (const damage of ["modified source", "missing source", "missing manifest", "missing archive", "hash mismatch"]) {
   test(`reinstall repairs ${damage} without changing pins or newer defaults`, async () => {
     const f = fixture();
