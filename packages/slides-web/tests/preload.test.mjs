@@ -116,3 +116,16 @@ test("versioned assets use cache-first requests and publish progress without reu
     expect(await (await originalFetch(next.source("/poster.png"))).text()).toBe("changed");
   } finally { unsubscribe(); first.dispose(); next.dispose(); server.stop(true); globalThis.fetch = originalFetch; globalThis.document = originalDocument; }
 });
+
+test("file URLs use DOM loading without fetches or a download-ready indicator", async () => {
+  const originalDocument = globalThis.document;
+  const originalFetch = globalThis.fetch;
+  globalThis.document = { baseURI: "file:///deck/index.html" };
+  globalThis.fetch = () => { throw new Error("File resources must not be fetched"); };
+  const preloader = new AssetPreloader([{ source: "./assets/movie.mp4", slide: 0 }]);
+  try {
+    await preloader.run();
+    expect(preloader.status).toEqual({ total: 0, loaded: 0, failed: [], active: "", complete: true });
+    expect(preloader.source("./assets/movie.mp4")).toBe("./assets/movie.mp4");
+  } finally { preloader.dispose(); globalThis.fetch = originalFetch; globalThis.document = originalDocument; }
+});

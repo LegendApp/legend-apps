@@ -4,12 +4,21 @@ Export ReactCon from the repository root:
 
 ```sh
 bun packages/slides-web/export.ts ../legend-talks/react-native-desktop/reactcon.mdx --out dist/reactcon
-python3 -m http.server 4330 --directory dist
 ```
 
-Open `http://localhost:4330/reactcon/`. Upload the generated directory to any static HTTP host; it also works under a URL subdirectory. Serve `.wasm` as `application/wasm` and support byte ranges for video seeking. Opening `index.html` directly with `file://` is unsupported.
+Open `dist/reactcon/index.html` directly from disk (`file://`), with no server or network. The same folder works on a static HTTP host, including under a URL subdirectory. Hosts should support byte ranges for video seeking.
 
-The output includes JavaScript, CSS, CanvasKit, a licensed font, images, recordings, and `export.json`. Re-exporting replaces an existing Legend Slides export only after compilation succeeds. Source directories and unrelated nonempty destinations are rejected. Assets must stay inside the deck directory, including symlink targets.
+The output includes JavaScript, CSS embedded in `index.html`, local media and `export.json`. Decks using Skia also include CanvasKit and a licensed font. CanvasKit is loaded only for those decks; non-Skia decks ship no CanvasKit binary. The local WASM binary is encoded in a classic script, and fonts use data URLs, so browser file URL restrictions do not require disabling browser security. This encoding increases the local WASM payload by one third. Re-exporting replaces an existing Legend Slides export only after compilation succeeds. Source directories and unrelated nonempty destinations are rejected. Assets must stay inside the deck directory, including symlink targets.
+
+For hosted exports, share a CanvasKit WASM URL between decks:
+
+```sh
+bun packages/slides-web/export.ts deck.mdx --out dist/deck --canvaskit-url https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.41.0/bin/full/canvaskit.wasm
+```
+
+The URL must serve the matching CanvasKit version with CORS enabled and `application/wasm`. This option requires network access and omits the local binary. Offline folders use their own copy by default.
+
+The exporter follows embedded HTML, stylesheets, JavaScript modules, static fetch/URL references, fonts, images, srcsets and media. Browser modules are bundled into classic scripts; stylesheet fonts and fetch data are embedded where file URL rules require it. Missing local files, directory escapes and computed fetch URLs fail with a source diagnostic. Use static URLs or embed dynamically selected data. Remote URLs are retained and listed in `export.json` (`remoteURLs` and `warnings`); those resources require network access. Exported CSS also scans the normally resolved installed effect packs.
 
 Use the arrows, Space, or Page Up/Down to navigate reveal steps. Home/End jump to the beginning/end; N toggles speaker notes; F toggles fullscreen. The slide picker jumps directly to a slide. Links such as `#18/4` restore a slide and reveal step, including on reload.
 
@@ -34,7 +43,7 @@ TypeGPU requires a browser with WebGPU and a secure context: HTTPS for remote ho
 
 Recorded demos retain their original frame rates and codec requirements. Chromium on macOS played the ReactCon `.mov` and `.mp4` files; other browsers may need media transcoding. This exporter does not transcode recordings.
 
-After the player opens, a background queue preloads exported assets in slide order. The exporter follows local component imports and includes companion recordings; assets whose use cannot be determined statically load last. Shared component modules are grouped conservatively, so some media may load earlier than its exact reveal step. Jumping to a slide prioritizes its media and subsequent slides, including assets shared with earlier slides.
+On HTTP(S), a background queue preloads exported assets in slide order. Under `file://`, DOM elements load local resources directly and the HTTP download indicator is hidden. The exporter follows local component imports and includes companion recordings; assets whose use cannot be determined statically load last. Shared component modules are grouped conservatively, so some media may load earlier than its exact reveal step. Jumping to a slide prioritizes its media and subsequent slides, including assets shared with earlier slides.
 
 The queue downloads one file at a time with low fetch priority and yields between files using the browser's background task scheduler (or a short timer fallback). It never waits before showing a slide or mounts hidden slide/video players. Completed images and videos are reused through blob URLs; an already mounted video keeps its source and playback position. Failed preloads fall back to normal loading when needed. Compressed media stays available for the page's lifetime, using approximately the exported media's file size in additional storage; decoding and rendering still happen through the existing libraries. Fetch priority is a browser hint, so network contention and media decoding can still affect transitions.
 

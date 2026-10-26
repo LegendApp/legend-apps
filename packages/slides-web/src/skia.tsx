@@ -11,8 +11,8 @@ export const Canvas = forwardRef<CanvasRef, CanvasProps>(function Canvas({ style
   return <View style={style}><SkiaCanvas {...props} ref={ref} style={{ width: "100%", height: "100%" }} /></View>;
 });
 let typeface: ReturnType<typeof Skia.Typeface.MakeFreeTypeFaceFromData>;
-export async function initializeFonts() {
-  const data = await Skia.Data.fromURI(new URL("./Roboto.ttf", import.meta.url).href);
+export async function initializeFonts(uri: string) {
+  const data = await Skia.Data.fromURI(uri);
   try { typeface = Skia.Typeface.MakeFreeTypeFaceFromData(data); } finally { data.dispose(); }
   if (!typeface) throw new Error("Could not load presentation font");
 }

@@ -31,6 +31,19 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("imports local fonts and media as asset URLs", async () => {
+    const deck = createDeck({
+      "deck.mdx": 'export { default as font } from "./font.woff2";\nexport { default as video } from "./movie.webm";\n\n# Local assets',
+      "font.woff2": "font bytes",
+      "movie.webm": "video bytes",
+    });
+    const result = await compileDeck(deck);
+    expect(result.success).toBe(true);
+    expect(result.code).toContain("font.woff2");
+    expect(result.code).toContain("movie.webm");
+    expect(result.dependencies.some(file => file.endsWith("font.woff2"))).toBe(true);
+    expect(result.dependencies.some(file => file.endsWith("movie.webm"))).toBe(true);
+  });
   test("still rejects separators inside layout containers after preprocessing", async () => {
     const result = await compileDeck(createDeck({ "deck.mdx": ":::group\n\nOne\n\n---\n\nTwo\n\n:::" }));
     expect(result.success).toBe(false);
