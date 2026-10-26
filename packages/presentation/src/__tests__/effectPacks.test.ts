@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { compileDeck } from "../compiler";
 import { resolveEffectPack } from "../compiler/effectPacks";
+import { effectPackIncompatibility } from "../effectPacks/schema";
 
 const temporary = [];
 function fixture(extra = {}) {
@@ -89,4 +90,25 @@ test("cross-pack imports require declared dependency versions and track both roo
   expect(result.success).toBe(true);
   expect(result.dependencies).toContain(path.join(packs, "motion/pack.json"));
   expect(result.dependencies).toContain(path.join(packs, "math/pack.json"));
+});
+
+test("local pack manifests reject capabilities absent from this host before evaluation", async () => {
+  for (const requirements of [{ hostApiVersion: 2, capabilities: [] }, { hostApiVersion: 1, capabilities: ["unknown-engine"] }]) {
+    const { deck, packs } = fixture({
+      "packs/motion/pack.json": JSON.stringify({ id: "motion", version: "1.0.0", ...requirements, exports: { Pose: "./Pose.ts" } }),
+      "packs/motion/Pose.ts": 'throw new Error("must never evaluate"); export const sample = 1;',
+    });
+    const result = await compileDeck(deck, { effectPacksDirectory: packs });
+    expect(result.success).toBe(false);
+    expect(result.errors.join("\n")).toContain("incompatible");
+    expect(result.errors.join("\n")).not.toContain("must never evaluate");
+  }
+});
+
+test("the signed host retains every capability required by the current source packs", () => {
+  const packs = path.resolve(import.meta.dirname, "../../../slides-effects/packs");
+  for (const id of fs.readdirSync(packs)) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(packs, id, "pack.json"), "utf8"));
+    expect(effectPackIncompatibility(manifest)).toBeUndefined();
+  }
 });

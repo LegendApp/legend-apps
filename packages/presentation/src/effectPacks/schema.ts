@@ -26,7 +26,7 @@ export function validateCatalog(catalog: EffectCatalog) {
     for (const [version, release] of Object.entries(pack.versions)) {
       validatePin(release);
       if (version !== release.version || !Number.isSafeInteger(release.bytes) || release.bytes < 1 || release.bytes > 10_000_000 ||
-        release.hostApiVersion !== 1 || !strings(release.capabilities) || !record(release.dependencies) || !record(release.exports) || typeof release.url !== "string") throw new Error("Incompatible effect pack release.");
+        !Number.isSafeInteger(release.hostApiVersion) || release.hostApiVersion < 1 || !strings(release.capabilities) || !record(release.dependencies) || !record(release.exports) || typeof release.url !== "string") throw new Error("Incompatible effect pack release.");
       for (const [entry, file] of Object.entries(release.exports)) {
         if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(entry) || typeof file !== "string" || !/^\.\/[A-Za-z0-9_.\/-]+\.(?:tsx?|json)$/.test(file) || file.slice(2).split("/").some(part => !part || part === "." || part === "..")) throw new Error("Invalid effect export.");
       }
@@ -45,4 +45,35 @@ export function validateCatalog(catalog: EffectCatalog) {
     slugs.add(effect.slug);
   }
   return catalog;
+}
+
+/** Capabilities exposed by the signed Slides host; packs cannot add native engines. */
+const effectHostCapabilities = new Set(["reanimated", "skia", "webgpu", "lottie", "native-video"]);
+export function effectPackIncompatibility(pack: { hostApiVersion: number; capabilities?: string[] }) {
+  if (pack.hostApiVersion !== 1) return `Requires host API ${pack.hostApiVersion}; this app provides 1.`;
+  if (pack.capabilities !== undefined && !strings(pack.capabilities)) return "Invalid host capabilities.";
+  const missing = (pack.capabilities ?? []).filter(capability => !effectHostCapabilities.has(capability));
+  if (missing.length) return `Requires unavailable host capabilities: ${missing.join(", ")}.`;
+}
+
+export function resolveInstallation(catalog: EffectCatalog, ids: string[], existing: EffectLock = { schemaVersion: 1, packs: {} }, requested: Record<string, PackPin> = {}) {
+  const pins = { ...existing.packs }; const releases = new Map<string, PackRelease>(); const visiting = new Set<string>();
+  function visit(id: string, required?: string) {
+    if (!validPackId(id)) throw new Error("Invalid effect pack ID.");
+    const pack = catalog.packs[id]; if (!pack) throw new Error(`Effect pack "${id}" is not in the catalog.`);
+    const pin = requested[id] ?? pins[id]; if (pin) validatePin(pin);
+    const version = pin?.version ?? required ?? pack.latest;
+    if (required && version !== required) throw new Error(`Effect dependency conflict for "${id}": ${version} versus ${required}.`);
+    const release = pack.versions[version];
+    if (!release || pin && pin.sha256 !== release.sha256) throw new Error(`Pinned effect "${id}" ${version} is not available in this catalog.`);
+    const incompatibility = effectPackIncompatibility(release);
+    if (incompatibility) throw new Error(`Effect pack "${id}" ${version} is incompatible: ${incompatibility}`);
+    if (visiting.has(id)) throw new Error("Effect pack dependencies form a cycle.");
+    if (releases.has(id)) { if (releases.get(id)!.version !== version) throw new Error(`Effect dependency conflict for "${id}".`); return; }
+    visiting.add(id);
+    for (const [dependency, requiredVersion] of Object.entries(release.dependencies)) visit(dependency, requiredVersion);
+    visiting.delete(id); pins[id] = { version, sha256: release.sha256 }; releases.set(id, release);
+  }
+  ids.forEach(id => visit(id));
+  return { lock: { schemaVersion: 1 as const, packs: pins }, releases };
 }

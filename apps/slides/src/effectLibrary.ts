@@ -1,11 +1,11 @@
 import { exists, getDirectory, list, readText } from "@legendapp/spark/files";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { validatePin, validPackId, type EffectCatalog, type EffectListing, type PackPin } from "../../../packages/presentation/src/effectPacks/schema";
+import { resolveInstallation, validatePin, validPackId, type EffectCatalog, type EffectListing, type PackPin } from "../../../packages/presentation/src/effectPacks/schema";
 import { runCompilerCommand } from "./compilerCommand";
 import { parseCompilerResult } from "./deckLoader";
 
-export type EffectPackState = "available" | "installed" | "update";
-export type EffectPackRow = { id: string; latest?: string; installed?: PackPin; state: EffectPackState; effects: EffectListing[] };
+export type EffectPackState = "available" | "installed" | "update" | "incompatible";
+export type EffectPackRow = { id: string; latest?: string; installed?: PackPin; state: EffectPackState; incompatibility?: string; effects: EffectListing[] };
 
 /** The compiler installs into ~/Library/Application Support/Legend Slides/effects; data is Application Support/<app>. */
 export async function effectsDirectory() {
@@ -44,13 +44,19 @@ export function effectPackRows(catalog: EffectCatalog | null, installed: Record<
   const ids = [...new Set([...Object.keys(catalog?.packs ?? {}), ...Object.keys(installed)])].sort();
   return ids.map(id => {
     const latest = catalog?.packs[id]?.latest, pin = installed[id];
-    const state = !pin ? "available" : latest && (pin.version !== latest || pin.sha256 !== catalog!.packs[id].versions[latest].sha256) ? "update" : "installed";
-    return { id, latest, installed: pin, state, effects: catalog?.effects.filter(effect => effect.pack === id) ?? [] };
+    let incompatibility: string | undefined;
+    if (catalog?.packs[id]) {
+      try { resolveInstallation(catalog, [id]); }
+      catch (error) { incompatibility = error instanceof Error ? error.message : String(error); }
+    }
+    const state = incompatibility ? "incompatible" : !pin ? "available" : latest && (pin.version !== latest || pin.sha256 !== catalog!.packs[id].versions[latest].sha256) ? "update" : "installed";
+    return { id, latest, installed: pin, state, incompatibility, effects: catalog?.effects.filter(effect => effect.pack === id) ?? [] };
   });
 }
 
 /** Previews are served beside the catalog. Hermes' URL shim can't resolve relative URLs. */
 export function catalogResource(resource: string, catalogURL: string) {
+  if (/[\\\u0000-\u0020]/.test(resource)) return undefined;
   const origin = /^https?:\/\/[^/]+/.exec(catalogURL)?.[0];
   if (!origin) return undefined;
   if (resource.startsWith("/")) return resource.startsWith("//") ? undefined : origin + resource;

@@ -180,7 +180,11 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
           const importerRoot = libraryRoots.get(args.importer);
           const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
             importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified);
-          if (pack.pin && options.resolvedPins) options.resolvedPins[pack.id] = pack.pin;
+          if (pack.pin && options.resolvedPins) {
+            const previous = options.resolvedPins[pack.id];
+            if (previous && (previous.version !== pack.pin.version || previous.sha256 !== pack.pin.sha256)) throw new Error(`Effect dependency conflict for "${pack.id}".`);
+            options.resolvedPins[pack.id] = pack.pin;
+          }
           libraryRoots.set(pack.file, pack.root);
           packRoots.add(pack.root);
           options.dependencies?.add(pack.manifest);
