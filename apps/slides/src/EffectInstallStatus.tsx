@@ -3,9 +3,9 @@ import { Pressable, Text, View } from "react-native";
 import { loadDeck } from "./deckLoader";
 import { runEffectCommand } from "./effectCommands";
 import { effectRequests$ } from "./effectRequests";
-import { CompilerRuntimePrompt } from "./CompilerRuntimePrompt";
+import { CompilerRuntimePrompt, CompilerDownloadPrompt } from "./CompilerRuntimePrompt";
 export function EffectInstallStatus() {
-  return <><CompilerRuntimePrompt /><EffectPackStatus /></>;
+  return <><CompilerRuntimePrompt /><CompilerDownloadPrompt /><EffectPackStatus /></>;
 }
 
 function EffectPackStatus() {

@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
+import { runInNewContext } from "node:vm";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
 import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
@@ -146,6 +147,25 @@ test("generated native config loads the current Spark native API", async () => {
   for (const name of sparkConfig(manifest).expo.autolinking.exclude) {
     assert.equal(config.dependencies[name]?.platforms?.macos, null, name);
   }
+});
+
+test("Slides compiler pins invalidate Metro's persistent cache", async () => {
+  const project = prepareSparkWorkspace(await loadAppManifest("slides"), "release");
+  const source = fs.readFileSync(path.join(project, "metro.config.js"), "utf8");
+  const cacheVersion = (pin: string) => {
+    const module = { exports: {} as { cacheVersion?: string } };
+    runInNewContext(source, {
+      __dirname: project, module, process: { env: { EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT: pin } },
+      require: (name: string) => name === "node:path" ? path : {
+        makeMetroConfig: () => ({ cacheVersion: "base", resolver: {}, server: {} }),
+        withDesktop: (config: unknown) => config,
+        withUniwindConfig: (config: unknown) => config,
+      },
+    });
+    return module.exports.cacheVersion;
+  };
+  assert.equal(cacheVersion("first-pin"), "base|first-pin");
+  assert.notEqual(cacheVersion("first-pin"), cacheVersion("next-pin"));
 });
 
 test("unknown declared native modules cannot be silently excluded", async () => {

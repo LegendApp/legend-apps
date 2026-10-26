@@ -1,5 +1,6 @@
 // @ts-nocheck Native I/O is replaced to exercise discovery and retry ordering.
 import { beforeEach, expect, mock, test } from "bun:test";
+import { observable } from "@legendapp/state";
 
 const runtime = { path: "/runtime/bun", kind: "bun", version: "1.3.14", source: "system" };
 let discover, install, probe, selected = "", loaded = [], commands = [], commandResults = [], arch;
@@ -13,6 +14,7 @@ mock.module("@legendapp/spark/processes", () => ({ spawn() {}, resolveCommand() 
 mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => typeof value === "string" ? value : "" }));
 mock.module("../deckLoader", () => ({ loadDeck: async path => { loaded.push(path); }, parseCompilerResult: JSON.parse }));
 mock.module("../slidesStore", () => ({ getSlidesState: () => ({ deckLocked: false, audienceOpen: false }) }));
+mock.module("../compilerHelper", () => ({ resolveCompilerHelper: async () => "/compiler/run", compilerHelper$: observable({ retryDeck: null }), CompilerDownloadError: class extends Error {} }));
 globalThis.__DEV__ = false;
 const { compilerRuntime$, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime, changeCompilerRuntime, CompilerRuntimeMissingError } = await import("../compilerRuntime");
 const { runCompilerCommand } = await import("../compilerCommand");

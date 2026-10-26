@@ -8,7 +8,7 @@ import { act, create } from "react-test-renderer";
 const compilerRuntime$ = observable({ status: "missing", retryDeck: "/deck.mdx", arch: "x64", runtime: null, progress: null, error: "" });
 let changes = 0, detections = 0;
 mock.module("../compilerRuntime", () => ({
-  compilerRuntime$, changeCompilerRuntime: async operation => { changes++; await operation(); },
+  runtimeHost() {}, compilerRuntime$, changeCompilerRuntime: async operation => { changes++; await operation(); },
   resolveCompilerRuntime: async options => { if (options.refresh) detections++; },
   downloadCompilerRuntime() {}, setCustomCompilerRuntime() {},
 }));
@@ -18,7 +18,7 @@ mock.module("@legendapp/spark/settings/window", () => ({
 }));
 mock.module("../slidesSettings", () => ({ useCompilerRuntimePathSetting: () => "" }));
 const { CompilerSettingsPage } = await import("../CompilerSettingsPage");
-const { CompilerRuntimePrompt, runtimeStatusText } = await import("../CompilerRuntimePrompt");
+const { CompilerRuntimePrompt, CompilerDownloadPrompt, runtimeStatusText } = await import("../CompilerRuntimePrompt");
 
 test("missing runtime prompt offers Detect Again through the shared retry operation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -69,5 +69,27 @@ test("deck prompt and Settings share bytes, percent, verifying and installing pr
     expect(renderer.root.findByProps({ accessibilityLabel: "Reinstall" }).props.disabled).toBe(false);
     await act(() => compilerRuntime$.assign({ status: "error", error: "offline" }));
     expect(renderer.root.findAllByProps({ accessibilityLabel: "Try Again" }).length).toBeGreaterThan(0);
+  } finally { if (renderer) await act(() => renderer.unmount()); }
+});
+
+test("compiler download shows progress and an actionable retry for the pending deck", async () => {
+  const { compilerHelper$ } = await import("../compilerHelper");
+  let retries = [];
+  mock.module("../deckLoader", () => ({ retryCompilerDownload: async () => { retries.push("retry"); } }));
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let renderer;
+  try {
+    await act(() => { renderer = create(<CompilerDownloadPrompt />); });
+    expect(renderer.toJSON()).toBeNull();
+    await act(() => compilerHelper$.assign({ busy: true, message: "Downloading deck compiler…" }));
+    expect(JSON.stringify(renderer.toJSON())).toContain("Downloading deck compiler");
+    expect(renderer.root.findAllByType("pressable")).toHaveLength(0);
+    await act(() => compilerHelper$.assign({ busy: false, error: "Connect to the internet and retry.", retryDeck: "/pending.mdx" }));
+    expect(JSON.stringify(renderer.toJSON())).toContain("Connect to the internet");
+    await act(() => renderer.root.findByProps({ accessibilityLabel: "Retry Compiler Download" }).props.onPress());
+    await new Promise(done => setTimeout(done, 0));
+    expect(retries).toEqual(["retry"]);
+    await act(() => compilerHelper$.assign({ error: "", retryDeck: null }));
+    expect(renderer.toJSON()).toBeNull();
   } finally { if (renderer) await act(() => renderer.unmount()); }
 });

@@ -2,6 +2,7 @@ import { useValue } from "@legendapp/state/react";
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { Pressable, Text, View } from "react-native";
 import { compilerRuntime$, changeCompilerRuntime, resolveCompilerRuntime, downloadCompilerRuntime, setCustomCompilerRuntime } from "./compilerRuntime";
+import { compilerHelper$ } from "./compilerHelper";
 import { pinnedBun } from "./compilerRuntimeCore";
 
 export function detectRuntimeAndRetry() {
@@ -73,5 +74,18 @@ export function CompilerRuntimePrompt() {
       <RuntimeButton title="Detect Again" disabled={busy} onPress={() => void detectRuntimeAndRetry()} />
       <RuntimeButton title="Use My Own Bun or Node…" disabled={busy} onPress={() => void chooseOwnRuntime()} />
     </View>
+  </View>;
+}
+
+/** Helper acquisition is separate from choosing the Bun/Node runtime. */
+export function CompilerDownloadPrompt() {
+  const busy = useValue(compilerHelper$.busy), message = useValue(compilerHelper$.message);
+  const error = useValue(compilerHelper$.error), path = useValue(compilerHelper$.retryDeck);
+  if (!busy && (!error || !path)) return null;
+  return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 22, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
+    <Text style={{ color: "#fafafa", fontSize: 14 }}>{busy ? message : error}</Text>
+    {!busy && path && <RuntimeButton title="Retry Compiler Download" onPress={() => {
+      void import("./deckLoader").then(({ retryCompilerDownload }) => retryCompilerDownload());
+    }} />}
   </View>;
 }

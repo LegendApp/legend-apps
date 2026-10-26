@@ -1,11 +1,14 @@
 import { resolveCommand, runCommand, type ProcessTarget } from "@legendapp/spark/processes";
 import { CompilerRuntimeMissingError, compilerRuntimeGeneration, invalidateCompilerRuntime, resolveCompilerRuntime } from "./compilerRuntime";
+import { resolveCompilerHelper } from "./compilerHelper";
 export async function compilerCommand(refresh = false): Promise<{ target: ProcessTarget; prefix: string[]; env?: Record<string, string>; generation?: number }> {
   if (!__DEV__) {
     // The shipped helper has no JavaScript runtime of its own; tell its launcher which one to use.
     const runtime = await resolveCompilerRuntime({ refresh });
     if (!runtime) throw new CompilerRuntimeMissingError();
-    return { target: { type: "helper", name: "slides-compiler" }, prefix: [], generation: compilerRuntimeGeneration(), env: { LEGEND_SLIDES_RUNTIME: runtime.path } };
+    const generation = compilerRuntimeGeneration();
+    const helper = await resolveCompilerHelper();
+    return { target: { type: "executable", path: helper }, prefix: [], generation, env: { LEGEND_SLIDES_RUNTIME: runtime.path } };
   }
   const source = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH;
   const bun = await resolveCommand("bun");
