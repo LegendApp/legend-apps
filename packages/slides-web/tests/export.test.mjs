@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -39,7 +39,7 @@ test("Skia detection follows compiled host imports and built-in effects, not sli
   expect(usesSkia('const Lottie = require("lottie-react-native")')).toBe(true);
 });
 
-test("exports real assets and preserves a completed export when recompilation fails", async () => {
+test("exports real assets and preserves a completed export and debug map when compilation or replacement fails", async () => {
   const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-export-")));
   try {
     const source = path.join(dir, "source");
@@ -82,6 +82,18 @@ test("exports real assets and preserves a completed export when recompilation fa
     const before = await fs.readFile(path.join(out, "player.js"));
     expect(before.toString()).toContain("./assets/..poster.png");
     expect(before.toString()).not.toContain("./assets/poster.png");
+    await fs.writeFile(deck, "# Replacement");
+    const rm = fs.rm.bind(fs);
+    const removal = spyOn(fs, "rm").mockImplementation((target, options) => {
+      if (target === out) return Promise.reject(new Error("Export replacement failed"));
+      return rm(target, options);
+    });
+    try {
+      await expect(exportWebsite(deck, out)).rejects.toThrow("Export replacement failed");
+    } finally { removal.mockRestore(); }
+    expect(await fs.readFile(path.join(out, "player.js"))).toEqual(before);
+    expect((await fs.readFile(mapFile)).equals(debugBefore)).toBe(true);
+    expect((await fs.readdir(dir)).some(file => file.startsWith(".slides-export-"))).toBe(false);
     await fs.writeFile(deck, 'export { Canvas } from "@shopify/react-native-skia";\n\n# Hosted Skia');
     const hosted = path.join(dir, "hosted");
     await exportWebsite(deck, hosted, { canvasKitURL: "https://cdn.example.com/canvaskit.wasm" });

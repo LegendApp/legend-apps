@@ -195,11 +195,11 @@ export async function exportWebsite(deck: string, output: string, options: Expor
   const staging = await fs.mkdtemp(path.join(path.dirname(out), ".slides-export-"));
   try {
     const sourceMap = await buildWebsite(deckPath, staging, options);
+    await fs.rm(out, { recursive: true, force: true });
+    await fs.rename(staging, out);
     const debug = exportDebugDirectory(out);
     await fs.mkdir(debug, { recursive: true });
     await fs.writeFile(path.join(debug, "player.js.map"), sourceMap);
-    await fs.rm(out, { recursive: true, force: true });
-    await fs.rename(staging, out);
     return out;
   } finally {
     await fs.rm(staging, { recursive: true, force: true });
