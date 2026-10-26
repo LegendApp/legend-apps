@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
+import { exportDebugDirectory, exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
 import { parsePosition } from "../src/navigation";
 
 test("links restore and clamp both slide and reveal positions", () => {
@@ -55,6 +55,14 @@ test("exports real assets and preserves a completed export when recompilation fa
     const out = path.join(dir, "website");
     await exportWebsite(deck, out);
     expect(await fs.readFile(path.join(out, "assets/..poster.png"))).toEqual(image);
+    const mapFile = path.join(exportDebugDirectory(out), "player.js.map");
+    const map = JSON.parse(await fs.readFile(mapFile, "utf8"));
+    expect(map.version).toBe(3);
+    expect(map.sourcesContent.some(source => source?.includes("Export test"))).toBe(true);
+    expect((await fs.readdir(out, { recursive: true })).some(file => file.endsWith(".map"))).toBe(false);
+    expect(await fs.readFile(path.join(out, "player.js"), "utf8")).not.toMatch(/\/\/[#@] sourceMappingURL=/);
+    // Replacing an older export also removes previously published maps.
+    await fs.writeFile(path.join(out, "player.js.map"), "old published map");
     const initialManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
     expect(initialManifest.canvasKit).toBeNull();
     expect(initialManifest.effects).toEqual({});
@@ -69,6 +77,8 @@ test("exports real assets and preserves a completed export when recompilation fa
     await exportWebsite(deck, out);
     const changedManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
     expect(changedManifest.preload[0].version).not.toBe(initialManifest.preload[0].version);
+    expect(await fs.exists(path.join(out, "player.js.map"))).toBe(false);
+    const debugBefore = await fs.readFile(mapFile);
     const before = await fs.readFile(path.join(out, "player.js"));
     expect(before.toString()).toContain("./assets/..poster.png");
     expect(before.toString()).not.toContain("./assets/poster.png");
@@ -82,7 +92,9 @@ test("exports real assets and preserves a completed export when recompilation fa
     await fs.writeFile(deck, "import Broken from './missing.tsx'\n\n# Broken");
     await expect(exportWebsite(deck, out)).rejects.toThrow();
     expect(await fs.readFile(path.join(out, "player.js"))).toEqual(before);
+    expect(await fs.readFile(mapFile)).toEqual(debugBefore);
   } finally {
+    for (const name of ["website", "hosted"]) await fs.rm(exportDebugDirectory(path.join(dir, name)), { recursive: true, force: true });
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 30000);
@@ -104,6 +116,7 @@ test("Lottie-only exports include offline CanvasKit and effect capability metada
   } finally {
     if (previousPacks === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
     else process.env.LEGEND_SLIDES_EFFECT_PACKS = previousPacks;
+    await fs.rm(exportDebugDirectory(path.join(dir, "website")), { recursive: true, force: true });
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 30000);

@@ -8,6 +8,8 @@ bun packages/slides-web/export.ts ../legend-talks/react-native-desktop/reactcon.
 
 Open `dist/reactcon/index.html` directly from disk (`file://`), with no server or network. The same folder works on a static HTTP host, including under a URL subdirectory. Hosts should support byte ranges for video seeking.
 
+Source maps stay in the local temporary cache `legend-slides-web/<SHA256 of absolute output path>/player.js.map` for debugging (`exportDebugDirectory(output)` returns the path). They are not included in the published folder, and the player contains no source-map URL.
+
 The output includes JavaScript, CSS embedded in `index.html`, local media and `export.json`. Decks using Skia also include CanvasKit and a licensed font. CanvasKit is loaded only for those decks; non-Skia decks ship no CanvasKit binary. The local WASM binary is encoded in a classic script, and fonts use data URLs, so browser file URL restrictions do not require disabling browser security. This encoding increases the local WASM payload by one third. Re-exporting replaces an existing Legend Slides export only after compilation succeeds. Source directories and unrelated nonempty destinations are rejected. Assets must stay inside the deck directory, including symlink targets.
 
 For hosted exports, share a CanvasKit WASM URL between decks:
