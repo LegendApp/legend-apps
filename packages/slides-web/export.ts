@@ -11,6 +11,17 @@ import { createPreloadManifest } from "./preloadManifest";
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "../..");
 const src = path.join(import.meta.dirname, "src");
+// How the web player renders each effect pack capability; any other capability is unsupported on web.
+const webCapabilities: Record<string, string> = {
+  reanimated: "Reanimated web", skia: "CanvasKit", lottie: "Skottie", "native-video": "HTML video", webgpu: "WebGPU (requires a WebGPU browser)",
+};
+
+export function webEffectSupport(packs: { id: string; capabilities: string[] }[]) {
+  const effects = Object.fromEntries(packs.map(pack => [pack.id, Object.fromEntries(pack.capabilities.map(capability => [capability, webCapabilities[capability] ?? "unsupported"]))]));
+  const unsupported = packs.flatMap(pack => pack.capabilities.filter(capability => !webCapabilities[capability])
+    .map(capability => `Effect pack "${pack.id}" is unsupported on web: it requires the native "${capability}" capability.`));
+  return { effects, unsupported };
+}
 
 async function buildWebsite(deck: string, output: string) {
   const deckPath = path.resolve(deck);
@@ -18,6 +29,9 @@ async function buildWebsite(deck: string, output: string) {
   const out = path.resolve(output);
   const result = await compileDeck(deckPath);
   if (!result.success) throw new Error(result.errors.join("\n"));
+  const packs = await Promise.all(result.dependencies.filter(file => path.basename(file) === "pack.json").map(async file => JSON.parse(await fs.readFile(file, "utf8"))));
+  const { effects, unsupported } = webEffectSupport(packs);
+  for (const warning of unsupported) console.warn(warning);
   await fs.mkdir(out, { recursive: true });
   const assets = result.dependencies.map(file => file.includes("deck-asset:") ? file.slice(file.indexOf("deck-asset:") + 11) : file)
     .filter(file => /\.(png|jpe?g|gif|webp|svg|html|ttf|woff2?)$/i.test(file));
@@ -97,7 +111,7 @@ async function buildWebsite(deck: string, output: string) {
   await fs.writeFile(path.join(out, "styles.css"), css);
   await fs.copyFile(path.join(src, "player.css"), path.join(out, "player.css"));
   await fs.writeFile(path.join(out, "export.json"), JSON.stringify({ format: "legend-slides-web", version: 1,
-    source: path.basename(deckPath), assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, warnings: result.warnings }, null, 2));
+    source: path.basename(deckPath), assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, effects, warnings: [...result.warnings, ...unsupported] }, null, 2));
   return out;
 }
 

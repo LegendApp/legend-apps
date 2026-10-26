@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { exportWebsite, validateDestination } from "../export";
+import { exportWebsite, validateDestination, webEffectSupport } from "../export";
 import { parsePosition } from "../src/navigation";
 
 test("links restore and clamp both slide and reveal positions", () => {
@@ -10,6 +10,12 @@ test("links restore and clamp both slide and reveal positions", () => {
   expect(parsePosition("#99/99", [1, 4])).toEqual({ currentSlide: 1, currentStep: 3 });
   expect(parsePosition("#0/0", [1, 4])).toEqual({ currentSlide: 0, currentStep: 0 });
   expect(parsePosition("#invalid", [1])).toEqual({ currentSlide: 0, currentStep: 0 });
+});
+
+test("reports how each effect pack runs on web and flags native-only capabilities", () => {
+  const { effects, unsupported } = webEffectSupport([{ id: "animation", capabilities: ["reanimated", "lottie"] }, { id: "camera", capabilities: ["skia", "arkit"] }]);
+  expect(effects).toEqual({ animation: { reanimated: "Reanimated web", lottie: "Skottie" }, camera: { skia: "CanvasKit", arkit: "unsupported" } });
+  expect(unsupported).toEqual(['Effect pack "camera" is unsupported on web: it requires the native "arkit" capability.']);
 });
 
 test("exports real assets and preserves a completed export when recompilation fails", async () => {
