@@ -1,5 +1,6 @@
 #import "RNSourceEditor.h"
 #import "SourceDocumentLoad.h"
+#import "SourceScrollTrace.h"
 #import <react/renderer/components/RNSourceEditorSpec/ComponentDescriptors.h>
 #import <react/renderer/components/RNSourceEditorSpec/EventEmitters.h>
 #import <react/renderer/components/RNSourceEditorSpec/Props.h>
@@ -203,13 +204,24 @@ static std::string utf8String(NSString *value) {
     if ([request isKindOfClass:NSDictionary.class]) [_input requestLineLayouts:request];
     return;
   }
+  if ([command isEqual:@"diagnose-scroll-batch"]) {
+    if (LESourceScrollTraceEnabled() && argument.length < 2000000) {
+      id batch = [NSJSONSerialization JSONObjectWithData:[argument dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+      if ([batch isKindOfClass:NSDictionary.class]) LESourceScrollTrace(@"js-batch", _input, batch);
+    }
+    return;
+  }
   __weak RNSourceEditorHost *weakSelf = self;
   const auto generation = _commandGeneration;
   void (^finish)(BOOL, NSString *) = ^(BOOL allowed, NSString *error) {
     RNSourceEditorHost *self = weakSelf;
     if (self && self->_commandGeneration == generation && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onCommandResult({.id = requestId, .allowed = (bool)allowed, .error = utf8String(error)});
   };
-  if ([command isEqual:@"save"] || [command isEqual:@"saveAs"]) [_input saveAs:[command isEqual:@"saveAs"] completion:finish];
+  if ([command isEqual:@"diagnose-scroll-status"]) {
+    if (LESourceScrollTraceEnabled()) LESourceScrollTrace(@"host-ready", _input, @{@"window":@(self.window.windowNumber), @"lines":@(_input.lineCount)});
+    finish(LESourceScrollTraceEnabled(), @"");
+  }
+  else if ([command isEqual:@"save"] || [command isEqual:@"saveAs"]) [_input saveAs:[command isEqual:@"saveAs"] completion:finish];
   else if ([command isEqual:@"confirmClose"]) [_input confirmDiscardWithCompletion:^(BOOL allow) { finish(allow, @""); }];
   else if ([command isEqual:@"find"]) { [_input showFindPanel]; finish(YES, @""); }
   else if ([command isEqual:@"goToLine"]) { [_input showGoToLine]; finish(YES, @""); }

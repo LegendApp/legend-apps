@@ -1,4 +1,5 @@
 #import "SourceInputView.h"
+#import "SourceScrollTrace.h"
 #include "../cpp/SourceEditing.hpp"
 #import "SourceSearchPanel.h"
 #include "../cpp/SourceDocument.hpp"
@@ -32,6 +33,7 @@ static NSString *string(const std::u16string &text) {
 - (LESourceLineLayout *)layoutForLine:(NSUInteger)index referenceRow:(nullable LESourceRowView *)row;
 - (void)applySyntaxToText:(NSMutableAttributedString *)text line:(NSUInteger)index font:(NSFont *)font;
 - (void)selectionDragTick;
+- (void)traceViewport:(NSString *)event clip:(NSClipView *)clip;
 - (void)scheduleLineLayouts;
 - (void)invalidatePreparedLayouts;
 - (void)invalidatePreparedLine:(uint64_t)lineId;
@@ -49,6 +51,7 @@ static NSString *string(const std::u16string &text) {
   CGFloat _heightWidth, _heightLineHeight;
   BOOL _heightWrap, _heightBusy, _heightPumpScheduled;
   NSUInteger _heightEpoch, _heightNext, _heightWarmNext, _heightWarmEnd;
+  id _traceBoundsObserver;
   NSRange _marked;
   NSUndoManager *_history;
   CGFloat _preferredX;
@@ -96,6 +99,12 @@ static NSString *string(const std::u16string &text) {
     _indentUnit = @"  ";
     _automaticPairs = YES;
     [self loadSource:@""];
+    if (LESourceScrollTraceEnabled()) {
+      __weak LESourceInputView *weakSelf = self;
+      _traceBoundsObserver = [NSNotificationCenter.defaultCenter addObserverForName:NSViewBoundsDidChangeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+        if ([note.object isKindOfClass:NSClipView.class]) [weakSelf traceViewport:@"native-scroll" clip:note.object];
+      }];
+    }
   }
   return self;
 }
@@ -104,6 +113,7 @@ static NSString *string(const std::u16string &text) {
 - (BOOL)resignFirstResponder { [self endSelectionDrag]; return [super resignFirstResponder]; }
 - (void)viewDidMoveToWindow { [super viewDidMoveToWindow]; [self endSelectionDrag]; }
 - (void)dealloc {
+  if (_traceBoundsObserver) [NSNotificationCenter.defaultCenter removeObserver:_traceBoundsObserver];
   [_searchPanel close];
   [self retireSyntax];
   auto retired = std::move(_document);
@@ -705,6 +715,29 @@ static NSString *string(const std::u16string &text) {
       }
     });
   });
+}
+- (void)traceViewport:(NSString *)event clip:(NSClipView *)clip {
+  // Only this editor's scroll surface; never inspect other apps/windows.
+  NSScrollView *scroll = nil;
+  for (LESourceRowView *row in _rows) { if (row.enclosingScrollView) { scroll = row.enclosingScrollView; break; } }
+  if (!scroll || scroll.contentView != clip) return;
+  std::vector<std::pair<CGFloat, CGFloat>> intervals;
+  NSUInteger visible = 0, stale = 0;
+  for (LESourceRowView *row in _rows) {
+    if (row.enclosingScrollView != scroll) continue;
+    NSRect rect = NSIntersectionRect([row convertRect:row.bounds toView:clip], clip.bounds);
+    if (NSIsEmptyRect(rect)) continue;
+    if (![self isCurrentRow:row]) { ++stale; continue; }
+    ++visible;
+    intervals.emplace_back(NSMinY(rect), NSMaxY(rect));
+  }
+  std::sort(intervals.begin(), intervals.end());
+  CGFloat covered = 0, end = NSMinY(clip.bounds);
+  for (auto span : intervals) { covered += MAX(0, span.second - MAX(end, span.first)); end = MAX(end, span.second); }
+  LESourceScrollTrace(event, self, @{@"window":@(self.window.windowNumber), @"y":@(clip.bounds.origin.y),
+    @"height":@(clip.bounds.size.height), @"width":@(clip.bounds.size.width), @"mounted":@(_rows.count),
+    @"visibleValidRows":@(visible), @"visibleStaleRows":@(stale), @"coveredHeight":@(covered),
+    @"lines":@(_document->lineCount()), @"loading":@(_sourceLoading), @"syntaxBusy":@(_treeBusy)});
 }
 - (void)recordStartupDraw {
   if (!_startupDrawn) {
@@ -1310,10 +1343,14 @@ static NSString *string(const std::u16string &text) {
   [_input unregisterRow:self];
   _input = input;
   _presentedLineIndex = input ? self.lineIndex : NSNotFound;
+  if (LESourceScrollTraceEnabled()) LESourceScrollTrace(@"row-attach", input,
+    @{@"row":@((uintptr_t)(__bridge void *)self), @"lineId":@(self.lineId), @"attached":@(input != nil)});
   [input registerRow:self];
   [self invalidateText];
 }
 - (void)applyLineId:(uint64_t)lineId index:(NSUInteger)index {
+  if (LESourceScrollTraceEnabled()) LESourceScrollTrace(@"native-row-props", self.input,
+    @{@"row":@((uintptr_t)(__bridge void *)self), @"lineId":@(lineId), @"line":@(index), @"oldId":@(_lineId)});
   // Native edits renumber mounted rows before the Fabric commit arrives. A
   // metrics/style commit carrying an old index must not detach that same ID.
   if (_lineId == lineId && _input && [_input offsetForRow:self] != NSNotFound) {
@@ -1333,10 +1370,15 @@ static NSString *string(const std::u16string &text) {
 }
 - (void)invalidateText { _cachedText = nil; self.needsLayout = YES; self.needsDisplay = YES; }
 - (void)layout {
+  const double traceStart = LESourceScrollTraceEnabled() ? LESourceScrollTraceClock() : 0;
   [super layout];
   // Fabric may attach a recycled row before assigning its measured width.
   // Do not wrap a large line into one-character fragments at that transient size.
-  if (!self.input || [self.input offsetForRow:self] == NSNotFound || self.bounds.size.width <= 72) return;
+  if (!self.input || [self.input offsetForRow:self] == NSNotFound || self.bounds.size.width <= 72) {
+    if (traceStart) LESourceScrollTrace(@"row-layout-skipped", self.input, @{@"lineId":@(self.lineId),
+      @"attached":@(self.input != nil), @"width":@(self.bounds.size.width), @"validId":@(self.input && [self.input offsetForRow:self] != NSNotFound)});
+    return;
+  }
   NSString *text = [self.input textForRow:self] ?: @"";
   CGFloat width = MAX(1, self.bounds.size.width - 72);
   if (_cachedWidth == width && [_cachedText isEqualToString:text]) {
@@ -1345,13 +1387,19 @@ static NSString *string(const std::u16string &text) {
   }
   _cachedText = text; _cachedWidth = width;
   _textLayout = [self.input layoutForLine:self.lineIndex referenceRow:self];
+  if (traceStart) LESourceScrollTrace(@"row-layout", self.input, @{@"lineId":@(self.lineId), @"line":@(self.lineIndex),
+    @"durationMs":@(LESourceScrollTraceClock() - traceStart), @"width":@(self.bounds.size.width), @"height":@(_textLayout.height)});
   if (self.onMetrics) self.onMetrics(_textLayout.height, _textLayout.width + 72);
   [self.input revealSelectionInRow:self];
 }
 - (void)drawRect:(NSRect)dirtyRect {
+  const double traceStart = LESourceScrollTraceEnabled() ? LESourceScrollTraceClock() : 0;
   // Detached/recycled Fabric subviews can still receive a final display pass.
   // Messaging nil returns 0, which is NOT our invalid-offset sentinel.
-  if (!self.input) return;
+  if (!self.input) {
+    if (traceStart) LESourceScrollTrace(@"row-draw-skipped", nil, @{@"lineId":@(self.lineId), @"reason":@"detached"});
+    return;
+  }
   [self layoutSubtreeIfNeeded];
   // A deleted line can still occupy its old container until Fabric removes it.
   // Preserve that position's gutter, but never draw stale text or selection.
@@ -1363,7 +1411,10 @@ static NSString *string(const std::u16string &text) {
     }];
   }
   NSUInteger offset = [self.input offsetForRow:self];
-  if (offset == NSNotFound) return;
+  if (offset == NSNotFound) {
+    if (traceStart) LESourceScrollTrace(@"row-draw-skipped", self.input, @{@"lineId":@(self.lineId), @"reason":@"stale-id"});
+    return;
+  }
   NSUInteger start = MIN(self.input.anchor, self.input.head), end = MAX(self.input.anchor, self.input.head);
   NSUInteger localStart = start > offset ? start - offset : 0;
   NSUInteger localEnd = end > offset ? MIN(end - offset, _cachedText.length) : 0;
@@ -1385,6 +1436,9 @@ static NSString *string(const std::u16string &text) {
     NSRect caret = [_textLayout caretRectAtOffset:self.input.head - offset downstream:YES];
     caret.origin.x += 64; [self.foreground setFill]; NSRectFill(caret);
   }
+  if (traceStart) LESourceScrollTrace(@"row-draw", self.input, @{@"lineId":@(self.lineId), @"line":@(self.lineIndex),
+    @"window":@(self.window.windowNumber), @"hasLayout":@(_textLayout != nil),
+    @"durationMs":@(LESourceScrollTraceClock() - traceStart)});
 }
 - (BOOL)isAccessibilityElement { return self.input && [self.input offsetForRow:self] != NSNotFound; }
 - (NSString *)accessibilityRole { return NSAccessibilityStaticTextRole; }

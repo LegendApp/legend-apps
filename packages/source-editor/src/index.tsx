@@ -11,6 +11,7 @@ import { GrammarProgressBanner } from "./GrammarProgressBanner";
 import { SourceLanguageSelector } from "./SourceLanguageSelector";
 import { SourceLineDataSource, type SourceAppend, type SourceEdit, type SourceLine } from "./SourceLineDataSource";
 import { getPreparedDocumentMetadata } from "./preparedDocument";
+import { createScrollTrace, SCROLL_TRACE_BATCH, SCROLL_TRACE_STATUS } from "./scrollTrace";
 import { SourceHeightCache } from "./SourceHeightCache";
 export { prepareDocument, cancelPreparedDocument } from "./preparedDocument";
 
@@ -48,19 +49,24 @@ export type SourceDocumentEditorHandle = {
   command: (command: string, argument?: string) => Promise<boolean>;
 };
 
-function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heights, heightKey, viewportWidth }: {
+function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, trace, heights, heightKey, viewportWidth }: {
   item: SourceLine; index: number; fontFamily: string; fontSize: number; foreground: string; wrap: boolean;
+  trace: ReturnType<typeof createScrollTrace>;
   heights: SourceHeightCache; heightKey: string; viewportWidth: number;
 }) {
   const lineHeight = Math.ceil(fontSize * 1.6);
   const subscribe = useCallback((listener: () => void) => heights.subscribe(item.id, listener), [heights, item.id]);
   const snapshot = useCallback(() => heights.get(heightKey, item.id) ?? lineHeight, [heights, heightKey, item.id, lineHeight]);
   const height = useSyncExternalStore(subscribe, snapshot);
+  useLayoutEffect(() => {
+    if (trace.enabled) trace.record("js-row-commit", { lineId: item.id, line: index });
+  }, [trace, item.id, index]);
   return <SourceEditorRow
     lineId={item.id} lineIndex={index} fontFamily={fontFamily} fontSize={fontSize}
     lineHeight={lineHeight} foreground={foreground} wrap={wrap}
     heightKey={heightKey}
     onMetrics={({ nativeEvent }) => {
+      if (trace.enabled) trace.record("js-row-metrics", { lineId: nativeEvent.lineId, height: nativeEvent.height });
       if (nativeEvent.lineId === item.id && nativeEvent.heightKey === heightKey && nativeEvent.viewportWidth === viewportWidth) {
         heights.set(heightKey, item.id, nativeEvent.height);
       }
@@ -74,6 +80,25 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
   syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange, preparedDocumentId,
 }: SourceDocumentEditorProps) {
   const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
+  const [trace] = useState(createScrollTrace);
+  const [traceEnabled, setTraceEnabled] = useState(false);
+  useEffect(() => {
+    if (host.current) Commands.execute(host.current, SCROLL_TRACE_STATUS, "diagnose-scroll-status", "");
+  }, []);
+  useEffect(() => {
+    if (!traceEnabled) return;
+    trace.enable();
+    trace.record("js-probe-ready", { probe: "source-scroll-v1", dev: __DEV__ });
+    let last = performance.now();
+    const started = last;
+    const timer = setInterval(() => {
+      const now = performance.now();
+      trace.record("js-heartbeat", { gapMs: now - last }); last = now;
+      if (host.current) Commands.execute(host.current, SCROLL_TRACE_BATCH, "diagnose-scroll-batch", trace.drain());
+      if (now - started > 300000) { clearInterval(timer); trace.stop(); }
+    }, 250);
+    return () => { clearInterval(timer); trace.stop(); };
+  }, [trace, traceEnabled]);
   const pending = useRef(new Map<number, { resolve: (value: boolean) => void; reject: (error: Error) => void }>());
   const requestId = useRef(0);
   useImperativeHandle(ref, () => ({
@@ -124,7 +149,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     prepareHeights(list.current?.getState().start ?? 0);
   }, [heightKey, dataSource, heights, prepareHeights]);
   const renderItem = ({ item, index }: LegendListDataSourceRenderItemProps<SourceLine>) => item
-    ? <EditorLine item={item} index={index} fontFamily={fontFamily} fontSize={fontSize} foreground={foreground} wrap={wrap}
+    ? <EditorLine item={item} index={index} fontFamily={fontFamily} fontSize={fontSize} foreground={foreground} wrap={wrap} trace={trace}
         heights={heights} heightKey={heightKey} viewportWidth={viewportWidth} /> : null;
 
   return <SourceEditorHost
@@ -133,6 +158,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     indentUnit={indentUnit}
     onDocumentState={({ nativeEvent }) => onDocumentState?.(nativeEvent)}
     onCommandResult={({ nativeEvent }) => {
+      if (nativeEvent.id === SCROLL_TRACE_STATUS) { setTraceEnabled(nativeEvent.allowed); return; }
       const request = pending.current.get(nativeEvent.id);
       pending.current.delete(nativeEvent.id);
       if (nativeEvent.error) request?.reject(new Error(nativeEvent.error)); else request?.resolve(nativeEvent.allowed);
@@ -169,6 +195,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
     }}
     style={styles.root}
     onReady={({ nativeEvent }) => {
+      if (trace.enabled) trace.record("js-document-ready", { lines: nativeEvent.lineCount, complete: nativeEvent.complete });
       setError(nativeEvent.error);
       setSourcePrefix(nativeEvent.sourcePrefix ?? "");
       setLoadingTail(!nativeEvent.complete && !nativeEvent.error);
@@ -226,6 +253,10 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       onFirstVisibleItemChanged={({ index }) => prepareHeights(index)}
       estimatedItemSize={Math.ceil(fontSize * 1.6)}
       maintainVisibleContentPosition
+      onScroll={traceEnabled ? event => {
+        const state = list.current?.getState();
+        trace.record("js-scroll", { y: event.nativeEvent.contentOffset.y, start: state?.start, end: state?.end });
+      } : undefined}
       style={styles.root}
     /> : null}
     {!error && !highlightError && (syntaxBackend === "tree-sitter" && syntaxHighlightingEnabled

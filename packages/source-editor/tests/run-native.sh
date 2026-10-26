@@ -5,6 +5,11 @@ source_editor_build="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-editor.XXXXXX")"
 clang++ -std=c++20 -O2 -fobjc-arc -framework Foundation -framework CoreGraphics -framework ImageIO "$source_editor_dir/tests/SourceProgressRing.test.mm" "$source_editor_dir/macos/SourceProgressRing.mm" -o "$source_editor_build/progress-ring-test"
 "$source_editor_build/progress-ring-test"
 rm "$source_editor_build/progress-ring-test"
+clang++ -std=c++20 -O2 -fobjc-arc -framework AppKit "$source_editor_dir/tests/SourceScrollTrace.test.mm" "$source_editor_dir/macos/SourceScrollTrace.mm" -o "$source_editor_build/trace-test"
+"$source_editor_build/trace-test"
+source_trace_test_dir="$(mktemp -d "${TMPDIR:-/tmp}/legend-source-scroll-trace-test.XXXXXX")"
+"$source_editor_build/trace-test" "$source_trace_test_dir"
+rm "$source_editor_build/trace-test"
 clang++ -std=c++20 -O2 -fobjc-arc -framework Foundation "$source_editor_dir/tests/SourceDocumentLoad.test.mm" "$source_editor_dir/macos/SourceDocumentLoad.mm" "$source_editor_dir/macos/SourceFileSession.mm" -o "$source_editor_build/preload-test"
 "$source_editor_build/preload-test"
 rm "$source_editor_build/preload-test"
@@ -32,6 +37,7 @@ syntax_flags=(
   -I"$source_editor_headers/Public/ReactCommon" -I"$source_editor_headers/Public/React-callinvoker"
 )
 syntax_sources=(
+  "$source_editor_dir/macos/SourceScrollTrace.mm"
   "$source_editor_dir/macos/SourceFileSession.mm"
   "$source_editor_dir/macos/SourceSearch.mm" "$source_editor_dir/macos/SourceSearchPanel.mm"
   "$syntax_parser_dir/cpp/TreeSitterHighlighter.cpp" "$source_editor_build/"*.o
