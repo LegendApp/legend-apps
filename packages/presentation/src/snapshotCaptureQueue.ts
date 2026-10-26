@@ -47,3 +47,14 @@ export function createSnapshotCaptureQueue(
   };
 }
 export const snapshotCaptureQueue = createSnapshotCaptureQueue();
+
+/** One-shot cleanup two frames later, once a canvas (including a native UI-thread draw) no longer replays what it frees. */
+export function afterTwoFrames(callback: () => void) {
+  // Hidden web tabs pause frames, and their canvases with them, so free now rather than retain.
+  if (typeof document !== "undefined" && document.hidden) {
+    callback();
+    return () => {};
+  }
+  let frame = requestAnimationFrame(() => { frame = requestAnimationFrame(callback); });
+  return () => cancelAnimationFrame(frame);
+}

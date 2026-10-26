@@ -6,11 +6,16 @@ import { preloadedSource } from "./preload";
 export const View = forwardRef<any, any>(function View({ className = "", style, ...props }, ref) {
   return <Native.View {...props} style={[useResolveClassNames(className), style]} ref={ref} />;
 });
-export const Image = forwardRef<any, any>(function Image({ className = "", style, source, ...props }, ref) {
+export const Image = forwardRef<any, any>(function Image({ className = "", style, source, onLoad, ...props }, ref) {
   const uri = source?.uri;
   const mediaUri = useMemo(() => uri ? preloadedSource(uri) : uri, [uri]);
   const imageSource = uri ? { ...source, uri: mediaUri } : source;
-  return <Native.Image {...props} source={imageSource} style={[useResolveClassNames(className), style]} ref={ref} />;
+  // React Native reports the decoded size as nativeEvent.source; React Native Web passes the DOM load event.
+  const handleLoad = onLoad && ((event: any) => {
+    const image = event.nativeEvent?.target as HTMLImageElement | undefined;
+    onLoad({ ...event, nativeEvent: { source: { uri, width: image?.naturalWidth ?? 0, height: image?.naturalHeight ?? 0 } } });
+  });
+  return <Native.Image {...props} onLoad={handleLoad} source={imageSource} style={[useResolveClassNames(className), style]} ref={ref} />;
 });
 export const Text = forwardRef<any, any>(function Text({ onTextLayout, className = "", style, ...props }, forwarded) {
   const ref = useRef<HTMLElement>(null);

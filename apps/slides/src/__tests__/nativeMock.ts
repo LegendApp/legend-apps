@@ -70,7 +70,7 @@ mock.module("react-native-reanimated", () => ({
   withTiming: (value, _, done) => { if (done) { transitions.push(({ finished }) => done(finished)); return 0; } return value; },
 }));
 mock.module("@shopify/react-native-skia", () => ({
-  Canvas: "canvas", Image: "image", useImage: () => null, matchFont: () => ({}),
+  Canvas: "canvas", Image: "image", ImageShader: "image-shader", useImage: () => null, matchFont: () => ({}),
   Blur: "blur", Group: "group", Paint: "paint", Fill: "fill", Shader: "shader", RuntimeShader: "shader",
   Skia: { RuntimeEffect: { Make: () => ({}) } },
   makeImageFromView: async () => null,

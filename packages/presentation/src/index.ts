@@ -1,4 +1,5 @@
 export { useRuntimeProjection } from "./useRuntimeProjection";
+export { useDeferredDispose } from "./useDeferredDispose";
 export { PresentationCanvas, PresentationCanvasScaleContext } from "./PresentationCanvas";
 export { PreparationBoundary, usePreparationTask } from "./PreparationBoundary";
 export { ProgressivePreparation } from "./ProgressivePreparation";

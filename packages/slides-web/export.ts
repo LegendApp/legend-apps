@@ -11,6 +11,18 @@ import { ExportAssets, isAsset } from "./assets";
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "../..");
 const src = path.join(import.meta.dirname, "src");
+// How the web player renders each effect pack capability; any other capability is unsupported on web.
+const webCapabilities: Record<string, string> = {
+  reanimated: "Reanimated web", skia: "CanvasKit", lottie: "Skottie", "native-video": "HTML video", webgpu: "WebGPU (requires a WebGPU browser)",
+};
+
+export function webEffectSupport(found: { id: string; capabilities?: unknown }[]) {
+  const packs = found.map(pack => ({ id: pack.id, capabilities: Array.isArray(pack.capabilities) ? pack.capabilities as string[] : [] }));
+  const effects = Object.fromEntries(packs.map(pack => [pack.id, Object.fromEntries(pack.capabilities.map(capability => [capability, webCapabilities[capability] ?? "unsupported"]))]));
+  const unsupported = packs.flatMap(pack => pack.capabilities.filter(capability => !webCapabilities[capability])
+    .map(capability => `Effect pack "${pack.id}" is unsupported on web: it requires the native "${capability}" capability.`));
+  return { effects, unsupported };
+}
 
 export type ExportOptions = { canvasKitURL?: string };
 
@@ -59,6 +71,9 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
   const out = path.resolve(output);
   const result = await compileDeck(deckPath);
   if (!result.success) throw new Error(result.errors.join("\n"));
+  const packs = await Promise.all(result.dependencies.filter(file => path.basename(file) === "pack.json").map(async file => JSON.parse(await fs.readFile(file, "utf8"))));
+  const { effects, unsupported } = webEffectSupport(packs);
+  for (const warning of unsupported) console.warn(warning);
   const skia = usesSkia(result.code);
   const font = skia ? `data:font/ttf;base64,${(await fs.readFile(path.join(import.meta.dirname, "assets/Roboto.ttf"))).toString("base64")}` : "";
   await fs.mkdir(out, { recursive: true });
@@ -83,6 +98,7 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
     "react-native": path.join(src, "native.tsx"),
     "@shopify/react-native-skia": path.join(src, "skia.tsx"),
     "@legend-apps/scaled-view": path.join(src, "scaled.tsx"),
+    "lottie-react-native": path.join(src, "lottie.tsx"),
   };
   const replacements: Record<string, string> = {
     "NativeVideoView.tsx": "video.tsx",
@@ -137,8 +153,8 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
   const remoteURLs = [...assets.remoteURLs].sort();
   await fs.writeFile(path.join(out, "export.json"), JSON.stringify({ format: "legend-slides-web", version: 1,
     source: path.basename(deckPath), canvasKit: skia ? options.canvasKitURL ?? "./canvaskit.js" : null,
-    assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload,
-    remoteURLs, warnings: [...result.warnings, ...remoteURLs.map(url => `Remote URL requires network: ${url}`)] }, null, 2));
+    assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, effects,
+    remoteURLs, warnings: [...result.warnings, ...unsupported, ...remoteURLs.map(url => `Remote URL requires network: ${url}`)] }, null, 2));
   return out;
 }
 

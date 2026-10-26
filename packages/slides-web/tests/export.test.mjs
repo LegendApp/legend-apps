@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { exportWebsite, usesSkia, validateDestination } from "../export";
+import { exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
 import { parsePosition } from "../src/navigation";
 
 test("links restore and clamp both slide and reveal positions", () => {
@@ -10,6 +10,13 @@ test("links restore and clamp both slide and reveal positions", () => {
   expect(parsePosition("#99/99", [1, 4])).toEqual({ currentSlide: 1, currentStep: 3 });
   expect(parsePosition("#0/0", [1, 4])).toEqual({ currentSlide: 0, currentStep: 0 });
   expect(parsePosition("#invalid", [1])).toEqual({ currentSlide: 0, currentStep: 0 });
+});
+
+test("reports how each effect pack runs on web and flags native-only capabilities", () => {
+  const { effects, unsupported } = webEffectSupport([{ id: "animation", capabilities: ["reanimated", "lottie"] }, { id: "camera", capabilities: ["skia", "arkit"] }]);
+  expect(effects).toEqual({ animation: { reanimated: "Reanimated web", lottie: "Skottie" }, camera: { skia: "CanvasKit", arkit: "unsupported" } });
+  expect(unsupported).toEqual(['Effect pack "camera" is unsupported on web: it requires the native "arkit" capability.']);
+  expect(webEffectSupport([{ id: "local" }])).toEqual({ effects: { local: {} }, unsupported: [] });
 });
 
 test("Skia detection follows compiled host imports and built-in effects, not slide prose", () => {
@@ -50,6 +57,8 @@ test("exports real assets and preserves a completed export when recompilation fa
     expect(await fs.readFile(path.join(out, "assets/..poster.png"))).toEqual(image);
     const initialManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
     expect(initialManifest.canvasKit).toBeNull();
+    expect(initialManifest.effects).toEqual({});
+    expect(initialManifest.remoteURLs).toEqual([]);
     expect(initialManifest.assets.some(file => /helper\.js|style\.css|font\.woff2/.test(file))).toBe(false);
     expect(initialManifest.preload.some(asset => /helper\.js|style\.css|font\.woff2/.test(asset.source))).toBe(false);
     expect(await fs.exists(path.join(out, "assets/font.woff2"))).toBe(false);
@@ -74,6 +83,27 @@ test("exports real assets and preserves a completed export when recompilation fa
     await expect(exportWebsite(deck, out)).rejects.toThrow();
     expect(await fs.readFile(path.join(out, "player.js"))).toEqual(before);
   } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("Lottie-only exports include offline CanvasKit and effect capability metadata", async () => {
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-lottie-")));
+  const previousPacks = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  process.env.LEGEND_SLIDES_EFFECT_PACKS = path.resolve(import.meta.dirname, "../../slides-effects/packs");
+  try {
+    const deck = path.resolve(import.meta.dirname, "../../slides-effects/examples/lottie-player/example.mdx");
+    const out = path.join(dir, "website");
+    await exportWebsite(deck, out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
+    expect(manifest.canvasKit).toBe("./canvaskit.js");
+    expect(manifest.effects.animation).toEqual({ reanimated: "Reanimated web", lottie: "Skottie" });
+    expect(manifest.remoteURLs).toEqual([]);
+    expect(manifest.warnings).toEqual([]);
+    expect(await fs.exists(path.join(out, "canvaskit.js"))).toBe(true);
+  } finally {
+    if (previousPacks === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
+    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previousPacks;
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 30000);
