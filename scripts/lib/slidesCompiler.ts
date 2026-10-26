@@ -7,9 +7,12 @@ import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
 import { bundleSlidesCompiler, slidesCompilerEntry } from "./slidesCompilerBundle";
 
-/** Types and source maps are not loaded by the shipped transpile-only compiler. */
+/** Omit package documentation and development files; retain runtime TypeScript and licenses. */
 export function isCompilerRuntimeFile(file: string) {
-  return !/\.map$|\.d\.[cm]?ts$/.test(file);
+  const parts = file.split(/[\\/]/);
+  return !/\.map$|\.d\.[cm]?ts$|\.flow$/.test(file)
+    && !parts.some(part => /^(?:tests?|__tests__|__mocks__)$/.test(part))
+    && !/^(?:readme|changelog|changes|history)(?:\.(?:md|markdown|txt|rst))?$/i.test(parts[parts.length - 1]);
 }
 
 /**
@@ -21,6 +24,8 @@ const packageRuntimeFiles: Record<string, RegExp> = {
 };
 
 export function isPackageRuntimeFile(name: string, relativeFile: string) {
+  // These packages are only resolved for Webviews, whose browser build defines NODE_ENV=production.
+  if (["react", "scheduler", "use-sync-external-store"].includes(name) && /\.development\.js$/.test(relativeFile)) return false;
   const allowed = packageRuntimeFiles[name];
   return !allowed || relativeFile === "" || relativeFile === "cjs" || allowed.test(relativeFile);
 }
@@ -75,7 +80,7 @@ export async function packageSlidesCompiler(destination: string) {
     fs.cpSync(source, target, { recursive: true, dereference: true, filter: (file) => {
       if (file === source) return true;
       const relative = path.relative(source, file);
-      return !relative.split(path.sep).includes("node_modules") && isCompilerRuntimeFile(file) && isPackageRuntimeFile(name, relative.split(path.sep).join("/"));
+      return !relative.split(path.sep).includes("node_modules") && isCompilerRuntimeFile(relative) && isPackageRuntimeFile(name, relative.split(path.sep).join("/"));
     } });
     const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
     for (const dependency of new Set([...Object.keys(pkg.dependencies ?? {}), ...Object.keys(pkg.optionalDependencies ?? {})])) {

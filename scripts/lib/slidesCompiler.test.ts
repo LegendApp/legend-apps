@@ -2,11 +2,11 @@
 import { expect, test } from "bun:test";
 import { isCompilerRuntimeFile, isPackageRuntimeFile } from "./slidesCompiler";
 
-test("compiler packaging omits maps and declarations while retaining runtime TypeScript and native modules", () => {
-  for (const name of ["index.js.map", "index.d.ts", "index.d.mts", "index.d.cts", "index.d.ts.map"]) {
+test("compiler packaging omits development files while retaining runtime TypeScript and native modules", () => {
+  for (const name of ["index.js.map", "index.d.ts", "index.d.mts", "index.d.cts", "index.d.ts.map", "index.js.flow", "README.md", "readme", "CHANGELOG.txt", "CHANGES.md", "HISTORY.rst", "test", "tests/unit.js", "lib/__tests__/index.js", "__mocks__/native.js"]) {
     expect(isCompilerRuntimeFile(name)).toBe(false);
   }
-  for (const name of ["compileVirtual.ts", "index.mjs", "index.cjs", "lightningcss.node", "package.json", "LICENSE", "theme.css"]) {
+  for (const name of ["src/compileVirtual.ts", "index.mjs", "index.cjs", "lightningcss.node", "package.json", "LICENSE", "LICENSE.md", "NOTICE.txt", "theme.css", "lib/test-utils.js"]) {
     expect(isCompilerRuntimeFile(name)).toBe(true);
   }
 });
@@ -18,7 +18,19 @@ test("compiler packaging keeps only the react-dom client production build", () =
   for (const file of ["server.js", "cjs/react-dom-client.development.js", "cjs/react-dom-server.node.production.js", "cjs/react-dom-profiling.profiling.js"]) {
     expect(isPackageRuntimeFile("react-dom", file)).toBe(false);
   }
-  expect(isPackageRuntimeFile("react", "cjs/react.development.js")).toBe(true);
+});
+
+test("Webview dependencies omit development builds and retain production entrypoints", () => {
+  for (const [name, entry] of [["react", "react"], ["scheduler", "scheduler"], ["use-sync-external-store", "use-sync-external-store"]]) {
+    expect(isPackageRuntimeFile(name, `cjs/${entry}.development.js`)).toBe(false);
+    expect(isPackageRuntimeFile(name, `cjs/${entry}.production.js`)).toBe(true);
+    expect(isPackageRuntimeFile(name, "index.js")).toBe(true);
+  }
+  expect(isPackageRuntimeFile("react", "jsx-dev-runtime.js")).toBe(true);
+  expect(isPackageRuntimeFile("react", "cjs/react-jsx-dev-runtime.production.js")).toBe(true);
+  expect(isPackageRuntimeFile("use-sync-external-store", "cjs/use-sync-external-store-shim")).toBe(true);
+  expect(isPackageRuntimeFile("use-sync-external-store", "cjs/use-sync-external-store-shim/with-selector.production.js")).toBe(true);
+  expect(isPackageRuntimeFile("another-package", "index.development.js")).toBe(true);
 });
 
 test("packaged compiler signs as a helper bundle and compiles local worklets and Webview components", async () => {
@@ -52,10 +64,14 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(fs.existsSync(path.join(compiler, "runtime/compiler/dist/bin/compiler.mjs"))).toBe(true);
     expect(fs.existsSync(path.join(compiler, "packages"))).toBe(false);
     expect(fs.existsSync(path.join(compiler, "bun"))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "node_modules/react/README.md"))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "node_modules/react/cjs/react.development.js"))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "node_modules/react/LICENSE"))).toBe(true);
+    expect(fs.existsSync(path.join(compiler, "node_modules/react/cjs/react-jsx-dev-runtime.production.js"))).toBe(true);
     const deck = path.join(temp, "deck.mdx");
     fs.writeFileSync(deck, '---\ntransition: fade\n---\nexport { pose } from "./pose"\n\n# Portable\n\n<Webview component="./Panel.tsx" />');
     fs.writeFileSync(path.join(temp, "pose.ts"), 'export function pose(x: number) { "worklet"; return x * 2; }');
-    fs.writeFileSync(path.join(temp, "Panel.tsx"), 'import { observable } from "@legendapp/state"; import { useValue } from "@legendapp/state/react"; const label = observable("Portable webview"); export default function Panel() { return <div>{useValue(label)}</div>; }');
+    fs.writeFileSync(path.join(temp, "Panel.tsx"), 'import { Fragment } from "react/jsx-dev-runtime"; import { observable } from "@legendapp/state"; import { useValue } from "@legendapp/state/react"; const label = observable("Portable webview"); export default function Panel() { return <Fragment><div>{useValue(label)}</div></Fragment>; }');
     // The helper ships no JavaScript runtime; exercise every runtime available on this machine.
     const runtimes = [Bun.which("bun") ?? process.execPath, Bun.which("node")].filter((runtime): runtime is string => !!runtime);
     for (const runtime of runtimes.slice(1)) {
