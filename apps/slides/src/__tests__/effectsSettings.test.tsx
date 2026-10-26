@@ -24,7 +24,7 @@ mock.module("../deckLoader", () => ({ loadDeck: async path => { loaded.push(path
 const slidesState$ = observable({ deckLocked: false, audienceOpen: false });
 mock.module("../slidesStore", () => ({ slidesState$, getSlidesState: () => slidesState$.peek() }));
 mock.module("@legend-apps/presentation", () => ({ NativeVideoView: "video" }));
-mock.module("../compilerRuntime", () => ({ compilerRuntime$: observable({}), changeCompilerRuntime() {}, resolveCompilerRuntime() {}, downloadCompilerRuntime() {}, setCustomCompilerRuntime() {} }));
+mock.module("../compilerRuntime", () => ({ runtimeHost() {}, compilerRuntime$: observable({}), changeCompilerRuntime() {}, resolveCompilerRuntime() {}, downloadCompilerRuntime() {}, setCustomCompilerRuntime() {} }));
 mock.module("@legendapp/spark/dialogs", () => ({ openFileDialog() {} }));
 mock.module("@legendapp/spark/settings/window", () => ({
   SettingsSection: ({ title, description, headerRight, children }) => <section title={title} description={description}>{headerRight}{children}</section>,
@@ -116,6 +116,32 @@ test("Settings operations do not show a presenter overlay", async () => {
   await act(async () => { renderer = create(<EffectInstallStatus />); });
   try { expect(renderer.root.findAll(node => node.type === "text" && node.children.includes("Installing backgrounds…"))).toHaveLength(0); }
   finally { await act(() => renderer.unmount()); }
+});
+
+test("presenter stacks simultaneous runtime, compiler and effects banners", async () => {
+  const { compilerRuntime$ } = await import("../compilerRuntime");
+  const { compilerHelper$ } = await import("../compilerHelper");
+  compilerRuntime$.assign({ retryDeck: "/deck.mdx", status: "error", error: "Runtime unavailable" });
+  compilerHelper$.assign({ retryDeck: "/deck.mdx", error: "Compiler unavailable" });
+  effectRequests$.pending.set({ path: "/deck.mdx", packs: ["backgrounds"] });
+  let renderer;
+  try {
+    await act(() => { renderer = create(<EffectInstallStatus />); });
+    const column = renderer.root.findByProps({ pointerEvents: "box-none" });
+    const banners = () => column.findAll(node => node.type === "view" && node.props.style?.backgroundColor === "#20242c");
+    expect(banners()).toHaveLength(3);
+    for (const banner of banners()) expect(banner.props.style.position).not.toBe("absolute");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Runtime unavailable");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Compiler unavailable");
+    expect(button(column, "Install Required Effects")).toBeDefined();
+    await act(() => compilerRuntime$.status.set("ready"));
+    expect(banners()).toHaveLength(2);
+    expect(button(column, "Retry Compiler Download")).toBeDefined();
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    compilerRuntime$.assign({ retryDeck: null, status: "ready", error: "" });
+    compilerHelper$.assign({ retryDeck: null, error: "" });
+  }
 });
 
 test("removal asks first, runs under the compiler's lease and reports failures", async () => {

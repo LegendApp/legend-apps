@@ -66,7 +66,7 @@ export function CompilerRuntimePrompt() {
   const error = useValue(compilerRuntime$.error);
   if (!retry || status === "ready") return null;
   const busy = status === "downloading" || status === "checking";
-  return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 21, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
+  return <View style={{ padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
     <Text style={{ color: "#fafafa", fontSize: 14 }}>{runtimeStatusText(status, error, arch)}</Text>
     {status === "downloading" && <CompilerRuntimeProgress textColor="#fafafa" />}
     <View style={{ flexDirection: "row", gap: 8 }}>
@@ -82,7 +82,7 @@ export function CompilerDownloadPrompt() {
   const busy = useValue(compilerHelper$.busy), message = useValue(compilerHelper$.message);
   const error = useValue(compilerHelper$.error), path = useValue(compilerHelper$.retryDeck);
   if (!busy && (!error || !path)) return null;
-  return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 22, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
+  return <View style={{ padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
     <Text style={{ color: "#fafafa", fontSize: 14 }}>{busy ? message : error}</Text>
     {!busy && path && <RuntimeButton title="Retry Compiler Download" onPress={() => {
       void import("./deckLoader").then(({ retryCompilerDownload }) => retryCompilerDownload());

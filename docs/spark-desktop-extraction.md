@@ -164,8 +164,9 @@ build intermediates.
 All app consumers use Spark's consolidated public paths. Window options group
 geometry and macOS chrome; menus and context menus use typed item trees and
 action results; dialogs return explicit cancellation results. Process execution
-uses `runCommand` with a target and byte output. The Slides compiler is packaged
-as a Spark helper under `Contents/Helpers/slides-compiler.helper`.
+uses `runCommand` with a target and byte output. Slides downloads its pinned
+compiler helper on first use and caches it in Application Support; it is no
+longer embedded in the app.
 
 Async native resources retain an owner during setup and teardown. Components
 release listeners, watchers, and shortcuts on unmount, including registrations

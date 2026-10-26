@@ -5,7 +5,9 @@ import { runEffectCommand } from "./effectCommands";
 import { effectRequests$ } from "./effectRequests";
 import { CompilerRuntimePrompt, CompilerDownloadPrompt } from "./CompilerRuntimePrompt";
 export function EffectInstallStatus() {
-  return <><CompilerRuntimePrompt /><CompilerDownloadPrompt /><EffectPackStatus /></>;
+  return <View pointerEvents="box-none" className="absolute bottom-4 left-4 right-4 z-20 gap-2">
+    <CompilerRuntimePrompt /><CompilerDownloadPrompt /><EffectPackStatus />
+  </View>;
 }
 
 function EffectPackStatus() {
@@ -14,7 +16,7 @@ function EffectPackStatus() {
   const settings = useValue(effectRequests$.source) === "settings";
   const needs = pending && `This deck needs optional effects: ${pending.packs.join(", ")}`;
   if (!pending && (settings || !busy && !message && !error)) return null;
-  return <View style={{ position: "absolute", bottom: 18, left: 18, right: 18, zIndex: 20, padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
+  return <View style={{ padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
     <Text style={{ color: "#fafafa", fontSize: 14 }}>{settings ? needs : busy ? message : error || needs || message}</Text>
     {pending && <Pressable disabled={busy} accessibilityRole="button" accessibilityLabel="Install Required Effects" onPress={async () => {
       try { await runEffectCommand([pending.path, "--install-effects"], "Installing required effects…"); if (effectRequests$.pending.peek()?.path === pending.path) await loadDeck(pending.path); }

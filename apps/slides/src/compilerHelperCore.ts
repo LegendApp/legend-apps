@@ -25,7 +25,7 @@ export async function installCompilerHelper(host: RuntimeHost, asset: CompilerAr
     report("Checking cached deck compiler…");
     if (!(await host.exists(archive)) || !(await valid(archive))) {
       report(`Downloading deck compiler (${Math.ceil(asset.bytes / 1_000_000)} MB, once)…`);
-      const download = await host.run("/usr/bin/curl", ["--fail", "--proto", "=https", "--tlsv1.2", "--connect-timeout", "20", "--max-time", "600", "--max-filesize", String(asset.bytes), "-o", `${scratch}/compiler.zip`, asset.url], { timeoutMs: 11 * 60_000 });
+      const download = await host.run("/usr/bin/curl", ["--fail", "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2", "--retry", "2", "--connect-timeout", "20", "--max-time", "600", "--max-filesize", String(asset.bytes), "-o", `${scratch}/compiler.zip`, asset.url], { timeoutMs: 11 * 60_000 });
       if (download.code !== 0 || download.timedOut) throw new CompilerDownloadError("Couldn't download the deck compiler. Connect to the internet and retry this action. Once downloaded, it works offline.");
       report("Verifying deck compiler…");
       if (!(await valid(`${scratch}/compiler.zip`))) throw new CompilerDownloadError("The deck compiler download failed its integrity check. Retry this action; if this continues, update Legend Slides.");
