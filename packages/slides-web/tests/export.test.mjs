@@ -19,6 +19,17 @@ test("Skia detection follows compiled host imports and built-in effects, not sli
   expect(usesSkia('const canvas = presentation.PresentationCanvas')).toBe(true);
   expect(usesSkia('const { Effect: LocalEffect } = components')).toBe(true);
   expect(usesSkia('const { Slide } = components')).toBe(false);
+  expect(usesSkia('props.Effect; state.Effect; slides.Effect; config.Skia')).toBe(false);
+  expect(usesSkia('const { Effect, Skia } = props')).toBe(false);
+  expect(usesSkia('const components = { Effect: 1 }; components.Effect')).toBe(false);
+  expect(usesSkia('function local(presentation) { return presentation.Skia }')).toBe(false);
+  expect(usesSkia('components[Effect]')).toBe(false);
+  expect(usesSkia('const host = require("@legend-apps/presentation"); const alias = host; alias["Effect"]')).toBe(true);
+  expect(usesSkia('const host = require("@legend-apps/presentation"); const { LiquidGlass } = host')).toBe(true);
+  expect(usesSkia('const _components = { ...props.components }; const { Effect } = _components')).toBe(true);
+  expect(usesSkia('const _components = { Effect: 1 }; _components.Effect')).toBe(false);
+  expect(usesSkia('require("number-flow-react-native/skia")')).toBe(true);
+  expect(usesSkia('const Lottie = require("lottie-react-native")')).toBe(true);
 });
 
 test("exports real assets and preserves a completed export when recompilation fails", async () => {
@@ -30,12 +41,18 @@ test("exports real assets and preserves a completed export when recompilation fa
     const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM5sAAAAASUVORK5CYII=", "base64");
     await fs.writeFile(path.join(source, "..poster.png"), image);
     await fs.symlink("..poster.png", path.join(source, "poster.png"));
-    await fs.writeFile(deck, "# Export test\n\n![Poster](./..poster.png)\n\n![Linked](./poster.png)");
+    await fs.writeFile(path.join(source, "helper.js"), 'import { Platform } from "react-native"; export const title = Platform.OS;');
+    await fs.writeFile(path.join(source, "style.css"), "body{color:red}");
+    await fs.writeFile(path.join(source, "font.woff2"), "font");
+    await fs.writeFile(deck, 'import { title } from "./helper.js";\nimport "./style.css";\nimport font from "./font.woff2";\nexport const fontURL = font;\n\n# Export test\n\n{title}\n\n![Poster](./..poster.png)\n\n![Linked](./poster.png)');
     const out = path.join(dir, "website");
     await exportWebsite(deck, out);
     expect(await fs.readFile(path.join(out, "assets/..poster.png"))).toEqual(image);
     const initialManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
     expect(initialManifest.canvasKit).toBeNull();
+    expect(initialManifest.assets.some(file => /helper\.js|style\.css|font\.woff2/.test(file))).toBe(false);
+    expect(initialManifest.preload.some(asset => /helper\.js|style\.css|font\.woff2/.test(asset.source))).toBe(false);
+    expect(await fs.exists(path.join(out, "assets/font.woff2"))).toBe(false);
     expect((await fs.readdir(out)).some(file => /canvaskit|Roboto/.test(file))).toBe(false);
     expect(await fs.readFile(path.join(out, "index.html"), "utf8")).not.toContain('type="module"');
     expect(initialManifest.preload[0].version).toMatch(/^[a-f0-9]{64}$/);

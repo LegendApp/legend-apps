@@ -6,6 +6,7 @@ import { build } from "esbuild";
 
 // Bun's streaming HTML parser handles entities, quoting, comments and raw script text.
 type Element = {
+  tagName: string;
   getAttribute(name: string): string | null;
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
@@ -24,16 +25,24 @@ const mime: Record<string, string> = {
   ".woff": "font/woff", ".woff2": "font/woff2", ".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm",
   ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".wasm": "application/wasm", ".pdf": "application/pdf",
 };
-export const isAsset = (file: string) => Object.hasOwn(mime, path.extname(file).toLowerCase());
+export const isAsset = (file: string) => /\.(?:png|jpe?g|gif|webp|avif|svg|html?|ttf|otf|woff2?|mp4|mov|webm|mp3|wav|ogg|wasm|pdf)$/i.test(file);
 
 export class ExportAssets {
   readonly copied = new Set<string>();
+  readonly embedded = new Set<string>();
   readonly remoteURLs = new Set<string>();
   private visiting = new Set<string>();
 
   constructor(private root: string, private out: string) {}
 
   private destination(file: string) { return path.join(this.out, "assets", path.relative(this.root, file)); }
+
+  private remote(source: string) {
+    for (const match of source.matchAll(/https?:\/\/[^\s<>"'`\\(]+/g)) {
+      const url = match[0].replace(/[.,;:!?)\]}]+$/, "");
+      if (!/^https?:\/\/www\.w3\.org\/(?:2000\/svg|1999\/(?:xhtml|xlink)|XML\/1998\/namespace)$/.test(url)) this.remoteURLs.add(url);
+    }
+  }
 
   private async validate(file: string) {
     const real = await fs.realpath(file).catch(() => { throw new Error(`Missing local export asset: ${file}`); });
@@ -45,19 +54,21 @@ export class ExportAssets {
 
   private async dataURL(file: string) {
     if (this.visiting.has(file)) throw new Error(`Cyclic embedded asset reference: ${file}`);
-    await this.copy(file);
-    return `data:${mime[path.extname(file).toLowerCase()] ?? "application/octet-stream"};base64,${(await fs.readFile(this.destination(file))).toString("base64")}`;
+    const contents = await this.transform(file) ?? await fs.readFile(file);
+    this.embedded.add(file);
+    return `data:${mime[path.extname(file).toLowerCase()] ?? "application/octet-stream"};base64,${Buffer.from(contents).toString("base64")}`;
   }
 
   async reference(reference: string, from: string, inline = false, base = pathToFileURL(from).href): Promise<string> {
     if (!reference || /^(?:#|data:|blob:|mailto:|tel:|javascript:)/i.test(reference)) return reference;
-    const url = new URL(reference, base);
+    const url = new URL(reference.startsWith("//") ? "https:" + reference : reference, base);
     if (/^https?:$/.test(url.protocol)) {
-      this.remoteURLs.add(url.href);
+      this.remote(url.href);
       return url.href;
     }
     if (url.protocol !== "file:") throw new Error(`Unsupported export URL in ${from}: ${reference}`);
     const file = fileURLToPath(url);
+    if ((await fs.stat(file).catch(() => null))?.isDirectory()) return reference;
     if (inline || /\.(?:ttf|otf|woff2?)$/i.test(file)) return (await this.dataURL(file)) + url.hash;
     await this.copy(file);
     const relative = path.relative(path.dirname(this.destination(from)), this.destination(file)).split(path.sep).map(encodeURIComponent).join("/");
@@ -66,35 +77,42 @@ export class ExportAssets {
 
   async copy(file: string) {
     if (this.copied.has(file) || this.visiting.has(file)) return;
-    await this.validate(file);
-    this.visiting.add(file);
+    const contents = await this.transform(file);
     const dest = this.destination(file);
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    const ext = path.extname(file).toLowerCase();
-    if ([".html", ".htm", ".svg", ".css", ".js", ".mjs"].includes(ext)) {
-      const source = await fs.readFile(file, "utf8");
-      const code = [".html", ".htm", ".svg"].includes(ext) ? await this.html(source, file)
-        : ext === ".css" ? await this.css(source, file) : await this.script(source, file);
-      await fs.writeFile(dest, code);
-    } else {
-      await fs.copyFile(file, dest);
-    }
-    this.visiting.delete(file);
+    if (contents === undefined) await fs.copyFile(file, dest);
+    else await fs.writeFile(dest, contents);
     this.copied.add(file);
+  }
+
+  private async transform(file: string): Promise<string | undefined> {
+    await this.validate(file);
+    this.visiting.add(file);
+    try {
+      const ext = path.extname(file).toLowerCase();
+      if ([".html", ".htm", ".css", ".js", ".mjs"].includes(ext)) {
+        const source = await fs.readFile(file, "utf8");
+        return [".html", ".htm"].includes(ext) ? await this.html(source, file)
+          : ext === ".css" ? await this.css(source, file) : await this.script(source, file);
+      }
+    } finally { this.visiting.delete(file); }
   }
 
   async deck(code: string, file: string, skia: boolean) {
     const tree = parseSync(code, { babelrc: false, configFile: false, sourceType: "script" })!;
-    const strings: Array<{ start: number; end: number; value: string; script: boolean }> = [];
+    const strings: Array<{ start: number; end: number; value: string; slot: string }> = [];
     traverse(tree, { StringLiteral(node) {
       const { start, end, value } = node.node;
-      strings.push({ start: start!, end: end!, value, script: t.isObjectProperty(node.parent) && t.isIdentifier(node.parent.key, { name: "componentScript" }) });
+      const property = node.parent;
+      const key = t.isObjectProperty(property) && !property.computed && property.value === node.node ? property.key : undefined;
+      strings.push({ start: start!, end: end!, value, slot: t.isIdentifier(key) ? key.name : t.isStringLiteral(key) ? key.value : "" });
     } });
-    for (const item of strings.reverse()) {
+    for (const item of strings.sort((a, b) => b.start - a.start)) {
       let value = item.value;
-      for (const match of value.matchAll(/https?:\/\/[^\s<>"'`\\]+/g)) this.remoteURLs.add(match[0]);
-      if (item.script) value = await this.script(value, file);
-      else if (/^\s*<(?:!doctype\s+html|[a-z][a-z0-9-]*)\b/i.test(value)) value = await this.html(value, file, true);
+      this.remote(value);
+      if (item.slot === "componentScript") value = await this.script(value, file);
+      else if (item.slot === "componentCss") value = await this.css(value, file);
+      else if (["html", "srcdoc", "srcDoc"].includes(item.slot)) value = await this.html(value, file, true);
       else if (value === pathToFileURL(this.root).href + "/") value = "./assets/";
       else if (value.startsWith("file:") || (/^(?:\.\.?\/)/.test(value) && isAsset(value.split(/[?#]/)[0]))) {
         const inline = /\.(?:ttf|otf|woff2?)(?:[?#]|$)/i.test(value) || (skia && /\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#]|$)/i.test(value));
@@ -114,6 +132,7 @@ export class ExportAssets {
     const rewrite = new HTMLRewriter().on("base", { element: element => element.remove() });
     rewrite.on("*", { element: async element => {
       for (const name of ["src", "href", "poster", "data", "xlink:href"]) {
+        if (name === "href" && ["a", "area"].includes(element.tagName)) continue;
         const value = element.getAttribute(name);
         if (value) element.setAttribute(name, await this.reference(value, file, inline, base));
       }
@@ -126,7 +145,7 @@ export class ExportAssets {
         }))).join(", "));
       }
       const style = element.getAttribute("style");
-      if (style) element.setAttribute("style", (await this.css(`x{${style}}`, file, base)).replace(/^x\s*\{|\}\s*$/g, "").trim());
+      if (style && /url\s*\(/i.test(style)) element.setAttribute("style", (await this.css(`x{${style}}`, file, base)).replace(/^x\s*\{|\}\s*$/g, "").trim());
       const srcdoc = element.getAttribute("srcdoc");
       if (srcdoc) element.setAttribute("srcdoc", await this.html(srcdoc, file, true));
     } });
@@ -153,12 +172,12 @@ export class ExportAssets {
   }
 
   private async css(source: string, file: string, base = pathToFileURL(file).href) {
-    const result = await build({ stdin: { contents: source, loader: "css", resolveDir: path.dirname(file), sourcefile: file },
-      bundle: true, write: false, logLevel: "silent", plugins: [{ name: "offline-css", setup: api => {
+    const result = await build({ stdin: { contents: source, loader: "css", resolveDir: path.dirname(file) },
+      bundle: true, write: false, minifyWhitespace: true, legalComments: "none", logLevel: "silent", plugins: [{ name: "offline-css", setup: api => {
         api.onResolve({ filter: /.*/ }, async args => {
-          const from = args.importer || file;
-          const url = new URL(args.path, args.importer ? pathToFileURL(from).href : base);
-          if (/^https?:$/.test(url.protocol)) { this.remoteURLs.add(url.href); return { path: url.href, external: true }; }
+          const from = path.isAbsolute(args.importer) ? args.importer : file;
+          const url = new URL(args.path.startsWith("//") ? "https:" + args.path : args.path, from === file ? base : pathToFileURL(from).href);
+          if (/^https?:$/.test(url.protocol)) { this.remote(url.href); return { path: url.href, external: true }; }
           if (url.protocol === "data:") return { path: args.path, external: true };
           if (args.kind === "import-rule") {
             const imported = fileURLToPath(url);
@@ -177,7 +196,7 @@ export class ExportAssets {
       const references: Array<{ value: string; replace(value: string): void }> = [];
       traverse(tree, {
         StringLiteral: node => {
-          for (const match of node.node.value.matchAll(/https?:\/\/[^\s<>"'`\\]+/g)) this.remoteURLs.add(match[0]);
+          this.remote(node.node.value);
           const parent = node.parent;
           const resource = t.isObjectProperty(parent) ? parent.key
             : t.isAssignmentExpression(parent) && t.isMemberExpression(parent.left) ? parent.left.property : undefined;
@@ -189,9 +208,8 @@ export class ExportAssets {
         CallExpression: node => {
           const callee = node.node.callee;
           if (!t.isIdentifier(callee, { name: "fetch" })) return;
-          const argument = node.get("arguments.0");
-          if (Array.isArray(argument)) return;
-          if (t.isNewExpression(argument.node) && t.isIdentifier(argument.node.callee, { name: "URL" })) return;
+          if (!node.node.arguments.length) throw new Error(`Cannot export empty fetch URL in ${filename}. Use a static local URL or embed the data.`);
+          const argument = node.get("arguments")[0];
           const evaluated = argument.evaluate();
           if (!evaluated.confident || typeof evaluated.value !== "string") throw new Error(`Cannot export computed fetch URL in ${filename}. Use a static local URL or embed the data.`);
           references.push({ value: evaluated.value, replace: value => argument.replaceWith(t.stringLiteral(value)) });
@@ -207,17 +225,19 @@ export class ExportAssets {
       return transformFromAstSync(tree, code, { babelrc: false, configFile: false })!.code!;
     };
     const result = await build({ stdin: { contents: await prepare(source, file), loader: "js", resolveDir: path.dirname(file), sourcefile: file },
-      bundle: true, format: "iife", platform: "browser", target: "es2022", outfile: "script.js", write: false, logLevel: "silent",
+      bundle: true, format: "iife", platform: "browser", target: "es2022", outfile: "script.js", write: false, minifyWhitespace: true, legalComments: "none", logLevel: "silent",
       plugins: [{ name: "offline-script", setup: api => {
         api.onResolve({ filter: /^https?:\/\// }, args => { throw new Error(`Remote script import cannot be bundled offline in ${file}: ${args.path}`); });
         api.onResolve({ filter: /^\./ }, async args => {
+          if (args.importer.includes("/node_modules/")) return;
           const target = path.resolve(args.resolveDir, args.path);
           await this.validate(target);
-          if (isAsset(target) && !/\.(?:[cm]?js|json|css)$/i.test(target)) return { path: await this.dataURL(target), namespace: "offline-data" };
+          if (isAsset(target)) return { path: await this.dataURL(target), namespace: "offline-data" };
         });
         api.onLoad({ filter: /.*/, namespace: "offline-data" }, args => ({ contents: `export default ${JSON.stringify(args.path)}`, loader: "js" }));
         api.onLoad({ filter: /\.css$/ }, async args => ({ contents: await this.css(await fs.readFile(args.path, "utf8"), args.path), loader: "css" }));
         api.onLoad({ filter: /\.[cm]?js$/ }, async args => {
+          if (args.path.includes("/node_modules/")) return;
           await this.validate(args.path);
           return { contents: await prepare(await fs.readFile(args.path, "utf8"), args.path), loader: "js" };
         });

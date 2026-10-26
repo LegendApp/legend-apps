@@ -3,7 +3,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { build, type Plugin } from "esbuild";
-import { parseSync, traverse, transformSync, types as t } from "@babel/core";
+import { parseSync, traverse, transformSync, types as t, type NodePath } from "@babel/core";
 import { compileDeck } from "../presentation/src/compiler/compileDeck";
 import { createPreloadManifest } from "./preloadManifest";
 import { ExportAssets, isAsset } from "./assets";
@@ -18,20 +18,36 @@ export function usesSkia(code: string) {
   // Inspect the compiled deck, including installed packs and attribute-generated effects.
   let needed = false;
   const skiaExports = new Set(["Effect", "LiquidGlass", "PresentationCanvas", "useNativeVideo", "Skia"]);
+  const name = (key: t.Node, computed = false) => t.isIdentifier(key) && !computed ? key.name : t.isStringLiteral(key) ? key.value : "";
+  const isHost = (object: t.Node | null | undefined, site: NodePath, seen = new Set<t.Node>()): boolean => {
+    if (t.isCallExpression(object)) return t.isIdentifier(object.callee, { name: "require" })
+      && !site.scope.getBinding("require") && t.isStringLiteral(object.arguments[0], { value: "@legend-apps/presentation" });
+    if (!t.isIdentifier(object)) return false;
+    const binding = site.scope.getBinding(object.name);
+    if (!binding) return ["components", "presentation"].includes(object.name);
+    if (!binding.constant || seen.has(binding.identifier) || !t.isVariableDeclarator(binding.path.node)) return false;
+    seen.add(binding.identifier);
+    const init = binding.path.node.init;
+    // MDX emits this host component table, including attribute-generated effects.
+    if (/^_components\d*$/.test(object.name) && t.isObjectExpression(init)
+      && init.properties.some(property => t.isSpreadElement(property) && t.isMemberExpression(property.argument)
+        && t.isIdentifier(property.argument.object, { name: "props" }) && name(property.argument.property, property.argument.computed) === "components")) return true;
+    return isHost(init, binding.path, seen);
+  };
   const tree = parseSync(code, { babelrc: false, configFile: false, sourceType: "script" });
   traverse(tree!, {
-    CallExpression({ node }) {
-      if (t.isIdentifier(node.callee, { name: "require" }) && t.isStringLiteral(node.arguments[0])
-        && ["@shopify/react-native-skia", "number-flow-react-native/skia"].includes(node.arguments[0].value)) needed = true;
+    CallExpression({ node, scope }) {
+      if (t.isIdentifier(node.callee, { name: "require" }) && !scope.getBinding("require") && t.isStringLiteral(node.arguments[0])
+        && ["@shopify/react-native-skia", "number-flow-react-native/skia", "lottie-react-native"].includes(node.arguments[0].value)) needed = true;
     },
-    ObjectPattern({ node }) {
-      if (node.properties.some(property => t.isObjectProperty(property)
-        && ((t.isIdentifier(property.key) && skiaExports.has(property.key.name))
-          || (t.isStringLiteral(property.key) && skiaExports.has(property.key.value))))) needed = true;
+    ObjectPattern(site) {
+      const parent = site.parent;
+      const object = t.isVariableDeclarator(parent) ? parent.init : t.isAssignmentExpression(parent) ? parent.right : undefined;
+      if (site.node.properties.some(property => t.isObjectProperty(property)
+        && skiaExports.has(name(property.key, property.computed))) && isHost(object, site)) needed = true;
     },
-    MemberExpression({ node }) {
-      const name = t.isIdentifier(node.property) ? node.property.name : t.isStringLiteral(node.property) ? node.property.value : "";
-      if (skiaExports.has(name)) needed = true;
+    MemberExpression(site) {
+      if (skiaExports.has(name(site.node.property, site.node.computed)) && isHost(site.node.object, site)) needed = true;
     },
   });
   return needed;
@@ -48,15 +64,15 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
   await fs.mkdir(out, { recursive: true });
   const assets = new ExportAssets(deckRoot, out);
   const dependencies = result.dependencies.map(file => file.replace(/^.*deck-asset:/, ""));
-  for (const file of dependencies.filter(file => isAsset(file) && !file.endsWith(".json"))) {
-    await assets.copy(file);
+  const deckCode = await assets.deck(result.code, deckPath, skia);
+  for (const file of dependencies.filter(file => isAsset(file) && !file.includes("/node_modules/"))) {
+    if (!assets.embedded.has(file)) await assets.copy(file);
     const stem = file.replace(/\.(html|png)$/i, "");
     for (const ext of [".mp4", ".mov"]) {
       const media = stem + ext;
       if (await fs.stat(media).catch(() => null)) await assets.copy(media);
     }
   }
-  const deckCode = await assets.deck(result.code, deckPath, skia);
   if (skia && options.canvasKitURL) assets.remoteURLs.add(options.canvasKitURL);
   const copied = assets.copied;
   const preload = await createPreloadManifest(deckPath, dependencies, [...copied]);
