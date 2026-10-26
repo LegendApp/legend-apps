@@ -40,6 +40,12 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
       }
     }
     checkLinks(compiler);
+    const { createRequire } = await import("node:module");
+    const helperRequire = createRequire(path.join(compiler, "package.json"));
+    const browserRequire = createRequire(path.join(compiler, "packages/slides-web/package.json"));
+    for (const name of ["react-dom/client", "@legendapp/state", "@legendapp/state/react"]) {
+      expect(fs.realpathSync(browserRequire.resolve(name))).toBe(fs.realpathSync(helperRequire.resolve(name)));
+    }
     if (process.platform === "darwin") {
       const { spawnSync } = await import("node:child_process");
       const { signSlidesCompiler } = await import("./slidesCompiler");

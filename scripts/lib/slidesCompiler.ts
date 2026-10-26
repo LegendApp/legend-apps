@@ -117,14 +117,14 @@ export async function packageSlidesCompiler(destination: string) {
     "@tailwindcss/oxide": uniwindRoot,
   };
   for (const [name, from] of Object.entries(externalRoots)) link(install(name, from), path.join(destination, "node_modules", name));
-  await packageSlidesWebRuntime(destination);
+  await packageSlidesWebRuntime(destination, copied);
   fs.writeFileSync(path.join(destination, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>so.legend.slides.compiler</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
   fs.writeFileSync(path.join(destination, "run"), slidesCompilerLauncher, { mode: 0o755 });
   return destination;
 }
 
 /** Preserve only esbuild's browser input files and the links/manifests needed to resolve them. */
-async function packageSlidesWebRuntime(destination: string) {
+async function packageSlidesWebRuntime(destination: string, copied: Map<string, string>) {
   const deck = [...hostModules].map(name => `exports[${JSON.stringify(name)}] = require(${JSON.stringify(name)});`).join("\n");
   const browser = await buildBrowserPlayer(deck, [], true, "", path.join(destination, "player.js"), undefined, false);
   const files = new Set(Object.keys(browser.metafile!.inputs).filter(file => !/^(?:compiled:|<)/.test(file)).map(file => path.resolve(rootDir, file)));
@@ -152,6 +152,9 @@ async function packageSlidesWebRuntime(destination: string) {
     }
   }
   function target(file: string) {
+    for (const [source, output] of copied) {
+      if (file === source || file.startsWith(source + path.sep)) return path.join(output, path.relative(source, file));
+    }
     const relative = path.relative(rootDir, file);
     if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Browser export dependency is outside the project: ${file}`);
     return path.join(destination, relative);
