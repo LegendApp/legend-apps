@@ -19,15 +19,18 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
     for (const app of fs.readdirSync(path.join(source, "apps"))) {
       const destination = path.join(root, "apps", app);
       fs.mkdirSync(destination, { recursive: true });
-      for (const file of ["package.json", "app.manifest.ts"]) {
+      for (const file of ["package.json", "app.manifest.ts", "scripts/benchmark-markdown.json"]) {
         const original = path.join(source, "apps", app, file);
-        if (fs.existsSync(original)) fs.copyFileSync(original, path.join(destination, file));
+        if (fs.existsSync(original)) {
+          fs.mkdirSync(path.dirname(path.join(destination, file)), { recursive: true });
+          fs.copyFileSync(original, path.join(destination, file));
+        }
       }
       const modules = path.join(source, "apps", app, "node_modules");
       if (fs.existsSync(modules)) fs.symlinkSync(modules, path.join(destination, "node_modules"));
     }
     const repo = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
-    repo.catalog["@legendapp/spark"] = "0.0.1-next.3";
+    repo.catalog["@legendapp/spark"] = "0.0.1";
     const repoSource = JSON.stringify(repo);
     fs.writeFileSync(path.join(root, "package.json"), repoSource);
     for (const archive of ["sdk.tgz", "other.tgz"]) fs.writeFileSync(path.join(workspace, archive), "preparation fixture");
@@ -55,7 +58,7 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
       const expected = sdk ? `file:${path.resolve(root, sdk.slice(5))}` : repo.catalog["@legendapp/spark"];
       assert.equal(generated.dependencies["@legendapp/spark"], expected);
       assert.equal(generated.overrides["@legendapp/spark"], expected);
-      assert.equal(generated.catalog["@legendapp/spark"], "0.0.1-next.3");
+      assert.equal(generated.catalog["@legendapp/spark"], "0.0.1");
       assert.equal(fs.readFileSync(path.join(root, "package.json"), "utf8"), repoSource);
       assert.ok(Object.values(generated.overrides).every(value => typeof value !== "string" || !value.includes("legend-spark/artifacts")));
       assert.ok(Object.values(generated.patchedDependencies).every(value => typeof value === "string" && path.resolve(root, "shell/.legend/spark/hello-world", value).startsWith(root)));

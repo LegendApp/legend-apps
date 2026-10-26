@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { exportWebsite, validateDestination, webEffectSupport } from "../export";
+import { exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
 import { parsePosition } from "../src/navigation";
 
 test("links restore and clamp both slide and reveal positions", () => {
@@ -19,6 +19,26 @@ test("reports how each effect pack runs on web and flags native-only capabilitie
   expect(webEffectSupport([{ id: "local" }])).toEqual({ effects: { local: {} }, unsupported: [] });
 });
 
+test("Skia detection follows compiled host imports and built-in effects, not slide prose", () => {
+  expect(usesSkia('const title = "Effect LiquidGlass PresentationCanvas"')).toBe(false);
+  expect(usesSkia('const skia = require("@shopify/react-native-skia")')).toBe(true);
+  expect(usesSkia('const effect = components.Effect')).toBe(true);
+  expect(usesSkia('const canvas = presentation.PresentationCanvas')).toBe(true);
+  expect(usesSkia('const { Effect: LocalEffect } = components')).toBe(true);
+  expect(usesSkia('const { Slide } = components')).toBe(false);
+  expect(usesSkia('props.Effect; state.Effect; slides.Effect; config.Skia')).toBe(false);
+  expect(usesSkia('const { Effect, Skia } = props')).toBe(false);
+  expect(usesSkia('const components = { Effect: 1 }; components.Effect')).toBe(false);
+  expect(usesSkia('function local(presentation) { return presentation.Skia }')).toBe(false);
+  expect(usesSkia('components[Effect]')).toBe(false);
+  expect(usesSkia('const host = require("@legend-apps/presentation"); const alias = host; alias["Effect"]')).toBe(true);
+  expect(usesSkia('const host = require("@legend-apps/presentation"); const { LiquidGlass } = host')).toBe(true);
+  expect(usesSkia('const _components = { ...props.components }; const { Effect } = _components')).toBe(true);
+  expect(usesSkia('const _components = { Effect: 1 }; _components.Effect')).toBe(false);
+  expect(usesSkia('require("number-flow-react-native/skia")')).toBe(true);
+  expect(usesSkia('const Lottie = require("lottie-react-native")')).toBe(true);
+});
+
 test("exports real assets and preserves a completed export when recompilation fails", async () => {
   const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-export-")));
   try {
@@ -28,11 +48,22 @@ test("exports real assets and preserves a completed export when recompilation fa
     const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM5sAAAAASUVORK5CYII=", "base64");
     await fs.writeFile(path.join(source, "..poster.png"), image);
     await fs.symlink("..poster.png", path.join(source, "poster.png"));
-    await fs.writeFile(deck, "# Export test\n\n![Poster](./..poster.png)\n\n![Linked](./poster.png)");
+    await fs.writeFile(path.join(source, "helper.js"), 'import { Platform } from "react-native"; export const title = Platform.OS;');
+    await fs.writeFile(path.join(source, "style.css"), "body{color:red}");
+    await fs.writeFile(path.join(source, "font.woff2"), "font");
+    await fs.writeFile(deck, 'import { title } from "./helper.js";\nimport "./style.css";\nimport font from "./font.woff2";\nexport const fontURL = font;\n\n# Export test\n\n{title}\n\n![Poster](./..poster.png)\n\n![Linked](./poster.png)');
     const out = path.join(dir, "website");
     await exportWebsite(deck, out);
     expect(await fs.readFile(path.join(out, "assets/..poster.png"))).toEqual(image);
     const initialManifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
+    expect(initialManifest.canvasKit).toBeNull();
+    expect(initialManifest.effects).toEqual({});
+    expect(initialManifest.remoteURLs).toEqual([]);
+    expect(initialManifest.assets.some(file => /helper\.js|style\.css|font\.woff2/.test(file))).toBe(false);
+    expect(initialManifest.preload.some(asset => /helper\.js|style\.css|font\.woff2/.test(asset.source))).toBe(false);
+    expect(await fs.exists(path.join(out, "assets/font.woff2"))).toBe(false);
+    expect((await fs.readdir(out)).some(file => /canvaskit|Roboto/.test(file))).toBe(false);
+    expect(await fs.readFile(path.join(out, "index.html"), "utf8")).not.toContain('type="module"');
     expect(initialManifest.preload[0].version).toMatch(/^[a-f0-9]{64}$/);
     await fs.writeFile(path.join(source, "..poster.png"), Buffer.concat([image, Buffer.from("changed")]));
     await exportWebsite(deck, out);
@@ -41,10 +72,38 @@ test("exports real assets and preserves a completed export when recompilation fa
     const before = await fs.readFile(path.join(out, "player.js"));
     expect(before.toString()).toContain("./assets/..poster.png");
     expect(before.toString()).not.toContain("./assets/poster.png");
+    await fs.writeFile(deck, 'export { Canvas } from "@shopify/react-native-skia";\n\n# Hosted Skia');
+    const hosted = path.join(dir, "hosted");
+    await exportWebsite(deck, hosted, { canvasKitURL: "https://cdn.example.com/canvaskit.wasm" });
+    const hostedManifest = JSON.parse(await fs.readFile(path.join(hosted, "export.json"), "utf8"));
+    expect(hostedManifest.canvasKit).toBe("https://cdn.example.com/canvaskit.wasm");
+    expect(hostedManifest.remoteURLs).toContain("https://cdn.example.com/canvaskit.wasm");
+    expect((await fs.readdir(hosted)).some(file => /canvaskit/.test(file))).toBe(false);
     await fs.writeFile(deck, "import Broken from './missing.tsx'\n\n# Broken");
     await expect(exportWebsite(deck, out)).rejects.toThrow();
     expect(await fs.readFile(path.join(out, "player.js"))).toEqual(before);
   } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("Lottie-only exports include offline CanvasKit and effect capability metadata", async () => {
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-lottie-")));
+  const previousPacks = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  process.env.LEGEND_SLIDES_EFFECT_PACKS = path.resolve(import.meta.dirname, "../../slides-effects/packs");
+  try {
+    const deck = path.resolve(import.meta.dirname, "../../slides-effects/examples/lottie-player/example.mdx");
+    const out = path.join(dir, "website");
+    await exportWebsite(deck, out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "export.json"), "utf8"));
+    expect(manifest.canvasKit).toBe("./canvaskit.js");
+    expect(manifest.effects.animation).toEqual({ reanimated: "Reanimated web", lottie: "Skottie" });
+    expect(manifest.remoteURLs).toEqual([]);
+    expect(manifest.warnings).toEqual([]);
+    expect(await fs.exists(path.join(out, "canvaskit.js"))).toBe(true);
+  } finally {
+    if (previousPacks === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
+    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previousPacks;
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 30000);

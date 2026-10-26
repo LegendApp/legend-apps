@@ -17,7 +17,7 @@ The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
-The committed root catalog pins the published npm SDK (`0.0.1-next.3`). For a
+The committed root catalog pins the published npm SDK (`0.0.1`). For a
 local artifact, create the gitignored root `spark.local.json`:
 
 ```json

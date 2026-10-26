@@ -237,6 +237,7 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
   const settings = path.join(project, ".spark/settings.json");
   if (!fs.existsSync(settings)) write(settings, { target: "dev" });
+  write(path.join(project, ".spark/version"), `${json(path.join(sparkSdkRoot, "package.json")).version}\n`);
   write(path.join(project, "package.json"), {
     name: `legend-spark-${manifest.id}`, version: app.version, private: true,
     main: "index.ts", packageManager: "bun@1.3.14", catalog: repo.catalog,

@@ -14,7 +14,8 @@
     "packages/*"
   ],
   "trustedDependencies": [
-    "react-native-enriched-markdown"
+    "react-native-enriched-markdown",
+    "@legendapp/spark"
   ],
   "scripts": {
     "spark": "bun scripts/spark-app.ts",
@@ -125,7 +126,6 @@
   "patchedDependencies": {
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
     "expo-modules-core@3.0.29": "patches/expo-modules-core@3.0.29.patch",
-    "react-native-enriched-markdown@1.1.1": "patches/react-native-enriched-markdown@1.1.1.patch",
     "react-native-macos@0.81.7": "patches/react-native-macos@0.81.7.patch",
     "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
@@ -138,7 +138,7 @@
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark": "0.0.1-next.3"
+    "@legendapp/spark": "0.0.1"
   },
   "dependencies": {
     "@legendapp/spark": "catalog:",

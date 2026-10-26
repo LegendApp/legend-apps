@@ -21,7 +21,7 @@
     "react": "catalog:",
     "react-native": "catalog:",
     "react-native-macos": "0.81.7",
-    "react-native-nitro-modules": "0.35.6",
+    "react-native-nitro-modules": "0.37.0",
     "tailwindcss": "^4.2.4",
     "uniwind": "^1.6.3"
   },

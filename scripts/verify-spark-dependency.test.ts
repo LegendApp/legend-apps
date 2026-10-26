@@ -12,8 +12,8 @@ test("the commit guard rejects staged local SDK pins and permits uncommitted tes
     const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   };
-  const manifest = (pin = "0.0.1-next.2") => fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ catalog: { "@legendapp/spark": pin }, dependencies: { "@legendapp/spark": "catalog:" } }));
-  const lock = (resolution = "@legendapp/spark@0.0.1-next.2") => fs.writeFileSync(path.join(root, "bun.lock"), JSON.stringify({ packages: { "@legendapp/spark": [resolution, "", {}, "integrity"] } }));
+  const manifest = (pin = "0.0.1") => fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ catalog: { "@legendapp/spark": pin }, dependencies: { "@legendapp/spark": "catalog:" } }));
+  const lock = (resolution = "@legendapp/spark@0.0.1") => fs.writeFileSync(path.join(root, "bun.lock"), JSON.stringify({ packages: { "@legendapp/spark": [resolution, "", {}, "integrity"] } }));
   const check = (...args: string[]) => spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: "utf8" });
   try {
     git("init", "-q");
