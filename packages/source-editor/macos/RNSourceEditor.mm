@@ -111,15 +111,10 @@ static std::string utf8String(NSString *value) {
   }
   if (_preparedDocumentId.length) {
     _loadJob = [LESourcePreparedDocuments claim:_preparedDocumentId path:_path];
-    if (!_loadJob) {
-      std::static_pointer_cast<const SourceEditorHostEventEmitter>(_eventEmitter)->onReady({
-        .lineCount = 0, .firstId = 1, .complete = true, .error = "Prepared document is unavailable. Reopen the file.", .sourcePrefix = "",
-      });
-      return;
-    }
-  } else {
-    _loadJob = startSourceDocumentLoad(_path);
   }
+  // Restored windows can retain a token consumed by the previous native view.
+  // Preparation accelerates a live open; the path remains the durable input.
+  if (!_loadJob) _loadJob = startSourceDocumentLoad(_path);
   auto job = _loadJob;
   if (sourceDocumentLoadReady(job)) {
     [self adoptPreparedDocument:job];
