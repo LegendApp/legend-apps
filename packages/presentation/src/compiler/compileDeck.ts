@@ -25,7 +25,7 @@ import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLoc
 const workletsPlugin = require("react-native-worklets/plugin");
 const reactCompilerPlugin = require("babel-plugin-react-compiler");
 const blockScopingPlugin = require("@babel/plugin-transform-block-scoping");
-const hostModules = new Set([
+export const hostModules = new Set([
   "react",
   "react/compiler-runtime",
   "react/jsx-runtime",
@@ -126,7 +126,8 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
         const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
         const transitions = new Set<string>();
-        const compiled = await compile(preprocessDeck(source), {
+        let compiled;
+        try { compiled = await compile(preprocessDeck(source), {
           jsx: true,
           jsxImportSource: "react",
           remarkPlugins: [
@@ -137,7 +138,13 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
             [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
             [remarkSlides, { templates, transitions, deckPath: args.path, dependencies: extraDependencies }],
           ],
-        });
+        }); }
+        catch (error) {
+          // MDX syntax errors end with "(line:column-…)" but omit the file; report both like esbuild errors.
+          const match = /^([\s\S]*?) \((\d+):(\d+)(?:-\d+:\d+)?\)$/.exec(error instanceof Error ? error.message : "");
+          if (!match) throw error;
+          return { errors: [{ text: match[1], location: { file: args.path, line: Number(match[2]), column: Number(match[3]) } }] };
+        }
         const templateEntries = [...templates.entries()];
         const templateImports = templateEntries.map(([, importPath], index) =>
           `import __LegendSlidesTemplate${index} from ${JSON.stringify(importPath)};`

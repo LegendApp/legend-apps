@@ -6,6 +6,10 @@ import { compileDeck } from "../packages/presentation/src/compiler";
 import { effectCatalogURL, installEffectPacks, installEffectExample, loadEffectCatalog, removeEffectPack, type EffectInstallProgress } from "../packages/presentation/src/effectPacks/install";
 import { parseEffectAction } from "../packages/presentation/src/effectPacks/protocol";
 import { getDeckSourceStructure } from "../packages/presentation/src/speakerNotesSource";
+import { cleanupExports, describeExportError, exportSteps, exportWebsite, ExportError } from "../packages/slides-web/export";
+
+const exportFlag = process.argv.indexOf("--export-html");
+if (exportFlag >= 0) process.once("SIGTERM", () => { cleanupExports(); process.exit(143); });
 
 const deckPath = process.argv[2]?.startsWith("--") ? undefined : process.argv[2];
 const source = process.argv.includes("--draft") ? readFileSync(0, "utf8") : undefined;
@@ -32,6 +36,17 @@ async function execute() {
   }
   if (!deckPath) return { success: false, errors: ["Usage: bun scripts/compile-slides.ts <deck.mdx> [--install-effects]"], warnings: [] };
   if (copyFlag >= 0) return { success: true, copy: await copyTransitionToDeck(deckPath, process.argv[copyFlag + 1], transitionDirectory!) };
+  if (exportFlag >= 0) {
+    const destination = process.argv[exportFlag + 1];
+    if (!destination || destination.startsWith("--")) throw new Error("Choose a destination folder for the HTML export.");
+    try {
+      const output = await exportWebsite(deckPath, destination, { transitionDirectory, effectPacksDirectory,
+        onProgress: step => process.stderr.write(`${JSON.stringify({ exportProgress: { step, steps: exportSteps.length, label: exportSteps[step] } })}\n`) });
+      return { success: true, path: output, warnings: JSON.parse(readFileSync(`${output}/export.json`, "utf8")).warnings };
+    } catch (error) {
+      return { success: false, errors: [describeExportError(error)], missingEffectPacks: error instanceof ExportError ? error.missingEffectPacks : [] };
+    }
+  }
   let result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory });
   if (process.argv.includes("--install-effects")) {
     if (!result.effectPackIds?.length) return result;

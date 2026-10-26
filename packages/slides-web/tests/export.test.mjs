@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
+import { gunzipSync } from "node:zlib";
+import { describeExportError, exportWebsite, usesSkia, validateDestination, webEffectSupport } from "../export";
 import { parsePosition } from "../src/navigation";
 
 test("links restore and clamp both slide and reveal positions", () => {
@@ -123,7 +124,7 @@ test("exports protect sources and unrelated directories, including symlinks", as
     expect(await validateDestination(deck, out)).toBe(out);
     await fs.mkdir(out);
     await fs.writeFile(path.join(out, "keep.txt"), "unrelated");
-    await expect(validateDestination(deck, out)).rejects.toThrow("Refusing");
+    await expect(validateDestination(deck, out)).rejects.toThrow("already contains other files");
     expect(await fs.readFile(path.join(out, "keep.txt"), "utf8")).toBe("unrelated");
     await expect(validateDestination(deck, path.join(out, "keep.txt"))).rejects.toThrow("directory");
     await fs.writeFile(path.join(out, "export.json"), JSON.stringify({ format: "legend-slides-web" }));
@@ -131,4 +132,35 @@ test("exports protect sources and unrelated directories, including symlinks", as
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test("JSON mode reports stages and actionable failures for the app", async () => {
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-json-")));
+  const run = async (deck, packs) => {
+    const child = Bun.spawn([process.execPath, path.join(import.meta.dirname, "../../../scripts/compile-slides.ts"), deck, "--export-html", path.join(dir, "out"), "--effect-packs", packs], { stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    await child.exited;
+    return { result: JSON.parse(gunzipSync(Buffer.from(JSON.parse(stdout).data, "base64")).toString()), stderr };
+  };
+  try {
+    const empty = path.join(dir, "no-packs");
+    await fs.mkdir(empty);
+    const missing = await run(path.resolve(import.meta.dirname, "../../slides-effects/examples/lottie-player/example.mdx"), empty);
+    expect(missing.result).toMatchObject({ success: false, missingEffectPacks: ["animation"] });
+    expect(missing.stderr).toContain('"label":"Compiling deck"');
+    await fs.mkdir(path.join(dir, "source"));
+    const deck = path.join(dir, "source/deck.mdx");
+    await fs.writeFile(deck, "# Title\n\n<View>\n");
+    const broken = await run(deck, empty);
+    expect(broken.result.success).toBe(false);
+    expect(broken.result.errors[0]).toMatch(/deck\.mdx:\d+:\d+/);
+    expect((await fs.readdir(dir)).sort()).toEqual(["no-packs", "source"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("file system failures name the folder and the fix", () => {
+  expect(describeExportError(Object.assign(new Error("x"), { code: "ENOSPC", path: "/Volumes/USB/deck" }))).toContain("Not enough disk space");
+  expect(describeExportError(Object.assign(new Error("x"), { code: "EACCES", path: "/System/deck" }))).toContain("can't write to the export folder (/System/deck)");
 });

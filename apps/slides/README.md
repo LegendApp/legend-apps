@@ -49,6 +49,13 @@ bun run slides run macos -- apps/slides/examples/showcase.mdx
 
 Bun compiles the deck when it opens and whenever a file in the deck directory changes. A failed rebuild leaves the last successful deck on screen and reports the error in the presenter window.
 
+Choose **File → Export to HTML…** to save pending edits and export to an empty
+folder or replace a previous export. Progress and Cancel appear in the presenter;
+missing effects offer **Install Required Effects**. Finder reveals the completed
+folder. Open its `index.html` directly from disk; remote resources are reported
+as warnings. Exporting embedded HTML requires Bun (Settings → Compiler).
+See [web export](../../packages/slides-web/README.md) for the folder format.
+
 Opening the audience window locks the deck. Saves continue to compile, but new
 code and styles are held until **Apply Update Now** is pressed. The lock stays
 enabled after applying an update or stopping the audience window. Use **Unlock

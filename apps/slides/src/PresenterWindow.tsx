@@ -22,6 +22,7 @@ import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
 import { applyPendingDeck, loadDeck } from "./deckLoader";
 import { EffectInstallStatus } from "./EffectInstallStatus";
+import { ExportStatus } from "./ExportStatus";
 import { getRehearsalEnabled, rememberRehearsalEnabled, getPresentationDisplayId, getPresenterLayout, rememberPresentationDisplayId, rememberPresenterLayout, resetPresenterLayout as resetStoredPresenterLayout, } from "./slidesPreferences";
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
@@ -639,6 +640,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
     }, [deckPath]);
     return (<>
       <EffectInstallStatus />
+      <ExportStatus />
       {hasDeck ? (<View style={styles.presenter}>
           <KeyboardJump value$={keyboardJump$}/>
 
