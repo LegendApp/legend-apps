@@ -135,7 +135,6 @@ export function Effect({
       return;
     }
     let cancelled = false;
-    let captured: SkImage | undefined;
     const cancelCapture = snapshotCaptureQueue.enqueue(async () => {
       await makeImageFromView(sourceRef).then((snapshot) => {
         if (!snapshot) {
@@ -145,7 +144,6 @@ export function Effect({
           snapshot.dispose();
           return;
         }
-        captured = snapshot;
         setSnapshot({ image: snapshot, scale: captureScale, width: size.width, height: size.height });
       }).catch(() => {
         // Unsupported capture paths fall back to the unfiltered children.
@@ -154,9 +152,13 @@ export function Effect({
     return () => {
       cancelled = true;
       cancelCapture();
-      captured?.dispose();
     };
   }, [captureScale, runtimeEffect, shouldRender, size.height, size.width]);
+  // The canvas can still paint a replaced snapshot until its next frame, so dispose it after that frame.
+  useEffect(() => () => {
+    const image = snapshot?.image;
+    if (image) requestAnimationFrame(() => image.dispose());
+  }, [snapshot]);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextSize = event.nativeEvent.layout;

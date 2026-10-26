@@ -103,9 +103,10 @@ test("captures only a visible, measured stage and recaptures after scale changes
     flushUI(); uiFrames.at(-1).tick(5501);
     expect(renderer.root.findByType("shader").props.uniforms.value.time).toBeCloseTo(1);
     await act(() => renderer.update(content(1)));
-    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(first.dispose).not.toHaveBeenCalled();
     expect(renderer.root.findAllByType("image")).toHaveLength(0);
     await flushFrame(); await flushFrame();
+    expect(first.dispose).toHaveBeenCalledTimes(1);
     expect(captures).toHaveLength(1);
     await act(() => renderer.update(content(0)));
     await act(() => captures.shift()(late));
