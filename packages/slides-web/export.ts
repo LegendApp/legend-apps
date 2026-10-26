@@ -16,7 +16,8 @@ const webCapabilities: Record<string, string> = {
   reanimated: "Reanimated web", skia: "CanvasKit", lottie: "Skottie", "native-video": "HTML video", webgpu: "WebGPU (requires a WebGPU browser)",
 };
 
-export function webEffectSupport(packs: { id: string; capabilities: string[] }[]) {
+export function webEffectSupport(found: { id: string; capabilities?: unknown }[]) {
+  const packs = found.map(pack => ({ id: pack.id, capabilities: Array.isArray(pack.capabilities) ? pack.capabilities as string[] : [] }));
   const effects = Object.fromEntries(packs.map(pack => [pack.id, Object.fromEntries(pack.capabilities.map(capability => [capability, webCapabilities[capability] ?? "unsupported"]))]));
   const unsupported = packs.flatMap(pack => pack.capabilities.filter(capability => !webCapabilities[capability])
     .map(capability => `Effect pack "${pack.id}" is unsupported on web: it requires the native "${capability}" capability.`));

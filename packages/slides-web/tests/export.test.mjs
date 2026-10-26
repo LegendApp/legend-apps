@@ -16,6 +16,7 @@ test("reports how each effect pack runs on web and flags native-only capabilitie
   const { effects, unsupported } = webEffectSupport([{ id: "animation", capabilities: ["reanimated", "lottie"] }, { id: "camera", capabilities: ["skia", "arkit"] }]);
   expect(effects).toEqual({ animation: { reanimated: "Reanimated web", lottie: "Skottie" }, camera: { skia: "CanvasKit", arkit: "unsupported" } });
   expect(unsupported).toEqual(['Effect pack "camera" is unsupported on web: it requires the native "arkit" capability.']);
+  expect(webEffectSupport([{ id: "local" }])).toEqual({ effects: { local: {} }, unsupported: [] });
 });
 
 test("exports real assets and preserves a completed export when recompilation fails", async () => {

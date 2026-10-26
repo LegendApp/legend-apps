@@ -17,7 +17,7 @@ import {
   type SkRuntimeEffect,
   type Uniform,
 } from "@shopify/react-native-skia";
-import { renderNativeChildren, useAnimatedShaderUniforms, usePresentationValue, snapshotCaptureQueue } from "@legend-apps/presentation";
+import { renderNativeChildren, useAnimatedShaderUniforms, usePresentationValue, snapshotCaptureQueue, useDeferredDispose } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
@@ -154,11 +154,8 @@ export function Effect({
       cancelCapture();
     };
   }, [captureScale, runtimeEffect, shouldRender, size.height, size.width]);
-  // The canvas can still paint a replaced snapshot until its next frame, so dispose it after that frame.
-  useEffect(() => () => {
-    const image = snapshot?.image;
-    if (image) requestAnimationFrame(() => image.dispose());
-  }, [snapshot]);
+  // The canvas can still paint a replaced snapshot, so dispose it only after later frames.
+  useDeferredDispose(snapshot?.image);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextSize = event.nativeEvent.layout;
