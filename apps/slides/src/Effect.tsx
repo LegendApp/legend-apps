@@ -4,10 +4,13 @@ import { useValue } from "@legendapp/state/react";
 import {
   Blur,
   Canvas,
+  Fill,
   Group,
+  ImageShader,
   Image as SkiaImage,
   Paint,
   RuntimeShader,
+  Shader,
   Skia,
   makeImageFromView,
   type SkImage,
@@ -16,7 +19,7 @@ import {
 } from "@shopify/react-native-skia";
 import { renderNativeChildren, useAnimatedShaderUniforms, usePresentationValue, snapshotCaptureQueue } from "@legend-apps/presentation";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PixelRatio, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { PixelRatio, Platform, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { resolveEffectSource, type EffectPreset } from "./effects";
 import { SlideCaptureContext } from "./SlideCaptureContext";
 
@@ -55,7 +58,7 @@ type EffectCanvasProps = {
   width: number;
 };
 
-function EffectShader({ blur, animationEnabled, effect, height, speed, strength, uniforms, width,
+function EffectShader({ blur, animationEnabled, effect, height, image, speed, strength, uniforms, width,
   time, pixelRatio }: EffectCanvasProps & { time: Readonly<Pick<SharedValue<{ time: number }>, "value">>; pixelRatio: number }) {
   // JS-owned subscriptions stay at the shader leaf; animation values stay on the UI runtime.
   const resolvedBlur = useValue(() => isShared(blur) ? 0 : typeof blur === "function" ? blur() : typeof blur === "number" ? blur : blur.get());
@@ -68,6 +71,13 @@ function EffectShader({ blur, animationEnabled, effect, height, speed, strength,
     time: animationEnabled && speed !== 0 ? time.value.time * speed : 0,
   }));
   const shaderBlur = useDerivedValue(() => Math.max(0, sharedBlur ? sharedBlur.value : resolvedBlur) * pixelRatio);
+  // CanvasKit has no runtime shader image filter, so web samples the snapshot as a child shader.
+  if (Platform.OS === "web") return <Fill>
+    <Shader source={effect} uniforms={shaderUniforms}>
+      <ImageShader image={image} fit="fill" rect={{ x: 0, y: 0, width: width * pixelRatio, height: height * pixelRatio }} />
+    </Shader>
+    <Blur blur={shaderBlur} mode="clamp" />
+  </Fill>;
   return <RuntimeShader source={effect} uniforms={shaderUniforms}><Blur blur={shaderBlur} mode="clamp" /></RuntimeShader>;
 }
 
@@ -78,9 +88,9 @@ function EffectCanvas(props: EffectCanvasProps) {
   const pixelRatio = PixelRatio.get();
   return <Canvas pointerEvents="none" style={StyleSheet.absoluteFill}>
     <Group transform={[{ scale: 1 / pixelRatio }]}>
-      <Group layer={<Paint><EffectShader {...props} time={time} pixelRatio={pixelRatio} /></Paint>} transform={[{ scale: pixelRatio }]}>
+      {Platform.OS === "web" ? <EffectShader {...props} time={time} pixelRatio={pixelRatio} /> : <Group layer={<Paint><EffectShader {...props} time={time} pixelRatio={pixelRatio} /></Paint>} transform={[{ scale: pixelRatio }]}>
         <SkiaImage fit="fill" height={height} image={image} width={width} x={0} y={0} />
-      </Group>
+      </Group>}
     </Group>
   </Canvas>;
 }

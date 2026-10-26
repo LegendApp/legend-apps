@@ -14,7 +14,7 @@ const runtimeEffect = {};
 let canvasRenders = 0;
 mock.module("@shopify/react-native-skia", () => ({
   Blur: "blur", Canvas: ({ children, ...props }) => { canvasRenders++; return <canvas {...props}>{children}</canvas>; },
-  Fill: "fill", Shader: "aurora-shader", vec: (x, y) => [x, y], Group: ({ children, layer, ...props }) => <group {...props}>{layer}{children}</group>, Image: "image", Paint: "paint", RuntimeShader: "shader",
+  Fill: "fill", Shader: "aurora-shader", vec: (x, y) => [x, y], Group: ({ children, layer, ...props }) => <group {...props}>{layer}{children}</group>, Image: "image", ImageShader: "image-shader", Paint: "paint", RuntimeShader: "shader",
   Skia: { RuntimeEffect: { Make: () => runtimeEffect } },
   makeImageFromView: (ref) => {
     captureTargets.push(ref.current);

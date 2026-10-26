@@ -7,9 +7,9 @@ const { transformSync } = require("esbuild");
 const source = readFileSync(`${import.meta.dir}/../Effect.tsx`, "utf8");
 const code = transformSync(source.slice(source.indexOf("function EffectShader("), source.indexOf("function EffectCanvas(")), {loader: "tsx", format: "cjs", jsx: "automatic"}).code;
 const jsx = (_, props) => props;
-const Shader = new Function("require", "useValue", "isShared", "useDerivedValue", "RuntimeShader", "Blur", code + ";return EffectShader;")(
+const Shader = new Function("require", "useValue", "isShared", "useDerivedValue", "RuntimeShader", "Blur", "Platform", code + ";return EffectShader;")(
   () => ({jsx}), fn => fn(), value => !!value && typeof value === "object" && "value" in value,
-  fn => ({get value() { return fn(); }}), "shader", "blur",
+  fn => ({get value() { return fn(); }}), "shader", "blur", {OS: "macos"},
 );
 test("static glass does not read playback but still follows formation and blur", () => {
   let reads = 0;
