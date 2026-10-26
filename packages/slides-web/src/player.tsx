@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { useValue } from "@legendapp/state/react";
 const { default: Deck, __legendSlidesTemplates, __legendSlidesTransitions } = require("virtual:deck");
 const { default: preloadAssets } = require("virtual:preload");
-import { DeckRenderer, SlideCanvas } from "../../../apps/slides/src/DeckRenderer";
+import { AudienceWindow } from "../../../apps/slides/src/AudienceWindow";
 import { getSlidesState, setSlidesState, slidesState$, nextSlide, previousSlide } from "../../../apps/slides/src/slidesStore";
 import { acceptsShortcut, parsePosition } from "./navigation";
 import { readNotesVisibility, saveNotesVisibility, SpeakerNotes } from "./notes";
@@ -28,7 +28,7 @@ function toggleFullscreen() {
   void action.catch(() => {});
 }
 const PresentationStage = memo(function PresentationStage() {
-  return <div className="stage"><SlideCanvas><DeckRenderer /></SlideCanvas></div>;
+  return <div className="stage"><AudienceWindow /></div>;
 });
 function App() {
   const currentSlide = useValue(slidesState$.currentSlide);
