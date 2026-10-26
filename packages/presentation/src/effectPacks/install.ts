@@ -28,7 +28,8 @@ export async function loadEffectCatalog(url = effectCatalogURL()) {
 export { resolveInstallation } from "./schema";
 async function installRelease(directory: string, id: string, release: PackRelease, catalogURL: string, onProgress?: (progress: EffectInstallProgress) => void) {
   const destination = pinnedPackDirectory(directory, id, release);
-  if (verifyInstalledPack(destination, release)) return;
+  try { if (verifyInstalledPack(destination, release)) return; }
+  catch { /* A damaged snapshot is replaced only after a verified download. */ }
   ensureEffectSpace(directory, release.bytes * 4);
   const text = await download(catalogResourceURL(release.url, catalogURL), release.bytes, release,
     receivedBytes => onProgress?.({ pack: id, receivedBytes, totalBytes: release.bytes }));
@@ -42,8 +43,14 @@ async function installRelease(directory: string, id: string, release: PackReleas
     for (const [file, source] of Object.entries(archive.files)) { const target = path.join(stage, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, source); }
     fs.writeFileSync(path.join(stage, ".archive.json"), text);
     verifyInstalledPack(stage, release);
+    const damaged = `${destination}.damaged-${crypto.randomUUID()}`;
+    if (fs.existsSync(destination)) fs.renameSync(destination, damaged);
     try { fs.renameSync(stage, destination); }
-    catch (error) { if (!verifyInstalledPack(destination, release)) throw error; }
+    catch (error) {
+      if (fs.existsSync(damaged)) fs.renameSync(damaged, destination);
+      throw error;
+    }
+    if (fs.existsSync(damaged)) fs.rmSync(damaged, { recursive: true });
   } finally { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true }); }
 }
 type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin>; onProgress?: (progress: EffectInstallProgress) => void };
@@ -90,6 +97,7 @@ async function installPacks(ids: string[], options: InstallOptions) {
   // Default selections affect new decks only. Existing decks resolve their lockfile.
   for (const [id] of releases) {
     const active = path.join(directory, id, "active.json");
+    if (existing?.packs[id] && fs.existsSync(active)) continue;
     if (ids.includes(id) || !fs.existsSync(active)) atomicWrite(active, JSON.stringify(lock.packs[id]) + "\n");
   }
   return { lock, catalog };

@@ -267,3 +267,36 @@ test("catalog content and examples retain same-origin download trust", async () 
   expect(fs.existsSync(effectLockPath(f.deck))).toBe(false);
   expect(fs.existsSync(path.join(f.directory, "motion/active.json"))).toBe(false);
 });
+
+for (const damage of ["modified source", "missing source", "missing manifest", "missing archive", "hash mismatch"]) {
+  test(`reinstall repairs ${damage} without changing pins or newer defaults`, async () => {
+    const f = fixture();
+    await installEffectPacks(["motion"], f.options);
+    const lock = readEffectLock(f.deck), root = pinnedPackDirectory(f.directory, "motion", lock.packs.motion);
+    f.catalog.packs.motion.latest = "2.0.0";
+    await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+    const lockBefore = fs.readFileSync(effectLockPath(f.deck), "utf8");
+    const selections = Object.fromEntries(["motion", "math"].map(id => [id, fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")]));
+    const files = fs.readdirSync(root);
+    const original = fs.readFileSync(path.join(root, "Pose.ts"), "utf8");
+    if (damage === "modified source") fs.writeFileSync(path.join(root, "Pose.ts"), "export const sample = () => 999;");
+    else if (damage === "hash mismatch") fs.appendFileSync(path.join(root, ".archive.json"), " ");
+    else fs.unlinkSync(path.join(root, damage === "missing source" ? "Pose.ts" : damage === "missing manifest" ? "pack.json" : ".archive.json"));
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(false);
+    f.corrupt(true);
+    await expect(installEffectPacks(["motion"], f.options)).rejects.toThrow("checksum");
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    for (const [id, selection] of Object.entries(selections)) expect(fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")).toBe(selection);
+    f.corrupt(false);
+    await installEffectPacks(["motion"], f.options);
+    expect(fs.readFileSync(path.join(root, "Pose.ts"), "utf8")).toBe(original);
+    expect(fs.readdirSync(root).sort()).toEqual(files.sort());
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    for (const [id, selection] of Object.entries(selections)) expect(fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")).toBe(selection);
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+    expect(fs.readdirSync(path.dirname(root))).toEqual([path.basename(root)]);
+    const requests = f.requests();
+    await installEffectPacks(["motion"], f.options);
+    expect(f.requests() - requests).toBe(1);
+  });
+}
