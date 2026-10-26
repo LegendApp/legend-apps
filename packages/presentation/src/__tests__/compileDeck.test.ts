@@ -31,6 +31,15 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("maps MDX diagnostics through notes, slide separators, and slide frontmatter", async () => {
+    for (const newline of ["\n", "\r\n", "\r"]) {
+      const source = ["# First", "", "<!--", "speaker notes", "more notes", "-->", "", "---", "layout: center", "---", "", "# Second", "", "  <View>", ""].join(newline);
+      const result = await compileDeck(createDeck({ "deck.mdx": source }));
+      expect(result.success).toBe(false);
+      expect(result.errors[0]).toContain("deck.mdx:14:3:");
+    }
+  });
+
   test("imports local fonts and media as asset URLs", async () => {
     const deck = createDeck({
       "deck.mdx": 'export { default as font } from "./font.woff2";\nexport { default as video } from "./movie.webm";\n\n# Local assets',

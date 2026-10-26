@@ -150,15 +150,55 @@ test("JSON mode reports stages and actionable failures for the app", async () =>
     expect(missing.stderr).toContain('"label":"Compiling deck"');
     await fs.mkdir(path.join(dir, "source"));
     const deck = path.join(dir, "source/deck.mdx");
-    await fs.writeFile(deck, "# Title\n\n<View>\n");
-    const broken = await run(deck, empty);
-    expect(broken.result.success).toBe(false);
-    expect(broken.result.errors[0]).toMatch(/deck\.mdx:\d+:\d+/);
+    for (const [source, line] of [
+      ["# Title\n\n<View>\n", 3],
+      ["---\ntitle: Shift probe\n---\n\n<!--\npresenter note line one\npresenter note line two\n-->\n\n# Heading\n\n<View>\n", 12],
+      ["# First\n\n---\nlayout: center\n---\n\n# Second\n\n<View>\n", 9],
+    ]) {
+      await fs.writeFile(deck, source);
+      const broken = await run(deck, empty);
+      expect(broken.result.success).toBe(false);
+      expect(broken.result.errors[0]).toContain(`deck.mdx:${line}:1:`);
+    }
     expect((await fs.readdir(dir)).sort()).toEqual(["no-packs", "source"]);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 30000);
+
+test("exports remove staging directories only after their owner exits", async () => {
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-web-staging-")));
+  const owner = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], { stdout: "ignore", stderr: "ignore" });
+  try {
+    const source = path.join(dir, `.slides-export-${owner.pid}-source`);
+    await fs.mkdir(source);
+    const deck = path.join(source, "deck.mdx");
+    await fs.writeFile(deck, "<View>\n");
+    const staging = path.join(dir, `.slides-export-${owner.pid}-abcdef`);
+    const previous = staging + ".previous";
+    const legacy = path.join(dir, ".slides-export-abcdef");
+    for (const directory of [staging, previous, legacy]) await fs.mkdir(directory);
+    await fs.writeFile(path.join(staging, "keep.txt"), "live export");
+    const out = path.join(dir, `.slides-export-${owner.pid}-output`);
+    await fs.mkdir(out);
+    await expect(exportWebsite(deck, out)).rejects.toThrow();
+    expect(await fs.readFile(path.join(staging, "keep.txt"), "utf8")).toBe("live export");
+    expect(await fs.exists(previous)).toBe(true);
+    owner.kill("SIGKILL");
+    await owner.exited;
+    await expect(exportWebsite(deck, out)).rejects.toThrow();
+    expect(await fs.exists(staging)).toBe(false);
+    expect(await fs.exists(previous)).toBe(false);
+    expect(await fs.readFile(deck, "utf8")).toBe("<View>\n");
+    expect(await fs.exists(out)).toBe(true);
+    // Older directory names carry no owner, so deleting them cannot be proven safe.
+    expect(await fs.exists(legacy)).toBe(true);
+  } finally {
+    if (owner.exitCode === null) owner.kill("SIGTERM");
+    await owner.exited;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
 
 test("file system failures name the folder and the fix", () => {
   expect(describeExportError(Object.assign(new Error("x"), { code: "ENOSPC", path: "/Volumes/USB/deck" }))).toContain("Not enough disk space");

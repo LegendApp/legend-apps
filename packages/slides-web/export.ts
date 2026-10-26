@@ -219,7 +219,19 @@ export async function exportWebsite(deck: string, output: string, options: Expor
   const deckPath = await fs.realpath(deck);
   const out = await validateDestination(deckPath, output);
   await fs.mkdir(path.dirname(out), { recursive: true });
-  const staging = mkdtempSync(path.join(path.dirname(out), ".slides-export-"));
+  // PID ownership is part of the name so even a hard kill leaves enough information for cleanup.
+  for (const entry of await fs.readdir(path.dirname(out), { withFileTypes: true })) {
+    const owner = /^\.slides-export-(\d+)-[A-Za-z0-9]{6}(?:\.previous)?$/.exec(entry.name);
+    const directory = path.join(path.dirname(out), entry.name);
+    if (!entry.isDirectory() || !owner || directory === out || deckPath.startsWith(directory + path.sep)) continue;
+    try { process.kill(Number(owner[1]), 0); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") {
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    }
+  }
+  const staging = mkdtempSync(path.join(path.dirname(out), `.slides-export-${process.pid}-`));
   activeStaging.add(staging);
   try {
     await buildWebsite(deckPath, staging, options);

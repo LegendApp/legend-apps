@@ -27,7 +27,7 @@ export async function exportDeckToHTML() {
   const abort = controller = new AbortController();
   webExport$.status.set("choosing");
   try {
-    if (!await prepareSlidesExit()) { webExport$.status.set("idle"); return; }
+    if (!await prepareSlidesExit()) throw new Error("Export stopped. Save your changes and try again.");
     const deckPath = getSlidesState().deckPath;
     if (!deckPath) { webExport$.status.set("idle"); return; }
     const picked = await openFileDialog({ selection: "directories", multiple: false, prompt: "Export",
@@ -55,7 +55,7 @@ export async function exportDeckToHTML() {
     if (!result.success) {
       if (result.missingEffectPacks?.length) {
         reportMissingEffects(deckPath, result.missingEffectPacks);
-        throw new Error(`This deck needs effects: ${result.missingEffectPacks.join(", ")}. Choose Install Required Effects below, then export again.`);
+        throw new Error([`This deck needs effects: ${result.missingEffectPacks.join(", ")}. Choose Install Required Effects below, then export again.`, ...result.errors].join("\n"));
       }
       throw new Error(result.errors.join("\n"));
     }

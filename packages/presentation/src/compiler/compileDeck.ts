@@ -106,6 +106,7 @@ function resolveLocalFile(importPath: string) {
 }
 
 function preprocessDeck(source: string) {
+  const original = source;
   const { comments, frontmatter, separators } = getDeckSourceStructure(source);
   const replacements = [
     ...separators.map(range => ({ start: range.start, end: range.end, value: "\n\n<SlideSeparator />\n\n" })),
@@ -115,7 +116,21 @@ function preprocessDeck(source: string) {
       value: `<SlideFrontmatter encoded="${Buffer.from(source.slice(range.start, range.end)).toString("base64")}" />\n` })),
   ].sort((a, b) => b.start - a.start);
   for (const { start, end, value } of replacements) source = source.slice(0, start) + value + source.slice(end);
-  return source;
+  return {
+    source,
+    originalLocation(line: number, column: number) {
+      const lineStarts = [0, ...Array.from(source.matchAll(/\r\n|\r|\n/g), match => match.index + match[0].length)];
+      let offset = lineStarts[line - 1] + column - 1;
+      // Undo edits in reverse application order. Generated markup has no exact source position.
+      for (const { start, end, value } of [...replacements].reverse()) {
+        if (offset < start) break;
+        if (offset < start + value.length) return undefined;
+        offset += end - start - value.length;
+      }
+      const lines = original.slice(0, offset).split(/\r\n|\r|\n/);
+      return { line: lines.length, column: lines[lines.length - 1].length + 1 };
+    },
+  };
 }
 
 function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftSource?: string, transitionDirectory?: string): Plugin {
@@ -126,8 +141,9 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
         const source = args.path === entryPath && draftSource !== undefined ? draftSource : fs.readFileSync(args.path, "utf8");
         const templates = new Map<string, string>();
         const transitions = new Set<string>();
+        const preprocessed = preprocessDeck(source);
         let compiled;
-        try { compiled = await compile(preprocessDeck(source), {
+        try { compiled = await compile(preprocessed.source, {
           jsx: true,
           jsxImportSource: "react",
           remarkPlugins: [
@@ -143,7 +159,10 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
           // MDX syntax errors end with "(line:column-…)" but omit the file; report both like esbuild errors.
           const match = /^([\s\S]*?) \((\d+):(\d+)(?:-\d+:\d+)?\)$/.exec(error instanceof Error ? error.message : "");
           if (!match) throw error;
-          return { errors: [{ text: match[1], location: { file: args.path, line: Number(match[2]), column: Number(match[3]) } }] };
+          const location = preprocessed.originalLocation(Number(match[2]), Number(match[3]));
+          return { errors: [location
+            ? { text: match[1], location: { file: args.path, ...location } }
+            : { text: `${path.basename(args.path)}: ${match[1]}` }] };
         }
         const templateEntries = [...templates.entries()];
         const templateImports = templateEntries.map(([, importPath], index) =>

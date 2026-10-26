@@ -55,6 +55,8 @@ test("reentrant actions cannot open a second picker; dialog cancellation runs no
 test("save cancellation and picker errors settle the action and allow retry", async () => {
   prepare = async () => false;
   await exportDeckToHTML(); expect(calls).toEqual([]);
+  expect(webExport$.status.peek()).toBe("error");
+  expect(webExport$.message.peek()).toContain("Save your changes and try again");
   prepare = async () => true;
   pick = async () => { throw new Error("Folder picker unavailable"); };
   await exportDeckToHTML(); expect(webExport$.message.peek()).toBe("Folder picker unavailable");
@@ -74,10 +76,11 @@ test("cancel aborts the running process and never reveals a folder or reports an
 });
 
 test("missing packs offer the existing install action for the captured source deck", async () => {
-  command = async () => { deckPath = "/another.mdx"; return result({ success: false, errors: [], missingEffectPacks: ["animation"] }); };
+  command = async () => { deckPath = "/another.mdx"; return result({ success: false, errors: ["deck.mdx:7:2: Unexpected closing tag"], missingEffectPacks: ["animation"] }); };
   await exportDeckToHTML();
   expect(effectRequests$.pending.peek()).toEqual({ path: "/source/deck.mdx", packs: ["animation"] });
   expect(webExport$.message.peek()).toContain("Install Required Effects");
+  expect(webExport$.message.peek()).toContain("deck.mdx:7:2: Unexpected closing tag");
   expect(webExport$.status.peek()).toBe("error"); expect(calls).toEqual([]);
 });
 
