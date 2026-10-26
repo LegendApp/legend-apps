@@ -16,7 +16,9 @@ export class AssetPreloader {
   get status() { return this.status$.peek(); }
 
   constructor(assets: PreloadAsset[]) {
-    this.pending = assets.filter((asset, index) => assets.findIndex(item => item.source === asset.source) === index);
+    // Disk resources load through DOM elements. Fetching file URLs is forbidden,
+    // and the HTTP download indicator must not claim they have been fetched.
+    this.pending = document.baseURI.startsWith("file:") ? [] : assets.filter((asset, index) => assets.findIndex(item => item.source === asset.source) === index);
     this.status$.total.set(this.pending.length);
   }
 

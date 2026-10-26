@@ -1,50 +1,68 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { build, type Plugin } from "esbuild";
-import { transformSync } from "@babel/core";
+import { parseSync, traverse, transformSync, types as t } from "@babel/core";
 import { compileDeck } from "../presentation/src/compiler/compileDeck";
 import { createPreloadManifest } from "./preloadManifest";
+import { ExportAssets, isAsset } from "./assets";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "../..");
 const src = path.join(import.meta.dirname, "src");
 
-async function buildWebsite(deck: string, output: string) {
+export type ExportOptions = { canvasKitURL?: string };
+
+export function usesSkia(code: string) {
+  // Inspect the compiled deck, including installed packs and attribute-generated effects.
+  let needed = false;
+  const skiaExports = new Set(["Effect", "LiquidGlass", "PresentationCanvas", "useNativeVideo", "Skia"]);
+  const tree = parseSync(code, { babelrc: false, configFile: false, sourceType: "script" });
+  traverse(tree!, {
+    CallExpression({ node }) {
+      if (t.isIdentifier(node.callee, { name: "require" }) && t.isStringLiteral(node.arguments[0])
+        && ["@shopify/react-native-skia", "number-flow-react-native/skia"].includes(node.arguments[0].value)) needed = true;
+    },
+    ObjectPattern({ node }) {
+      if (node.properties.some(property => t.isObjectProperty(property)
+        && ((t.isIdentifier(property.key) && skiaExports.has(property.key.name))
+          || (t.isStringLiteral(property.key) && skiaExports.has(property.key.value))))) needed = true;
+    },
+    MemberExpression({ node }) {
+      const name = t.isIdentifier(node.property) ? node.property.name : t.isStringLiteral(node.property) ? node.property.value : "";
+      if (skiaExports.has(name)) needed = true;
+    },
+  });
+  return needed;
+}
+
+async function buildWebsite(deck: string, output: string, options: ExportOptions) {
   const deckPath = path.resolve(deck);
   const deckRoot = path.dirname(deckPath);
   const out = path.resolve(output);
   const result = await compileDeck(deckPath);
   if (!result.success) throw new Error(result.errors.join("\n"));
+  const skia = usesSkia(result.code);
+  const font = skia ? `data:font/ttf;base64,${(await fs.readFile(path.join(import.meta.dirname, "assets/Roboto.ttf"))).toString("base64")}` : "";
   await fs.mkdir(out, { recursive: true });
-  const assets = result.dependencies.map(file => file.includes("deck-asset:") ? file.slice(file.indexOf("deck-asset:") + 11) : file)
-    .filter(file => /\.(png|jpe?g|gif|webp|svg|html|ttf|woff2?)$/i.test(file));
-  const copied = new Set<string>();
-  async function copyAsset(file: string) {
-    if (copied.has(file)) return;
-    const relative = path.relative(deckRoot, file);
-    const resolvedRelative = path.relative(deckRoot, await fs.realpath(file));
-    if ([relative, resolvedRelative].some(value => value === ".." || value.startsWith(".." + path.sep) || path.isAbsolute(value))) throw new Error(`Asset escapes deck: ${file}`);
-    const dest = path.join(out, "assets", relative);
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.copyFile(file, dest);
-    copied.add(file);
-  }
-  for (const file of assets) {
-    await copyAsset(file);
+  const assets = new ExportAssets(deckRoot, out);
+  const dependencies = result.dependencies.map(file => file.replace(/^.*deck-asset:/, ""));
+  for (const file of dependencies.filter(file => isAsset(file) && !file.endsWith(".json"))) {
+    await assets.copy(file);
     const stem = file.replace(/\.(html|png)$/i, "");
     for (const ext of [".mp4", ".mov"]) {
       const media = stem + ext;
-      if (await fs.stat(media).catch(() => null)) await copyAsset(media);
+      if (await fs.stat(media).catch(() => null)) await assets.copy(media);
     }
   }
-  const preload = await createPreloadManifest(deckPath, result.dependencies.map(file => file.replace(/^.*deck-asset:/, "")), [...copied]);
+  const deckCode = await assets.deck(result.code, deckPath, skia);
+  if (skia && options.canvasKitURL) assets.remoteURLs.add(options.canvasKitURL);
+  const copied = assets.copied;
+  const preload = await createPreloadManifest(deckPath, dependencies, [...copied]);
   for (const asset of preload) {
     asset.version = createHash("sha256").update(await fs.readFile(path.join(out, decodeURIComponent(asset.source)))).digest("hex");
   }
-  const deckCode = result.code.replaceAll(pathToFileURL(deckRoot).href + "/", "./assets/");
   const aliases: Record<string, string> = {
     "react-native": path.join(src, "native.tsx"),
     "@shopify/react-native-skia": path.join(src, "skia.tsx"),
@@ -81,22 +99,30 @@ async function buildWebsite(deck: string, output: string) {
     },
   };
   await build({ entryPoints: [path.join(src, "bootstrap.ts")], outfile: path.join(out, "player.js"), bundle: true,
-    format: "esm", platform: "browser", target: "es2022", resolveExtensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".tsx", ".ts", ".jsx", ".js", ".json"], jsx: "automatic", minify: true, sourcemap: true,
-    define: { "process.env.NODE_ENV": '"production"', "process.env": "{}", __DEV__: "false", global: "globalThis" },
+    format: "iife", platform: "browser", target: "es2022", resolveExtensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".tsx", ".ts", ".jsx", ".js", ".json"], jsx: "automatic", minify: true, sourcemap: true,
+    define: { "process.env.NODE_ENV": '"production"', "process.env": "{}", __DEV__: "false", global: "globalThis",
+      __SLIDES_SKIA__: JSON.stringify(skia), __SLIDES_CANVASKIT_URL__: JSON.stringify(options.canvasKitURL) ?? "undefined", __SLIDES_FONT__: JSON.stringify(font) },
     external: ["fs", "path"], logLevel: "silent",
     nodePaths: [path.join(import.meta.dirname, "node_modules"), path.join(root, "apps/slides/node_modules"), path.join(root, "shell/node_modules")], plugins: [plugin] });
-  const kit = require.resolve("canvaskit-wasm/bin/full/canvaskit.wasm");
-  await fs.copyFile(kit, path.join(out, "canvaskit.wasm"));
-  await fs.copyFile(path.join(import.meta.dirname, "assets/Roboto.ttf"), path.join(out, "Roboto.ttf"));
-  await fs.copyFile(path.join(import.meta.dirname, "assets/OFL.txt"), path.join(out, "OFL.txt"));
-  await fs.writeFile(path.join(out, "index.html"), '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Legend Slides</title><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./player.css"></head><body><div id="root"></div><script type="module" src="./player.js"></script></body></html>');
+  if (skia) {
+    if (!options.canvasKitURL) {
+      const kit = await fs.readFile(require.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
+      await fs.writeFile(path.join(out, "canvaskit.js"), `globalThis.__legendSlidesWasmURL="data:application/wasm;base64,${kit.toString("base64")}";`);
+    }
+    await fs.copyFile(path.join(import.meta.dirname, "assets/OFL.txt"), path.join(out, "OFL.txt"));
+  }
   const cssPath = path.join(root, "shell/src/global.css");
   const { compileVirtual } = await import(path.join(root, "shell/node_modules/uniwind/src/metro/compileVirtual.ts"));
-  const css = await compileVirtual({ css: `${await fs.readFile(cssPath, "utf8")}\n@source ${JSON.stringify(deckRoot)};`, cssPath, platform: "web", debug: false, polyfills: undefined, themes: ["light", "dark"] });
-  await fs.writeFile(path.join(out, "styles.css"), css);
-  await fs.copyFile(path.join(src, "player.css"), path.join(out, "player.css"));
+  const styleRoots = [deckRoot, ...dependencies.filter(file => file.endsWith(`${path.sep}pack.json`)).map(file => path.dirname(file))];
+  const css = await compileVirtual({ css: `${await fs.readFile(cssPath, "utf8")}\n${styleRoots.map(directory => `@source ${JSON.stringify(directory)};`).join("\n")}`, cssPath, platform: "web", debug: false, polyfills: undefined, themes: ["light", "dark"] });
+  // Inline styles stay readable through CSSOM when canvas capture runs under file://.
+  const styles = `${css}\n${await fs.readFile(path.join(src, "player.css"), "utf8")}`.replace(/<\/style/gi, "<\\/style");
+  await fs.writeFile(path.join(out, "index.html"), `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Legend Slides</title><style>${styles}</style></head><body><div id="root"></div><script src="./player.js"></script></body></html>`);
+  const remoteURLs = [...assets.remoteURLs].sort();
   await fs.writeFile(path.join(out, "export.json"), JSON.stringify({ format: "legend-slides-web", version: 1,
-    source: path.basename(deckPath), assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, warnings: result.warnings }, null, 2));
+    source: path.basename(deckPath), canvasKit: skia ? options.canvasKitURL ?? "./canvaskit.js" : null,
+    assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload,
+    remoteURLs, warnings: [...result.warnings, ...remoteURLs.map(url => `Remote URL requires network: ${url}`)] }, null, 2));
   return out;
 }
 
@@ -119,13 +145,14 @@ export async function validateDestination(deck: string, output: string) {
   return out;
 }
 
-export async function exportWebsite(deck: string, output: string) {
+export async function exportWebsite(deck: string, output: string, options: ExportOptions = {}) {
+  if (options.canvasKitURL && !/^https?:\/\//.test(options.canvasKitURL)) throw new Error("CanvasKit URL must be an absolute HTTP(S) URL for hosted exports.");
   const deckPath = await fs.realpath(deck);
   const out = await validateDestination(deckPath, output);
   await fs.mkdir(path.dirname(out), { recursive: true });
   const staging = await fs.mkdtemp(path.join(path.dirname(out), ".slides-export-"));
   try {
-    await buildWebsite(deckPath, staging);
+    await buildWebsite(deckPath, staging, options);
     await fs.rm(out, { recursive: true, force: true });
     await fs.rename(staging, out);
     return out;
@@ -135,7 +162,7 @@ export async function exportWebsite(deck: string, output: string) {
 }
 
 if (import.meta.main) {
-  const [deck, flag, output] = process.argv.slice(2);
-  if (!deck || flag !== "--out" || !output) throw new Error("Usage: bun packages/slides-web/export.ts deck.mdx --out dist/reactcon");
-  console.log(await exportWebsite(deck, output));
+  const [deck, flag, output, kitFlag, canvasKitURL] = process.argv.slice(2);
+  if (!deck || flag !== "--out" || !output || (kitFlag && (kitFlag !== "--canvaskit-url" || !canvasKitURL))) throw new Error("Usage: bun packages/slides-web/export.ts deck.mdx --out dist/reactcon [--canvaskit-url https://host/canvaskit.wasm]");
+  console.log(await exportWebsite(deck, output, { canvasKitURL }));
 }
