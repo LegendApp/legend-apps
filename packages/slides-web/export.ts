@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
+import { brotliDecompressSync } from "node:zlib";
 import { build, type Plugin } from "esbuild";
 import { parseSync, traverse, transformSync, types as t, type NodePath } from "@babel/core";
 import { compileDeck } from "../presentation/src/compiler/compileDeck";
@@ -175,8 +176,9 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
   }
   if (skia) {
     if (!options.canvasKitURL) {
-      const kit = await fs.readFile(webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
-      await fs.writeFile(path.join(out, "canvaskit.js"), `globalThis.__legendSlidesWasmURL="data:application/wasm;base64,${kit.toString("base64")}";`);
+      const kit = await fs.readFile(webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.js").replace(/\.js$/, bundled ? ".wasm.br" : ".wasm"));
+      const wasm = bundled ? brotliDecompressSync(kit) : kit;
+      await fs.writeFile(path.join(out, "canvaskit.js"), `globalThis.__legendSlidesWasmURL="data:application/wasm;base64,${wasm.toString("base64")}";`);
     }
     await fs.copyFile(path.join(webRoot, "assets/OFL.txt"), path.join(out, "OFL.txt"));
   }

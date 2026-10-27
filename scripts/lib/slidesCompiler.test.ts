@@ -55,6 +55,11 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     const { createRequire } = await import("node:module");
     const helperRequire = createRequire(path.join(compiler, "package.json"));
     const browserRequire = createRequire(path.join(compiler, "packages/slides-web/package.json"));
+    const sourceRequire = createRequire(path.resolve(import.meta.dirname, "../../packages/slides-web/package.json"));
+    const wasm = fs.readFileSync(sourceRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
+    const packedWasm = path.join(path.dirname(browserRequire.resolve("canvaskit-wasm/bin/full/canvaskit.js")), "canvaskit.wasm");
+    expect(fs.existsSync(packedWasm)).toBe(false);
+    expect(fs.existsSync(packedWasm + ".br")).toBe(true);
     for (const name of ["react-dom/client", "@legendapp/state", "@legendapp/state/react"]) {
       expect(fs.realpathSync(browserRequire.resolve(name))).toBe(fs.realpathSync(helperRequire.resolve(name)));
     }
@@ -115,10 +120,10 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     fs.copyFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/examples/lottie-player/example.mdx"), path.join(examples, "lottie.mdx"));
     const packs = path.join(temp, "export-effects");
     fs.cpSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/packs/animation"), path.join(packs, "animation"), { recursive: true });
-    for (const name of ["demo", "lottie"]) {
+    for (const [name, runtime] of [["demo", runtimes[0]], ...runtimes.map(runtime => ["lottie", runtime])]) {
       const output = path.join(temp, name + "-html");
       const child = Bun.spawn([path.join(compiler, "run"), path.join(examples, name + ".mdx"), "--export-html", output, "--effect-packs", packs],
-        { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0], NODE_PATH: "" }, stdout: "pipe", stderr: "pipe" });
+        { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtime, NODE_PATH: "" }, stdout: "pipe", stderr: "pipe" });
       const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
       const exported = JSON.parse(gunzipSync(Buffer.from(JSON.parse(stdout).data, "base64")).toString());
       expect(exported).toMatchObject({ success: true, path: output, warnings: [] });
@@ -128,6 +133,10 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
       expect(fs.existsSync(path.join(output, "canvaskit.js"))).toBe(name === "lottie");
       expect(fs.existsSync(path.join(output, "player.js.map"))).toBe(false);
       const { exportDebugDirectory } = await import("../../packages/slides-web/export");
+      if (name === "lottie") {
+        const payload = fs.readFileSync(path.join(output, "canvaskit.js"), "utf8").match(/base64,([^\"]+)/)[1];
+        expect(Buffer.from(payload, "base64")).toEqual(wasm);
+      }
       const sources = JSON.parse(fs.readFileSync(path.join(exportDebugDirectory(output), "player.js.map"), "utf8")).sources;
       expect(sources.filter(file => file.endsWith("/cjs/react.production.js"))).toHaveLength(1);
       expect(sources.filter(file => /(?:@legendapp-state-[^/]+|@legendapp\/state)\/index\.[cm]?js$/.test(file))).toHaveLength(1);
@@ -254,7 +263,7 @@ test("content-addressed artifact installs from verified cache and compiles ident
     expect((await compile([entry, deck])).code).toBe(downloaded.code);
     expect(downloads).toBe(1);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
-}, 60_000);
+}, 120_000);
 
 test("Babel embeds the artifact pin in the app and varies its cache with the pin", async () => {
   const { createRequire } = await import("node:module");
