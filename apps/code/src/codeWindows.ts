@@ -59,7 +59,10 @@ export async function openCodeViewerWindow(launchArguments?: string[]) {
     const preparedDocumentId = path ? prepareDocument(path) : undefined;
     try {
         return await CodeWindowsNavigator.open(codeViewerWindowModuleName, {
-            props: { launchArguments, preparedDocumentId },
+            props: {
+                ...(launchArguments !== undefined ? { launchArguments } : {}),
+                ...(preparedDocumentId !== undefined ? { preparedDocumentId } : {}),
+            },
             options: {
                 ...createCodeViewerWindowStyle({ includeFrame: true })
             }
