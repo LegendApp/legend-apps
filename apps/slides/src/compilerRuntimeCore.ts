@@ -1,5 +1,5 @@
 /**
- * Release builds ship the deck compiler as one JavaScript file without a runtime.
+ * Release builds download the deck compiler separately, without a runtime.
  * This module finds a compatible runtime (Bun or Node) or installs a pinned Bun.
  * It talks to the system only through `RuntimeHost`, so it can be tested without the app.
  */

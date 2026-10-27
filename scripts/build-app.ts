@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { sparkWorkspace } from "./lib/sparkWorkspaces";
-import { packageSlidesCompiler, signSlidesCompiler } from "./lib/slidesCompiler";
+import { signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -146,9 +146,6 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     if (appId === "slides") {
       const compilerDirectory = path.join(appPath, "Contents/Helpers/slides-compiler.helper");
       fs.rmSync(compilerDirectory, { recursive: true, force: true });
-      await packageSlidesCompiler(compilerDirectory);
-      fs.writeFileSync(path.join(compilerDirectory, ".spark-entry"), "run");
-      signSlidesCompiler(compilerDirectory, getExistingCodeSignIdentity(appPath));
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
     }
     const didNormalizeAssets = normalizeMacOSMetroAssetPaths(appPath);

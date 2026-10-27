@@ -25,6 +25,7 @@ const env = {
   LEGEND_APP: appId, LEGEND_PLATFORM: "macos", SPARK_PLATFORM: "macos",
   ...(installOptions.offline ? { LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } : {}),
   EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: ["start", "run"].includes(action) ? getDevSyntaxAssetSourceRoot() : undefined,
+  EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT: undefined as string | undefined,
   EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
   EXPO_PUBLIC_LEGEND_DIFF_CUSTOMIZER_PATH: appId === "diff" ? path.resolve(project, "../../../../scripts/diff-customization.mjs") : undefined,
 };
@@ -55,7 +56,15 @@ else if (action !== "install") {
     if (installOptions.offline) await assertSparkOfflineStart(project, cli, actionArgs);
     await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, appArgs, env });
   }
-  else if (action === "build-release" || action === "build") runCommand("node", [cli, ...buildArgs], { cwd: project, env });
+  else if (action === "build-release" || action === "build") {
+    if (appId === "slides" && action === "build-release") {
+      const { packageSlidesCompilerArtifact } = await import("./lib/slidesCompiler");
+      const arch = process.env.SPARK_MACOS_ARCH ?? process.arch;
+      const artifact = await packageSlidesCompilerArtifact(path.join(project, ".spark/compiler"), arch);
+      env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = JSON.stringify(artifact);
+    }
+    runCommand("node", [cli, ...buildArgs], { cwd: project, env });
+  }
   else if (action === "start") await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, noOpen: true, env });
   else if (action === "analyze") runCommand("node", [cli, "analyze", ...actionTail], { cwd: project, env });
   else throw new Error(`Unknown Spark action: ${action}`);

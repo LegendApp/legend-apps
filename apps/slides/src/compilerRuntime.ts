@@ -22,7 +22,7 @@ export class CompilerRuntimeMissingError extends Error {
 }
 
 let hostPromise: Promise<RuntimeHost> | undefined;
-function runtimeHost() {
+export function runtimeHost() {
   return hostPromise ??= (async () => {
     // Application Support/<app>; the user's home is the part before /Library/.
     const data = await getDirectory("data");

@@ -153,3 +153,32 @@ export function signSlidesCompiler(directory: string, identity: string) {
     if (fs.existsSync(path.join(directory, "Info.plist"))) sign(directory, fs.existsSync(path.join(directory, "bun")));
   }
 }
+
+/** Produce a local, content-addressed download and the pin embedded by Babel. Never uploads. */
+export async function packageSlidesCompilerArtifact(output: string, arch: string, identity = process.env.LEGEND_DEVELOPER_ID_APPLICATION
+  || (process.env.LEGEND_TEAM_NAME && process.env.LEGEND_TEAM_ID
+    ? `Developer ID Application: ${process.env.LEGEND_TEAM_NAME} (${process.env.LEGEND_TEAM_ID})` : "-")) {
+  if (arch !== process.arch) throw new Error(`Build the ${arch} compiler on a matching Mac; installed native compiler dependencies are ${process.arch}.`);
+  fs.mkdirSync(output, { recursive: true });
+  const scratch = fs.mkdtempSync(path.join(output, ".package-"));
+  try {
+    const helper = await packageSlidesCompiler(path.join(scratch, "slides-compiler.helper"));
+    signSlidesCompiler(helper, identity);
+    const zip = path.join(scratch, "compiler.zip");
+    const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", helper, zip], { encoding: "utf8" });
+    if (packed.status !== 0) throw new Error(`Compiler archive failed: ${packed.stderr}`);
+    const bytes = fs.readFileSync(zip);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const name = `slides-compiler-darwin-${arch}-${sha256}.zip`;
+    fs.renameSync(zip, path.join(output, name));
+    const artifact = { url: `https://legend.so/slides/compiler/${name}`, sha256, bytes: bytes.length, arch };
+    fs.writeFileSync(path.join(output, "artifact.json"), JSON.stringify(artifact, null, 2) + "\n");
+    return artifact;
+  } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+}
+
+if (import.meta.main) {
+  const [output, arch = process.arch] = process.argv.slice(2);
+  if (!output) throw new Error("Usage: bun scripts/lib/slidesCompiler.ts <output-directory> [arm64|x64]");
+  console.log(JSON.stringify(await packageSlidesCompilerArtifact(path.resolve(output), arch), null, 2));
+}
