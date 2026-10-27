@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import { installEffectExample, installEffectPacks, loadEffectCatalog, removeEffectPack, resolveInstallation } from "../effectPacks/install";
+import { catalogResourceURL, installEffectExample, installEffectPacks, loadEffectCatalog, removeEffectPack, resolveInstallation } from "../effectPacks/install";
 import { effectLockPath, pinnedPackDirectory, readEffectLock, readPackArchive, sha256, writeEffectLock } from "../effectPacks/storage";
 import { compileDeck } from "../compiler";
 import { defaultEffectPacksDirectory } from "../compiler/effectPacks";
@@ -22,6 +22,7 @@ function fixture() {
   fs.writeFileSync(deck, 'export { sample } from "slides:motion/Pose"\n\n# Installed');
   const archives = {}, packs = {};
   for (const [id, version, source, dependencies] of [
+    ["math", "2.0.0", 'export const twice = x => x * 4;', {}],
     ["math", "1.0.0", 'export const twice = x => x * 2;', {}],
     ["motion", "1.0.0", 'import { twice } from "slides:math/Pose"; export function sample(x) { "worklet"; return twice(x); }', { math: "1.0.0" }],
     ["motion", "2.0.0", 'export function sample(x) { "worklet"; return x * 3; }', {}],
@@ -34,6 +35,7 @@ function fixture() {
     packs[id].versions[version] = { version, sha256: sha256(text), url, bytes: Buffer.byteLength(text),
       hostApiVersion: 1, capabilities: manifest.capabilities, dependencies, exports: manifest.exports };
   }
+  packs.math.latest = "1.0.0";
   const catalog = { schemaVersion: 1, packs, effects: [] };
   let broken = false, requests = 0;
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
@@ -198,3 +200,126 @@ test("the compiler CLI lists, installs with progress, compiles from Application 
   expect((await run("--effect-action", "legend-slides://effects/install?pack=motion&version=1.0.0", "--effect-packs", custom)).result.success).toBe(true);
   expect(fs.existsSync(path.join(custom, "motion/active.json"))).toBe(true);
 });
+
+test("future host versions and capabilities are isolated before any archive download", async () => {
+  const f = fixture();
+  f.catalog.packs.motion.versions["2.0.0"].hostApiVersion = 2;
+  expect((await loadEffectCatalog(f.options.catalogURL)).packs.motion.versions["2.0.0"].hostApiVersion).toBe(2);
+  await installEffectPacks(["motion"], f.options);
+  const lock = fs.readFileSync(effectLockPath(f.deck), "utf8");
+  const active = fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8");
+  for (const incompatible of [{ hostApiVersion: 2, capabilities: [] }, { hostApiVersion: 1, capabilities: ["future-engine"] }]) {
+    Object.assign(f.catalog.packs.motion.versions["2.0.0"], incompatible);
+    f.catalog.packs.motion.latest = "2.0.0";
+    const before = f.requests();
+    await expect(installEffectPacks(["motion"], { ...f.options, deck: undefined })).rejects.toThrow("incompatible");
+    expect(f.requests() - before).toBe(1);
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lock);
+    expect(fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8")).toBe(active);
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+  }
+  f.catalog.packs.math.versions["1.0.0"].capabilities = ["future-engine"];
+  expect(() => resolveInstallation(f.catalog, ["motion"], readEffectLock(f.deck))).toThrow("future-engine");
+});
+
+test("independent default updates resolve exact dependencies and preserve deck locks", async () => {
+  const f = fixture();
+  await installEffectPacks(["motion"], f.options);
+  const oldLock = fs.readFileSync(effectLockPath(f.deck), "utf8");
+  await installEffectPacks(["math"], { ...f.options, deck: undefined, requested: { math: f.catalog.packs.math.versions["2.0.0"] } });
+  const fresh = path.join(f.root, "fresh.mdx");
+  fs.copyFileSync(f.deck, fresh);
+  let result = await compileDeck(fresh, { effectPacksDirectory: f.directory });
+  expect(result.success, result.errors?.join("\n")).toBe(true);
+  expect(readEffectLock(fresh).packs.math.version).toBe("1.0.0");
+  const module = { exports: {} };
+  Function("require", "module", "exports", result.code)(() => ({}), module, module.exports);
+  expect(module.exports.sample(21)).toBe(42);
+  await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+  expect(JSON.parse(fs.readFileSync(path.join(f.directory, "math/active.json"), "utf8")).version).toBe("2.0.0");
+  f.catalog.packs.motion.latest = "2.0.0";
+  await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+  const next = path.join(f.root, "next.mdx");
+  fs.copyFileSync(f.deck, next);
+  result = await compileDeck(next, { effectPacksDirectory: f.directory });
+  expect(result.success, result.errors?.join("\n")).toBe(true);
+  expect(readEffectLock(next).packs.motion.version).toBe("2.0.0");
+  expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(oldLock);
+  expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+  // Explicit imports requiring two versions cannot silently overwrite a deck pin.
+  const conflict = path.join(f.root, "conflict.mdx");
+  await installEffectPacks(["motion"], { ...f.options, deck: undefined, requested: { motion: f.catalog.packs.motion.versions["1.0.0"] } });
+  fs.writeFileSync(conflict, 'export { sample } from "slides:motion/Pose";\nexport { twice } from "slides:math/Pose";\n\n# Conflict');
+  result = await compileDeck(conflict, { effectPacksDirectory: f.directory });
+  expect(result.success).toBe(false);
+  expect(result.errors.join("\n")).toContain("dependency conflict");
+  expect(fs.existsSync(effectLockPath(conflict))).toBe(false);
+});
+
+test("catalog content and examples retain same-origin download trust", async () => {
+  const f = fixture();
+  for (const url of ["https://evil.example/pack.json", "//evil.example/pack.json", "http://legend.so/pack.json"]) {
+    expect(() => catalogResourceURL(url, "https://legend.so/catalog.json")).toThrow("origin");
+  }
+  expect(catalogResourceURL("packs/a.json", "https://legend.so/effects/catalog.json")).toBe("https://legend.so/effects/packs/a.json");
+  f.catalog.packs.math.versions["1.0.0"].url = "https://evil.example/pack.json";
+  await expect(installEffectPacks(["motion"], f.options)).rejects.toThrow("origin");
+  expect(fs.existsSync(effectLockPath(f.deck))).toBe(false);
+  expect(fs.existsSync(path.join(f.directory, "motion/active.json"))).toBe(false);
+});
+
+for (const missing of [true, false]) {
+  test(`reinstall sweeps abandoned damaged snapshots with a ${missing ? "missing" : "valid"} destination`, async () => {
+    const f = fixture();
+    await installEffectPacks(["motion"], f.options);
+    const lockBefore = fs.readFileSync(effectLockPath(f.deck), "utf8");
+    const activeBefore = fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8");
+    const root = pinnedPackDirectory(f.directory, "motion", readEffectLock(f.deck).packs.motion);
+    const abandoned = `${root}.damaged-${crypto.randomUUID()}`;
+    if (missing) fs.renameSync(root, abandoned);
+    else fs.mkdirSync(abandoned);
+    fs.mkdirSync(`${root}.damaged-${crypto.randomUUID()}`);
+    const unrelated = [`${root}.damaged`, path.join(path.dirname(root), `${"a".repeat(64)}.damaged-other`)];
+    for (const directory of unrelated) fs.mkdirSync(directory);
+    const requests = f.requests();
+    await installEffectPacks(["motion"], f.options);
+    expect(f.requests() - requests).toBe(missing ? 2 : 1);
+    expect(fs.readdirSync(path.dirname(root)).sort()).toEqual([root, ...unrelated].map(directory => path.basename(directory)).sort());
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    expect(fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8")).toBe(activeBefore);
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+  });
+}
+
+for (const damage of ["modified source", "missing source", "missing manifest", "missing archive", "hash mismatch"]) {
+  test(`reinstall repairs ${damage} without changing pins or newer defaults`, async () => {
+    const f = fixture();
+    await installEffectPacks(["motion"], f.options);
+    const lock = readEffectLock(f.deck), root = pinnedPackDirectory(f.directory, "motion", lock.packs.motion);
+    f.catalog.packs.motion.latest = "2.0.0";
+    await installEffectPacks(["motion"], { ...f.options, deck: undefined });
+    const lockBefore = fs.readFileSync(effectLockPath(f.deck), "utf8");
+    const selections = Object.fromEntries(["motion", "math"].map(id => [id, fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")]));
+    const files = fs.readdirSync(root);
+    const original = fs.readFileSync(path.join(root, "Pose.ts"), "utf8");
+    if (damage === "modified source") fs.writeFileSync(path.join(root, "Pose.ts"), "export const sample = () => 999;");
+    else if (damage === "hash mismatch") fs.appendFileSync(path.join(root, ".archive.json"), " ");
+    else fs.unlinkSync(path.join(root, damage === "missing source" ? "Pose.ts" : damage === "missing manifest" ? "pack.json" : ".archive.json"));
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(false);
+    f.corrupt(true);
+    await expect(installEffectPacks(["motion"], f.options)).rejects.toThrow("checksum");
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    for (const [id, selection] of Object.entries(selections)) expect(fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")).toBe(selection);
+    f.corrupt(false);
+    await installEffectPacks(["motion"], f.options);
+    expect(fs.readFileSync(path.join(root, "Pose.ts"), "utf8")).toBe(original);
+    expect(fs.readdirSync(root).sort()).toEqual(files.sort());
+    expect(fs.readFileSync(effectLockPath(f.deck), "utf8")).toBe(lockBefore);
+    for (const [id, selection] of Object.entries(selections)) expect(fs.readFileSync(path.join(f.directory, id, "active.json"), "utf8")).toBe(selection);
+    expect((await compileDeck(f.deck, { effectPacksDirectory: f.directory })).success).toBe(true);
+    expect(fs.readdirSync(path.dirname(root))).toEqual([path.basename(root)]);
+    const requests = f.requests();
+    await installEffectPacks(["motion"], f.options);
+    expect(f.requests() - requests).toBe(1);
+  });
+}
