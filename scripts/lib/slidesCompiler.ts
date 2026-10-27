@@ -22,6 +22,7 @@ export function isCompilerRuntimeFile(file: string) {
  * so the helper needs the client entry and its production build, not server/dev/profiling builds.
  */
 const packageRuntimeFiles: Record<string, RegExp> = {
+  "@legendapp/state": /^(package\.json|LICENSE|(?:index|react|sync)\.[cm]?js|react-reactive(?:\/enableReactive\.[cm]?js)?)$/,
   "react-dom": /^(package\.json|LICENSE|index\.js|client\.js|cjs\/react-dom(-client)?\.production\.js)$/,
 };
 

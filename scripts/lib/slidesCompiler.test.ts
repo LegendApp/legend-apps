@@ -83,10 +83,11 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(fs.existsSync(path.join(compiler, "node_modules/react/cjs/react.development.js"))).toBe(false);
     expect(fs.existsSync(path.join(compiler, "node_modules/react/LICENSE"))).toBe(true);
     expect(fs.existsSync(path.join(compiler, "node_modules/react/cjs/react-jsx-dev-runtime.production.js"))).toBe(true);
+    expect(fs.existsSync(path.join(compiler, "node_modules/@legendapp/state/sync-plugins/firebase.js"))).toBe(false);
     const deck = path.join(temp, "deck.mdx");
     fs.writeFileSync(deck, '---\ntransition: fade\n---\nexport { pose } from "./pose"\n\n# Portable\n\n<Webview component="./Panel.tsx" />');
     fs.writeFileSync(path.join(temp, "pose.ts"), 'export function pose(x: number) { "worklet"; return x * 2; }');
-    fs.writeFileSync(path.join(temp, "Panel.tsx"), 'import { Fragment } from "react/jsx-dev-runtime"; import { observable } from "@legendapp/state"; import { useValue } from "@legendapp/state/react"; const label = observable("Portable webview"); export default function Panel() { return <Fragment><div>{useValue(label)}</div></Fragment>; }');
+    fs.writeFileSync(path.join(temp, "Panel.tsx"), 'import { Fragment } from "react/jsx-dev-runtime"; import { observable } from "@legendapp/state"; import { useValue } from "@legendapp/state/react"; import { synced } from "@legendapp/state/sync"; const label = observable(synced({ initial: "Portable webview", get: () => "Portable webview" })); export default function Panel() { return <Fragment><div>{useValue(label)}</div></Fragment>; }');
     // The helper ships no JavaScript runtime; exercise every runtime available on this machine.
     const runtimes = [Bun.which("bun") ?? process.execPath, Bun.which("node")].filter((runtime): runtime is string => !!runtime);
     for (const runtime of runtimes.slice(1)) {
