@@ -107,16 +107,17 @@ Validation: 11 focused tests passed (113 assertions), the changed scripts passed
 
 ## Integrated compiler and HTML exports (2026-10-27)
 
-Base: `b8ae4802da9b6874b4c1dacd6b391dc4f66a8a1e`, after merging PRs #4–#7. Implementation: `8171e534` plus the documented budget change. macOS arm64, Node 24.19.0, Bun 1.3.14, matching cached dependencies, ad hoc signed helpers. Compiler artifacts were packaged directly with `packageSlidesCompilerArtifact`; no native app was rebuilt. The 12 MB guardrail failed on the combined baseline.
+Base: `b8ae4802da9b6874b4c1dacd6b391dc4f66a8a1e`, after merging PRs #4–#7. Measured source: `25b5b53dc23d25cae1268d414864300f52056c1e`. macOS arm64, Node 24.19.0, Bun 1.3.14, matching cached dependencies, ad hoc signed helpers. Compiler artifacts were packaged directly with `packageSlidesCompilerArtifact`; no native app was rebuilt. The 12 MB guardrail failed on the combined baseline.
 
 | Payload (bytes) | Combined baseline | After shrinking |
 | --- | ---: | ---: |
-| Compiler ZIP | 15,952,356 | 15,054,987 |
-| Installed helper, regular files | 41,188,315 | 35,330,913 |
-| Demo HTML folder | 1,419,398 | 1,419,184 |
-| Lottie HTML folder | 13,004,544 | 6,284,577 |
+| Compiler ZIP | 15,952,356 | 15,054,995 |
+| Installed helper, regular files | 41,188,315 | 35,330,933 |
+| Demo HTML folder | 1,419,398 | 1,419,245 |
+| Lottie HTML folder | 13,004,544 | 6,284,639 |
+| Lottie files, sum of gzip-9 bytes | 5,115,737 | 4,028,904 |
 
-Maximum ZIP compression saves 47,027 bytes; removing unreachable State adapters saves another 116,464 bytes. Brotli storage of the full CanvasKit WASM saves 734,133 ZIP bytes and 5,564,389 installed bytes. Gzipping the HTML WASM and full Roboto font before Base64 encoding saves 6,719,843 folder bytes against the preceding step and adds 255 bytes to the helper ZIP. Tiny player-size differences between packaging runs are not separate wins.
+Maximum ZIP compression saves 47,027 bytes; removing unreachable State adapters saves another 116,464 bytes. Brotli storage of the full CanvasKit WASM saves 734,133 ZIP bytes and 5,564,389 installed bytes. Gzipping the HTML WASM and full Roboto font before Base64 encoding saves 6,719,843 folder bytes against the preceding step and adds 255 bytes to the helper ZIP. Tiny player-size differences between packaging runs are not separate wins. The gzip totals compress each regular file separately and exclude HTTP headers; they are payload-size estimates, not network timing measurements.
 
 The helper decompresses CanvasKit in memory during export, preserving the installed-size saving. Offline HTML uses the browser's `DecompressionStream("gzip")` and temporary blob URLs. The full WASM and font bytes are preserved, including Skottie and non-Latin glyph coverage; no native rendering engines, syntax languages, locales or font variants were removed. Maximum-quality Brotli increases packaging time; the artifact test allows two minutes for its two helper builds.
 
