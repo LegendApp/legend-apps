@@ -1,3 +1,4 @@
+import { loadHotkeys } from "./hotkeySerialization";
 import type { HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import { createJSONManager } from '../utils/JSONManager';
 import { syncState } from '@legendapp/state';
@@ -87,7 +88,7 @@ export const hotkeys$ = createJSONManager<Record<HotkeyName, HotkeyValue>>({
   filename: 'hotkeys.json',
   initialValue: DEFAULT_HOTKEYS,
   saveDefaultToFile: true,
-
+  transform: { load: value => loadHotkeys(value, DEFAULT_HOTKEYS) },
 });
 
 export const isHotkeysLoaded$ = observable(() => !!syncState(hotkeys$).isPersistLoaded.get());
