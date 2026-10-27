@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
+import { brotliCompressSync, constants } from "node:zlib";
 import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
 import { buildBrowserPlayer } from "../../packages/slides-web/export";
@@ -22,6 +23,7 @@ export function isCompilerRuntimeFile(file: string) {
  * so the helper needs the client entry and its production build, not server/dev/profiling builds.
  */
 const packageRuntimeFiles: Record<string, RegExp> = {
+  "@legendapp/state": /^(package\.json|LICENSE|(?:index|react|sync)\.[cm]?js|react-reactive(?:\/enableReactive\.[cm]?js)?)$/,
   "react-dom": /^(package\.json|LICENSE|index\.js|client\.js|cjs\/react-dom(-client)?\.production\.js)$/,
 };
 
@@ -136,7 +138,8 @@ async function packageSlidesWebRuntime(destination: string, copied: Map<string, 
   const webRoot = path.join(rootDir, "packages/slides-web");
   const webRequire = createRequire(path.join(webRoot, "package.json"));
   for (const file of ["package.json", "src/player.css", "assets/Roboto.ttf", "assets/OFL.txt"]) files.add(path.join(webRoot, file));
-  files.add(webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
+  const canvasKitWasm = webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm");
+  files.add(canvasKitWasm);
   const directories = new Set<string>();
   const packageRoots = new Set<string>();
   for (const file of files) {
@@ -167,7 +170,9 @@ async function packageSlidesWebRuntime(destination: string, copied: Map<string, 
   for (const file of files) {
     const output = target(file);
     fs.mkdirSync(path.dirname(output), { recursive: true });
-    fs.copyFileSync(file, output);
+    if (file === canvasKitWasm) {
+      fs.writeFileSync(output + ".br", brotliCompressSync(fs.readFileSync(file), { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
+    } else fs.copyFileSync(file, output);
   }
   function links(directory: string) {
     if (!fs.existsSync(directory)) return;
@@ -235,7 +240,7 @@ export async function packageSlidesCompilerArtifact(output: string, arch: string
     const helper = await packageSlidesCompiler(path.join(scratch, "slides-compiler.helper"));
     signSlidesCompiler(helper, identity);
     const zip = path.join(scratch, "compiler.zip");
-    const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", helper, zip], { encoding: "utf8" });
+    const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", "--zlibCompressionLevel", "9", helper, zip], { encoding: "utf8" });
     if (packed.status !== 0) throw new Error(`Compiler archive failed: ${packed.stderr}`);
     const bytes = fs.readFileSync(zip);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
