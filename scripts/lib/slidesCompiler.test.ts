@@ -57,6 +57,7 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     const browserRequire = createRequire(path.join(compiler, "packages/slides-web/package.json"));
     const sourceRequire = createRequire(path.resolve(import.meta.dirname, "../../packages/slides-web/package.json"));
     const wasm = fs.readFileSync(sourceRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
+    const font = fs.readFileSync(path.resolve(import.meta.dirname, "../../packages/slides-web/assets/Roboto.ttf"));
     const packedWasm = path.join(path.dirname(browserRequire.resolve("canvaskit-wasm/bin/full/canvaskit.js")), "canvaskit.wasm");
     expect(fs.existsSync(packedWasm)).toBe(false);
     expect(fs.existsSync(packedWasm + ".br")).toBe(true);
@@ -134,8 +135,10 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
       expect(fs.existsSync(path.join(output, "player.js.map"))).toBe(false);
       const { exportDebugDirectory } = await import("../../packages/slides-web/export");
       if (name === "lottie") {
-        const payload = fs.readFileSync(path.join(output, "canvaskit.js"), "utf8").match(/base64,([^\"]+)/)[1];
-        expect(Buffer.from(payload, "base64")).toEqual(wasm);
+        const payload = fs.readFileSync(path.join(output, "canvaskit.js"), "utf8").match(/"([^"]+)"/)[1];
+        expect(gunzipSync(Buffer.from(payload, "base64")).equals(wasm)).toBe(true);
+        const fontPayload = fs.readFileSync(path.join(output, "player.js"), "utf8").match(/["'](H4sI[A-Za-z0-9+/=]+)["']/)[1];
+        expect(gunzipSync(Buffer.from(fontPayload, "base64")).equals(font)).toBe(true);
       }
       const sources = JSON.parse(fs.readFileSync(path.join(exportDebugDirectory(output), "player.js.map"), "utf8")).sources;
       expect(sources.filter(file => file.endsWith("/cjs/react.production.js"))).toHaveLength(1);
