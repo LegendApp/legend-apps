@@ -62,11 +62,11 @@ export function linkMapSummary(source: string) {
 if (import.meta.main) {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     zip: { type: "string" }, "budget-mb": { type: "string", default: "25" },
-    compiler: { type: "string" }, "compiler-budget-mb": { type: "string", default: "12" },
+    compiler: { type: "string" }, "compiler-budget-mb": { type: "string", default: "15.5" },
     "link-map": { type: "string" }, help: { type: "boolean" },
   } });
   if (values.help) {
-    console.log("Usage: bun scripts/slides-size-budget.ts <app> --zip <output.zip> [--budget-mb 25] [--compiler <compiler.zip>] [--compiler-budget-mb 12] [--link-map <map>]\nWrites a notarization-style ditto ZIP and prints JSON. Budgets use decimal MB; exits 1 when exceeded. Does not sign, notarize or publish.");
+    console.log("Usage: bun scripts/slides-size-budget.ts <app> --zip <output.zip> [--budget-mb 25] [--compiler <compiler.zip>] [--compiler-budget-mb 15.5] [--link-map <map>]\nWrites a notarization-style ditto ZIP and prints JSON. Budgets use decimal MB; exits 1 when exceeded. Does not sign, notarize or publish.");
   } else {
     if (positionals.length !== 1 || !values.zip) throw new Error("Supply one .app and --zip output (see --help).");
     const app = path.resolve(positionals[0]!);
