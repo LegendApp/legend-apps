@@ -13,7 +13,7 @@ import { effectRequests$ } from "./effectRequests";
 import { slidesState$ } from "./slidesStore";
 
 type Catalog = { catalog: EffectCatalog; url: string } | { error: string } | null;
-const stateLabel = { available: "Not installed", installed: "Installed", update: "Update available" } as const;
+const stateLabel = { available: "Not installed", installed: "Installed", update: "Update available", incompatible: "Incompatible with this app" } as const;
 
 function EffectCard({ effect, catalogURL }: { effect: EffectListing; catalogURL: string }) {
   const [playing, setPlaying] = useState(false);
@@ -88,9 +88,9 @@ export function EffectsSettingsPage() {
         : message ? <SettingsRow title={message} control={null} /> : null}
     </SettingsSection>
     {rows.map(row => <SettingsSection key={row.id} title={row.id[0].toUpperCase() + row.id.slice(1)}
-      description={`${stateLabel[row.state]}${row.installed ? ` · ${row.installed.version}` : ""}${row.latest && row.state !== "installed" ? ` · Latest ${row.latest}` : ""}${row.effects.length ? ` · ${row.effects.map(effect => effect.title).join(", ")}` : ""}`}
+      description={`${stateLabel[row.state]}${row.installed ? ` · ${row.installed.version}` : ""}${row.latest && row.state !== "installed" ? ` · Latest ${row.latest}` : ""}${row.incompatibility ? ` · ${row.incompatibility}` : ""}${row.effects.length ? ` · ${row.effects.map(effect => effect.title).join(", ")}` : ""}`}
       headerRight={<View className="flex-row gap-2">
-        {row.latest && row.state !== "installed" ? <RuntimeButton title={row.state === "update" ? `Update to ${row.latest}` : "Install"} disabled={disabled} onPress={() => install(row)} /> : null}
+        {row.latest && row.state !== "installed" && row.state !== "incompatible" ? <RuntimeButton title={row.state === "update" ? `Update to ${row.latest}` : "Install"} disabled={disabled} onPress={() => install(row)} /> : null}
         {row.installed ? <RuntimeButton title="Remove" disabled={disabled} onPress={() => remove(row)} /> : null}
       </View>}>
       {loaded && row.effects.length ? <ScrollView horizontal contentContainerStyle={{ gap: 16, padding: 16 }}>

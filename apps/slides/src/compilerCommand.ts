@@ -17,7 +17,7 @@ export async function compilerCommand(refresh = false): Promise<{ target: Proces
 }
 
 /** Retry a vanished runtime once, with one extra retry cycle for newer-runtime recovery. */
-export async function runCompilerCommand(args: string[], options: Pick<Parameters<typeof runCommand>[0], "input" | "timeoutMs" | "onOutput"> = {}, checkCancelled?: () => void) {
+export async function runCompilerCommand(args: string[], options: Pick<Parameters<typeof runCommand>[0], "input" | "timeoutMs" | "onOutput" | "signal"> = {}, checkCancelled?: () => void) {
   let retriedNewerRuntime = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

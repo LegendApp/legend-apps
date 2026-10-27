@@ -125,6 +125,7 @@ export class ExportAssets {
   }
 
   async html(source: string, file: string, inline = false) {
+    if (typeof HTMLRewriter === "undefined") throw new Error("Exporting HTML assets needs Bun. Open Settings › Compiler to install or select Bun, then export again.");
     let base = pathToFileURL(file).href;
     await new HTMLRewriter().on("base[href]", { element(element) {
       base = new URL(element.getAttribute("href")!, base).href;

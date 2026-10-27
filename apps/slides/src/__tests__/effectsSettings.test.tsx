@@ -76,7 +76,7 @@ test("preview URLs resolve beside the catalog and stay on its origin", () => {
   expect(catalogResource("/slides/p.png", url)).toBe("https://legend.so/slides/p.png");
   expect(catalogResource("previews/p.png", url)).toBe("https://legend.so/slides/effects/previews/p.png");
   expect(catalogResource("https://legend.so/p.mp4", url)).toBe("https://legend.so/p.mp4");
-  for (const resource of ["https://evil.example/p.png", "//evil.example/p.png", "javascript:alert(1)"]) expect(catalogResource(resource, url)).toBeUndefined();
+  for (const resource of ["https://evil.example/p.png", "//evil.example/p.png", "javascript:alert(1)", "/\\\\evil.example/p.png", "https://legend.so\t.evil.example/p.png"]) expect(catalogResource(resource, url)).toBeUndefined();
 });
 
 test("lists packs with previews, versions and state, and installs updates with progress", async () => {
@@ -211,4 +211,25 @@ test("failed compiler output does not expose progress JSON as an error", async (
     await act(async () => { button(section(renderer, "Media"), "Install").props.onPress(); await turn(); });
     expect(renderer.root.findAll(node => node.type === "row" && node.props.description === "Effect installation failed.")).toHaveLength(1);
   } finally { await act(() => renderer.unmount()); }
+});
+
+test("incompatible releases and dependencies stay visible without install actions", async () => {
+  const incompatible = structuredClone(catalog);
+  incompatible.packs.backgrounds.versions["2.0.0"].hostApiVersion = 2;
+  incompatible.packs.media.versions["1.0.0"].capabilities = ["future-engine"];
+  incompatible.packs.charts.versions["1.0.0"].dependencies = { media: "1.0.0" };
+  respond = () => ok({ catalog: incompatible, url });
+  const renderer = await render();
+  try {
+    for (const title of ["Backgrounds", "Charts", "Media"]) {
+      const row = section(renderer, title);
+      expect(row.props.description).toContain("Incompatible with this app");
+      expect(button(row, "Install")).toBeUndefined();
+      expect(button(row, "Update to 2.0.0")).toBeUndefined();
+    }
+    expect(section(renderer, "Backgrounds").props.description).toContain("host API 2");
+    expect(section(renderer, "Charts").props.description).toContain("future-engine");
+    expect(button(section(renderer, "Backgrounds"), "Remove")).toBeDefined();
+    expect(commands).toEqual([["--effect-catalog"]]);
+  } finally { await act(async () => renderer.unmount()); }
 });

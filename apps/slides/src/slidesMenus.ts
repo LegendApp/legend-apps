@@ -1,6 +1,9 @@
 import { useMenu } from "@legendapp/spark/menus";
-import { getSlidesState, setSlidesState } from "./slidesStore";
+import { useValue } from "@legendapp/state/react";
+import { getSlidesState, setSlidesState, slidesState$ } from "./slidesStore";
+import { exportDeckToHTML, webExport$ } from "./webExport";
 export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, blackout: boolean, resetPresenterLayout: () => void, openSettings: () => unknown) {
+ const canExport = useValue(() => !!slidesState$.deckPath.get() && !["choosing", "exporting"].includes(webExport$.status.get()));
  useMenu({ id: "slides-presenter", items: [
       { type: "submenu",
         id: "app",
@@ -13,7 +16,8 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
         label: "File",
         target: { menu: "file" },
         placement: { before: { menu: "edit" } },
-        items: [{ type: "action", id: "open", target: { role: "open" }, label: "Open…", }],
+        items: [{ type: "action", id: "open", target: { role: "open" }, label: "Open…", },
+          { type: "action", id: "export-html", label: "Export to HTML…", disabled: !canExport }],
       },
       { type: "submenu",
         id: "presentation",
@@ -33,6 +37,7 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
     ], onAction(action) {
   if (action.type !== "action") return;
   if (action.itemId === "open") void openDeck();
+  if (action.itemId === "export-html") void exportDeckToHTML();
   if (action.itemId === "blackout" && getSlidesState().audienceOpen) setSlidesState(current => ({ blackout: !current.blackout }));
   if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
   if (action.itemId === "settings") void openSettings();
