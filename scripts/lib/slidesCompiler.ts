@@ -235,7 +235,7 @@ export async function packageSlidesCompilerArtifact(output: string, arch: string
     const helper = await packageSlidesCompiler(path.join(scratch, "slides-compiler.helper"));
     signSlidesCompiler(helper, identity);
     const zip = path.join(scratch, "compiler.zip");
-    const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", helper, zip], { encoding: "utf8" });
+    const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", "--zlibCompressionLevel", "9", helper, zip], { encoding: "utf8" });
     if (packed.status !== 0) throw new Error(`Compiler archive failed: ${packed.stderr}`);
     const bytes = fs.readFileSync(zip);
     const sha256 = createHash("sha256").update(bytes).digest("hex");

@@ -272,6 +272,8 @@ async function packageArchitecture(
     "-rsrc",
     "--sequesterRsrc",
     "--keepParent",
+    "--zlibCompressionLevel",
+    "9",
     distAppPath,
     archivePath,
   ]);
