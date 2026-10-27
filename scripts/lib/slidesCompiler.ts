@@ -5,6 +5,8 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
+import { buildBrowserPlayer } from "../../packages/slides-web/export";
+import { hostModules } from "../../packages/presentation/src/compiler/compileDeck";
 import { bundleSlidesCompiler, slidesCompilerEntry } from "./slidesCompilerBundle";
 
 /** Types and source maps are not loaded by the shipped transpile-only compiler. */
@@ -115,9 +117,72 @@ export async function packageSlidesCompiler(destination: string) {
     "@tailwindcss/oxide": uniwindRoot,
   };
   for (const [name, from] of Object.entries(externalRoots)) link(install(name, from), path.join(destination, "node_modules", name));
+  await packageSlidesWebRuntime(destination, copied);
   fs.writeFileSync(path.join(destination, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>so.legend.slides.compiler</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
   fs.writeFileSync(path.join(destination, "run"), slidesCompilerLauncher, { mode: 0o755 });
   return destination;
+}
+
+/** Preserve only esbuild's browser input files and the links/manifests needed to resolve them. */
+async function packageSlidesWebRuntime(destination: string, copied: Map<string, string>) {
+  const deck = [...hostModules].map(name => `exports[${JSON.stringify(name)}] = require(${JSON.stringify(name)});`).join("\n");
+  const browser = await buildBrowserPlayer(deck, [], true, "", path.join(destination, "player.js"), undefined, false);
+  const files = new Set(Object.keys(browser.metafile!.inputs).filter(file => !/^(?:compiled:|<)/.test(file)).map(file => path.resolve(rootDir, file)));
+  const webRoot = path.join(rootDir, "packages/slides-web");
+  const webRequire = createRequire(path.join(webRoot, "package.json"));
+  for (const file of ["package.json", "src/player.css", "assets/Roboto.ttf", "assets/OFL.txt"]) files.add(path.join(webRoot, file));
+  files.add(webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
+  const directories = new Set<string>();
+  const packageRoots = new Set<string>();
+  for (const file of files) {
+    let directory = path.dirname(file);
+    while (directory !== rootDir && directory.startsWith(rootDir + path.sep)) {
+      directories.add(directory);
+      const manifest = path.join(directory, "package.json");
+      if (fs.existsSync(manifest)) {
+        files.add(manifest);
+        if (JSON.parse(fs.readFileSync(manifest, "utf8")).name) packageRoots.add(directory);
+      }
+      directory = path.dirname(directory);
+    }
+  }
+  for (const directory of packageRoots) {
+    for (const file of fs.readdirSync(directory).filter(name => /^(?:licen[sc]e|notice)(?:\..*)?$/i.test(name))) {
+      files.add(path.join(directory, file));
+    }
+  }
+  function target(file: string) {
+    for (const [source, output] of copied) {
+      if (file === source || file.startsWith(source + path.sep)) return path.join(output, path.relative(source, file));
+    }
+    const relative = path.relative(rootDir, file);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`Browser export dependency is outside the project: ${file}`);
+    return path.join(destination, relative);
+  }
+  for (const file of files) {
+    const output = target(file);
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    fs.copyFileSync(file, output);
+  }
+  function links(directory: string) {
+    if (!fs.existsSync(directory)) return;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory() && entry.name.startsWith("@")) links(file);
+      else if (entry.isSymbolicLink()) {
+        const real = fs.realpathSync(file);
+        if (!packageRoots.has(real)) continue;
+        const output = target(file);
+        fs.mkdirSync(path.dirname(output), { recursive: true });
+        if (!fs.existsSync(output)) fs.symlinkSync(path.relative(path.dirname(output), target(real)), output);
+      }
+    }
+  }
+  directories.add(rootDir);
+  for (const directory of directories) {
+    if (path.basename(directory) === "node_modules") links(directory);
+    else if (!directory.includes(`${path.sep}node_modules${path.sep}`)) links(path.join(directory, "node_modules"));
+  }
 }
 
 function resolvePackageRoot(name: string, from: string) {

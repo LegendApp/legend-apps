@@ -27,11 +27,25 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
   const path = await import("node:path");
   const { gunzipSync } = await import("node:zlib");
   const { packageSlidesCompiler } = await import("./slidesCompiler");
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "slides-package-test-"));
+  const temp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "slides-package-test-")));
   try {
     const app = path.join(temp, "Slides.app");
     const compiler = await packageSlidesCompiler(path.join(app, "Contents/Helpers/slides-compiler.helper"));
     fs.writeFileSync(path.join(compiler, ".spark-entry"), "run");
+    function checkLinks(directory) {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const file = path.join(directory, entry.name);
+        if (entry.isSymbolicLink()) expect(fs.realpathSync(file).startsWith(fs.realpathSync(compiler) + path.sep)).toBe(true);
+        else if (entry.isDirectory()) checkLinks(file);
+      }
+    }
+    checkLinks(compiler);
+    const { createRequire } = await import("node:module");
+    const helperRequire = createRequire(path.join(compiler, "package.json"));
+    const browserRequire = createRequire(path.join(compiler, "packages/slides-web/package.json"));
+    for (const name of ["react-dom/client", "@legendapp/state", "@legendapp/state/react"]) {
+      expect(fs.realpathSync(browserRequire.resolve(name))).toBe(fs.realpathSync(helperRequire.resolve(name)));
+    }
     if (process.platform === "darwin") {
       const { spawnSync } = await import("node:child_process");
       const { signSlidesCompiler } = await import("./slidesCompiler");
@@ -50,7 +64,8 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
       expect(entitlement.stdout).not.toContain("com.apple.security.cs.allow-jit");
     }
     expect(fs.existsSync(path.join(compiler, "runtime/compiler/dist/bin/compiler.mjs"))).toBe(true);
-    expect(fs.existsSync(path.join(compiler, "packages"))).toBe(false);
+    expect(fs.existsSync(path.join(compiler, "packages/slides-web/src/bootstrap.ts"))).toBe(true);
+    expect(fs.existsSync(path.join(compiler, "packages/slides-web/export.ts"))).toBe(false);
     expect(fs.existsSync(path.join(compiler, "bun"))).toBe(false);
     const deck = path.join(temp, "deck.mdx");
     fs.writeFileSync(deck, '---\ntransition: fade\n---\nexport { pose } from "./pose"\n\n# Portable\n\n<Webview component="./Panel.tsx" />');
@@ -74,6 +89,48 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(result.code).toContain("__workletHash");
     expect(result.code).toContain('require("react/compiler-runtime")');
     expect(result.uniwindCode).toContain("stylesheet");
+    // Both real export fixtures run with only the packaged helper and copied decks available.
+    const examples = path.join(temp, "examples");
+    fs.mkdirSync(path.join(examples, "templates"), { recursive: true });
+    for (const file of ["demo.mdx", "Counter.tsx", "templates/Frame.tsx"]) {
+      fs.copyFileSync(path.resolve(import.meta.dirname, "../../apps/slides/examples", file), path.join(examples, file));
+    }
+    fs.copyFileSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/examples/lottie-player/example.mdx"), path.join(examples, "lottie.mdx"));
+    const packs = path.join(temp, "export-effects");
+    fs.cpSync(path.resolve(import.meta.dirname, "../../packages/slides-effects/packs/animation"), path.join(packs, "animation"), { recursive: true });
+    for (const name of ["demo", "lottie"]) {
+      const output = path.join(temp, name + "-html");
+      const child = Bun.spawn([path.join(compiler, "run"), path.join(examples, name + ".mdx"), "--export-html", output, "--effect-packs", packs],
+        { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0], NODE_PATH: "" }, stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+      const exported = JSON.parse(gunzipSync(Buffer.from(JSON.parse(stdout).data, "base64")).toString());
+      expect(exported).toMatchObject({ success: true, path: output, warnings: [] });
+      expect(status).toBe(0);
+      expect(stderr).toContain('"label":"Writing files"');
+      expect(fs.readFileSync(path.join(output, "index.html"), "utf8")).not.toContain('type="module"');
+      expect(fs.existsSync(path.join(output, "canvaskit.js"))).toBe(name === "lottie");
+      expect(fs.existsSync(path.join(output, "player.js.map"))).toBe(false);
+      const { exportDebugDirectory } = await import("../../packages/slides-web/export");
+      const sources = JSON.parse(fs.readFileSync(path.join(exportDebugDirectory(output), "player.js.map"), "utf8")).sources;
+      expect(sources.filter(file => file.endsWith("/cjs/react.production.js"))).toHaveLength(1);
+      expect(sources.filter(file => /(?:@legendapp-state-[^/]+|@legendapp\/state)\/index\.[cm]?js$/.test(file))).toHaveLength(1);
+    }
+    const previousPlayer = fs.readFileSync(path.join(temp, "demo-html/player.js"));
+    const { exportDebugDirectory } = await import("../../packages/slides-web/export");
+    const debugMap = path.join(exportDebugDirectory(path.join(temp, "demo-html")), "player.js.map");
+    const previousMap = fs.readFileSync(debugMap);
+    const cancelled = Bun.spawn([path.join(compiler, "run"), path.join(examples, "lottie.mdx"), "--export-html", path.join(temp, "demo-html"), "--effect-packs", packs],
+      { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0] }, stdout: "pipe", stderr: "pipe" });
+    let progress = "";
+    for await (const chunk of cancelled.stderr) {
+      progress += new TextDecoder().decode(chunk);
+      if (progress.includes('"label":"Bundling player"')) { cancelled.kill("SIGTERM"); break; }
+    }
+    expect(await cancelled.exited).not.toBe(0);
+    expect(progress).toContain('"label":"Bundling player"');
+    expect(fs.readFileSync(path.join(temp, "demo-html/player.js"))).toEqual(previousPlayer);
+    expect(fs.readFileSync(debugMap)).toEqual(previousMap);
+    expect(fs.readdirSync(temp).some(name => name.startsWith(".slides-export-"))).toBe(false);
     const { createHash } = await import("node:crypto");
     const manifest = {id: "optional",version:"1.0.0",hostApiVersion:1,capabilities:[],dependencies:{},exports:{Pose:"./Pose.ts"}};
     const archive = JSON.stringify({schemaVersion:1,files:{"pack.json":JSON.stringify(manifest),"Pose.ts":'export function pose(x) { "worklet"; return x * 7; }'}});
@@ -106,7 +163,7 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
-}, 60_000);
+}, 120_000);
 
 test("compiler bundle rejects worklets plugin changes that bypass the require.resolve rewrite", async () => {
   const { rewriteWorkletsBabelPlugins } = await import("./slidesCompilerBundle");

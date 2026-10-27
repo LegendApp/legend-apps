@@ -78,6 +78,7 @@ export async function bundleSlidesCompiler(outfile: string) {
     format: "esm",
     target: "node22",
     minify: true,
+    define: { __SLIDES_COMPILER_BUNDLE__: "true" },
     legalComments: "eof",
     outfile,
     external: slidesCompilerExternals,
