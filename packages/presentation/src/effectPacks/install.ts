@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { validateCatalog, validatePin, validPackId, type EffectCatalog, type EffectLock, type PackPin, type PackRelease } from "./schema";
+import { resolveInstallation, validateCatalog, validatePin, validPackId, type PackPin, type PackRelease } from "./schema";
 import { atomicWrite, effectLockPath, ensureEffectSpace, installedPacksDirectory, pinnedPackDirectory, readEffectLock, readPackArchive, sha256, verifyInstalledPack, writeEffectLock } from "./storage";
 export const effectCatalogURL = () => process.env.LEGEND_SLIDES_EFFECTS_CATALOG ?? "https://legend.so/slides/effects/catalog.json";
 export function catalogResourceURL(resource: string, catalogURL: string) {
@@ -25,28 +25,15 @@ export async function loadEffectCatalog(url = effectCatalogURL()) {
   catalogResourceURL(url, url);
   return validateCatalog(JSON.parse(await download(url, 2_000_000)));
 }
-export function resolveInstallation(catalog: EffectCatalog, ids: string[], existing: EffectLock = { schemaVersion: 1, packs: {} }, requested: Record<string, PackPin> = {}) {
-  const pins = { ...existing.packs }; const releases = new Map<string, PackRelease>(); const visiting = new Set<string>();
-  function visit(id: string, required?: string) {
-    if (!validPackId(id)) throw new Error("Invalid effect pack ID.");
-    const pack = catalog.packs[id]; if (!pack) throw new Error(`Effect pack "${id}" is not in the catalog.`);
-    const pin = requested[id] ?? pins[id]; if (pin) validatePin(pin);
-    const version = pin?.version ?? required ?? pack.latest;
-    if (required && version !== required) throw new Error(`Effect dependency conflict for "${id}": ${version} versus ${required}.`);
-    const release = pack.versions[version];
-    if (!release || pin && pin.sha256 !== release.sha256) throw new Error(`Pinned effect "${id}" ${version} is not available in this catalog.`);
-    if (visiting.has(id)) throw new Error("Effect pack dependencies form a cycle.");
-    if (releases.has(id)) { if (releases.get(id)!.version !== version) throw new Error(`Effect dependency conflict for "${id}".`); return; }
-    visiting.add(id);
-    for (const [dependency, requiredVersion] of Object.entries(release.dependencies)) visit(dependency, requiredVersion);
-    visiting.delete(id); pins[id] = { version, sha256: release.sha256 }; releases.set(id, release);
-  }
-  ids.forEach(id => visit(id));
-  return { lock: { schemaVersion: 1 as const, packs: pins }, releases };
-}
+export { resolveInstallation } from "./schema";
 async function installRelease(directory: string, id: string, release: PackRelease, catalogURL: string, onProgress?: (progress: EffectInstallProgress) => void) {
   const destination = pinnedPackDirectory(directory, id, release);
-  if (verifyInstalledPack(destination, release)) return;
+  const versionDirectory = path.dirname(destination);
+  if (fs.existsSync(versionDirectory)) for (const sibling of fs.readdirSync(versionDirectory)) {
+    if (sibling.startsWith(`${release.sha256}.damaged-`)) fs.rmSync(path.join(versionDirectory, sibling), { recursive: true });
+  }
+  try { if (verifyInstalledPack(destination, release)) return; }
+  catch { /* A damaged snapshot is replaced only after a verified download. */ }
   ensureEffectSpace(directory, release.bytes * 4);
   const text = await download(catalogResourceURL(release.url, catalogURL), release.bytes, release,
     receivedBytes => onProgress?.({ pack: id, receivedBytes, totalBytes: release.bytes }));
@@ -60,8 +47,14 @@ async function installRelease(directory: string, id: string, release: PackReleas
     for (const [file, source] of Object.entries(archive.files)) { const target = path.join(stage, file); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, source); }
     fs.writeFileSync(path.join(stage, ".archive.json"), text);
     verifyInstalledPack(stage, release);
+    const damaged = `${destination}.damaged-${crypto.randomUUID()}`;
+    if (fs.existsSync(destination)) fs.renameSync(destination, damaged);
     try { fs.renameSync(stage, destination); }
-    catch (error) { if (!verifyInstalledPack(destination, release)) throw error; }
+    catch (error) {
+      if (fs.existsSync(damaged)) fs.renameSync(damaged, destination);
+      throw error;
+    }
+    if (fs.existsSync(damaged)) fs.rmSync(damaged, { recursive: true });
   } finally { if (fs.existsSync(stage)) fs.rmSync(stage, { recursive: true }); }
 }
 type InstallOptions = { directory?: string; catalogURL?: string; deck?: string; requested?: Record<string, PackPin>; onProgress?: (progress: EffectInstallProgress) => void };
@@ -106,7 +99,11 @@ async function installPacks(ids: string[], options: InstallOptions) {
   for (const [id, release] of releases) await installRelease(directory, id, release, catalogURL, options.onProgress);
   if (options.deck) writeEffectLock(options.deck, lock, before);
   // Default selections affect new decks only. Existing decks resolve their lockfile.
-  for (const [id] of releases) atomicWrite(path.join(directory, id, "active.json"), JSON.stringify(lock.packs[id]) + "\n");
+  for (const [id] of releases) {
+    const active = path.join(directory, id, "active.json");
+    if (existing?.packs[id] && fs.existsSync(active)) continue;
+    if (ids.includes(id) || !fs.existsSync(active)) atomicWrite(active, JSON.stringify(lock.packs[id]) + "\n");
+  }
   return { lock, catalog };
 }
 /** Remove every installed version; decks pinned to the pack offer to reinstall it. */
@@ -138,6 +135,7 @@ export async function installEffectExample(slug: string, options: { directory?: 
   ensureEffectSpace(directory, 2_000_000);
   const catalogURL = options.catalogURL ?? effectCatalogURL(), catalog = await loadEffectCatalog(catalogURL);
   const effect = catalog.effects.find(item => item.slug === slug); if (!effect) throw new Error("Unknown effect example.");
+  resolveInstallation(catalog, [effect.pack]);
   const text = await download(catalogResourceURL(effect.example.url, catalogURL), effect.example.bytes, effect.example);
   const deck = path.join(directory, "examples", slug, effect.example.sha256, catalog.packs[effect.pack].versions[catalog.packs[effect.pack].latest].sha256, "example.mdx");
   await installEffectPacks([effect.pack], { ...options, directory, deck, requested: { [effect.pack]: catalog.packs[effect.pack].versions[catalog.packs[effect.pack].latest] } });

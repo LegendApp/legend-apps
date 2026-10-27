@@ -259,7 +259,7 @@ const { makeMetroConfig } = require("expo-desktop-metro-config");
 const { withDesktop } = require("@legendapp/spark/metro");
 const { withUniwindConfig } = require("uniwind/metro");
 const config = makeMetroConfig(__dirname);
-config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
+${manifest.id === "slides" ? 'config.cacheVersion = [config.cacheVersion, process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT || ""].join("|");\n' : ""}config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
 config.server.unstable_serverRoot = ${mode === "release" ? "__dirname" : JSON.stringify(rootDir)};
 config.resolver.useWatchman = false;

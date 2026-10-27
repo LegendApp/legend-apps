@@ -2,6 +2,7 @@ import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
 import { deckWatchDirectories } from "./deckWatchDirectories";
 import { effectRequests$, reportMissingEffects } from "./effectRequests";
+import { CompilerDownloadError, compilerHelper$ } from "./compilerHelper";
 import { runCompilerCommand } from "./compilerCommand";
 import { CompilerRuntimeMissingError, compilerRuntime$, downloadCompilerRuntime } from "./compilerRuntime";
 import { writeTextIfUnchanged } from "@legendapp/spark/files";
@@ -44,7 +45,11 @@ let watchedDeckPath: string | undefined;
 let watchedDirectories: string[] = [];
 let reloadQueue: ReturnType<typeof createDeckReloadQueue> | undefined;
 let buildSequence = 0;
+let retryCompilerDeck: (() => Promise<boolean>) | undefined;
+
 let draftReloadHandler: ((path: string) => Promise<unknown>) | undefined;
+
+export function retryCompilerDownload() { return retryCompilerDeck?.(); }
 
 export function setDraftReloadHandler(handler?: (path: string) => Promise<unknown>) {
   draftReloadHandler = handler;
@@ -53,6 +58,8 @@ export function setDraftReloadHandler(handler?: (path: string) => Promise<unknow
 export function invalidateDeckBuild() {
   buildSequence += 1;
   compilerRuntime$.retryDeck.set(null);
+  compilerHelper$.retryDeck.set(null);
+  retryCompilerDeck = undefined;
 }
 
 // react-native-webgpu installs these globals after its constants module has
@@ -176,6 +183,8 @@ export { getLastDeckPath } from "./slidesPreferences";
 
 export async function loadDeck(path: string, remember = true, draftSource?: string, onSourceIndex?: (ends: number[]) => void) {
   const sequence = ++buildSequence;
+  compilerHelper$.retryDeck.set(null);
+  retryCompilerDeck = undefined;
   compilerRuntime$.retryDeck.set(compilerRuntime$.status.peek() === "downloading" ? path : null);
   if (remember) effectRequests$.pending.set(null);
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -185,6 +194,10 @@ export async function loadDeck(path: string, remember = true, draftSource?: stri
       break;
     } catch (error) {
       if (sequence === buildSequence) {
+        if (error instanceof CompilerDownloadError) {
+          compilerHelper$.retryDeck.set(path);
+          retryCompilerDeck = () => loadDeck(path, remember, draftSource, onSourceIndex);
+        }
         const missingRuntime = error instanceof CompilerRuntimeMissingError;
         if (missingRuntime) compilerRuntime$.retryDeck.set(path);
         const installRuntime = missingRuntime && attempt === 0 && compilerRuntime$.status.peek() !== "error";

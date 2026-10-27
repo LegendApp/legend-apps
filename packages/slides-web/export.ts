@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
-import { existsSync, mkdtempSync, renameSync, rmSync } from "node:fs";
+import fsSync, { existsSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { build, type Plugin } from "esbuild";
@@ -129,7 +130,7 @@ export async function buildBrowserPlayer(deckCode: string, preload: unknown[], s
     },
   };
   return build({ entryPoints: [path.join(src, "bootstrap.ts")], outfile, bundle: true,
-    format: "iife", platform: "browser", target: "es2022", resolveExtensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".tsx", ".ts", ".jsx", ".js", ".json"], jsx: "automatic", minify: true, sourcemap: true,
+    format: "iife", platform: "browser", target: "es2022", resolveExtensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".tsx", ".ts", ".jsx", ".js", ".json"], jsx: "automatic", minify: true, sourcemap: "external",
     define: { "process.env.NODE_ENV": '"production"', "process.env": "{}", __DEV__: "false", global: "globalThis",
       __SLIDES_SKIA__: JSON.stringify(skia), __SLIDES_CANVASKIT_URL__: JSON.stringify(canvasKitURL) ?? "undefined", __SLIDES_FONT__: JSON.stringify(font) },
     external: ["fs", "path"], logLevel: "silent",
@@ -168,7 +169,10 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
     asset.version = createHash("sha256").update(await fs.readFile(path.join(out, decodeURIComponent(asset.source)))).digest("hex");
   }
   options.onProgress?.(2);
-  await buildBrowserPlayer(deckCode, preload, skia, font, path.join(out, "player.js"), options.canvasKitURL);
+  const bundle = await buildBrowserPlayer(deckCode, preload, skia, font, path.join(out, "player.js"), options.canvasKitURL, false);
+  for (const file of bundle.outputFiles!) {
+    if (!file.path.endsWith(".map")) await fs.writeFile(file.path, file.contents);
+  }
   if (skia) {
     if (!options.canvasKitURL) {
       const kit = await fs.readFile(webRequire.resolve("canvaskit-wasm/bin/full/canvaskit.wasm"));
@@ -190,7 +194,13 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
     source: path.basename(deckPath), canvasKit: skia ? options.canvasKitURL ?? "./canvaskit.js" : null,
     assets: [...copied].map(file => path.relative(deckRoot, file)).sort(), preload, effects,
     remoteURLs, warnings: [...result.warnings, ...unsupported, ...remoteURLs.map(url => `Remote URL requires network: ${url}`)] }, null, 2));
-  return out;
+  return bundle.outputFiles!.find(file => file.path.endsWith(".map"))!.contents;
+}
+
+/** Local debugging artifacts are kept outside the folder users publish. */
+export function exportDebugDirectory(output: string) {
+  const key = createHash("sha256").update(path.resolve(output)).digest("hex");
+  return path.join(os.tmpdir(), "legend-slides-web", key);
 }
 
 export async function validateDestination(deck: string, output: string) {
@@ -234,14 +244,14 @@ export async function exportWebsite(deck: string, output: string, options: Expor
   const staging = mkdtempSync(path.join(path.dirname(out), `.slides-export-${process.pid}-`));
   activeStaging.add(staging);
   try {
-    await buildWebsite(deckPath, staging, options);
+    const sourceMap = await buildWebsite(deckPath, staging, options);
     // Keep publication synchronous so cancellation cannot interrupt the replacement.
     const previous = staging + ".previous";
     const replacing = existsSync(out);
-    if (replacing) renameSync(out, previous);
-    try { renameSync(staging, out); }
+    if (replacing) fsSync.renameSync(out, previous);
+    try { fsSync.renameSync(staging, out); }
     catch (error) {
-      if (replacing) renameSync(previous, out);
+      if (replacing) fsSync.renameSync(previous, out);
       throw error;
     }
     if (replacing) {
@@ -249,6 +259,9 @@ export async function exportWebsite(deck: string, output: string, options: Expor
       try { await fs.rm(previous, { recursive: true, force: true }); }
       finally { activeStaging.delete(previous); }
     }
+    const debug = exportDebugDirectory(out);
+    await fs.mkdir(debug, { recursive: true });
+    await fs.writeFile(path.join(debug, "player.js.map"), sourceMap);
     return out;
   } finally {
     await fs.rm(staging, { recursive: true, force: true });

@@ -109,11 +109,16 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
       expect(stderr).toContain('"label":"Writing files"');
       expect(fs.readFileSync(path.join(output, "index.html"), "utf8")).not.toContain('type="module"');
       expect(fs.existsSync(path.join(output, "canvaskit.js"))).toBe(name === "lottie");
-      const sources = JSON.parse(fs.readFileSync(path.join(output, "player.js.map"), "utf8")).sources;
+      expect(fs.existsSync(path.join(output, "player.js.map"))).toBe(false);
+      const { exportDebugDirectory } = await import("../../packages/slides-web/export");
+      const sources = JSON.parse(fs.readFileSync(path.join(exportDebugDirectory(output), "player.js.map"), "utf8")).sources;
       expect(sources.filter(file => file.endsWith("/cjs/react.production.js"))).toHaveLength(1);
       expect(sources.filter(file => /(?:@legendapp-state-[^/]+|@legendapp\/state)\/index\.[cm]?js$/.test(file))).toHaveLength(1);
     }
     const previousPlayer = fs.readFileSync(path.join(temp, "demo-html/player.js"));
+    const { exportDebugDirectory } = await import("../../packages/slides-web/export");
+    const debugMap = path.join(exportDebugDirectory(path.join(temp, "demo-html")), "player.js.map");
+    const previousMap = fs.readFileSync(debugMap);
     const cancelled = Bun.spawn([path.join(compiler, "run"), path.join(examples, "lottie.mdx"), "--export-html", path.join(temp, "demo-html"), "--effect-packs", packs],
       { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0] }, stdout: "pipe", stderr: "pipe" });
     let progress = "";
@@ -124,6 +129,7 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(await cancelled.exited).not.toBe(0);
     expect(progress).toContain('"label":"Bundling player"');
     expect(fs.readFileSync(path.join(temp, "demo-html/player.js"))).toEqual(previousPlayer);
+    expect(fs.readFileSync(debugMap)).toEqual(previousMap);
     expect(fs.readdirSync(temp).some(name => name.startsWith(".slides-export-"))).toBe(false);
     const { createHash } = await import("node:crypto");
     const manifest = {id: "optional",version:"1.0.0",hostApiVersion:1,capabilities:[],dependencies:{},exports:{Pose:"./Pose.ts"}};
@@ -170,4 +176,88 @@ test("compiler bundle rejects a worklets plugin path that no longer matches", as
   let onEnd;
   inlineWorkletsBabelPlugins().setup({ onLoad() {}, onEnd(callback) { onEnd = callback; } });
   expect(onEnd().errors[0].text).toContain("not found or rewritten");
+});
+
+test("content-addressed artifact installs from verified cache and compiles identically offline", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { createHash } = await import("node:crypto");
+  const { gunzipSync } = await import("node:zlib");
+  const { packageSlidesCompiler, packageSlidesCompilerArtifact } = await import("./slidesCompiler");
+  const { installCompilerHelper } = await import("../../apps/slides/src/compilerHelperCore");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "slides-artifact-test-"));
+  try {
+    const output = path.join(root, "artifacts");
+    const asset = await packageSlidesCompilerArtifact(output, process.arch);
+    const zip = path.join(output, new URL(asset.url).pathname.split("/").pop());
+    expect(asset.bytes).toBe(fs.statSync(zip).size);
+    expect(asset.sha256).toBe(createHash("sha256").update(fs.readFileSync(zip)).digest("hex"));
+    expect(JSON.parse(fs.readFileSync(path.join(output, "artifact.json"), "utf8"))).toEqual(asset);
+    let downloads = 0, offline = false;
+    const host = {
+      home: root, dataDirectory: path.join(root, "Application Support"),
+      exists: async file => fs.existsSync(file), mkdir: async file => { fs.mkdirSync(file, { recursive: true }); },
+      remove: async file => { fs.rmSync(file, { recursive: true, force: true }); },
+      move: async (from, to) => { fs.renameSync(from, to); },
+      async run(executable, args) {
+        if (executable === "/usr/bin/curl") {
+          downloads++;
+          if (offline) throw new Error("unexpected network access");
+          fs.copyFileSync(zip, args[args.indexOf("-o") + 1]);
+          return { code: 0, stdout: "", stderr: "" };
+        }
+        const child = Bun.spawn([executable, ...args], { stdout: "pipe", stderr: "pipe" });
+        const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+        return { stdout, stderr, code };
+      },
+    };
+    const entry = await installCompilerHelper(host, asset, () => {});
+    const deck = path.join(root, "deck.mdx");
+    fs.writeFileSync(deck, 'export { pose } from "./pose"\n\n# Downloaded\n\n<Webview component="./Panel.tsx" />');
+    fs.writeFileSync(path.join(root, "pose.ts"), 'export function pose(x) { "worklet"; return x * 3; }');
+    fs.writeFileSync(path.join(root, "Panel.tsx"), 'export default function Panel() { return <div>Downloaded webview</div>; }');
+    const compile = async command => {
+      const child = Bun.spawn(command, { cwd: root, env: { ...process.env, LEGEND_SLIDES_RUNTIME: process.execPath }, stdout: "pipe", stderr: "pipe" });
+      const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+      expect(stderr).toBe(""); expect(status).toBe(0);
+      const result = JSON.parse(gunzipSync(Buffer.from(JSON.parse(stdout).data, "base64")).toString());
+      expect(result.success).toBe(true);
+      return result;
+    };
+    const embedded = await packageSlidesCompiler(path.join(root, "embedded-compiler"));
+    const source = await compile([path.join(embedded, "run"), deck]);
+    const downloaded = await compile([entry, deck]);
+    expect(downloaded.code).toBe(source.code);
+    expect(downloaded.uniwindCode).toBe(source.uniwindCode);
+    expect(downloaded.code).toContain("__workletHash");
+    offline = true;
+    fs.writeFileSync(entry, "damaged extraction");
+    expect(await installCompilerHelper(host, asset, () => {})).toBe(entry);
+    expect((await compile([entry, deck])).code).toBe(downloaded.code);
+    expect(downloads).toBe(1);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}, 60_000);
+
+test("Babel embeds the artifact pin in the app and varies its cache with the pin", async () => {
+  const { createRequire } = await import("node:module");
+  const path = await import("node:path");
+  const require = createRequire(path.resolve("shell/package.json"));
+  const { transformSync } = require("@babel/core");
+  const configure = require(path.resolve("apps/slides/babel.config.cjs"));
+  const previous = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT;
+  try {
+    process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = '{"sha256":"exact-build-pin"}';
+    let key;
+    const config = configure({ cache: { using: fn => { key = fn; } } });
+    const before = key();
+    const result = transformSync("const pin = process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT;", { configFile: false, babelrc: false, plugins: [config.plugins[0]] });
+    expect(result.code).toContain("exact-build-pin");
+    expect(result.code).not.toContain("process.env");
+    process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = "changed";
+    expect(key()).not.toBe(before);
+  } finally {
+    if (previous === undefined) delete process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT;
+    else process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = previous;
+  }
 });

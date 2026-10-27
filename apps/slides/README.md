@@ -245,10 +245,11 @@ The implementation is in `packages/presentation/src/transitions`, the library ma
 is `apps/slides/src/transitionLibrary.ts`, and compilation uses
 `packages/presentation/src/compiler/transitionLibrary.ts`.
 
-macOS release builds package the compiler, Bun, and compiler dependencies inside the
-app resources. They do not require a source checkout or a separately installed Bun.
-Development builds continue to use the repository compiler and local Bun. Build
-release compiler resources on a Mac matching the release target architecture.
+macOS release builds download the pinned compiler helper on first use and cache it
+for offline compilation. Bun is downloaded separately on demand, or you can use
+your own Bun 1.3+ or Node 22+. No source checkout is required. Development builds
+use the repository compiler and local Bun. Package the release compiler on a Mac
+matching the target architecture. See [compiler downloads](../../docs/slides-compiler-download.md).
 
 ## Focus transitions
 
@@ -529,8 +530,9 @@ bun run slides build macos
 bun run slides open macos --release -- /absolute/path/to/talk.mdx
 ```
 
-This embeds application JavaScript and a portable compiler with its runtime and
-dependencies. It does not connect to Metro or require a checkout on the presenting
+This embeds application JavaScript and pins an on-demand compiler download. Open
+a deck while online to cache the compiler and, if needed, Bun before presenting
+offline. The app does not connect to Metro or require a checkout on the presenting
 machine. Keep all local deck files together, and copy any personal transitions
 into the deck before moving it to another computer. Run the **open** command before
 the talk rather than rebuilding or installing dependencies at the venue.

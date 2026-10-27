@@ -17,6 +17,7 @@ test("failed replacement opens retain the visible deck watcher until a successfu
     "@legend-apps/runtime-utils": { ownRegistration: (promise) => ({ remove: async () => { (await promise).remove(); } }), decodeProcessText: bytes => new TextDecoder().decode(bytes) },
     "./deckReloadQueue": { createDeckReloadQueue: reload => ({ changed: reload, dispose() {} }) },
     "./compilerRuntime": { compilerRuntime$: observable({ retryDeck: null, status: "ready" }), CompilerRuntimeMissingError: class extends Error {} },
+    "./compilerHelper": { compilerHelper$: observable({ retryDeck: null }), CompilerDownloadError: class extends Error {} },
     "./compilerCommand": { runCompilerCommand: async args => mocks["@legendapp/spark/processes"].runCommand({ args }) },
     "./transitionLibrary": { transitionDirectoryPath: () => "/transitions" },
     "./deckWatchDirectories": { deckWatchDirectories },
