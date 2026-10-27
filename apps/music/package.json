@@ -16,7 +16,7 @@
     "@legendapp/list": "catalog:",
     "@legendapp/motion": "catalog:",
     "@legendapp/state": "catalog:",
-    "expo-file-system": "~19.0.21",
+    "expo-file-system": "~55.0.26",
     "react-native-webview": "16.0.0",
     "sf-symbols-typescript": "^2.2.0",
     "@legendapp/spark": "catalog:",

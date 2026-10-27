@@ -598,7 +598,7 @@ export function getLegendDisplayTheme(themeName: string | null | undefined): Leg
   return legendDisplayThemeMap.get((themeName ?? "") as LegendDisplayThemeName) ?? legendDisplayThemeMap.get("light") as LegendDisplayTheme;
 }
 
-export function getLegendDisplayThemeForColorScheme(colorScheme: ColorSchemeName): LegendDisplayTheme {
+export function getLegendDisplayThemeForColorScheme(colorScheme: ColorSchemeName | null | undefined): LegendDisplayTheme {
   return getLegendDisplayTheme(colorScheme === "dark" ? "dark" : "light");
 }
 

@@ -19,6 +19,10 @@ import { markdownMenuConfig } from "../../apps/markdown/src/markdownMenus";
 
 const require = createRequire(import.meta.url);
 const sdkRoot = fs.realpathSync(path.resolve("node_modules/@legendapp/spark"));
+const releaseFile = path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json");
+const selectedSdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync("spark.local.json") ? JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk : "");
+const localReleaseMissing = selectedSdk?.startsWith("file:") && !fs.existsSync(releaseFile);
+const publishedRelease = { skip: localReleaseMissing && "Local Spark packs have no published release metadata" };
 const { toExpo } = require("@legendapp/spark/config");
 const { identity } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-desktop-config/identity.cjs"));
 
@@ -29,7 +33,7 @@ for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenu
     const native = [
       { id: "native-app", target: { menu: "app" }, items: [{ role: "about" }, { role: "settings" }] },
       { id: "native-file", target: { menu: "file" }, items: ["new", "open", "close", "save", "saveAs"].map(role => ({ role })) },
-      { id: "native-edit", target: { menu: "edit" }, items: [{ role: "undo" }, { role: "redo" }] },
+      { id: "native-edit", target: { menu: "edit" }, items: [{ role: "undo" }, { role: "redo" }, { role: "selectAll" }] },
       { id: "native-view", target: { menu: "view" }, items: [{ role: "toggleFullscreen" }] },
       { id: "native-window", target: { menu: "window" }, items: [] },
     ];
@@ -73,8 +77,8 @@ test("generated workspaces record the installed Spark version for its migration 
   assert.equal(fs.readFileSync(path.join(project, ".spark/version"), "utf8"), `${version}\n`);
 });
 
-test("published SDK consumers use the release native archives in the shared install", async () => {
-  const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
+test("published SDK consumers use the release native archives in the shared install", publishedRelease, async () => {
+  const release = JSON.parse(fs.readFileSync(releaseFile, "utf8"));
   const shared = await prepareSharedSparkInstall();
   const project = prepareSparkWorkspace(await loadAppManifest("markdown"));
   for (const directory of [shared, project]) {
@@ -87,12 +91,12 @@ test("published SDK consumers use the release native archives in the shared inst
   }
 });
 
-test("offline release preparation verifies archives without downloading", async () => {
+test("offline release preparation verifies archives without downloading", publishedRelease, async () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "spark-release-offline-"));
   try {
     fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "0.0.1" } }));
     await assert.rejects(prepareSparkReleasePackages(project, true), /archive is missing/);
-    const release = JSON.parse(fs.readFileSync(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json"), "utf8"));
+    const release = JSON.parse(fs.readFileSync(releaseFile, "utf8"));
     const [name, asset] = Object.entries(release.packages)[0] as [string, { sha256: string }];
     fs.mkdirSync(path.join(project, "spark-packages"));
     fs.writeFileSync(path.join(project, "spark-packages", `${name.replace(/^@/, "").replaceAll("/", "-")}-${asset.sha256}.tgz`), "corrupt");

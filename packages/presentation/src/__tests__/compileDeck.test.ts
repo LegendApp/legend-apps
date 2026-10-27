@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -411,8 +410,9 @@ describe("compileDeck", () => {
         "  loop: module.exports.loopValues(),",
         "}));",
       ].join("\n"));
-      const reactNativeRoot = path.dirname(createRequire(import.meta.url).resolve("react-native/package.json"));
-      const hermesPath = path.join(reactNativeRoot, "sdks/hermesc/osx-bin/hermes");
+      // RN 0.83 provides the interpreter through the macOS app's Hermes pod.
+      const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
+      if (!fs.existsSync(hermesPath)) throw new Error("Build Slides for macOS before running its Hermes execution test.");
       const probe = spawnSync(hermesPath, [probePath], { encoding: "utf8" });
       expect(probe.error).toBeUndefined();
       expect(probe.stderr).toBe("");

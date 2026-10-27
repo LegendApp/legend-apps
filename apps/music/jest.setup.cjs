@@ -257,7 +257,7 @@ jest.mock("@shopify/react-native-skia", () => ({
 }), { virtual: true });
 
 jest.mock("./src/utils/cacheDirectories", () => {
-    const FileSystem = require("expo-file-system/next");
+    const FileSystem = require("expo-file-system");
 
     return {
         deleteCacheFiles: jest.fn(),

@@ -10,24 +10,6 @@ import {
 } from "../LocalMusicState";
 
 jest.mock("expo-file-system", () => {
-    const pathExists = new Map<string, boolean>();
-    return {
-        __esModule: true,
-        getInfoAsync: jest.fn(async (uri: string) => {
-            const normalized = uri.startsWith("file://") ? uri.slice("file://".length) : uri;
-            const exists = pathExists.has(normalized) ? pathExists.get(normalized) : true;
-            return { exists: !!exists, uri };
-        }),
-        __setMockPathExists: (path: string, exists: boolean) => {
-            pathExists.set(path, exists);
-        },
-        __resetMockPaths: () => {
-            pathExists.clear();
-        },
-    };
-});
-
-jest.mock("expo-file-system/next", () => {
     const mockFs = new Map<string, { files: string[]; directories: string[] }>();
 
     const normalizePath = (input: string): string => {
@@ -174,7 +156,7 @@ jest.mock("expo-file-system/next", () => {
 
 jest.mock("../../utils/cacheDirectories", () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-var-requires
-    const FileSystem = require("expo-file-system/next");
+    const FileSystem = require("expo-file-system");
 
     return {
         getCacheDirectory(subdirectory: string) {
@@ -253,24 +235,8 @@ jest.mock("@shopify/react-native-skia", () => ({
 describe("scanLocalMusic", () => {
     const getMockFsSetter = () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-explicit-any
-        const module: any = require("expo-file-system/next");
+        const module: any = require("expo-file-system");
         return module.__setMockFileSystem as (data: Record<string, { files: string[]; directories: string[] }>) => void;
-    };
-
-    const setPathExists = (path: string, exists: boolean) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-explicit-any
-        const module: any = require("expo-file-system");
-        if (typeof module.__setMockPathExists === "function") {
-            module.__setMockPathExists(path, exists);
-        }
-    };
-
-    const resetPathExists = () => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-explicit-any
-        const module: any = require("expo-file-system");
-        if (typeof module.__resetMockPaths === "function") {
-            module.__resetMockPaths();
-        }
     };
 
     const getMediaLibraryScannerMock = () =>
@@ -289,7 +255,6 @@ describe("scanLocalMusic", () => {
             { relativePath: "sub/nested.mp3", fileName: "nested.mp3" },
             { relativePath: "sub/deeper/deep.mp3", fileName: "deep.mp3" },
         ];
-        resetPathExists();
         getMockFsSetter()({
             "/music": {
                 files: ["root.mp3", "ignore.txt"],
@@ -378,8 +343,6 @@ describe("scanLocalMusic", () => {
                 directories: [],
             },
         });
-        setPathExists("/music", false);
-        setPathExists("/other", true);
         librarySettings$.paths.set(() => ["/music", "/other"]);
         mockScanTracks = [{ relativePath: "alt.mp3", fileName: "alt.mp3" }];
 
