@@ -11,6 +11,9 @@ import { renderNativeChildren } from "../nativeChildren";
 import { getDeckSourceStructure } from "../speakerNotesSource";
 
 const temporaryDirectories: string[] = [];
+// RN 0.83 supplies this interpreter through the app's Hermes pod; prepare it
+// with `bun run spark slides build` to include the Hermes execution test.
+const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
 
 function createDeck(files: Record<string, string>) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-"));
@@ -385,7 +388,7 @@ describe("compileDeck", () => {
     expect(result.code).toContain('template":false');
   });
 
-  test.skipIf(process.platform !== "darwin")("preserves template exports and captured loop bindings in Hermes", async () => {
+  test.skipIf(process.platform !== "darwin" || !fs.existsSync(hermesPath))("preserves template exports and captured loop bindings in Hermes", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
         "---",
@@ -410,9 +413,6 @@ describe("compileDeck", () => {
         "  loop: module.exports.loopValues(),",
         "}));",
       ].join("\n"));
-      // RN 0.83 provides the interpreter through the macOS app's Hermes pod.
-      const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
-      if (!fs.existsSync(hermesPath)) throw new Error("Build Slides for macOS before running its Hermes execution test.");
       const probe = spawnSync(hermesPath, [probePath], { encoding: "utf8" });
       expect(probe.error).toBeUndefined();
       expect(probe.stderr).toBe("");
