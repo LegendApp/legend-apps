@@ -1,3 +1,5 @@
+import { normalizeHotkeyBindings } from "@legendapp/spark/shortcuts/commands";
+
 // Legacy Photos bindings used macOS virtual key codes, not character codes.
 const legacyKeys: Record<number, string> = {
   0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X", 8: "C", 9: "V",
@@ -14,9 +16,31 @@ const legacyKeys: Record<number, string> = {
   10001: "MediaPlayPause", 10002: "MediaNext", 10003: "MediaPrevious",
 };
 
-export function loadHotkeys(value: Record<string, string | number>, defaults: Record<string, string>) {
-  return Object.fromEntries(Object.entries(value).map(([name, binding]) => [
-    name,
-    typeof binding === "number" ? legacyKeys[binding] ?? defaults[name] ?? "" : binding,
-  ]));
+// Labels written by the original app and the intermediate Spark keyboard manager.
+const legacyLabels: Record<string, string> = {
+  "←": "Left", "→": "Right", "↑": "Up", "↓": "Down",
+  "↩": "Enter", "⇥": "Tab", "⌫": "Backspace", Esc: "Escape",
+  "⌘": "Cmd", "⇧": "Shift", "⌥": "Alt", "⌃": "Ctrl", "⇪": "CapsLock",
+  1048576: "Cmd", 131072: "Shift", 524288: "Alt", 262144: "Ctrl",
+  65536: "CapsLock", 8388608: "Fn",
+  Page_up: "PageUp", Page_down: "PageDown", Left_bracket: "[", Right_bracket: "]",
+  Forward_delete: "Delete", "Forward Delete": "Delete",
+  Media_play_pause: "MediaPlayPause", "Play/Pause": "MediaPlayPause",
+  Media_next: "MediaNext", "Next Track": "MediaNext",
+  Media_previous: "MediaPrevious", "Previous Track": "MediaPrevious",
+};
+
+export function loadHotkeys(value: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(value).flatMap(([name, binding]) => {
+    const key = typeof binding === "number" ? legacyKeys[binding] :
+      typeof binding === "string" ? binding.split("+").map(part => legacyLabels[part.trim()] ?? part).join("+") : undefined;
+    if (key === undefined) return [];
+    try {
+      normalizeHotkeyBindings([key]);
+      return [[name, key]];
+    } catch {
+      // Omit invalid bindings so built-in and plugin defaults can apply.
+      return [];
+    }
+  }));
 }
