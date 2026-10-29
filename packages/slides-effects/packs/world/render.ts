@@ -29,12 +29,7 @@ fn corner(id:u32)->vec2f {
 }
 `;
 const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
-  sphere: { count: 12 * 8 * 6, code: `
-  let cell=vid/6u; let uv=(vec2f(f32(cell%12u),f32(cell/12u))+corner(vid))/vec2f(12.,8.);
-  let longitude=uv.x*6.2831853; let latitude=uv.y*3.14159265;
-  normal=vec3f(sin(latitude)*cos(longitude),cos(latitude),sin(latitude)*sin(longitude));
-  point=normal*radius;
-` },
+  sphere: { count: 6, code: "" },
   box: { count: 36, code: `
   let face=vid/6u; let uv=corner(vid)*2.-1.;
   if(face==0u) { normal=vec3f(1.,0.,0.); point=vec3f(1.,uv.y,uv.x); }
@@ -72,22 +67,28 @@ struct ShapeContext { time:f32, slideTime:f32, stepTime:f32, step:f32 }
 struct ShapeVertex { position:vec3f, normal:vec3f }
 fn shapeContext()->ShapeContext { return ShapeContext(frame.time,frame.slideTime,frame.stepTime,frame.step); }
 fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimIntensity:f32,activation:f32)->vec3f {
- let view=normalize(eye()-world); var color=material.albedo*uniforms[52]+material.emissive;
+ let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));
+ var color=material.albedo*uniforms[52]+material.emissive;
  let roughness=clamp(material.roughness,.04,1.); let metal=clamp(material.metal,0.,1.);
  ${lightCount === 0 ? "color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55;" : ""}
  for(var light=0u;light<${lightCount}u;light++) {
   let base=64u+light*12u; let delta=vector(base)-world; let distance=max(length(delta),.001); let toward=delta/distance;
-  let range=max(.001,uniforms[base+7u]); let attenuation=pow(max(0.,1.-distance/range),2.)/(1.+distance*distance*.06);
+  let range=max(.001,uniforms[base+7u]); let cutoff=pow(max(0.,1.-pow(distance/range,4.)),2.);
+  let attenuation=cutoff/max(1.,distance*distance);
   var cone=1.; let cosine=uniforms[base+11u];
   if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)))); }
   let halfVector=normalize(toward+view+vec3f(.00001));
-  let specular=pow(max(0.,dot(normal,halfVector)),mix(128.,3.,roughness))*mix(1.,.12,roughness);
-  let f0=mix(vec3f(.04),material.albedo,metal);
-  let diffuse=material.albedo*max(0.,dot(normal,toward))*(1.-metal);
-  color+=(diffuse+f0*specular)*vector(base+4u)*uniforms[base+3u]*attenuation*cone;
+  let nl=max(0.,dot(normal,toward)); let nh=max(0.,dot(normal,halfVector));
+  let vh=max(0.,dot(view,halfVector)); let alpha=roughness*roughness; let a2=alpha*alpha;
+  let denominator=nh*nh*(a2-1.)+1.;
+  let distribution=a2/(3.14159265*denominator*denominator);
+  let visibility=.5/max(.0001,nl*sqrt(nv*nv*(1.-a2)+a2)+nv*sqrt(nl*nl*(1.-a2)+a2));
+  let f0=mix(vec3f(.04),material.albedo,metal); let fresnel=f0+(1.-f0)*pow(1.-vh,5.);
+  let diffuse=material.albedo*(1.-fresnel)*(1.-metal)/3.14159265;
+  color+=(diffuse+fresnel*distribution*visibility)*nl*vector(base+4u)*max(0.,uniforms[base+3u])*attenuation*cone;
  }
- let rim=pow(1.-abs(dot(normal,view)),3.);
- return color+rim*(rimColor*rimIntensity+vector(48u)*uniforms[51]*activation);
+ let rim=pow(1.-nv,3.);
+ return clamp(color+rim*(rimColor*rimIntensity+vector(48u)*uniforms[51]*activation),vec3f(0.),vec3f(4096.));
 }
 `;
 }
@@ -98,6 +99,7 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
 `;
 function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry) {
   const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
+  const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
   return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}${vertexFields}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
@@ -110,9 +112,50 @@ ${custom?.wgsl ?? sdf?.wgsl ?? ""}
  let scale=max(vector(base+8u),vec3f(.0001)); let world=origin+point*scale;
  var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(normal/scale);
  result.color=vector(base+4u); result.emissive=uniforms[base+7u]; result.material=vec4f(uniforms[base+27u],uniforms[base+28u],uniforms[base+29u],uniforms[base+30u]);
- result.albedo=vector(base+24u); result.opacity=uniforms[base+23u]; result.instance=iid; return result;
+ result.albedo=vector(base+24u); result.opacity=uniforms[base+23u]; result.instance=iid;
+ ${sphere ? `
+ let center=projected(origin); let radii=scale*radius;
+ let extent=max(radii.x,max(radii.y,radii.z));
+ if(result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.) {
+  result.position=vec4f(2.,2.,0.,1.); return result;
+ }
+ let z=max(.0001,center.w); let centerNDC=center.xy/z;
+ let margin=vec2f(extent)/(vec2f(uniforms[3]*frame.aspect,uniforms[3])*max(.0001,z-extent))*(1.+abs(centerNDC)*vec2f(uniforms[3]*frame.aspect,uniforms[3]));
+ let lower=select(max(vec2f(-1.),centerNDC-margin),vec2f(-1.),center.w<=extent);
+ let upper=select(min(vec2f(1.),centerNDC+margin),vec2f(1.),center.w<=extent);
+ let ndc=mix(lower,upper,corner(vid));
+ var ray=cameraForward()+cameraRight()*ndc.x*frame.aspect*uniforms[3]+cameraUp()*ndc.y*uniforms[3];
+ ${reflection ? "ray.y=-ray.y;" : ""}
+ result.position=vec4f(ndc,0.,1.); result.world=eye()+ray;
+ ` : ""}
+ return result;
 }
-${sdf ? `
+${sphere ? `
+struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
+@fragment fn worldFragment(in:WorldVertex)->SphereResult {
+ let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
+ let radii=max(vector(base+8u),vec3f(.0001))*max(uniforms[base+3u],.0001);
+ let origin=(eye()-vector(base))/radii; let ray=normalize((in.world-eye())/radii);
+ let along=dot(origin,ray); let closest=origin-ray*along; let field=1.-dot(closest,closest);
+ let edge=max(fwidth(field),.00001);
+ if(field<=0. || in.opacity<=.001) { discard; }
+ let roots=vec2f(-along-sqrt(field),-along+sqrt(field));
+ var local=vec3f(0.); var hit=vec3f(0.); var clip=vec4f(0.); var found=false;
+ for(var root=0u;root<2u;root++) {
+  if(roots[root]<0.) { continue; }
+  local=origin+ray*roots[root]; hit=vector(base)+local*radii; clip=projected(hit);
+  if(clip.w<=.05 || clip.z<0. || clip.z>clip.w) { continue; }
+  ${reflection ? "if(hit.y<uniforms[36]) { continue; }" : ""}
+  found=true; break;
+ }
+ if(!found) { discard; }
+ let normal=normalize(local/radii); let facing=max(0.,dot(normal,normalize(eye()-hit)));
+ let emission=(in.color*(.1+.9*pow(facing,3.))+vec3f(.35*pow(facing,16.)))*in.emissive;
+ let material=Material(in.albedo,emission,in.material.x,in.material.y);
+ let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w);
+ let opacity=in.opacity*smoothstep(0.,edge,field);
+ return SphereResult(vec4f(color*opacity,opacity),clip.z/clip.w);
+}` : sdf ? `
 struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SDFResult {
  if(in.opacity<=.001) { discard; }
@@ -137,7 +180,7 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 }` : `
 @fragment fn worldFragment(in:WorldVertex)->@location(0) vec4f {
  if(in.opacity<=.001) { discard; }
- ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
+ ${reflection ? "if(in.world.y<uniforms[36]) { discard; }" : ""}
  let normal=normalize(in.normal);
  let material=${custom ? "shade(in.instance,in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
  let color=illuminate(in.world,normal,material,in.color,in.material.z,in.material.w);
@@ -154,16 +197,21 @@ struct FloorVertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn floorFragment(in:FloorVertex)->FloorResult {
  let ray=cameraForward()+cameraRight()*(in.uv.x*2.-1.)*frame.aspect*uniforms[3]+cameraUp()*(1.-in.uv.y*2.)*uniforms[3];
- if(abs(ray.y)<.0001) { discard; } let distance=(uniforms[36]-vector(0u).y)/ray.y;
+ if(ray.y>=-.0001 || vector(0u).y<=uniforms[36]) { discard; } let distance=(uniforms[36]-vector(0u).y)/ray.y;
  let world=vector(0u)+ray*distance;
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
  let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vec3f(0.),uniforms[37],uniforms[43]);
- var color=illuminate(world,normal,material,vec3f(0.),0.,1.);
- ${mirror ? `let spread=uniforms[37]*.025; let pixel=vec2f(spread,spread*frame.aspect);
+ var color=illuminate(world,normal,material,vec3f(0.),0.,0.);
+ ${mirror ? `let roughness=clamp(uniforms[37],0.,1.);
+ let spread=roughness*roughness*min(distance,80.)*.0015;
+ let pixel=vec2f(spread,spread*frame.aspect);
  var reflected=textureSampleLevel(reflection,linearSampler,in.uv,0.).rgb*.4;
  reflected+=(textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(0.,1.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(0.,1.),0.).rgb)*.15;
  let fresnel=.04+.96*pow(1.-clamp(dot(normal,view),0.,1.),5.);
- color=mix(color,reflected,clamp(uniforms[38]*mix(fresnel,1.,uniforms[43]),0.,1.));` : ""}
+ let edgeFade=1.-smoothstep(uniforms[39]*.85,uniforms[39],max(abs(world.x),abs(world.z)));
+ let distanceFade=exp(-max(0.,uniforms[12])*distance*roughness);
+ let strength=clamp(uniforms[38],0.,1.)*mix(fresnel,1.,clamp(uniforms[43],0.,1.))*(1.-roughness*.7)*distanceFade*edgeFade;
+ color=mix(color,reflected,strength);` : ""}
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
 }
