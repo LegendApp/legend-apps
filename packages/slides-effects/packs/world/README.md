@@ -212,8 +212,10 @@ import { PathPulse, Spray, Rows, Stage, flyTo } from "slides:world/World";
 ```
 
 Pulse paths accept positions or ids; bare graph ids resolve as `node:<id>`.
-The head and trail follow the graph's curved edges. The trail restarts at each
-node so one tube never cuts across a junction. Ambient Spray accepts
+The head is a round emissive orb of radius `size`. Its thinner trail uses 18%
+of that radius and 30% of the head's emissive intensity so the orb stays distinct.
+Both follow the graph's curved edges. The trail restarts at each node so one tube
+never cuts across a junction. Ambient Spray accepts
 `position`, `spread`, `velocity` and `seed`; `under="leaves:lit"` emits beneath
 active leaves. Motion, birth and lifetime are analytic samples of absolute time.
 

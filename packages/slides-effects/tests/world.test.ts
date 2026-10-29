@@ -183,6 +183,22 @@ test("pulse geometry, camera follow and focus share the exact curved path across
   expect(() => prepareWorldScene({ instances: pulseInstances({ id: "bad", path: ["bad", [0, 0, 0]] }) })).toThrow("cycle");
 });
 
+test("pulse keeps a spherical head distinct from its thin, fainter curved trail", () => {
+  const scene = prepareWorldScene({ instances: pulseInstances({ id: "pulse", path: [[0, 3, 0], [4, 0, 0]], size: 0.2, emissive: 12 }) });
+  const head = scene.instances.find(instance => instance.id === "pulse")!;
+  const trail = scene.instances.find(instance => instance.id === "pulse:trail")!;
+  const values = sampleWorldUniforms(scene, clock(1));
+  const at = (instance: typeof head) => worldHeaderSize + scene.instances.indexOf(instance) * worldInstanceSize;
+  expect(head.kind).toBe("sphere"); expect(trail.kind).toBe("tube");
+  expect(values.slice(at(head) + 8, at(head) + 11)).toEqual([1, 1, 1]);
+  expect(values[at(head) + 3]).toBe(0.2);
+  expect(values[at(trail) + 19]).toBeCloseTo(0.036);
+  expect(values[at(trail) + 7]).toBeCloseTo(3.6);
+  expect(values[at(head) + 7]).toBe(12);
+  const sphere = buildWorldGraph(scene).passes.find(pass => pass.id === "scene-sphere");
+  expect(sphere).toMatchObject({ kind: "render", vertexCount: 6, instanceCount: 1 });
+});
+
 test("pulse trails reconstruct exact curved subsegments and restart at a turn without extra instances", () => {
   const scene = prepareWorldScene({ instances: [...graphInstances({ data: tree("root", [["a", ["leaf"]]]), edge: { curve: 0.65 } }),
     ...pulseInstances({ id: "pulse", path: ["root", "a", "leaf"], step: 1, duration: 4, trail: 0.18 })] });

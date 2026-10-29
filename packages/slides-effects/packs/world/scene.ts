@@ -137,7 +137,7 @@ export function orbInstances({ id = "orb", count = 48, colors = ["#22d3ee", "#b5
 export function pulseInstances(options: PulseOptions): Instance[] {
   if (options.path.length < 2 || !Number.isFinite(options.duration ?? 2) || (options.duration ?? 2) <= 0 || !Number.isFinite(options.trail ?? 0.18) || (options.trail ?? 0.18) < 0) throw new Error("A world pulse needs at least two anchors, a positive duration and a nonnegative trail");
   return [false, true].map(tail => ({ ...primitive(tail ? "tube" : "sphere", { id: tail ? `${options.id}:trail` : options.id,
-    size: options.size ?? 0.08, thickness: (options.size ?? 0.08) * 0.45, color: options.color ?? "#22d3ee", emissive: options.emissive ?? 8 }),
+    size: options.size ?? 0.08, thickness: (options.size ?? 0.08) * 0.18, color: options.color ?? "#22d3ee", emissive: options.emissive ?? 8 }),
     pulse: { options, anchors: [], curves: [], tail } }));
 }
 export function sprayInstances(options: SprayOptions = {}): Instance[] {
@@ -392,6 +392,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2];
     values[index + 3] = sampleTrack(instance.size, clock) * (instance.voxel ? instanceOpacity(instance, clock) : 1);
     let emissive = sampleTrack(instance.emissive, clock) * activation;
+    if (instance.pulse?.tail) emissive *= 0.3;
     if (instance.rows) { const flash = rowFlash(instance, clock); color = mixVector(color, instance.rows.flashColor, flash); emissive += flash * 8; }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
     values[index + 4] = dim[0] + (color[0] - dim[0]) * activation;
