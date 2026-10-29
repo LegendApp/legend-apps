@@ -133,10 +133,26 @@ both a camera target and a focus target.
 Materials can be declared by id or passed inline through a primitive's `material`
 prop. Albedo, emissive intensity, roughness, metal and rim strength support tracks.
 Point and spot lights support animated position, target, color, intensity, range
-and spot angle (radians). At most four local lights are supported. `RimLight`
-sets the shared rim color/intensity. The mirror redraws the scene about the floor
-plane into a half-resolution reflection target and clips geometry below it.
-Roughness blurs that reflection; reflectivity controls its strength.
+and spot angle (radians). Intensity uses relative linear-light units, with
+inverse-square attenuation beyond one world unit and a smooth cutoff at range.
+Spot angle is the outer cone half-angle. Materials use GGX specular, Schlick
+fresnel and energy-conserving diffuse; `metal` tints specular with albedo and
+reduces diffuse. Surface radiance is capped at 4096 linear units to retain
+half-float headroom for bloom. At most four local lights are supported. `RimLight`
+adds a shared view-dependent rim color/intensity, including on dark materials.
+
+Spheres, orbs and spray use six-vertex analytic spheres with curved normals,
+nonuniform scale and surface depth. Emissive spheres have a bright round center
+and radial falloff; bloom supplies the surrounding halo. Emission contributes
+HDR radiance but does not automatically create a local light. Place a point light
+near an emissive subject when it should illuminate nearby surfaces.
+
+The mirror redraws the scene about the floor plane into a half-resolution
+reflection target and clips geometry below it. Roughness broadens and fades the
+reflection with distance; reflectivity controls its strength, with fresnel and
+metal controlling its viewing-angle response. Reflection taps stay inside the
+viewport and fade near the finite floor boundary. The regular fog stage also
+fades the floor into the scene.
 
 DOF uses a half-resolution gather and depth-aware composite. Shafts integrate
 point/spot scattering along the visible camera ray at quarter resolution.
