@@ -217,25 +217,33 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 }
 const filterCode = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
-fn tentFilter(uv:vec2f)->vec3f {
- let pixel=1./vec2f(textureDimensions(source));
- return textureSampleLevel(source,linearSampler,uv,0.).rgb*.25
-  +(textureSampleLevel(source,linearSampler,uv+pixel*vec2f(-1.,-1.),0.).rgb
-   +textureSampleLevel(source,linearSampler,uv+pixel*vec2f(1.,-1.),0.).rgb
-   +textureSampleLevel(source,linearSampler,uv+pixel*vec2f(-1.,1.),0.).rgb
-   +textureSampleLevel(source,linearSampler,uv+pixel*vec2f(1.,1.),0.).rgb)*.1875;
+fn tap(uv:vec2f,offset:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv+offset/vec2f(textureDimensions(source)),0.).rgb; }
+fn box(color:vec3f,weight:f32,karis:bool)->vec4f { let w=weight*select(1.,1./(1.+max(color.r,max(color.g,color.b))),karis); return vec4f(color*w,w); }
+// 13 taps as five overlapping 2x2 boxes; the Karis average keeps single HDR pixels from flaring.
+fn downsample13(uv:vec2f,karis:bool)->vec3f {
+ let a=tap(uv,vec2f(-2.,-2.)); let b=tap(uv,vec2f(0.,-2.)); let c=tap(uv,vec2f(2.,-2.));
+ let d=tap(uv,vec2f(-2.,0.)); let e=tap(uv,vec2f(0.,0.)); let f=tap(uv,vec2f(2.,0.));
+ let g=tap(uv,vec2f(-2.,2.)); let h=tap(uv,vec2f(0.,2.)); let i=tap(uv,vec2f(2.,2.));
+ let j=tap(uv,vec2f(-1.,-1.)); let k=tap(uv,vec2f(1.,-1.)); let l=tap(uv,vec2f(-1.,1.)); let m=tap(uv,vec2f(1.,1.));
+ let sum=box((j+k+l+m)*.25,.5,karis)+box((a+b+d+e)*.25,.125,karis)+box((b+c+e+f)*.25,.125,karis)+box((d+e+g+h)*.25,.125,karis)+box((e+f+h+i)*.25,.125,karis);
+ return sum.rgb/sum.a;
+}
+fn tent9(uv:vec2f)->vec3f {
+ return (tap(uv,vec2f(0.,0.))*4.+(tap(uv,vec2f(-1.,0.))+tap(uv,vec2f(1.,0.))+tap(uv,vec2f(0.,-1.))+tap(uv,vec2f(0.,1.)))*2.
+  +tap(uv,vec2f(-1.,-1.))+tap(uv,vec2f(1.,-1.))+tap(uv,vec2f(-1.,1.))+tap(uv,vec2f(1.,1.)))/16.;
 }
 `;
 const downsample = `${filterCode}
-@fragment fn downsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(tentFilter(uv),1.); }`;
+@fragment fn downsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(downsample13(uv,false),1.); }`;
 const threshold = `${filterCode}
 @fragment fn threshold(@location(0) uv:vec2f)->@location(0) vec4f {
- let color=tentFilter(uv); let brightness=max(color.r,max(color.g,color.b));
- return vec4f(color*max(0.,brightness-uniforms[10])/max(.0001,brightness),1.);
+ let color=downsample13(uv,true); let brightness=max(color.r,max(color.g,color.b));
+ let knee=uniforms[10]*.5; let soft=clamp(brightness-uniforms[10]+knee,0.,2.*knee);
+ return vec4f(color*max(soft*soft/(4.*knee+.0001),brightness-uniforms[10])/max(.0001,brightness),1.);
 }`;
 const upsample = `${filterCode}
 @group(0) @binding(4) var high:texture_2d<f32>;
-@fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb+tentFilter(uv)*uniforms[11],1.); }`;
+@fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb+tent9(uv)*uniforms[11],1.); }`;
 const bloomComposite = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var bloom:texture_2d<f32>;

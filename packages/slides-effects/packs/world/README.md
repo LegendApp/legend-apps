@@ -91,7 +91,7 @@ upload still scale with the instance count; the graph API targets 20–60 nodes.
 
 The pipeline is an instanced HDR scene with depth, optional planar reflections,
 height fog and volumetric lights, depth of field, a half-resolution bloom mip
-chain, chromatic aberration, ACES exposure/tonemapping, sRGB encoding, vignette
+chain with a soft threshold knee and round 13-tap/tent filters, chromatic aberration, ACES exposure/tonemapping, sRGB encoding, vignette
 and grain. `high` and `auto` use full-resolution scene targets and five
 bloom levels. `medium` uses 0.85 scene scale and five levels; `low` uses 0.65 scene
 scale and three levels. Output resolution stays unchanged. `renderScale` is a

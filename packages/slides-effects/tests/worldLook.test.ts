@@ -28,3 +28,12 @@ for (const quality of ["low", "medium", "high"] as const) {
     expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(5);
   });
 }
+
+test("bloom uses round kernels with a soft threshold knee", () => {
+  const graph = buildWorldGraph(prepareWorldScene({ instances: [], bloom: {} }));
+  const code = (id: string) => graph.passes.find(pass => pass.id === id)!.code;
+  expect(code("bloom-threshold")).toContain("downsample13(uv,true)");
+  expect(code("bloom-threshold")).toContain("soft*soft");
+  expect(code("bloom-down-1")).toContain("downsample13(uv,false)");
+  expect(code("bloom-up-0")).toContain("tent9(uv)");
+});
