@@ -220,7 +220,8 @@ never cuts across a junction. Ambient Spray accepts
 active leaves. Motion, birth and lifetime are analytic samples of absolute time.
 
 Rows keep a fixed instance pool while logical row ids advance with the clock.
-Only listed changes flash; recycled slots do not inherit a previous row's flash.
+Listed changes flash on entry, then stay in `flashColor` with a steady glow while
+the other rows dim; recycled slots do not inherit a previous row's highlight.
 Use `rows:row:4` to follow or focus logical row 4 while it is visible.
 `width`, `depth`, `start`, `flashDuration` and `position` configure the column.
 Stages offset nested primitives and multiply their glow. Stage positions and glow

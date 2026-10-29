@@ -219,16 +219,21 @@ export function rowLogicalIndex(instance: Instance, clock: ClockSample) {
   const rows = instance.rows!;
   return rows.logical ?? Math.floor((rows.options.start ?? 0) + clock.slideTime * (rows.options.speed ?? 0.3)) + rows.slot;
 }
-function rowFlash(instance: Instance, clock: ClockSample) {
+function rowHighlight(instance: Instance, clock: ClockSample) {
   "worklet";
   const rows = instance.rows!;
-  const logical = rowLogicalIndex(instance, clock);
-  let flash = 0;
-  for (const change of rows.options.changes ?? []) if (change.row === logical) {
-    const elapsed = triggerElapsed(change.step, clock), duration = rows.options.flashDuration ?? 0.8;
-    if (elapsed >= 0 && elapsed < duration) flash = Math.max(flash, Math.pow(1 - elapsed / duration, 2));
+  const logical = rowLogicalIndex(instance, clock), duration = rows.options.flashDuration ?? 0.8;
+  let changed = false, active = false, flash = 0;
+  for (const change of rows.options.changes ?? []) {
+    const elapsed = triggerElapsed(change.step, clock);
+    if (elapsed < 0) continue;
+    active = true;
+    if (change.row !== logical) continue;
+    changed = true;
+    if (elapsed < duration) flash = Math.max(flash, Math.pow(1 - elapsed / duration, 2));
   }
-  return flash;
+  // Changed rows keep their color and glow once their step has started; the others dim behind them.
+  return { changed, dimmed: active && !changed, flash };
 }
 function quadraticPoint(from: Vec3, to: Vec3, curve: number, t: number): Vec3 {
   "worklet";
@@ -393,7 +398,11 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index + 3] = sampleTrack(instance.size, clock) * (instance.voxel ? instanceOpacity(instance, clock) : 1);
     let emissive = sampleTrack(instance.emissive, clock) * activation;
     if (instance.pulse?.tail) emissive *= 0.3;
-    if (instance.rows) { const flash = rowFlash(instance, clock); color = mixVector(color, instance.rows.flashColor, flash); emissive += flash * 8; }
+    if (instance.rows) {
+      const highlight = rowHighlight(instance, clock);
+      if (highlight.changed) { color = instance.rows.flashColor; emissive += 1.5 + highlight.flash * 8; }
+      else if (highlight.dimmed) color = mixVector(color, [0, 0, 0], 0.8);
+    }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
     values[index + 4] = dim[0] + (color[0] - dim[0]) * activation;
     values[index + 5] = dim[1] + (color[1] - dim[1]) * activation;

@@ -230,6 +230,27 @@ test("pulse trails reconstruct exact curved subsegments and restart at a turn wi
   expect(sampleWorldUniforms(scene, clock(1))[35]).toBe(1);
 });
 
+test("changed rows stay highlighted for the whole step while the others dim", () => {
+  const scene = prepareWorldScene({ instances: rowInstances({ id: "rows", count: 4, speed: 0, color: "#808080", flashColor: "#ff0000", changes: [{ row: 1, step: 1 }, { row: 2, step: 2 }], flashDuration: 0.5 }),
+    camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
+  const row = (slot: number, sample: ClockSample) => {
+    const values = sampleWorldUniforms(scene, sample), index = worldHeaderSize + slot * worldInstanceSize;
+    return { color: [...values.slice(index + 4, index + 7)], emissive: values[index + 7] };
+  };
+  const grey = row(0, clock(5)).color;
+  expect(row(1, clock(5)).emissive).toBe(0.1);
+  const entry = row(1, clock(1.1, 1, { 1: 1 })), settled = row(1, clock(9, 1, { 1: 1 }));
+  expect(entry.emissive).toBeGreaterThan(settled.emissive);
+  expect(settled.color).toEqual([1, 0, 0]);
+  expect(settled.emissive).toBeCloseTo(1.6);
+  expect(row(0, clock(9, 1, { 1: 1 })).color[0]).toBeCloseTo(grey[0] * 0.2);
+  expect(row(2, clock(9, 1, { 1: 1 })).emissive).toBe(0.1);
+  const later = clock(20, 2, { 1: 1, 2: 10 });
+  expect(row(1, later).color).toEqual([1, 0, 0]);
+  expect(row(2, later).color).toEqual([1, 0, 0]);
+  expect(row(3, later).color[0]).toBeCloseTo(grey[0] * 0.2);
+});
+
 test("recycling transfers a flash with logical row identity and never to a reused slot", () => {
   const scene = prepareWorldScene({ instances: rowInstances({ id: "rows", count: 4, speed: 1, spacing: 1, changes: [{ row: 1, step: 1 }], flashDuration: 2 }),
     dof: { focus: "rows:row:1" }, camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
