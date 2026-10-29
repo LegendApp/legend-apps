@@ -114,8 +114,11 @@ ${custom?.wgsl ?? sdf?.wgsl ?? ""}
  result.color=vector(base+4u); result.emissive=uniforms[base+7u]; result.material=vec4f(uniforms[base+27u],uniforms[base+28u],uniforms[base+29u],uniforms[base+30u]);
  result.albedo=vector(base+24u); result.opacity=uniforms[base+23u]; result.instance=iid;
  ${sphere ? `
- let center=projected(origin); let radii=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
+ let center=projected(origin); let radii=scale*radius;
  let extent=max(radii.x,max(radii.y,radii.z));
+ if(result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.) {
+  result.position=vec4f(2.,2.,0.,1.); return result;
+ }
  let z=max(.0001,center.w); let centerNDC=center.xy/z;
  let margin=vec2f(extent)/(vec2f(uniforms[3]*frame.aspect,uniforms[3])*max(.0001,z-extent))*(1.+abs(centerNDC)*vec2f(uniforms[3]*frame.aspect,uniforms[3]));
  let lower=select(max(vec2f(-1.),centerNDC-margin),vec2f(-1.),center.w<=extent);
@@ -131,7 +134,7 @@ ${sphere ? `
 struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SphereResult {
  let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
- let radii=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
+ let radii=max(vector(base+8u),vec3f(.0001))*max(uniforms[base+3u],.0001);
  let origin=(eye()-vector(base))/radii; let ray=normalize((in.world-eye())/radii);
  let along=dot(origin,ray); let closest=origin-ray*along; let field=1.-dot(closest,closest);
  let edge=max(fwidth(field),.00001);

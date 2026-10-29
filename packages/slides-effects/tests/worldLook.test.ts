@@ -13,6 +13,8 @@ for (const quality of ["low", "medium", "high"] as const) {
       expect(draw.kind).toBe("render");
       if (draw.kind !== "render") throw new Error("Expected sphere render pass");
       expect(draw.vertexCount).toBe(6);
+      const vertex = draw.code.slice(draw.code.indexOf("@vertex"), draw.code.indexOf("struct SphereResult"));
+      expect(vertex).toContain("result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.");
       expect(draw.instanceCount).toBe(3000);
       expect(draw.code).toContain("@builtin(frag_depth)");
       expect(draw.code).toContain("if(field<=0.");
