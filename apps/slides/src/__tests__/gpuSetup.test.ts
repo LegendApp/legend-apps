@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
+import { prepareRenderGraph, encodeRenderGraph } from "../gpuRenderGraph";
 
 const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
 const require = createRequire(filename);
@@ -58,4 +59,96 @@ test("valid resources transfer only after validation and cancelled setup never t
   const cancelled = await setup(null, true);
   expect(cancelled.resources).toEqual([undefined]);
   expect(cancelled.errors).toEqual([]);
+});
+
+test.each(["web", "macos"])("canvas device handoff waits for deferred frame retirement on %s", async platform => {
+  const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+  const ui = [], pendingDevices = [], events = [], errors = [];
+  let effects = [], callback, owner;
+  const context = {
+    canvas: { width: 100, height: 100 },
+    configure: ({ device }) => { owner = device; events.push(["configure", device.id]); },
+    getCurrentTexture: () => {
+      if (!owner) throw new Error("Texture requested before configuration");
+      return { width: 100, height: 100, createView: () => ({ device: owner }) };
+    },
+    present() {},
+  };
+  const mutable = value => ({ value, set(next) { this.value = next; } });
+  const playback = { value: { phase: "playing", slideKey: "slide", stepKey: "step", stepIndex: 0 } };
+  const mocks = {
+    react: { useEffect: effect => effects.push(effect) },
+    "react-native": { Platform: { OS: platform }, PixelRatio: { get: () => 1 } },
+    "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "./slidesStore": {},
+    "@legend-apps/presentation": { usePresentationValue: field => field === "isActive", usePlayback: () => playback, samplePlayback: () => 0 },
+    "./gpuRenderGraph": { prepareRenderGraph, encodeRenderGraph },
+    "react-native-reanimated": { makeMutable: mutable, useSharedValue: mutable, useAnimatedReaction() {},
+      useFrameCallback: fn => { callback = fn; return { setActive() {} }; }, runOnJS: fn => fn,
+      runOnUI: fn => (...args) => ui.push(() => fn(...args)) },
+  };
+  const { startShaderCanvas, UIFrames } = new Function("require", "exports", "navigator", code + "\nreturn { startShaderCanvas, UIFrames };")(
+    name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => pendingDevices.shift() }), getPreferredCanvasFormat: () => "bgra8unorm" } },
+  );
+  const flushUI = () => { while (ui.length) ui.shift()(); };
+  const begin = async id => {
+    const ready = deferred(), validation = deferred(), transferred = deferred(), resources = [];
+    const device = { id, lost: new Promise(() => {}), addEventListener() {}, pushErrorScope() {},
+      popErrorScope: () => { ready.resolve(); return validation.promise; }, destroy: () => events.push(["destroy", id]),
+      createBuffer: () => ({}), createSampler: () => ({}), createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
+      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipeline: () => ({}),
+      queue: { writeBuffer() {}, submit() {} },
+      createCommandEncoder: () => ({ finish() {}, beginRenderPass: descriptor => {
+        const view = descriptor.colorAttachments[0].view;
+        if (view.device !== device) throw new Error(`Device ${id} received a texture from device ${view.device.id}`);
+        events.push(["draw", id]);
+        return { setPipeline() {}, setBindGroup() {}, draw() {}, end() {} };
+      } }),
+    };
+    pendingDevices.push(device);
+    const stop = startShaderCanvas({ canvas: { current: { getContext: () => context } }, code: "", particles: false, particleCount: 1,
+      renderGraph: { targets: [], passes: [{ kind: "fullscreen", id: `screen-${id}`, code: "", fragment: "main", output: "screen" }] },
+      setResources: value => { resources.push(value); if (value) transferred.resolve(value); }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
+    await ready.promise;
+    return { stop, validation, transferred, resources };
+  };
+  const mount = resources => {
+    effects = [];
+    UIFrames({ resources, width: 100, height: 100, aspect: 1, brightness: 1, particleCount: 1, previewTime: 0,
+      onReady() {}, onError: error => errors.push(error) });
+    const tick = callback, cleanup = effects.map(effect => effect());
+    return { tick: () => tick({ timeSincePreviousFrame: 16 }), stop: () => cleanup.forEach(fn => fn?.()) };
+  };
+  const configurations = () => events.filter(event => event[0] === "configure").map(event => event[1]);
+  const old = await begin(1);
+  expect(configurations()).toEqual([]);
+  old.validation.resolve(null);
+  const oldFrames = mount(await old.transferred.promise);
+  expect(configurations()).toEqual([]);
+  flushUI(); oldFrames.tick();
+  expect(configurations()).toEqual([1]);
+  old.stop(); oldFrames.stop();
+  const replacement = await begin(2);
+  oldFrames.tick();
+  expect(configurations()).toEqual([1]);
+  replacement.validation.resolve(null);
+  const newFrames = mount(await replacement.transferred.promise);
+  expect(configurations()).toEqual([1]);
+  flushUI();
+  expect(configurations()).toEqual([1, 2]);
+  expect(events.findIndex(event => event[0] === "destroy" && event[1] === 1)).toBeLessThan(events.findIndex(event => event[0] === "configure" && event[1] === 2));
+  const draws = events.filter(event => event[0] === "draw").length;
+  oldFrames.tick();
+  expect(events.filter(event => event[0] === "draw")).toHaveLength(draws);
+  newFrames.tick();
+  expect(events.at(-1)).toEqual(["draw", 2]);
+  const cancelled = await begin(3);
+  cancelled.stop(); cancelled.validation.resolve(null);
+  await new Promise(resolve => setImmediate(resolve));
+  expect(cancelled.resources).toEqual([undefined]);
+  expect(configurations()).toEqual([1, 2]);
+  newFrames.tick();
+  expect(errors).toEqual([]);
+  replacement.stop(); newFrames.stop(); flushUI();
+  expect(events.filter(event => event[0] === "destroy" && event[1] === 1)).toHaveLength(1);
+  expect(events.filter(event => event[0] === "destroy" && event[1] === 2)).toHaveLength(1);
 });

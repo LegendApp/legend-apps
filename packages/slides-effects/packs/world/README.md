@@ -42,6 +42,9 @@ import { Background } from "@legend-apps/presentation";
 </World></Background>
 ```
 
+World animation time restarts on slide entry, including inside `<Background>`.
+This includes drifting objects, scrolling rows, sprays and custom WGSL time uniforms.
+
 `Camera.shots` are ordered keyframes with either a `step` or an `at` time in
 seconds. Times and step numbers should increase within their respective clock.
 Each shot inherits unspecified values from the pose sampled when it starts;
@@ -95,7 +98,7 @@ scale and three levels. Output resolution stays unchanged. `renderScale` is a
 static multiplier greater than zero and at most one for every offscreen target.
 It combines with the preset and the per-effect scales; it does not rebuild pipelines.
 
-`auto` starts with the high preset and adjusts an additional multiplier from 1
+`auto` starts each slide with the high preset and adjusts an additional multiplier from 1
 down to 0.5 in 0.125 steps. It samples live playback callback intervals, waits
 through startup and resizing, lowers resolution after sustained intervals above
 18.5ms, and requires several healthy windows before raising it. Paused and

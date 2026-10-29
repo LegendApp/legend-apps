@@ -12,8 +12,10 @@ type Resources = {
   id: number;
   alive: SharedValue<boolean>;
   disposed: SharedValue<boolean>;
+  configured: SharedValue<boolean>;
   device: GPUDevice;
   context: RNCanvasContext;
+  format: GPUTextureFormat;
   clock: GPUBuffer;
   states: GPUBuffer[];
   groups: GPUBindGroup[];
@@ -126,12 +128,11 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         // Set the drawing buffer before transferring ownership to UIFrames.
         if (Platform.OS === "web") resizeBrowserSurface(context, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({ device, format, alphaMode: "premultiplied" });
         if (renderGraph) {
           const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
           const frameData = device.createBuffer({ size: Math.max(16, frameDataSize * 4), usage: 128 | 8 });
           const graph = await prepareRenderGraph(device, renderGraph, format, clock, frameData);
-          await transfer({ device, context, clock, frameData, graph, states: [], groups: [] });
+          await transfer({ device, context, format, clock, frameData, graph, states: [], groups: [] });
           return;
         }
         const fieldFormat = composite ? "rgba16float" : format;
@@ -195,7 +196,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
           });
           compositeResources = { pipeline, group, texture };
         }
-        await transfer({ device, context, clock, states, groups, compute, render, particles: particlePipeline, frameData, composite: compositeResources });
+        await transfer({ device, context, format, clock, states, groups, compute, render, particles: particlePipeline, frameData, composite: compositeResources });
       } catch (caught) {
         if (validationScope) {
           validationScope = false;
@@ -205,15 +206,15 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         if (!cancelled) { setError(caught instanceof Error ? caught.message : String(caught)); reportError(caught); }
       }
     }
-    async function transfer(program: Omit<Resources, "alive" | "disposed" | "id" | "graph"> & { graph?: RenderGraphResources }) {
+    async function transfer(program: Omit<Resources, "alive" | "disposed" | "configured" | "id" | "graph"> & { graph?: RenderGraphResources }) {
       validationScope = false;
       const validationError = await program.device.popErrorScope();
       if (validationError) throw new Error(validationError.message);
       if (cancelled) { program.device.destroy(); return; }
-      const alive = makeMutable(true), disposed = makeMutable(false);
+      const alive = makeMutable(true), disposed = makeMutable(false), configured = makeMutable(false);
       release = () => runOnUI(destroyGPU)(program.device, alive, disposed);
       transferred = true;
-      setResources({ ...program, graph: program.graph ? makeMutable(program.graph) : undefined, alive, disposed, id: ++nextGPUResourceId });
+      setResources({ ...program, graph: program.graph ? makeMutable(program.graph) : undefined, alive, disposed, configured, id: ++nextGPUResourceId });
     }
     void setup();
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
@@ -330,6 +331,11 @@ async function loadImageTexture(device: GPUDevice, uri: string) {
 function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[]>, renderScale = 1) {
   "worklet";
   const { device, context, clock, groups, compute, render, particles } = r;
+  // Configure on UI after retirement of the previous owner, never during async setup.
+  if (!r.configured.value) {
+    context.configure({ device, format: r.format, alphaMode: "premultiplied" });
+    r.configured.value = true;
+  }
   const data = frameData?.value;
   if (r.frameData && data) device.queue.writeBuffer(r.frameData, 0, new Float32Array(data!));
   const encoder = device.createCommandEncoder();

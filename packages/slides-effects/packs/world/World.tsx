@@ -1,4 +1,4 @@
-import { GPURenderGraph, samplePlayback, useBackgroundSize, usePlayback, usePresentationValue } from "@legend-apps/presentation";
+import { GPURenderGraph, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
 import { Children, Component, Fragment, isValidElement, useMemo, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
@@ -8,7 +8,7 @@ import { advanceResolution, createResolutionState } from "./resolution";
 import { compileTrack, customInstances, graphInstances, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CustomOptions, type GraphOptions, type Instance, type LightOptions, type MaterialOptions, type OrbsOptions,
-  type PostOptions, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
+  type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
@@ -69,8 +69,15 @@ export type WorldProps = {
   postOrder?: WorldScene["postOrder"];
 };
 export function World(props: WorldProps) {
+  const background = usePresentationValue("playbackScope") === "background";
   // id defines a continuity boundary; changing it creates a fresh sampled origin.
-  return <WorldSurface key={props.id ?? "world"} {...props} />;
+  const surface = <WorldSurface key={props.id ?? "world"} {...props} />;
+  return background ? <WorldSlideClock>{surface}</WorldSlideClock> : surface;
+}
+function WorldSlideClock({ children }: { children: ReactNode }) {
+  const sourceRuntime$ = usePresentation$();
+  const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), playbackScope: "slide" }), [sourceRuntime$]);
+  return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
 function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"]) {
   const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], quality, exposure, backgroundColor, postOrder,
@@ -124,23 +131,35 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
   collect(children);
   return { prepared: prepareWorldScene(scene), overlay };
 }
-function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, backgroundColor = "#05060a", quality = "auto",
-  exposure = 1, previewTime = 4, borderRadius = 0, renderScale = 1, enter, scrim = false, fallback, active = true, children, accessibilityLabel, postOrder }: WorldProps) {
-  if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
+function WorldSurface(props: WorldProps) {
+  const { children, quality = "auto", exposure = 1, backgroundColor = "#05060a", scrim = false, postOrder,
+    width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, borderRadius = 0, accessibilityLabel } = props;
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
-  // GPU pipelines keep their identity across clock navigation and surface resizes.
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder), [children, quality, exposure, backgroundColor, scrim, postOrder]);
   const topology = JSON.stringify(worldGraphTopology(prepared));
+  const [continuity] = useState(() => props.id ? retainedPose(props.id) : undefined);
+  const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
+  const resolution = useSharedValue(createResolutionState());
+  return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
+    style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
+    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={prepared} topology={topology}
+      continuity={continuity} origin={origin} resolution={resolution} />
+    {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
+  </View>;
+}
+function WorldSceneRuntime({ width, height, background = false, quality = "auto",
+  previewTime = 4, borderRadius = 0, renderScale = 1, enter, fallback, active = true, prepared, topology, continuity, origin, resolution }:
+  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; topology: string; continuity?: SharedValue<CameraPose | null>;
+    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>> }) {
+  if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
+  // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
   const playback = usePlayback();
-  const [continuity] = useState(() => id ? retainedPose(id) : undefined);
-  const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const sampleClock = samplePlayback;
   const cameraEvaluator = sampleWorldCamera;
   const sampleUniforms = sampleWorldUniforms;
-  const resolution = useSharedValue(createResolutionState());
   const resolutionEvaluator = advanceResolution;
   const adaptive = quality === "auto";
   const adaptivePlayback = adaptive ? playback : null;
@@ -175,12 +194,8 @@ function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHei
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
     return sampleUniforms(prepared, clock, previous, enterDuration, effectiveScale.value);
   }, [prepared, previewTime, enterDuration, entryPose, effectiveScale]);
-  return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
-    style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
-    <WorldGPU fallback={fallback ?? null}>
-      <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
-        borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
-    </WorldGPU>
-    {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
-  </View>;
+  return <WorldGPU fallback={fallback ?? null}>
+    <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
+      borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
+  </WorldGPU>;
 }

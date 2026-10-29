@@ -10,10 +10,19 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { createPlaybackState, advancePlayback, transitionPlayback } from "../../presentation/src/playbackState";
 import { samplePlayback } from "../../presentation/src/playback";
+import { PresentationObservableProvider, usePresentation$ } from "../../presentation/src/runtime";
+import { useRuntimeProjection } from "../../presentation/src/useRuntimeProjection";
 import { worldHeaderSize } from "../packs/world/scene";
 
 const playback = { value: createPlaybackState({ phase: "playing", slideKey: "a", stepKey: "0", stepIndex: 0 }) };
+const animated = { ...await import("react-native-reanimated") };
+mock.module("react-native-reanimated", () => ({ ...animated, useDerivedValue(read) {
+  const latest = React.useRef(read);
+  latest.current = read;
+  return React.useRef({ _isReanimatedSharedValue: true, get value() { return latest.current(); } }).current;
+} }));
 mock.module("@legend-apps/presentation", () => ({
+  PresentationObservableProvider, usePresentation$, useRuntimeProjection,
   GPURenderGraph: props => React.createElement("render-graph", props),
   usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 1280, height: 720 }),
   usePresentationValue: () => playback.value.phase,
@@ -92,6 +101,83 @@ test("equal-content parent renders and resize retain pipeline definitions while 
   } finally { await act(() => tree?.unmount()); }
 });
 
+test("topology transitions retire a uniform generation with its original capacity", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  playback.value = createPlaybackState({ phase: "playing", slideKey: "generation-a", stepKey: "0", stepIndex: 0 });
+  let renderer, overlayMounts = 0, overlayUnmounts = 0;
+  function Overlay() {
+    const [identity] = React.useState(() => ++overlayMounts);
+    React.useEffect(() => () => { overlayUnmounts++; }, []);
+    return <world-overlay identity={identity} />;
+  }
+  const content = (count, width = 800, exposure = 1) => <World id="uniform-generations" quality="auto" width={width} exposure={exposure}>
+    <Camera shots={[{ at: 0, position: [0, 5, 18] }]} /><Orbs count={count} /><Overlay />
+  </World>;
+  const graph = () => renderer.root.findByType("render-graph").props;
+  try {
+    await act(() => { renderer = create(content(24)); });
+    const first = graph();
+    expect(first.uniforms.value).toHaveLength(first.uniformsSize);
+    await act(() => renderer.update(content(24, 1000, 2)));
+    expect(graph().uniforms).toBe(first.uniforms);
+    expect(graph().passes).toBe(first.passes);
+    expect(graph().uniforms.value[8]).toBe(2);
+    playback.value = createPlaybackState({ phase: "playing", slideKey: "generation-b", stepKey: "0", stepIndex: 0 });
+    await act(() => renderer.update(content(64)));
+    const second = graph();
+    expect(second.uniforms).not.toBe(first.uniforms);
+    expect(second.uniforms.value).toHaveLength(second.uniformsSize);
+    expect(first.uniforms.value).toHaveLength(first.uniformsSize);
+    playback.value = createPlaybackState({ phase: "playing", slideKey: "generation-c", stepKey: "0", stepIndex: 0 });
+    await act(() => renderer.update(content(24)));
+    expect(graph().uniforms).not.toBe(first.uniforms);
+    expect(graph().uniforms).not.toBe(second.uniforms);
+    expect(graph().uniforms.value).toHaveLength(first.uniformsSize);
+    expect(second.uniforms.value).toHaveLength(second.uniformsSize);
+    expect(first.uniforms.value).toHaveLength(first.uniformsSize);
+    expect(renderer.root.findByType("world-overlay").props.identity).toBe(1);
+    expect(overlayMounts).toBe(1); expect(overlayUnmounts).toBe(0);
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+      playback.value = advancePlayback(playback.value, timestamp);
+      reactUI();
+    }
+    const scale = graph().renderScale.value;
+    expect(scale).toBeLessThan(1);
+    await act(() => renderer.update(content(64)));
+    reactUI();
+    expect(graph().renderScale.value).toBe(scale);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("a topology change during camera entry preserves the original slide anchor", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  playback.value = createPlaybackState({ phase: "playing", slideKey: "entry-origin", stepKey: "0", stepIndex: 0 });
+  let renderer;
+  const content = (count, entering = false) => <World id="topology-entry" quality="high" enter={entering ? { from: "previous", duration: 2 } : undefined}>
+    <Camera shots={[{ at: 0, position: entering ? [0, 5, 30] : [0, 5, 10] }]} /><Orbs count={count} />
+  </World>;
+  const values = () => renderer.root.findByType("render-graph").props.uniforms.value;
+  try {
+    await act(() => { renderer = create(content(24)); });
+    reactUI();
+    playback.value = createPlaybackState({ phase: "playing", slideKey: "entry-target", stepKey: "0", stepIndex: 0 });
+    await act(() => renderer.update(content(24, true)));
+    reactUI();
+    playback.value = advancePlayback(advancePlayback(playback.value, 0), 1000);
+    reactUI();
+    expect(values()[2]).toBe(20);
+    await act(() => renderer.update(content(64, true)));
+    reactUI();
+    expect(values()[2]).toBe(20);
+    playback.value = advancePlayback(playback.value, 1500);
+    reactUI();
+    expect(values()[2]).toBeCloseTo(28.75);
+    playback.value = advancePlayback(playback.value, 2000);
+    reactUI();
+    expect(values()[2]).toBe(30);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
 test("auto resolution adapts without React frames and preserves the frozen pause/outgoing scale", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   playback.value = createPlaybackState({ phase: "playing", slideKey: "adaptive", stepKey: "0", stepIndex: 0 });
@@ -149,7 +235,8 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     const require = createRequire(import.meta.url);
     const module = { exports: {} };
     const callbacks = [], mutables = [], preparations = [], reactions = [];
-    const presentation = { GPURenderGraph: props => React.createElement("compiled-graph", props),
+    const presentation = { PresentationObservableProvider, usePresentation$, useRuntimeProjection,
+      GPURenderGraph: props => React.createElement("compiled-graph", props),
       usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 800, height: 500 }),
       usePresentationValue: () => playback.value.phase };
     const reanimated = {

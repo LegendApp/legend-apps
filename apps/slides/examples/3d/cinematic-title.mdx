@@ -13,7 +13,7 @@ import { Text } from "react-native"
 import { World, Camera, Box, Ring, Orbs, Material, Floor, SpotLight, RimLight, Fog, Shafts, DOF, Bloom, Vignette, Grain } from "slides:world/World"
 
 export const structures = <>
-  <Material id="stone" albedo="#101827" roughness={0.45} metal={0.2} rim={1.5} />
+  <Material id="stone" albedo="#101827" roughness={0.45} metal={0.2} rim={1.5} emissive={0} />
   <Box material="stone" position={[-5, 0.5, 0]} scale={[1, 7, 1]} />
   <Box material="stone" position={[-2, 0, 0]} scale={[1, 6, 1]} />
   <Box material="stone" position={[1, 1, 0]} scale={[1, 8, 1]} />
@@ -39,7 +39,7 @@ export const structures = <>
 
 # Quiet structures
 
-<Text className="text-3xl text-slate-300">Light, air and a slow orbit</Text>
+<Text className="text-3xl text-slate-300 text-center self-center">Light, air and a slow orbit</Text>
 
 ---
 
@@ -59,7 +59,7 @@ export const structures = <>
 
 # Through the air
 
-<Step at={1}><Text className="text-3xl text-cyan-300">A quiet reveal</Text></Step>
+<Step at={1}><Text className="text-3xl text-cyan-300 text-center self-center">A quiet reveal</Text></Step>
 
 ---
 
@@ -79,4 +79,4 @@ export const structures = <>
 
 # Room to breathe
 
-<Text className="text-3xl text-slate-300">A wider view</Text>
+<Text className="text-3xl text-slate-300 text-center self-center">A wider view</Text>

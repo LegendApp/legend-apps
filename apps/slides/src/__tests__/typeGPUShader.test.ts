@@ -51,7 +51,7 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
   const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(
     name => mocks[name] ?? require(name), {},
   );
-  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
+  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { configure() {}, getCurrentTexture: () => ({ createView() {} }), present() {} },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
     effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
@@ -257,7 +257,8 @@ test("offscreen browser setup sizes first and allocates simulation resources onl
   );
   const surface = {width:0,height:0};
   const assertSize = () => expect([surface.width,surface.height]).toEqual([2016,1000]);
-  const context = {canvas:surface,configure:assertSize,getCurrentTexture:()=>{assertSize();return {createView(){}};}};
+  let configurations = 0;
+  const context = {canvas:surface,configure:()=>{configurations++;assertSize();}};
   const buffers=[],computes=[];
   const device = {
     addEventListener(){},pushErrorScope(){},popErrorScope:async()=>null,lost:new Promise(()=>{}),destroy(){},
@@ -271,7 +272,7 @@ test("offscreen browser setup sizes first and allocates simulation resources onl
     for (const simulation of [false,true]) await new Promise<void>((resolve,reject)=>{
       start({canvas:{current:{getContext:()=>{surface.width=0;surface.height=0;return context;}}},
         code:simulation ? "@compute @workgroup_size(64) fn simulate() {}" : "",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
-        setResources:r=>{if(r){r.context.getCurrentTexture();expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
+        setResources:r=>{if(r){assertSize();expect(r.configured.value).toBe(false);expect(configurations).toBe(0);expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
     });
     expect(buffers.filter(b=>b.usage===(128|8))).toHaveLength(2);
     expect(buffers.filter(b=>b.usage===(64|8))).toHaveLength(2);
