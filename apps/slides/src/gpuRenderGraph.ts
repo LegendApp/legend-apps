@@ -157,7 +157,7 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
       const groups = pass.workgroups;
       if (groups === "perPixel") command.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
       else if (Array.isArray(groups)) command.dispatchWorkgroups(groups[0], groups[1] ?? 1, groups[2] ?? 1);
-      else command.dispatchWorkgroups(Math.ceil(groups.perInstance / 64));
+      else if (groups.perInstance > 0) command.dispatchWorkgroups(Math.ceil(groups.perInstance / 64));
       command.end();
     } else {
       const colors = pass.kind === "render" ? pass.color : [output(pass)];
@@ -166,7 +166,11 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
         clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" : "clear", storeOp: "store" })),
         ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) });
       command.setPipeline(resource.pipeline as GPURenderPipeline); command.setBindGroup(0, resource.group!);
-      command.draw(pass.kind === "render" ? pass.vertexCount : 3, pass.kind === "render" ? pass.instanceCount ?? 1 : 1); command.end();
+      // Dawn reports zero-count draws through a logging callback that calls the JS runtime from this UI thread, which can crash Hermes.
+      // An empty pass still clears its attachments.
+      const vertices = pass.kind === "render" ? pass.vertexCount : 3, instances = pass.kind === "render" ? pass.instanceCount ?? 1 : 1;
+      if (vertices > 0 && instances > 0) command.draw(vertices, instances);
+      command.end();
     }
   }
 }

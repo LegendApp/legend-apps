@@ -69,6 +69,17 @@ test("multipass setup binds declared resources, initializes buffers, and submits
   expect(g.textures.slice(3).map(t => t.descriptor.size)).toEqual([[3840, 2160], [3840, 2160], [1920, 1080]]);
 });
 
+test("empty draws and dispatches still run their passes without a zero-count GPU call", async () => {
+  const g = gpu();
+  const r = await prepareRenderGraph(g.device, { targets: definition.targets, passes: [
+    { kind: "compute", id: "instances", code: "", entry: "main", writes: ["hdr"], workgroups: { perInstance: 0 } },
+    { kind: "render", id: "empty", code: "", vertex: "vertex", fragment: "fragment", color: ["hdr"], depth: "depth", vertexCount: 36, instanceCount: 0, clear: [0, 0, 0, 1] },
+  ] }, "bgra8unorm", {}, {});
+  encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
+  expect(g.commands.map(c => c[0])).toEqual(["render"]);
+  expect(g.commands[0][1].colorAttachments[0].loadOp).toBe("clear");
+});
+
 test("graph rejects invalid references and shader diagnostics before a frame can receive pipelines", async () => {
   const g = gpu();
   await expect(prepareRenderGraph(g.device, { ...definition, passes: [{ ...definition.passes[3], reads: ["bloom@3"] }] }, "bgra8unorm", {}, {})).rejects.toThrow("Invalid GPU mip");
