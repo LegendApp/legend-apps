@@ -386,17 +386,24 @@ describe("compileDeck", () => {
     expect(result.code).toContain('template":false');
   });
 
-  test.skipIf(process.platform !== "darwin")("preserves template exports and captured loop bindings in Hermes", async () => {
+  test.skipIf(process.platform !== "darwin")("preserves classes, template exports and captured loop bindings in Hermes", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
         "---",
         "template: ./Frame.tsx",
         "---",
+        'export { Boundary } from "./Boundary"',
         "export function loopValues() { const callbacks = []; for (let i = 0; i < 3; i++) callbacks.push(() => i); return callbacks.map(fn => fn()); }",
         "",
         "# Framed slide",
       ].join("\n"),
       "Frame.tsx": "export default function Frame({ children }) { return children; }",
+      "Boundary.tsx": `import { Component } from "react";
+        export class Boundary extends Component {
+          state = { failed: false };
+          static getDerivedStateFromError() { return { failed: true }; }
+          render() { return this.state.failed ? this.props.fallback : this.props.children; }
+        }`,
     });
     const result = await compileDeck(deckPath);
     expect(result).toMatchObject({ success: true });
@@ -404,11 +411,16 @@ describe("compileDeck", () => {
       const probePath = path.join(path.dirname(deckPath), "probe.js");
       fs.writeFileSync(probePath, [
         "var module = { exports: {} };",
-        `Function("require", "module", "exports", ${JSON.stringify(result.code)})(function() { return {}; }, module, module.exports);`,
+        "function Component(props) { this.props = props; }",
+        `Function("require", "module", "exports", ${JSON.stringify(result.code)})(function(name) { return name === "react" ? { Component: Component } : {}; }, module, module.exports);`,
+        'var boundary = new module.exports.Boundary({ children: "scene", fallback: "fallback" });',
+        "var content = boundary.render();",
+        "boundary.state = module.exports.Boundary.getDerivedStateFromError(new Error());",
         "print(JSON.stringify({",
         '  componentType: typeof module.exports.default,',
         '  framed: module.exports.__legendSlidesTemplates["./Frame.tsx"]({ children: "content" }),',
         "  loop: module.exports.loopValues(),",
+        '  content: content, fallback: boundary.render(), inherited: boundary instanceof Component,',
         "}));",
       ].join("\n"));
       const reactNativeRoot = path.dirname(createRequire(import.meta.url).resolve("react-native/package.json"));
@@ -417,7 +429,7 @@ describe("compileDeck", () => {
       expect(probe.error).toBeUndefined();
       expect(probe.stderr).toBe("");
       expect(probe.status).toBe(0);
-      expect(JSON.parse(probe.stdout)).toEqual({ componentType: "function", framed: "content", loop: [0, 1, 2] });
+      expect(JSON.parse(probe.stdout)).toEqual({ componentType: "function", framed: "content", loop: [0, 1, 2], content: "scene", fallback: "fallback", inherited: true });
     }
   });
 
