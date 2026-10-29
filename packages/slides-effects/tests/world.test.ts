@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateCamera, flyTo, type CameraOptions, type ClockSample } from "../packs/world/camera";
+import { evaluateCamera, flyTo, type CameraOptions, type ClockSample, type Vec3 } from "../packs/world/camera";
 import { activationAt, layoutTree, subset, tree, wave } from "../packs/world/graph";
 import { buildWorldGraph } from "../packs/world/render";
 import { compileTrack, customInstances, graphInstances, instanceOpacity, instancePosition, orbInstances, prepareWorldScene, primitive, pulseInstances,
@@ -181,6 +181,37 @@ test("pulse geometry, camera follow and focus share the exact curved path across
   expect(instanceOpacity(pulse, jump)).toBe(0);
   expect(instancePosition(pulse, jump)).toEqual(resolveAnchor(scene, "leaf", jump)!);
   expect(() => prepareWorldScene({ instances: pulseInstances({ id: "bad", path: ["bad", [0, 0, 0]] }) })).toThrow("cycle");
+});
+
+test("pulse trails reconstruct exact curved subsegments and restart at a turn without extra instances", () => {
+  const scene = prepareWorldScene({ instances: [...graphInstances({ data: tree("root", [["a", ["leaf"]]]), edge: { curve: 0.65 } }),
+    ...pulseInstances({ id: "pulse", path: ["root", "a", "leaf"], step: 1, duration: 4, trail: 0.18 })] });
+  const trail = scene.instances.find(instance => instance.id === "pulse:trail")!;
+  const index = worldHeaderSize + scene.instances.indexOf(trail) * worldInstanceSize;
+  const point = (from: Vec3, to: Vec3, curve: number, t: number): Vec3 => {
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+    return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t + 2 * (1 - t) * t * length * curve, from[2] + (to[2] - from[2]) * t];
+  };
+  const check = (time: number, sourceId: string, targetId: string, tailT: number, headT: number) => {
+    const sample = clock(time, 1, { 1: 0 }), values = sampleWorldUniforms(scene, sample);
+    const source = resolveAnchor(scene, sourceId, sample)!, target = resolveAnchor(scene, targetId, sample)!;
+    const start = values.slice(index, index + 3) as Vec3, end = values.slice(index + 12, index + 15) as Vec3;
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const actual = point(start, end, values[index + 15], t), expected = point(source, target, 0.65, tailT + (headT - tailT) * t);
+      actual.forEach((value, axis) => expect(value).toBeCloseTo(expected[axis], 10));
+    }
+    return values;
+  };
+  check(1, "root", "a", 0.14, 0.5);
+  const before = check(1.99, "root", "a", 0.635, 0.995);
+  const turn = sampleWorldUniforms(scene, clock(2, 1, { 1: 0 }));
+  expect(turn[index + 23]).toBe(0); expect(turn[index + 15]).toBe(0);
+  const after = check(2.01, "a", "leaf", 0, 0.005);
+  expect(after.slice(index, index + 3)).toEqual(resolveAnchor(scene, "a", clock(2.01, 1, { 1: 0 }))!);
+  expect(before[index + 23]).toBe(1); expect(after[index + 23]).toBe(1);
+  expect(scene.instances.filter(instance => instance.pulse)).toHaveLength(2);
+  expect(sampleWorldUniforms(scene, clock(1), undefined, 1, 0.75)[35]).toBe(0.75);
+  expect(sampleWorldUniforms(scene, clock(1))[35]).toBe(1);
 });
 
 test("recycling transfers a flash with logical row identity and never to a reused slot", () => {

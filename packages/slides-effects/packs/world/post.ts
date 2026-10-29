@@ -22,9 +22,13 @@ ${depthCode()}
  let ray=worldRay(uv); let direction=normalize(ray);
  let distance=min(depthAt(uv),100.); let stride=distance/${steps}.;
  let density=max(uniforms[46],.0001); let anisotropy=clamp(uniforms[47],-.8,.8);
+ let pixel=vec2u(uv*vec2f(textureDimensions(depth)));
+ var seed=pixel.x*1973u+pixel.y*9277u+89173u;
+ seed=(seed^(seed>>16u))*2246822519u; seed=(seed^(seed>>13u))*3266489917u;
+ let jitter=f32((seed^(seed>>16u))&65535u)/65536.;
  var scattering=vec3f(0.); var opticalDepth=0.;
  for(var sampleIndex=0u;sampleIndex<${steps}u;sampleIndex++) {
-  let z=(f32(sampleIndex)+.5)*stride; let world=vector(0u)+ray*z;
+  let z=(f32(sampleIndex)+jitter)*stride; let world=vector(0u)+ray*z;
   let localDensity=density*exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
   let transmission=exp(-opticalDepth); opticalDepth+=localDensity*stride*length(ray);
   for(var light=0u;light<${lights}u;light++) {
@@ -65,7 +69,7 @@ fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.
   return {
     gather: `${common}
 @fragment fn gather(@location(0) uv:vec2f)->@location(0) vec4f {
- let centerDepth=depthAt(uv); let radius=coc(centerDepth)*uniforms[34];
+ let centerDepth=depthAt(uv); let radius=coc(centerDepth)*uniforms[34]*uniforms[35];
  let pixel=1./vec2f(textureDimensions(depth)); var color=vec3f(0.); var weight=0.;
  for(var i=0u;i<${samples}u;i++) {
   let angle=f32(i)*2.39996323; let disk=sqrt((f32(i)+.5)/${samples}.);
@@ -118,12 +122,12 @@ fn digit(p:vec2f,value:u32)->f32 {
  if((mask&64u)!=0u) { distance=min(distance,rectangle(p,vec2f(.5,.92),vec2f(.32,.055))); }
  return 1.-smoothstep(0.,.025,distance);
 }
-@fragment fn tonemap(@location(0) uv:vec2f)->@location(0) vec4f {
+@fragment fn tonemap(@location(0) uv:vec2f,@builtin(position) pixel:vec4f)->@location(0) vec4f {
  let shift=(uv-.5)*uniforms[44];
  var color=vec3f(textureSampleLevel(source,linearSampler,uv+shift,0.).r,textureSampleLevel(source,linearSampler,uv,0.).g,textureSampleLevel(source,linearSampler,uv-shift,0.).b);
  color=srgb(aces(color*uniforms[8]*frame.brightness));
  color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;
- let noise=fract(sin(dot(uv*vec2f(textureDimensions(source)),vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
+ let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
  color+=noise*uniforms[16];
  if(uniforms[53]>.5) {
   let value=floor(clamp(uniforms[56],0.,999999.)); var digits=1.; var remaining=u32(value);

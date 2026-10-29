@@ -11,7 +11,7 @@ type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPi
 export type RenderGraphResources = {
   targets: GPUTarget[]; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
-  width: number; height: number;
+  width: number; height: number; scale: number;
 };
 
 function reference(value: string): [string, number] {
@@ -36,13 +36,13 @@ function output(pass: GPUPass) {
   if (pass.kind === "fullscreen") return pass.mip === undefined ? pass.output : pass.output + "@" + pass.mip;
   return pass.kind === "render" ? pass.color[0] ?? pass.depth ?? "screen" : pass.writes?.[0] ?? "screen";
 }
-function dimensions(r: RenderGraphResources, value: string, width: number, height: number): [number, number] {
+function dimensions(r: RenderGraphResources, value: string, width: number, height: number, renderScale = r.scale): [number, number] {
   "worklet";
   const [id, mip] = reference(value);
   if (value === "screen" || r.buffers[id]) return [width, height];
   const target = targetFor(r.targets, value);
-  if (r.textures[id] && r.width === width && r.height === height) return [Math.max(1, r.textures[id].width >> mip), Math.max(1, r.textures[id].height >> mip)];
-  const scale = (target.scale ?? 1) / Math.pow(2, mip);
+  if (r.textures[id] && r.width === width && r.height === height && r.scale === renderScale) return [Math.max(1, r.textures[id].width >> mip), Math.max(1, r.textures[id].height >> mip)];
+  const scale = (target.scale ?? 1) * renderScale / Math.pow(2, mip);
   return [Math.max(1, Math.floor(width * scale)), Math.max(1, Math.floor(height * scale))];
 }
 
@@ -59,7 +59,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (!Number.isFinite(target.scale ?? 1) || (target.scale ?? 1) <= 0 || !Number.isInteger(target.mips ?? 1) || (target.mips ?? 1) < 1) throw new Error("Invalid GPU target dimensions: " + target.id);
   }
   const r: RenderGraphResources = { targets, textures: {}, buffers: {}, passes: [], clock, uniforms,
-    sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0 };
+    sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1 };
   for (const buffer of buffers) {
     if (!Number.isInteger(buffer.size) || buffer.size <= 0 || buffer.size % 4 || (buffer.init && buffer.init.byteLength > buffer.size)) throw new Error("Invalid GPU buffer size: " + buffer.id);
     r.buffers[buffer.id] = device.createBuffer({ size: buffer.size, usage: 128 | 8 });
@@ -116,13 +116,14 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
   return r;
 }
 
-/** Recreate only texture views/bind groups when the drawing-buffer size changes. */
-export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, width: number, height: number) {
+/** Recreate only textures/views/bind groups when drawing-buffer size or render scale changes. */
+export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, width: number, height: number, renderScale = 1) {
   "worklet";
-  if (r.width === width && r.height === height) return;
+  if (!Number.isFinite(renderScale) || renderScale <= 0) throw new Error("GPU renderScale must be finite and positive");
+  if (r.width === width && r.height === height && r.scale === renderScale) return;
   for (const target of r.targets) {
     const old = r.textures[target.id];
-    const [w, h] = dimensions(r, target.id, width, height);
+    const [w, h] = dimensions(r, target.id, width, height, renderScale);
     const mips = target.mips ?? 1;
     // Allocate enough base pixels for all declared mip levels, even in tiny previews.
     const minSize = Math.pow(2, mips - 1);
@@ -140,13 +141,13 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
       }),
     ] });
   }
-  r.width = width; r.height = height;
+  r.width = width; r.height = height; r.scale = renderScale;
 }
 
 /** One encoder for every pass; the caller submits and presents the final screen. */
-export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture) {
+export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture, renderScale = 1) {
   "worklet";
-  resizeRenderGraph(r, device, screen.width, screen.height);
+  resizeRenderGraph(r, device, screen.width, screen.height, renderScale);
   for (const resource of r.passes) {
     const pass = resource.pass;
     if (pass.kind === "compute") {

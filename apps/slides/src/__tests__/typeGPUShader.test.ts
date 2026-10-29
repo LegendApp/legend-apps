@@ -14,10 +14,10 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
   const effects = [], calls = [], uniforms = [], errors = [];
-  const frameData={value:[1,2,3,4]};
+  const frameData={value:[1,2,3,4]}, renderScale={value:1};
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
-  let callback, enabled = false, ready = 0;
+  let callback, reaction, reactionInputs, enabled = false, ready = 0;
   const frame = { setActive: value => { enabled = value; } };
   const pass = kind => ({
     setPipeline() {}, setBindGroup: (_, value) => calls.push([kind, value]),
@@ -42,10 +42,11 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     "react-native-reanimated": {
       useSharedValue: value => ({ value }),
       useFrameCallback: fn => { callback = fn; return frame; },
+      useAnimatedReaction: (prepare, fn) => { reactionInputs = prepare.__closure; let previous = prepare(); reaction = () => { const next = prepare(); fn(next, previous); previous = next; }; },
       runOnJS: fn => fn, runOnUI: fn => fn,
     },
     "./slidesStore": {},
-    "./gpuRenderGraph": { encodeRenderGraph: () => calls.push(["graph"]) },
+    "./gpuRenderGraph": { encodeRenderGraph: (_, __, ___, ____, scale) => calls.push(["graph", scale]) },
   };
   const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(
     name => mocks[name] ?? require(name), {},
@@ -53,10 +54,11 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
-    effectActive, maxTime, frameTimeIndex, clockMode, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
-    playback, frameData, redraw: () => effects[0](),
+    playback, frameData, reactionInputs, redraw: () => effects[0](),
+    scale: value => { renderScale.value = value; reaction(); },
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
@@ -80,6 +82,29 @@ test("active GPU frames alternate storage buffers and dispatch the configured pa
   f.tick();
   expect(f.calls.length).toBe(count);
   expect(f.calls.filter(call => call[0] === "destroy")).toHaveLength(1);
+});
+
+test("shared render scale redraws a paused graph at its frozen clock and frame", () => {
+  const f = frames({ graph: true, simulation: false });
+  f.tick();
+  f.playback.value = { ...f.playback.value, phase: "paused" };
+  const previous = f.uniforms.at(-1);
+  f.scale(.75);
+  expect(f.calls.at(-1)).toEqual(["graph", .75]);
+  expect(f.uniforms.at(-1)).toEqual([previous[0], 0, previous[2], ...previous.slice(3)]);
+  const count = f.calls.length;
+  f.scale(.75); expect(f.calls).toHaveLength(count);
+  f.scale(1); expect(f.calls.at(-1)).toEqual(["graph", 1]);
+  f.stop();
+});
+
+test("scale reaction subscribes to graph uniforms without subscribing legacy frame-data shaders", () => {
+  const contains = (value, target) => value === target || !!value && typeof value === "object" && Object.values(value).some(child => contains(child, target));
+  for (const graph of [false, true]) {
+    const f = frames({ graph, data: true, simulation: false });
+    expect(contains(f.reactionInputs, f.frameData)).toBe(graph);
+    f.stop();
+  }
 });
 
 test("preview renders one deterministic frame without starting a loop", () => {

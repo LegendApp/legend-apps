@@ -65,14 +65,31 @@ test("postOrder rewires HDR stages and custom hooks retain the declared color-sp
     { id: "before-focus", wgsl: scanlines, before: "dof" }, { id: "ldr", wgsl: scanlines, after: "tonemap" },
   ] }));
   const pass = (id: string) => graph.passes.find(pass => pass.id === id)!;
+  const output = (id: string) => { const item = pass(id); return item.kind === "fullscreen" ? item.output : undefined; };
   expect(pass("bloom-threshold").reads).toEqual(["hdr"]);
-  expect(pass("before-focus").reads?.[0]).toBe("bloom-composite");
-  expect(pass("dof-gather").reads?.[0]).toBe("custom-post-0");
-  expect(pass("fog").reads?.[0]).toBe("dof-composite");
+  expect(pass("before-focus").reads?.[0]).toBe(output("bloom-composite"));
+  expect(pass("dof-gather").reads?.[0]).toBe(output("before-focus"));
+  expect(pass("fog").reads?.[0]).toBe(output("dof-composite"));
   expect(pass("tonemap").kind).toBe("fullscreen");
-  expect(pass("ldr").reads?.[0]).toBe("tonemapped");
-  expect(pass("screen").reads).toEqual(["custom-post-1"]);
+  expect(pass("ldr").reads?.[0]).toBe(output("tonemap"));
+  expect(pass("screen").reads).toEqual([output("ldr")]);
   expect(graph.passes.filter(pass => pass.id === "tonemap")).toHaveLength(1);
+});
+
+test("HDR transients reuse two targets without aliasing DOF inputs, while explicit custom reads retain intermediates", () => {
+  for (const postOrder of [["fog", "dof", "bloom"], ["dof", "bloom", "fog"], ["bloom", "fog", "dof"]] as const) {
+    const graph = buildWorldGraph(scene({ dof: {}, postOrder: [...postOrder], passes: [{ wgsl: scanlines, after: "tonemap" }] }));
+    expect(graph.targets.filter(target => target.id.startsWith("post-"))).toHaveLength(2);
+    expect(graph.targets.some(target => target.id === "hdr")).toBe(true);
+    const gather = graph.passes.find(pass => pass.id === "dof-gather")!;
+    const composite = graph.passes.find(pass => pass.id === "dof-composite")!;
+    expect(composite.reads?.[0]).toBe(gather.reads?.[0]);
+    for (const pass of graph.passes) if (pass.kind === "fullscreen") expect(pass.reads).not.toContain(pass.output);
+  }
+  const retained = buildWorldGraph(scene({ dof: {}, passes: [{ wgsl: scanlines, after: "bloom", reads: ["fog"] }] }));
+  expect(retained.targets.some(target => target.id === "fog")).toBe(true);
+  expect(retained.targets.some(target => target.id.startsWith("post-"))).toBe(false);
+  expect(retained.passes.find(pass => pass.id === "custom-post-0")?.reads).toContain("fog");
 });
 
 test("invalid post stage permutations and placements fail rather than silently skipping hooks", () => {

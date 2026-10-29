@@ -135,7 +135,7 @@ export function orbInstances({ id = "orb", count = 48, colors = ["#22d3ee", "#b5
 }
 
 export function pulseInstances(options: PulseOptions): Instance[] {
-  if (options.path.length < 2 || (options.duration ?? 2) <= 0) throw new Error("A world pulse needs at least two anchors and a positive duration");
+  if (options.path.length < 2 || !Number.isFinite(options.duration ?? 2) || (options.duration ?? 2) <= 0 || !Number.isFinite(options.trail ?? 0.18) || (options.trail ?? 0.18) < 0) throw new Error("A world pulse needs at least two anchors, a positive duration and a nonnegative trail");
   return [false, true].map(tail => ({ ...primitive(tail ? "tube" : "sphere", { id: tail ? `${options.id}:trail` : options.id,
     size: options.size ?? 0.08, thickness: (options.size ?? 0.08) * 0.45, color: options.color ?? "#22d3ee", emissive: options.emissive ?? 8 }),
     pulse: { options, anchors: [], curves: [], tail } }));
@@ -236,15 +236,21 @@ function quadraticPoint(from: Vec3, to: Vec3, curve: number, t: number): Vec3 {
   const lift = Math.sqrt(dx * dx + dy * dy + dz * dz) * curve;
   return [from[0] + dx * t, from[1] + dy * t + 2 * (1 - t) * t * lift, from[2] + dz * t];
 }
+function pulseRange(pulse: NonNullable<Instance["pulse"]>, clock: ClockSample) {
+  "worklet";
+  const segments = pulse.anchors.length - 1;
+  const progress = Math.max(0, Math.min(1, triggerElapsed(pulse.options.step ?? 0, clock) / (pulse.options.duration ?? 2)));
+  const travel = progress * segments, segment = Math.min(segments - 1, Math.floor(travel));
+  const head = travel - segment;
+  return { segment, head, tail: Math.max(0, head - (pulse.options.trail ?? 0.18) * segments) };
+}
 export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
   "worklet";
   let position = sampleTrack(instance.position, clock);
   if (instance.pulse) {
     const pulse = instance.pulse;
-    const progress = Math.max(0, Math.min(1, triggerElapsed(pulse.options.step ?? 0, clock) / (pulse.options.duration ?? 2)));
-    const travel = Math.max(0, progress - (pulse.tail ? pulse.options.trail ?? 0.18 : 0)) * (pulse.anchors.length - 1);
-    const segment = Math.min(pulse.anchors.length - 2, Math.floor(travel));
-    return quadraticPoint(instancePosition(pulse.anchors[segment], clock), instancePosition(pulse.anchors[segment + 1], clock), pulse.curves[segment], travel - segment);
+    const range = pulseRange(pulse, clock);
+    return quadraticPoint(instancePosition(pulse.anchors[range.segment], clock), instancePosition(pulse.anchors[range.segment + 1], clock), pulse.curves[range.segment], pulse.tail ? range.tail : range.head);
   }
   if (instance.spray) {
     const spray = instance.spray, life = spray.options.lifetime ?? 2;
@@ -285,6 +291,10 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   }
   if (instance.pulse) {
     const elapsed = triggerElapsed(instance.pulse.options.step ?? 0, clock), duration = instance.pulse.options.duration ?? 2;
+    if (instance.pulse.tail) {
+      const range = pulseRange(instance.pulse, clock);
+      if (range.head === range.tail) return 0;
+    }
     return elapsed < 0 ? 0 : Math.max(0, Math.min(1, (duration + 0.25 - elapsed) / 0.25));
   }
   if (instance.voxel) {
@@ -334,7 +344,7 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
 }
-export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1): number[] {
+export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1): number[] {
   "worklet";
   const values = new Array<number>(worldHeaderSize + scene.instances.length * worldInstanceSize).fill(0);
   const objects: Record<string, Vec3> = {};
@@ -348,6 +358,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   const fog = sampleTrack(scene.fogTrack, clock);
   values[20] = fog[0]; values[21] = fog[1]; values[22] = fog[2];
   values[32] = sampleFocus(scene, clock, camera);
+  values[35] = renderScale;
   for (const field of scene.colorTracks) {
     const color = sampleTrack(field.track, clock);
     values[field.index] = color[0]; values[field.index + 1] = color[1]; values[field.index + 2] = color[2];
@@ -389,7 +400,15 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index + 7] = emissive;
     values[index + 8] = scale[0]; values[index + 9] = scale[1]; values[index + 10] = scale[2];
     values[index + 12] = endpoint[0]; values[index + 13] = endpoint[1]; values[index + 14] = endpoint[2];
-    values[index + 15] = instance.curve; values[index + 19] = instance.thickness;
+    let curve = instance.curve;
+    if (instance.pulse?.tail) {
+      const pulse = instance.pulse, range = pulseRange(pulse, clock);
+      const from = instancePosition(pulse.anchors[range.segment], clock), to = instancePosition(pulse.anchors[range.segment + 1], clock);
+      const length = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]);
+      const chord = Math.hypot(endpoint[0] - position[0], endpoint[1] - position[1], endpoint[2] - position[2]);
+      curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
+    }
+    values[index + 15] = curve; values[index + 19] = instance.thickness;
     values[index + 23] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!, sampledAlbedo = sampleTrack(material.albedo, clock);
     const albedo = instance.material ? instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo : [values[index + 4], values[index + 5], values[index + 6]];

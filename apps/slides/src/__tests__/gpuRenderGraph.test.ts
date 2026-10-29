@@ -79,6 +79,23 @@ test("graph rejects invalid references and shader diagnostics before a frame can
   expect(g.pipelines).toHaveLength(0);
 });
 
+test("global render scale resizes offscreen targets and dispatches without recompiling or scaling the screen", async () => {
+  const g = gpu(), r = await prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {});
+  const screen = { width: 1920, height: 1080, createView: () => "screen" };
+  encodeRenderGraph(r, g.device, g.encoder, screen);
+  encodeRenderGraph(r, g.device, g.encoder, screen, .5);
+  expect(r.scale).toBe(.5);
+  expect(g.textures.slice(3).map(t => t.descriptor.size)).toEqual([[960, 540], [960, 540], [480, 270]]);
+  expect(g.textures.slice(0, 3).every(t => t.destroyed)).toBe(true);
+  expect(g.commands.filter(c => c[0] === "compute").at(-1)).toEqual(["compute", 120, 68]);
+  expect(g.commands.at(-2)[1].colorAttachments[0].view).toBe("screen");
+  encodeRenderGraph(r, g.device, g.encoder, screen, .5);
+  expect(g.textures).toHaveLength(6); expect(g.groups).toHaveLength(8); expect(g.pipelines).toHaveLength(4);
+  encodeRenderGraph(r, g.device, g.encoder, { ...screen, width: 2, height: 2 }, .5);
+  expect(g.textures.at(-1).descriptor.size).toEqual([4, 4]);
+  for (const invalid of [0, -1, NaN, Infinity]) expect(() => encodeRenderGraph(r, g.device, g.encoder, screen, invalid)).toThrow("renderScale");
+});
+
 
 test("multipass encoding compiles for the host UI runtime", () => {
   const filename = fileURLToPath(new URL("../gpuRenderGraph.ts", import.meta.url));
@@ -132,5 +149,9 @@ test("native callback copies retain one mutable graph across draws and resizing"
   for (let frame = 0; frame < 6; frame++) submitGPUFrame(copy(resources), frame, 1, 6);
   expect(g.textures).toHaveLength(6); expect(g.groups).toHaveLength(8);
   expect(g.textures.slice(0, 3).every(texture => texture.destroyed)).toBe(true);
+  for (let frame = 0; frame < 6; frame++) submitGPUFrame(copy(resources), frame, 1, 6, undefined, .75);
+  expect(g.textures).toHaveLength(9); expect(g.groups).toHaveLength(12);
+  expect(resources.graph.value.scale).toBe(.75);
+  expect(g.textures.slice(3, 6).every(texture => texture.destroyed)).toBe(true);
   stop();
 });

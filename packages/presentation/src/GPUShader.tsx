@@ -10,6 +10,9 @@ export type GPUShaderProps = {
   active?: boolean; children?: ReactNode;
   maxTime?: number; frameTimeIndex?: number;
   renderGraph?: GPURenderGraphDefinition;
+  /** Positive shared multiplier for graph offscreen textures, including values above 1.
+   * Changes recreate/clear those textures; screen resolution stays fixed. Ignored without renderGraph. */
+  renderScale?: SharedValue<number>;
   borderRadius?: number; accessibilityLabel?: string;
 };
 const GPUShaderContext = createContext<ComponentType<GPUShaderProps> | null>(null);

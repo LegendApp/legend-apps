@@ -265,8 +265,10 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     passes.push({ kind: "fullscreen", id: "shafts", code: shaftCode(worldBindings, lights, topology.shaftSamples ?? samples), fragment: "shafts", reads: ["depth"], output: "shafts" });
   }
   let color = "hdr", customIndex = 0;
+  const transientTargets = new Set<string>();
   const fullscreen = (id: string, code: string, fragment: string, reads: string[], output = id, targetScale = scale) => {
     if (output !== "screen") targets.push({ id: output, format: "rgba16float", scale: targetScale });
+    if (output !== "screen" && output !== "dof" && targetScale === scale) transientTargets.add(output);
     passes.push({ kind: "fullscreen", id, code, fragment, reads, output }); color = output;
   };
   const stages = ["scene", "fog", "dof", "bloom", "tonemap"];
@@ -310,6 +312,17 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   for (const pass of passes) {
     if (passIds.has(pass.id)) throw new Error("World pass id is duplicated: " + pass.id);
     passIds.add(pass.id);
+  }
+  if (!(topology.passes ?? []).some(pass => pass.reads?.length)) {
+    const aliases = new Map<string, string>(), used = new Set<string>();
+    for (const pass of passes) {
+      if (pass.reads) pass.reads = pass.reads.map(id => aliases.get(id) ?? id);
+      if (pass.kind !== "fullscreen" || !transientTargets.has(pass.output)) continue;
+      const output = ["post-a", "post-b"].find(id => !pass.reads?.includes(id))!;
+      aliases.set(pass.output, output); used.add(output); pass.output = output;
+    }
+    for (let i = targets.length - 1; i >= 0; i--) if (transientTargets.has(targets[i].id)) targets.splice(i, 1);
+    for (const id of used) targets.push({ id, format: "rgba16float", scale });
   }
   return { targets, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
 }

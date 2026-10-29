@@ -3,7 +3,8 @@ import { encodeRenderGraph, prepareRenderGraph } from "../../../apps/slides/src/
 
 export type BenchmarkOptions = {
   definition: GPURenderGraphDefinition;
-  uniformsAt: (seconds: number) => number[];
+  uniformsAt: (seconds: number, renderScale: number) => number[];
+  renderScaleAt?: (timestamp: number) => number;
   width: number;
   height: number;
   warmup?: number;
@@ -20,7 +21,7 @@ function summarize(values: number[]) {
 }
 
 /** Replay fixed clock samples, with optional browser cadence measurement. */
-export async function benchmarkRenderGraph({ definition, uniformsAt, width, height, warmup = 30, frames = 120, repetitions = 3, paced = false }: BenchmarkOptions) {
+export async function benchmarkRenderGraph({ definition, uniformsAt, renderScaleAt, width, height, warmup = 30, frames = 120, repetitions = 3, paced = false }: BenchmarkOptions) {
   if (![width, height, warmup, frames, repetitions].every(Number.isInteger) || width < 1 || height < 1 || warmup < 0 || frames < 1 || repetitions < 1) {
     throw new Error("Benchmark dimensions and sample counts must be positive integers");
   }
@@ -40,7 +41,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
   if (!context) { device.destroy(); throw new Error("No WebGPU canvas context"); }
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format, alphaMode: "opaque" });
-  const initial = uniformsAt(0);
+  const initial = uniformsAt(0, 1);
   const clock = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   const uniforms = device.createBuffer({ size: Math.max(16, initial.length * 4), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   const passCount = definition.passes.length;
@@ -48,7 +49,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
   const queryBytes = passCount * 16;
   const resolve = query ? device.createBuffer({ size: queryBytes, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }) : undefined;
   const readback = query ? device.createBuffer({ size: queryBytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) : undefined;
-  const samples: { repetition: number; frame: number; seconds: number; completedMs: number; intervalMs?: number; gpuMs?: number; passes?: Record<string, number> }[] = [];
+  const samples: { repetition: number; frame: number; seconds: number; renderScale: number; completedMs: number; intervalMs?: number; gpuMs?: number; passes?: Record<string, number> }[] = [];
   try {
     device.pushErrorScope("validation");
     const graph = await prepareRenderGraph(device, definition, format, clock, uniforms);
@@ -61,7 +62,8 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
       previousFrame = now;
       const seconds = 2 + frame / 60;
       const start = performance.now();
-      const values = uniformsAt(seconds);
+      const renderScale = renderScaleAt?.(now ?? start) ?? 1;
+      const values = uniformsAt(seconds, renderScale);
       if (values.length !== initial.length) throw new Error("Benchmark uniforms changed size");
       device.queue.writeBuffer(clock, 0, new Float32Array([seconds, 1 / 60, frame, 1, width / height, 1, seconds, seconds]));
       device.queue.writeBuffer(uniforms, 0, new Float32Array(values));
@@ -78,7 +80,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
           return encoder.beginComputePass({ ...descriptor, timestampWrites: { querySet: query, beginningOfPassWriteIndex: offset, endOfPassWriteIndex: offset + 1 } });
         },
       } as GPUCommandEncoder : encoder;
-      encodeRenderGraph(graph, device, timedEncoder, context!.getCurrentTexture());
+      encodeRenderGraph(graph, device, timedEncoder, context!.getCurrentTexture(), renderScale);
       if (query && timed) {
         encoder.resolveQuerySet(query, 0, passCount * 2, resolve!, 0);
         encoder.copyBufferToBuffer(resolve!, 0, readback!, 0, queryBytes);
@@ -95,7 +97,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
         readback.unmap();
       }
       if (failures.length) throw new Error(failures.join("\n"));
-      return { seconds, completedMs, ...(intervalMs === undefined ? {} : { intervalMs }), ...(gpuMs === undefined ? {} : { gpuMs, passes }) };
+      return { seconds, renderScale, completedMs, ...(intervalMs === undefined ? {} : { intervalMs }), ...(gpuMs === undefined ? {} : { gpuMs, passes }) };
     }
     for (let frame = 0; frame < warmup; frame++) await render(frame, false);
     for (let repetition = 0; repetition < repetitions; repetition++) {
@@ -112,6 +114,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
         viewport: { width: innerWidth, height: innerHeight }, visibility: document.visibilityState },
       methodology: `${paced ? "rAF-paced" : "Unpaced"} fixed-clock samples; completedMs includes uniform evaluation, writes, encode, submit and queue completion. GPU frame span is the last pass end minus the first pass beginning; pass scopes may overlap and are non-additive. GPU timestamps exclude CPU and presentation and are disabled in paced runs to avoid readback overhead. rAF cadence is browser callback cadence, not evidence of physical display presentation.`,
       pipeline: { targets: definition.targets, passes: definition.passes.map(pass => ({ id: pass.id, kind: pass.kind })) },
+      renderScale: { min: Math.min(...samples.map(sample => sample.renderScale)), max: Math.max(...samples.map(sample => sample.renderScale)), final: samples.at(-1)!.renderScale },
       completed: summarize(samples.map(sample => sample.completedMs)),
       gpu: timestamps ? summarize(samples.map(sample => sample.gpuMs!)) : null,
       passes: timestamps ? Object.fromEntries(definition.passes.map(pass => [pass.id, summarize(samples.map(sample => sample.passes![pass.id]))])) : null,

@@ -1,9 +1,10 @@
 import { customInstances, graphInstances, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances, type WorldScene } from "../packs/world/scene";
 import { tree, wave } from "../packs/world/graph";
 import { buildWorldGraph } from "../packs/world/render";
+import { advanceResolution, createResolutionState } from "../packs/world/resolution";
 import { benchmarkRenderGraph, type BenchmarkOptions } from "./renderGraphBenchmark";
 
-type Options = Omit<BenchmarkOptions, "definition" | "uniformsAt"> & { quality: NonNullable<WorldScene["quality"]>; allEffects?: boolean };
+type Options = Omit<BenchmarkOptions, "definition" | "uniformsAt" | "renderScaleAt"> & { quality: NonNullable<WorldScene["quality"]>; allEffects?: boolean; renderScale?: number };
 
 export async function benchmarkWorld(options: Options) {
   const data = tree("root", Array.from({ length: 3 }, (_, branch) => [
@@ -53,10 +54,16 @@ export async function benchmarkWorld(options: Options) {
     bloom: { intensity: 1.4, threshold: 1, radius: 0.8 }, fog: { density: 0.025, color: "#05060a" },
     vignette: 0.3, grain: 0.015, exposure: 1.1,
   });
+  const adaptiveActive = options.quality === "auto" && options.paced === true;
+  let resolution = createResolutionState();
   const result = await benchmarkRenderGraph({ ...options, definition: buildWorldGraph(scene),
-    uniformsAt: seconds => sampleWorldUniforms(scene, { slideTime: seconds, stepTime: seconds, stepIndex: 1, stepOrigins: { 0: 0, 1: 0 } }) });
+    renderScaleAt: timestamp => {
+      if (adaptiveActive) resolution = advanceResolution(resolution, { timestamp, playing: true, key: `${options.width}x${options.height}` });
+      return (options.renderScale ?? 1) * (adaptiveActive ? resolution.scale : 1);
+    },
+    uniformsAt: (seconds, renderScale) => sampleWorldUniforms(scene, { slideTime: seconds, stepTime: seconds, stepIndex: 1, stepOrigins: { 0: 0, 1: 0 } }, undefined, 1, renderScale) });
   return { ...result, workload: { quality: options.quality, orbs: 64, graphNodes: 40, graphEdges: 39, rings: 1,
-    allEffects: !!options.allEffects, instanceCount: scene.instances.length,
+    allEffects: !!options.allEffects, instanceCount: scene.instances.length, adaptiveActive, manualRenderScale: options.renderScale ?? 1,
     effects: options.allEffects ? { reflection: { sceneScaleFactor: scene.floor?.scale }, dof: { sceneScaleFactor: scene.dof?.scale, samples: scene.dof?.samples },
       shafts: { sceneScaleFactor: scene.shafts?.scale, samples: scene.shafts?.samples }, chromatic: 0.0025, lights: 2,
       pulseInstances: 2, sprayParticles: 48, rows: 8, voxels: 64, customQuads: 2, sdfObjects: 1, customPost: true } : null,

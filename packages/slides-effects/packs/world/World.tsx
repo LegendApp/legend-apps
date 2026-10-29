@@ -4,6 +4,7 @@ import { View } from "react-native";
 import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
+import { advanceResolution, createResolutionState } from "./resolution";
 import { compileTrack, customInstances, graphInstances, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CustomOptions, type GraphOptions, type Instance, type LightOptions, type MaterialOptions, type OrbsOptions,
@@ -62,6 +63,7 @@ class WorldGPU extends Component<{ fallback: ReactNode; children: ReactNode }, {
 export type WorldProps = {
   id?: string; width?: number; height?: number; background?: boolean; backgroundColor?: string;
   quality?: WorldScene["quality"]; exposure?: Animated<number>; previewTime?: number; borderRadius?: number;
+  renderScale?: number;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
   children?: ReactNode; accessibilityLabel?: string;
   postOrder?: WorldScene["postOrder"];
@@ -123,7 +125,8 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
   return { prepared: prepareWorldScene(scene), overlay };
 }
 function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, backgroundColor = "#05060a", quality = "auto",
-  exposure = 1, previewTime = 4, borderRadius = 0, enter, scrim = false, fallback, active = true, children, accessibilityLabel, postOrder }: WorldProps) {
+  exposure = 1, previewTime = 4, borderRadius = 0, renderScale = 1, enter, scrim = false, fallback, active = true, children, accessibilityLabel, postOrder }: WorldProps) {
+  if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
@@ -137,6 +140,22 @@ function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHei
   const sampleClock = samplePlayback;
   const cameraEvaluator = sampleWorldCamera;
   const sampleUniforms = sampleWorldUniforms;
+  const resolution = useSharedValue(createResolutionState());
+  const resolutionEvaluator = advanceResolution;
+  const adaptive = quality === "auto";
+  const adaptivePlayback = adaptive ? playback : null;
+  const scaleKey = `${width}:${height}:${renderScale}`;
+  useAnimatedReaction(() => adaptivePlayback?.value ?? null, state => {
+    "worklet";
+    if (!state) return;
+    resolution.value = resolutionEvaluator(resolution.value, { timestamp: state.lastTimestamp,
+      playing: active && state.phase === "playing", key: `${state.slideKey}:${scaleKey}` });
+  }, [adaptivePlayback, active, scaleKey]);
+  const effectiveScale = useDerivedValue(() => {
+    "worklet";
+    const phase = adaptivePlayback?.value.phase;
+    return renderScale * (phase && phase !== "preview" && phase !== "preparing" ? resolution.value.scale : 1);
+  }, [renderScale, adaptivePlayback]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const phase = usePresentationValue("playbackPhase");
@@ -154,13 +173,13 @@ function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHei
     const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
-    return sampleUniforms(prepared, clock, previous, enterDuration);
-  }, [prepared, previewTime, enterDuration, entryPose]);
+    return sampleUniforms(prepared, clock, previous, enterDuration, effectiveScale.value);
+  }, [prepared, previewTime, enterDuration, entryPose, effectiveScale]);
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
     <WorldGPU fallback={fallback ?? null}>
       <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
-        borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} />
+        borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
     </WorldGPU>
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;

@@ -26,12 +26,21 @@ const network = tree("root", [["a", ["a1", "a2"]], ["b", ["b1", "b2"]]]);
 </World>
 ```
 
-`World` accepts `background`, `backgroundColor`, `quality`, `exposure`, `scrim`,
+`World` accepts `background`, `backgroundColor`, `quality`, `renderScale`, `exposure`, `scrim`,
 `previewTime`, `active`, `borderRadius` and `fallback`. Normal React Native
 children are overlaid above the canvas; keep text in those children or in normal
 slide layers. A local GPU boundary displays `fallback` on unsupported adapters;
 the default is the dark background. GPU errors produce a diagnostic. A background
-world fills the background host's dimensions.
+world fills the background host's dimensions. Wrap it in presentation's
+`<Background>` to place it behind the slide content:
+
+```tsx
+import { Background } from "@legend-apps/presentation";
+
+<Background><World background quality="auto">
+  <Orbs count={32} /><Fog density={0.025} /><Bloom intensity={1.2} />
+</World></Background>
+```
 
 `Camera.shots` are ordered keyframes with either a `step` or an `at` time in
 seconds. Times and step numbers should increase within their respective clock.
@@ -82,14 +91,31 @@ height fog and volumetric lights, depth of field, a half-resolution bloom mip
 chain, chromatic aberration, ACES exposure/tonemapping, sRGB encoding, vignette
 and grain. `high` and `auto` use full-resolution scene targets and five
 bloom levels. `medium` uses 0.85 scene scale and five levels; `low` uses 0.65 scene
-scale and three levels. Output resolution stays unchanged. `auto` currently
-selects the high preset; it does not change quality based on frame timing.
+scale and three levels. Output resolution stays unchanged. `renderScale` is a
+static multiplier greater than zero and at most one for every offscreen target.
+It combines with the preset and the per-effect scales; it does not rebuild pipelines.
+
+`auto` starts with the high preset and adjusts an additional multiplier from 1
+down to 0.5 in 0.125 steps. It samples live playback callback intervals, waits
+through startup and resizing, lowers resolution after sustained intervals above
+18.5ms, and requires several healthy windows before raising it. Paused and
+outgoing frames keep the last live scale; preparation and previews use the
+explicit static scale. A retained world may resize once when leaving preparation.
+This policy changes
+resolution only; camera motion and effect animation still sample the presentation
+clock. Callback cadence is an indirect signal: CPU load or a low-refresh display
+can also trigger reductions, and a GPU backlog may not immediately affect it.
+Use a fixed quality and scale for repeatable image comparisons.
 
 For a raw WGSL escape hatch, use `GPURenderGraph` from
 `@legend-apps/presentation`. `buildWorldGraph` and the pure `scene.ts` helpers
 expose the same description and deterministic uniform samples for measurement.
 The scene hooks below share that pipeline. All animation samples the same clock;
 no frame history or per-frame React render is required.
+
+The raw host accepts `renderScale` as a positive numeric SharedValue, defaulting
+to 1. It multiplies offscreen target scales while retaining the drawing-buffer
+size and compiled pipelines. Quality policy belongs to the pack.
 
 Generate a standalone browser measurement page from the repository root:
 
@@ -102,6 +128,9 @@ Open that file in Chrome with WebGPU and run
 Repeat at 3840×2160 and with each preset. Results report completed-submit frame
 times and per-pass GPU timestamps when available. Throughput measurements do not
 measure display refresh rate or prove a particular presentation frame rate.
+Use fixed presets and `renderScale` for cost comparisons. Automatic adaptation
+runs only with `paced: true` in the harness; its per-sample scale history is a
+controller and callback-cadence check, rather than a steady-state cost at one resolution.
 
 
 ## Focus, floor and lighting
@@ -140,6 +169,8 @@ Roughness blurs that reflection; reflectivity controls its strength.
 
 DOF uses a half-resolution gather and depth-aware composite. Shafts integrate
 point/spot scattering along the visible camera ray at quarter resolution.
+Their fixed pixel jitter avoids synchronized integration bands; changing target
+resolution changes that sampling pattern.
 Static `scale` overrides are available on DOF, Floor (reflection resolution) and
 Shafts; DOF and Shafts also accept `samples`. These change pipeline topology.
 Animated focus, aperture, blur radius, lighting and effect strengths update uniforms.
@@ -162,8 +193,8 @@ import { PathPulse, Spray, Rows, Stage, flyTo } from "slides:world/World";
 ```
 
 Pulse paths accept positions or ids; bare graph ids resolve as `node:<id>`.
-The head follows the graph's curved edges. Its short straight trail joins two
-sampled path positions and can cut across a bend. Ambient Spray accepts
+The head and trail follow the graph's curved edges. The trail restarts at each
+node so one tube never cuts across a junction. Ambient Spray accepts
 `position`, `spread`, `velocity` and `seed`; `under="leaves:lit"` emits beneath
 active leaves. Motion, birth and lifetime are analytic samples of absolute time.
 
@@ -224,7 +255,8 @@ Use the function name `customPass`; `pass` is reserved in WGSL. Placement accept
 `scene`, `fog`, `dof`, `bloom` or `tonemap` through one `before` or `after` prop.
 Before tonemapping, colors are linear HDR. After tonemapping, colors are sRGB LDR;
 output then copies to the screen without a second tonemap. `before="scene"` is
-invalid. Additional `reads` follow the fixed previous/depth/HDR texture bindings
+invalid. A hook after tonemapping moves that stage into an offscreen target, so
+its grain size follows the target resolution. Additional `reads` follow the fixed previous/depth/HDR texture bindings
 at group 0 binding 6 onward; declare their WGSL bindings explicitly. Raw
 `GPURenderGraph` exposes the full resource/pass contract.
 
@@ -270,3 +302,5 @@ fn sdf(p:vec3f)->f32 {
 WGSL compilation/validation errors use the normal slide diagnostic path. The
 `world-tour.mdx` deck executes all three hook examples; `data-flow.mdx` shows
 pulse following, changed rows, stage flights and voxel reduction.
+`cinematic-title.mdx` combines a mirror floor, lit monoliths, volumetric fog,
+drifting particles and continuous camera moves behind normal text overlays.

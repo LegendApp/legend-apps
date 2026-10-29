@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createPlaybackState, advancePlayback } from "../../presentation/src/playbackState";
+import { createPlaybackState, advancePlayback, transitionPlayback } from "../../presentation/src/playbackState";
 import { samplePlayback } from "../../presentation/src/playback";
 import { worldHeaderSize } from "../packs/world/scene";
 
@@ -92,6 +92,52 @@ test("equal-content parent renders and resize retain pipeline definitions while 
   } finally { await act(() => tree?.unmount()); }
 });
 
+test("auto resolution adapts without React frames and preserves the frozen pause/outgoing scale", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  playback.value = createPlaybackState({ phase: "playing", slideKey: "adaptive", stepKey: "0", stepIndex: 0 });
+  let renderer, commits = 0;
+  const content = (quality, active = true) => <Profiler id="adaptive" onRender={() => commits++}><World quality={quality} renderScale={0.8} active={active}><Sphere /></World></Profiler>;
+  try {
+    await act(() => { renderer = create(content("auto")); });
+    const graph = () => renderer.root.findByType("render-graph").props;
+    const passes = graph().passes, initialCommits = commits;
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+      playback.value = advancePlayback(playback.value, timestamp);
+      reactUI();
+    }
+    expect(graph().renderScale.value).toBeLessThan(0.8);
+    expect(graph().uniforms.value[35]).toBe(graph().renderScale.value);
+    expect(graph().passes).toBe(passes); expect(commits).toBe(initialCommits);
+    expect(playback.value.slideTime).toBeCloseTo(6);
+    const frozenScale = graph().renderScale.value;
+    playback.value = transitionPlayback(playback.value, { ...playback.value, phase: "paused" });
+    reactUI();
+    expect(graph().renderScale.value).toBe(frozenScale); expect(graph().uniforms.value[35]).toBe(frozenScale);
+    playback.value = transitionPlayback(playback.value, { ...playback.value, phase: "playing" });
+    playback.value = advancePlayback(playback.value, 50000);
+    reactUI();
+    expect(graph().renderScale.value).toBe(frozenScale); expect(playback.value.slideTime).toBeCloseTo(6);
+    playback.value = transitionPlayback(playback.value, { ...playback.value, phase: "outgoing" });
+    reactUI();
+    expect(graph().renderScale.value).toBe(frozenScale);
+    expect(graph().passes).toBe(passes); expect(commits).toBe(initialCommits);
+    await act(() => renderer.update(content("auto", false)));
+    reactUI();
+    expect(graph().renderScale.value).toBe(frozenScale); expect(graph().passes).toBe(passes);
+    playback.value = createPlaybackState({ phase: "preview", slideKey: "preview", stepKey: "1", stepIndex: 1 });
+    reactUI();
+    expect(graph().renderScale.value).toBe(0.8);
+    playback.value = createPlaybackState({ phase: "playing", slideKey: "fixed", stepKey: "0", stepIndex: 0 });
+    await act(() => renderer.update(content("high")));
+    const fixedCommits = commits;
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+      playback.value = advancePlayback(playback.value, timestamp);
+      reactUI();
+    }
+    expect(graph().renderScale.value).toBe(0.8); expect(commits).toBe(fixedCommits);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
 test("compiled recursive world evaluators survive an isolated UI-worklet closure", async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "world-worklets-"));
   try {
@@ -102,14 +148,14 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const require = createRequire(import.meta.url);
     const module = { exports: {} };
-    const callbacks = [], mutables = [];
+    const callbacks = [], mutables = [], preparations = [], reactions = [];
     const presentation = { GPURenderGraph: props => React.createElement("compiled-graph", props),
       usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 800, height: 500 }),
       usePresentationValue: () => playback.value.phase };
     const reanimated = {
       makeMutable: value => { const shared = { value }; mutables.push(shared); return shared; },
       useSharedValue: value => React.useRef({ value }).current,
-      useAnimatedReaction: () => {},
+      useAnimatedReaction: (prepare, react) => { preparations.push(prepare); reactions.push(react); },
       useDerivedValue: fn => { callbacks.push(fn); return { get value() { return fn(); } }; },
     };
     Function("require", "module", "exports", compiled.code)(name => {
@@ -153,6 +199,8 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     for (const clock of [
       { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } },
       { slideTime: 3, stepTime: 1, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
+      { slideTime: 3.99, stepTime: 1.99, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
+      { slideTime: 4.01, stepTime: 2.01, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 1, stepTime: 1, stepIndex: 2, stepOrigins: { 2: 0 } },
       { slideTime: 0.5, stepTime: 0.5, stepIndex: 3, stepOrigins: { 3: 0 } },
     ]) expect(sample(scene, clock)).toEqual(api.sampleWorldUniforms(scene, clock));
@@ -161,6 +209,15 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     try {
       playback.value = createPlaybackState({ phase: "playing", slideKey: "closure", stepKey: "0", stepIndex: 0 });
       await act(() => { renderer = create(React.createElement(api.World, { id: "closure" })); });
+      const autoClosure = reactions.at(-2).__closure;
+      const advanceScale = restore(autoClosure.resolutionEvaluator);
+      let isolated = autoClosure.resolution.value, expected = autoClosure.resolution.value;
+      for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+        const input = { timestamp, playing: true, key: "compiled" };
+        isolated = advanceScale(isolated, input); expected = autoClosure.resolutionEvaluator(expected, input);
+        expect(isolated).toEqual(expected);
+      }
+      expect(isolated.scale).toBeLessThan(1);
       const retained = mutables[0];
       expect(Object.values(callbacks.at(-1).__closure)).not.toContain(retained);
       await act(() => renderer.unmount());
@@ -173,8 +230,11 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       expect(Object.values(callbacks.at(-1).__closure)).toContain(retained);
       await act(() => renderer.unmount());
       const count = mutables.length;
-      await act(() => { renderer = create(React.createElement(api.World)); });
+      await act(() => { renderer = create(React.createElement(api.World, { quality: "high" })); });
       expect(mutables.length).toBe(count);
+      expect(Object.values(preparations.at(-2).__closure)).not.toContain(playback);
+      expect(restore(preparations.at(-2))()).toBeNull();
+      expect(Object.values(callbacks.at(-2).__closure)).not.toContain(playback);
     } finally { await act(() => renderer?.unmount()); }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }, 30000);
