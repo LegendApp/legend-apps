@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { evaluateCamera, type CameraOptions, type ClockSample } from "../packs/world/camera";
+import { evaluateCamera, flyTo, type CameraOptions, type ClockSample } from "../packs/world/camera";
 import { activationAt, layoutTree, subset, tree, wave } from "../packs/world/graph";
 import { buildWorldGraph } from "../packs/world/render";
-import { compileTrack, graphInstances, instancePosition, orbInstances, prepareWorldScene, primitive, sampleTrack, sampleWorldCamera, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { compileTrack, customInstances, graphInstances, instanceOpacity, instancePosition, orbInstances, prepareWorldScene, primitive, pulseInstances,
+  resolveAnchor, rowInstances, rowLogicalIndex, sampleTrack, sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { advancePlayback, createPlaybackState, transitionPlayback } from "../../presentation/src/playbackState";
 
 function clock(time: number, step = 0, origins: Record<number, number> = { 0: 0 }): ClockSample {
   return { slideTime: time, stepTime: time - (origins[step] ?? 0), stepIndex: step, stepOrigins: origins };
@@ -154,4 +156,152 @@ test("HDR scene and five-level half-resolution bloom describe independent attach
   expect(orbInstances({ count: 3, seed: 7 })).not.toEqual(orbInstances({ count: 3, seed: 8 }));
   expect(() => prepareWorldScene({ instances: [...orbInstances({ count: 1 }), ...orbInstances({ count: 1 })] })).toThrow("id is duplicated");
   expect(() => prepareWorldScene({ instances: [...orbInstances({ id: "near", count: 1 }), ...orbInstances({ id: "far", count: 1 })] })).not.toThrow();
+});
+
+test("pulse geometry, camera follow and focus share the exact curved path across clock transitions", () => {
+  const scene = prepareWorldScene({ instances: [...graphInstances({ data: tree("root", [["a", ["leaf"]]]) }),
+    ...pulseInstances({ id: "pulse", path: ["root", "a", "leaf"], step: 1, duration: 4 })],
+    camera: { shots: [{ step: 0, position: [0, 4, 20] }, { step: 1, follow: "pulse", dolly: 6, duration: 0 }] }, dof: { focus: "pulse" } });
+  const pulse = scene.instances.find(instance => instance.id === "pulse")!;
+  let state = createPlaybackState({ phase: "playing", slideKey: "pulse", stepKey: "1", stepIndex: 1 });
+  state = advancePlayback(advancePlayback(state, 0), 1000);
+  const position = instancePosition(pulse, state), camera = sampleWorldCamera(scene, state), uniforms = sampleWorldUniforms(scene, state);
+  expect(camera.target).toEqual(position);
+  expect(uniforms[32]).toBeCloseTo(6);
+  const source = resolveAnchor(scene, "root", state)!, target = resolveAnchor(scene, "a", state)!;
+  expect(position[0]).toBeCloseTo((source[0] + target[0]) / 2);
+  expect(position[1]).toBeGreaterThan((source[1] + target[1]) / 2);
+  const trail = scene.instances.find(instance => instance.id === "pulse:trail")!;
+  const index = worldHeaderSize + scene.instances.indexOf(trail) * worldInstanceSize;
+  expect(uniforms.slice(index + 12, index + 15)).toEqual(position);
+  state = transitionPlayback(state, { ...state, phase: "paused" });
+  state = advancePlayback(state, 10000);
+  expect(instancePosition(pulse, state)).toEqual(position);
+  const jump = createPlaybackState({ phase: "playing", slideKey: "jump", stepKey: "3", stepIndex: 3 });
+  expect(instanceOpacity(pulse, jump)).toBe(0);
+  expect(instancePosition(pulse, jump)).toEqual(resolveAnchor(scene, "leaf", jump)!);
+  expect(() => prepareWorldScene({ instances: pulseInstances({ id: "bad", path: ["bad", [0, 0, 0]] }) })).toThrow("cycle");
+});
+
+test("recycling transfers a flash with logical row identity and never to a reused slot", () => {
+  const scene = prepareWorldScene({ instances: rowInstances({ id: "rows", count: 4, speed: 1, spacing: 1, changes: [{ row: 1, step: 1 }], flashDuration: 2 }),
+    dof: { focus: "rows:row:1" }, camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
+  const before = clock(0.9, 1, { 1: 0.8 }), after = clock(1.1, 1, { 1: 0.8 });
+  const first = scene.instances[0], second = scene.instances[1];
+  expect(rowLogicalIndex(first, before)).toBe(0); expect(rowLogicalIndex(second, before)).toBe(1);
+  expect(rowLogicalIndex(first, after)).toBe(1); expect(rowLogicalIndex(second, after)).toBe(2);
+  const brightness = (slot: number, sample: ClockSample) => sampleWorldUniforms(scene, sample)[worldHeaderSize + slot * worldInstanceSize + 7];
+  expect(brightness(1, before)).toBeGreaterThan(1);
+  expect(brightness(0, before)).toBe(0.1);
+  expect(brightness(0, after)).toBeGreaterThan(1);
+  expect(brightness(1, after)).toBe(0.1);
+  expect(resolveAnchor(scene, "rows:row:1", after)).toEqual(instancePosition(first, after));
+  expect(sampleWorldUniforms(scene, after)[32]).toBe(10);
+  expect(brightness(0, clock(0, 3, { 3: 0 }))).toBe(0.1);
+  let state = createPlaybackState({ phase: "playing", slideKey: "rows", stepKey: "1", stepIndex: 1 });
+  state = advancePlayback(advancePlayback(state, 0), 990);
+  const departing = instanceOpacity(first, state), retained = instanceOpacity(second, state);
+  const retainedPosition = instancePosition(second, state);
+  state = advancePlayback(state, 1010);
+  expect(departing).toBeCloseTo(0.01);
+  expect(retained).toBe(1);
+  expect(instanceOpacity(first, state)).toBeCloseTo(0.99);
+  expect(instanceOpacity(scene.instances.at(-1)!, state)).toBeCloseTo(0.01);
+  expect(instancePosition(first, state)[1] - retainedPosition[1]).toBeCloseTo(0.02);
+  expect(brightness(0, state)).toBeGreaterThan(1);
+});
+
+test("voxel compaction keeps topology fixed and its counter matches the surviving cells", () => {
+  const scene = prepareWorldScene({ instances: voxelInstances({ id: "cells", grid: [8, 8, 8], collapse: { step: 1, to: 0.2, duration: 2 } }), counter: { source: "cells" } });
+  const graph = buildWorldGraph(scene);
+  const initial = sampleWorldUniforms(scene, clock(0)), middle = sampleWorldUniforms(scene, clock(1, 1, { 1: 0 })), final = sampleWorldUniforms(scene, clock(2, 1, { 1: 0 }));
+  expect(initial[56]).toBe(512); expect(middle[56]).toBe(307); expect(final[56]).toBe(102);
+  expect(scene.instances.reduce((sum, instance) => sum + instanceOpacity(instance, clock(2, 1, { 1: 0 })), 0)).toBe(102);
+  expect(graph.passes.filter(pass => pass.kind === "render")[0].instanceCount).toBe(512);
+  expect(final.length).toBe(graph.uniformsSize);
+  expect(sampleWorldUniforms(scene, clock(0, 3, { 3: 0 }))[56]).toBe(102);
+  expect(sampleWorldUniforms(scene, clock(0))[56]).toBe(512);
+});
+
+test("removed voxels shrink in place, including collapse to zero and backwards sampling", () => {
+  const scene = prepareWorldScene({ instances: voxelInstances({ id: "cells", grid: [5, 1, 1], collapse: { step: 1, to: 0.2, duration: 2, ease: "linear" } }), counter: { source: "cells" } });
+  let state = createPlaybackState({ phase: "playing", slideKey: "shrink", stepKey: "1", stepIndex: 1 });
+  const removed = scene.instances[3], position = instancePosition(removed, state);
+  state = advancePlayback(advancePlayback(state, 0), 750);
+  expect(instancePosition(removed, state)).toEqual(position);
+  expect(instanceOpacity(removed, state)).toBeCloseTo(0.5);
+  expect(sampleWorldUniforms(scene, state)[worldHeaderSize + 3 * worldInstanceSize + 3]).toBeCloseTo(0.065);
+  state = advancePlayback(state, 2000);
+  expect(instancePosition(removed, state)).toEqual(position);
+  expect(instanceOpacity(removed, state)).toBe(0);
+  expect(instanceOpacity(removed, clock(0))).toBe(1);
+  const empty = prepareWorldScene({ instances: voxelInstances({ id: "empty", grid: [2, 2, 2], collapse: { step: 1, to: 0, duration: 1 } }), counter: { source: "empty" } });
+  const initial = empty.instances.map(instance => instancePosition(instance, clock(0)));
+  const finished = clock(1, 1, { 1: 0 });
+  expect(sampleWorldUniforms(empty, finished)[56]).toBe(0);
+  expect(empty.instances.every(instance => instanceOpacity(instance, finished) === 0)).toBe(true);
+  expect(empty.instances.map(instance => instancePosition(instance, finished))).toEqual(initial);
+});
+
+test("stages, material references, light direction and HDR post settings share animated uniforms", () => {
+  const stage = { id: "b", position: compileTrack<[number, number, number]>({ 0: [10, 0, 0], 1: [12, 0, 0] }), glow: compileTrack({ 0: 1, 1: 0.5 }) };
+  const scene = prepareWorldScene({ instances: [{ ...primitive("tube", { id: "tube", position: [0, 0, 0], end: [2, 0, 0], material: "stone", emissive: 4 }), stages: [stage] }],
+    stages: [{ stage, parents: [] }], materials: { stone: { albedo: "#ffffff", roughness: 0.7, metal: 0.2, rim: 0.9 } },
+    camera: { shots: [flyTo("b", { step: 0, offset: [0, 0, 10] })] },
+    dof: { focus: "stage:b", aperture: 0.8 }, floor: { mirror: true, y: -3 }, shafts: { intensity: 0.7 }, chromatic: 0.003,
+    lights: [{ kind: "spot", position: [0, 5, 0], target: [0, 0, 0], angle: 0.4 }], rim: { color: "#22d3ee", intensity: 2 } });
+  const sample = clock(2, 1, { 0: 0, 1: 1 }), values = sampleWorldUniforms(scene, sample);
+  expect(resolveAnchor(scene, "stage:b", sample)).toEqual([12, 0, 0]);
+  expect(sampleWorldCamera(scene, sample).position).toEqual([12, 0, 10]);
+  expect(values.slice(worldHeaderSize + 12, worldHeaderSize + 15)).toEqual([14, 0, 0]);
+  expect(values[worldHeaderSize + 7]).toBe(2);
+  expect(values.slice(worldHeaderSize + 24, worldHeaderSize + 27)).toEqual([1, 1, 1]);
+  expect(values[worldHeaderSize + 27]).toBe(0.7); expect(values[worldHeaderSize + 28]).toBe(0.2);
+  expect(values[32]).toBe(10); expect(values[33]).toBe(0.8); expect(values[36]).toBe(-3); expect(values[44]).toBe(0.003);
+  expect(values[51]).toBe(2);
+  expect(sampleWorldUniforms(prepareWorldScene({ instances: [] }), sample)[51]).toBe(0);
+  expect(values.slice(72, 75)).toEqual([0, -1, 0]); expect(values[75]).toBeCloseTo(Math.cos(0.4));
+  const named = prepareWorldScene({ instances: [primitive("sphere", { id: "b", position: [1, 2, 3] })], stages: scene.stages });
+  expect(resolveAnchor(named, "b", sample)).toEqual([1, 2, 3]);
+  expect(resolveAnchor(named, "stage:b", sample)).toEqual([12, 0, 0]);
+});
+
+test("spray sampling is stateless and gates against lit leaves", () => {
+  const scene = prepareWorldScene({ instances: [...graphInstances({ data: tree("root", ["leaf"]), activate: [wave({ from: "root", step: 1 })] }),
+    ...sprayInstances({ id: "spray", under: "leaves:lit", rate: 4, lifetime: 2 })] });
+  const particles = scene.instances.filter(instance => instance.spray);
+  expect(particles).toHaveLength(8);
+  expect(particles.every(instance => instanceOpacity(instance, clock(0)) === 0)).toBe(true);
+  expect(particles.some(instance => instanceOpacity(instance, clock(2, 1, { 1: 0 })) > 0)).toBe(true);
+  const positions = particles.map(instance => instancePosition(instance, clock(2, 1, { 1: 0 })));
+  particles.forEach(instance => instancePosition(instance, clock(10, 3, { 3: 0 })));
+  expect(particles.map(instance => instancePosition(instance, clock(2, 1, { 1: 0 })))).toEqual(positions);
+});
+
+test("explicit materials and rim lights preserve dim graph nodes until activation", () => {
+  const scene = prepareWorldScene({ instances: graphInstances({ data: tree("root"), nodes: { root: { material: "bright" } }, activate: [wave({ from: "root", step: 1 })] }),
+    materials: { bright: { albedo: "#ffffff", rim: 2 } }, rim: { intensity: 3 } });
+  const dim = scene.instances[0].graph!.dim;
+  let state = createPlaybackState({ phase: "playing", slideKey: "material", stepKey: "0", stepIndex: 0 });
+  const dark = sampleWorldUniforms(scene, state);
+  expect(dark.slice(worldHeaderSize + 24, worldHeaderSize + 27)).toEqual(dim);
+  expect(dark[worldHeaderSize + 7]).toBe(0);
+  expect(dark[worldHeaderSize + 29]).toBe(0); expect(dark[worldHeaderSize + 30]).toBe(0);
+  state = transitionPlayback(state, { ...state, stepKey: "1", stepIndex: 1 });
+  state = advancePlayback(advancePlayback(state, 0), 1000);
+  const lit = sampleWorldUniforms(scene, state);
+  expect(lit.slice(worldHeaderSize + 24, worldHeaderSize + 27)).toEqual([1, 1, 1]);
+  expect(lit[worldHeaderSize + 29]).toBe(2); expect(lit[worldHeaderSize + 30]).toBe(1);
+  expect(sampleWorldUniforms(scene, clock(0)).slice(worldHeaderSize + 24, worldHeaderSize + 27)).toEqual(dim);
+});
+
+test("custom and bounded geometry keep their own draw groups and validate resources before setup", () => {
+  const a = customInstances({ wgsl: "shape-a", count: 2, vertexCount: 6 }), b = customInstances({ wgsl: "shape-a", count: 3, vertexCount: 6 });
+  expect(a[0].custom).toBe(a[1].custom); expect(a[0].custom).not.toBe(b[0].custom);
+  const scene = prepareWorldScene({ instances: [...a, primitive("sphere"), ...b, sdfInstance({ wgsl: "distance", bounds: [[-1, -1, -1], [1, 1, 1]] })] });
+  expect(scene.instances[0].kind).toBe("sphere");
+  expect(scene.instances.at(-1)?.sdf).toBeDefined();
+  expect(() => prepareWorldScene({ instances: [primitive("box", { material: "missing" })] })).toThrow("material");
+  expect(() => prepareWorldScene({ instances: [], dof: { scale: 0 } })).toThrow("scale");
+  expect(() => prepareWorldScene({ instances: [], lights: Array.from({ length: 5 }, () => ({})) })).toThrow("four");
 });

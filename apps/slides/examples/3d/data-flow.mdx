@@ -1,0 +1,102 @@
+---
+title: Data Flow
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050811"
+  color: "#f8fafc"
+---
+
+import { Text } from "react-native"
+import { World, Camera, Graph, tree, wave, subset, PathPulse, Rows, Voxels, WorldCounter, Stage, flyTo, Box, Ring, Floor, PointLight, RimLight, Bloom, Fog, DOF, Vignette } from "slides:world/World"
+
+export const network = tree("root", [
+  ["north", [["n1", ["n11", "n12", "n13"]], ["n2", ["n21", "n22", "n23"]]]],
+  ["east", [["e1", ["e11", "e12", "e13"]], ["e2", ["e21", "e22", "e23"]]]],
+  ["west", [["w1", ["w11", "w12", "w13"]], ["w2", ["w21", "w22", "w23"]]]],
+])
+
+# Follow one branch
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 6, 23], target: [0, 0, 0] }]} />
+  <Graph data={network} node={{ color: "#22d3ee", dim: "#101d35", size: 0.3 }} edge={{ curve: 0.4, glow: 0.6 }} activate={[wave({ from: "root", step: 1, speed: 0.35 }), subset({ branches: ["east"], step: 2 })]} />
+  <Floor mirror y={-5} roughness={0.08} reflectivity={0.5} />
+  <Bloom intensity={1.2} /><Fog density={0.025} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Across the tree</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">Only this branch</Text></Step>
+
+---
+
+# A single path
+
+<World width={1696} height={650} quality="high">
+  <Camera duration={2.2} shots={[{ step: 0, position: [0, 6, 22], target: [0, 0, 0] }, { step: 1, follow: "pulse", dolly: 6 }]} />
+  <Graph data={network} node={{ dim: "#102033", size: 0.22 }} edge={{ curve: 0.4 }} />
+  <PathPulse id="pulse" path={["root", "east", "e1", "e12"]} step={1} duration={3.5} color="#22d3ee" size={0.09} trail={0.18} />
+  <DOF focus={{ 0: 20, 1: "pulse" }} aperture={0.6} maxBlur={12} />
+  <Bloom intensity={1.1} /><Fog density={0.02} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Follow the pulse</Text></Step>
+
+---
+
+# Change in a moving column
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ step: 0, position: [4, 2, 14], target: [0, 0, 0], fov: 40 }]} />
+  <Rows id="rows" count={9} position={[0, 0, 0]} spacing={1.1} speed={0.3} changes={[{ row: 4, step: 1 }, { row: 6, step: 2 }]} color="#163047" flashColor="#22d3ee" />
+  <DOF focus={{ 0: "rows:row:4", 2: "rows:row:6" }} aperture={0.8} maxBlur={14} />
+  <PointLight position={[3, 6, 5]} color="#f59e0b" intensity={2} range={20} />
+  <Floor mirror y={-5} roughness={0.12} reflectivity={0.4} />
+  <Bloom intensity={1} /><Fog density={0.02} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">One changed row</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">Focus follows the next change</Text></Step>
+
+---
+
+# Three places to land
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[flyTo("a", { step: 0, offset: [0, 4, 12] }), flyTo("b", { step: 1, arc: 4, duration: 1.6, offset: [0, 4, 12] }), flyTo("c", { step: 2, arc: 4, duration: 1.6, offset: [0, 4, 12] })]} />
+  <Stage id="a" position={[-10, 0, 0]} glow={1}>
+    <Box position={[0, 0, 0]} scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={4} />
+    <Ring position={[0, -2, 0]} radius={2.5} color="#f59e0b" emissive={2} />
+  </Stage>
+  <Stage id="b" position={[0, 0, 0]} glow={0.6}>
+    <Box position={[0, 0, 0]} scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={4} />
+    <Ring position={[0, -2, 0]} radius={2.5} color="#f59e0b" emissive={2} />
+  </Stage>
+  <Stage id="c" position={[10, 0, 0]} glow={0.25}>
+    <Box position={[0, 0, 0]} scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={4} />
+    <Ring position={[0, -2, 0]} radius={2.5} color="#f59e0b" emissive={2} />
+  </Stage>
+  <Floor mirror y={-3} roughness={0.08} reflectivity={0.6} />
+  <RimLight color="#f59e0b" intensity={1} />
+  <Bloom intensity={1.2} /><Fog density={0.015} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">A softer glow</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">A quiet landing</Text></Step>
+
+---
+
+# Less to carry
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ step: 0, position: [7, 6, 12], target: [0, 0, 0], fov: 40 }]} />
+  <Voxels id="voxels" grid={[8, 8, 8]} spacing={0.5} size={0.18} position={[0, 0, 0]} color="#22d3ee" collapse={{ step: 1, to: 0.2, duration: 2.4 }} />
+  <WorldCounter source="voxels" position={[0.82, 0.2]} size={0.07} color="#ffffff" />
+  <Text className="absolute top-8 right-12 text-3xl text-white">Active cells</Text>
+  <Floor mirror y={-3} roughness={0.08} reflectivity={0.5} />
+  <RimLight color="#f59e0b" intensity={1} />
+  <Bloom intensity={0.9} /><Fog density={0.018} /><Vignette amount={0.3} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">About one fifth remains</Text></Step>

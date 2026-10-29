@@ -9,6 +9,7 @@ export type BenchmarkOptions = {
   warmup?: number;
   frames?: number;
   repetitions?: number;
+  paced?: boolean;
 };
 
 function summarize(values: number[]) {
@@ -18,15 +19,16 @@ function summarize(values: number[]) {
     minMs: sorted[0], maxMs: sorted[sorted.length - 1], throughputFps: 1000 / median };
 }
 
-/** Fixed clock samples measure rendering without introducing a playback driver. */
-export async function benchmarkRenderGraph({ definition, uniformsAt, width, height, warmup = 30, frames = 120, repetitions = 3 }: BenchmarkOptions) {
+/** Replay fixed clock samples, with optional browser cadence measurement. */
+export async function benchmarkRenderGraph({ definition, uniformsAt, width, height, warmup = 30, frames = 120, repetitions = 3, paced = false }: BenchmarkOptions) {
   if (![width, height, warmup, frames, repetitions].every(Number.isInteger) || width < 1 || height < 1 || warmup < 0 || frames < 1 || repetitions < 1) {
     throw new Error("Benchmark dimensions and sample counts must be positive integers");
   }
   if (!navigator.gpu) throw new Error("WebGPU unavailable");
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
   if (!adapter) throw new Error("No WebGPU adapter");
-  const timestamps = adapter.features.has("timestamp-query");
+  const timestampSupported = adapter.features.has("timestamp-query");
+  const timestamps = timestampSupported && !paced;
   const device = await adapter.requestDevice({ requiredFeatures: timestamps ? ["timestamp-query"] : [] });
   const failures: string[] = [];
   device.addEventListener("uncapturederror", event => failures.push(event.error.message));
@@ -46,13 +48,17 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
   const queryBytes = passCount * 16;
   const resolve = query ? device.createBuffer({ size: queryBytes, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC }) : undefined;
   const readback = query ? device.createBuffer({ size: queryBytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ }) : undefined;
-  const samples: { repetition: number; frame: number; seconds: number; completedMs: number; gpuMs?: number; passes?: Record<string, number> }[] = [];
+  const samples: { repetition: number; frame: number; seconds: number; completedMs: number; intervalMs?: number; gpuMs?: number; passes?: Record<string, number> }[] = [];
   try {
     device.pushErrorScope("validation");
     const graph = await prepareRenderGraph(device, definition, format, clock, uniforms);
     const setupError = await device.popErrorScope();
     if (setupError) throw new Error(setupError.message);
+    let previousFrame: number | undefined;
     async function render(frame: number, timed: boolean) {
+      const now = paced ? await new Promise<number>(resolve => requestAnimationFrame(resolve)) : undefined;
+      const intervalMs = now === undefined || previousFrame === undefined ? undefined : now - previousFrame;
+      previousFrame = now;
       const seconds = 2 + frame / 60;
       const start = performance.now();
       const values = uniformsAt(seconds);
@@ -89,7 +95,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
         readback.unmap();
       }
       if (failures.length) throw new Error(failures.join("\n"));
-      return { seconds, completedMs, ...(gpuMs === undefined ? {} : { gpuMs, passes }) };
+      return { seconds, completedMs, ...(intervalMs === undefined ? {} : { intervalMs }), ...(gpuMs === undefined ? {} : { gpuMs, passes }) };
     }
     for (let frame = 0; frame < warmup; frame++) await render(frame, false);
     for (let repetition = 0; repetition < repetitions; repetition++) {
@@ -99,14 +105,20 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, width, heig
     await render(90, false);
     const png = canvas.toDataURL("image/png");
     const info = adapter.info;
+    const intervals = samples.flatMap(sample => sample.intervalMs === undefined ? [] : [sample.intervalMs]);
     return {
       environment: { browser: navigator.userAgent, adapter: { vendor: info.vendor, architecture: info.architecture, device: info.device, description: info.description },
-        timestampQuery: timestamps, width, height, warmup, frames, repetitions, devicePixelRatio, visibility: document.visibilityState },
-      methodology: "Unpaced fixed-clock samples; completedMs includes uniform evaluation, writes, encode, submit and queue completion. GPU frame span is the last pass end minus the first pass beginning; pass scopes may overlap and are non-additive. GPU timestamps exclude CPU and presentation. Throughput is not display-paced FPS.",
+        timestampQuery: timestamps, timestampQuerySupported: timestampSupported, paced, width, height, warmup, frames, repetitions, devicePixelRatio,
+        viewport: { width: innerWidth, height: innerHeight }, visibility: document.visibilityState },
+      methodology: `${paced ? "rAF-paced" : "Unpaced"} fixed-clock samples; completedMs includes uniform evaluation, writes, encode, submit and queue completion. GPU frame span is the last pass end minus the first pass beginning; pass scopes may overlap and are non-additive. GPU timestamps exclude CPU and presentation and are disabled in paced runs to avoid readback overhead. rAF cadence is browser callback cadence, not evidence of physical display presentation.`,
       pipeline: { targets: definition.targets, passes: definition.passes.map(pass => ({ id: pass.id, kind: pass.kind })) },
       completed: summarize(samples.map(sample => sample.completedMs)),
       gpu: timestamps ? summarize(samples.map(sample => sample.gpuMs!)) : null,
       passes: timestamps ? Object.fromEntries(definition.passes.map(pass => [pass.id, summarize(samples.map(sample => sample.passes![pass.id]))])) : null,
+      cadence: intervals.length ? { ...summarize(intervals), intervalCount: intervals.length,
+        observedFps: intervals.length * 1000 / intervals.reduce((sum, ms) => sum + ms, 0),
+        longIntervalsOver25Ms: intervals.filter(ms => ms > 25).length,
+        estimatedMissed60HzFrames: intervals.reduce((sum, ms) => sum + Math.max(0, Math.round(ms / (1000 / 60)) - 1), 0) } : null,
       repetitions: Array.from({ length: repetitions }, (_, repetition) => ({ repetition,
         completed: summarize(samples.filter(sample => sample.repetition === repetition).map(sample => sample.completedMs)),
         gpu: timestamps ? summarize(samples.filter(sample => sample.repetition === repetition).map(sample => sample.gpuMs!)) : null })),

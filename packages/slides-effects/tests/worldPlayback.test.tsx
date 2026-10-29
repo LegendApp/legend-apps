@@ -10,6 +10,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { createPlaybackState, advancePlayback } from "../../presentation/src/playbackState";
 import { samplePlayback } from "../../presentation/src/playback";
+import { worldHeaderSize } from "../packs/world/scene";
 
 const playback = { value: createPlaybackState({ phase: "playing", slideKey: "a", stepKey: "0", stepIndex: 0 }) };
 mock.module("@legend-apps/presentation", () => ({
@@ -84,7 +85,7 @@ test("equal-content parent renders and resize retain pipeline definitions while 
     expect(graph().targets).toBe(targets);
     await act(() => tree.update(content(1000, 4)));
     expect(graph().passes).toBe(passes);
-    expect(graph().uniforms.value[32]).toBe(4);
+    expect(graph().uniforms.value[worldHeaderSize]).toBe(4);
     expect(graph().width).toBe(1000);
     await act(() => tree.update(content(1000, 4, "low")));
     expect(graph().passes).not.toBe(passes);
@@ -96,7 +97,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
   try {
     const { compileDeck } = await import("../../presentation/src/compiler");
     const deck = path.join(directory, "world.mdx");
-    fs.writeFileSync(deck, 'export { World, sampleWorldUniforms, prepareWorldScene, graphInstances, tree, wave } from "slides:world/World"\n\n# World');
+    fs.writeFileSync(deck, 'export { World, sampleWorldUniforms, prepareWorldScene, graphInstances, pulseInstances, sprayInstances, rowInstances, voxelInstances, flyTo, tree, wave } from "slides:world/World"\n\n# World');
     const compiled = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const require = createRequire(import.meta.url);
@@ -135,15 +136,25 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     const api = module.exports;
     expect(api.sampleWorldUniforms.__workletHash).toBeNumber();
     const sample = restore(api.sampleWorldUniforms);
+    const stage = { id: "zone", position: { initial: [5, 0, 0], frames: [] }, glow: { initial: 0.5, frames: [] } };
     const scene = api.prepareWorldScene({
-      instances: api.graphInstances({ data: api.tree("root", [["a", ["a1", "a2"]]]), activate: [api.wave({ from: "root", step: 1 })] }),
-      camera: { shots: [{ step: 0, position: [0, 4, 20] }, { step: 1, orbit: { center: [0, 0, 0], radius: 10 } }, { step: 2, follow: "node:a", dolly: 5 }] },
+      instances: [
+        ...api.graphInstances({ data: api.tree("root", [["a", ["a1", "a2"]]]), activate: [api.wave({ from: "root", step: 1 })] }).map(instance => ({ ...instance, stages: [stage] })),
+        ...api.pulseInstances({ id: "pulse", path: ["root", "a", "a1"], step: 1, duration: 4 }),
+        ...api.sprayInstances({ id: "mist", under: "leaves:lit", rate: 4, lifetime: 2 }),
+        ...api.rowInstances({ id: "rows", count: 4, changes: [{ row: 2, step: 2 }], speed: 1 }).map(instance => ({ ...instance, stages: [stage] })),
+        ...api.voxelInstances({ id: "voxels", grid: [2, 2, 2], collapse: { step: 1, to: 0.2, duration: 2 } }),
+      ],
+      stages: [{ stage, parents: [] }], counter: { source: "voxels" }, dof: {},
+      camera: { shots: [{ step: 0, position: [0, 4, 20] }, { step: 1, follow: "pulse", dolly: 5, focus: "pulse" },
+        { step: 2, follow: "rows:row:2", dolly: 7, focus: "rows:row:2" }, api.flyTo("zone", { step: 3, arc: 3 })] },
       exposure: { 0: 1, 1: 1.5, 2: 0.8 }, bloom: { intensity: 1.4 },
     });
     for (const clock of [
       { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } },
       { slideTime: 3, stepTime: 1, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 1, stepTime: 1, stepIndex: 2, stepOrigins: { 2: 0 } },
+      { slideTime: 0.5, stepTime: 0.5, stepIndex: 3, stepOrigins: { 3: 0 } },
     ]) expect(sample(scene, clock)).toEqual(api.sampleWorldUniforms(scene, clock));
     // Mapper inputs come from the serialized closure, including unread values.
     let renderer;

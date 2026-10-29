@@ -1,0 +1,32 @@
+---
+title: World
+width: 1920
+height: 1080
+theme:
+  backgroundColor: "#050811"
+  color: "#f8fafc"
+---
+
+import { World, Camera, Orbs, Graph, tree, wave, subset, Bloom, Fog } from "slides:world/World"
+
+export const branches = tree("root", [["a", [["a1", ["a11", "a12"]], ["a2", ["a21", "a22"]]]], ["b", [["b1", ["b11", "b12"]], ["b2", ["b21", "b22"]]]], ["c", [["c1", ["c11", "c12"]], ["c2", ["c21", "c22"]]]]])
+
+# A world of light
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 18, height: 4, speed: 0.08 } }]} />
+  <Orbs count={48} colors={["#22d3ee", "#f59e0b"]} />
+  <Bloom intensity={1.4} /><Fog density={0.03} />
+</World>
+
+---
+steps: 3
+---
+
+# A selective cascade
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 6, 22], target: [0, 0, 0] }]} />
+  <Graph data={branches} node={{ color: "#22d3ee", size: 0.3 }} activate={[wave({ from: "root", step: 1 }), subset({ branches: ["b"], step: 2 })]} />
+  <Bloom intensity={1.4} /><Fog density={0.02} />
+</World>

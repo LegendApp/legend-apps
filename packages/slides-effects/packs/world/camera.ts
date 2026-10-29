@@ -5,11 +5,23 @@ export type CameraPose = { position: Vec3; target: Vec3; fov: number; roll: numb
 export type Shot = {
   step?: number; at?: number; position?: Vec3; target?: Vec3; fov?: number; roll?: number;
   orbit?: { center: Vec3; radius: number; speed?: number; height?: number; phase?: number };
-  dolly?: number; follow?: string; duration?: number; ease?: Ease;
+  dolly?: number; follow?: string; duration?: number; ease?: Ease; focus?: number | string;
+  stage?: string; offset?: Vec3; arc?: number;
 };
 export type CameraOptions = { shots?: Shot[]; duration?: number; ease?: Ease };
 type ObjectPositions = Record<string, Vec3> | ((id: string, clock: ClockSample) => Vec3 | undefined);
 export const defaultPose: CameraPose = { position: [0, 5, 18], target: [0, 0, 0], fov: 42, roll: 0 };
+export function flyTo(stage: string, options: Omit<Shot, "stage"> = {}): Shot {
+  return { ...options, stage };
+}
+export function cameraFocus(options: CameraOptions, clock: ClockSample) {
+  "worklet";
+  let focus: number | string | undefined;
+  for (const shot of options.shots ?? []) if (shot.at !== undefined ? clock.slideTime >= shot.at : clock.stepIndex >= (shot.step ?? 0)) {
+    if (shot.focus !== undefined) focus = shot.focus;
+  }
+  return focus;
+}
 
 export function easeProgress(value: number, ease: Ease = "cubic") {
   "worklet";
@@ -37,6 +49,14 @@ function destination(shot: Shot, base: CameraPose, elapsed: number, objects: Obj
   let position = shot.position ?? base.position;
   const followed = shot.follow ? typeof objects === "function" ? objects(shot.follow, clock) : objects[shot.follow] : undefined;
   let target = followed ?? shot.target ?? base.target;
+  if (shot.stage) {
+    const anchor = typeof objects === "function" ? objects(`stage:${shot.stage}`, clock) : objects[`stage:${shot.stage}`];
+    if (anchor) {
+      target = anchor;
+      const offset = shot.offset ?? [0, 4, 10];
+      position = [anchor[0] + offset[0], anchor[1] + offset[1], anchor[2] + offset[2]];
+    }
+  }
   if (shot.orbit) {
     const orbit = shot.orbit;
     const angle = (orbit.phase ?? 0) + elapsed * (orbit.speed ?? 0.12);
@@ -65,7 +85,9 @@ function evaluateShots(options: CameraOptions, clock: ClockSample, objects: Obje
   const duration = shot.duration ?? options.duration ?? 1.2;
   const completed = shot.at === undefined && (shot.step ?? 0) < clock.stepIndex && clock.stepOrigins[shot.step ?? 0] === undefined;
   const t = index === 0 || completed ? 1 : easeProgress(duration <= 0 ? 1 : elapsed / duration, shot.ease ?? options.ease);
-  return { position: mixVector(from.position, end.position, t), target: mixVector(from.target, end.target, t),
+  const position = mixVector(from.position, end.position, t);
+  if (shot.arc && t > 0 && t < 1) position[1] += Math.sin(t * Math.PI) * shot.arc;
+  return { position, target: mixVector(from.target, end.target, t),
     fov: from.fov + (end.fov - from.fov) * t, roll: from.roll + (end.roll - from.roll) * t };
 }
 /** Stateless evaluation also handles direct step jumps and backwards scrubbing. */

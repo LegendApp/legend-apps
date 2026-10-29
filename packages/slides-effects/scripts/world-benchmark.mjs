@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.length !== 2 || args[0] !== "--output") {
-  console.log("Usage: bun packages/slides-effects/scripts/world-benchmark.mjs --output /absolute/path/harness.html\nGenerates a standalone offline WebGPU measurement page. In Chrome, call await benchmarkWorld({width:1920,height:1080,quality:'high'}).\nResult includes raw samples, per-pass GPU timestamps when available, completed-submit wall times and a PNG data URL.\nGenerate and launch the browser through the heavy gate; call the measurement through the fps gate. Keep generated pages/results outside the repository.");
+  console.log("Usage: bun packages/slides-effects/scripts/world-benchmark.mjs --output /absolute/path/harness.html\nGenerates a standalone offline WebGPU measurement page. In Chrome, call await benchmarkWorld({width:1920,height:1080,quality:'high'}). Add allEffects:true for the full scene or paced:true for rAF interval measurements (without GPU timestamp readback).\nResult includes raw samples, per-pass GPU timestamps when available, completed-submit wall times and a PNG data URL.\nGenerate and launch the browser through the heavy gate; call the measurement through the fps gate. Keep generated pages/results outside the repository.");
   process.exit(args.includes("--help") ? 0 : 2);
 }
 const output = resolve(args[1]);

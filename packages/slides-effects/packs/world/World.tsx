@@ -4,15 +4,17 @@ import { View } from "react-native";
 import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
-import { graphInstances, orbInstances, prepareWorldScene, primitive, sampleWorldCamera, sampleWorldUniforms,
-  type Animated, type GraphOptions, type OrbsOptions, type PrimitiveOptions, type WorldScene } from "./scene";
+import { compileTrack, customInstances, graphInstances, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
+  sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
+  type Animated, type CustomOptions, type GraphOptions, type Instance, type LightOptions, type MaterialOptions, type OrbsOptions,
+  type PostOptions, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 
 export { tree, wave, subset, layoutTree } from "./graph";
-export { evaluateCamera } from "./camera";
+export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
-export { orbInstances, graphInstances, primitive, prepareWorldScene, sampleWorldUniforms } from "./scene";
+export { orbInstances, graphInstances, primitive, prepareWorldScene, pulseInstances, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
 export type { Shot, CameraPose, Vec3 } from "./camera";
-export type { Animated, GraphOptions, OrbsOptions, PrimitiveOptions, WorldScene } from "./scene";
+export type { Animated, GraphOptions, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
 export function Camera(_: CameraOptions) { return null; }
 export function Graph(_: GraphOptions) { return null; }
@@ -25,6 +27,23 @@ export function Fog(_: NonNullable<WorldScene["fog"]>) { return null; }
 export function Bloom(_: NonNullable<WorldScene["bloom"]>) { return null; }
 export function Vignette(_: { amount?: Animated<number> }) { return null; }
 export function Grain(_: { amount?: Animated<number> }) { return null; }
+export function PathPulse(_: PulseOptions) { return null; }
+export function Spray(_: SprayOptions) { return null; }
+export function Rows(_: RowsOptions) { return null; }
+export function Voxels(_: VoxelsOptions) { return null; }
+export function Stage(_: StageOptions & { children?: ReactNode }) { return null; }
+export function WorldCounter(_: NonNullable<WorldScene["counter"]>) { return null; }
+export function DOF(_: NonNullable<WorldScene["dof"]>) { return null; }
+export function Floor(_: NonNullable<WorldScene["floor"]>) { return null; }
+export function Shafts(_: NonNullable<WorldScene["shafts"]>) { return null; }
+export function Chromatic(_: { amount?: Animated<number> }) { return null; }
+export function RimLight(_: NonNullable<WorldScene["rim"]>) { return null; }
+export function PointLight(_: Omit<LightOptions, "kind">) { return null; }
+export function SpotLight(_: Omit<LightOptions, "kind">) { return null; }
+export function Material(_: MaterialOptions & { id: string }) { return null; }
+export function Pass(_: PostOptions) { return null; }
+export function Custom(_: CustomOptions) { return null; }
+export function SDF(_: SDFOptions) { return null; }
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
 function retainedPose(id: string) {
@@ -45,29 +64,54 @@ export type WorldProps = {
   quality?: WorldScene["quality"]; exposure?: Animated<number>; previewTime?: number; borderRadius?: number;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
   children?: ReactNode; accessibilityLabel?: string;
+  postOrder?: WorldScene["postOrder"];
 };
 export function World(props: WorldProps) {
   // id defines a continuity boundary; changing it creates a fresh sampled origin.
   return <WorldSurface key={props.id ?? "world"} {...props} />;
 }
-function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number) {
-  const scene: WorldScene = { instances: [], quality, exposure, backgroundColor, scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
+function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"]) {
+  const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], quality, exposure, backgroundColor, postOrder,
+    scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
-  function collect(content: ReactNode) {
+  function add(instances: Instance[], stages: StageMotion[]) { for (const instance of instances) { if (stages.length) instance.stages = stages; scene.instances.push(instance); } }
+  function collect(content: ReactNode, stages: StageMotion[] = []) {
     Children.forEach(content, child => {
       if (!isValidElement<Record<string, unknown>>(child)) {
         if (child && (typeof child !== "string" || child.trim())) overlay.push(child);
         return;
       }
       const options = child.props;
-      if (child.type === Fragment) collect(options.children as ReactNode);
+      if (child.type === Fragment) collect(options.children as ReactNode, stages);
+      else if (child.type === Stage) {
+        const stageOptions = options as StageOptions;
+        if (scene.stages!.some(item => item.stage.id === stageOptions.id)) throw new Error(`World stage id is duplicated: ${stageOptions.id}`);
+        const stage: StageMotion = { id: stageOptions.id, position: compileTrack(stageOptions.position ?? [0, 0, 0]), glow: compileTrack(stageOptions.glow ?? 1) };
+        scene.stages!.push({ stage, parents: stages });
+        collect(options.children as ReactNode, [...stages, stage]);
+      }
       else if (child.type === Camera) scene.camera = options as CameraOptions;
-      else if (child.type === Graph) scene.instances.push(...graphInstances(options as GraphOptions));
-      else if (child.type === Orbs) scene.instances.push(...orbInstances(options));
-      else if (child.type === Sphere) scene.instances.push(primitive("sphere", options));
-      else if (child.type === Box) scene.instances.push(primitive("box", options));
-      else if (child.type === Tube) scene.instances.push(primitive("tube", options));
-      else if (child.type === Ring) scene.instances.push(primitive("ring", { ...options, size: options.radius ?? options.size } as PrimitiveOptions));
+      else if (child.type === Graph) add(graphInstances(options as GraphOptions), stages);
+      else if (child.type === Orbs) add(orbInstances(options), stages);
+      else if (child.type === Sphere) add([primitive("sphere", options)], stages);
+      else if (child.type === Box) add([primitive("box", options)], stages);
+      else if (child.type === Tube) add([primitive("tube", options)], stages);
+      else if (child.type === Ring) add([primitive("ring", { ...options, size: options.radius ?? options.size } as PrimitiveOptions)], stages);
+      else if (child.type === PathPulse) add(pulseInstances(options as PulseOptions), stages);
+      else if (child.type === Spray) add(sprayInstances(options), stages);
+      else if (child.type === Rows) add(rowInstances(options as RowsOptions), stages);
+      else if (child.type === Voxels) add(voxelInstances(options as VoxelsOptions), stages);
+      else if (child.type === Custom) add(customInstances(options as CustomOptions), stages);
+      else if (child.type === SDF) add([sdfInstance(options as SDFOptions)], stages);
+      else if (child.type === Material) { const material = options as MaterialOptions & { id: string }; scene.materials![material.id] = material; }
+      else if (child.type === WorldCounter) scene.counter = options as NonNullable<WorldScene["counter"]>;
+      else if (child.type === DOF) scene.dof = options;
+      else if (child.type === Floor) scene.floor = options;
+      else if (child.type === Shafts) scene.shafts = options;
+      else if (child.type === Chromatic) scene.chromatic = options.amount as Animated<number> | undefined;
+      else if (child.type === RimLight) scene.rim = options;
+      else if (child.type === PointLight || child.type === SpotLight) scene.lights!.push({ ...options, kind: child.type === PointLight ? "point" : "spot" });
+      else if (child.type === Pass) scene.passes!.push(options as PostOptions);
       else if (child.type === Fog) scene.fog = options;
       else if (child.type === Bloom) scene.bloom = options;
       else if (child.type === Vignette) scene.vignette = options.amount as Animated<number> | undefined;
@@ -79,15 +123,14 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
   return { prepared: prepareWorldScene(scene), overlay };
 }
 function WorldSurface({ id, width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, backgroundColor = "#05060a", quality = "auto",
-  exposure = 1, previewTime = 4, borderRadius = 0, enter, scrim = false, fallback, active = true, children, accessibilityLabel }: WorldProps) {
+  exposure = 1, previewTime = 4, borderRadius = 0, enter, scrim = false, fallback, active = true, children, accessibilityLabel, postOrder }: WorldProps) {
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
   // GPU pipelines keep their identity across clock navigation and surface resizes.
-  const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim), [children, quality, exposure, backgroundColor, scrim]);
-  const { counts: { box, ring, sphere, tube }, backgroundVector: [red, green, blue] } = worldGraphTopology(prepared);
-  const graph = useMemo(() => buildWorldGraph({ quality, counts: { box, ring, sphere, tube }, backgroundVector: [red, green, blue] }),
-    [quality, box, ring, sphere, tube, red, green, blue]);
+  const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder), [children, quality, exposure, backgroundColor, scrim, postOrder]);
+  const topology = JSON.stringify(worldGraphTopology(prepared));
+  const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
   const playback = usePlayback();
   const [continuity] = useState(() => id ? retainedPose(id) : undefined);
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
