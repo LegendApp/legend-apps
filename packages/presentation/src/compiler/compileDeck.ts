@@ -24,7 +24,7 @@ import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLoc
 // Pass plugin modules rather than paths so the shipped compiler can be a single bundle.
 const workletsPlugin = require("react-native-worklets/plugin");
 const reactCompilerPlugin = require("babel-plugin-react-compiler");
-const blockScopingPlugin = require("@babel/plugin-transform-block-scoping");
+const reactNativePreset = require("@react-native/babel-preset");
 export const hostModules = new Set([
   "react",
   "react/compiler-runtime",
@@ -345,14 +345,15 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     }
     // Built-in transition sources enter through a separate loader, so serialize
     // their worklets here too. Imported deck source was serialized before bundling.
-    // Hermes shares captured loop bindings without Babel's block-scope transform.
-    // Run it after bundling so esbuild's generated export getters are lowered too.
+    // Lower classes and scoped bindings for Hermes after bundling so generated
+    // export getters are covered too. Deck helpers must stay inline.
     const code = transformSync(output.text, {
       babelrc: false,
       compact: false,
       configFile: false,
       filename: "deck.js",
-      plugins: [[workletsPlugin, { disableSourceMaps: true }], blockScopingPlugin],
+      presets: [[reactNativePreset, { disableImportExportTransform: true, disableStaticViewConfigsCodegen: true, enableBabelRuntime: false, unstable_transformProfile: "hermes-stable" }]],
+      plugins: [[workletsPlugin, { disableSourceMaps: true }]],
       sourceMaps: "inline",
       sourceType: "script",
     })?.code;
