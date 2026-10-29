@@ -62,7 +62,7 @@ test("manifests reject missing, incompatible, unexported and escaping entries", 
     expect(() => resolveEffectPack(ref, packs)).toThrow();
   }
   const manifest = path.join(packs, "motion/pack.json");
-  fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 2, exports: { Pose: "./Pose.ts" } }));
+  fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 3, exports: { Pose: "./Pose.ts" } }));
   expect(() => resolveEffectPack("slides:motion/Pose", packs)).toThrow("incompatible");
   fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 1, exports: { Pose: "../../outside.ts" } }));
   expect(() => resolveEffectPack("slides:motion/Pose", packs)).toThrow();
@@ -93,7 +93,7 @@ test("cross-pack imports require declared dependency versions and track both roo
 });
 
 test("local pack manifests reject capabilities absent from this host before evaluation", async () => {
-  for (const requirements of [{ hostApiVersion: 2, capabilities: [] }, { hostApiVersion: 1, capabilities: ["unknown-engine"] }]) {
+  for (const requirements of [{ hostApiVersion: 3, capabilities: [] }, { hostApiVersion: 1, capabilities: ["unknown-engine"] }]) {
     const { deck, packs } = fixture({
       "packs/motion/pack.json": JSON.stringify({ id: "motion", version: "1.0.0", ...requirements, exports: { Pose: "./Pose.ts" } }),
       "packs/motion/Pose.ts": 'throw new Error("must never evaluate"); export const sample = 1;',
@@ -111,4 +111,10 @@ test("the signed host retains every capability required by the current source pa
     const manifest = JSON.parse(fs.readFileSync(path.join(packs, id, "pack.json"), "utf8"));
     expect(effectPackIncompatibility(manifest)).toBeUndefined();
   }
+});
+
+test("host API 2 accepts multipass packs while retaining API 1", () => {
+  expect(effectPackIncompatibility({ hostApiVersion: 2, capabilities: ["webgpu", "webgpu-multipass", "reanimated"] })).toBeUndefined();
+  expect(effectPackIncompatibility({ hostApiVersion: 1, capabilities: ["webgpu"] })).toBeUndefined();
+  for (const hostApiVersion of [0, 1.5, 3]) expect(effectPackIncompatibility({ hostApiVersion })).toContain("this app provides 2");
 });

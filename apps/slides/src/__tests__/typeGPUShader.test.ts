@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true } = {}) {
+function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -45,17 +45,18 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
       runOnJS: fn => fn, runOnUI: fn => fn,
     },
     "./slidesStore": {},
+    "./gpuRenderGraph": { encodeRenderGraph: () => calls.push(["graph"]) },
   };
   const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(
     name => mocks[name] ?? require(name), {},
   );
   UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
-    clock: {}, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
+    clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
     effectActive, maxTime, frameTimeIndex, clockMode, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
-    playback, frameData,
+    playback, frameData, redraw: () => effects[0](),
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
@@ -284,4 +285,50 @@ test("geometry can retain slide time across steps while uploading UI data and co
   const count=f.uniforms.length;
   f.tick(); expect(f.uniforms).toHaveLength(count);
   f.stop();
+});
+
+
+test("multipass surfaces redraw a frozen frame after paused and outgoing resizing", () => {
+  const f = frames({ graph: true, data: true });
+  f.tick();
+  const lastFrame = f.uniforms.at(-2);
+  expect(f.calls.filter(call => call[0] === "graph")).toHaveLength(2);
+  for (const phase of ["paused", "outgoing"]) {
+    f.playback.value = { ...f.playback.value, phase, stepTime: lastFrame[0] };
+    f.redraw();
+    expect(f.uniforms.at(-2).slice(0, 4)).toEqual([lastFrame[0], 0, lastFrame[2], lastFrame[3]]);
+    const count = f.uniforms.length;
+    f.tick(); expect(f.uniforms).toHaveLength(count);
+  }
+  f.stop();
+  expect(f.calls.filter(call => call[0] === "destroy")).toHaveLength(1);
+});
+
+test("frame failures report the latest slide context as well as stopping the surface", () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false, presets: [require.resolve("@react-native/babel-preset")],
+  });
+  let state = 0, refIndex = 0, slideIndex = 1, preview = false;
+  const refs = [], errors = [], reports = [];
+  const mocks = {
+    react: { useContext: () => 1, useRef: value => refs[refIndex++] ??= { current: value }, useEffect() {}, useLayoutEffect: effect => effect(),
+      useState: () => [state++ % 3 === 0 ? { id: 1 } : undefined, message => errors.push(message)] },
+    "react-native": { View: "View", Platform: { OS: "web" } }, "react-native-webgpu": { Canvas: "Canvas" }, "@shopify/react-native-skia": {},
+    "react-native-reanimated": {}, "./gpuRenderGraph": {},
+    "@legend-apps/presentation": { useBackgroundSize: () => ({ width: 1920, height: 1080 }), useBackgroundIntensity: () => 1,
+      usePresentationValue: field => field === "slideIndex" ? slideIndex : preview, usePreparationTask() {} },
+    "./slidesStore": { reportSlideError: (...args) => reports.push(args) },
+  };
+  const renderer = new Function("require", "exports", "navigator", code + "\nreturn TypeGPUShader;")(
+    name => mocks[name] ?? require(name), {}, { gpu: {} },
+  );
+  const first = renderer({ code: "" });
+  const onError = first.props.children[1].props.onError;
+  slideIndex = 4; preview = true; state = 0; refIndex = 0;
+  renderer({ code: "" });
+  onError("draw failed");
+  expect(errors).toEqual(["draw failed"]);
+  expect(reports).toEqual([["draw failed", 4, true]]);
 });

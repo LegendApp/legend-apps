@@ -203,12 +203,12 @@ test("the compiler CLI lists, installs with progress, compiles from Application 
 
 test("future host versions and capabilities are isolated before any archive download", async () => {
   const f = fixture();
-  f.catalog.packs.motion.versions["2.0.0"].hostApiVersion = 2;
-  expect((await loadEffectCatalog(f.options.catalogURL)).packs.motion.versions["2.0.0"].hostApiVersion).toBe(2);
+  f.catalog.packs.motion.versions["2.0.0"].hostApiVersion = 3;
+  expect((await loadEffectCatalog(f.options.catalogURL)).packs.motion.versions["2.0.0"].hostApiVersion).toBe(3);
   await installEffectPacks(["motion"], f.options);
   const lock = fs.readFileSync(effectLockPath(f.deck), "utf8");
   const active = fs.readFileSync(path.join(f.directory, "motion/active.json"), "utf8");
-  for (const incompatible of [{ hostApiVersion: 2, capabilities: [] }, { hostApiVersion: 1, capabilities: ["future-engine"] }]) {
+  for (const incompatible of [{ hostApiVersion: 3, capabilities: [] }, { hostApiVersion: 1, capabilities: ["future-engine"] }]) {
     Object.assign(f.catalog.packs.motion.versions["2.0.0"], incompatible);
     f.catalog.packs.motion.latest = "2.0.0";
     const before = f.requests();

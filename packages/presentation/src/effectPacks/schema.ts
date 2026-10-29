@@ -48,9 +48,9 @@ export function validateCatalog(catalog: EffectCatalog) {
 }
 
 /** Capabilities exposed by the signed Slides host; packs cannot add native engines. */
-const effectHostCapabilities = new Set(["reanimated", "skia", "webgpu", "lottie", "native-video"]);
+const effectHostCapabilities = new Set(["reanimated", "skia", "webgpu", "webgpu-multipass", "lottie", "native-video"]);
 export function effectPackIncompatibility(pack: { hostApiVersion: number; capabilities?: string[] }) {
-  if (pack.hostApiVersion !== 1) return `Requires host API ${pack.hostApiVersion}; this app provides 1.`;
+  if (!Number.isSafeInteger(pack.hostApiVersion) || pack.hostApiVersion < 1 || pack.hostApiVersion > 2) return `Requires host API ${pack.hostApiVersion}; this app provides 2.`;
   if (pack.capabilities !== undefined && !strings(pack.capabilities)) return "Invalid host capabilities.";
   const missing = (pack.capabilities ?? []).filter(capability => !effectHostCapabilities.has(capability));
   if (missing.length) return `Requires unavailable host capabilities: ${missing.join(", ")}.`;

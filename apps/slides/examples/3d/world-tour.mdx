@@ -1,0 +1,88 @@
+---
+title: World Tour
+aspectRatio: 16:9
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050811"
+  color: "#f8fafc"
+---
+
+import { Text } from "react-native"
+import { World, Camera, Graph, tree, wave, subset, Orbs, Sphere, Box, Tube, Ring, Fog, Bloom, Vignette, Grain } from "slides:world/World"
+
+export const network = tree("root", [
+  ["north", [["n1", ["n11", "n12", "n13"]], ["n2", ["n21", "n22", "n23"]]]],
+  ["east", [["e1", ["e11", "e12", "e13"]], ["e2", ["e21", "e22", "e23"]]]],
+  ["west", [["w1", ["w11", "w12", "w13"]], ["w2", ["w21", "w22", "w23"]]]],
+])
+
+# Into the world
+
+<World width={1696} height={650} quality="medium" exposure={1.1}>
+  <Camera shots={[{ at: 0, position: [0, 4, 19], target: [0, 0, 0], fov: 42 }, { at: 2, position: [6, 3, 14], target: [0, 0, 0], fov: 42 }]} duration={3} />
+  <Orbs count={48} colors={["#22d3ee", "#f59e0b"]} />
+  <Fog density={0.035} />
+  <Bloom intensity={1.4} />
+  <Vignette amount={0.3} />
+  <Grain amount={0.025} />
+</World>
+
+---
+
+# A moving viewpoint
+
+<World id="orbit" width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 5, 18], target: [0, 0, 0], fov: 40 }, { step: 1, orbit: { center: [0, 0, 0], radius: 15, height: 5, speed: 0.15 } }, { step: 2, position: [2, 1, 9], target: [0, 0, 0], fov: 40 }]} duration={1.5} ease="cubic" />
+  <Orbs count={32} colors={["#22d3ee", "#f59e0b"]} />
+  <Ring radius={7} color="#22d3ee" />
+  <Bloom intensity={1.2} />
+  <Fog density={0.025} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Orbit</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">Dolly</Text></Step>
+
+---
+
+# Across the branches
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 6, 22], target: [0, 0, 0], fov: 42 }, { step: 2, position: [8, 4, 17], target: [0, 0, 0], fov: 42 }]} duration={1.4} />
+  <Graph data={network} node={{ color: "#22d3ee", dim: "#101d35", size: 0.3 }} edge={{ curve: 0.4, glow: 0.6 }} activate={[wave({ from: "root", step: 1, speed: 0.35 }), subset({ branches: ["east"], step: 2 })]} />
+  <Ring radius={8} color="#f59e0b" />
+  <Bloom intensity={1.5} />
+  <Fog density={0.025} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Cascade</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">One branch</Text></Step>
+
+---
+
+# Light in the fog
+
+<World width={1696} height={650} quality="high" exposure={1.2} scrim>
+  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 17, height: 4, speed: 0.06 }, fov: 40 }]} />
+  <Orbs count={60} colors={["#22d3ee", "#f59e0b"]} />
+  <Fog density={0.055} color="#071020" />
+  <Bloom intensity={1.8} />
+  <Vignette amount={0.4} />
+  <Grain amount={0.03} />
+  <Text className="absolute bottom-12 left-12 text-5xl font-bold text-white">Room for a thought</Text>
+</World>
+
+---
+
+# Simple shapes
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, position: [0, 5, 16], target: [0, 0, 0], fov: 42 }]} />
+  <Sphere position={[-4, 0, 0]} size={1} color="#22d3ee" emissive={2} />
+  <Box position={[0, 0, 0]} size={1} scale={[0.7, 1.6, 0.7]} color="#f59e0b" emissive={1.5} />
+  <Tube position={[-4, 0, 0]} end={[4, 0, 0]} curve={0.5} thickness={0.04} color="#22d3ee" emissive={3} />
+  <Ring position={[4, 0, 0]} radius={1.5} color="#f59e0b" emissive={3} />
+  <Bloom intensity={1.2} />
+  <Fog density={0.02} />
+</World>
