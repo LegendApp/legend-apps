@@ -347,6 +347,20 @@ test("spray sampling is stateless and gates against lit leaves", () => {
   expect(particles.map(instance => instancePosition(instance, clock(2, 1, { 1: 0 })))).toEqual(positions);
 });
 
+test("each spray particle carries only the leaf it samples", () => {
+  const scene = prepareWorldScene({ instances: [...graphInstances({ data: tree("root", [["a", ["a1", "a2", "a3"]], ["b", ["b1", "b2", "b3"]]]) }),
+    ...sprayInstances({ id: "spray", under: "leaves:lit", rate: 10, lifetime: 2 })] });
+  const leaves = scene.instances.filter(instance => instance.kind === "sphere" && /^node:[ab]\d$/.test(instance.id ?? ""));
+  const carried = scene.instances.filter(instance => instance.spray).map(particle => {
+    const found = new Set<unknown>();
+    const walk = (value: unknown) => { if (!value || typeof value !== "object") return; if (leaves.includes(value as never)) { found.add(value); return; } Object.values(value).forEach(walk); };
+    walk(particle.spray);
+    expect(found.size).toBe(1);
+    return [...found][0];
+  });
+  expect(new Set(carried).size).toBe(leaves.length);
+});
+
 test("explicit materials and rim lights preserve dim graph nodes until activation", () => {
   const scene = prepareWorldScene({ instances: graphInstances({ data: tree("root"), nodes: { root: { material: "bright" } }, activate: [wave({ from: "root", step: 1 })] }),
     materials: { bright: { albedo: "#ffffff", rim: 2 } }, rim: { intensity: 3 } });

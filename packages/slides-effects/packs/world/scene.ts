@@ -30,7 +30,7 @@ export type Instance = {
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
   pulse?: { options: PulseOptions; anchors: Instance[]; curves: number[]; tail: boolean };
-  spray?: { options: SprayOptions; sources: Instance[]; phase: number };
+  spray?: { options: SprayOptions; source?: Instance; phase: number };
   rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3 };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
@@ -145,7 +145,7 @@ export function sprayInstances(options: SprayOptions = {}): Instance[] {
   if (!Number.isFinite(count) || count < 0 || count > 10000 || (options.lifetime ?? 2) <= 0) throw new Error("World spray requires a positive lifetime and at most 10000 particles");
   return orbInstances({ id: options.id ?? "spray", count, colors: [options.color ?? "#22d3ee"], radius: options.size ?? 0.025,
     spread: [0, 0, 0], position: options.position, seed: options.seed, drift: 0, emissive: 5 }).map((instance, index) => ({
-      ...instance, spray: { options, sources: [], phase: ((index + 1) * 0.61803398875) % 1 },
+      ...instance, spray: { options, phase: ((index + 1) * 0.61803398875) % 1 },
     }));
 }
 export function rowInstances(options: RowsOptions): Instance[] {
@@ -261,7 +261,7 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
     const spray = instance.spray, life = spray.options.lifetime ?? 2;
     const elapsed = spray.options.step === undefined ? clock.slideTime : triggerElapsed(spray.options.step, clock);
     const age = ((Math.max(0, elapsed) / life + spray.phase) % 1) * life;
-    if (spray.sources.length) position = instancePosition(spray.sources[Math.floor(spray.phase * spray.sources.length) % spray.sources.length], clock);
+    if (spray.source) position = instancePosition(spray.source, clock);
     else {
       const offset = stageOffset(instance.stages, clock);
       position = [position[0] + offset[0], position[1] + offset[1], position[2] + offset[2]];
@@ -309,7 +309,7 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
     const spray = instance.spray, elapsed = spray.options.step === undefined ? clock.slideTime : triggerElapsed(spray.options.step, clock);
     if (elapsed < 0) return 0;
     const phase = (elapsed / (spray.options.lifetime ?? 2) + spray.phase) % 1;
-    const source = spray.sources[Math.floor(spray.phase * spray.sources.length) % spray.sources.length];
+    const source = spray.source;
     const lit = source?.graph ? activationAt(source.graph.node, source.graph.nodes, source.graph.activate, clock) : 1;
     return Math.sin(phase * Math.PI) * lit;
   }
@@ -471,7 +471,8 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       const sources = under === "leaves:lit" ? instances.filter(item => item.kind === "sphere" && item.graph &&
         !item.graph.nodes.some(node => node.parent === item.graph!.node.id)) : under ? [byId.get(under) ?? byId.get(`node:${under}`)].filter((item): item is typeof instances[number] => !!item) : [];
       if (under && sources.length === 0) throw new Error(`Unknown world spray source: ${under}`);
-      instance.spray = { ...instance.spray, sources };
+      // Keep only the source this particle samples; serializing every candidate per particle multiplies the scene copied to the UI.
+      instance.spray = { ...instance.spray, source: sources[Math.floor(instance.spray.phase * sources.length) % sources.length] };
     }
   }
   const visiting = new Set<Instance>(), visited = new Set<Instance>();
@@ -479,7 +480,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if (visiting.has(instance)) throw new Error("World motion anchors cannot form a cycle");
     if (visited.has(instance)) return;
     visiting.add(instance);
-    for (const anchor of instance.pulse?.anchors ?? instance.spray?.sources ?? []) verifyAnchors(anchor);
+    for (const anchor of instance.pulse?.anchors ?? (instance.spray?.source ? [instance.spray.source] : [])) verifyAnchors(anchor);
     visiting.delete(instance); visited.add(instance);
   }
   instances.forEach(verifyAnchors);
