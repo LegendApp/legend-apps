@@ -349,6 +349,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     // export getters are covered too. Deck helpers must stay inline.
     const code = transformSync(output.text, {
       babelrc: false,
+      comments: true,
       compact: false,
       configFile: false,
       filename: "deck.js",

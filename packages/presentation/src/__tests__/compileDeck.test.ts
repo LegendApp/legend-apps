@@ -331,6 +331,17 @@ describe("compileDeck", () => {
     expect(result.uniwindCode).toContain("bg-fuchsia-500");
   });
 
+  test("keeps pure annotations in executable output", async () => {
+    const deckPath = createDeck({
+      "deck.mdx": `import { Card } from "./Card"\n\n<Card />`,
+      "Card.tsx": `import { View } from "react-native"; export function Card() { return <View />; }`,
+    });
+    const result = await compileDeck(deckPath);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.code.split("//# sourceMappingURL=")[0]).toMatch(/\/\*\s*[@#]__PURE__\s*\*\/\s*\(0, import_jsx_runtime\d*\.jsx\)\(import_react_native\d*\.View/);
+  });
+
   test("bundles a template selected by file name in deck frontmatter", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
