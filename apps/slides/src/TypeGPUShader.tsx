@@ -244,7 +244,7 @@ function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, fra
     }
     simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
     const frameIndex = frozen ? Math.max(0, count.value - 1) : count.value;
-    const scale = renderScale?.value;
+    const scale = renderScale?.get();
     try {
       const time = samplePlayback(state, previewTime, clockMode);
       device.queue.writeBuffer(clock, 0, new Float32Array([time, dt, frameIndex, state.stepIndex, aspect, brightness, samplePlayback(state, previewTime, "slide"), samplePlayback(state, previewTime, "step")]));
@@ -337,7 +337,10 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
     r.configured.value = true;
   }
   const data = frameData?.value;
-  if (r.frameData && data) device.queue.writeBuffer(r.frameData, 0, new Float32Array(data!));
+  if (r.frameData && data) {
+    if (data.length * 4 > r.frameData.size) throw new Error(`Frame data has ${data.length} values; its buffer holds ${r.frameData.size / 4}`);
+    device.queue.writeBuffer(r.frameData, 0, new Float32Array(data));
+  }
   const encoder = device.createCommandEncoder();
   if (r.graph) {
     encodeRenderGraph(r.graph.value, device, encoder, context.getCurrentTexture(), renderScale);
@@ -346,7 +349,7 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   }
   const source = compute ? frame % 2 : 0;
   const target = compute ? 1-source : 0;
-  if (compute) {
+  if (compute && particleCount > 0) {
     const simulation = encoder.beginComputePass();
     simulation.setPipeline(compute); simulation.setBindGroup(0, groups[source]);
     simulation.dispatchWorkgroups(Math.ceil(particleCount / 64)); simulation.end();
@@ -357,7 +360,7 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   }] });
   pass.setBindGroup(0, groups[target]);
   pass.setPipeline(render!); pass.draw(3);
-  if (particles) { pass.setPipeline(particles); pass.draw(particleVertexCount, particleCount); }
+  if (particles && particleCount > 0 && particleVertexCount > 0) { pass.setPipeline(particles); pass.draw(particleVertexCount, particleCount); }
   pass.end();
   if (r.composite) {
     const compositePass = encoder.beginRenderPass({ colorAttachments: [{
