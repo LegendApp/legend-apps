@@ -869,3 +869,17 @@ boundaries in the compiler, source editor, and speaker-notes editor. A top-level
 dash separator starts a slide even directly after text; use `## Heading` for a
 heading instead of setext underline syntax. Separators inside code and JSX stay
 inside their containing slide.
+
+### Native frame scheduler check
+
+After normal macOS native preparation applies the tracked Worklets patch, run
+this local check from the repository root with a 60 Hz display:
+
+```sh
+patches/tests/run-react-native-worklets-frame-queue.sh
+```
+
+The check compiles the installed source under `shell/.legend/spark/node_modules`;
+it does not apply the patch. To check another candidate, pass its exact
+`AnimationFrameQueue.mm` path and set `SPARK_NODE_MODULES` to the matching native
+dependencies. This display-dependent check is separate from hosted CI.

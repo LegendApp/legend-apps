@@ -7,6 +7,9 @@ on:
       - packages/presentation/**
       - packages/slides-effects/**
       - patches/**
+      - shell/src/global.css
+      - shell/package.json
+      - scripts/compile-slides.ts
       - package.json
       - bun.lock
       - .github/workflows/slides-world.yml
