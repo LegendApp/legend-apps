@@ -80,11 +80,18 @@ int main()
   @autoreleasepool {
     NSThread.currentThread.name = @"com.facebook.react.runtime.JavaScript";
     CVDisplayLinkRef probe;
-    CVDisplayLinkCreateWithActiveCGDisplays(&probe);
+    if (CVDisplayLinkCreateWithActiveCGDisplays(&probe) != kCVReturnSuccess) {
+      CHECK(false, "a display link is available");
+      return 1;
+    }
     CVTime nominal = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(probe);
     const double period = 1000.0 * nominal.timeValue / nominal.timeScale;
     CVDisplayLinkRelease(probe);
     printf("INFO display period %.2f ms\n", period);
+    if (fabs(period - 1000.0 / 60) > 0.5 || !std::isfinite(period)) {
+      CHECK(false, "frame queue tests require a 60 Hz display");
+      return 1;
+    }
 
     for (double busyMs : {0.0, 4.0, 8.0, 12.0}) {
       AnimationFrameQueue *queue = [AnimationFrameQueue new];
@@ -94,6 +101,11 @@ int main()
       runFor(1000);
       loop.running = false;
       runFor(4 * period);
+      dispatch_sync(turboModuleQueue(), ^{ [queue invalidate]; });
+      if (loop.calls.size() < 7 || loop.timestamps.size() < 2) {
+        CHECK(false, "busy %.0f ms delivered too few frame samples (%zu calls, %zu timestamps)", busyMs, loop.calls.size(), loop.timestamps.size());
+        return 1;
+      }
       auto frameDeltas = deltas(loop.calls, 5);
       double fps = 1000.0 * (loop.calls.size() - 6) / (loop.calls.back() - loop.calls[5]);
       printf("INFO busy %.0f ms: %.1f fps, median %.2f ms\n", busyMs, fps, median(frameDeltas));
@@ -101,7 +113,6 @@ int main()
       auto timestampDeltas = deltas(loop.timestamps);
       CHECK(*std::min_element(timestampDeltas.begin(), timestampDeltas.end()) > 0, "busy %.0f ms timestamps increase", busyMs);
       CHECK(fabs(loop.timestamps.back() - loop.calls.back()) < 3 * period, "timestamps are milliseconds near the media clock");
-      dispatch_sync(turboModuleQueue(), ^{ [queue invalidate]; });
     }
 
     {
@@ -113,6 +124,11 @@ int main()
       runFor(600);
       loop.running = false;
       runFor(4 * period);
+      dispatch_sync(turboModuleQueue(), ^{ [queue invalidate]; });
+      if (loop.calls.size() < 26 || loop.timestamps.size() < 26) {
+        CHECK(false, "stall test delivered too few frame samples (%zu calls, %zu timestamps)", loop.calls.size(), loop.timestamps.size());
+        return 1;
+      }
       std::vector<double> after;
       for (size_t i = 20; i < loop.calls.size() && after.size() < 6; i++) after.push_back(loop.calls[i]);
       auto afterDeltas = deltas(after);
@@ -126,7 +142,6 @@ int main()
       CHECK(burst <= 1, "main thread stall does not replay queued pulses (%d frames)", burst);
       CHECK(minDelta > period / 2, "frames after the stall stay one pulse apart (min %.2f ms)", minDelta);
       CHECK(minTimestampDelta > period / 2, "timestamps after the stall stay one pulse apart (min %.2f ms)", minTimestampDelta);
-      dispatch_sync(turboModuleQueue(), ^{ [queue invalidate]; });
     }
 
     {

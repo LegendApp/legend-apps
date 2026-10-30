@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the patched Worklets AnimationFrameQueue against a real display link. Needs a display.
+# Runs the patched Worklets AnimationFrameQueue against a real 60 Hz display link.
 # Usage: run-react-native-worklets-frame-queue.sh [AnimationFrameQueue.mm]
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
