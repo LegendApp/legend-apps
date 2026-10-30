@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { compileDeck } from "../compiler";
-import { updateSlideSpeakerNotes } from "../speakerNotesSource";
+import { getDeckSourceStructure, updateSlideSpeakerNotes } from "../speakerNotesSource";
 
 describe("updateSlideSpeakerNotes", () => {
   test("updates only the target slide comment", () => {
@@ -217,4 +217,30 @@ test("alternate separators keep notes edits bound to their own slide", () => {
     expect(updated).toContain("<!-- changed -->");
     expect(updated).not.toContain("<!-- second -->");
   }
+});
+
+test("comparison and arrow operators in JSX expressions keep later slides split", () => {
+  const blocks = [
+    "<Rows changed={step >= 1} />",
+    "<Rows changed={step <= 1} />",
+    "<Rows changed={step > 1} />",
+    "<Rows render={(item) => item.label} />",
+    '<Rows label={"a > b"} hint={\'c >= d\'} note={`e => ${f > g ? "h" : "i"}`} />',
+    "<Rows style={{ opacity: step >= 1 ? 1 : 0, nested: { deep: step > 2 } }} />",
+    "<Rows\n  changed={step >= 1}\n  render={() => ({ value: step > 2 })}\n/>",
+    "<Steps count={3}>{step => step >= 1 && <Text>{step > 1 ? \"more > less\" : \"less\"}</Text>}</Steps>",
+    "<View>\n  {items.filter(item => item.size >= 2).map(item => <Text key={item.id}>{item.label}</Text>)}\n</View>",
+  ];
+  for (const block of blocks) {
+    const source = `# One\n\n${block}\n\n---\n\n# Two\n\n---\n\n# Three\n`;
+    const { slides } = getDeckSourceStructure(source);
+    expect(slides.map((slide) => source.slice(slide.contentStart, slide.end).trim())).toEqual([`# One\n\n${block}`, "# Two", "# Three"]);
+  }
+});
+
+test("attribute strings after a comparison stay literal", () => {
+  const source = '# One\n\n<Rows changed={step >= 1} label="<!-- literal -->" />\n\n<!-- note -->\n\n---\n\n# Two\n';
+  const { comments, slides } = getDeckSourceStructure(source);
+  expect(comments.map((comment) => source.slice(comment.start, comment.end))).toEqual(["<!-- note -->"]);
+  expect(slides).toHaveLength(2);
 });
