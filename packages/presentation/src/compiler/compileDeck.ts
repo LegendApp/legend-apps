@@ -18,7 +18,7 @@ import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 import { loadUniwindCompiler } from "./uniwindCompiler";
 import { defaultEffectPacksDirectory, MissingEffectPack, resolveEffectPack } from "./effectPacks";
-import type { EffectLock } from "../effectPacks/schema";
+import { isLocalPack, type EffectLock } from "../effectPacks/schema";
 import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLock } from "../effectPacks/storage";
 
 // Pass plugin modules rather than paths so the shipped compiler can be a single bundle.
@@ -205,10 +205,11 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
         try {
           const importerRoot = libraryRoots.get(args.importer);
           const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
-            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified);
-          if (pack.pin && options.resolvedPins) {
+            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified, path.dirname(entryPath));
+          if (pack.local && options.resolvedPins) options.resolvedPins[pack.id] = pack.local;
+          else if (pack.pin && options.resolvedPins) {
             const previous = options.resolvedPins[pack.id];
-            if (previous && (previous.version !== pack.pin.version || previous.sha256 !== pack.pin.sha256)) throw new Error(`Effect dependency conflict for "${pack.id}".`);
+            if (previous && (isLocalPack(previous) || previous.version !== pack.pin.version || previous.sha256 !== pack.pin.sha256)) throw new Error(`Effect dependency conflict for "${pack.id}".`);
             options.resolvedPins[pack.id] = pack.pin;
           }
           libraryRoots.set(pack.file, pack.root);

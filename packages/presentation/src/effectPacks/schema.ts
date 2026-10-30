@@ -1,5 +1,8 @@
 export type PackPin = { version: string; sha256: string };
-export type EffectLock = { schemaVersion: 1; packs: Record<string, PackPin> };
+/** A deck-relative pack folder, used from source rather than pinned to a catalog checksum. */
+export type LocalPackSource = { path: string };
+export type EffectLock = { schemaVersion: 1; packs: Record<string, PackPin | LocalPackSource> };
+export const isLocalPack = (entry: PackPin | LocalPackSource | undefined): entry is LocalPackSource => !!entry && "path" in entry;
 export type PackRelease = PackPin & { url: string; bytes: number; hostApiVersion: number; capabilities: string[];
   dependencies: Record<string, string>; exports: Record<string, string> };
 export type EffectListing = { slug: string; title: string; description: string; pack: string; entry: string; symbol: string;
@@ -16,7 +19,11 @@ export function validatePin(pin: PackPin) {
 }
 export function validateLock(lock: EffectLock) {
   if (!lock || lock.schemaVersion !== 1 || !record(lock.packs)) throw new Error("Invalid effect lockfile.");
-  for (const [id, pin] of Object.entries(lock.packs)) { if (!validPackId(id)) throw new Error("Invalid pack ID."); validatePin(pin); }
+  for (const [id, pin] of Object.entries(lock.packs)) {
+    if (!validPackId(id)) throw new Error("Invalid pack ID.");
+    if (!isLocalPack(pin)) validatePin(pin);
+    else if (typeof pin.path !== "string" || !pin.path || pin.path.startsWith("/")) throw new Error("Local effect packs must use a deck-relative path.");
+  }
   return lock;
 }
 export function validateCatalog(catalog: EffectCatalog) {
@@ -60,8 +67,10 @@ export function resolveInstallation(catalog: EffectCatalog, ids: string[], exist
   const pins = { ...existing.packs }; const releases = new Map<string, PackRelease>(); const visiting = new Set<string>();
   function visit(id: string, required?: string) {
     if (!validPackId(id)) throw new Error("Invalid effect pack ID.");
+    const pin = requested[id] ?? pins[id];
+    if (isLocalPack(pin)) return;
     const pack = catalog.packs[id]; if (!pack) throw new Error(`Effect pack "${id}" is not in the catalog.`);
-    const pin = requested[id] ?? pins[id]; if (pin) validatePin(pin);
+    if (pin) validatePin(pin);
     const version = pin?.version ?? required ?? pack.latest;
     if (required && version !== required) throw new Error(`Effect dependency conflict for "${id}": ${version} versus ${required}.`);
     const release = pack.versions[version];
