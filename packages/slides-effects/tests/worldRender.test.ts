@@ -60,6 +60,16 @@ test("custom draw groups keep marker-local instance ids and SDF ranges outside p
   expect(graph.uniformsSize).toBe(worldHeaderSize + 7 * worldInstanceSize);
 });
 
+test("custom draw order compares WGSL by code unit rather than locale", () => {
+  const lower = quad.replace("vec3f(.2,.5,.8)", "vec3f(.2,.5,.8)*alpha"), upper = quad.replace("vec3f(.2,.5,.8)", "vec3f(.2,.5,.8)*Beta");
+  const topology = worldGraphTopology(scene({ instances: [primitive("sphere"), ...customInstances({ wgsl: lower, vertexCount: 6, count: 2 }),
+    ...customInstances({ wgsl: upper, vertexCount: 3, count: 3 })] }));
+  expect(topology.customs?.map(draw => [draw.wgsl, draw.offset, draw.count])).toEqual([[upper, 1, 3], [lower, 4, 2]]);
+  const graph = buildWorldGraph(topology);
+  expect(graph.passes.filter(pass => pass.kind === "render").map(pass => [pass.vertexCount, pass.instanceCount])).toEqual([[expect.any(Number), 1], [3, 3], [6, 2]]);
+  expect(graph.uniformsSize).toBe(worldHeaderSize + 6 * worldInstanceSize);
+});
+
 test("postOrder rewires HDR stages and custom hooks retain the declared color-space boundary", () => {
   const graph = buildWorldGraph(scene({ dof: {}, postOrder: ["bloom", "dof", "fog"], passes: [
     { id: "before-focus", wgsl: scanlines, before: "dof" }, { id: "ldr", wgsl: scanlines, after: "tonemap" },
