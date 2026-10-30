@@ -400,7 +400,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     if (instance.pulse?.tail) emissive *= 0.3;
     if (instance.rows) {
       const highlight = rowHighlight(instance, clock);
-      if (highlight.changed) { color = instance.rows.flashColor; emissive += 1.5 + highlight.flash * 8; }
+      if (highlight.changed) { color = instance.rows.flashColor; emissive += 0.5 + highlight.flash * 4; }
       else if (highlight.dimmed) color = mixVector(color, [0, 0, 0], 0.8);
     }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);

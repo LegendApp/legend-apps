@@ -241,8 +241,9 @@ test("changed rows stay highlighted for the whole step while the others dim", ()
   expect(row(1, clock(5)).emissive).toBe(0.1);
   const entry = row(1, clock(1.1, 1, { 1: 1 })), settled = row(1, clock(9, 1, { 1: 1 }));
   expect(entry.emissive).toBeGreaterThan(settled.emissive);
+  expect(entry.emissive).toBeLessThan(4);
   expect(settled.color).toEqual([1, 0, 0]);
-  expect(settled.emissive).toBeCloseTo(1.6);
+  expect(settled.emissive).toBeCloseTo(0.6);
   expect(row(0, clock(9, 1, { 1: 1 })).color[0]).toBeCloseTo(grey[0] * 0.2);
   expect(row(2, clock(9, 1, { 1: 1 })).emissive).toBe(0.1);
   const later = clock(20, 2, { 1: 1, 2: 10 });
