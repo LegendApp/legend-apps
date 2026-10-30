@@ -95,8 +95,8 @@ function scanSource(lines: readonly SourceLine[], source: string) {
         if (ch === '"' || ch === "'" || ch === "`") { quote = ch; continue; }
       }
       if (ch === "\\") { at++; continue; }
-      if (ch === "<" && /^<\/?[A-Za-z]/.test(source.slice(at, at + 3))) tag = true;
-      if (ch === ">") tag = false;
+      if (!depth && ch === "<" && /^<\/?[A-Za-z]/.test(source.slice(at, at + 3))) tag = true;
+      if (!depth && ch === ">") tag = false;
       if (ch === "{") { depth++; continue; }
       if (ch === "}" && depth > 0) { depth--; continue; }
       if (depth > 0 || moduleCode) continue;
@@ -126,6 +126,49 @@ function scanSource(lines: readonly SourceLine[], source: string) {
   return { fenced, comments, literals };
 }
 
+/** Offset after the `}` matching the `{` at `start`, skipping JS strings and comments. */
+function expressionEnd(content: string, start: number) {
+  let depth = 0;
+  for (let at = start; at < content.length; at++) {
+    const ch = content[at];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      for (at++; at < content.length && content[at] !== ch; at++) if (content[at] === "\\") at++;
+    } else if (ch === "/" && content[at + 1] === "*") {
+      at = content.indexOf("*/", at + 2) + 1;
+      if (at <= 0) break;
+    } else if (ch === "/" && content[at + 1] === "/") {
+      at = content.indexOf("\n", at);
+      if (at < 0) break;
+    } else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) return at + 1;
+  }
+  return content.length;
+}
+
+const tagStart = /<(\/)?(?:[A-Za-z][\w.:-]*(?=[\s/>])|(?=>))/y;
+const selfClose = /\/\s*>/y;
+
+/** A JSX tag at `start`, whose `>` may not be inside an attribute string or expression. */
+function tagAt(content: string, start: number) {
+  tagStart.lastIndex = start;
+  const opening = tagStart.exec(content);
+  if (!opening) return undefined;
+  const closing = Boolean(opening[1]);
+  for (let at = tagStart.lastIndex; at < content.length; at++) {
+    const ch = content[at];
+    if (ch === "{") at = expressionEnd(content, at) - 1;
+    else if (ch === '"' || ch === "'") {
+      at = content.indexOf(ch, at + 1);
+      if (at < 0) return undefined;
+    } else if (ch === ">") return { closing, end: at + 1, selfClosing: false, start };
+    else if (ch === "/") {
+      selfClose.lastIndex = at;
+      return selfClose.test(content) ? { closing, end: selfClose.lastIndex, selfClosing: !closing, start } : undefined;
+    } else if (ch === "<") return undefined;
+  }
+  return undefined;
+}
+
 function jsxDepths(
   source: string,
   lines: readonly SourceLine[],
@@ -148,16 +191,19 @@ function jsxDepths(
   comments.forEach((comment) => mask(comment.start, comment.end));
 
   const tags: Array<{ closing: boolean; end: number; selfClosing: boolean; start: number }> = [];
-  const tagPattern = /<(\/)?(?:[A-Za-z][\w.:-]*|)(?:\s[^<>]*?)?(\/)?\s*>/g;
-  let match: RegExpExecArray | null;
   const content = masked.join("");
-  while ((match = tagPattern.exec(content))) {
-    tags.push({
-      closing: Boolean(match[1]),
-      end: match.index + match[0].length,
-      selfClosing: Boolean(match[2]),
-      start: match.index,
-    });
+  // Expressions are skipped whole: tags inside them balance there, and their lines
+  // are already excluded by expressionDepths.
+  for (let at = 0; at < content.length; at++) {
+    if (content[at] === "\\") at++;
+    else if (content[at] === "{") at = expressionEnd(content, at) - 1;
+    else if (content[at] === "<") {
+      const tag = tagAt(content, at);
+      if (tag) {
+        tags.push(tag);
+        at = tag.end - 1;
+      }
+    }
   }
 
   const events = tags.flatMap((tag) => tag.selfClosing
