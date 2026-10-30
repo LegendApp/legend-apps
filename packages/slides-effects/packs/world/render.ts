@@ -50,8 +50,8 @@ const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
   normal=right*cos(uv.y*6.2831853)+up*sin(uv.y*6.2831853);
   point=2.*(1.-t)*t*control+t*t*endpoint+normal*uniforms[base+19u];
 ` },
-  ring: { count: 32 * 6 * 6, code: `
-  let cell=vid/6u; let uv=(vec2f(f32(cell%32u),f32(cell/32u))+corner(vid))/vec2f(32.,6.);
+  ring: { count: 128 * 6 * 6, code: `
+  let cell=vid/6u; let uv=(vec2f(f32(cell%128u),f32(cell/128u))+corner(vid))/vec2f(128.,6.);
   let a=uv.x*6.2831853; let b=uv.y*6.2831853; let radial=vec3f(cos(a),0.,sin(a));
   normal=radial*cos(b)+vec3f(0.,sin(b),0.);
   point=radial*radius+normal*uniforms[base+19u];
@@ -248,9 +248,25 @@ const bloomComposite = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var bloom:texture_2d<f32>;
 @fragment fn bloomComposite(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(source,linearSampler,uv,0.).rgb+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9],1.); }`;
-const copyCode = `${worldBindings}
+// FXAA on the display-referred image catches what MSAA cannot: shading edges, the floor horizon and low-quality scenes.
+const fxaaCode = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
-@fragment fn copyColor(@location(0) uv:vec2f)->@location(0) vec4f { return textureSampleLevel(source,linearSampler,uv,0.); }`;
+fn fetch(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb; }
+fn luma(color:vec3f)->f32 { return dot(color,vec3f(.299,.587,.114)); }
+@fragment fn fxaa(@location(0) uv:vec2f)->@location(0) vec4f {
+ let texel=1./vec2f(textureDimensions(source)); let center=fetch(uv); let m=luma(center);
+ let nw=luma(fetch(uv+vec2f(-1.,-1.)*texel)); let ne=luma(fetch(uv+vec2f(1.,-1.)*texel));
+ let sw=luma(fetch(uv+vec2f(-1.,1.)*texel)); let se=luma(fetch(uv+vec2f(1.,1.)*texel));
+ let lumaMin=min(m,min(min(nw,ne),min(sw,se))); let lumaMax=max(m,max(max(nw,ne),max(sw,se)));
+ if(lumaMax-lumaMin<max(.0312,lumaMax*.125)) { return vec4f(center,1.); }
+ var direction=vec2f((sw+se)-(nw+ne),(nw+sw)-(ne+se));
+ let reduce=max((nw+ne+sw+se)*.03125,1./128.);
+ direction=clamp(direction/(min(abs(direction.x),abs(direction.y))+reduce),vec2f(-8.),vec2f(8.))*texel;
+ let inner=.5*(fetch(uv-direction/6.)+fetch(uv+direction/6.));
+ let outer=inner*.5+.25*(fetch(uv-direction*.5)+fetch(uv+direction*.5));
+ let l=luma(outer);
+ return vec4f(select(outer,inner,l<lumaMin || l>lumaMax),1.);
+}`;
 
 type CustomDraw = CustomGeometry & { offset: number; count: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
@@ -289,8 +305,9 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const scale = topology.quality === "low" ? .65 : topology.quality === "medium" ? .85 : 1;
   const levels = topology.quality === "low" ? 3 : 5;
   const samples = topology.quality === "low" ? 8 : topology.quality === "medium" ? 12 : 16;
+  const msaa = topology.quality === "low" ? 1 : 4;
   const passes: GPUPass[] = [];
-  const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale }, { id: "depth", format: "depth32float", scale },
+  const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa },
     { id: "bloom", format: "rgba16float", scale: scale * .5, mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * .5, mips: levels }];
   const background = topology.backgroundVector;
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
@@ -310,14 +327,14 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     if (!draws && !cleared) add("empty", "box", 0, 0);
   };
   if (topology.mirror) {
-    const reflectionScale = scale * (topology.reflectionScale ?? .5);
-    targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale });
+    const reflectionScale = scale * (topology.reflectionScale ?? 1);
+    targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale, samples: msaa }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale, samples: msaa });
     renderScene(true);
   }
   if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror), vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: topology.mirror ? ["reflect"] : [] });
   renderScene(false, !!topology.floor);
   if (topology.shafts) {
-    targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .25) });
+    targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .5) });
     passes.push({ kind: "fullscreen", id: "shafts", code: shaftCode(worldBindings, lights, topology.shaftSamples ?? samples), fragment: "shafts", reads: ["depth"], output: "shafts" });
   }
   let color = "hdr", customIndex = 0;
@@ -360,10 +377,10 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     custom(stage, false);
   }
   custom("tonemap", true);
-  const postTone = (topology.passes ?? []).some(item => item.after === "tonemap");
-  fullscreen("tonemap", finalCode(worldBindings), "tonemap", [color], postTone ? "tonemapped" : "screen");
+  fullscreen("tonemap", finalCode(worldBindings), "tonemap", [color], "tonemapped");
   custom("tonemap", false);
-  if (postTone) fullscreen("screen", copyCode, "copyColor", [color], "screen");
+  fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
+  if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");
   const passIds = new Set<string>();
   for (const pass of passes) {
     if (passIds.has(pass.id)) throw new Error("World pass id is duplicated: " + pass.id);

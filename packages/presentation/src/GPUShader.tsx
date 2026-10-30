@@ -29,6 +29,8 @@ export function GPUShader(props: GPUShaderProps) {
 export type GPUTarget = {
   id: string; format: "rgba16float" | "rgba8unorm" | "depth32float" | "r32float";
   scale?: number; mips?: number;
+  /** 4 renders through a multisampled attachment; colour resolves into this target, depth is read as texture_depth_multisampled_2d. */
+  samples?: 1 | 4;
 };
 export type GPUBufferTarget = { id: string; size: number; init?: Float32Array };
 /** Resource references accept `id@N` to select mip N; bindings follow reads, then writes. */

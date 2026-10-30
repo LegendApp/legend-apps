@@ -92,16 +92,17 @@ upload still scale with the instance count; the graph API targets 20–60 nodes.
 The pipeline is an instanced HDR scene with depth, optional planar reflections,
 height fog and volumetric lights, depth of field, a half-resolution bloom mip
 chain with a soft threshold knee and round 13-tap/tent filters, chromatic aberration, ACES exposure/tonemapping, sRGB encoding, vignette
-and grain. `high` and `auto` use full-resolution scene targets and five
+and grain, then FXAA. The drawable is backed at device pixels. `high`, `medium` and `auto` render
+the scene through 4x MSAA colour and depth; `high` and `auto` use full-resolution scene targets and five
 bloom levels. `medium` uses 0.85 scene scale and five levels; `low` uses 0.65 scene
 scale and three levels. Output resolution stays unchanged. `renderScale` is a
 static multiplier greater than zero and at most one for every offscreen target.
 It combines with the preset and the per-effect scales; it does not rebuild pipelines.
 
 `auto` starts each slide with the high preset and adjusts an additional multiplier from 1
-down to 0.5 in 0.125 steps. It samples live playback callback intervals, waits
-through startup and resizing, lowers resolution after sustained intervals above
-18.5ms, and requires several healthy windows before raising it. Paused and
+down to 0.75 in 0.125 steps. It samples live playback callback intervals, waits
+through startup and resizing, lowers resolution only after sustained intervals above
+25ms (a collapse below ~40 fps), and requires several healthy windows before raising it. Paused and
 outgoing frames keep the last live scale; preparation and previews use the
 explicit static scale. A retained world may resize once when leaving preparation.
 This policy changes
@@ -187,9 +188,9 @@ viewport and fade near the finite floor boundary. The regular fog stage also
 fades the floor into the scene.
 
 DOF uses a half-resolution gather and depth-aware composite. Shafts integrate
-point/spot scattering along the visible camera ray at quarter resolution.
-Their fixed pixel jitter avoids synchronized integration bands; changing target
-resolution changes that sampling pattern.
+point/spot scattering along the visible camera ray at half resolution.
+Interleaved-gradient jitter avoids synchronized integration bands, and fog applies them
+through a 3x3 tent filter so the jitter never shows as grain.
 Static `scale` overrides are available on DOF, Floor (reflection resolution) and
 Shafts; DOF and Shafts also accept `samples`. These change pipeline topology.
 Animated focus, aperture, blur radius, lighting and effect strengths update uniforms.

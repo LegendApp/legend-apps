@@ -21,19 +21,23 @@ test("ordinary 60 Hz and 120 Hz cadence keeps full resolution", () => {
   }
 });
 
-test("sustained 50 fps steps down within bounds and healthy cadence recovers with hysteresis", () => {
-  const slow = frames(createResolutionState(), 20, 1000);
-  expect(slow.scales.slice(0, 60).every(scale => scale === 1)).toBe(true);
-  expect([...new Set(slow.scales)]).toEqual([1, 0.875, 0.75, 0.625, 0.5]);
-  expect(slow.state.scale).toBe(0.5);
-  expect(frames(createResolutionState(), 120, 200).state.scale).toBe(0.5);
-  const neutral = frames(slow.state, 18, 400);
-  expect(neutral.state.scale).toBe(0.5);
+test("sustained 50 fps keeps full resolution", () => {
+  expect(frames(createResolutionState(), 20, 1000).scales.every(scale => scale === 1)).toBe(true);
+});
+
+test("collapsed cadence steps down to the 0.75 floor and healthy cadence recovers with hysteresis", () => {
+  const slow = frames(createResolutionState(), 30, 1000);
+  expect(slow.scales.slice(0, 40).every(scale => scale === 1)).toBe(true);
+  expect([...new Set(slow.scales)]).toEqual([1, 0.875, 0.75]);
+  expect(slow.state.scale).toBe(0.75);
+  expect(frames(createResolutionState(), 120, 200).state.scale).toBe(0.75);
+  const neutral = frames(slow.state, 20, 400);
+  expect(neutral.state.scale).toBe(0.75);
   const shortRecovery = frames(neutral.state, 1000 / 60, 240);
-  expect(shortRecovery.state.scale).toBe(0.5);
+  expect(shortRecovery.state.scale).toBe(0.75);
   const recovered = frames(shortRecovery.state, 1000 / 60, 1600);
   expect(recovered.state.scale).toBe(1);
-  expect(recovered.scales.every(scale => scale >= 0.5 && scale <= 1)).toBe(true);
+  expect(recovered.scales.every(scale => scale >= 0.75 && scale <= 1)).toBe(true);
 });
 
 test("startup, isolated stalls, paused gaps and timestamp resets do not lower resolution", () => {
@@ -57,7 +61,7 @@ test("startup, isolated stalls, paused gaps and timestamp resets do not lower re
 });
 
 test("an isolated hitch preserves the current cooldown and recovery history", () => {
-  const state = frames(createResolutionState(), 20, 100).state;
+  const state = frames(createResolutionState(), 30, 70).state;
   expect(state.scale).toBe(0.875);
   expect(state.cooldownUntil).toBeGreaterThan(state.lastTimestamp!);
   const hitch = advanceResolution(state, { timestamp: state.lastTimestamp! + 500, playing: true, key: "scene" });
@@ -77,7 +81,7 @@ test("an isolated hitch preserves the current cooldown and recovery history", ()
 test("adaptation never changes playback clocks across a real pause and resume", () => {
   let playback = createPlaybackState({ phase: "playing", slideKey: "clock", stepKey: "0", stepIndex: 0 });
   let resolution = createResolutionState();
-  for (let timestamp = 0; timestamp <= 10000; timestamp += 20) {
+  for (let timestamp = 0; timestamp <= 10000; timestamp += 40) {
     playback = advancePlayback(playback, timestamp);
     resolution = advanceResolution(resolution, { timestamp: playback.lastTimestamp, playing: playback.phase === "playing", key: playback.slideKey });
   }

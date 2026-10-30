@@ -18,10 +18,10 @@ for (const quality of ["low", "medium", "high"] as const) test(`all enabled post
   for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-composite", "tonemap"]) expect(ids).toContain(id);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
-  expect(target("reflect").scale).toBe(scale * .5);
+  expect(target("reflect").scale).toBe(scale);
   expect(target("reflectDepth").scale).toBe(target("reflect").scale);
   expect(target("dof").scale).toBe(scale * .5);
-  expect(target("shafts").scale).toBe(scale * .25);
+  expect(target("shafts").scale).toBe(scale * .5);
   expect(graph.uniformsSize).toBe(worldHeaderSize + worldInstanceSize);
 });
 

@@ -150,7 +150,9 @@ test("HDR scene and five-level half-resolution bloom describe independent attach
   expect(render.map(pass => pass.instanceCount)).toEqual([1, 1, 3, 1]);
   expect(render[0].clear).toBeArray();
   expect(render.slice(1).every(pass => pass.clear === false)).toBe(true);
-  expect(graph.passes.at(-1)).toMatchObject({ id: "tonemap", output: "screen" });
+  expect(graph.passes.at(-1)).toMatchObject({ id: "screen", fragment: "fxaa", output: "screen" });
+  expect(graph.targets.filter(target => target.samples === 4).map(target => target.id)).toEqual(["hdr", "depth"]);
+  expect(render.every(pass => pass.vertexCount > 0)).toBe(true);
   expect(graph.uniformsSize).toBe(sampleWorldUniforms(scene, clock(0)).length);
   expect(orbInstances({ count: 3, seed: 7 })).toEqual(orbInstances({ count: 3, seed: 7 }));
   expect(orbInstances({ count: 3, seed: 7 })).not.toEqual(orbInstances({ count: 3, seed: 8 }));

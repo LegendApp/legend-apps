@@ -51,13 +51,8 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   // Surface dimensions are independent of shader/device ownership. In particular,
   // live window resizing must not recompile pipelines or reset simulation buffers.
   useLayoutEffect(() => {
-    if (Platform.OS === "web") {
-      const context = canvas.current?.getContext("webgpu");
-      if (context) resizeBrowserSurface(context, width, height, displayScale);
-      return;
-    }
-    const surface = canvas.current?.getNativeSurface();
-    if (surface) { surface.width = width; surface.height = height; }
+    const surface = Platform.OS === "web" ? canvas.current?.getContext("webgpu")?.canvas : canvas.current?.getNativeSurface();
+    if (surface) resizeSurface(surface, width, height, displayScale);
   }, [width, height, displayScale, resources]);
   useEffect(() => {
     if (!supported) return;
@@ -74,8 +69,8 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   </View>;
 }
 
-function resizeBrowserSurface(context: RNCanvasContext, width: number, height: number, displayScale: number) {
-  const surface = context.canvas;
+/** Back the drawable at device pixels, the slide's display scale times the screen's backing scale. */
+function resizeSurface(surface: { width: number; height: number }, width: number, height: number, displayScale: number) {
   const pixelWidth = Math.max(1, Math.round(width * displayScale * PixelRatio.get()));
   const pixelHeight = Math.max(1, Math.round(height * displayScale * PixelRatio.get()));
   if (surface.width !== pixelWidth) surface.width = pixelWidth;
@@ -126,7 +121,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         if (!context) throw new Error("WebGPU surface unavailable");
         // The library sizes from DOM bounds, which are zero during preparation.
         // Set the drawing buffer before transferring ownership to UIFrames.
-        if (Platform.OS === "web") resizeBrowserSurface(context, width, height, displayScale);
+        if (Platform.OS === "web") resizeSurface(context.canvas, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
         if (renderGraph) {
           const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
@@ -247,7 +242,10 @@ function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, fra
     const scale = renderScale?.get();
     try {
       const time = samplePlayback(state, previewTime, clockMode);
-      device.queue.writeBuffer(clock, 0, new Float32Array([time, dt, frameIndex, state.stepIndex, aspect, brightness, samplePlayback(state, previewTime, "slide"), samplePlayback(state, previewTime, "step")]));
+      const values = scratch(8);
+      values[0] = time; values[1] = dt; values[2] = frameIndex; values[3] = state.stepIndex; values[4] = aspect; values[5] = brightness;
+      values[6] = samplePlayback(state, previewTime, "slide"); values[7] = samplePlayback(state, previewTime, "step");
+      device.queue.writeBuffer(clock, 0, values);
       submitGPUFrame(r, frameIndex, particleCount, particleVertexCount, frameData, scale);
       if (!frozen) count.value += 1;
       if (!rendered.value) { rendered.value = true; runOnJS(onReady)(); }
@@ -290,6 +288,14 @@ function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, fra
   return null;
 }
 
+
+/** writeBuffer copies synchronously, so surfaces on the UI runtime share one exact-length staging array per size. */
+function scratch(length: number) {
+  "worklet";
+  const runtime = globalThis as { __gpuScratch?: Record<number, Float32Array<ArrayBuffer>> };
+  const arrays = runtime.__gpuScratch ??= {};
+  return arrays[length] ??= new Float32Array(length);
+}
 
 function destroyGPU(device: GPUDevice, alive: SharedValue<boolean>, disposed: SharedValue<boolean>) {
   "worklet";
@@ -339,7 +345,9 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   const data = frameData?.value;
   if (r.frameData && data) {
     if (data.length * 4 > r.frameData.size) throw new Error(`Frame data has ${data.length} values; its buffer holds ${r.frameData.size / 4}`);
-    device.queue.writeBuffer(r.frameData, 0, new Float32Array(data));
+    const values = scratch(data.length);
+    values.set(data);
+    device.queue.writeBuffer(r.frameData, 0, values);
   }
   const encoder = device.createCommandEncoder();
   if (r.graph) {

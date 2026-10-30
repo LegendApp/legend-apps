@@ -7,7 +7,7 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
   return GraphVertex(vec4f(p * 2.0 - 1.0, 0.0, 1.0), vec2f(p.x, 1.0 - p.y));
 }`;
 
-type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup };
+type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[] };
 export type RenderGraphResources = {
   targets: GPUTarget[]; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
@@ -30,6 +30,10 @@ function view(r: RenderGraphResources, value: string) {
   "worklet";
   const [id, mip] = reference(value);
   return r.textures[id].createView({ baseMipLevel: mip, mipLevelCount: 1 });
+}
+function multisampled(r: { targets: GPUTarget[] }, value: string) {
+  "worklet";
+  return value !== "screen" && (targetFor(r.targets, value).samples ?? 1) > 1;
 }
 function output(pass: GPUPass) {
   "worklet";
@@ -57,6 +61,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
   }
   for (const target of targets) {
     if (!Number.isFinite(target.scale ?? 1) || (target.scale ?? 1) <= 0 || !Number.isInteger(target.mips ?? 1) || (target.mips ?? 1) < 1) throw new Error("Invalid GPU target dimensions: " + target.id);
+    if (![1, 4].includes(target.samples ?? 1) || ((target.samples ?? 1) > 1 && ((target.mips ?? 1) > 1 || target.format === "r32float"))) throw new Error("Invalid GPU target samples: " + target.id);
   }
   const r: RenderGraphResources = { targets, textures: {}, buffers: {}, passes: [], clock, uniforms,
     sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1 };
@@ -89,7 +94,8 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
       entries.push({ binding: index + 3, visibility: writing ? 4 : 7,
         ...(r.buffers[id] ? { buffer: { type: writing ? "storage" as const : "read-only-storage" as const } }
           : writing ? { storageTexture: { access: "write-only" as const, format: target!.format } }
-          : { texture: { sampleType: target!.format === "depth32float" ? "depth" as const : target!.format === "r32float" ? "unfilterable-float" as const : "float" as const } }) });
+          : { texture: { sampleType: target!.format === "depth32float" ? "depth" as const : target!.format === "r32float" ? "unfilterable-float" as const : "float" as const,
+            multisampled: target!.format === "depth32float" && (target!.samples ?? 1) > 1 } }) });
     }
     const module = device.createShaderModule({ code: pass.code + (pass.kind === "fullscreen" ? graphVertex : "") });
     const diagnostics = await module.getCompilationInfo();
@@ -109,9 +115,18 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
           ...(blend && blend !== "none" ? { blend: { color: { srcFactor: "one" as const, dstFactor: blend === "over" ? "one-minus-src-alpha" as const : "one" as const, operation: "add" as const },
             alpha: { srcFactor: "one" as const, dstFactor: "one-minus-src-alpha" as const, operation: "add" as const } } } : {}) })) },
         ...(pass.kind === "render" && pass.depth ? { depthStencil: { format: targetFor(targets, pass.depth).format, depthWriteEnabled: true, depthCompare: pass.depthCompare ?? "less" } } : {}),
+        ...(pass.kind === "render" ? { multisample: { count: targetFor(targets, pass.color[0] ?? pass.depth!).samples ?? 1 } } : {}),
       });
     }
-    r.passes.push({ pass, pipeline, layout });
+    r.passes.push({ pass, pipeline, layout, resolves: [] });
+  }
+  // A multisampled colour target resolves once, in the last render pass that writes it.
+  const resolved = new Set<string>();
+  for (let i = r.passes.length - 1; i >= 0; i--) {
+    const { pass } = r.passes[i];
+    if (pass.kind !== "render") continue;
+    r.passes[i].resolves = pass.color.map(color => multisampled(r, color) && !resolved.has(color));
+    for (const color of pass.color) resolved.add(color);
   }
   return r;
 }
@@ -124,12 +139,16 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
   for (const target of r.targets) {
     const old = r.textures[target.id];
     const [w, h] = dimensions(r, target.id, width, height, renderScale);
-    const mips = target.mips ?? 1;
+    const mips = target.mips ?? 1, samples = target.samples ?? 1, depth = target.format === "depth32float";
     // Allocate enough base pixels for all declared mip levels, even in tiny previews.
     const minSize = Math.pow(2, mips - 1);
     r.textures[target.id] = device.createTexture({ size: [Math.max(minSize, w), Math.max(minSize, h)], format: target.format, mipLevelCount: mips,
-      usage: 16 | 4 | (target.format === "depth32float" ? 0 : 8) });
+      sampleCount: depth ? samples : 1, usage: 16 | 4 | (depth || samples > 1 ? 0 : 8) });
     old?.destroy();
+    if (samples > 1 && !depth) {
+      r.textures[target.id + "#ms"]?.destroy();
+      r.textures[target.id + "#ms"] = device.createTexture({ size: [w, h], format: target.format, sampleCount: samples, usage: 16 });
+    }
   }
   for (const resource of r.passes) {
     const pass = resource.pass;
@@ -162,8 +181,10 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
     } else {
       const colors = pass.kind === "render" ? pass.color : [output(pass)];
       const clear = pass.kind === "render" ? pass.clear : undefined;
-      const command = encoder.beginRenderPass({ colorAttachments: colors.map(color => ({ view: color === "screen" ? screen.createView() : view(r, color),
-        clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" : "clear", storeOp: "store" })),
+      const command = encoder.beginRenderPass({ colorAttachments: colors.map((color, index) => color === "screen" || !multisampled(r, color)
+        ? { view: color === "screen" ? screen.createView() : view(r, color), clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: "store" as const }
+        : { view: r.textures[color + "#ms"].createView(), resolveTarget: resource.resolves[index] ? view(r, color) : undefined,
+          clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: resource.resolves[index] ? "discard" as const : "store" as const }),
         ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) });
       command.setPipeline(resource.pipeline as GPURenderPipeline); command.setBindGroup(0, resource.group!);
       // Dawn reports zero-count draws through a logging callback that calls the JS runtime from this UI thread, which can crash Hermes.

@@ -26,11 +26,12 @@ export function advanceResolution(state: ResolutionState, sample: ResolutionSamp
   if (elapsed < 1000) return { ...state, lastTimestamp: timestamp, elapsed, frames };
   const mean = elapsed / frames;
   const healthyWindows = mean <= 17.5 ? Math.min(5, state.healthyWindows + 1) : 0;
-  const lower = mean > 18.5 && state.scale > 0.5;
+  // Ordinary misses keep full resolution; only a collapse below ~40 fps trades pixels for cadence.
+  const lower = mean > 25 && state.scale > 0.75;
   const raise = healthyWindows >= 5 && state.scale < 1;
   const change = timestamp >= state.cooldownUntil && (lower || raise);
   return { ...state, lastTimestamp: timestamp, elapsed: 0, frames: 0,
-    scale: change ? Math.max(0.5, Math.min(1, state.scale + (lower ? -0.125 : 0.125))) : state.scale,
+    scale: change ? Math.max(0.75, Math.min(1, state.scale + (lower ? -0.125 : 0.125))) : state.scale,
     healthyWindows: change ? 0 : healthyWindows,
     warmupUntil: change ? timestamp + 500 : state.warmupUntil,
     cooldownUntil: change ? timestamp + 3000 : state.cooldownUntil };

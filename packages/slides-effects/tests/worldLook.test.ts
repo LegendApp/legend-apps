@@ -24,7 +24,7 @@ for (const quality of ["low", "medium", "high"] as const) {
     }
     const reflection = graph.targets.find(target => target.id === "reflect")!;
     const hdr = graph.targets.find(target => target.id === "hdr")!;
-    expect(reflection.scale).toBe(hdr.scale! * .5);
+    expect(reflection).toMatchObject({ scale: hdr.scale, samples: hdr.samples });
     expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(5);
   });
 }

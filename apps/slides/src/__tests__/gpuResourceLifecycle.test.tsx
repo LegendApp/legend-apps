@@ -30,7 +30,7 @@ test.each(["macos", "web"])("persistent backgrounds retain GPU resources across 
     name => mocks[name] ?? require(name), {}, options => { setups++; report = options.reportError; return () => { cleanups++; }; },
     { gpu: {} },
   );
-  const expectedSize = () => platform === "web" ? { width: size.width * 2, height: size.height * 2 } : size;
+  const expectedSize = () => ({ width: size.width * 2, height: size.height * 2 });
   await act(() => { tree = create(<Component code="first" background />, {createNodeMock: () => ({getNativeSurface: () => surface, getContext: () => ({ canvas: surface })})}); });
   expect(surface).toEqual(expectedSize());
   for (let width = 101; width <= 120; width++) {

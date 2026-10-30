@@ -18,14 +18,12 @@ export function shaftCode(bindings: string, lights: number, steps: number) {
   return `${bindings}
 @group(0) @binding(3) var depth:texture_depth_2d;
 ${depthCode()}
-@fragment fn shafts(@location(0) uv:vec2f)->@location(0) vec4f {
+@fragment fn shafts(@location(0) uv:vec2f,@builtin(position) position:vec4f)->@location(0) vec4f {
  let ray=worldRay(uv); let direction=normalize(ray);
  let distance=min(depthAt(uv),100.); let stride=distance/${steps}.;
  let density=max(uniforms[46],.0001); let anisotropy=clamp(uniforms[47],-.8,.8);
- let pixel=vec2u(uv*vec2f(textureDimensions(depth)));
- var seed=pixel.x*1973u+pixel.y*9277u+89173u;
- seed=(seed^(seed>>16u))*2246822519u; seed=(seed^(seed>>13u))*3266489917u;
- let jitter=f32((seed^(seed>>16u))&65535u)/65536.;
+ // Interleaved gradient noise spreads the step offsets evenly, so fog's 3x3 tent removes the banding without white-noise grain.
+ let jitter=fract(52.9829189*fract(dot(floor(position.xy),vec2f(.06711056,.00583715))));
  var scattering=vec3f(0.); var opticalDepth=0.;
  for(var sampleIndex=0u;sampleIndex<${steps}u;sampleIndex++) {
   let z=(f32(sampleIndex)+jitter)*stride; let world=vector(0u)+ray*z;
@@ -48,14 +46,21 @@ export function fogCode(bindings: string, shafts: boolean) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var depth:texture_depth_2d;
-${shafts ? "@group(0) @binding(5) var shaftField:texture_2d<f32>;" : ""}
+${shafts ? `@group(0) @binding(5) var shaftField:texture_2d<f32>;
+fn shaftAt(uv:vec2f)->vec3f {
+ let texel=1./vec2f(textureDimensions(shaftField)); var sum=vec3f(0.);
+ for(var y=-1;y<=1;y++) { for(var x=-1;x<=1;x++) {
+  sum+=textureSampleLevel(shaftField,linearSampler,uv+vec2f(f32(x),f32(y))*texel,0.).rgb*f32((2-abs(x))*(2-abs(y)));
+ } }
+ return sum/16.;
+}` : ""}
 ${depthCode()}
 @fragment fn fog(@location(0) uv:vec2f)->@location(0) vec4f {
  let distance=depthAt(uv); let world=vector(0u)+worldRay(uv)*distance;
  let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
  let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
  var color=mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,vector(20u),clamp(fogAmount,0.,1.));
- ${shafts ? "color+=textureSampleLevel(shaftField,linearSampler,uv,0.).rgb;" : ""}
+ ${shafts ? "color+=shaftAt(uv);" : ""}
  return vec4f(color,1.);
 }`;
 }
