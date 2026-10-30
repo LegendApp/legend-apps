@@ -1,6 +1,7 @@
 // @ts-nocheck Inspect the real compiled deck and clock uniforms without a GPU.
 import "../../../apps/slides/src/__tests__/nativeMock";
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import React from "react";
@@ -25,8 +26,9 @@ function sample(time, step = 0) {
 beforeAll(async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const root = path.resolve(import.meta.dirname, "../../..");
-  const compiled = await compileDeck(path.join(root, "apps/slides/examples/3d/data-flow.mdx"), {
-    effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
+  const deckPath = path.join(root, "apps/slides/examples/3d/data-flow.mdx");
+  const compiled = await compileDeck(deckPath, {
+    source: readFileSync(deckPath, "utf8"), effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
   });
   if (!compiled.success) throw new Error(compiled.errors.join("\n"));
   const require = createRequire(import.meta.url), module = { exports: {} };
@@ -89,8 +91,9 @@ test("the 53-node cascade heats descendants then prunes to one branch while keep
   closeVector(nodes()[0].slice(4, 7), colorVector("#ff36c8"));
   sample(2, 2);
   expect(nodes().filter(item => item[30] === 1)).toHaveLength(13);
-  const target = layoutTree(network, { radius: 6.8, levelHeight: 1.7, position: [0, 3.2, 0] }).nodes.find(node => node.id === "e2").position;
-  closeVector(values(0).slice(4, 7), target);
+  const target = layoutTree(network, { radius: 6.8, levelHeight: 1.7, position: [0, 3.2, 0] }).nodes.find(node => node.id === "e2");
+  expect(target, "node e2").toBeDefined();
+  closeVector(values(0).slice(4, 7), target.position);
   expect(values(0)[32]).toBeCloseTo(10);
 });
 
@@ -98,6 +101,8 @@ test("the cyan orb follows one curved edge with a fainter trail and matching cam
   sample(2, 1);
   const head = instances(1).find(item => item[7] === 14);
   const trail = instances(1).find(item => item[7] === 14 * 0.3);
+  expect(head, "orb head").toBeDefined();
+  expect(trail, "orb trail").toBeDefined();
   expect(head.slice(4, 7)).toEqual(colorVector("#22d3ee"));
   expect(head.slice(8, 11)).toEqual([1, 1, 1]);
   expect(trail[19]).toBeCloseTo(head[3] * 0.18);
