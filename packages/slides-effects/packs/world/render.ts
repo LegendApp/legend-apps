@@ -128,10 +128,10 @@ struct CardResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let highlight=1.-exp(-max(e-.03,0.)*30.); let rest=clamp(e/.025,.35,1.); let flash=max(e-.45,0.);
  let coverage=1.-smoothstep(-pixel*.5,pixel*.5,d);
  let shadow=.15*shown*(1.-smoothstep(-glowWidth*.2,glowWidth*1.6,roundRect(p+vec2f(0.,glowWidth*.4),half.xy,radius)));
- let glow=accent*(.04*rest+.5*highlight+.25*flash)*shown*exp(-max(d,0.)/(glowWidth*.35));
+ let glow=accent*(.04*rest+.3*highlight+.25*flash)*shown*exp(-max(d,0.)/(glowWidth*.35));
  let v=clamp(p.y/half.y*.5+.5,0.,1.);
- var body=mix(vector(base+24u),accent*.03,highlight)*mix(1.,1.9,v)+accent*(.01*rest+.03*highlight+.08*flash)*mix(.5,1.,v);
- body+=accent*(.04*rest+.3*highlight)*exp(d/(glowWidth*.35));
+ var body=mix(vector(base+24u),accent*.018,highlight)*mix(1.,1.9,v)+accent*(.01*rest+.015*highlight+.08*flash)*mix(.5,1.,v);
+ body+=accent*(.04*rest+.15*highlight)*exp(d/(glowWidth*.35));
  let line=max(pixel*1.25,.01);
  let rim=smoothstep(-line-pixel*.5,-line+pixel*.5,d);
  body+=rim*(accent*uniforms[base+17u]*(.8*rest+2.2*highlight+flash)*mix(.5,1.15,v)+vec3f(.06*rest*smoothstep(.55,1.,v)));
@@ -294,7 +294,7 @@ fn advance(code:u32,mono:bool)->f32 { return select(advances[clamp(code,${glyphF
   if(mono) { start+=(.6-advances[clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u])*.5; }
   distance=max(distance,glyph(code,in.local-vec2f(start,0.)));
  }
- let alpha=smoothstep(-.7*footprint,.7*footprint,distance)*uniforms[base+23u];
+ let alpha=smoothstep(-.6*footprint,.6*footprint,distance)*uniforms[base+23u];
  if(alpha<=.004) { discard; }
  ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let color=vector(base+4u);
