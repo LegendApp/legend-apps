@@ -167,8 +167,8 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
 export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture, renderScale = 1) {
   "worklet";
   resizeRenderGraph(r, device, screen.width, screen.height, renderScale);
-  for (const resource of r.passes) {
-    const pass = resource.pass;
+  for (let index = 0; index < r.passes.length; index++) {
+    const resource = r.passes[index], pass = resource.pass;
     if (pass.kind === "compute") {
       const command = encoder.beginComputePass();
       command.setPipeline(resource.pipeline as GPUComputePipeline); command.setBindGroup(0, resource.group!);
@@ -181,16 +181,30 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
     } else {
       const colors = pass.kind === "render" ? pass.color : [output(pass)];
       const clear = pass.kind === "render" ? pass.clear : undefined;
-      const command = encoder.beginRenderPass({ colorAttachments: colors.map((color, index) => color === "screen" || !multisampled(r, color)
+      // Following draws that load the same attachments join this pass (validation already forbids reading them), so tiled GPUs keep MSAA samples on chip
+      // instead of storing and reloading them between draws; the batch resolves as its last draw would have.
+      let last = index;
+      while (pass.kind === "render" && last + 1 < r.passes.length) {
+        const next = r.passes[last + 1].pass;
+        if (next.kind !== "render" || next.clear !== false || next.depth !== pass.depth || next.color.length !== colors.length ||
+          next.color.some((color, slot) => color !== colors[slot])) break;
+        last++;
+      }
+      const resolves = r.passes[last].resolves;
+      const command = encoder.beginRenderPass({ colorAttachments: colors.map((color, slot) => color === "screen" || !multisampled(r, color)
         ? { view: color === "screen" ? screen.createView() : view(r, color), clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: "store" as const }
-        : { view: r.textures[color + "#ms"].createView(), resolveTarget: resource.resolves[index] ? view(r, color) : undefined,
-          clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: resource.resolves[index] ? "discard" as const : "store" as const }),
+        : { view: r.textures[color + "#ms"].createView(), resolveTarget: resolves[slot] ? view(r, color) : undefined,
+          clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: resolves[slot] ? "discard" as const : "store" as const }),
         ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) });
-      command.setPipeline(resource.pipeline as GPURenderPipeline); command.setBindGroup(0, resource.group!);
-      // Dawn reports zero-count draws through a logging callback that calls the JS runtime from this UI thread, which can crash Hermes.
-      // An empty pass still clears its attachments.
-      const vertices = pass.kind === "render" ? pass.vertexCount : 3, instances = pass.kind === "render" ? pass.instanceCount ?? 1 : 1;
-      if (vertices > 0 && instances > 0) command.draw(vertices, instances);
+      for (; index <= last; index++) {
+        const draw = r.passes[index], drawPass = draw.pass;
+        command.setPipeline(draw.pipeline as GPURenderPipeline); command.setBindGroup(0, draw.group!);
+        // Dawn reports zero-count draws through a logging callback that calls the JS runtime from this UI thread, which can crash Hermes.
+        // An empty pass still clears its attachments.
+        const vertices = drawPass.kind === "render" ? drawPass.vertexCount : 3, instances = drawPass.kind === "render" ? drawPass.instanceCount ?? 1 : 1;
+        if (vertices > 0 && instances > 0) command.draw(vertices, instances);
+      }
+      index = last;
       command.end();
     }
   }
