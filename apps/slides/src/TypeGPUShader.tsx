@@ -39,6 +39,12 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const height = background ? Math.max(1, Math.round(size.height)) : configuredHeight;
   const brightness = background ? intensity : 1;
   const canvas = useRef<CanvasRef>(null);
+  // Native getContext() returns a new wrapper per call, each with its own canvas size, so one wrapper both sizes and renders.
+  const context = useRef<RNCanvasContext | null>(null);
+  const surfaceContext = () => {
+    if (!context.current) context.current = canvas.current?.getContext("webgpu") ?? null;
+    return context.current;
+  };
   const supported = typeof navigator !== "undefined" && !!navigator.gpu;
   const [resources, setResources] = useState<Resources>();
   const [preparedResources, setPreparedResources] = useState<Resources>();
@@ -51,12 +57,12 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   // Surface dimensions are independent of shader/device ownership. In particular,
   // live window resizing must not recompile pipelines or reset simulation buffers.
   useLayoutEffect(() => {
-    const surface = Platform.OS === "web" ? canvas.current?.getContext("webgpu")?.canvas : canvas.current?.getNativeSurface();
+    const surface = surfaceContext()?.canvas;
     if (surface) resizeSurface(surface, width, height, displayScale);
   }, [width, height, displayScale, resources]);
   useEffect(() => {
     if (!supported) return;
-    return startShaderCanvas({ canvas, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize, renderGraph,
+    return startShaderCanvas({ canvas, surfaceContext, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize, renderGraph,
       reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
       setResources, setError });
   }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize, renderGraph]);
@@ -88,8 +94,8 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ canvas, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, setResources, setError }: {
-  canvas: RefObject<CanvasRef | null>; code: string; renderGraph?: GPURenderGraphDefinition;
+function startShaderCanvas({ canvas, surfaceContext, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, setResources, setError }: {
+  canvas: RefObject<CanvasRef | null>; surfaceContext(): RNCanvasContext | null; code: string; renderGraph?: GPURenderGraphDefinition;
   particles: boolean; particleCount: number; particleBlend?: "additive" | "over"; image?: string; composite?: boolean;
   width?: number; height?: number; displayScale?: number; frameDataSize?: number; reportError(error: unknown): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
@@ -117,11 +123,11 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         void device.lost.then(info => {
           if (!cancelled && info.reason !== "destroyed") setError("WebGPU device lost: " + info.message);
         });
-        const context = canvas.current.getContext("webgpu");
+        const context = surfaceContext();
         if (!context) throw new Error("WebGPU surface unavailable");
-        // The library sizes from DOM bounds, which are zero during preparation.
-        // Set the drawing buffer before transferring ownership to UIFrames.
-        if (Platform.OS === "web") resizeSurface(context.canvas, width, height, displayScale);
+        // The library sizes from view bounds in points (zero during preparation on web).
+        // Set the drawing buffer in device pixels before transferring ownership to UIFrames.
+        resizeSurface(context.canvas, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
         if (renderGraph) {
           const clock = device.createBuffer({ size: 32, usage: 64 | 8 });

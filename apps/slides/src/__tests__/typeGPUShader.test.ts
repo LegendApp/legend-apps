@@ -303,7 +303,7 @@ test("offscreen browser setup sizes first and allocates simulation resources onl
   Object.defineProperty(globalThis,"navigator",{configurable:true,value:{gpu:{requestAdapter:async()=>({requestDevice:async()=>device}),getPreferredCanvasFormat:()=>"bgra8unorm"}}});
   try {
     for (const simulation of [false,true]) await new Promise<void>((resolve,reject)=>{
-      start({canvas:{current:{getContext:()=>{surface.width=0;surface.height=0;return context;}}},
+      start({canvas:{current:{}},surfaceContext:()=>{surface.width=0;surface.height=0;return context;},
         code:simulation ? "@compute @workgroup_size(64) fn simulate() {}" : "",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
         setResources:r=>{if(r){assertSize();expect(r.configured.value).toBe(false);expect(configurations).toBe(0);expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
     });

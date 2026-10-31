@@ -17,7 +17,9 @@ test.each(["macos", "web"])("persistent backgrounds retain GPU resources across 
   let index = 0, preview = false, setups = 0, cleanups = 0, report, tree;
   const errors = [];
   let size = {width: 100, height: 100};
-  const surface = {width: 0, height: 0};
+  // Like native, every getContext() returns a new wrapper with its own canvas size.
+  const contexts = [];
+  const surface = () => contexts.at(-1)?.canvas;
   const scale = React.createContext(1);
   const mocks = {
     react: React, "react-native": { View: "View", Text: "Text", Platform: { OS: platform }, PixelRatio: { get: () => 2 } },
@@ -31,13 +33,14 @@ test.each(["macos", "web"])("persistent backgrounds retain GPU resources across 
     { gpu: {} },
   );
   const expectedSize = () => ({ width: size.width * 2, height: size.height * 2 });
-  await act(() => { tree = create(<Component code="first" background />, {createNodeMock: () => ({getNativeSurface: () => surface, getContext: () => ({ canvas: surface })})}); });
-  expect(surface).toEqual(expectedSize());
+  await act(() => { tree = create(<Component code="first" background />, {createNodeMock: () => ({getNativeSurface: () => ({width: 0, height: 0}), getContext: () => { const context = { canvas: {width: 0, height: 0} }; contexts.push(context); return context; }})}); });
+  expect(surface()).toEqual(expectedSize());
   for (let width = 101; width <= 120; width++) {
     size = {width, height: width};
     await act(() => tree.update(<Component code="first" background />));
-    expect(surface).toEqual(expectedSize());
+    expect(surface()).toEqual(expectedSize());
   }
+  expect(contexts).toHaveLength(1);
   expect(setups).toBe(1); expect(cleanups).toBe(0);
   index = 3; preview = true;
   await act(() => tree.update(<Component code="first" background />));
@@ -50,7 +53,7 @@ test.each(["macos", "web"])("persistent backgrounds retain GPU resources across 
     await act(() => tree.update(<scale.Provider value={0.5}><Component code="changed" background /></scale.Provider>));
     const setupsBeforeResize = setups;
     await act(() => tree.update(<scale.Provider value={0.75}><Component code="changed" background /></scale.Provider>));
-    expect(surface).toEqual({ width: 180, height: 180 });
+    expect(surface()).toEqual({ width: 180, height: 180 });
     expect(setups).toBe(setupsBeforeResize);
   }
   await act(() => tree.unmount());

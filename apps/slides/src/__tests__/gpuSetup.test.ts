@@ -24,16 +24,19 @@ async function setup(validationError, cancelDuringValidation = false) {
     createComputePipeline: () => { calls.push("pipeline"); return {}; }, createRenderPipeline: () => { calls.push("pipeline"); return {}; },
     destroy: () => { calls.push("destroy"); done(); },
   };
-  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
+  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" }, PixelRatio: { get: () => 2 } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
     "react-native-reanimated": { makeMutable: value => ({ value }), runOnUI: fn => fn } };
   const start = new Function("require", "exports", "navigator", code + "\nreturn startShaderCanvas;")(
     name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => device }), getPreferredCanvasFormat: () => "bgra8unorm" } },
   );
-  const stop = start({ canvas: { current: { getContext: () => ({ configure() {} }), getNativeSurface: () => ({}) } },
+  const context = { configure() {}, canvas: { width: 100, height: 100 } };
+  const stop = start({ canvas: { current: {} }, surfaceContext: () => context,
     code: "shader", width: 100, height: 100, particles: false, particleCount: 10,
     setResources: value => { resources.push(value); if (value) done(); }, setError: value => { if (value) errors.push(value); }, reportError: error => reports.push(error.message),
   });
   while (!resolveScope) await Promise.resolve();
+  // The rendering context's drawable is sized in device pixels, not the view's points.
+  expect(context.canvas).toEqual({ width: 200, height: 200 });
   expect(calls.indexOf("listener")).toBeLessThan(calls.indexOf("pipeline"));
   expect(calls.indexOf("scope")).toBeLessThan(calls.indexOf("pipeline"));
   expect(resources).toEqual([undefined]);
@@ -105,7 +108,7 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
       } }),
     };
     pendingDevices.push(device);
-    const stop = startShaderCanvas({ canvas: { current: { getContext: () => context } }, code: "", particles: false, particleCount: 1,
+    const stop = startShaderCanvas({ canvas: { current: {} }, surfaceContext: () => context, code: "", particles: false, particleCount: 1,
       renderGraph: { targets: [], passes: [{ kind: "fullscreen", id: `screen-${id}`, code: "", fragment: "main", output: "screen" }] },
       setResources: value => { resources.push(value); if (value) transferred.resolve(value); }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
     await ready.promise;

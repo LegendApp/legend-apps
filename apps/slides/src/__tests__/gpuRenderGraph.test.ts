@@ -80,6 +80,20 @@ test("empty draws and dispatches still run their passes without a zero-count GPU
   expect(g.commands[0][1].colorAttachments[0].loadOp).toBe("clear");
 });
 
+test("consecutive draws into the same multisampled attachments share one pass; the last pass writing them resolves", async () => {
+  const g = gpu();
+  const draw = (id, extra = {}) => ({ kind: "render", id, code: "", vertex: "vertex", fragment: "fragment", color: ["hdr"], depth: "depth", vertexCount: 6, clear: false, ...extra });
+  const r = await prepareRenderGraph(g.device, { targets: [{ id: "hdr", format: "rgba16float", samples: 4 }, { id: "depth", format: "depth32float", samples: 4 }, { id: "glyphs", format: "rgba8unorm" }],
+    passes: [draw("boxes", { clear: [0, 0, 0, 1] }), draw("cards"), draw("labels", { reads: ["glyphs"] }), draw("overlay", { depth: undefined }),
+      { kind: "fullscreen", id: "screen", code: "", fragment: "final", reads: ["hdr"], output: "screen" }] }, "bgra8unorm", {}, {});
+  encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
+  expect(g.commands.map(c => c[0])).toEqual(["render", "draw", "draw", "draw", "render", "draw", "render", "draw"]);
+  const [first, second] = g.commands.filter(c => c[0] === "render").map(c => c[1].colorAttachments[0]);
+  expect(first).toMatchObject({ loadOp: "clear", storeOp: "store", resolveTarget: undefined });
+  expect(second).toMatchObject({ loadOp: "load", storeOp: "discard" });
+  expect(second.resolveTarget).toBeDefined();
+});
+
 test("graph rejects invalid references and shader diagnostics before a frame can receive pipelines", async () => {
   const g = gpu();
   await expect(prepareRenderGraph(g.device, { ...definition, passes: [{ ...definition.passes[3], reads: ["bloom@3"] }] }, "bgra8unorm", {}, {})).rejects.toThrow("Invalid GPU mip");
@@ -131,10 +145,10 @@ test("native callback copies retain one mutable graph across draws and resizing"
   g.device.queue.submit = () => {};
   g.encoder.finish = () => ({});
   const screen = { width: 1920, height: 1080, createView: () => "screen" };
-  const context = { __gpuHandle: true, configure() {}, getCurrentTexture: () => screen, present() {} };
+  const context = { __gpuHandle: true, canvas: { width: 1920, height: 1080 }, configure() {}, getCurrentTexture: () => screen, present() {} };
   const makeMutable = value => ({ __shared: true, value });
   const mocks = {
-    react: {}, "react-native": { Platform: { OS: "macos" } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {},
+    react: {}, "react-native": { Platform: { OS: "macos" }, PixelRatio: { get: () => 1 } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {},
     "@legend-apps/presentation": {}, "./slidesStore": {},
     "./gpuRenderGraph": { prepareRenderGraph, encodeRenderGraph },
     "react-native-reanimated": { makeMutable, runOnUI: fn => fn },
@@ -145,7 +159,7 @@ test("native callback copies retain one mutable graph across draws and resizing"
   );
   let stop;
   const resources = await new Promise((resolve, reject) => {
-    stop = startShaderCanvas({ canvas: { current: { getContext: () => context } }, renderGraph: definition, code: "", particles: false, particleCount: 1,
+    stop = startShaderCanvas({ canvas: { current: {} }, surfaceContext: () => context, renderGraph: definition, code: "", particles: false, particleCount: 1,
       setResources: value => { if (value) resolve(value); }, setError: error => { if (error) reject(new Error(error)); }, reportError: reject });
   });
   // Worklet closures copy plain objects; shared values and native GPU handles retain identity.
