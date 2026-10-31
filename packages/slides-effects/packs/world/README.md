@@ -241,16 +241,19 @@ import { Card } from "slides:world/World";
 <Rows id="pool" height={0.66} card={{ radius: 0.16, avatar: 0.62 }} labels={[{ text: "{initial}", align: "center" }]} />
 ```
 
-A Card is a rounded glass slab: `scale` is its full width, height and depth;
-`radius` rounds its corners, `bevel` its edges, and `edge` sets the glow along its
-outline in `color`, which also tints the avatar disc. The body takes 40% of
-`emissive`, so edges carry most of the glow. A card with a `title` shows an avatar
+A Card is a flat rounded glass panel facing the camera: `scale` is its full width,
+height and depth (the panel sits on the front face). `radius` rounds its corners,
+`edge` sets the strength of its thin rim light in `color`, and `glow` is the width of
+the soft outer glow; a drop shadow follows the same outline. `emissive` sets how lit
+the card is: about 0.025 rests, lower values dim it, and 0.1 or more highlights it
+with a brighter rim, glow and tinted fill. A card with a `title` shows an avatar
 (`avatar` is its radius as a fraction of half the height; 0 hides it) with the
 title's initial or `initials`, then the title and an optional `subtitle`, plus a
 right-aligned mono `meta` tag. Text sizes follow the height; `opacity` fades the
 text and `titleOpacity` the title alone. Rows take the same shape through `card`;
-their label templates add `{initial}`. Cards are ray-marched inside their box with
-analytic edge coverage, so silhouettes stay smooth without per-sample shading.
+their label templates add `{initial}`. Each card is one quad shaded from a 2D
+rounded-rectangle distance field, antialiased per device pixel, so edges stay crisp
+at Retina sizes without MSAA.
 
 ## Voxel reduction and counter
 

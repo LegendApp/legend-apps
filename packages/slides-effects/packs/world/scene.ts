@@ -17,8 +17,8 @@ export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?
 export type LabelAlign = "left" | "center" | "right";
 export type LabelOptions = { id?: string; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean };
-/** Rounded card shape: corner `radius` and edge `bevel` in world units, `edge` glow strength, `avatar` disc radius as a fraction of half the height (0 hides it). */
-export type CardStyle = { radius?: number; bevel?: number; edge?: number; avatar?: number };
+/** Rounded card shape: corner `radius` and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it). */
+export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?: number };
 /** A rounded card with an optional avatar (initials default to the title's first letter), a title, a second line and a right-aligned meta tag.
  * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */
 export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & CardStyle & {
@@ -183,7 +183,9 @@ export function rowInstances(options: RowsOptions): Instance[] {
   const box = (id: string): Instance => ({ ...primitive("box", { id, position: options.position ?? [0, 0, 0],
     scale: [options.width ?? 3, options.height ?? 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: options.emissive ?? 0.1, material: options.material }), ...card });
   const slots: Instance[] = Array.from({ length: count }, (_, slot) => ({ ...box(`${options.id}:slot:${slot}`), rows: { ...shared, slot } }));
-  const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 } }));
+  // Ghosts carry no labels, so they skip the avatar disc.
+  const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 },
+    ...card.card ? { card: { ...card.card, avatar: 0 } } : {} }));
   const labels = slots.flatMap(parent => (options.labels ?? []).map((row, index) => {
     const instance = labelInstance({ ...row, id: `${parent.id}:label:${index}`, position: row.offset });
     instance.label = { ...instance.label!, parent, row };
@@ -191,8 +193,8 @@ export function rowInstances(options: RowsOptions): Instance[] {
   }));
   return [...slots, ...ghosts, ...labels];
 }
-function cardStyle({ radius = 0.12, bevel = 0.02, edge = 0.6, avatar = 0 }: CardStyle): Required<CardStyle> {
-  return { radius, bevel, edge, avatar };
+function cardStyle({ radius = 0.12, glow = 0.14, edge = 0.6, avatar = 0 }: CardStyle): Required<CardStyle> {
+  return { radius, glow, edge, avatar };
 }
 function largestScale(scale: Animated<Vec3> | undefined): Vec3 {
   const track = compileTrack<Vec3>(scale ?? [1, 1, 1]);
@@ -671,7 +673,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
     }
     values[index + 15] = curve; values[index + 19] = instance.thickness;
-    if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.bevel; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; }
+    if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; }
     values[index + 23] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {

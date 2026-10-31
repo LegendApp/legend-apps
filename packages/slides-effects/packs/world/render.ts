@@ -98,58 +98,62 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
  @location(2) color:vec3f, @location(3) emissive:f32, @location(4) material:vec4f, @location(5) albedo:vec3f,
  @location(6) opacity:f32, @location(7) @interpolate(flat) instance:u32 }
 `;
-// Cards march an exact rounded slab inside their box: corner radius in the face plane, a bevel on every edge, an inner edge glow
-// and an optional avatar disc domed toward the camera. Bodies take 40% of emissive so the edges carry the glow. Shape fields: 11 corner radius, 16 bevel, 17 edge glow, 18 avatar radius / half height.
-const cardCode = (reflection: boolean) => `
+// Cards are one quad in the card's front plane. The fragment shades a 2D rounded-rect distance field: coverage is antialiased over one
+// device pixel, and the rim, inner glow, glass gradient, outer glow and drop shadow all fall off from the same distance, so edges stay
+// crisp at any resolution without MSAA. Emissive drives the glow: about 0.025 rests, lower dims, 0.1 and above highlights.
+// Shape fields: 11 corner radius, 16 glow width, 17 rim strength, 18 avatar radius / half height.
+function cardCode(offset: number, reflection: boolean) {
+  return `${worldBindings}${triangleCorner}${lightingCode(0, reflection)}
+struct CardVertex { @builtin(position) position:vec4f, @location(0) local:vec2f, @location(1) @interpolate(flat) instance:u32 }
+fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
+fn cardHalf(base:u32)->vec3f { return max(vector(base+8u)*uniforms[base+3u],vec3f(.0001)); }
+// Collapsing cards take their glow and shadow with them.
+fn presence(half:vec3f)->f32 { return clamp(min(half.x,half.y)/.08,0.,1.); }
 fn roundRect(p:vec2f,half:vec2f,radius:f32)->f32 { let q=abs(p)-half+radius; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.)-radius; }
-fn cardField(p:vec3f,half:vec3f,radius:f32,bevel:f32)->f32 {
- let w=vec2f(roundRect(p.xy,half.xy-bevel,max(0.,radius-bevel)),abs(p.z)-half.z+bevel);
- return min(max(w.x,w.y),0.)+length(max(w,vec2f(0.)))-bevel;
+@vertex fn cardVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->CardVertex {
+ let base=slot(iid); let half=cardHalf(base); let margin=uniforms[base+16u]*presence(half)*2.5+.01;
+ let local=mix(-half.xy-margin,half.xy+margin,corner(vid));
+ var result:CardVertex; result.position=projected(vector(base)+vec3f(local,half.z)); result.local=local; result.instance=iid;
+ if(uniforms[base+23u]<=.001 || presence(half)<=0.) { result.position=vec4f(2.,2.,0.,1.); }
+ return result;
 }
 struct CardResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
-@fragment fn worldFragment(in:WorldVertex)->CardResult {
- let pixel=max(length(fwidth(in.world)),.0001);
- if(in.opacity<=.001 || dot(in.normal,eye()-in.world)<0.) { discard; }
- let base=slot(in.instance); let origin=vector(base);
- let half=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
- let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let bevel=clamp(uniforms[base+16u],0.,min(radius,half.z));
- // Rays that graze the silhouette keep their closest approach as partial coverage, since this shader runs per pixel, not per MSAA sample.
- let ray=normalize(in.world-eye()); var p=in.world-origin; var closest=1e9; var nearest=p;
- for(var i=0u;i<40u;i++) {
-  let field=cardField(p,half,radius,bevel);
-  if(field<closest) { closest=field; nearest=p; }
-  if(field<max(.0002,pixel*.25)) { break; }
-  p+=ray*field;
-  if(any(abs(p)>half+vec3f(.001))) { break; }
- }
- let coverage=1.-smoothstep(pixel*.25,pixel,closest);
- if(coverage<=.004) { discard; }
- p=nearest;
- let hit=origin+p;
- ${reflection ? "if(hit.y<uniforms[36]+.001) { discard; }" : ""}
- let e=max(.0005,pixel*.5);
- var normal=normalize(vec3f(cardField(p+vec3f(e,0.,0.),half,radius,bevel)-cardField(p-vec3f(e,0.,0.),half,radius,bevel),
-  cardField(p+vec3f(0.,e,0.),half,radius,bevel)-cardField(p-vec3f(0.,e,0.),half,radius,bevel),
-  cardField(p+vec3f(0.,0.,e),half,radius,bevel)-cardField(p-vec3f(0.,0.,e),half,radius,bevel)));
- let accent=in.color; let inset=-roundRect(p.xy,half.xy,radius);
- var albedo=in.albedo*(1.+.35*p.y/half.y);
- var emission=accent*in.emissive*.4+accent*uniforms[base+17u]*(exp(-inset/max(pixel*1.2,bevel*.25))*.7+exp(-inset/max(.02,half.y*.2))*.06);
+@fragment fn cardFragment(in:CardVertex)->CardResult {
+ let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let world=vector(base)+vec3f(p,half.z);
+ ${reflection ? "if(world.y<uniforms[36]+.001) { discard; }" : ""}
+ if(eye().z<world.z) { discard; }
+ let pixel=max(length(fwidth(p))*.7071,.00001);
+ let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
+ let accent=vector(base+4u); let e=uniforms[base+7u]; let glowWidth=max(uniforms[base+16u],.001); let shown=presence(half);
+ let highlight=1.-exp(-max(e-.03,0.)*30.); let rest=clamp(e/.025,.35,1.); let flash=max(e-.45,0.);
+ let coverage=1.-smoothstep(-pixel*.5,pixel*.5,d);
+ let shadow=.15*shown*(1.-smoothstep(-glowWidth*.2,glowWidth*1.6,roundRect(p+vec2f(0.,glowWidth*.4),half.xy,radius)));
+ let glow=accent*(.04*rest+.5*highlight+.25*flash)*shown*exp(-max(d,0.)/(glowWidth*.35));
+ let v=clamp(p.y/half.y*.5+.5,0.,1.);
+ var body=mix(vector(base+24u),accent*.03,highlight)*mix(1.,1.9,v)+accent*(.01*rest+.03*highlight+.08*flash)*mix(.5,1.,v);
+ body+=accent*(.04*rest+.3*highlight)*exp(d/(glowWidth*.35));
+ let line=max(pixel*1.25,.01);
+ let rim=smoothstep(-line-pixel*.5,-line+pixel*.5,d);
+ body+=rim*(accent*uniforms[base+17u]*(.8*rest+2.2*highlight+flash)*mix(.5,1.15,v)+vec3f(.06*rest*smoothstep(.55,1.,v)));
  let avatar=uniforms[base+18u]*half.y;
  if(avatar>0.) {
-  let center=vec2f(-half.x+half.y,0.); let offset=(p.xy-center)/avatar; let distance=length(offset);
-  let disc=(1.-smoothstep(1.-pixel/avatar,1.+pixel/avatar,distance))*smoothstep(.2,.8,normal.z);
-  let dome=normalize(vec3f(offset*.2,1.));
-  normal=normalize(mix(normal,dome,disc*step(distance,1.)));
-  let ring=exp(-abs(distance-1.)*avatar/max(pixel*1.5,.004));
-  albedo=mix(albedo,accent*.2,disc);
-  emission=mix(emission,accent*(.12+.3*smoothstep(-1.,1.,offset.y)),disc)+accent*ring*disc*.45;
+  let q=p-vec2f(-half.x+half.y,0.); let dc=length(q)-avatar; let disc=1.-smoothstep(-pixel*.5,pixel*.5,dc);
+  let t=clamp(q.y/avatar*.5+.5,0.,1.);
+  var fill=mix(accent*.12,accent*.5,t)*(1.+.3*highlight);
+  fill+=accent*.5*(1.-smoothstep(line-pixel*.5,line+pixel*.5,-dc));
+  body=mix(body+accent*.12*exp(-max(dc,0.)/.04),fill,disc);
  }
- let material=Material(albedo,emission,in.material.x,in.material.y);
- let color=illuminate(hit,normal,material,accent,in.material.z,in.material.w); let clip=projected(hit);
- let alpha=in.opacity*coverage;
- return CardResult(vec4f(color*alpha,alpha),clamp(clip.z/clip.w,0.,1.));
+ let opacity=uniforms[base+23u]; let alpha=coverage*.98;
+ let color=(body*alpha+glow*(1.-coverage))*opacity; let cover=(alpha+(1.-coverage)*shadow)*opacity;
+ if(cover<.003 && max(color.r,max(color.g,color.b))<.002) { discard; }
+ // Glow and shadow sit a little behind the plane, so a neighbour's body covers them. Their depth is quantized so that
+ // overlapping glows from cards in one plane land on exactly equal depth and blend instead of z-fighting.
+ let clip=projected(select(world+normalize(world-eye())*.3,world,coverage>.5)); var depth=clamp(clip.z/clip.w,0.,1.);
+ if(coverage<=.5) { depth=min(1.,ceil(depth*8192.)/8192.); }
+ return CardResult(vec4f(color,cover),depth);
 }`;
-function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, card = false) {
+}
+function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry) {
   const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
@@ -183,7 +187,7 @@ fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInsta
  ` : ""}
  return result;
 }
-${card ? cardCode(reflection) : sphere ? `
+${sphere ? `
 struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SphereResult {
  let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
@@ -450,14 +454,15 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
     let offset = 0, draws = 0;
-    const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry, card = false) => {
-      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, card), vertex: "worldVertex", fragment: "worldFragment",
+    const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
+      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf), vertex: "worldVertex", fragment: "worldFragment",
         color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false });
     };
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
-    if (cards) add("cards", "box", cards.count, cards.offset, undefined, undefined, true);
+    if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection), vertex: "cardVertex", fragment: "cardFragment",
+      color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
     if (!draws && !cleared) add("empty", "box", 0, 0);
     if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection), vertex: "labelVertex", fragment: "labelFragment",
       color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
