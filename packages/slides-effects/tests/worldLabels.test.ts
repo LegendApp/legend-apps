@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClockSample, Vec3 } from "../packs/world/camera";
-import { glyphAdvances, glyphCell, glyphFirst } from "../packs/world/glyphs";
+import { glyphMetrics, glyphKernings, glyphPixelCount, glyphFirst } from "../packs/world/glyphs";
 import { buildWorldGraph } from "../packs/world/render";
 import { cardInstances, compileTrack, formatRowLabel, sampleTrack, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareWorldScene, primitive,
   recyclePathPoint, recycleSlot, rowInstances, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
@@ -19,10 +19,41 @@ function unpack(values: ArrayLike<number>, index: number, length: number) {
 
 describe("world labels", () => {
   test("measures proportional text from the atlas advances and mono text in fixed cells", () => {
-    const advance = (c: string) => glyphAdvances[c.charCodeAt(0) - glyphFirst];
+    const advance = (c: string) => glyphMetrics[1][c.charCodeAt(0) - glyphFirst][0];
     expect(labelWidth("Ada", false)).toBeCloseTo(advance("A") + advance("d") + advance("a"));
     expect(labelWidth("{ id: 1 }", true)).toBeCloseTo(9 * 0.6);
     expect(labelWidth("é", false)).toBeCloseTo(advance("?"));
+  });
+  test("uses GPOS kerning, real monospace shapes and distinct face weights", () => {
+    const pair = ("A".charCodeAt(0) - glyphFirst) * 95 + "V".charCodeAt(0) - glyphFirst;
+    for (const [face, weight] of (["regular", "medium", "bold"] as const).entries()) {
+      expect(glyphKernings[face][pair]).toBeLessThan(0);
+      expect(labelWidth("AV", false, weight)).toBeCloseTo(labelWidth("A", false, weight) + labelWidth("V", false, weight) + glyphKernings[face][pair]);
+      const scene = prepareWorldScene({ instances: [labelInstance({ text: "AV", weight })] });
+      const values = sampleWorldUniforms(scene, clock(0)) as number[];
+      expect(values[worldHeaderSize + 11]).toBe(face);
+      expect(values[worldHeaderSize + 8]).toBeCloseTo(labelWidth("AV", false, weight));
+    }
+    expect(glyphMetrics[3].every(glyph => Math.abs(glyph[0] - 0.6) < 1e-6)).toBe(true);
+    expect(glyphMetrics[3]["i".charCodeAt(0) - glyphFirst][3]).not.toBe(glyphMetrics[1]["i".charCodeAt(0) - glyphFirst][3]);
+    expect(labelWidth("Wide", false, "regular")).not.toBe(labelWidth("Wide", false, "bold"));
+    const scene = prepareWorldScene({ instances: [labelInstance({ text: "iW", mono: true, weight: "bold" })] });
+    expect((sampleWorldUniforms(scene, clock(0)) as number[])[worldHeaderSize + 11]).toBe(3);
+  });
+  test("uploads distinct RGB channels and preserves counters and stems in every face", () => {
+    const graph = buildWorldGraph(prepareWorldScene({ instances: [labelInstance({ text: "Sharp" })] }));
+    const pixels = new Uint32Array(graph.buffers![0].init!.buffer).subarray(4 * 95 * 6 + 4 * 95 * 95);
+    expect(pixels.length).toBe(glyphPixelCount);
+    expect(pixels.some(pixel => (pixel & 255) !== (pixel >>> 8 & 255))).toBe(true);
+    for (const face of glyphMetrics) {
+      const center = (character: string) => {
+        const [, , , width, height, offset] = face[character.charCodeAt(0) - glyphFirst];
+        const pixel = pixels[offset + Math.floor(height / 2) * width + Math.floor(width / 2)];
+        return [pixel & 255, pixel >>> 8 & 255, pixel >>> 16 & 255].sort((a, b) => a - b)[1];
+      };
+      expect(center("I")).toBeGreaterThan(127);
+      expect(center("O")).toBeLessThan(127);
+    }
   });
   test("packs three characters per float into the slot's spare fields and round-trips them exactly", () => {
     const values = new Float32Array(worldInstanceSize);
@@ -48,7 +79,7 @@ describe("world labels", () => {
     const graph = buildWorldGraph(scene);
     const pass = graph.passes.find(item => item.id === "scene-labels")!;
     expect(pass).toMatchObject({ kind: "render", instanceCount: 1, reads: ["glyphs"] });
-    expect(graph.buffers?.[0]).toMatchObject({ id: "glyphs", size: 95 * glyphCell * glyphCell });
+    expect(graph.buffers?.[0]).toMatchObject({ id: "glyphs", size: (4 * 95 * 6 + 4 * 95 * 95 + glyphPixelCount) * 4 });
     expect(graph.passes.indexOf(pass)).toBe(graph.passes.length - 1 - graph.passes.slice().reverse().findIndex(item => item.id.startsWith("scene-")));
     expect(() => prepareWorldScene({ instances: [labelInstance({ text: "x", attach: "missing" })] })).toThrow("Unknown world label parent");
   });

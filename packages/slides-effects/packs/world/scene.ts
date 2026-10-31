@@ -1,6 +1,6 @@
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
-import { glyphAdvances, glyphFirst, glyphLast } from "./glyphs";
+import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
 
 /** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
@@ -14,18 +14,19 @@ export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<numbe
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
 export type PulseOptions = { id: string; path: (string | Vec3)[]; step?: number; duration?: number; color?: Animated<string>; size?: number; trail?: number; emissive?: Animated<number> };
 export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?: number; lifetime?: number; color?: string; size?: number; spread?: Vec3; velocity?: Vec3; seed?: number; step?: number };
+export type LabelWeight = "regular" | "medium" | "bold";
 export type LabelAlign = "left" | "center" | "right";
 export type LabelOptions = { id?: string; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
-  emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean };
+  emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
 /** Rounded card shape: corner `radius` and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it). */
 export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?: number };
 /** A rounded card with an optional avatar (initials default to the title's first letter), a title, a second line and a right-aligned meta tag.
  * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */
 export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & CardStyle & {
-  title?: string; subtitle?: string; meta?: string; initials?: string; mono?: boolean; textColor?: string; subtleColor?: string; textEmissive?: number;
+  title?: string; subtitle?: string; meta?: string; initials?: string; mono?: boolean; weight?: LabelWeight; textColor?: string; subtleColor?: string; textEmissive?: number;
   opacity?: Animated<number>; titleOpacity?: Animated<number> };
 /** `text` substitutes `{item}` (items[index]), `{initial}` (its first letter), `{index}` (the logical row) and `{slot}` (the pooled container). */
-export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean };
+export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
 export type RecycleOptions = { above?: number; below?: number; reach?: number; lift?: number; color?: string; ghosts?: number };
 export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; height?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number;
   scroll?: Animated<number>; items?: string[]; labels?: RowLabel[]; recycle?: RecycleOptions; emissive?: number; material?: string | MaterialOptions; card?: CardStyle };
@@ -48,7 +49,7 @@ export type Instance = {
   pulse?: { options: PulseOptions; anchors: Instance[]; curves: number[]; tail: boolean };
   spray?: { options: SprayOptions; source?: Instance; phase: number };
   rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3; scroll?: Track<number>; recycleColor?: Vec3; ghost?: number };
-  label?: { text: string; align: LabelAlign; mono: boolean; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
+  label?: { text: string; align: LabelAlign; mono: boolean; weight: LabelWeight; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle>;
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
@@ -209,28 +210,34 @@ export function cardInstances(options: CardOptions): Instance[] {
     labelInstance({ id: `${options.id}:${key}`, attach: options.id, text, position, size, color, emissive, opacity: opacity ?? 1, ...extra });
   const initials = options.initials ?? title?.[0]?.toUpperCase();
   return [card,
-    ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#060d1a", textEmissive * 1.2, { align: "center" })] : [],
-    ...title ? [label("title", title, [left, subtitle ? height * 0.13 : 0, z], height * (subtitle ? 0.36 : 0.4), textColor, textEmissive, { mono, ...titleOpacity !== undefined ? { opacity: titleOpacity } : {} })] : [],
-    ...subtitle ? [label("subtitle", subtitle, [left, -height * 0.24, z], height * 0.22, subtleColor, textEmissive * 0.55)] : [],
+    ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#060d1a", textEmissive * 1.2, { align: "center", weight: "bold" })] : [],
+    ...title ? [label("title", title, [left, subtitle ? height * 0.13 : 0, z], height * (subtitle ? 0.36 : 0.4), textColor, textEmissive, { mono, weight: options.weight, ...titleOpacity !== undefined ? { opacity: titleOpacity } : {} })] : [],
+    ...subtitle ? [label("subtitle", subtitle, [left, -height * 0.24, z], height * 0.22, subtleColor, textEmissive * 0.55, { weight: "regular" })] : [],
     ...meta ? [label("meta", meta, [width / 2 - height * 0.3, 0, z], height * 0.28, subtleColor, textEmissive * 0.55, { mono: true, align: "right" })] : []];
 }
 export function labelInstance(options: LabelOptions): Instance {
   return { ...primitive("box", { id: options.id, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),
-    label: { text: options.text, align: options.align ?? "left", mono: options.mono ?? false, offset: compileTrack<Vec3>(options.position ?? [0, 0, 0]),
+    label: { text: options.text, align: options.align ?? "left", mono: options.mono ?? false, weight: options.weight ?? "medium", offset: compileTrack<Vec3>(options.position ?? [0, 0, 0]),
       opacity: compileTrack(options.opacity ?? 1), attach: options.attach } };
 }
 // Worklets capture module bindings when they are defined, so constants and helpers precede their users.
 export const labelCapacity = 57;
 const labelSwap = 0.75;
-/** Width in ems of the text the label shader draws; mono uses fixed 0.6em cells. */
-export function labelWidth(text: string, mono: boolean) {
+function labelFace(mono: boolean, weight: LabelWeight) {
   "worklet";
+  return mono ? 3 : weight === "regular" ? 0 : weight === "bold" ? 2 : 1;
+}
+/** Width and kerning use the same face metrics as the shader. Unsupported characters become '?'. */
+export function labelWidth(text: string, mono: boolean, weight: LabelWeight = "medium") {
+  "worklet";
+  const face = labelFace(mono, weight);
   const length = Math.min(text.length, labelCapacity);
-  if (mono) return length * 0.6;
   let width = 0;
   for (let i = 0; i < length; i++) {
-    const code = text.charCodeAt(i);
-    width += glyphAdvances[(code < glyphFirst || code > glyphLast ? 63 : code) - glyphFirst];
+    const code = text.charCodeAt(i), next = text.charCodeAt(i + 1);
+    const glyph = (code < glyphFirst || code > glyphLast ? 63 : code) - glyphFirst;
+    width += glyphMetrics[face][glyph][0];
+    if (i + 1 < length) width += glyphKernings[face][glyph * (glyphLast - glyphFirst + 1) + (next < glyphFirst || next > glyphLast ? 63 : next) - glyphFirst] ?? 0;
   }
   return width;
 }
@@ -627,8 +634,8 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       if (!cache || cache.labels[i] !== logical) {
         if (cache) cache.labels[i] = logical;
         const text = label.row ? formatRowLabel(label.text, label.parent!.rows!.options.items, logical, label.parent!.rows!.slot) : label.text;
-        values[index + 8] = labelWidth(text, label.mono); values[index + 9] = Math.min(text.length, labelCapacity);
-        values[index + 10] = label.align === "center" ? 0.5 : label.align === "right" ? 1 : 0; values[index + 11] = label.mono ? 1 : 0;
+        values[index + 8] = labelWidth(text, label.mono, label.weight); values[index + 9] = Math.min(text.length, labelCapacity);
+        values[index + 10] = label.align === "center" ? 0.5 : label.align === "right" ? 1 : 0; values[index + 11] = labelFace(label.mono, label.weight);
         packLabelText(text, values, index);
       }
       continue;

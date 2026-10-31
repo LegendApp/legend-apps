@@ -256,6 +256,45 @@ their label templates add `{initial}`. Each card is one quad shaded from a 2D
 rounded-rectangle distance field, antialiased per device pixel, so edges stay crisp
 at Retina sizes without MSAA.
 
+## Label fonts
+
+`Label`, card titles and `Rows` label templates accept `weight="regular"`,
+`"medium"` (default), or `"bold"` for Roboto 400/500/700. Card subtitles use regular
+and avatar initials use bold. `mono` selects JetBrains Mono Regular with its real
+0.6 em advance and outlines; `weight` applies to the proportional face only.
+Both fonts use the SIL Open Font License 1.1; full notices ship in
+`font-licenses.json` alongside the generated atlas.
+
+```tsx
+<Label text="Vector labels" weight="bold" size={0.4} />
+<Label text="items.map(render)" mono size={0.25} />
+```
+
+Printable ASCII uses vector-generated RGB MSDF at 40 px/em with an 8 px distance
+range. Layout and drawing share advances and GPOS kerning extracted from the
+font. Unsupported characters become `?`; labels retain the 57-character limit.
+The shader bilinearly filters the linear RGB channels before median decoding,
+then computes coverage from fragment derivatives in render-target pixels.
+Camera motion never snaps glyph positions. Scene depth, fog and post effects
+still apply, so depth of field can intentionally blur out-of-focus text.
+
+Atlas generation is a build-time tool, with no generator or font-file dependency
+in the application. The generated `glyphs.ts` is part of the installable World
+source pack. It uses lossless RGB run packets decoded once per runtime; GPU
+buffers also contain face metrics and pair kerning. To regenerate, install
+`msdfgen-wasm@1.0.0` in a tools directory and `fonttools` plus `uharfbuzz` in a
+Python environment, then run from the repo root:
+
+```sh
+NODE_PATH=/path/to/tools/node_modules FONTTOOLS_PYTHON=/path/to/venv/bin/python \
+  node packages/slides-effects/scripts/world-glyphs.cjs \
+  /path/to/JetBrainsMono-Regular.ttf /path/to/JetBrainsMono-OFL.txt
+```
+
+The proportional source is `packages/slides-web/assets/Roboto.ttf`; monospace
+inputs are from [JetBrains Mono v2.304](https://github.com/JetBrains/JetBrainsMono/tree/v2.304).
+Keep the generated source and notices together when rebuilding or installing a pack.
+
 ## Voxel reduction and counter
 
 ```tsx

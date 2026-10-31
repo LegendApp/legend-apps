@@ -159,9 +159,9 @@ export const tapeY = index => 3.3 - index * 0.4
     <Rows id="pool" count={8} position={[0, poolY, 0]} spacing={0.85} width={4} height={0.66} depth={0.18} color={cyan} material="glass" emissive={0.025} scroll={scroll}
       card={{ radius: 0.16, avatar: 0.62 }} items={names} recycle={{ above: 1, below: 1, reach: 5.4, lift: 0.9, ghosts: 3, color: violet }} labels={[
         { text: "C{slot}", offset: [-2.35, 0, 0.1], size: 0.2, mono: true, align: "right", color: cyan, emissive: 1.4 },
-        { text: "{initial}", offset: [-1.67, 0, 0.1], size: 0.254, align: "center", color: "#060d1a", emissive: 1.2 },
+        { text: "{initial}", offset: [-1.67, 0, 0.1], size: 0.254, weight: "bold", align: "center", color: "#060d1a", emissive: 1.2 },
         { text: "{item}", offset: [-1.32, 0.086, 0.1], size: 0.238, color: ink, emissive: 1 },
-        { text: "item {index}", offset: [-1.32, -0.158, 0.1], size: 0.145, color: dim, emissive: 0.55 },
+        { text: "item {index}", offset: [-1.32, -0.158, 0.1], size: 0.145, weight: "regular", color: dim, emissive: 0.55 },
       ]} />
     {[[0, poolY + 2.55, 4.5, 0.035], [0, poolY - 2.55, 4.5, 0.035], [-2.25, poolY, 0.035, 5.135], [2.25, poolY, 0.035, 5.135]].map(([x, y, w, h], index) =>
       <Box key={`frame:${index}`} position={[x, y, 0]} scale={[w, h, 0.035]} color={cyan} emissive={1.8} />)}

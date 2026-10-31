@@ -2,7 +2,7 @@ import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentatio
 import { worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
-import { glyphAdvances, glyphAtlas, glyphBaseline, glyphCell, glyphEm, glyphFirst, glyphLast, glyphSpread } from "./glyphs";
+import { glyphAtlas, glyphEm, glyphFirst, glyphLast, glyphRange, glyphMetrics, glyphKernings, glyphPixelCount } from "./glyphs";
 
 export const worldBindings = `
 struct Frame { time:f32, dt:f32, frame:f32, step:f32, aspect:f32, brightness:f32, slideTime:f32, stepTime:f32 }
@@ -267,13 +267,17 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  return vec4f(color*in.opacity,in.opacity);
 }`}`;
 }
+const glyphCount = glyphLast - glyphFirst + 1;
+const glyphMetricsSize = glyphMetrics.length * glyphCount * 6;
+const glyphPixelsStart = glyphMetricsSize + glyphMetrics.length * glyphCount * glyphCount;
 // Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
 // so text is lit, reflected, focused and bloomed with the rest of the scene.
 function labelCode(offset: number, lights: number, reflection: boolean) {
   const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
   return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}
 @group(0) @binding(3) var<storage,read> glyphs:array<u32>;
-const advances=array<f32,${glyphAdvances.length}>(${glyphAdvances.map(f).join(",")});
+fn metric(face:u32,code:u32,field:u32)->f32 { return bitcast<f32>(glyphs[(face*${glyphCount}u+clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*6u+field]); }
+fn kern(face:u32,a:u32,b:u32)->f32 { return bitcast<f32>(glyphs[${glyphMetricsSize}u+face*${glyphCount * glyphCount}u+(clamp(a,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*${glyphCount}u+clamp(b,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u]); }
 struct LabelVertex { @builtin(position) position:vec4f, @location(0) world:vec3f, @location(1) local:vec2f, @location(2) @interpolate(flat) instance:u32 }
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
 @vertex fn labelVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->LabelVertex {
@@ -288,36 +292,41 @@ fn character(base:u32,i:u32)->u32 {
  let k=i/3u; let field=select(base+13u+k,base+12u+k,k<11u);
  return (u32(uniforms[field])>>((i%3u)*7u))&127u;
 }
-fn atlas(code:u32,x:i32,y:i32)->f32 {
- let index=u32((i32(code)-${glyphFirst})*${glyphCell * glyphCell}+clamp(y,0,${glyphCell - 1})*${glyphCell}+clamp(x,0,${glyphCell - 1}));
- return f32((glyphs[index/4u]>>((index%4u)*8u))&255u);
+fn atlas(offset:u32,width:i32,height:i32,x:i32,y:i32)->vec3f {
+ let pixel=glyphs[${glyphPixelsStart}u+offset+u32(clamp(y,0,height-1)*width+clamp(x,0,width-1))];
+ return vec3f(f32(pixel&255u),f32((pixel>>8u)&255u),f32((pixel>>16u)&255u))/255.;
 }
-// Signed distance in atlas pixels (inside positive) from a glyph whose pen origin sits at em position pen.
-fn glyph(code:u32,p:vec2f)->f32 {
- if(code<${glyphFirst + 1}u || code>${glyphLast}u) { return -${f(glyphSpread)}; }
- let pixel=vec2f(${f(glyphSpread)}+p.x*${f(glyphEm)},${f(glyphCell - glyphBaseline)}-p.y*${f(glyphEm)})-.5;
- if(any(pixel<vec2f(-1.)) || any(pixel>vec2f(${f(glyphCell)}))) { return -${f(glyphSpread)}; }
- let cell=vec2i(floor(pixel)); let t=fract(pixel);
- let value=mix(mix(atlas(code,cell.x,cell.y),atlas(code,cell.x+1,cell.y),t.x),mix(atlas(code,cell.x,cell.y+1),atlas(code,cell.x+1,cell.y+1),t.x),t.y);
- return (value-128.)/127.*${f(glyphSpread)};
+// Filter RGB in linear space, then take its median to preserve corners.
+fn glyph(face:u32,code:u32,p:vec2f)->f32 {
+ if(code<${glyphFirst + 1}u || code>${glyphLast}u) { return -.5; }
+ let width=i32(metric(face,code,3u)); let height=i32(metric(face,code,4u));
+ let pixel=vec2f((p.x+metric(face,code,1u))*${f(glyphEm)},f32(height)-(p.y+metric(face,code,2u))*${f(glyphEm)})-.5;
+ if(any(pixel<vec2f(-.5)) || any(pixel>vec2f(f32(width)-.5,f32(height)-.5))) { return -.5; }
+ let cell=vec2i(floor(pixel)); let t=fract(pixel); let offset=u32(metric(face,code,5u));
+ let value=mix(mix(atlas(offset,width,height,cell.x,cell.y),atlas(offset,width,height,cell.x+1,cell.y),t.x),mix(atlas(offset,width,height,cell.x,cell.y+1),atlas(offset,width,height,cell.x+1,cell.y+1),t.x),t.y);
+ return max(min(value.r,value.g),min(max(value.r,value.g),value.b))-.5;
 }
-fn advance(code:u32,mono:bool)->f32 { return select(advances[clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u],.6,mono); }
+fn advance(face:u32,base:u32,i:u32,count:u32)->f32 {
+ let code=character(base,i); var result=metric(face,code,0u);
+ if(i+1u<count) { result+=kern(face,code,character(base,i+1u)); }
+ return result;
+}
 @fragment fn labelFragment(in:LabelVertex)->@location(0) vec4f {
- let base=slot(in.instance); let count=u32(uniforms[base+9u]); let mono=uniforms[base+11u]>.5;
- let footprint=max(length(fwidth(in.local))*${f(glyphEm)},.0001);
+ let base=slot(in.instance); let count=u32(uniforms[base+9u]); let face=u32(uniforms[base+11u]);
+ // Derivatives are in actual render-target pixels, including Retina and renderScale.
+ let emPerPixel=max(sqrt(dpdx(in.local)*dpdx(in.local)+dpdy(in.local)*dpdy(in.local)),vec2f(.00001));
+ let screenRange=max(.5*dot(vec2f(${f(glyphRange / glyphEm)}),1./emPerPixel),1.);
  var pen=0.; var index=0u;
- if(mono) { index=u32(clamp(floor(in.local.x/.6),0.,f32(count-1u))); pen=f32(index)*.6; }
- else { for(var i=0u;i+1u<count;i++) { let next=pen+advance(character(base,i),false); if(next>in.local.x) { break; } pen=next; index=i+1u; } }
- var distance=-${f(glyphSpread)};
+ if(face==3u) { let cell=metric(face,32u,0u); index=u32(clamp(floor(in.local.x/cell),0.,f32(count-1u))); pen=f32(index)*cell; }
+ else { for(var i=0u;i+1u<count;i++) { let next=pen+advance(face,base,i,count); if(next>in.local.x) { break; } pen=next; index=i+1u; } }
+ var distance=-.5;
  for(var d=-1;d<=1;d++) {
   let i=i32(index)+d; if(i<0 || i>=i32(count)) { continue; }
   let code=character(base,u32(i)); var start=pen;
-  if(d<0) { start=pen-advance(code,mono); } if(d>0) { start=pen+advance(character(base,index),mono); }
-  if(mono) { start+=(.6-advances[clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u])*.5; }
-  distance=max(distance,glyph(code,in.local-vec2f(start,0.)));
+  if(d<0) { start=pen-advance(face,base,u32(i),count); } if(d>0) { start=pen+advance(face,base,index,count); }
+  distance=max(distance,glyph(face,code,in.local-vec2f(start,0.)));
  }
- // Mono text draws a little lighter, closer to a monospace face than the proportional atlas.
- let alpha=smoothstep(-.6*footprint,.6*footprint,distance-select(0.,.7,mono))*uniforms[base+23u];
+ let alpha=clamp(distance*screenRange+.5,0.,1.)*uniforms[base+23u];
  if(alpha<=.004) { discard; }
  ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let color=vector(base+4u);
@@ -326,17 +335,30 @@ fn advance(code:u32,mono:bool)->f32 { return select(advances[clamp(code,${glyphF
 }`;
 }
 let glyphWords: Float32Array | undefined;
-/** The atlas bytes as a storage buffer, decoded once per process. */
+/** Face metrics, kerning and losslessly packed RGB pixels, uploaded once per graph. */
 function glyphBuffer() {
   if (!glyphWords) {
+    glyphWords = new Float32Array(glyphPixelsStart + glyphPixelCount);
+    glyphWords.set(glyphMetrics.flat(2));
+    for (let face = 0; face < glyphMetrics.length; face++) for (const [pair, adjustment] of Object.entries(glyphKernings[face])) {
+      glyphWords[glyphMetricsSize + face * glyphCount * glyphCount + Number(pair)] = adjustment;
+    }
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    const bytes = new Uint8Array(Math.ceil(glyphAtlas.length * 3 / 4 / 4) * 4);
+    const bytes = new Uint8Array(glyphAtlas.length * 3 / 4);
     let length = 0;
     for (let i = 0; i < glyphAtlas.length; i += 4) {
       const n = (alphabet.indexOf(glyphAtlas[i]) << 18) | (alphabet.indexOf(glyphAtlas[i + 1]) << 12) | (Math.max(0, alphabet.indexOf(glyphAtlas[i + 2])) << 6) | Math.max(0, alphabet.indexOf(glyphAtlas[i + 3]));
       bytes[length++] = n >> 16 & 255; if (glyphAtlas[i + 2] !== "=") bytes[length++] = n >> 8 & 255; if (glyphAtlas[i + 3] !== "=") bytes[length++] = n & 255;
     }
-    glyphWords = new Float32Array(bytes.buffer, 0, Math.ceil(length / 4));
+    const words = new Uint32Array(glyphWords.buffer);
+    let output = glyphPixelsStart, input = 0;
+    const pixel = () => { const value = bytes[input] | bytes[input + 1] << 8 | bytes[input + 2] << 16; input += 3; return value; };
+    while (input < length) {
+      const packet = bytes[input++];
+      if (packet >= 128) { const value = pixel(), count = packet - 128 + 2; words.fill(value, output, output + count); output += count; }
+      else for (let i = 0; i <= packet; i++) words[output++] = pixel();
+    }
+    if (output !== words.length) throw new Error("Invalid World glyph atlas length");
   }
   return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
 }
