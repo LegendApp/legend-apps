@@ -1,22 +1,171 @@
 diff --git a/apple/worklets/apple/AnimationFrameQueue.mm b/apple/worklets/apple/AnimationFrameQueue.mm
-index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..08e340e6e7cf9025192ffc3c835395e676862b49 100644
+index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9c35dd05a 100644
 --- a/apple/worklets/apple/AnimationFrameQueue.mm
 +++ b/apple/worklets/apple/AnimationFrameQueue.mm
-@@ -87,7 +87,6 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
+@@ -6,7 +6,9 @@
+ #import <chrono>
+ 
+ #if TARGET_OS_OSX
++#import <CoreVideo/CoreVideo.h>
+ #import <QuartzCore/CADisplayLink.h>
++#import <atomic>
+ #endif // TARGET_OS_OSX
+ 
+ #import <React/RCTAssert.h>
+@@ -20,6 +22,124 @@
+ const auto POOR = CAFrameRateRangeMake(10, 24, 24);
+ } // namespace FrameRateRange
+ 
++#if TARGET_OS_OSX
++// RCTPlatformDisplayLink queues a main run loop tick for every display pulse, so ticks queued while the
++// main thread is busy run back to back. This link keeps at most one tick queued or running, and an
++// invalidated link never restarts or delivers a queued tick.
++@interface WorkletsFrameLink : RCTPlatformDisplayLink
++@end
++
++@implementation WorkletsFrameLink {
++  CVDisplayLinkRef link_;
++  __weak id target_;
++  SEL selector_;
++  NSRunLoop *runLoop_;
++  NSRunLoopMode mode_;
++  // Orders Start/Stop with invalidation. The display link callback never takes it.
++  std::mutex controlMutex_;
++  std::atomic<bool> tickPending_;
++  std::atomic<bool> invalidated_;
++}
++
+++ (instancetype)displayLinkWithTarget:(id)target selector:(SEL)selector
++{
++  WorkletsFrameLink *link = [self new];
++  link->target_ = target;
++  link->selector_ = selector;
++  return link;
++}
++
++static CVReturn WorkletsFrameLinkCallback(
++    CVDisplayLinkRef,
++    const CVTimeStamp *,
++    const CVTimeStamp *,
++    CVOptionFlags,
++    CVOptionFlags *,
++    void *context)
++{
++  WorkletsFrameLink *link = (__bridge WorkletsFrameLink *)context;
++  if (link->invalidated_ || link->tickPending_.exchange(true)) {
++    return kCVReturnSuccess;
++  }
++  CFRunLoopRef runLoop = link->runLoop_.getCFRunLoop;
++  CFRunLoopPerformBlock(runLoop, (__bridge CFTypeRef)link->mode_, ^{
++    @autoreleasepool {
++      id target = link->target_;
++      if (!link->invalidated_ && target) {
++        ((void (*)(id, SEL, WorkletsFrameLink *))[target methodForSelector:link->selector_])(
++            target, link->selector_, link);
++      }
++      link->tickPending_ = false;
++    }
++  });
++  CFRunLoopWakeUp(runLoop);
++  return kCVReturnSuccess;
++}
++
++- (void)dealloc
++{
++  if (link_ != NULL) {
++    CVDisplayLinkStop(link_);
++    CVDisplayLinkRelease(link_);
++  }
++}
++
++- (void)addToRunLoop:(NSRunLoop *)runLoop forMode:(NSRunLoopMode)mode
++{
++  runLoop_ = runLoop;
++  mode_ = mode;
++  if (CVDisplayLinkCreateWithActiveCGDisplays(&link_) != kCVReturnSuccess) {
++    CVDisplayLinkCreateWithCGDisplay(CGMainDisplayID(), &link_);
++  }
++  RCTAssert(link_ != NULL, @"Cannot create display link");
++  CVDisplayLinkSetOutputCallback(link_, &WorkletsFrameLinkCallback, (__bridge void *)self);
++}
++
++- (void)setPaused:(BOOL)paused
++{
++  std::lock_guard<std::mutex> lock(controlMutex_);
++  if (link_ == NULL || invalidated_) {
++    return;
++  }
++  if (paused) {
++    CVDisplayLinkStop(link_);
++  } else {
++    CVDisplayLinkStart(link_);
++  }
++}
++
++- (void)invalidate
++{
++  std::lock_guard<std::mutex> lock(controlMutex_);
++  invalidated_ = true;
++  if (link_ != NULL) {
++    CVDisplayLinkStop(link_);
++  }
++}
++
++- (BOOL)isPaused
++{
++  return link_ == NULL || !CVDisplayLinkIsRunning(link_);
++}
++
++- (NSTimeInterval)timestamp
++{
++  CVTimeStamp now = {};
++  CVDisplayLinkGetCurrentTime(link_, &now);
++  return (NSTimeInterval)now.hostTime / (NSTimeInterval)CVGetHostClockFrequency();
++}
++
++- (NSTimeInterval)duration
++{
++  const CVTime period = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(link_);
++  return (period.flags & kCVTimeIsIndefinite) ? 0 : (NSTimeInterval)period.timeValue / period.timeScale;
++}
++
++@end
++#else // TARGET_OS_OSX
++typedef WorkletsDisplayLink WorkletsFrameLink;
++#endif // TARGET_OS_OSX
++
+ @implementation AnimationFrameQueue {
+   /* DisplayLink is thread safe. */
+   WorkletsDisplayLink *displayLink_;
+@@ -45,9 +165,9 @@ - (instancetype)init
+ 
+     SEL frameCallback = supportsProMotion ? @selector(executeQueueForProMotion:) : @selector(executeQueue:);
+     currentFrameRate_ = supportsProMotion ? FrameRateRange::BEST : FrameRateRange::STANDARD;
+-    displayLink_ = [WorkletsDisplayLink displayLinkWithTarget:self selector:frameCallback];
++    displayLink_ = [WorkletsFrameLink displayLinkWithTarget:self selector:frameCallback];
+   } else {
+-    displayLink_ = [WorkletsDisplayLink displayLinkWithTarget:self selector:@selector(executeQueue:)];
++    displayLink_ = [WorkletsFrameLink displayLinkWithTarget:self selector:@selector(executeQueue:)];
+   }
+ 
+ #if TARGET_OS_OSX
+@@ -87,7 +207,19 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
    RCTAssertMainQueue();
  
    auto frameCallbacks = [self pullCallbacks];
--  [displayLink_ setPaused:TRUE];
++#if TARGET_OS_OSX
++  // The link keeps running while frames are requested, so a long frame still makes the next pulse.
++  // Stop it on an idle tick; the recheck under the lock keeps a concurrent request from being lost.
++  if (frameCallbacks.empty()) {
++    std::lock_guard<std::mutex> lock(callbacksMutex_);
++    if (frameCallbacks_.empty()) {
++      [displayLink_ setPaused:TRUE];
++    }
++    return;
++  }
++#else // TARGET_OS_OSX
+   [displayLink_ setPaused:TRUE];
++#endif // TARGET_OS_OSX
  
  #if TARGET_OS_OSX
    auto targetTimestamp = displayLink.timestamp + displayLink.duration;
-@@ -95,6 +94,9 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
-   auto targetTimestamp = displayLink.targetTimestamp;
- #endif // TARGET_OS_OSX
-   targetTimestamp = worklets::calculateTimestampWithSlowAnimations(targetTimestamp);
-+  // macOS cannot read the CVDisplayLink clock after it is stopped. Capture
-+  // the timestamp first, then pause before callbacks can request another frame.
-+  [displayLink_ setPaused:TRUE];
-   for (const auto &callback : frameCallbacks) {
-     callback(targetTimestamp);
-   }

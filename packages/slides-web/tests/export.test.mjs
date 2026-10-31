@@ -19,6 +19,7 @@ test("reports how each effect pack runs on web and flags native-only capabilitie
   expect(effects).toEqual({ animation: { reanimated: "Reanimated web", lottie: "Skottie" }, camera: { skia: "CanvasKit", arkit: "unsupported" } });
   expect(unsupported).toEqual(['Effect pack "camera" is unsupported on web: it requires the native "arkit" capability.']);
   expect(webEffectSupport([{ id: "local" }])).toEqual({ effects: { local: {} }, unsupported: [] });
+  expect(webEffectSupport([{ id: "world", capabilities: ["webgpu-multipass"] }])).toEqual({ effects: { world: { "webgpu-multipass": "WebGPU multipass (requires a WebGPU browser)" } }, unsupported: [] });
 });
 
 test("Skia detection follows compiled host imports and built-in effects, not slide prose", () => {

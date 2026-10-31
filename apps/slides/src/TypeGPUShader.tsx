@@ -2,20 +2,26 @@ import { useContext, useEffect, useLayoutEffect, useRef, useState, type RefObjec
 import { AlphaType, ColorType, Skia } from "@shopify/react-native-skia";
 import { PixelRatio, Platform, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
-import { makeMutable, runOnJS, runOnUI, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask, type GPUShaderProps } from "@legend-apps/presentation";
+import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
+import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask, type GPURenderGraphDefinition, type GPUShaderProps } from "@legend-apps/presentation";
+import { prepareRenderGraph, encodeRenderGraph, type RenderGraphResources } from "./gpuRenderGraph";
 import { reportSlideError } from "./slidesStore";
 
+let nextGPUResourceId = 0;
 type Resources = {
+  id: number;
   alive: SharedValue<boolean>;
   disposed: SharedValue<boolean>;
+  configured: SharedValue<boolean>;
   device: GPUDevice;
   context: RNCanvasContext;
+  format: GPUTextureFormat;
   clock: GPUBuffer;
   states: GPUBuffer[];
   groups: GPUBindGroup[];
   compute?: GPUComputePipeline;
-  render: GPURenderPipeline;
+  render?: GPURenderPipeline;
+  graph?: SharedValue<RenderGraphResources>;
   particles?: GPURenderPipeline;
   frameData?: GPUBuffer;
   composite?: { pipeline: GPURenderPipeline; group: GPUBindGroup; texture: GPUTexture };
@@ -25,7 +31,7 @@ type Resources = {
 export function TypeGPUShader({ code, width: configuredWidth = 1696, height: configuredHeight = 650, background = false,
   particles = false, particleCount = 256, particleVertexCount = 6, particleBlend = "additive", previewTime = 4,
   clock: clockMode = "step", image, composite = false, frameData, frameDataSize = 0, borderRadius,
-  accessibilityLabel, active = true, children, maxTime, frameTimeIndex }: GPUShaderProps) {
+  accessibilityLabel, active = true, children, maxTime, frameTimeIndex, renderGraph, renderScale }: GPUShaderProps) {
   const size = useBackgroundSize();
   const intensity = useBackgroundIntensity();
   const displayScale = useContext(PresentationCanvasScaleContext);
@@ -33,6 +39,12 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const height = background ? Math.max(1, Math.round(size.height)) : configuredHeight;
   const brightness = background ? intensity : 1;
   const canvas = useRef<CanvasRef>(null);
+  // Native getContext() returns a new wrapper per call, each with its own canvas size, so one wrapper both sizes and renders.
+  const context = useRef<RNCanvasContext | null>(null);
+  const surfaceContext = () => {
+    if (!context.current) context.current = canvas.current?.getContext("webgpu") ?? null;
+    return context.current;
+  };
   const supported = typeof navigator !== "undefined" && !!navigator.gpu;
   const [resources, setResources] = useState<Resources>();
   const [preparedResources, setPreparedResources] = useState<Resources>();
@@ -45,31 +57,26 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   // Surface dimensions are independent of shader/device ownership. In particular,
   // live window resizing must not recompile pipelines or reset simulation buffers.
   useLayoutEffect(() => {
-    if (Platform.OS === "web") {
-      const context = canvas.current?.getContext("webgpu");
-      if (context) resizeBrowserSurface(context, width, height, displayScale);
-      return;
-    }
-    const surface = canvas.current?.getNativeSurface();
-    if (surface) { surface.width = width; surface.height = height; }
+    const surface = surfaceContext()?.canvas;
+    if (surface) resizeSurface(surface, width, height, displayScale);
   }, [width, height, displayScale, resources]);
   useEffect(() => {
     if (!supported) return;
-    return startShaderCanvas({ canvas, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize,
+    return startShaderCanvas({ canvas, surfaceContext, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize, renderGraph,
       reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
       setResources, setError });
-  }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize]);
+  }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize, renderGraph]);
   if (!supported) throw new Error("WebGPU is required to render this effect");
   if (error) throw new Error(error);
   return <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
     <Canvas ref={canvas} style={{ width, height }} transparent />
-    {resources && <UIFrames key={code} resources={resources} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={setError} onReady={() => setPreparedResources(resources)} />}
+    {resources && <UIFrames key={resources.id} resources={resources} renderScale={renderScale} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} displayScale={displayScale} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={message => { setError(message); reportSlideError(message, errorContext.current.slideIndex, errorContext.current.isPreview); }} onReady={() => setPreparedResources(resources)} />}
     {resources && children}
   </View>;
 }
 
-function resizeBrowserSurface(context: RNCanvasContext, width: number, height: number, displayScale: number) {
-  const surface = context.canvas;
+/** Back the drawable at device pixels, the slide's display scale times the screen's backing scale. */
+function resizeSurface(surface: { width: number; height: number }, width: number, height: number, displayScale: number) {
   const pixelWidth = Math.max(1, Math.round(width * displayScale * PixelRatio.get()));
   const pixelHeight = Math.max(1, Math.round(height * displayScale * PixelRatio.get()));
   if (surface.width !== pixelWidth) surface.width = pixelWidth;
@@ -87,8 +94,8 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ canvas, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, reportError, setResources, setError }: {
-  canvas: RefObject<CanvasRef | null>; code: string;
+function startShaderCanvas({ canvas, surfaceContext, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, setResources, setError }: {
+  canvas: RefObject<CanvasRef | null>; surfaceContext(): RNCanvasContext | null; code: string; renderGraph?: GPURenderGraphDefinition;
   particles: boolean; particleCount: number; particleBlend?: "additive" | "over"; image?: string; composite?: boolean;
   width?: number; height?: number; displayScale?: number; frameDataSize?: number; reportError(error: unknown): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
@@ -116,13 +123,19 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         void device.lost.then(info => {
           if (!cancelled && info.reason !== "destroyed") setError("WebGPU device lost: " + info.message);
         });
-        const context = canvas.current.getContext("webgpu");
+        const context = surfaceContext();
         if (!context) throw new Error("WebGPU surface unavailable");
-        // The library sizes from DOM bounds, which are zero during preparation.
-        // Set the drawing buffer before transferring ownership to UIFrames.
-        if (Platform.OS === "web") resizeBrowserSurface(context, width, height, displayScale);
+        // The library sizes from view bounds in points (zero during preparation on web).
+        // Set the drawing buffer in device pixels before transferring ownership to UIFrames.
+        resizeSurface(context.canvas, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({ device, format, alphaMode: "premultiplied" });
+        if (renderGraph) {
+          const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
+          const frameData = device.createBuffer({ size: Math.max(16, frameDataSize * 4), usage: 128 | 8 });
+          const graph = await prepareRenderGraph(device, renderGraph, format, clock, frameData);
+          await transfer({ device, context, format, clock, frameData, graph, states: [], groups: [] });
+          return;
+        }
         const fieldFormat = composite ? "rgba16float" : format;
         const module = device.createShaderModule({ code });
         const diagnostics = await module.getCompilationInfo();
@@ -184,16 +197,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
           });
           compositeResources = { pipeline, group, texture };
         }
-        validationScope = false;
-        const validationError = await device.popErrorScope();
-        if (validationError) throw new Error(validationError.message);
-        if (cancelled) { device.destroy(); return; }
-        const alive = makeMutable(true);
-        const disposed = makeMutable(false);
-        const ownedDevice = device;
-        release = () => runOnUI(destroyGPU)(ownedDevice, alive, disposed);
-        transferred = true;
-        setResources({ alive, disposed, device, context, clock, states, groups, compute, render, particles: particlePipeline, frameData, composite: compositeResources });
+        await transfer({ device, context, format, clock, states, groups, compute, render, particles: particlePipeline, frameData, composite: compositeResources });
       } catch (caught) {
         if (validationScope) {
           validationScope = false;
@@ -203,11 +207,21 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
         if (!cancelled) { setError(caught instanceof Error ? caught.message : String(caught)); reportError(caught); }
       }
     }
+    async function transfer(program: Omit<Resources, "alive" | "disposed" | "configured" | "id" | "graph"> & { graph?: RenderGraphResources }) {
+      validationScope = false;
+      const validationError = await program.device.popErrorScope();
+      if (validationError) throw new Error(validationError.message);
+      if (cancelled) { program.device.destroy(); return; }
+      const alive = makeMutable(true), disposed = makeMutable(false), configured = makeMutable(false);
+      release = () => runOnUI(destroyGPU)(program.device, alive, disposed);
+      transferred = true;
+      setResources({ ...program, graph: program.graph ? makeMutable(program.graph) : undefined, alive, disposed, configured, id: ++nextGPUResourceId });
+    }
     void setup();
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[]>; previewTime: number; onError(message: string): void; onReady(): void }) {
+function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -219,7 +233,7 @@ function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, 
   const finished = useSharedValue(false);
   const simulationEpoch = useSharedValue({ phase: "", slideKey: "", stepKey: "" });
   const { device, context, clock, groups, compute, render, particles } = r;
-  const draw = (dt: number) => {
+  const draw = (dt: number, frozen = false) => {
     "worklet";
     if (!alive.value) return;
     const state = playback.value;
@@ -229,18 +243,30 @@ function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, 
          (state.phase === "playing" && previous.phase !== "playing"))) {
       count.value = 0;
     }
-    simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
+    if (previous.phase !== state.phase || previous.slideKey !== state.slideKey || previous.stepKey !== state.stepKey) {
+      simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
+    }
+    const frameIndex = frozen ? Math.max(0, count.value - 1) : count.value;
+    const scale = renderScale?.get();
     try {
       const time = samplePlayback(state, previewTime, clockMode);
-      device.queue.writeBuffer(clock, 0, new Float32Array([time, dt, count.value, state.stepIndex, aspect, brightness, samplePlayback(state, previewTime, "slide"), samplePlayback(state, previewTime, "step")]));
-      submitGPUFrame(r, count.value, particleCount, particleVertexCount, frameData);
-      count.value += 1;
+      const values = scratch(8);
+      values[0] = time; values[1] = dt; values[2] = frameIndex; values[3] = state.stepIndex; values[4] = aspect; values[5] = brightness;
+      values[6] = samplePlayback(state, previewTime, "slide"); values[7] = samplePlayback(state, previewTime, "step");
+      device.queue.writeBuffer(clock, 0, values);
+      submitGPUFrame(r, frameIndex, particleCount, particleVertexCount, frameData, scale);
+      if (!frozen) count.value += 1;
       if (!rendered.value) { rendered.value = true; runOnJS(onReady)(); }
     } catch (caught) {
       alive.set(false);
       runOnJS(onError)(String(caught));
     }
   };
+  const scaleInputs = r.graph && renderScale ? { scale: renderScale, uniforms: frameData } : null;
+  // Order a frozen redraw after the uniform mapper has sampled the same scale.
+  useAnimatedReaction(() => scaleInputs ? { scale: scaleInputs.scale.value, uniforms: scaleInputs.uniforms?.value } : null, (snapshot, previous) => {
+    if (snapshot && previous && snapshot.scale !== previous.scale && rendered.value && playback.value.phase !== "playing") draw(0, true);
+  });
   const frame = useFrameCallback(info => {
     if (!effectActive || playback.value.phase !== "playing") return;
     const state=playback.value, previous=simulationEpoch.value;
@@ -259,9 +285,10 @@ function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, 
       if (phase === "playing") finished.value=false;
       if (phase === "preview" || phase === "preparing") { finished.value=false; count.value = 0; draw(0); }
       else if (phase === "playing" && (!rendered.value || !effectActive)) draw(0);
+      else if (r.graph && rendered.value && (phase === "paused" || phase === "outgoing")) draw(0, true);
     })();
     return () => frame.setActive(false);
-  }, [active, effectActive, maxTime, frameTimeIndex, preview, preparing, previewTime, step, frame, rendered, finished, brightness, playback, width, height, clockMode, frameData, particleVertexCount]);
+  }, [active, effectActive, maxTime, frameTimeIndex, preview, preparing, previewTime, step, frame, rendered, finished, brightness, playback, displayScale, width, height, clockMode, frameData, renderScale, particleVertexCount]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
     runOnUI(destroyGPU)(device, alive, disposed);
@@ -269,6 +296,14 @@ function UIFrames({ resources: r, effectActive = true, maxTime, frameTimeIndex, 
   return null;
 }
 
+
+/** writeBuffer copies synchronously, so surfaces on the UI runtime share one exact-length staging array per size. */
+function scratch(length: number) {
+  "worklet";
+  const runtime = globalThis as { __gpuScratch?: Record<number, Float32Array<ArrayBuffer>> };
+  const arrays = runtime.__gpuScratch ??= {};
+  return arrays[length] ??= new Float32Array(length);
+}
 
 function destroyGPU(device: GPUDevice, alive: SharedValue<boolean>, disposed: SharedValue<boolean>) {
   "worklet";
@@ -301,21 +336,36 @@ async function loadImageTexture(device: GPUDevice, uri: string) {
       const pixels = image.readPixels(0, 0, { width, height, colorType: ColorType.RGBA_8888, alphaType: AlphaType.Premul });
       if (!(pixels instanceof Uint8Array)) throw new Error("Could not read GPU image pixels");
       const texture = device.createTexture({ size: [width, height], format: "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-      device.queue.writeTexture({ texture }, pixels, { bytesPerRow: width * 4 }, [width, height]);
+      device.queue.writeTexture({ texture }, pixels.buffer, { offset: pixels.byteOffset, bytesPerRow: width * 4 }, [width, height]);
       return texture;
     } finally { image.dispose(); }
   } finally { data.dispose(); }
 }
 
-function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[]>) {
+function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>, renderScale = 1) {
   "worklet";
   const { device, context, clock, groups, compute, render, particles } = r;
+  // Configure on UI after retirement of the previous owner, never during async setup.
+  if (!r.configured.value) {
+    context.configure({ device, format: r.format, alphaMode: "premultiplied" });
+    r.configured.value = true;
+  }
   const data = frameData?.value;
-  if (r.frameData && data) device.queue.writeBuffer(r.frameData, 0, new Float32Array(data!));
+  if (r.frameData && data) {
+    if (data.length * 4 > r.frameData.size) throw new Error(`Frame data has ${data.length} values; its buffer holds ${r.frameData.size / 4}`);
+    let values = data;
+    if (!(values instanceof Float32Array)) { values = scratch(data.length); values.set(data); }
+    device.queue.writeBuffer(r.frameData, 0, values);
+  }
   const encoder = device.createCommandEncoder();
+  if (r.graph) {
+    encodeRenderGraph(r.graph.value, device, encoder, context.getCurrentTexture(), renderScale);
+    device.queue.submit([encoder.finish()]); context.present();
+    return;
+  }
   const source = compute ? frame % 2 : 0;
   const target = compute ? 1-source : 0;
-  if (compute) {
+  if (compute && particleCount > 0) {
     const simulation = encoder.beginComputePass();
     simulation.setPipeline(compute); simulation.setBindGroup(0, groups[source]);
     simulation.dispatchWorkgroups(Math.ceil(particleCount / 64)); simulation.end();
@@ -325,8 +375,8 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
     loadOp: "clear", storeOp: "store",
   }] });
   pass.setBindGroup(0, groups[target]);
-  pass.setPipeline(render); pass.draw(3);
-  if (particles) { pass.setPipeline(particles); pass.draw(particleVertexCount, particleCount); }
+  pass.setPipeline(render!); pass.draw(3);
+  if (particles && particleCount > 0 && particleVertexCount > 0) { pass.setPipeline(particles); pass.draw(particleVertexCount, particleCount); }
   pass.end();
   if (r.composite) {
     const compositePass = encoder.beginRenderPass({ colorAttachments: [{

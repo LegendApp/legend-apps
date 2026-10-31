@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true } = {}) {
+function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -13,21 +13,22 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     presets: [require.resolve("@react-native/babel-preset")],
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
-  const effects = [], calls = [], uniforms = [], errors = [];
-  const frameData={value:[1,2,3,4]};
+  const effects = [], calls = [], events = [], uniforms = [], errors = [];
+  const frameData={value:[1,2,3,4]}, renderScale={value:1,get(){return this.value;}};
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
-  let callback, enabled = false, ready = 0;
+  let callback, reaction, reactionInputs, enabled = false, ready = 0;
   const frame = { setActive: value => { enabled = value; } };
   const pass = kind => ({
     setPipeline() {}, setBindGroup: (_, value) => calls.push([kind, value]),
     dispatchWorkgroups: count => calls.push(["dispatch", count]),
-    draw: (...args) => calls.push(["draw", ...args]), end() {},
+    draw: (...args) => calls.push(["draw", ...args]), end: () => events.push(["end", kind]),
   });
   const device = {
-    queue: { writeBuffer: (_, __, values) => uniforms.push([...values]), submit() {} },
+    queue: { writeBuffer: (_, __, values) => uniforms.push([...values]), submit: () => events.push(["submit"]) },
     createCommandEncoder: () => ({
-      beginComputePass: () => pass("compute"), beginRenderPass: () => pass("render"), finish() {},
+      beginComputePass: () => { events.push(["begin", "compute"]); return pass("compute"); },
+      beginRenderPass: ({ colorAttachments }) => { events.push(["begin", "render", colorAttachments[0].loadOp]); return pass("render"); }, finish() {},
     }),
     destroy: () => calls.push(["destroy"]),
   };
@@ -42,20 +43,23 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     "react-native-reanimated": {
       useSharedValue: value => ({ value }),
       useFrameCallback: fn => { callback = fn; return frame; },
+      useAnimatedReaction: (prepare, fn) => { reactionInputs = prepare.__closure; let previous = prepare(); reaction = () => { const next = prepare(); fn(next, previous); previous = next; }; },
       runOnJS: fn => fn, runOnUI: fn => fn,
     },
     "./slidesStore": {},
+    "./gpuRenderGraph": { encodeRenderGraph: (_, __, ___, ____, scale) => calls.push(["graph", scale]) },
   };
   const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(
     name => mocks[name] ?? require(name), {},
   );
-  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, device, context: { getCurrentTexture: () => ({ createView() {} }), present() {} },
-    clock: {}, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? {} : undefined,
+  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
+    clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? { size: 16 } : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
-    effectActive, maxTime, frameTimeIndex, clockMode, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount: 2048, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
-  return { calls, uniforms, errors, ready: () => ready, enabled: () => enabled,
-    playback, frameData,
+  return { calls, events, uniforms, errors, ready: () => ready, enabled: () => enabled,
+    playback, frameData, reactionInputs, redraw: () => effects[0](),
+    scale: value => { renderScale.value = value; reaction(); },
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
@@ -79,6 +83,46 @@ test("active GPU frames alternate storage buffers and dispatch the configured pa
   f.tick();
   expect(f.calls.length).toBe(count);
   expect(f.calls.filter(call => call[0] === "destroy")).toHaveLength(1);
+});
+
+test("particle-free frames skip empty particle work but still clear, draw fullscreen passes and present", () => {
+  for (const [particleCount, particleVertexCount] of [[0, 6], [2, 0], [2, 6]]) for (const composite of [false, true]) for (const simulation of [false, true]) {
+    const f = frames({ particleCount, particleVertexCount, composite, simulation });
+    f.tick();
+    const dispatches = simulation && particleCount > 0;
+    const frame = {
+      draws: [["draw", 3], ...(particleCount && particleVertexCount ? [["draw", particleVertexCount, particleCount]] : []), ...(composite ? [["draw", 3]] : [])],
+      events: [...(dispatches ? [["begin", "compute"], ["end", "compute"]] : []), ["begin", "render", "clear"], ["end", "render"],
+        ...(composite ? [["begin", "render", "clear"], ["end", "render"]] : []), ["submit"], ["present"]],
+    };
+    expect(f.calls.filter(call => call[0] === "dispatch")).toEqual(dispatches ? [["dispatch", 1], ["dispatch", 1]] : []);
+    expect(f.calls.filter(call => call[0] === "draw")).toEqual([...frame.draws, ...frame.draws]);
+    expect(f.events).toEqual([...frame.events, ...frame.events]);
+    f.stop();
+  }
+});
+
+test("shared render scale redraws a paused graph at its frozen clock and frame", () => {
+  const f = frames({ graph: true, simulation: false });
+  f.tick();
+  f.playback.value = { ...f.playback.value, phase: "paused" };
+  const previous = f.uniforms.at(-1);
+  f.scale(.75);
+  expect(f.calls.at(-1)).toEqual(["graph", .75]);
+  expect(f.uniforms.at(-1)).toEqual([previous[0], 0, previous[2], ...previous.slice(3)]);
+  const count = f.calls.length;
+  f.scale(.75); expect(f.calls).toHaveLength(count);
+  f.scale(1); expect(f.calls.at(-1)).toEqual(["graph", 1]);
+  f.stop();
+});
+
+test("scale reaction subscribes to graph uniforms without subscribing legacy frame-data shaders", () => {
+  const contains = (value, target) => value === target || !!value && typeof value === "object" && Object.values(value).some(child => contains(child, target));
+  for (const graph of [false, true]) {
+    const f = frames({ graph, data: true, simulation: false });
+    expect(contains(f.reactionInputs, f.frameData)).toBe(graph);
+    f.stop();
+  }
 });
 
 test("preview renders one deterministic frame without starting a loop", () => {
@@ -140,6 +184,21 @@ test("GPU submission errors stop subsequent rendering", () => {
   const count = f.uniforms.length;
   f.tick();
   expect(f.uniforms.length).toBe(count);
+  f.stop();
+});
+
+test("frame data larger than its GPU buffer stops before upload and reports once", () => {
+  const f = frames({ data: true });
+  expect(f.uniforms.at(-1)).toEqual([1, 2, 3, 4]);
+  f.frameData.value = [1, 2, 3, 4, 5];
+  const count = f.uniforms.length;
+  f.tick();
+  expect(f.uniforms.slice(count).some(values => values.length === 5)).toBe(false);
+  expect(f.errors).toHaveLength(1);
+  const submitted = f.events.length;
+  f.tick();
+  expect(f.events).toHaveLength(submitted);
+  expect(f.errors).toHaveLength(1);
   f.stop();
 });
 
@@ -231,7 +290,8 @@ test("offscreen browser setup sizes first and allocates simulation resources onl
   );
   const surface = {width:0,height:0};
   const assertSize = () => expect([surface.width,surface.height]).toEqual([2016,1000]);
-  const context = {canvas:surface,configure:assertSize,getCurrentTexture:()=>{assertSize();return {createView(){}};}};
+  let configurations = 0;
+  const context = {canvas:surface,configure:()=>{configurations++;assertSize();}};
   const buffers=[],computes=[];
   const device = {
     addEventListener(){},pushErrorScope(){},popErrorScope:async()=>null,lost:new Promise(()=>{}),destroy(){},
@@ -243,9 +303,9 @@ test("offscreen browser setup sizes first and allocates simulation resources onl
   Object.defineProperty(globalThis,"navigator",{configurable:true,value:{gpu:{requestAdapter:async()=>({requestDevice:async()=>device}),getPreferredCanvasFormat:()=>"bgra8unorm"}}});
   try {
     for (const simulation of [false,true]) await new Promise<void>((resolve,reject)=>{
-      start({canvas:{current:{getContext:()=>{surface.width=0;surface.height=0;return context;}}},
+      start({canvas:{current:{}},surfaceContext:()=>{surface.width=0;surface.height=0;return context;},
         code:simulation ? "@compute @workgroup_size(64) fn simulate() {}" : "",particles:false,particleCount:1,width:2016,height:1000,displayScale:0.5,
-        setResources:r=>{if(r){r.context.getCurrentTexture();expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
+        setResources:r=>{if(r){assertSize();expect(r.configured.value).toBe(false);expect(configurations).toBe(0);expect(r.states.length).toBe(simulation ? 2 : 0);expect(r.groups.length).toBe(simulation ? 2 : 1);resolve();}},setError:error=>{if(error)reject(new Error(error));},reportError:reject});
     });
     expect(buffers.filter(b=>b.usage===(128|8))).toHaveLength(2);
     expect(buffers.filter(b=>b.usage===(64|8))).toHaveLength(2);
@@ -284,4 +344,85 @@ test("geometry can retain slide time across steps while uploading UI data and co
   const count=f.uniforms.length;
   f.tick(); expect(f.uniforms).toHaveLength(count);
   f.stop();
+});
+
+
+test("multipass surfaces redraw a frozen frame after paused and outgoing resizing", () => {
+  const f = frames({ graph: true, data: true });
+  f.tick();
+  const lastFrame = f.uniforms.at(-2);
+  expect(f.calls.filter(call => call[0] === "graph")).toHaveLength(2);
+  for (const phase of ["paused", "outgoing"]) {
+    f.playback.value = { ...f.playback.value, phase, stepTime: lastFrame[0] };
+    f.redraw();
+    expect(f.uniforms.at(-2).slice(0, 4)).toEqual([lastFrame[0], 0, lastFrame[2], lastFrame[3]]);
+    const count = f.uniforms.length;
+    f.tick(); expect(f.uniforms).toHaveLength(count);
+  }
+  f.stop();
+  expect(f.calls.filter(call => call[0] === "destroy")).toHaveLength(1);
+});
+
+test("frame failures report the latest slide context as well as stopping the surface", () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false, presets: [require.resolve("@react-native/babel-preset")],
+  });
+  let state = 0, refIndex = 0, slideIndex = 1, preview = false;
+  const refs = [], errors = [], reports = [];
+  const mocks = {
+    react: { useContext: () => 1, useRef: value => refs[refIndex++] ??= { current: value }, useEffect() {}, useLayoutEffect: effect => effect(),
+      useState: () => [state++ % 3 === 0 ? { id: 1 } : undefined, message => errors.push(message)] },
+    "react-native": { View: "View", Platform: { OS: "web" } }, "react-native-webgpu": { Canvas: "Canvas" }, "@shopify/react-native-skia": {},
+    "react-native-reanimated": {}, "./gpuRenderGraph": {},
+    "@legend-apps/presentation": { useBackgroundSize: () => ({ width: 1920, height: 1080 }), useBackgroundIntensity: () => 1,
+      usePresentationValue: field => field === "slideIndex" ? slideIndex : preview, usePreparationTask() {} },
+    "./slidesStore": { reportSlideError: (...args) => reports.push(args) },
+  };
+  const renderer = new Function("require", "exports", "navigator", code + "\nreturn TypeGPUShader;")(
+    name => mocks[name] ?? require(name), {}, { gpu: {} },
+  );
+  const first = renderer({ code: "" });
+  const onError = first.props.children[1].props.onError;
+  slideIndex = 4; preview = true; state = 0; refIndex = 0;
+  renderer({ code: "" });
+  onError("draw failed");
+  expect(errors).toEqual(["draw failed"]);
+  expect(reports).toEqual([["draw failed", 4, true]]);
+});
+
+test("React Compiler renders frame surfaces without reading shared values", () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false,
+    presets: [require.resolve("@react-native/babel-preset")],
+    plugins: [
+      [require.resolve("babel-plugin-react-compiler"), { target: "19" }],
+      require.resolve("react-native-worklets/plugin"),
+    ],
+  });
+  let rendering = false, cache;
+  const reads = [];
+  const shared = (name, value) => ({ get value() { if (rendering) reads.push(name); return value; }, set value(next) { value = next; },
+    get() { if (rendering) reads.push(name); return value; }, set(next) { value = next; } });
+  const mocks = {
+    react: { useEffect() {} },
+    "react/compiler-runtime": { c: size => cache ??= new Array(size).fill(Symbol.for("react.memo_cache_sentinel")) },
+    "react-native": {}, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "./slidesStore": {}, "./gpuRenderGraph": {},
+    "@legend-apps/presentation": { usePresentationValue: () => false, usePlayback: () => playback, samplePlayback() {} },
+    "react-native-reanimated": { useSharedValue: value => shared("local", value), useFrameCallback: () => ({ setActive() {} }),
+      useAnimatedReaction() {}, runOnJS: fn => fn, runOnUI: fn => fn },
+  };
+  const playback = shared("playback", { phase: "playing" });
+  const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(name => mocks[name] ?? require(name), {});
+  const props = { resources: { alive: shared("alive", true), disposed: shared("disposed", false), configured: shared("configured", false),
+    graph: shared("graph", {}), device: {}, context: {}, clock: {}, groups: [] }, renderScale: shared("renderScale", 1),
+    frameData: shared("frameData", [0]), frameTimeIndex: 0, width: 1, height: 1, aspect: 1, brightness: 1, particleCount: 0, previewTime: 0,
+    onError() {}, onReady() {} };
+  rendering = true;
+  UIFrames(props); UIFrames(props); UIFrames({ ...props, particleCount: 1, frameTimeIndex: undefined, maxTime: 2 });
+  rendering = false;
+  expect(reads).toEqual([]);
 });

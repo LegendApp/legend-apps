@@ -24,6 +24,9 @@ Decks resolve verified source snapshots from
 `~/Library/Application Support/Legend Slides/effects/`, including in a source checkout.
 To compile against this `packs/` directory while developing effects, set
 `LEGEND_SLIDES_EFFECT_PACKS` or pass `--effect-packs <directory>` to the compiler.
+A pack at `<deck folder>/effects/<id>/pack.json` is used from source before installed
+packs, and edits recompile the deck. The lockfile records it as `{ "path": "effects/<id>" }`
+rather than a checksum; point that path elsewhere, as `apps/slides/examples/3d` does for `world`.
 Source is trusted code with the same host API access as a local deck component.
 
 The native app and shipped compiler omit these implementations. The gallery at

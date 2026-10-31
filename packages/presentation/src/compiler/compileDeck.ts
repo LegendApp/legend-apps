@@ -18,13 +18,13 @@ import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 import { loadUniwindCompiler } from "./uniwindCompiler";
 import { defaultEffectPacksDirectory, MissingEffectPack, resolveEffectPack } from "./effectPacks";
-import type { EffectLock } from "../effectPacks/schema";
+import { isLocalPack, type EffectLock } from "../effectPacks/schema";
 import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLock } from "../effectPacks/storage";
 
 // Pass plugin modules rather than paths so the shipped compiler can be a single bundle.
 const workletsPlugin = require("react-native-worklets/plugin");
 const reactCompilerPlugin = require("babel-plugin-react-compiler");
-const blockScopingPlugin = require("@babel/plugin-transform-block-scoping");
+const reactNativePreset = require("@react-native/babel-preset");
 export const hostModules = new Set([
   "react",
   "react/compiler-runtime",
@@ -205,10 +205,11 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
         try {
           const importerRoot = libraryRoots.get(args.importer);
           const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
-            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified);
-          if (pack.pin && options.resolvedPins) {
+            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified, path.dirname(entryPath));
+          if (pack.local && options.resolvedPins) options.resolvedPins[pack.id] = pack.local;
+          else if (pack.pin && options.resolvedPins) {
             const previous = options.resolvedPins[pack.id];
-            if (previous && (previous.version !== pack.pin.version || previous.sha256 !== pack.pin.sha256)) throw new Error(`Effect dependency conflict for "${pack.id}".`);
+            if (previous && (isLocalPack(previous) || previous.version !== pack.pin.version || previous.sha256 !== pack.pin.sha256)) throw new Error(`Effect dependency conflict for "${pack.id}".`);
             options.resolvedPins[pack.id] = pack.pin;
           }
           libraryRoots.set(pack.file, pack.root);
@@ -345,14 +346,16 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     }
     // Built-in transition sources enter through a separate loader, so serialize
     // their worklets here too. Imported deck source was serialized before bundling.
-    // Hermes shares captured loop bindings without Babel's block-scope transform.
-    // Run it after bundling so esbuild's generated export getters are lowered too.
+    // Lower classes and scoped bindings for Hermes after bundling so generated
+    // export getters are covered too. Deck helpers must stay inline.
     const code = transformSync(output.text, {
       babelrc: false,
+      comments: true,
       compact: false,
       configFile: false,
       filename: "deck.js",
-      plugins: [[workletsPlugin, { disableSourceMaps: true }], blockScopingPlugin],
+      presets: [[reactNativePreset, { disableImportExportTransform: true, disableStaticViewConfigsCodegen: true, enableBabelRuntime: false, unstable_transformProfile: "hermes-stable" }]],
+      plugins: [[workletsPlugin, { disableSourceMaps: true }]],
       sourceMaps: "inline",
       sourceType: "script",
     })?.code;

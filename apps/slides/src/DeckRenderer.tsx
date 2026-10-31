@@ -330,7 +330,7 @@ function BackgroundErrorBoundary({ children }: { children?: ReactNode }) {
 }
 
 export function SlideBackgroundHost(props: ComponentProps<typeof BackgroundHost>) {
-  return <BackgroundHost {...props} boundary={BackgroundErrorBoundary} />;
+  return <GPUShaderProvider renderer={TypeGPUShader}><BackgroundHost {...props} boundary={BackgroundErrorBoundary} /></GPUShaderProvider>;
 }
 
 export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {

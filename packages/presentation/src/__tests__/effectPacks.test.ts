@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { compileDeck } from "../compiler";
 import { resolveEffectPack } from "../compiler/effectPacks";
-import { effectPackIncompatibility } from "../effectPacks/schema";
+import { effectPackIncompatibility, resolveInstallation } from "../effectPacks/schema";
 
 const temporary = [];
 function fixture(extra = {}) {
@@ -56,13 +56,55 @@ test("pack imports do not relax deck or pack containment", async () => {
   expect(result.errors.join("\n")).toContain("escapes the deck directory");
 });
 
+test("deck-local packs resolve before installed packs and lock as relative paths", async () => {
+  const { root, deck, packs } = fixture({
+    "deck/effects/motion/pack.json": JSON.stringify({ id: "motion", version: "0.0.1", hostApiVersion: 1, exports: { Pose: "./Pose.ts" } }),
+    "deck/effects/motion/Pose.ts": 'export function sample(x) { "worklet"; return x * 3; }',
+  });
+  const lockFile = `${deck}.effects.lock.json`;
+  fs.writeFileSync(lockFile, JSON.stringify({ schemaVersion: 1, packs: { motion: { version: "1.0.0", sha256: "a".repeat(64) } } }));
+  let result = await compileDeck(deck, { effectPacksDirectory: packs });
+  expect(result.success).toBe(true);
+  expect(result.dependencies).toContain(path.join(root, "deck/effects/motion/pack.json"));
+  const module = { exports: {} };
+  Function("require", "module", "exports", result.code)(() => ({}), module, module.exports);
+  expect(module.exports.sample(21)).toBe(63);
+
+  fs.rmSync(lockFile);
+  result = await compileDeck(deck, { effectPacksDirectory: path.join(root, "empty") });
+  expect(result.success).toBe(true);
+  const lock = fs.readFileSync(lockFile, "utf8");
+  expect(JSON.parse(lock).packs).toEqual({ motion: { path: "effects/motion" } });
+  fs.writeFileSync(path.join(root, "deck/effects/motion/Pose.ts"), 'export function sample(x) { "worklet"; return x * 4; }');
+  expect((await compileDeck(deck, { effectPacksDirectory: packs })).success).toBe(true);
+  expect(fs.readFileSync(lockFile, "utf8")).toBe(lock);
+
+  fs.rmSync(path.join(root, "deck/effects"), { recursive: true });
+  fs.writeFileSync(lockFile, JSON.stringify({ schemaVersion: 1, packs: { motion: { path: "../packs/motion" } } }));
+  result = await compileDeck(deck, { effectPacksDirectory: path.join(root, "empty") });
+  expect(result.success).toBe(true);
+  expect(result.dependencies).toContain(path.join(packs, "motion/pack.json"));
+
+  fs.writeFileSync(lockFile, JSON.stringify({ schemaVersion: 1, packs: { motion: { path: "../missing" } } }));
+  result = await compileDeck(deck, { effectPacksDirectory: packs });
+  expect(result.success).toBe(false);
+  expect(result.missingEffectPacks).toEqual([]);
+  expect(result.errors.join("\n")).toContain("was not found at ../missing");
+});
+
+test("installing catalog packs preserves local lock entries without consulting the catalog", () => {
+  const catalog = { schemaVersion: 1, packs: {}, effects: [] };
+  const local = { schemaVersion: 1, packs: { world: { path: "effects/world" } } };
+  expect(resolveInstallation(catalog, ["world"], local).lock).toEqual(local);
+});
+
 test("manifests reject missing, incompatible, unexported and escaping entries", () => {
   const { packs, root } = fixture();
   for (const ref of ["slides:missing/Pose", "slides:motion/Unknown", "slides:../motion/Pose", "slides:motion/../Pose", "slides:motion/__proto__"]) {
     expect(() => resolveEffectPack(ref, packs)).toThrow();
   }
   const manifest = path.join(packs, "motion/pack.json");
-  fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 2, exports: { Pose: "./Pose.ts" } }));
+  fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 3, exports: { Pose: "./Pose.ts" } }));
   expect(() => resolveEffectPack("slides:motion/Pose", packs)).toThrow("incompatible");
   fs.writeFileSync(manifest, JSON.stringify({ id: "motion", version: "1.0.0", hostApiVersion: 1, exports: { Pose: "../../outside.ts" } }));
   expect(() => resolveEffectPack("slides:motion/Pose", packs)).toThrow();
@@ -93,7 +135,7 @@ test("cross-pack imports require declared dependency versions and track both roo
 });
 
 test("local pack manifests reject capabilities absent from this host before evaluation", async () => {
-  for (const requirements of [{ hostApiVersion: 2, capabilities: [] }, { hostApiVersion: 1, capabilities: ["unknown-engine"] }]) {
+  for (const requirements of [{ hostApiVersion: 3, capabilities: [] }, { hostApiVersion: 1, capabilities: ["unknown-engine"] }]) {
     const { deck, packs } = fixture({
       "packs/motion/pack.json": JSON.stringify({ id: "motion", version: "1.0.0", ...requirements, exports: { Pose: "./Pose.ts" } }),
       "packs/motion/Pose.ts": 'throw new Error("must never evaluate"); export const sample = 1;',
@@ -111,4 +153,10 @@ test("the signed host retains every capability required by the current source pa
     const manifest = JSON.parse(fs.readFileSync(path.join(packs, id, "pack.json"), "utf8"));
     expect(effectPackIncompatibility(manifest)).toBeUndefined();
   }
+});
+
+test("host API 2 accepts multipass packs while retaining API 1", () => {
+  expect(effectPackIncompatibility({ hostApiVersion: 2, capabilities: ["webgpu", "webgpu-multipass", "reanimated"] })).toBeUndefined();
+  expect(effectPackIncompatibility({ hostApiVersion: 1, capabilities: ["webgpu"] })).toBeUndefined();
+  for (const hostApiVersion of [0, 1.5, 3]) expect(effectPackIncompatibility({ hostApiVersion })).toContain("this app provides 2");
 });
