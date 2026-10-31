@@ -5,6 +5,7 @@ import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
 import { advanceResolution, createResolutionState } from "./resolution";
+import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
 import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
@@ -15,6 +16,7 @@ export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
 export { cardInstances, orbInstances, graphInstances, labelInstance, primitive, prepareWorldScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
 export type { Shot, CameraPose, Vec3 } from "./camera";
+export type { RenderFlash, RenderTreeOptions } from "./renderTree";
 export type { Animated, CardOptions, CardStyle, GraphOptions, LabelOptions, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
 export function Camera(_: CameraOptions) { return null; }
@@ -34,6 +36,7 @@ export function Rows(_: RowsOptions) { return null; }
 export function Label(_: LabelOptions) { return null; }
 export function Card(_: CardOptions) { return null; }
 export function Voxels(_: VoxelsOptions) { return null; }
+export function RenderTree(_: RenderTreeOptions) { return null; }
 export function Stage(_: StageOptions & { children?: ReactNode }) { return null; }
 export function WorldCounter(_: NonNullable<WorldScene["counter"]>) { return null; }
 export function DOF(_: NonNullable<WorldScene["dof"]>) { return null; }
@@ -114,6 +117,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === Label) add([labelInstance(options as LabelOptions)], stages);
       else if (child.type === Card) add(cardInstances(options as CardOptions), stages);
       else if (child.type === Voxels) add(voxelInstances(options as VoxelsOptions), stages);
+      else if (child.type === RenderTree) add(renderTreeInstances(options as RenderTreeOptions), stages);
       else if (child.type === Custom) add(customInstances(options as CustomOptions), stages);
       else if (child.type === SDF) add([sdfInstance(options as SDFOptions)], stages);
       else if (child.type === Material) { const material = options as MaterialOptions & { id: string }; scene.materials![material.id] = material; }

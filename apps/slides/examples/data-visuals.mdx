@@ -1,0 +1,125 @@
+---
+title: Data visuals
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#05060a"
+  color: "#e8eef6"
+---
+
+import { Text, View } from "react-native"
+import { RenderTree } from "slides:charts/RenderTree"
+import { AnimatedNumber, NumberCard } from "slides:charts/AnimatedNumber"
+import { BarChart } from "slides:charts/BarChart"
+import { LineChart } from "slides:charts/LineChart"
+import { World, Camera, Material, RenderTree as WorldRenderTree, RimLight, Bloom, Fog, Vignette, Grain, Label, tree } from "slides:world/World"
+
+export const nodes = [
+  { id: "app", label: "App" },
+  { id: "header", label: "Header" }, { id: "feed", label: "Feed" }, { id: "side", label: "Sidebar" },
+  { id: "logo", label: "Logo" }, { id: "search", label: "Search" },
+  { id: "a", label: "Item A" }, { id: "b", label: "Item B" }, { id: "c", label: "Item C" },
+  { id: "profile", label: "Profile" },
+]
+export const edges = [["app", "header"], ["app", "feed"], ["app", "side"], ["header", "logo"], ["header", "search"],
+  ["feed", "a"], ["feed", "b"], ["feed", "c"], ["side", "profile"]]
+export const flashes = [undefined, "all", { subtree: "feed" }, ["b"], "all"]
+export const modes = ["", "all", "subtree", "single leaf", "all"]
+
+export const mode = text => <Text style={{ color: "#7b8ba1", fontFamily: "Menlo", fontSize: 24, letterSpacing: 2.4, height: 34 }}>{text.toUpperCase()}</Text>
+
+# Render tree
+
+<Steps count={5}>{step => <View style={{ gap: 20 }}>
+  {mode(modes[step])}
+  <RenderTree nodes={nodes} edges={edges} flashes={flashes} step={step} width={1680} height={560} />
+</View>}</Steps>
+
+<!-- Step 1 renders every node, step 2 one subtree, step 3 a single leaf, step 4 everything again. Badges and the total accumulate. -->
+
+---
+
+# Render tree in 3D
+
+export const worldTree = tree("app", [["header", ["logo", "search"]], ["feed", ["a", "b", "c"]], ["side", ["profile"]]])
+export const worldLabels = Object.fromEntries(nodes.map(node => [node.id, node.label]))
+
+<Steps count={5}>{step => <View style={{ gap: 20 }}>
+  {mode(modes[step])}
+  <World width={1680} height={600} exposure={1.2} backgroundColor="#05060a">
+    <Camera shots={[{ step: 0, position: [0.6, -0.1, 10.8], target: [0.6, -0.1, 0], fov: 38 }]} />
+    <Material id="glass" albedo="#0e1d33" roughness={0.3} metal={0.3} rim={0.35} />
+    <RimLight color="#22d3ee" intensity={0.2} />
+    <WorldRenderTree data={worldTree} labels={worldLabels} flashes={flashes} position={[-1.2, 1.6, 0]} spacing={[2.3, 1.75]}
+      total={{ position: [8.1, 1.2, 0], size: 1.1 }} />
+    <Label text="RENDERS" mono align="right" position={[8.1, 2.2, 0]} size={0.28} color="#7b8ba1" emissive={0.7} />
+    <Fog density={0.015} color="#05060a" />
+    <Bloom intensity={0.9} threshold={1.4} radius={0.7} />
+    <Vignette amount={0.25} /><Grain amount={0.01} />
+  </World>
+</View>}</Steps>
+
+---
+
+# Animated numbers
+
+<Steps count={3}>{step => <View style={{ flexDirection: "row", gap: 48, alignItems: "flex-start" }}>
+  <NumberCard label="Operations per update" value={[20160, 10040, 40][step]} from={0} width={980}
+    baselines={[{ label: "Baseline", value: 20160 }, { label: "Previous", value: [20160, 20160, 10040][step] }]}
+    tag={[undefined, "-50%", "-99.8%"][step]} />
+  <View style={{ gap: 28, paddingTop: 20 }}>
+    <View>
+      <Text style={{ color: "#7b8ba1", fontFamily: "Menlo", fontSize: 22, letterSpacing: 2 }}>LATENCY</Text>
+      <AnimatedNumber value={[184.2, 96.5, 12.8][step]} decimals={1} suffix=" ms" fontSize={72} fontFamily="Menlo" fontWeight="500" />
+    </View>
+    <View>
+      <Text style={{ color: "#7b8ba1", fontFamily: "Menlo", fontSize: 22, letterSpacing: 2 }}>THROUGHPUT</Text>
+      <AnimatedNumber value={[1200, 2450, 9800][step]} suffix="/s" fontSize={72} fontFamily="Menlo" fontWeight="500" color="#22d3ee" />
+    </View>
+  </View>
+</View>}</Steps>
+
+---
+
+# Extreme ranges: linear to log
+
+export const ranges = [
+  { label: "Full scan", value: 48000 },
+  { label: "Indexed", value: 2400 },
+  { label: "Cached", value: 120 },
+  { label: "Precomputed", value: 3 },
+]
+
+<Steps count={2}>{step => <BarChart data={ranges} scale={step ? "log" : "linear"} maximum={step ? 100000 : 50000} width={1680} highlight="Precomputed" suffix=" µs" />}</Steps>
+
+<!-- The linear axis keeps a minimum bar and a readable value for the tiny entries; the log axis spreads all four out. -->
+
+---
+
+# Extreme ranges: broken axis
+
+export const services = [
+  { label: "Service A", value: 9800 },
+  { label: "Service B", value: 9350 },
+  { label: "Service C", value: 140 },
+  { label: "Service D", value: 12 },
+]
+
+<Steps count={2}>{step => <BarChart data={services} scale={{ break: [200, 9000] }} maximum={10000} width={1680} highlight="Service D"
+  callout={step ? { label: "Service D", text: "800× less" } : undefined} suffix=" ms" />}</Steps>
+
+---
+
+# Time series
+
+export const wave = (seed, spikes) => Array.from({ length: 48 }, (_, i) => {
+  const base = 9 + 2.2 * Math.sin(i * 0.7 + seed) + 1.4 * Math.sin(i * 1.9 + seed * 2)
+  return spikes && (i * 7 + 3) % 11 === 0 ? base + 26 + ((i * 13) % 9) * 2.2 : base
+})
+export const frames = [wave(0, true), wave(0, false)]
+
+<Steps count={2}>{step => <LineChart series={[{ points: frames[step] }]} maximum={60} width={1680} height={600}
+  reference={{ value: 16.7, label: "16.7 ms" }} xLabels={["0 s", "1 s", "2 s", "3 s", "4 s"]} />}</Steps>
+
+<!-- Step 1 eases every point to the flattened dataset. -->

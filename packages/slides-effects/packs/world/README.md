@@ -256,6 +256,23 @@ their label templates add `{initial}`. Each card is one quad shaded from a 2D
 rounded-rectangle distance field, antialiased per device pixel, so edges stay crisp
 at Retina sizes without MSAA.
 
+## Render trees
+
+```tsx
+import { RenderTree, tree } from "slides:world/World";
+
+<RenderTree data={tree("app", [["list", ["a", "b"]], "footer"])} flashes={[undefined, "all", { subtree: "list" }, ["b"]]}
+  labels={{ app: "App" }} position={[0, 1.6, 0]} spacing={[2.3, 1.75]} card={[2, 0.56]} total={{ position: [7, 1.4, 0] }} />
+```
+
+A flat tree of Cards facing the camera, laid out with leaves in consecutive columns.
+Each `flashes` entry is `"all"`, a list of ids or `{ subtree: id }`. Cards and their
+edges pulse in `color` top-down on the steps where they render, then settle to a faint
+glow and dim again on the next step without a render. Each card shows its accumulated
+render count; `total` places the running sum. Counts crossfade between steps; for a
+ticking total, overlay the charts pack's `AnimatedNumber`. Instance ids are
+`<id>:<node>` (default id `tree`).
+
 ## Voxel reduction and counter
 
 ```tsx
