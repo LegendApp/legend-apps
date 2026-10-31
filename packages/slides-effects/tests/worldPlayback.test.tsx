@@ -22,7 +22,7 @@ mock.module("react-native-reanimated", () => ({ ...animated, useDerivedValue(rea
   return React.useRef({ _isReanimatedSharedValue: true, get value() { return latest.current(); } }).current;
 } }));
 mock.module("@legend-apps/presentation", () => ({
-  PresentationObservableProvider, usePresentation$, useRuntimeProjection,
+  PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
   GPURenderGraph: props => React.createElement("render-graph", props),
   usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 1280, height: 720 }),
   usePresentationValue: () => playback.value.phase,
@@ -235,7 +235,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     const require = createRequire(import.meta.url);
     const module = { exports: {} };
     const callbacks = [], mutables = [], preparations = [], reactions = [];
-    const presentation = { PresentationObservableProvider, usePresentation$, useRuntimeProjection,
+    const presentation = { PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
       GPURenderGraph: props => React.createElement("compiled-graph", props),
       usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 800, height: 500 }),
       usePresentationValue: () => playback.value.phase };
@@ -247,7 +247,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     };
     Function("require", "module", "exports", compiled.code)(name => {
       if (name === "react" || name === "react/compiler-runtime" || name === "react/jsx-runtime") return require(name);
-      if (name === "react-native") return { View: "view" };
+      if (name === "react-native") return { View: "view", PixelRatio: { get: () => 2 } };
       if (name === "@legend-apps/presentation") return presentation;
       if (name === "react-native-reanimated") return reanimated;
       return {};

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ClockSample, Vec3 } from "../packs/world/camera";
-import { glyphAdvances, glyphFirst } from "../packs/world/glyphs";
+import { glyphAdvances, glyphCell, glyphFirst } from "../packs/world/glyphs";
 import { buildWorldGraph } from "../packs/world/render";
-import { compileTrack, formatRowLabel, sampleTrack, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareWorldScene, primitive,
+import { cardInstances, compileTrack, formatRowLabel, sampleTrack, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareWorldScene, primitive,
   recyclePathPoint, recycleSlot, rowInstances, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 
 function clock(time: number, step = 0, origins: Record<number, number> = { 0: 0 }): ClockSample {
@@ -48,7 +48,7 @@ describe("world labels", () => {
     const graph = buildWorldGraph(scene);
     const pass = graph.passes.find(item => item.id === "scene-labels")!;
     expect(pass).toMatchObject({ kind: "render", instanceCount: 1, reads: ["glyphs"] });
-    expect(graph.buffers?.[0]).toMatchObject({ id: "glyphs", size: 95 * 32 * 32 });
+    expect(graph.buffers?.[0]).toMatchObject({ id: "glyphs", size: 95 * glyphCell * glyphCell });
     expect(graph.passes.indexOf(pass)).toBe(graph.passes.length - 1 - graph.passes.slice().reverse().findIndex(item => item.id.startsWith("scene-")));
     expect(() => prepareWorldScene({ instances: [labelInstance({ text: "x", attach: "missing" })] })).toThrow("Unknown world label parent");
   });
@@ -116,5 +116,38 @@ describe("recycled rows", () => {
     const ghost = scene.instances.find(item => item.id === "list:ghost:0")!;
     expect(instanceOpacity(ghost, clock(1))).toBe(0);
     expect(instanceOpacity(ghost, clock(1.5))).toBeGreaterThan(0);
+  });
+});
+
+describe("world cards", () => {
+  test("lay out an avatar initial, title, subtitle and meta from the card's largest size", () => {
+    const [card, ...labels] = cardInstances({ id: "ada", title: "ada", subtitle: "Lovelace", meta: "key 1", scale: [{ step: 0, value: [4, 0, 0] }, { step: 1, value: [4, 0.6, 0.2] }] });
+    expect(card.card).toEqual({ radius: 0.12, bevel: 0.02, edge: 0.6, avatar: 0.62 });
+    expect(labels.map(label => [label.id, label.label!.text, label.label!.attach])).toEqual([
+      ["ada:initials", "A", "ada"], ["ada:title", "ada", "ada"], ["ada:subtitle", "Lovelace", "ada"], ["ada:meta", "key 1", "ada"]]);
+    const [initials, title, , meta] = labels.map(label => label.label!.offset.initial);
+    expect(initials[0]).toBeCloseTo(-2 + 0.3);
+    expect(title[0]).toBeGreaterThan(initials[0] + 0.6 * 0.62 / 2);
+    expect(meta[0]).toBeLessThan(2);
+    expect(initials[2]).toBeCloseTo(0.11);
+    expect(cardInstances({ id: "code", title: "{ id: 1 }", avatar: 0 }).map(item => item.id)).toEqual(["code", "code:title"]);
+    expect(() => cardInstances({ title: "Ada" })).toThrow("needs an id");
+  });
+  test("write their shape into the slot and draw in card passes before labels", () => {
+    const scene = prepareWorldScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2 }), primitive("box")], floor: { mirror: true } });
+    const index = scene.instances.findIndex(item => item.card);
+    const values = sampleWorldUniforms(scene, clock(0)) as number[];
+    const base = worldHeaderSize + index * worldInstanceSize;
+    expect([values[base + 11], values[base + 16], values[base + 17], values[base + 18]]).toEqual([0.2, 0.02, 0.6, 0.62]);
+    const ids = buildWorldGraph(scene).passes.map(pass => pass.id);
+    expect(ids.indexOf("scene-cards")).toBeGreaterThan(ids.indexOf("scene-box"));
+    expect(ids.indexOf("scene-labels")).toBeGreaterThan(ids.indexOf("scene-cards"));
+    expect(ids).toContain("reflection-cards");
+  });
+  test("rows can be cards and their labels can show the item's initial", () => {
+    const [slot] = rowInstances({ id: "pool", count: 2, height: 0.66, card: { avatar: 0.62 } });
+    expect(slot.card).toEqual({ radius: 0.12, bevel: 0.02, edge: 0.6, avatar: 0.62 });
+    expect(slot.scale.initial[1]).toBe(0.66);
+    expect(formatRowLabel("{initial}", ["grace"], 0, 0)).toBe("G");
   });
 });

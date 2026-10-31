@@ -17,11 +17,18 @@ export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?
 export type LabelAlign = "left" | "center" | "right";
 export type LabelOptions = { id?: string; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean };
-/** `text` substitutes `{item}` (items[index]), `{index}` (the logical row) and `{slot}` (the pooled container). */
+/** Rounded card shape: corner `radius` and edge `bevel` in world units, `edge` glow strength, `avatar` disc radius as a fraction of half the height (0 hides it). */
+export type CardStyle = { radius?: number; bevel?: number; edge?: number; avatar?: number };
+/** A rounded card with an optional avatar (initials default to the title's first letter), a title, a second line and a right-aligned meta tag.
+ * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */
+export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & CardStyle & {
+  title?: string; subtitle?: string; meta?: string; initials?: string; mono?: boolean; textColor?: string; subtleColor?: string; textEmissive?: number;
+  opacity?: Animated<number>; titleOpacity?: Animated<number> };
+/** `text` substitutes `{item}` (items[index]), `{initial}` (its first letter), `{index}` (the logical row) and `{slot}` (the pooled container). */
 export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean };
 export type RecycleOptions = { above?: number; below?: number; reach?: number; lift?: number; color?: string; ghosts?: number };
-export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number;
-  scroll?: Animated<number>; items?: string[]; labels?: RowLabel[]; recycle?: RecycleOptions; emissive?: number; material?: string | MaterialOptions };
+export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; height?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number;
+  scroll?: Animated<number>; items?: string[]; labels?: RowLabel[]; recycle?: RecycleOptions; emissive?: number; material?: string | MaterialOptions; card?: CardStyle };
 export type VoxelsOptions = { id: string; grid?: Vec3; spacing?: number; size?: number; position?: Vec3; color?: Animated<string>; emissive?: Animated<number>; collapse?: Collapse };
 export type CustomOptions = PrimitiveOptions & { wgsl: string; count?: number; vertexCount: number };
 export type SDFOptions = PrimitiveOptions & { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
@@ -43,7 +50,7 @@ export type Instance = {
   rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3; scroll?: Track<number>; recycleColor?: Vec3; ghost?: number };
   label?: { text: string; align: LabelAlign; mono: boolean; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
-  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
+  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle>;
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
   anchor?: boolean;
@@ -172,8 +179,9 @@ export function rowInstances(options: RowsOptions): Instance[] {
   if (recycle && (recycle.above ?? 0) + (recycle.below ?? 0) >= count) throw new Error("World recycled rows need at least one visible row besides the buffers");
   const shared = { options, flashColor: colorVector(options.flashColor ?? "#22d3ee"), scroll: options.scroll === undefined ? undefined : compileTrack(options.scroll),
     recycleColor: recycle ? colorVector(recycle.color ?? "#b07cff") : undefined };
-  const box = (id: string) => primitive("box", { id, position: options.position ?? [0, 0, 0],
-    scale: [options.width ?? 3, 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: options.emissive ?? 0.1, material: options.material });
+  const card = options.card ? { card: cardStyle(options.card) } : {};
+  const box = (id: string): Instance => ({ ...primitive("box", { id, position: options.position ?? [0, 0, 0],
+    scale: [options.width ?? 3, options.height ?? 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: options.emissive ?? 0.1, material: options.material }), ...card });
   const slots: Instance[] = Array.from({ length: count }, (_, slot) => ({ ...box(`${options.id}:slot:${slot}`), rows: { ...shared, slot } }));
   const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 } }));
   const labels = slots.flatMap(parent => (options.labels ?? []).map((row, index) => {
@@ -182,6 +190,29 @@ export function rowInstances(options: RowsOptions): Instance[] {
     return instance;
   }));
   return [...slots, ...ghosts, ...labels];
+}
+function cardStyle({ radius = 0.12, bevel = 0.02, edge = 0.6, avatar = 0 }: CardStyle): Required<CardStyle> {
+  return { radius, bevel, edge, avatar };
+}
+function largestScale(scale: Animated<Vec3> | undefined): Vec3 {
+  const track = compileTrack<Vec3>(scale ?? [1, 1, 1]);
+  return [track.initial, ...track.frames.map(frame => frame.value)].reduce((a, b) => b[1] > a[1] ? b : a);
+}
+export function cardInstances(options: CardOptions): Instance[] {
+  const { title, subtitle, meta, mono = false, textColor = "#e8f4ff", subtleColor = "#7f9bb3", textEmissive = 1, opacity, titleOpacity } = options;
+  const style = cardStyle({ avatar: title ? 0.62 : 0, ...options });
+  if (!options.id && (title || subtitle || meta)) throw new Error("A World card with text needs an id");
+  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: style };
+  const [width, height, depth] = largestScale(options.scale ?? [4, 0.62, 0.18]).map(value => value * (typeof options.size === "number" ? options.size : 0.5) * 2) as Vec3;
+  const z = depth / 2 + 0.01, left = -width / 2 + (style.avatar > 0 ? height * (0.5 + style.avatar * 0.5) + height * 0.22 : height * 0.3);
+  const label = (key: string, text: string, position: Vec3, size: number, color: string, emissive: number, extra: Partial<LabelOptions> = {}) =>
+    labelInstance({ id: `${options.id}:${key}`, attach: options.id, text, position, size, color, emissive, opacity: opacity ?? 1, ...extra });
+  const initials = options.initials ?? title?.[0]?.toUpperCase();
+  return [card,
+    ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#ffffff", textEmissive * 1.2, { align: "center" })] : [],
+    ...title ? [label("title", title, [left, subtitle ? height * 0.13 : 0, z], height * (subtitle ? 0.36 : 0.4), textColor, textEmissive, { mono, ...titleOpacity !== undefined ? { opacity: titleOpacity } : {} })] : [],
+    ...subtitle ? [label("subtitle", subtitle, [left, -height * 0.24, z], height * 0.22, subtleColor, textEmissive * 0.7)] : [],
+    ...meta ? [label("meta", meta, [width / 2 - height * 0.3, 0, z], height * 0.28, subtleColor, textEmissive * 0.7, { mono: true, align: "right" })] : []];
 }
 export function labelInstance(options: LabelOptions): Instance {
   return { ...primitive("box", { id: options.id, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),
@@ -219,7 +250,7 @@ export function packLabelText(text: string, values: number[] | Float32Array, ind
 export function formatRowLabel(template: string, items: string[] | undefined, logical: number, slot: number) {
   "worklet";
   const item = items?.length ? items[((logical % items.length) + items.length) % items.length] : "";
-  return template.replace("{item}", item).replace("{index}", String(logical)).replace("{slot}", String(slot));
+  return template.replace("{item}", item).replace("{initial}", item.slice(0, 1).toUpperCase()).replace("{index}", String(logical)).replace("{slot}", String(slot));
 }
 /** The pooled container model: slot k holds the mounted logical row congruent to k; the top-most one travels while scroll crosses a row. */
 export function recycleSlot(slot: number, count: number, above: number, scroll: number) {
@@ -640,6 +671,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
     }
     values[index + 15] = curve; values[index + 19] = instance.thickness;
+    if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.bevel; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; }
     values[index + 23] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {
@@ -715,7 +747,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   }
   instances.forEach(verifyAnchors);
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
-  const order = (instance: Instance) => instance.label ? "3" : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
+  const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
   instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
   const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));

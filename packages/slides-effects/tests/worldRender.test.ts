@@ -126,3 +126,11 @@ test("custom ids cannot shadow built-in passes or another custom pass", () => {
     { id: "scanlines", wgsl: scanlines, after: "fog" }, { id: "scanlines", wgsl: scanlines, after: "bloom" },
   ] }))).toThrow("pass id is duplicated");
 });
+
+test("auto quality drops MSAA only where the drawable already supersamples the slide", () => {
+  const scene = prepareWorldScene({ quality: "auto", instances: [primitive("box")], floor: { mirror: true } });
+  const samples = (topology: object) => buildWorldGraph({ ...worldGraphTopology(scene), ...topology }).targets.filter(target => target.samples === 4).map(target => target.id);
+  expect(samples({})).toEqual(["hdr", "depth", "reflect", "reflectDepth"]);
+  expect(samples({ supersampled: true })).toEqual([]);
+  expect(samples({ supersampled: true, quality: "high" })).toHaveLength(4);
+});

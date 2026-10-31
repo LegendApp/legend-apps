@@ -98,14 +98,66 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
  @location(2) color:vec3f, @location(3) emissive:f32, @location(4) material:vec4f, @location(5) albedo:vec3f,
  @location(6) opacity:f32, @location(7) @interpolate(flat) instance:u32 }
 `;
-function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry) {
+// Cards march an exact rounded slab inside their box: corner radius in the face plane, a bevel on every edge, an inner edge glow
+// and an optional avatar disc domed toward the camera. Bodies take 40% of emissive so the edges carry the glow. Shape fields: 11 corner radius, 16 bevel, 17 edge glow, 18 avatar radius / half height.
+const cardCode = (reflection: boolean) => `
+fn roundRect(p:vec2f,half:vec2f,radius:f32)->f32 { let q=abs(p)-half+radius; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.)-radius; }
+fn cardField(p:vec3f,half:vec3f,radius:f32,bevel:f32)->f32 {
+ let w=vec2f(roundRect(p.xy,half.xy-bevel,max(0.,radius-bevel)),abs(p.z)-half.z+bevel);
+ return min(max(w.x,w.y),0.)+length(max(w,vec2f(0.)))-bevel;
+}
+struct CardResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
+@fragment fn worldFragment(in:WorldVertex)->CardResult {
+ let pixel=max(length(fwidth(in.world)),.0001);
+ if(in.opacity<=.001 || dot(in.normal,eye()-in.world)<0.) { discard; }
+ let base=slot(in.instance); let origin=vector(base);
+ let half=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
+ let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let bevel=clamp(uniforms[base+16u],0.,min(radius,half.z));
+ // Rays that graze the silhouette keep their closest approach as partial coverage, since this shader runs per pixel, not per MSAA sample.
+ let ray=normalize(in.world-eye()); var p=in.world-origin; var closest=1e9; var nearest=p;
+ for(var i=0u;i<40u;i++) {
+  let field=cardField(p,half,radius,bevel);
+  if(field<closest) { closest=field; nearest=p; }
+  if(field<max(.0002,pixel*.25)) { break; }
+  p+=ray*field;
+  if(any(abs(p)>half+vec3f(.001))) { break; }
+ }
+ let coverage=1.-smoothstep(pixel*.25,pixel,closest);
+ if(coverage<=.004) { discard; }
+ p=nearest;
+ let hit=origin+p;
+ ${reflection ? "if(hit.y<uniforms[36]+.001) { discard; }" : ""}
+ let e=max(.0005,pixel*.5);
+ var normal=normalize(vec3f(cardField(p+vec3f(e,0.,0.),half,radius,bevel)-cardField(p-vec3f(e,0.,0.),half,radius,bevel),
+  cardField(p+vec3f(0.,e,0.),half,radius,bevel)-cardField(p-vec3f(0.,e,0.),half,radius,bevel),
+  cardField(p+vec3f(0.,0.,e),half,radius,bevel)-cardField(p-vec3f(0.,0.,e),half,radius,bevel)));
+ let accent=in.color; let inset=-roundRect(p.xy,half.xy,radius);
+ var albedo=in.albedo*(1.+.35*p.y/half.y);
+ var emission=accent*in.emissive*.4+accent*uniforms[base+17u]*(exp(-inset/max(pixel*1.2,bevel*.25))*.7+exp(-inset/max(.02,half.y*.2))*.06);
+ let avatar=uniforms[base+18u]*half.y;
+ if(avatar>0.) {
+  let center=vec2f(-half.x+half.y,0.); let offset=(p.xy-center)/avatar; let distance=length(offset);
+  let disc=(1.-smoothstep(1.-pixel/avatar,1.+pixel/avatar,distance))*smoothstep(.2,.8,normal.z);
+  let dome=normalize(vec3f(offset*.2,1.));
+  normal=normalize(mix(normal,dome,disc*step(distance,1.)));
+  let ring=exp(-abs(distance-1.)*avatar/max(pixel*1.5,.004));
+  albedo=mix(albedo,accent*.2,disc);
+  emission=mix(emission,accent*(.12+.3*smoothstep(-1.,1.,offset.y)),disc)+accent*ring*disc*.45;
+ }
+ let material=Material(albedo,emission,in.material.x,in.material.y);
+ let color=illuminate(hit,normal,material,accent,in.material.z,in.material.w); let clip=projected(hit);
+ let alpha=in.opacity*coverage;
+ return CardResult(vec4f(color*alpha,alpha),clamp(clip.z/clip.w,0.,1.));
+}`;
+function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, card = false) {
   const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
   return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}${vertexFields}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
+fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
 @vertex fn worldVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->WorldVertex {
- let base=${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u;
+ let base=slot(iid);
  let origin=vector(base); let radius=max(uniforms[base+3u],.0001);
  var point=vec3f(0.); var normal=vec3f(0.,1.,0.);
  ${shape}
@@ -131,7 +183,7 @@ ${custom?.wgsl ?? sdf?.wgsl ?? ""}
  ` : ""}
  return result;
 }
-${sphere ? `
+${card ? cardCode(reflection) : sphere ? `
 struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SphereResult {
  let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
@@ -346,19 +398,22 @@ type CustomDraw = CustomGeometry & { offset: number; count: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
   quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
-  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number;
+  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
-  customs?: CustomDraw[]; sdfs?: SDFDraw[]; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
+  customs?: CustomDraw[]; sdfs?: SDFDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
 };
 export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopology {
   const counts: Record<PrimitiveKind, number> = { box: 0, ring: 0, sphere: 0, tube: 0 };
   const customs: CustomDraw[] = [], sdfs: SDFDraw[] = [];
-  let previousCustom: CustomGeometry | undefined, previousSDF: SDFGeometry | undefined, labels: { offset: number; count: number } | undefined;
+  let previousCustom: CustomGeometry | undefined, previousSDF: SDFGeometry | undefined, labels: { offset: number; count: number } | undefined, cards: typeof labels;
   for (let offset = 0; offset < scene.instances.length; offset++) {
     const instance = scene.instances[offset];
     if (instance.label) {
       labels ??= { offset, count: 0 };
       labels.count++;
+    } else if (instance.card) {
+      cards ??= { offset, count: 0 };
+      cards.count++;
     } else if (instance.custom) {
       const last = customs.at(-1);
       if (last && last.offset + last.count === offset && previousCustom === instance.custom) last.count++;
@@ -374,7 +429,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
   return { quality: scene.quality, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
-    customs, sdfs, labels, passes: scene.passes, postOrder: scene.postOrder };
+    customs, sdfs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
 export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology): GPURenderGraphDefinition & { uniformsSize: number } {
@@ -382,7 +437,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const scale = topology.quality === "low" ? .65 : topology.quality === "medium" ? .85 : 1;
   const levels = topology.quality === "low" ? 3 : 5;
   const samples = topology.quality === "low" ? 8 : topology.quality === "medium" ? 12 : 16;
-  const msaa = topology.quality === "low" ? 1 : 4;
+  const msaa = topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4;
   const passes: GPUPass[] = [];
   const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa },
     { id: "bloom", format: "rgba16float", scale: scale * .5, mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * .5, mips: levels }];
@@ -390,18 +445,19 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
   const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [];
   const lights = topology.lightCount ?? 0;
-  const labels = topology.labels;
-  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0) + (labels?.count ?? 0);
+  const labels = topology.labels, cards = topology.cards;
+  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0) + (cards?.count ?? 0) + (labels?.count ?? 0);
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
     let offset = 0, draws = 0;
-    const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
-      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf), vertex: "worldVertex", fragment: "worldFragment",
+    const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry, card = false) => {
+      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, card), vertex: "worldVertex", fragment: "worldFragment",
         color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false });
     };
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
+    if (cards) add("cards", "box", cards.count, cards.offset, undefined, undefined, true);
     if (!draws && !cleared) add("empty", "box", 0, 0);
     if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection), vertex: "labelVertex", fragment: "labelFragment",
       color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });

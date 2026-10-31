@@ -1,21 +1,21 @@
-import { GPURenderGraph, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
-import { Children, Component, Fragment, isValidElement, useMemo, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
+import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
+import { PixelRatio, View } from "react-native";
 import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
 import { advanceResolution, createResolutionState } from "./resolution";
-import { compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
+import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
-  type Animated, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
+  type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
   type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
-export { orbInstances, graphInstances, labelInstance, primitive, prepareWorldScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
+export { cardInstances, orbInstances, graphInstances, labelInstance, primitive, prepareWorldScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
 export type { Shot, CameraPose, Vec3 } from "./camera";
-export type { Animated, GraphOptions, LabelOptions, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
+export type { Animated, CardOptions, CardStyle, GraphOptions, LabelOptions, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
 export function Camera(_: CameraOptions) { return null; }
 export function Graph(_: GraphOptions) { return null; }
@@ -32,6 +32,7 @@ export function PathPulse(_: PulseOptions) { return null; }
 export function Spray(_: SprayOptions) { return null; }
 export function Rows(_: RowsOptions) { return null; }
 export function Label(_: LabelOptions) { return null; }
+export function Card(_: CardOptions) { return null; }
 export function Voxels(_: VoxelsOptions) { return null; }
 export function Stage(_: StageOptions & { children?: ReactNode }) { return null; }
 export function WorldCounter(_: NonNullable<WorldScene["counter"]>) { return null; }
@@ -111,6 +112,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === Spray) add(sprayInstances(options), stages);
       else if (child.type === Rows) add(rowInstances(options as RowsOptions), stages);
       else if (child.type === Label) add([labelInstance(options as LabelOptions)], stages);
+      else if (child.type === Card) add(cardInstances(options as CardOptions), stages);
       else if (child.type === Voxels) add(voxelInstances(options as VoxelsOptions), stages);
       else if (child.type === Custom) add(customInstances(options as CustomOptions), stages);
       else if (child.type === SDF) add([sdfInstance(options as SDFOptions)], stages);
@@ -140,7 +142,9 @@ function WorldSurface(props: WorldProps) {
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder), [children, quality, exposure, backgroundColor, scrim, postOrder]);
-  const topology = JSON.stringify(worldGraphTopology(prepared));
+  // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
+  const supersampled = PixelRatio.get() * useContext(PresentationCanvasScaleContext) >= 1.5;
+  const topology = JSON.stringify({ ...worldGraphTopology(prepared), supersampled });
   const [continuity] = useState(() => props.id ? retainedPose(props.id) : undefined);
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const resolution = useSharedValue(createResolutionState());

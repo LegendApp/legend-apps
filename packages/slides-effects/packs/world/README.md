@@ -231,6 +231,27 @@ nested in a Stage. `flyTo` targets `stage:<id>` with a deterministic eased trans
 use that explicit prefix when following a stage directly. An eased flight is the
 default; a positive `arc` adds vertical curvature to the transition.
 
+## Cards
+
+```tsx
+import { Card } from "slides:world/World";
+
+<Card id="ada" position={[0, 1, 0]} scale={[4, 0.66, 0.18]} material="glass" color="#22d3ee"
+  title="Ada" subtitle="Lovelace" meta="key 1" />
+<Rows id="pool" height={0.66} card={{ radius: 0.16, avatar: 0.62 }} labels={[{ text: "{initial}", align: "center" }]} />
+```
+
+A Card is a rounded glass slab: `scale` is its full width, height and depth;
+`radius` rounds its corners, `bevel` its edges, and `edge` sets the glow along its
+outline in `color`, which also tints the avatar disc. The body takes 40% of
+`emissive`, so edges carry most of the glow. A card with a `title` shows an avatar
+(`avatar` is its radius as a fraction of half the height; 0 hides it) with the
+title's initial or `initials`, then the title and an optional `subtitle`, plus a
+right-aligned mono `meta` tag. Text sizes follow the height; `opacity` fades the
+text and `titleOpacity` the title alone. Rows take the same shape through `card`;
+their label templates add `{initial}`. Cards are ray-marched inside their box with
+analytic edge coverage, so silhouettes stay smooth without per-sample shading.
+
 ## Voxel reduction and counter
 
 ```tsx
