@@ -5,17 +5,17 @@ import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
 import { advanceResolution, createResolutionState } from "./resolution";
-import { compileTrack, customInstances, graphInstances, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
+import { compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
-  type Animated, type CustomOptions, type GraphOptions, type Instance, type LightOptions, type MaterialOptions, type OrbsOptions,
+  type Animated, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
   type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
-export { orbInstances, graphInstances, primitive, prepareWorldScene, pulseInstances, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
+export { orbInstances, graphInstances, labelInstance, primitive, prepareWorldScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
 export type { Shot, CameraPose, Vec3 } from "./camera";
-export type { Animated, GraphOptions, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
+export type { Animated, GraphOptions, LabelOptions, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
 export function Camera(_: CameraOptions) { return null; }
 export function Graph(_: GraphOptions) { return null; }
@@ -31,6 +31,7 @@ export function Grain(_: { amount?: Animated<number> }) { return null; }
 export function PathPulse(_: PulseOptions) { return null; }
 export function Spray(_: SprayOptions) { return null; }
 export function Rows(_: RowsOptions) { return null; }
+export function Label(_: LabelOptions) { return null; }
 export function Voxels(_: VoxelsOptions) { return null; }
 export function Stage(_: StageOptions & { children?: ReactNode }) { return null; }
 export function WorldCounter(_: NonNullable<WorldScene["counter"]>) { return null; }
@@ -109,6 +110,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === PathPulse) add(pulseInstances(options as PulseOptions), stages);
       else if (child.type === Spray) add(sprayInstances(options), stages);
       else if (child.type === Rows) add(rowInstances(options as RowsOptions), stages);
+      else if (child.type === Label) add([labelInstance(options as LabelOptions)], stages);
       else if (child.type === Voxels) add(voxelInstances(options as VoxelsOptions), stages);
       else if (child.type === Custom) add(customInstances(options as CustomOptions), stages);
       else if (child.type === SDF) add([sdfInstance(options as SDFOptions)], stages);

@@ -1,5 +1,6 @@
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
+import { glyphAdvances, glyphFirst, glyphLast } from "./glyphs";
 
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease };
 export type Animated<T> = T | Record<number, T> | Keyframe<T>[];
@@ -12,7 +13,14 @@ export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<numbe
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
 export type PulseOptions = { id: string; path: (string | Vec3)[]; step?: number; duration?: number; color?: Animated<string>; size?: number; trail?: number; emissive?: Animated<number> };
 export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?: number; lifetime?: number; color?: string; size?: number; spread?: Vec3; velocity?: Vec3; seed?: number; step?: number };
-export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number };
+export type LabelAlign = "left" | "center" | "right";
+export type LabelOptions = { id?: string; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
+  emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean };
+/** `text` substitutes `{item}` (items[index]), `{index}` (the logical row) and `{slot}` (the pooled container). */
+export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean };
+export type RecycleOptions = { above?: number; below?: number; reach?: number; lift?: number; color?: string; ghosts?: number };
+export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number;
+  scroll?: Animated<number>; items?: string[]; labels?: RowLabel[]; recycle?: RecycleOptions };
 export type VoxelsOptions = { id: string; grid?: Vec3; spacing?: number; size?: number; position?: Vec3; color?: Animated<string>; emissive?: Animated<number>; collapse?: Collapse };
 export type CustomOptions = PrimitiveOptions & { wgsl: string; count?: number; vertexCount: number };
 export type SDFOptions = PrimitiveOptions & { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
@@ -31,7 +39,8 @@ export type Instance = {
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
   pulse?: { options: PulseOptions; anchors: Instance[]; curves: number[]; tail: boolean };
   spray?: { options: SprayOptions; source?: Instance; phase: number };
-  rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3 };
+  rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3; scroll?: Track<number>; recycleColor?: Vec3; ghost?: number };
+  label?: { text: string; align: LabelAlign; mono: boolean; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
@@ -153,11 +162,90 @@ export function sprayInstances(options: SprayOptions = {}): Instance[] {
     }));
 }
 export function rowInstances(options: RowsOptions): Instance[] {
-  const count = options.count ?? 9;
+  const count = options.count ?? 9, recycle = options.recycle;
   if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error("World rows need an integer pool size between 1 and 1000");
-  return Array.from({ length: count }, (_, slot) => ({ ...primitive("box", { id: `${options.id}:slot:${slot}`, position: options.position ?? [0, 0, 0],
-    scale: [options.width ?? 3, 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: 0.1 }),
-    rows: { options, slot, flashColor: colorVector(options.flashColor ?? "#22d3ee") } }));
+  if (recycle && (recycle.above ?? 0) + (recycle.below ?? 0) >= count) throw new Error("World recycled rows need at least one visible row besides the buffers");
+  const shared = { options, flashColor: colorVector(options.flashColor ?? "#22d3ee"), scroll: options.scroll === undefined ? undefined : compileTrack(options.scroll),
+    recycleColor: recycle ? colorVector(recycle.color ?? "#b07cff") : undefined };
+  const box = (id: string) => primitive("box", { id, position: options.position ?? [0, 0, 0],
+    scale: [options.width ?? 3, 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: 0.1 });
+  const slots: Instance[] = Array.from({ length: count }, (_, slot) => ({ ...box(`${options.id}:slot:${slot}`), rows: { ...shared, slot } }));
+  const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 } }));
+  const labels = slots.flatMap(parent => (options.labels ?? []).map((row, index) => {
+    const instance = labelInstance({ ...row, id: `${parent.id}:label:${index}`, position: row.offset });
+    instance.label = { ...instance.label!, parent, row };
+    return instance;
+  }));
+  return [...slots, ...ghosts, ...labels];
+}
+export function labelInstance(options: LabelOptions): Instance {
+  return { ...primitive("box", { id: options.id, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),
+    label: { text: options.text, align: options.align ?? "left", mono: options.mono ?? false, offset: compileTrack<Vec3>(options.position ?? [0, 0, 0]),
+      opacity: compileTrack(options.opacity ?? 1), attach: options.attach } };
+}
+/** Width in ems of the text the label shader draws; mono uses fixed 0.6em cells. */
+export function labelWidth(text: string, mono: boolean) {
+  "worklet";
+  const length = Math.min(text.length, labelCapacity);
+  if (mono) return length * 0.6;
+  let width = 0;
+  for (let i = 0; i < length; i++) {
+    const code = text.charCodeAt(i);
+    width += glyphAdvances[(code < glyphFirst || code > glyphLast ? 63 : code) - glyphFirst];
+  }
+  return width;
+}
+export const labelCapacity = 57;
+const labelSwap = 0.75;
+function rowLabelLogical(instance: Instance, clock: ClockSample) {
+  "worklet";
+  const parent = instance.label!.parent!, rows = parent.rows!, recycle = rows.options.recycle;
+  if (!recycle) return rowLogicalIndex(parent, clock);
+  const count = rows.options.count ?? 9, slot = recycleSlot(rows.slot, count, recycle.above ?? 0, rowScroll(rows, clock));
+  return slot.logical + (slot.travel >= labelSwap ? count : 0);
+}
+/** Packs seven-bit characters three per float into the label slot's spare fields 12-22 and 24-31. */
+export function packLabelText(text: string, values: number[] | Float32Array, index: number) {
+  "worklet";
+  for (let k = 0; k < labelCapacity / 3; k++) {
+    let packed = 0;
+    for (let c = 2; c >= 0; c--) {
+      const i = k * 3 + c, code = i < text.length ? text.charCodeAt(i) : 0;
+      packed = packed * 128 + (code < glyphFirst || code > glyphLast ? (i < text.length ? 63 : 0) : code);
+    }
+    values[index + (k < 11 ? 12 + k : 13 + k)] = packed;
+  }
+}
+export function formatRowLabel(template: string, items: string[] | undefined, logical: number, slot: number) {
+  "worklet";
+  const item = items?.length ? items[((logical % items.length) + items.length) % items.length] : "";
+  return template.replace("{item}", item).replace("{index}", String(logical)).replace("{slot}", String(slot));
+}
+/** The pooled container model: slot k holds the mounted logical row congruent to k; the top-most one travels while scroll crosses a row. */
+export function recycleSlot(slot: number, count: number, above: number, scroll: number) {
+  "worklet";
+  const top = Math.floor(scroll), base = top - above;
+  const logical = base + (((slot - base) % count) + count) % count;
+  return { logical, travel: logical === base ? scroll - top : -1 };
+}
+/** Exits upward from `start`, loops around the right at `reach` and slides left into `end`, sampled by arc length. */
+export function recyclePathPoint(start: Vec3, end: Vec3, reach: number, lift: number, t: number): Vec3 {
+  "worklet";
+  const right = start[0] + reach, top = start[1] + lift;
+  const radius = Math.max(0.001, Math.min(reach - lift, (top - end[1]) / 2) * 0.6);
+  const quarter = Math.PI / 2;
+  const lengths = [quarter * lift, Math.max(0, right - radius - start[0] - lift), quarter * radius, Math.max(0, top - end[1] - 2 * radius), quarter * radius, Math.max(0, right - radius - end[0])];
+  let distance = Math.max(0, Math.min(1, t)) * lengths.reduce((a, b) => a + b, 0);
+  const z = start[2] + (end[2] - start[2]) * Math.max(0, Math.min(1, t));
+  let segment = 0;
+  while (segment < 5 && distance > lengths[segment]) distance -= lengths[segment++];
+  const f = lengths[segment] > 0 ? distance / lengths[segment] : 1;
+  if (segment === 0) return [start[0] + lift + lift * Math.cos(Math.PI - quarter * f), start[1] + lift * Math.sin(Math.PI - quarter * f), z];
+  if (segment === 1) return [start[0] + lift + lengths[1] * f, top, z];
+  if (segment === 2) return [right - radius + radius * Math.cos(quarter - quarter * f), top - radius + radius * Math.sin(quarter - quarter * f), z];
+  if (segment === 3) return [right, top - radius - lengths[3] * f, z];
+  if (segment === 4) return [right - radius + radius * Math.cos(-quarter * f), end[1] + radius + radius * Math.sin(-quarter * f), z];
+  return [right - radius - lengths[5] * f, end[1], z];
 }
 export function voxelInstances(options: VoxelsOptions): Instance[] {
   const grid = options.grid ?? [8, 8, 8];
@@ -220,10 +308,60 @@ function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec
   }
   return offset;
 }
+function rowScroll(rows: NonNullable<Instance["rows"]>, clock: ClockSample) {
+  "worklet";
+  return rows.scroll ? sampleTrack(rows.scroll, clock) : (rows.options.start ?? 0) + clock.slideTime * (rows.options.speed ?? 0.3);
+}
 export function rowLogicalIndex(instance: Instance, clock: ClockSample) {
   "worklet";
-  const rows = instance.rows!;
-  return rows.logical ?? Math.floor((rows.options.start ?? 0) + clock.slideTime * (rows.options.speed ?? 0.3)) + rows.slot;
+  const rows = instance.rows!, recycle = rows.options.recycle;
+  if (rows.logical !== undefined) return rows.logical;
+  if (recycle) return recycleSlot(rows.slot, rows.options.count ?? 9, recycle.above ?? 0, rowScroll(rows, clock)).logical;
+  return Math.floor(rowScroll(rows, clock)) + rows.slot;
+}
+/** Row-space y of a logical row: 0 is the top visible row; recycled pools exclude their buffers from the centred window. */
+function rowY(rows: NonNullable<Instance["rows"]>, row: number) {
+  "worklet";
+  const recycle = rows.options.recycle, visible = (rows.options.count ?? 9) - (recycle ? (recycle.above ?? 0) + (recycle.below ?? 0) : 0);
+  return ((visible - 1) / 2 - row) * (rows.options.spacing ?? 1.2);
+}
+/** Position of a recycled pool slot, or of a ghost trailing the travelling slot; null hides a ghost. */
+function recycledRowPosition(rows: NonNullable<Instance["rows"]>, origin: Vec3, clock: ClockSample): Vec3 | null {
+  "worklet";
+  const recycle = rows.options.recycle!, count = rows.options.count ?? 9, above = recycle.above ?? 0, scroll = rowScroll(rows, clock);
+  let travel: number;
+  if (rows.ghost) travel = scroll - Math.floor(scroll) - rows.ghost * 0.04;
+  else if (rows.logical !== undefined) return [origin[0], origin[1] + rowY(rows, rows.logical - scroll), origin[2]];
+  else {
+    const slot = recycleSlot(rows.slot, count, above, scroll);
+    if (slot.travel < 0) return [origin[0], origin[1] + rowY(rows, slot.logical - scroll), origin[2]];
+    travel = slot.travel;
+  }
+  if (travel <= 0) return rows.ghost ? null : [origin[0], origin[1] + rowY(rows, -above), origin[2]];
+  return recyclePathPoint([origin[0], origin[1] + rowY(rows, -above), origin[2]], [origin[0], origin[1] + rowY(rows, count - above - 1), origin[2]],
+    recycle.reach ?? (rows.options.width ?? 3) * 2 + 1, recycle.lift ?? (rows.options.spacing ?? 1.2) * 0.8, easeProgress(travel, "smoothstep"));
+}
+/** 0 inside the viewport, rising to 1 one row into a buffer; travelling slots count as inside. */
+function rowOutside(instance: Instance, clock: ClockSample) {
+  "worklet";
+  const rows = instance.rows!, recycle = rows.options.recycle;
+  if (!recycle || rows.ghost) return 0;
+  const scroll = rowScroll(rows, clock), slot = recycleSlot(rows.slot, rows.options.count ?? 9, recycle.above ?? 0, scroll);
+  if (slot.travel >= 0 && rows.logical === undefined) return 0;
+  const row = (rows.logical ?? slot.logical) - scroll, last = (rows.options.count ?? 9) - (recycle.above ?? 0) - (recycle.below ?? 0) - 1;
+  return Math.max(0, Math.min(1, Math.max(-row, row - last)));
+}
+/** Recycle accent: rises as a slot leaves, holds along the path and fades after it docks with new data. */
+function recycleGlow(instance: Instance, clock: ClockSample) {
+  "worklet";
+  const rows = instance.rows!, recycle = rows.options.recycle;
+  if (!recycle || rows.logical !== undefined) return 0;
+  const count = rows.options.count ?? 9, scroll = rowScroll(rows, clock), fraction = scroll - Math.floor(scroll);
+  if (rows.ghost) return 1;
+  const slot = recycleSlot(rows.slot, count, recycle.above ?? 0, scroll);
+  if (slot.travel >= 0) return Math.min(1, slot.travel / 0.12);
+  const initial = rows.scroll ? rows.scroll.initial : rows.options.start ?? 0;
+  return slot.logical === Math.floor(scroll) - (recycle.above ?? 0) + count - 1 && Math.floor(scroll) > Math.floor(initial) ? Math.max(0, 1 - fraction / 0.5) : 0;
 }
 function rowHighlight(instance: Instance, clock: ClockSample) {
   "worklet";
@@ -277,8 +415,17 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
       position[1] + Math.cos(spray.phase * 53) * spread[1] * age + velocity[1] * age,
       position[2] + Math.sin(spray.phase * 71) * spread[2] * age + velocity[2] * age];
   }
-  if (instance.rows) {
-    const rows = instance.rows, scroll = (rows.options.start ?? 0) + clock.slideTime * (rows.options.speed ?? 0.3);
+  if (instance.label?.parent) {
+    const parent = instancePosition(instance.label.parent, clock), offset = sampleTrack(instance.label.offset, clock);
+    return [parent[0] + offset[0], parent[1] + offset[1], parent[2] + offset[2]];
+  }
+  if (instance.label) {
+    const offset = sampleTrack(instance.label.offset, clock);
+    position = [offset[0], offset[1], offset[2]];
+  }
+  if (instance.rows?.options.recycle) position = recycledRowPosition(instance.rows, position, clock) ?? position;
+  else if (instance.rows) {
+    const rows = instance.rows, scroll = rowScroll(rows, clock);
     position = [position[0], position[1] + (((rows.options.count ?? 9) - 1) / 2 + scroll - rowLogicalIndex(instance, clock)) * (rows.options.spacing ?? 1.2), position[2]];
   }
   if (instance.voxel) {
@@ -295,8 +442,30 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
 }
 export function instanceOpacity(instance: Instance, clock: ClockSample): number {
   "worklet";
+  if (instance.label) {
+    const label = instance.label;
+    let opacity = sampleTrack(label.opacity, clock) * (label.parent ? instanceOpacity(label.parent, clock) : 1);
+    const rows = label.parent?.rows;
+    if (rows?.options.recycle && label.row) {
+      const travel = recycleSlot(rows.slot, rows.options.count ?? 9, rows.options.recycle.above ?? 0, rowScroll(rows, clock)).travel;
+      // Content swaps at the dock point, hidden by a short dip.
+      if (travel >= 0) opacity *= Math.min(1, Math.abs(travel - labelSwap) / 0.15);
+    }
+    return opacity;
+  }
+  if (instance.rows?.options.recycle) {
+    const rows = instance.rows, recycle = instance.rows.options.recycle, count = rows.options.count ?? 9, scroll = rowScroll(rows, clock);
+    if (rows.ghost) {
+      const travel = scroll - Math.floor(scroll) - rows.ghost * 0.04;
+      return travel <= 0 || travel >= 1 ? 0 : 0.5 * Math.pow(0.7, rows.ghost) * Math.min(1, travel / 0.1, (1 - travel) / 0.1);
+    }
+    const slot = recycleSlot(rows.slot, count, recycle.above ?? 0, scroll);
+    const logical = rows.logical ?? slot.logical;
+    if (slot.travel >= 0 && rows.logical === undefined) return (logical >= 0 ? 1 - slot.travel : 0) + (logical + count >= 0 ? slot.travel : 0);
+    return logical >= 0 ? 1 : 0;
+  }
   if (instance.rows) {
-    const rows = instance.rows, scroll = (rows.options.start ?? 0) + clock.slideTime * (rows.options.speed ?? 0.3);
+    const rows = instance.rows, scroll = rowScroll(rows, clock);
     const fraction = scroll - Math.floor(scroll);
     return (rows.slot === 0 ? 1 - fraction : 1) * (rows.slot === (rows.options.count ?? 9) - 1 ? fraction : 1);
   }
@@ -355,7 +524,7 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
 }
-type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array };
+type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array };
 /** With reuse, every call for the same prepared scene returns one buffer and rewrites only slots whose inputs changed. */
 export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
@@ -365,7 +534,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
     cache = caches.get(scene);
     if (!cache) {
-      cache = { values: new Float32Array(worldHeaderSize + count * worldInstanceSize), keys: new Float64Array(count).fill(NaN) };
+      cache = { values: new Float32Array(worldHeaderSize + count * worldInstanceSize), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN) };
       caches.set(scene, cache);
     }
   }
@@ -408,6 +577,24 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       cache.keys[i] = key;
     }
     const index = worldHeaderSize + i * worldInstanceSize;
+    if (instance.label) {
+      const label = instance.label, position = instancePosition(instance, clock), color = sampleTrack(instance.color, clock);
+      values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2]; values[index + 3] = sampleTrack(instance.size, clock);
+      values[index + 4] = color[0]; values[index + 5] = color[1]; values[index + 6] = color[2];
+      let emissive = sampleTrack(instance.emissive, clock) * (label.parent?.rows ? 1 - 0.6 * rowOutside(label.parent, clock) : 1);
+      for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
+      values[index + 7] = emissive;
+      values[index + 23] = instanceOpacity(instance, clock);
+      const logical = label.row ? rowLabelLogical(instance, clock) : 0;
+      if (!cache || cache.labels[i] !== logical) {
+        if (cache) cache.labels[i] = logical;
+        const text = label.row ? formatRowLabel(label.text, label.parent!.rows!.options.items, logical, label.parent!.rows!.slot) : label.text;
+        values[index + 8] = labelWidth(text, label.mono); values[index + 9] = Math.min(text.length, labelCapacity);
+        values[index + 10] = label.align === "center" ? 0.5 : label.align === "right" ? 1 : 0; values[index + 11] = label.mono ? 1 : 0;
+        packLabelText(text, values, index);
+      }
+      continue;
+    }
     const position = instance.endpoints ? objects[instance.endpoints[0]] : instance.anchor ? objects[instance.id!] : instancePosition(instance, clock);
     const offset = stageOffset(instance.stages, clock);
     const endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
@@ -420,10 +607,15 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index + 3] = sampleTrack(instance.size, clock) * (instance.voxel ? instanceOpacity(instance, clock) : 1);
     let emissive = sampleTrack(instance.emissive, clock) * activation;
     if (instance.pulse?.tail) emissive *= 0.3;
-    if (instance.rows) {
+    if (instance.rows && !instance.rows.ghost) {
       const highlight = rowHighlight(instance, clock);
       if (highlight.changed) { color = instance.rows.flashColor; emissive += 0.5 + highlight.flash * 4; }
       else if (highlight.dimmed) color = mixVector(color, [0, 0, 0], 0.8);
+    }
+    if (instance.rows?.recycleColor) {
+      const glow = recycleGlow(instance, clock), outside = rowOutside(instance, clock);
+      color = mixVector(mixVector(color, [0, 0, 0], 0.55 * outside), instance.rows.recycleColor, glow);
+      emissive = emissive * (1 - 0.6 * outside) + glow * 2.5;
     }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
     values[index + 4] = dim[0] + (color[0] - dim[0]) * activation;
@@ -491,6 +683,12 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
         edge.endpoints?.[1] === anchors[index].id && edge.endpoints?.[0] === target.id)?.curve ?? 0);
       instance.pulse = { ...instance.pulse, anchors, curves };
     }
+    const parentId = instance.label?.attach ?? instance.label?.parent?.id;
+    if (parentId) {
+      const parent = byId.get(parentId);
+      if (!parent) throw new Error(`Unknown world label parent: ${parentId}`);
+      instance.label = { ...instance.label!, parent };
+    }
     if (instance.spray) {
       const under = instance.spray.options.under;
       const sources = under === "leaves:lit" ? instances.filter(item => item.kind === "sphere" && item.graph &&
@@ -505,12 +703,12 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if (visiting.has(instance)) throw new Error("World motion anchors cannot form a cycle");
     if (visited.has(instance)) return;
     visiting.add(instance);
-    for (const anchor of instance.pulse?.anchors ?? (instance.spray?.source ? [instance.spray.source] : [])) verifyAnchors(anchor);
+    for (const anchor of instance.pulse?.anchors ?? (instance.spray?.source ? [instance.spray.source] : instance.label?.parent ? [instance.label.parent] : [])) verifyAnchors(anchor);
     visiting.delete(instance); visited.add(instance);
   }
   instances.forEach(verifyAnchors);
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
-  const order = (instance: Instance) => instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
+  const order = (instance: Instance) => instance.label ? "3" : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
   instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
   const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));
@@ -519,6 +717,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if (instance.id && anchorIds.has(instance.id)) instance.anchor = true;
     const material = instance.materialTracks!;
     if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
+      (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
       !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
   }

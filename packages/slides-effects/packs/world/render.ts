@@ -2,6 +2,7 @@ import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentatio
 import { worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
+import { glyphAdvances, glyphAtlas, glyphBaseline, glyphCell, glyphEm, glyphFirst, glyphLast, glyphSpread } from "./glyphs";
 
 export const worldBindings = `
 struct Frame { time:f32, dt:f32, frame:f32, step:f32, aspect:f32, brightness:f32, slideTime:f32, stepTime:f32 }
@@ -188,6 +189,78 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  return vec4f(color*in.opacity,in.opacity);
 }`}`;
 }
+// Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
+// so text is lit, reflected, focused and bloomed with the rest of the scene.
+function labelCode(offset: number, lights: number, reflection: boolean) {
+  const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
+  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}
+@group(0) @binding(3) var<storage,read> glyphs:array<u32>;
+const advances=array<f32,${glyphAdvances.length}>(${glyphAdvances.map(f).join(",")});
+struct LabelVertex { @builtin(position) position:vec4f, @location(0) world:vec3f, @location(1) local:vec2f, @location(2) @interpolate(flat) instance:u32 }
+fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
+@vertex fn labelVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->LabelVertex {
+ let base=slot(iid); let size=uniforms[base+3u]; let width=uniforms[base+8u];
+ let local=mix(vec2f(-.25,-.4),vec2f(width+.25,1.05),corner(vid));
+ let world=vector(base)+vec3f((local.x-width*uniforms[base+10u])*size,(local.y-.36)*size,0.);
+ var result:LabelVertex; result.position=projected(world); result.world=world; result.local=local; result.instance=iid;
+ if(uniforms[base+23u]<=.001 || uniforms[base+9u]<1.) { result.position=vec4f(2.,2.,0.,1.); }
+ return result;
+}
+fn character(base:u32,i:u32)->u32 {
+ let k=i/3u; let field=select(base+13u+k,base+12u+k,k<11u);
+ return (u32(uniforms[field])>>((i%3u)*7u))&127u;
+}
+fn atlas(code:u32,x:i32,y:i32)->f32 {
+ let index=u32((i32(code)-${glyphFirst})*${glyphCell * glyphCell}+clamp(y,0,${glyphCell - 1})*${glyphCell}+clamp(x,0,${glyphCell - 1}));
+ return f32((glyphs[index/4u]>>((index%4u)*8u))&255u);
+}
+// Signed distance in atlas pixels (inside positive) from a glyph whose pen origin sits at em position pen.
+fn glyph(code:u32,p:vec2f)->f32 {
+ if(code<${glyphFirst + 1}u || code>${glyphLast}u) { return -${f(glyphSpread)}; }
+ let pixel=vec2f(${f(glyphSpread)}+p.x*${f(glyphEm)},${f(glyphCell - glyphBaseline)}-p.y*${f(glyphEm)})-.5;
+ if(any(pixel<vec2f(-1.)) || any(pixel>vec2f(${f(glyphCell)}))) { return -${f(glyphSpread)}; }
+ let cell=vec2i(floor(pixel)); let t=fract(pixel);
+ let value=mix(mix(atlas(code,cell.x,cell.y),atlas(code,cell.x+1,cell.y),t.x),mix(atlas(code,cell.x,cell.y+1),atlas(code,cell.x+1,cell.y+1),t.x),t.y);
+ return (value-128.)/127.*${f(glyphSpread)};
+}
+fn advance(code:u32,mono:bool)->f32 { return select(advances[clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u],.6,mono); }
+@fragment fn labelFragment(in:LabelVertex)->@location(0) vec4f {
+ let base=slot(in.instance); let count=u32(uniforms[base+9u]); let mono=uniforms[base+11u]>.5;
+ let footprint=max(length(fwidth(in.local))*${f(glyphEm)},.0001);
+ var pen=0.; var index=0u;
+ if(mono) { index=u32(clamp(floor(in.local.x/.6),0.,f32(count-1u))); pen=f32(index)*.6; }
+ else { for(var i=0u;i+1u<count;i++) { let next=pen+advance(character(base,i),false); if(next>in.local.x) { break; } pen=next; index=i+1u; } }
+ var distance=-${f(glyphSpread)};
+ for(var d=-1;d<=1;d++) {
+  let i=i32(index)+d; if(i<0 || i>=i32(count)) { continue; }
+  let code=character(base,u32(i)); var start=pen;
+  if(d<0) { start=pen-advance(code,mono); } if(d>0) { start=pen+advance(character(base,index),mono); }
+  if(mono) { start+=(.6-advances[clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u])*.5; }
+  distance=max(distance,glyph(code,in.local-vec2f(start,0.)));
+ }
+ let alpha=smoothstep(-.7*footprint,.7*footprint,distance)*uniforms[base+23u];
+ if(alpha<=.004) { discard; }
+ ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
+ let color=vector(base+4u);
+ let lit=illuminate(in.world,vec3f(0.,0.,1.),Material(color*.25,color*uniforms[base+7u],.45,0.),color,0.,0.);
+ return vec4f(lit*alpha,alpha);
+}`;
+}
+let glyphWords: Float32Array | undefined;
+/** The atlas bytes as a storage buffer, decoded once per process. */
+function glyphBuffer() {
+  if (!glyphWords) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const bytes = new Uint8Array(Math.ceil(glyphAtlas.length * 3 / 4 / 4) * 4);
+    let length = 0;
+    for (let i = 0; i < glyphAtlas.length; i += 4) {
+      const n = (alphabet.indexOf(glyphAtlas[i]) << 18) | (alphabet.indexOf(glyphAtlas[i + 1]) << 12) | (Math.max(0, alphabet.indexOf(glyphAtlas[i + 2])) << 6) | Math.max(0, alphabet.indexOf(glyphAtlas[i + 3]));
+      bytes[length++] = n >> 16 & 255; if (glyphAtlas[i + 2] !== "=") bytes[length++] = n >> 8 & 255; if (glyphAtlas[i + 3] !== "=") bytes[length++] = n & 255;
+    }
+    glyphWords = new Float32Array(bytes.buffer, 0, Math.ceil(length / 4));
+  }
+  return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
+}
 function floorCode(lights: number, mirror: boolean) {
   return `${worldBindings}${lightingCode(lights, false)}
 ${mirror ? "@group(0) @binding(3) var reflection:texture_2d<f32>;" : ""}
@@ -275,15 +348,18 @@ export type WorldGraphTopology = {
   quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
-  customs?: CustomDraw[]; sdfs?: SDFDraw[]; passes?: WorldPostPass[]; postOrder?: string[];
+  customs?: CustomDraw[]; sdfs?: SDFDraw[]; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
 };
 export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopology {
   const counts: Record<PrimitiveKind, number> = { box: 0, ring: 0, sphere: 0, tube: 0 };
   const customs: CustomDraw[] = [], sdfs: SDFDraw[] = [];
-  let previousCustom: CustomGeometry | undefined, previousSDF: SDFGeometry | undefined;
+  let previousCustom: CustomGeometry | undefined, previousSDF: SDFGeometry | undefined, labels: { offset: number; count: number } | undefined;
   for (let offset = 0; offset < scene.instances.length; offset++) {
     const instance = scene.instances[offset];
-    if (instance.custom) {
+    if (instance.label) {
+      labels ??= { offset, count: 0 };
+      labels.count++;
+    } else if (instance.custom) {
       const last = customs.at(-1);
       if (last && last.offset + last.count === offset && previousCustom === instance.custom) last.count++;
       else customs.push({ ...instance.custom, offset, count: 1 });
@@ -298,7 +374,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
   return { quality: scene.quality, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
-    customs, sdfs, passes: scene.passes, postOrder: scene.postOrder };
+    customs, sdfs, labels, passes: scene.passes, postOrder: scene.postOrder };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
 export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology): GPURenderGraphDefinition & { uniformsSize: number } {
@@ -314,7 +390,8 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
   const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [];
   const lights = topology.lightCount ?? 0;
-  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0);
+  const labels = topology.labels;
+  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0) + (labels?.count ?? 0);
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
     let offset = 0, draws = 0;
@@ -326,6 +403,8 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
     if (!draws && !cleared) add("empty", "box", 0, 0);
+    if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection), vertex: "labelVertex", fragment: "labelFragment",
+      color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
   };
   if (topology.mirror) {
     const reflectionScale = scale * (topology.reflectionScale ?? 1);
@@ -398,5 +477,5 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (let i = targets.length - 1; i >= 0; i--) if (transientTargets.has(targets[i].id)) targets.splice(i, 1);
     for (const id of used) targets.push({ id, format: "rgba16float", scale });
   }
-  return { targets, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
+  return { targets, ...labels ? { buffers: [glyphBuffer()] } : {}, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
 }
