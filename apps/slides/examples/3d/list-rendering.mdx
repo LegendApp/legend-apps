@@ -107,7 +107,7 @@ export const work = [[10, 0.12], [100, 0.3], ["1k", 0.6], ["10k", 1.05], ["100k"
       {[0, 1, 2, 3, 4, 5].map(index => <Label key={`tag:${index}`} text={`C${index}`} mono align="right" position={[2.15, rowY(index), 0.1]} size={0.2} color={cyan} emissive={1.6}
         opacity={[{ step: 0, value: 0 }, { step: 5, value: 1, duration: 0.3, delay: 0.8 + index * 0.1 }]} />)}
     </Stage>
-    <Floor mirror y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} reflectivity={0.35} scale={0.5} size={40} />
+    <Floor y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} size={40} />
     <PointLight position={[-2, 7, 8]} color="#cfe6ff" intensity={150} range={40} />
     <PointLight position={[1.5, 0.5, 6]} color={cyan} intensity={5} range={10} />
     <DOF focus={{ 0: 16, 5: "stage:list" }} aperture={{ 0: 0.15, 5: 0.5 }} maxBlur={8} />
@@ -177,7 +177,7 @@ export const tapeY = index => 3.3 - index * 0.4
       opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 1, delay: 4 }]} />
     <Label text="containers, whatever the length" mono align="center" position={[8.4, -0.9, 0]} size={0.15} color={dim} emissive={0.8}
       opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 1, delay: 4.4 }]} />
-    <Floor mirror y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} reflectivity={0.35} scale={0.5} size={40} />
+    <Floor y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} size={40} />
     <PointLight position={[-2, 7, 8]} color="#cfe6ff" intensity={150} range={40} />
     <PointLight position={[4.5, -1, 3]} color={violet} intensity={{ 0: 6, 1: 22 }} range={12} />
     <DOF aperture={0.2} maxBlur={6} />
