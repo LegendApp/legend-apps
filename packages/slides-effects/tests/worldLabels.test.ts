@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ClockSample, Vec3 } from "../packs/world/camera";
 import { glyphAdvances, glyphFirst } from "../packs/world/glyphs";
 import { buildWorldGraph } from "../packs/world/render";
-import { formatRowLabel, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareWorldScene, primitive,
+import { compileTrack, formatRowLabel, sampleTrack, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareWorldScene, primitive,
   recyclePathPoint, recycleSlot, rowInstances, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 
 function clock(time: number, step = 0, origins: Record<number, number> = { 0: 0 }): ClockSample {
@@ -52,6 +52,17 @@ describe("world labels", () => {
     expect(graph.passes.indexOf(pass)).toBe(graph.passes.length - 1 - graph.passes.slice().reverse().findIndex(item => item.id.startsWith("scene-")));
     expect(() => prepareWorldScene({ instances: [labelInstance({ text: "x", attach: "missing" })] })).toThrow("Unknown world label parent");
   });
+});
+
+test("delayed step keyframes hold the previous value until their delay elapses", () => {
+  const track = compileTrack([{ step: 0, value: 0 }, { step: 1, value: 1, duration: 1, ease: "linear" as const, delay: 2 }, { step: 1, value: 0, duration: 1, ease: "linear" as const, delay: 4 }]);
+  const origins = { 0: 0, 1: 10 };
+  expect(sampleTrack(track, clock(11, 1, origins))).toBe(0);
+  expect(sampleTrack(track, clock(12.5, 1, origins))).toBeCloseTo(0.5);
+  expect(sampleTrack(track, clock(13.5, 1, origins))).toBe(1);
+  expect(sampleTrack(track, clock(14.5, 1, origins))).toBeCloseTo(0.5);
+  // A completed step without an origin settles every delayed frame.
+  expect(sampleTrack(track, clock(20, 2, { 2: 20 }))).toBe(0);
 });
 
 describe("recycled rows", () => {
