@@ -1,6 +1,6 @@
-import { GPURenderGraph, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
-import { Children, Component, Fragment, isValidElement, useMemo, useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
+import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
+import { PixelRatio, View } from "react-native";
 import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
@@ -138,7 +138,9 @@ function WorldSurface(props: WorldProps) {
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder), [children, quality, exposure, backgroundColor, scrim, postOrder]);
-  const topology = JSON.stringify(worldGraphTopology(prepared));
+  // At 1.5 or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
+  const supersampled = PixelRatio.get() * useContext(PresentationCanvasScaleContext) >= 1.5;
+  const topology = JSON.stringify({ ...worldGraphTopology(prepared), supersampled });
   const [continuity] = useState(() => props.id ? retainedPose(props.id) : undefined);
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const resolution = useSharedValue(createResolutionState());

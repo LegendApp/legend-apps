@@ -273,7 +273,7 @@ type CustomDraw = CustomGeometry & { offset: number; count: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
   quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
-  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number;
+  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; passes?: WorldPostPass[]; postOrder?: string[];
 };
@@ -306,7 +306,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const scale = topology.quality === "low" ? .65 : topology.quality === "medium" ? .85 : 1;
   const levels = topology.quality === "low" ? 3 : 5;
   const samples = topology.quality === "low" ? 8 : topology.quality === "medium" ? 12 : 16;
-  const msaa = topology.quality === "low" ? 1 : 4;
+  const msaa = topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4;
   const passes: GPUPass[] = [];
   const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa },
     { id: "bloom", format: "rgba16float", scale: scale * .5, mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * .5, mips: levels }];
