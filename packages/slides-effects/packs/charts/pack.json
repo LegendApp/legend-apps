@@ -1,11 +1,16 @@
 {
   "id": "charts",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "hostApiVersion": 1,
   "exports": {
     "BarRow": "./BarRow.tsx",
     "ChartBar": "./ChartBar.tsx",
-    "NumberTiming": "./NumberTiming.ts"
+    "NumberTiming": "./NumberTiming.ts",
+    "AnimatedNumber": "./AnimatedNumber.tsx",
+    "RenderTree": "./RenderTree.tsx",
+    "BarChart": "./BarChart.tsx",
+    "LineChart": "./LineChart.tsx",
+    "DataGeometry": "./DataGeometry.ts"
   },
   "capabilities": [
     "reanimated",
