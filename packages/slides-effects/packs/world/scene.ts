@@ -183,9 +183,7 @@ export function rowInstances(options: RowsOptions): Instance[] {
   const box = (id: string): Instance => ({ ...primitive("box", { id, position: options.position ?? [0, 0, 0],
     scale: [options.width ?? 3, options.height ?? 0.35, options.depth ?? 0.35], size: 0.5, color: options.color ?? "#163047", emissive: options.emissive ?? 0.1, material: options.material }), ...card });
   const slots: Instance[] = Array.from({ length: count }, (_, slot) => ({ ...box(`${options.id}:slot:${slot}`), rows: { ...shared, slot } }));
-  // Ghosts carry no labels, so they skip the avatar disc.
-  const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 },
-    ...card.card ? { card: { ...card.card, avatar: 0 } } : {} }));
+  const ghosts: Instance[] = Array.from({ length: recycle?.ghosts ?? 0 }, (_, ghost) => ({ ...box(`${options.id}:ghost:${ghost}`), rows: { ...shared, slot: -1, ghost: ghost + 1 } }));
   const labels = slots.flatMap(parent => (options.labels ?? []).map((row, index) => {
     const instance = labelInstance({ ...row, id: `${parent.id}:label:${index}`, position: row.offset });
     instance.label = { ...instance.label!, parent, row };
@@ -211,10 +209,10 @@ export function cardInstances(options: CardOptions): Instance[] {
     labelInstance({ id: `${options.id}:${key}`, attach: options.id, text, position, size, color, emissive, opacity: opacity ?? 1, ...extra });
   const initials = options.initials ?? title?.[0]?.toUpperCase();
   return [card,
-    ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#ffffff", textEmissive * 1.2, { align: "center" })] : [],
+    ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#060d1a", textEmissive * 1.2, { align: "center" })] : [],
     ...title ? [label("title", title, [left, subtitle ? height * 0.13 : 0, z], height * (subtitle ? 0.36 : 0.4), textColor, textEmissive, { mono, ...titleOpacity !== undefined ? { opacity: titleOpacity } : {} })] : [],
-    ...subtitle ? [label("subtitle", subtitle, [left, -height * 0.24, z], height * 0.22, subtleColor, textEmissive * 0.7)] : [],
-    ...meta ? [label("meta", meta, [width / 2 - height * 0.3, 0, z], height * 0.28, subtleColor, textEmissive * 0.7, { mono: true, align: "right" })] : []];
+    ...subtitle ? [label("subtitle", subtitle, [left, -height * 0.24, z], height * 0.22, subtleColor, textEmissive * 0.55)] : [],
+    ...meta ? [label("meta", meta, [width / 2 - height * 0.3, 0, z], height * 0.28, subtleColor, textEmissive * 0.55, { mono: true, align: "right" })] : []];
 }
 export function labelInstance(options: LabelOptions): Instance {
   return { ...primitive("box", { id: options.id, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),

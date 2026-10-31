@@ -149,8 +149,6 @@ describe("world cards", () => {
   test("rows can be cards and their labels can show the item's initial", () => {
     const [slot] = rowInstances({ id: "pool", count: 2, height: 0.66, card: { avatar: 0.62 } });
     expect(slot.card).toEqual({ radius: 0.12, glow: 0.14, edge: 0.6, avatar: 0.62 });
-    const ghost = rowInstances({ id: "pool", count: 3, card: { avatar: 0.62 }, recycle: { ghosts: 1 } }).find(instance => instance.rows?.ghost);
-    expect(ghost?.card?.avatar).toBe(0);
     expect(slot.scale.initial[1]).toBe(0.66);
     expect(formatRowLabel("{initial}", ["grace"], 0, 0)).toBe("G");
   });

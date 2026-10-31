@@ -243,10 +243,11 @@ import { Card } from "slides:world/World";
 
 A Card is a flat rounded glass panel facing the camera: `scale` is its full width,
 height and depth (the panel sits on the front face). `radius` rounds its corners,
-`edge` sets the strength of its thin rim light in `color`, and `glow` is the width of
-the soft outer glow; a drop shadow follows the same outline. `emissive` sets how lit
-the card is: about 0.025 rests, lower values dim it, and 0.1 or more highlights it
-with a brighter rim, glow and tinted fill. A card with a `title` shows an avatar
+`edge` scales its thin rim and glow, and `glow` is the blur width of the soft outer
+glow. At rest (`emissive` up to 0.03) a card is dark slate glass with a dim slate rim
+and avatar; an `emissive` of 0.09 or more lights it in `color`: tinted fill, rim,
+avatar and a faint glow. Card colors are display colors, as a 2D layer would draw
+them, mapped back through the tonemap. A card with a `title` shows an avatar
 (`avatar` is its radius as a fraction of half the height; 0 hides it) with the
 title's initial or `initials`, then the title and an optional `subtitle`, plus a
 right-aligned mono `meta` tag. Text sizes follow the height; `opacity` fades the
