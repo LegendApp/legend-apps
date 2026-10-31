@@ -192,7 +192,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
-    return sampleUniforms(prepared, clock, previous, enterDuration, effectiveScale.value);
+    return sampleUniforms(prepared, clock, previous, enterDuration, effectiveScale.value, true);
   }, [prepared, previewTime, enterDuration, entryPose, effectiveScale]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}

@@ -3,7 +3,7 @@ import { encodeRenderGraph, prepareRenderGraph } from "../../../apps/slides/src/
 
 export type BenchmarkOptions = {
   definition: GPURenderGraphDefinition;
-  uniformsAt: (seconds: number, renderScale: number) => number[];
+  uniformsAt: (seconds: number, renderScale: number) => ArrayLike<number>;
   renderScaleAt?: (timestamp: number) => number;
   width: number;
   height: number;

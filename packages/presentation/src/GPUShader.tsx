@@ -6,7 +6,7 @@ export type GPUShaderProps = {
   particles?: boolean; particleCount?: number; particleVertexCount?: number;
   particleBlend?: "additive" | "over"; previewTime?: number;
   clock?: "slide" | "step"; image?: string; composite?: boolean;
-  frameData?: SharedValue<number[]>; frameDataSize?: number;
+  frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; frameDataSize?: number;
   active?: boolean; children?: ReactNode;
   maxTime?: number; frameTimeIndex?: number;
   renderGraph?: GPURenderGraphDefinition;
@@ -49,7 +49,7 @@ export type GPUPass =
 export type GPURenderGraphDefinition = { targets: GPUTarget[]; buffers?: GPUBufferTarget[]; passes: GPUPass[] };
 export type GPURenderGraphProps = Omit<GPUShaderProps,
   "code" | "particles" | "particleCount" | "particleVertexCount" | "particleBlend" | "composite" | "image" | "frameData" | "frameDataSize" | "renderGraph"> &
-  GPURenderGraphDefinition & { uniforms?: SharedValue<number[]>; /** Float capacity, defaults to 4096. */ uniformsSize?: number };
+  GPURenderGraphDefinition & { uniforms?: SharedValue<number[] | Float32Array<ArrayBuffer>>; /** Float capacity, defaults to 4096. */ uniformsSize?: number };
 /** Group 0: Frame at 0, read-only float uniforms at 1, linear sampler at 2,
  * then reads and compute writes. Fullscreen vertex output has position and location-0 UV. */
 export function GPURenderGraph({ targets, buffers, passes, uniforms, uniformsSize = 4096, ...props }: GPURenderGraphProps) {

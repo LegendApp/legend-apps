@@ -12,8 +12,10 @@ import { colorVector, worldHeaderSize, worldInstanceSize } from "../packs/world/
 
 const playback = { value: { phase: "playing", slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } } };
 let renderer, network;
-const closeVector = (actual, expected) => expected.forEach((value, axis) => expect(actual[axis]).toBeCloseTo(value, 10));
-const values = index => renderer.root.findAllByType("world-gpu")[index].props.uniforms.value;
+// World uploads float32 uniforms, so exact expectations round the same way.
+const f32 = Math.fround, f32Vector = vector => vector.map(f32);
+const closeVector = (actual, expected) => expected.forEach((value, axis) => expect(actual[axis]).toBeCloseTo(value, 5));
+const values = index => Array.from(renderer.root.findAllByType("world-gpu")[index].props.uniforms.value);
 const instances = index => {
   const data = values(index), result = [];
   for (let offset = worldHeaderSize; offset < data.length; offset += worldInstanceSize) result.push(data.slice(offset, offset + worldInstanceSize));
@@ -74,15 +76,15 @@ test("all five scenes fill the background and retain short overlay titles and na
 test("the 53-node cascade heats descendants then prunes to one branch while keeping dim geometry", () => {
   expect(layoutTree(network).nodes).toHaveLength(53);
   sample(0);
-  const nodes = () => instances(0).filter(item => item[3] === 0.24);
-  const edges = instances(0).filter(item => item[15] === 0.45);
+  const nodes = () => instances(0).filter(item => item[3] === f32(0.24));
+  const edges = instances(0).filter(item => item[15] === f32(0.45));
   expect(nodes()).toHaveLength(53); expect(edges).toHaveLength(52);
   for (const item of [...nodes(), ...edges]) {
     expect(item[23]).toBe(1);
-    expect(item.slice(4, 7)).toEqual(colorVector("#647b9a"));
+    expect(item.slice(4, 7)).toEqual(f32Vector(colorVector("#647b9a")));
   }
   expect(values(0)[1]).toBeCloseTo(1.8);
-  expect(values(0)[9]).toBe(1.8); expect(values(0)[12]).toBe(0.035);
+  expect(values(0)[9]).toBe(f32(1.8)); expect(values(0)[12]).toBe(f32(0.035));
   sample(0.5, 1);
   const partial = nodes().filter(item => item[30] > 0);
   expect(partial.length).toBeGreaterThan(1); expect(partial.length).toBeLessThan(53);
@@ -100,17 +102,17 @@ test("the 53-node cascade heats descendants then prunes to one branch while keep
 test("the cyan orb follows one curved edge with a fainter trail and matching camera focus", () => {
   sample(2, 1);
   const head = instances(1).find(item => item[7] === 14);
-  const trail = instances(1).find(item => item[7] === 14 * 0.3);
+  const trail = instances(1).find(item => item[7] === f32(14 * 0.3));
   expect(head, "orb head").toBeDefined();
   expect(trail, "orb trail").toBeDefined();
-  expect(head.slice(4, 7)).toEqual(colorVector("#22d3ee"));
+  expect(head.slice(4, 7)).toEqual(f32Vector(colorVector("#22d3ee")));
   expect(head.slice(8, 11)).toEqual([1, 1, 1]);
   expect(trail[19]).toBeCloseTo(head[3] * 0.18);
   expect(trail.slice(12, 15)).toEqual(head.slice(0, 3));
   expect(trail[15]).toBeGreaterThan(0);
   expect(values(1).slice(4, 7)).toEqual(head.slice(0, 3));
   expect(values(1)[32]).toBeCloseTo(7);
-  expect(instances(1).filter(item => item[7] > 0 && item[3] === 0.2)).toHaveLength(2);
+  expect(instances(1).filter(item => item[7] > 0 && item[3] === f32(0.2))).toHaveLength(2);
 });
 
 test("rows, stage flights and voxel reduction retain their clock-driven behavior", () => {
@@ -125,5 +127,5 @@ test("rows, stage flights and voxel reduction retain their clock-driven behavior
   expect(values(4)[56]).toBe(1000);
   sample(2.4, 1);
   expect(values(4)[56]).toBe(200);
-  expect(instances(4).filter(item => item[3] > 0 && item[3] <= 0.17)).toHaveLength(200);
+  expect(instances(4).filter(item => item[3] > 0 && item[3] <= f32(0.17))).toHaveLength(200);
 });

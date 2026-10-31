@@ -294,6 +294,21 @@ test("voxel compaction keeps topology fixed and its counter matches the survivin
   expect(sampleWorldUniforms(scene, clock(0))[56]).toBe(512);
 });
 
+test("reused uniforms keep one buffer and match fresh sampling while static and collapsing slots are skipped", () => {
+  const scene = prepareWorldScene({ instances: [
+    ...voxelInstances({ id: "cells", grid: [4, 4, 4], collapse: { step: 1, to: 0.2, duration: 2 } }), primitive("box", { id: "still", position: [2, 0, 0] }),
+    ...orbInstances({ count: 3, drift: 0.4 }), ...graphInstances({ data: tree("root", ["a"]), activate: [wave({ from: "root", step: 1 })] }),
+    ...pulseInstances({ id: "pulse", path: ["root", "a"], step: 1 }),
+  ], counter: { source: "cells" } });
+  expect(scene.instances.filter(instance => instance.motion === "voxel")).toHaveLength(64);
+  expect(scene.instances.filter(instance => instance.anchor).map(instance => instance.id).sort()).toEqual(["node:a", "node:root", "pulse"]);
+  const reused = sampleWorldUniforms(scene, clock(0), undefined, 1, 1, true);
+  for (const sample of [clock(0.5), clock(0.5, 1, { 0: 0, 1: 0.5 }), clock(1.5, 1, { 0: 0, 1: 0.5 }), clock(4, 1, { 0: 0, 1: 0.5 }), clock(5, 1, { 0: 0, 1: 0.5 }), clock(0.2)]) {
+    expect(sampleWorldUniforms(scene, sample, undefined, 1, 1, true)).toBe(reused);
+    expect(reused).toEqual(Float32Array.from(sampleWorldUniforms(scene, sample)));
+  }
+});
+
 test("removed voxels shrink in place, including collapse to zero and backwards sampling", () => {
   const scene = prepareWorldScene({ instances: voxelInstances({ id: "cells", grid: [5, 1, 1], collapse: { step: 1, to: 0.2, duration: 2, ease: "linear" } }), counter: { source: "cells" } });
   let state = createPlaybackState({ phase: "playing", slideKey: "shrink", stepKey: "1", stepIndex: 1 });

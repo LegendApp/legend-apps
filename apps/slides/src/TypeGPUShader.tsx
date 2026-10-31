@@ -215,7 +215,7 @@ function startShaderCanvas({ canvas, code, particles, particleCount, particleBle
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[]>; previewTime: number; onError(message: string): void; onReady(): void }) {
+function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -336,7 +336,7 @@ async function loadImageTexture(device: GPUDevice, uri: string) {
   } finally { data.dispose(); }
 }
 
-function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[]>, renderScale = 1) {
+function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>, renderScale = 1) {
   "worklet";
   const { device, context, clock, groups, compute, render, particles } = r;
   // Configure on UI after retirement of the previous owner, never during async setup.
@@ -347,8 +347,8 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   const data = frameData?.value;
   if (r.frameData && data) {
     if (data.length * 4 > r.frameData.size) throw new Error(`Frame data has ${data.length} values; its buffer holds ${r.frameData.size / 4}`);
-    const values = scratch(data.length);
-    values.set(data);
+    let values = data;
+    if (!(values instanceof Float32Array)) { values = scratch(data.length); values.set(data); }
     device.queue.writeBuffer(r.frameData, 0, values);
   }
   const encoder = device.createCommandEncoder();

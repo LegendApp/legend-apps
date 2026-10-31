@@ -35,6 +35,10 @@ export type Instance = {
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
+  /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
+  anchor?: boolean;
+  /** Set by prepareWorldScene: the slot never changes, or changes only with its voxel collapse progress. */
+  motion?: "static" | "voxel";
 };
 export type GraphOptions = {
   data: TreeNode; layout?: "cone"; radius?: number; levelHeight?: number; position?: Vec3;
@@ -205,10 +209,12 @@ export function voxelRemaining(instance: Instance, clock: ClockSample): number {
   const target = Math.round(voxel.count * (voxel.options.collapse?.to ?? 0.2));
   return voxel.count + (target - voxel.count) * collapseProgress(voxel.options.collapse, clock);
 }
+const noOffset: Vec3 = [0, 0, 0];
 function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec3 {
   "worklet";
+  if (!stages?.length) return noOffset;
   const offset: Vec3 = [0, 0, 0];
-  for (const stage of stages ?? []) {
+  for (const stage of stages) {
     const position = sampleTrack(stage.position, clock);
     for (let axis = 0; axis < 3; axis++) offset[axis] += position[axis];
   }
@@ -349,11 +355,23 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
 }
-export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1): number[] {
+type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array };
+/** With reuse, every call for the same prepared scene returns one buffer and rewrites only slots whose inputs changed. */
+export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
-  const values = new Array<number>(worldHeaderSize + scene.instances.length * worldInstanceSize).fill(0);
+  const count = scene.instances.length;
+  let cache: UniformCache | undefined;
+  if (reuse) {
+    const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
+    cache = caches.get(scene);
+    if (!cache) {
+      cache = { values: new Float32Array(worldHeaderSize + count * worldInstanceSize), keys: new Float64Array(count).fill(NaN) };
+      caches.set(scene, cache);
+    }
+  }
+  const values = cache?.values ?? new Array<number>(worldHeaderSize + count * worldInstanceSize).fill(0);
   const objects: Record<string, Vec3> = {};
-  for (const instance of scene.instances) if (instance.id) objects[instance.id] = instancePosition(instance, clock);
+  for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance, clock);
   const camera = sampleWorldCamera(scene, clock, previous, enterDuration);
   values[0] = camera.position[0]; values[1] = camera.position[1]; values[2] = camera.position[2]; values[3] = Math.tan(camera.fov * Math.PI / 360);
   values[4] = camera.target[0]; values[5] = camera.target[1]; values[6] = camera.target[2]; values[7] = camera.roll;
@@ -377,19 +395,23 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[base + 11] = light.spot ? Math.cos(sampleTrack(light.angle, clock)) : -1;
   });
   if (scene.counter) {
-    const voxel = scene.instances.find(instance => instance.voxel?.options.id === scene.counter!.source)!;
     values[53] = 1;
-    values[56] = Math.round(voxelRemaining(voxel, clock));
+    values[56] = Math.round(voxelRemaining(scene.instances[scene.counterIndex!], clock));
     values[57] = scene.counter.position?.[0] ?? 0.8; values[58] = scene.counter.position?.[1] ?? 0.12; values[59] = scene.counter.size ?? 0.07;
     const color = scene.counterColor!; values[60] = color[0]; values[61] = color[1]; values[62] = color[2];
   }
-  for (let i = 0; i < scene.instances.length; i++) {
+  for (let i = 0; i < count; i++) {
     const instance = scene.instances[i];
+    if (cache) {
+      const key = instance.motion === "static" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock) : NaN;
+      if (cache.keys[i] === key) continue;
+      cache.keys[i] = key;
+    }
     const index = worldHeaderSize + i * worldInstanceSize;
-    const position = instance.endpoints ? objects[instance.endpoints[0]] : instance.id ? objects[instance.id] : instancePosition(instance, clock);
+    const position = instance.endpoints ? objects[instance.endpoints[0]] : instance.anchor ? objects[instance.id!] : instancePosition(instance, clock);
     const offset = stageOffset(instance.stages, clock);
     const endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
-      : [instance.end[0] + offset[0], instance.end[1] + offset[1], instance.end[2] + offset[2]];
+      : !instance.stages?.length ? instance.end : [instance.end[0] + offset[0], instance.end[1] + offset[1], instance.end[2] + offset[2]];
     const scale = sampleTrack(instance.scale, clock);
     let color = sampleTrack(instance.color, clock);
     const activation = instance.graph ? activationAt(instance.graph.node, instance.graph.nodes, instance.graph.activate, clock) : 1;
@@ -420,9 +442,12 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     }
     values[index + 15] = curve; values[index + 19] = instance.thickness;
     values[index + 23] = instanceOpacity(instance, clock);
-    const material = instance.materialTracks!, sampledAlbedo = sampleTrack(material.albedo, clock);
-    const albedo = instance.material ? instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo : [values[index + 4], values[index + 5], values[index + 6]];
-    values[index + 24] = albedo[0]; values[index + 25] = albedo[1]; values[index + 26] = albedo[2];
+    const material = instance.materialTracks!;
+    if (instance.material) {
+      const sampledAlbedo = sampleTrack(material.albedo, clock);
+      const albedo = instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo;
+      values[index + 24] = albedo[0]; values[index + 25] = albedo[1]; values[index + 26] = albedo[2];
+    } else { values[index + 24] = values[index + 4]; values[index + 25] = values[index + 5]; values[index + 26] = values[index + 6]; }
     values[index + 27] = sampleTrack(material.roughness, clock); values[index + 28] = sampleTrack(material.metal, clock); values[index + 29] = sampleTrack(material.rim, clock) * activation;
     values[index + 30] = activation;
   }
@@ -431,7 +456,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
 
 export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fogTrack: Track<Vec3>; backgroundVector: Vec3;
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
-  focusTrack?: Track<number | string>; counterColor?: Vec3;
+  focusTrack?: Track<number | string>; counterColor?: Vec3; counterIndex?: number;
   lightTracks: { position: Track<Vec3>; target: Track<Vec3>; color: Track<Vec3>; intensity: Track<number>; range: Track<number>; angle: Track<number>; spot: boolean }[] };
 export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   if ((scene.lights?.length ?? 0) > 4) throw new Error("World supports at most four point or spot lights");
@@ -488,6 +513,15 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   const order = (instance: Instance) => instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
   instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
+  const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));
+  const still = (track: Track<unknown>) => track.frames.length === 0;
+  for (const instance of instances) {
+    if (instance.id && anchorIds.has(instance.id)) instance.anchor = true;
+    const material = instance.materialTracks!;
+    if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
+      (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
+      !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
+  }
   const fields: [number, Animated<number>][] = [[9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
     [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
@@ -498,6 +532,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
     colorTracks: [{ index: 40, track: compileTrack(scene.floor?.color ?? "#101827", colorVector) }, { index: 48, track: compileTrack(scene.rim?.color ?? "#ffffff", colorVector) }],
     counterColor: scene.counter ? colorVector(scene.counter.color ?? "#ffffff") : undefined,
+    counterIndex: scene.counter ? instances.findIndex(instance => instance.voxel?.options.id === scene.counter!.source) : undefined,
     lightTracks: (scene.lights ?? []).map(light => ({ position: compileTrack<Vec3>(light.position ?? [0, 8, 0]), target: compileTrack<Vec3>(light.target ?? [0, 0, 0]),
       color: compileTrack(light.color ?? "#ffffff", colorVector), intensity: compileTrack(light.intensity ?? 4), range: compileTrack(light.range ?? 25),
       angle: compileTrack(light.angle ?? 0.45), spot: light.kind === "spot" })),
