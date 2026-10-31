@@ -1,0 +1,205 @@
+---
+title: How Lists Render
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#05060a"
+  color: "#f8fafc"
+---
+
+import { Background } from "@legend-apps/presentation"
+import { Text } from "react-native"
+import { World, Camera, Box, Sphere, Tube, Label, Rows, Stage, Material, Floor, PointLight, RimLight, Bloom, Fog, DOF, Vignette, Grain, recyclePathPoint } from "slides:world/World"
+
+export const cyan = "#22d3ee"
+export const amber = "#ffb547"
+export const violet = "#b07cff"
+export const ink = "#e8f4ff"
+export const dim = "#6f8aa3"
+
+export const prev = [[1, "Ada"], [2, "Grace"], [3, "Linus"], [4, "Margaret"], [5, "Alan"], [6, "Barbara"]]
+export const next = [[1, "Ada"], [2, "Grace"], [7, "Ken"], [3, "Linus"], [5, "Alan T."], [6, "Barbara"]]
+export const rowY = index => 2 - index * 0.85
+export const code = ([id, name]) => `{ id: ${id}, name: "${name}" }`
+
+export const look = <>
+  <Material id="glass" albedo="#0a1626" roughness={0.32} metal={0.35} rim={0.9} />
+  <RimLight color={cyan} intensity={0.35} />
+  <Fog density={0.018} height={-2} falloff={0.15} color="#070a12" />
+  <Bloom intensity={1.15} threshold={0.75} radius={0.85} />
+  <Vignette amount={0.32} /><Grain amount={0.012} />
+</>
+
+export const card = ({ id, x, index, item, color = cyan, emissive = 0.025, header, scale = [4, 0.6, 0.18], opacity = 1 }) => <>
+  <Box id={id} material="glass" position={[x, rowY(index), 0]} scale={scale} color={color} emissive={emissive} />
+  <Label attach={id} text={code(item)} mono position={[-1.82, 0, 0.1]} size={0.24} color="#b9e2f2" emissive={0.9} opacity={opacity} />
+  {header && <Label attach={id} text={`[${index}]`} mono align="right" position={[-2.2, 0, 0.1]} size={0.2} color={dim} emissive={0.5} />}
+</>
+
+export const row = ({ id, y, name, key, scale = [4, 0.62, 0.18], color = cyan, emissive = 0.025, opacity = 1, nameOpacity = opacity }) => <>
+  <Box id={id} material="glass" position={y} scale={scale} color={color} emissive={emissive} />
+  <Label attach={id} text={name} position={[-1.3, 0, 0.1]} size={0.3} color={ink} emissive={1.3} opacity={nameOpacity} />
+  <Label attach={id} text={`key ${key}`} mono align="right" position={[1.8, 0, 0.1]} size={0.19} color={dim} emissive={0.6} opacity={opacity} />
+</>
+
+export const listY = index => [4.6, rowY(index), 0]
+export const linkEnds = [[0, 0], [1, 1], [2, 3], [4, 4], [5, 5]]
+export const work = [[10, 0.12], [100, 0.3], ["1k", 0.6], ["10k", 1.05], ["100k", 1.75]]
+
+<Background>
+  <World id="lists" background quality="auto" exposure={1.25}>
+    <Camera duration={1.2} ease="cubic" shots={[
+      { step: 0, position: [-1.4, 1.2, 16.6], target: [-1.4, -0.15, 0], fov: 40 },
+      { step: 1, position: [-1.4, 1.0, 15.8], target: [-1.4, -0.2, 0], duration: 1 },
+      { step: 5, position: [0, 0.8, 13.4], target: [0, -0.35, 0], duration: 1.4 },
+    ]} />
+    <Stage id="diff" position={{ 0: [0, 0, 0], 5: [-15, 0, 0] }} glow={{ 0: 1, 5: 0.25 }}>
+      <Label text={"items"} mono position={{ 0: [-9, 2.75, 0], 1: [-9, 2.75, 0] }} size={0.22} color={dim} emissive={0.7} opacity={{ 0: 1, 1: 0 }} />
+      <Label text={"prev"} mono position={[-9, 2.75, 0]} size={0.22} color={dim} emissive={0.7} opacity={{ 0: 0, 1: 1 }} />
+      <Label text={"next"} mono position={[-3.4, 2.75, 0]} size={0.22} color={dim} emissive={0.7} opacity={{ 0: 0, 1: 1 }} />
+      {prev.map((item, index) => card({ id: `prev:${index}`, x: -7.2, index, item, header: true,
+        color: index === 3 || index === 4 ? { 0: cyan, 3: amber } : cyan, emissive: index === 3 || index === 4 ? { 0: 0.025, 3: 0.1 } : { 0: 0.025, 4: 0.012 } }))}
+      {next.map((item, index) => card({ id: `next:${index}`, x: -1.6, index, item,
+        scale: [{ step: 0, value: [4, 0, 0] }, { step: 1, value: [4, 0.6, 0.18], duration: 0.5, delay: 0.3 + index * 0.06 }],
+        opacity: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 0.4, delay: 0.5 + index * 0.06 }],
+        color: index === 2 || index === 4 ? { 0: cyan, 3: amber } : cyan, emissive: index === 2 || index === 4 ? { 0: 0.025, 3: 0.1 } : { 0: 0.025, 4: 0.012 } }))}
+      <Box id="chip:render" material="glass" position={[-1.3, 0.3, 0]} scale={{ 0: [2, 0.48, 0.12], 1: [0, 0, 0] }} color={cyan} emissive={0.04} />
+      <Label attach="chip:render" text="render()" mono align="center" position={[0, 0, 0.08]} size={0.22} color={cyan} emissive={2.2} opacity={{ 0: 1, 1: 0 }} />
+      <Box id="chip:set" material="glass" position={[-1.6, 3.45, 0]} scale={{ 0: [0, 0, 0], 1: [2.6, 0.48, 0.12], 2: [0, 0, 0] }} color={cyan} emissive={0.04} />
+      <Label attach="chip:set" text="setItems(next)" mono align="center" position={[0, 0, 0.08]} size={0.22} color={cyan} emissive={2.2} opacity={{ 0: 0, 1: 1, 2: 0 }} />
+      <Box id="chip:reconcile" material="glass" position={[-4.4, 3.45, 0]} scale={{ 0: [0, 0, 0], 2: [3.6, 0.48, 0.12] }} color={cyan} emissive={0.04} />
+      <Label attach="chip:reconcile" text="reconcile(prev, next)" mono align="center" position={[0, 0, 0.08]} size={0.22} color={cyan} emissive={2.2} opacity={{ 0: 0, 2: 1 }} />
+      <Box position={[{ step: 0, value: [-4.4, rowY(0), -0.2] }, { step: 2, value: [-4.4, rowY(5), -0.2], duration: 2, ease: "linear" }]}
+        scale={{ 0: [0, 0, 0], 2: [11.2, 0.8, 0.02], 3: [0, 0, 0] }} color={cyan} emissive={0.35} />
+      {linkEnds.map(([from, to]) => <Tube key={to} position={[-5.2, rowY(from), 0]} end={[-3.6, rowY(to), 0]} thickness={0.022}
+        scale={[{ step: 0, value: [0, 0, 0] }, { step: 2, value: [1, 1, 1], duration: 0.3, delay: to * 0.33 }]}
+        color={to === 4 ? { 0: cyan, 3: amber } : cyan} emissive={{ 0: 3, 3: to === 4 ? 4 : to === 3 ? 2 : 1.2, 4: to === 4 ? 4 : 0.6 }} />)}
+      <Label text="+ insert" mono position={[0.55, rowY(2) + 0.3, 0.1]} size={0.2} color={amber} emissive={2.4} opacity={{ 0: 0, 3: 1 }} />
+      <Label text="~ update" mono position={[0.55, rowY(4) + 0.3, 0.1]} size={0.2} color={amber} emissive={2.4} opacity={{ 0: 0, 3: 1 }} />
+      <Label text="- remove" mono align="right" position={[-9.9, rowY(3), 0.1]} size={0.2} color={amber} emissive={2.4} opacity={{ 0: 0, 3: 1 }} />
+      {[2, 4].map(index => <Tube key={index} position={[0.4, rowY(index), 0]} end={[2.6, rowY(index), 0]} thickness={0.022}
+        scale={[{ step: 0, value: [0, 0, 0] }, { step: 4, value: [1, 1, 1], duration: 0.5, delay: index * 0.08 }]} color={amber} emissive={4} />)}
+    </Stage>
+    <Stage id="work" position={{ 0: [0, 0, 0], 5: [0, 6, 0] }} glow={{ 0: 1, 5: 0 }}>
+      <Label text="work per update" mono position={[2.6, 3.95, 0]} size={0.2} color={dim} emissive={0.8} opacity={{ 0: 0, 4: 1 }} />
+      {work.map(([count, height], index) => <>
+        <Box key={`bar:${index}`} position={[{ step: 0, value: [2.9 + index * 0.75, 3.35, 0] }, { step: 4, value: [2.9 + index * 0.75, 3.35 + height / 2, 0], duration: 0.6, delay: 0.4 + index * 0.25 }]}
+          scale={[{ step: 0, value: [0.42, 0, 0] }, { step: 4, value: [0.42, height, 0.12], duration: 0.6, delay: 0.4 + index * 0.25 }]} color={amber} emissive={0.5 + index * 0.12} />
+        <Label key={`count:${index}`} text={String(count)} mono align="center" position={[2.9 + index * 0.75, 3.12, 0]} size={0.17} color={amber} emissive={1.4}
+          opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 0.3, delay: 0.4 + index * 0.25 }]} />
+      </>)}
+    </Stage>
+    <Stage id="list" position={{ 0: [0, 0, 0], 5: [-4.6, 0, 0] }}>
+      <Label text="rendered list" mono position={[2.6, 2.75, 0]} size={0.22} color={dim} emissive={0.7} opacity={{ 0: 1, 5: 0 }} />
+      {row({ id: "row:ada", y: listY(0), name: "Ada", key: 1 })}
+      {row({ id: "row:grace", y: listY(1), name: "Grace", key: 2 })}
+      {row({ id: "row:linus", y: { 0: listY(2), 4: listY(3) }, name: "Linus", key: 3 })}
+      {row({ id: "row:margaret", y: listY(3), name: "Margaret", key: 4, scale: { 0: [4, 0.62, 0.18], 4: [4, 0, 0] }, color: { 0: cyan, 4: amber }, opacity: { 0: 1, 4: 0 } })}
+      {row({ id: "row:ken", y: listY(2), name: "Ken", key: 7, scale: [{ step: 0, value: [4, 0, 0] }, { step: 4, value: [4, 0.62, 0.18], duration: 0.6, delay: 0.3 }], color: { 0: amber, 5: cyan }, emissive: { 0: 0.1, 5: 0.025 }, opacity: [{ step: 0, value: 0 }, { step: 4, value: 1, delay: 0.5 }] })}
+      {row({ id: "row:alan", y: listY(4), name: "Alan", key: 5, color: { 0: cyan, 4: amber, 5: cyan }, emissive: { 0: 0.025, 4: 0.1, 5: 0.025 }, nameOpacity: [{ step: 0, value: 1 }, { step: 4, value: 0, duration: 0.3, delay: 0.5 }] })}
+      <Label attach="row:alan" text="Alan T." position={[-1.3, 0, 0.1]} size={0.3} color={ink} emissive={1.3} opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 0.3, delay: 0.7 }]} />
+      {row({ id: "row:barbara", y: listY(5), name: "Barbara", key: 6 })}
+      {[[2, 0.3], [4, 0.6]].map(([index, delay]) => <Box key={index} position={[{ step: 0, value: [2.7, rowY(index), 0.12] }, { step: 4, value: [6.5, rowY(index), 0.12], duration: 0.9, ease: "smoothstep", delay }]}
+        scale={[{ step: 0, value: [0, 0, 0] }, { step: 4, value: [0.06, 0.66, 0.06], duration: 0.05, delay }, { step: 4, value: [0, 0, 0], duration: 0.05, delay: delay + 0.9 }]} color={amber} emissive={9} />)}
+      {[[4.6, 2.45, 4.735, 0.035], [4.6, -2.7, 4.735, 0.035], [2.25, -0.125, 0.035, 5.185], [6.95, -0.125, 0.035, 5.185]].map(([x, y, w, h], index) =>
+        <Box key={`frame:${index}`} position={[x, y, 0]} scale={[{ step: 0, value: [0, 0, 0] }, { step: 5, value: [w, h, 0.035], duration: 0.6, delay: 0.7 }]} color={cyan} emissive={4} />)}
+      {[0, 1, 2, 3, 4, 5].map(index => <Label key={`tag:${index}`} text={`C${index}`} mono align="right" position={[2.15, rowY(index), 0.1]} size={0.2} color={cyan} emissive={1.6}
+        opacity={[{ step: 0, value: 0 }, { step: 5, value: 1, duration: 0.3, delay: 0.8 + index * 0.1 }]} />)}
+    </Stage>
+    <Floor mirror y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} reflectivity={0.35} scale={0.5} size={40} />
+    <PointLight position={[-2, 7, 8]} color="#cfe6ff" intensity={150} range={40} />
+    <PointLight position={[1.5, 0.5, 6]} color={cyan} intensity={5} range={10} />
+    <DOF focus={{ 0: 16, 5: "stage:list" }} aperture={{ 0: 0.2, 5: 0.7 }} maxBlur={12} />
+    {look}
+  </World>
+</Background>
+
+<View className="absolute left-16 top-12">
+  <Steps count={6}>{step => <View>
+    <Text className="text-xl font-semibold tracking-widest text-cyan-300/80">{step === 5 ? "TRANSITION" : step >= 4 ? "PART A · COMMIT" : step >= 2 ? "PART A · RECONCILIATION" : "PART A · HOW LISTS USUALLY RENDER"}</Text>
+    <Text className="mt-2 text-6xl font-bold text-white">{["An array becomes rows", "The data changes", "Compare prev and next, key by key", "Find what changed", "Patch the changed rows", "The rendered list becomes a viewport"][step]}</Text>
+  </View>}</Steps>
+</View>
+<View className="absolute right-16 top-14 items-end">
+  <Steps count={6}>{step => step >= 2 && step < 4 ? <Text className="text-2xl text-slate-300">{step === 2 ? "keys compared 6 / 6" : "changes found 3"}</Text> : null}</Steps>
+</View>
+<View className="absolute bottom-12 left-0 right-0 items-center">
+  <Steps count={6}>{step => <Text className="text-3xl text-slate-200">{[
+    "Each item in the data maps to one row on screen.",
+    "One insert, one removal, one edit. Nothing on screen has changed yet.",
+    "The reconciler walks both arrays and matches items by key.",
+    "Matches pass through. Inserts, removals and edits become the patch.",
+    "Changed rows re-run their component, but every item was compared. The cost grows with the list.",
+    "Same rows, new idea: a fixed set of containers that never gets created or destroyed.",
+  ][step]}</Text>}</Steps>
+</View>
+
+---
+
+export const names = ["Ada", "Grace", "Linus", "Margaret", "Alan", "Barbara", "Ken", "Dennis", "Hedy", "Radia", "John", "Katherine", "Tim", "Sophie", "Guido", "Frances", "Edsger", "Donald", "Niklaus", "Barbara L."]
+export const scroll = [
+  { step: 0, value: 1 },
+  { step: 1, value: 1.3, duration: 1.2 },
+  { step: 2, value: 1.55, duration: 1 },
+  { step: 3, value: 2, duration: 1.2 },
+  { step: 4, value: 6, duration: 4.5 },
+]
+export const poolY = 0.6
+export const top = [0, poolY + 3.5 * 0.85, 0]
+export const bottom = [0, poolY - 3.5 * 0.85, 0]
+export const loop = Array.from({ length: 48 }, (_, index) => recyclePathPoint(top, bottom, 5.4, 0.9, index / 47))
+export const tapeY = index => 3.3 - index * 0.4
+
+<Background>
+  <World id="lists" background quality="auto" exposure={1.25} enter={{ from: "previous", duration: 1.2 }}>
+    <Camera duration={1.2} ease="cubic" shots={[
+      { step: 0, position: [0.4, 1.4, 16.4], target: [0.4, 0.3, 0], fov: 40 },
+      { step: 4, position: [0.8, 1.3, 16.8], target: [0.8, 0.25, 0], duration: 3 },
+    ]} />
+    <Rows id="pool" count={8} position={[0, poolY, 0]} spacing={0.85} width={4} depth={0.18} color={cyan} material="glass" emissive={0.025} scroll={scroll}
+      items={names} recycle={{ above: 1, below: 1, reach: 5.4, lift: 0.9, ghosts: 3, color: violet }} labels={[
+        { text: "C{slot}", offset: [-2.35, 0, 0.1], size: 0.2, mono: true, align: "right", color: cyan, emissive: 1.6 },
+        { text: "{item}", offset: [-1.7, 0, 0.1], size: 0.3, color: ink, emissive: 1.3 },
+        { text: "item {index}", offset: [1.8, 0, 0.1], size: 0.19, mono: true, align: "right", color: dim, emissive: 0.7 },
+      ]} />
+    {[[0, poolY + 2.55, 4.5, 0.035], [0, poolY - 2.55, 4.5, 0.035], [-2.25, poolY, 0.035, 5.135], [2.25, poolY, 0.035, 5.135]].map(([x, y, w, h], index) =>
+      <Box key={`frame:${index}`} position={[x, y, 0]} scale={[w, h, 0.035]} color={cyan} emissive={4} />)}
+    <Label text="buffer" mono position={[2.45, poolY + 3 * 0.85 + 0.3, 0]} size={0.17} color={violet} emissive={1} />
+    <Label text="buffer" mono position={[2.45, poolY - 3 * 0.85 - 0.3, 0]} size={0.17} color={violet} emissive={1} />
+    {loop.map((point, index) => <Sphere key={index} position={[point[0], point[1], -0.25]} size={{ 0: 0, 1: 0.028 }} color={violet} emissive={{ 0: 0, 1: 3, 4: 1.6 }} />)}
+    <Label text="data: 10,000 items" mono position={[-8.4, 3.85, 0]} size={0.2} color={dim} emissive={0.8} />
+    {names.slice(0, 15).map((name, index) => <Label key={index} text={`[${index}] ${name}`} mono position={[-8.4, tapeY(index), 0]} size={0.17} color="#8fb6cc" emissive={0.7} />)}
+    {[[0, 1.2, 2.7, 0.03], [0, -1.2, 2.7, 0.03], [-1.35, 0, 0.03, 2.43], [1.35, 0, 0.03, 2.43]].map(([x, y, w, h], index) =>
+      <Box key={`window:${index}`} position={scroll.map(frame => ({ ...frame, value: [-7.3 + x, tapeY(frame.value + 2.5) + y, 0] }))} scale={[w, h, 0.03]} color={cyan} emissive={4} />)}
+    <Label text="8" align="center" position={[8.4, 0.4, 0]} size={2.6} color={violet} emissive={[{ step: 0, value: 0 }, { step: 4, value: 1.4, duration: 1, delay: 4 }]}
+      opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 1, delay: 4 }]} />
+    <Label text="containers, whatever the length" mono align="center" position={[8.4, -0.9, 0]} size={0.15} color={dim} emissive={0.8}
+      opacity={[{ step: 0, value: 0 }, { step: 4, value: 1, duration: 1, delay: 4.4 }]} />
+    <Floor mirror y={-4.2} color="#0b1220" roughness={0.35} metal={0.2} reflectivity={0.35} scale={0.5} size={40} />
+    <PointLight position={[-2, 7, 8]} color="#cfe6ff" intensity={150} range={40} />
+    <PointLight position={[4.5, -1, 3]} color={violet} intensity={{ 0: 6, 1: 22 }} range={12} />
+    <DOF focus={13.5} aperture={0.35} maxBlur={10} />
+    {look}
+  </World>
+</Background>
+
+<View className="absolute left-16 top-12">
+  <Steps count={5}>{step => <View>
+    <Text className="text-xl font-semibold tracking-widest text-violet-300/80">PART B · LEGEND LIST RECYCLING</Text>
+    <Text className="mt-2 text-6xl font-bold text-white">{["A fixed pool of containers", "A row scrolls off the top", "It travels around to the bottom", "Re-enters at the bottom with new data", "Steady state: the pool never grows"][step]}</Text>
+  </View>}</Steps>
+</View>
+<View className="absolute right-16 top-14 items-end">
+  <Text className="text-2xl text-slate-300">pool 8 containers · data 10,000 items</Text>
+  <Text className="mt-1 text-2xl text-violet-300">created 0 · destroyed 0</Text>
+</View>
+<View className="absolute bottom-12 left-0 right-0 items-center">
+  <Steps count={5}>{step => <Text className="text-3xl text-slate-200">{[
+    "Six containers fill the viewport, with one buffered above and one below.",
+    "Item 0 has left the window. Its container is now free to reuse.",
+    "The same container moves out to the right and down. Nothing is unmounted.",
+    "Its content swaps from Ada to Hedy as it slides into the bottom slot.",
+    "Scroll cost depends on the viewport, not on the length of the data.",
+  ][step]}</Text>}</Steps>
+</View>
