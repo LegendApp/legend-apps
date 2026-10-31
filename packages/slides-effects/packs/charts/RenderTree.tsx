@@ -6,12 +6,14 @@ import Animated, { useAnimatedStyle, useDerivedValue, type SharedValue } from "r
 import { AnimatedNumber, dataColors, monoFont } from "./AnimatedNumber";
 import { layoutTree, renderCounts, type TreeEdge, type TreeFlash, type TreeNode } from "./DataGeometry";
 
-/** Rise quickly, then settle slowly to a faint residual glow; delayed by depth so renders read top-down. */
+/** Rise quickly, then settle slowly to a residual glow; delayed by depth so renders read top-down. */
 function pulse(time: number) {
   "worklet";
   if (time <= 0) return 0;
   if (time < 0.22) return time / 0.22;
-  return 0.4 + 0.6 * Math.exp(-(time - 0.22) / 0.9);
+  // A finite settle, so the glow stops changing (and its canvas stops redrawing) 2.7 s after the step.
+  const t = Math.min(1, (time - 0.22) / 2.5);
+  return 1 - 0.6 * t * t * (3 - 2 * t);
 }
 
 function usePulse(playback: SharedValue<any>, delay: number, active: boolean) {
