@@ -237,7 +237,9 @@ function UIFrames({ resources: r, renderScale, effectActive = true, maxTime, fra
          (state.phase === "playing" && previous.phase !== "playing"))) {
       count.value = 0;
     }
-    simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
+    if (previous.phase !== state.phase || previous.slideKey !== state.slideKey || previous.stepKey !== state.stepKey) {
+      simulationEpoch.value = { phase: state.phase, slideKey: state.slideKey, stepKey: state.stepKey };
+    }
     const frameIndex = frozen ? Math.max(0, count.value - 1) : count.value;
     const scale = renderScale?.get();
     try {

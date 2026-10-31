@@ -180,8 +180,9 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 }` : `
 @fragment fn worldFragment(in:WorldVertex)->@location(0) vec4f {
  if(in.opacity<=.001) { discard; }
- ${reflection ? "if(in.world.y<uniforms[36]) { discard; }" : ""}
+ ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let normal=normalize(in.normal);
+ ${kind === "box" && !custom ? "if(in.opacity>=.999 && dot(normal,eye()-in.world)<0.) { discard; }" : ""}
  let material=${custom ? "shade(in.instance,in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
  let color=illuminate(in.world,normal,material,in.color,in.material.z,in.material.w);
  return vec4f(color*in.opacity,in.opacity);
@@ -228,9 +229,9 @@ fn downsample13(uv:vec2f,karis:bool)->vec3f {
  let sum=box((j+k+l+m)*.25,.5,karis)+box((a+b+d+e)*.25,.125,karis)+box((b+c+e+f)*.25,.125,karis)+box((d+e+g+h)*.25,.125,karis)+box((e+f+h+i)*.25,.125,karis);
  return sum.rgb/sum.a;
 }
+// The 3x3 tent as four bilinear taps at half-texel offsets.
 fn tent9(uv:vec2f)->vec3f {
- return (tap(uv,vec2f(0.,0.))*4.+(tap(uv,vec2f(-1.,0.))+tap(uv,vec2f(1.,0.))+tap(uv,vec2f(0.,-1.))+tap(uv,vec2f(0.,1.)))*2.
-  +tap(uv,vec2f(-1.,-1.))+tap(uv,vec2f(1.,-1.))+tap(uv,vec2f(-1.,1.))+tap(uv,vec2f(1.,1.)))/16.;
+ return (tap(uv,vec2f(-.5,-.5))+tap(uv,vec2f(.5,-.5))+tap(uv,vec2f(-.5,.5))+tap(uv,vec2f(.5,.5)))*.25;
 }
 `;
 const downsample = `${filterCode}

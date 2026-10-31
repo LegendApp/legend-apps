@@ -20,7 +20,7 @@ export function shaftCode(bindings: string, lights: number, steps: number) {
 ${depthCode()}
 @fragment fn shafts(@location(0) uv:vec2f,@builtin(position) position:vec4f)->@location(0) vec4f {
  let ray=worldRay(uv); let direction=normalize(ray);
- let distance=min(depthAt(uv),100.); let stride=distance/${steps}.;
+ let distance=min(depthAt(uv),100.); let stride=distance/${steps}.; let segment=stride*length(ray);
  let density=max(uniforms[46],.0001); let anisotropy=clamp(uniforms[47],-.8,.8);
  // Interleaved gradient noise spreads the step offsets evenly, so fog's 3x3 tent removes the banding without white-noise grain.
  let jitter=fract(52.9829189*fract(dot(floor(position.xy),vec2f(.06711056,.00583715))));
@@ -28,15 +28,15 @@ ${depthCode()}
  for(var sampleIndex=0u;sampleIndex<${steps}u;sampleIndex++) {
   let z=(f32(sampleIndex)+jitter)*stride; let world=vector(0u)+ray*z;
   let localDensity=density*exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
-  let transmission=exp(-opticalDepth); opticalDepth+=localDensity*stride*length(ray);
+  let transmission=exp(-opticalDepth); opticalDepth+=localDensity*segment;
   for(var light=0u;light<${lights}u;light++) {
    let base=64u+light*12u; let delta=vector(base)-world; let lightDistance=max(length(delta),.001);
    let toward=delta/lightDistance; let radius=max(uniforms[base+7u],.001);
    let attenuation=pow(max(0.,1.-lightDistance/radius),2.)/(1.+lightDistance*lightDistance*.06);
    var cone=1.; let cosine=uniforms[base+11u];
    if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)))); }
-   let angle=dot(direction,toward); let phase=(1.-anisotropy*anisotropy)/pow(max(.01,1.+anisotropy*anisotropy-2.*anisotropy*angle),1.5);
-   scattering+=vector(base+4u)*uniforms[base+3u]*attenuation*cone*phase*transmission*localDensity*stride*length(ray);
+   let angle=dot(direction,toward); let falloff=max(.01,1.+anisotropy*anisotropy-2.*anisotropy*angle); let phase=(1.-anisotropy*anisotropy)/(falloff*sqrt(falloff));
+   scattering+=vector(base+4u)*uniforms[base+3u]*attenuation*cone*phase*transmission*localDensity*segment;
   }
  }
  return vec4f(scattering*uniforms[45],1.);
@@ -47,12 +47,11 @@ export function fogCode(bindings: string, shafts: boolean) {
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var depth:texture_depth_2d;
 ${shafts ? `@group(0) @binding(5) var shaftField:texture_2d<f32>;
+// The 3x3 tent as four bilinear taps at half-texel offsets.
 fn shaftAt(uv:vec2f)->vec3f {
- let texel=1./vec2f(textureDimensions(shaftField)); var sum=vec3f(0.);
- for(var y=-1;y<=1;y++) { for(var x=-1;x<=1;x++) {
-  sum+=textureSampleLevel(shaftField,linearSampler,uv+vec2f(f32(x),f32(y))*texel,0.).rgb*f32((2-abs(x))*(2-abs(y)));
- } }
- return sum/16.;
+ let texel=.5/vec2f(textureDimensions(shaftField)); var sum=vec3f(0.);
+ for(var i=0;i<4;i++) { sum+=textureSampleLevel(shaftField,linearSampler,uv+vec2f(f32(i&1)*2.-1.,f32(i>>1u)*2.-1.)*texel,0.).rgb; }
+ return sum*.25;
 }` : ""}
 ${depthCode()}
 @fragment fn fog(@location(0) uv:vec2f)->@location(0) vec4f {

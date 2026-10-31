@@ -35,6 +35,13 @@ test("animated floor, light and focus changes preserve topology while static qua
   expect(graph.targets.find(target => target.id === "shafts")?.scale).toBe(.125);
 });
 
+test("opaque boxes drop back faces so a base resting on the floor cannot z-fight with it", () => {
+  const graph = buildWorldGraph(scene({ floor: { mirror: true }, instances: [primitive("box"), ...customInstances({ wgsl: quad, vertexCount: 6, count: 1 })] }));
+  const code = (id: string) => graph.passes.find(pass => pass.id === id)!.code;
+  for (const id of ["scene-box", "reflection-box"]) expect(code(id)).toContain("dot(normal,eye()-in.world)<0.");
+  expect(code("scene-custom-0")).not.toContain("dot(normal,eye()-in.world)<0.");
+});
+
 test("opaque floor clears the scene before translucent geometry loads its color and depth", () => {
   const graph = buildWorldGraph(scene({ floor: { mirror: true }, instances: rowInstances({ id: "rows", count: 3 }) }));
   const draws = graph.passes.filter(pass => pass.kind === "render");
