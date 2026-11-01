@@ -1,30 +1,46 @@
 # World
 
 A deterministic instanced 3D scene for macOS and offline WebGPU exports. It uses
-the presentation clock on the UI thread and a generic multipass GPU host. Import
-only this pack's entrypoint:
+the presentation clock on the UI thread and a generic multipass GPU host.
 
-```tsx
-import { World, Camera, Graph, tree, wave, subset, Orbs, Ring, Fog, Bloom, Vignette, Grain } from "slides:world/World";
+## Getting started
 
-const network = tree("root", [["a", ["a1", "a2"]], ["b", ["b1", "b2"]]]);
+Create a `.mdx` deck and open it in Legend Slides. If World is missing, install the
+pack offered by the app before presenting. Keep the generated effect lockfile
+beside the deck; installed, pinned packs work offline. World is a source pack,
+not a package to add with npm. These APIs require a pack version containing them.
+See [pack installation and local development](../../README.md).
 
-<World width={1696} height={650} exposure={{ 0: 1, 2: 1.2 }}>
-  <Camera duration={1.2} ease="cubic" shots={[
-    { step: 0, position: [0, 5, 18], target: [0, 0, 0], fov: 42 },
-    { step: 1, orbit: { center: [0, 0, 0], radius: 15, height: 5, speed: 0.12 } },
-    { step: 2, follow: "node:b2", dolly: 8 },
+This complete deck has two builds. Advance once to move the box and camera:
+
+```mdx
+---
+title: A small world
+width: 1920
+height: 1080
+transition: none
+---
+
+import { World, Camera, Box, Bloom } from "slides:world/World"
+
+<Steps count={2}>{() => null}</Steps>
+<World width={1600} height={800} clock="step" buildDuration={1.5}>
+  <Camera shots={[
+    { step: 0, position: [0, 3, 12], target: [0, 0, 0] },
+    { step: 1, position: [4, 3, 10], target: [2, 0, 0], duration: 1.5 },
   ]} />
-  <Graph data={network} activate={[
-    wave({ from: "root", step: 1, speed: 0.35 }),
-    subset({ branches: ["b"], step: 2 }),
-  ]} />
-  <Ring radius={7} position={[0, -5, 0]} color="#22d3ee" emissive={3} />
-  <Fog density={0.025} color="#05060a" />
-  <Bloom intensity={1.4} radius={0.8} threshold={1} />
-  <Vignette amount={0.3} /><Grain amount={0.015} />
+  <Box id="part" position={{ 0: [-2, 0, 0], 1: [2, 0, 0] }}
+    color="#22d3ee" emissive={0.4} />
+  <Bloom intensity={0.6} />
 </World>
 ```
+
+Import World declarations from `slides:world/World` in MDX or deck-local TSX.
+Put cameras, geometry, lights and effects **inside** a World. Regular native text
+can sit above its canvas. Coordinates are world units; the default camera looks
+toward the origin with Y up. `width`/`height` are logical slide units, while
+`renderScale` controls GPU target resolution. Timings are seconds; steps start at
+zero and the deck's step count includes its initial state.
 
 `World` accepts `background`, `backgroundColor`, `quality`, `renderScale`, `exposure`, `scrim`,
 `previewTime`, `active`, `borderRadius` and `fallback`. Normal React Native
@@ -44,6 +60,8 @@ import { Background } from "@legend-apps/presentation";
 
 World animation time restarts on slide entry, including inside `<Background>`.
 This includes drifting objects, scrolling rows, sprays and custom WGSL time uniforms.
+Give related Worlds the same `id` for camera continuity across slides; ids identify
+scenes, while each primitive's `id` identifies an object within that scene.
 
 ## Local builds and navigation
 
@@ -83,6 +101,8 @@ across slides. Keep carried parts in both scenes with the same ids and resting
 positions; the local clock does not remove or relocate them. Camera entry does
 not replay on each step. See `apps/slides/examples/3d/world-steps.mdx` for a
 small two-slide deck with local builds and carried geometry.
+
+## Worlds and camera shots
 
 `Camera.shots` are ordered keyframes with either a `step` or an `at` time in
 seconds. Times and step numbers should increase within their respective clock.
@@ -176,7 +196,27 @@ runs only with `paced: true` in the harness; its per-sample scale history is a
 controller and callback-cadence check, rather than a steady-state cost at one resolution.
 
 
-## Focus, floor and lighting
+## Materials, lights and environment
+
+Start with one reusable material, a key light and the studio environment:
+
+```tsx
+import { World, Material, Box, KeyLight, Environment } from "slides:world/World";
+
+<World width={1600} height={800}>
+  <Material id="paint" albedo="#243047" roughness={0.5} metal={0.15} />
+  <Box material="paint" position={[0, 1, 0]} />
+  <KeyLight position={[-6, 10, 8]} target={[0, 0, 0]} intensity={2} />
+  <Environment intensity={0.7} />
+</World>
+```
+
+`albedo` is the lit surface color; `emissive` adds self-lit color and can feed bloom.
+Use roughness for highlight width and metal for the metallic response. Environment
+is an analytic studio reflection, not an HDR image loader. Add a floor, local
+lights or post effects only when the scene benefits from them.
+
+### Focus, floor and lighting
 
 ```tsx
 import { DOF, Floor, Material, PointLight, SpotLight, RimLight, Shafts, Chromatic } from "slides:world/World";
@@ -335,7 +375,8 @@ import { Card } from "slides:world/World";
 A Card is a flat rounded glass panel facing the camera: `scale` is its full width,
 height and depth (the panel sits on the front face). `radius` rounds its corners,
 `edge` scales its thin rim and glow, and `glow` is the blur width of the soft outer
-glow. At rest (`emissive` up to 0.03) a card is dark slate glass with a dim slate rim
+glow. `fill` (0 to 1, default 1) is the body's opacity under the rim and glow, so
+a translucent plate can back text without hiding the scene. At rest (`emissive` up to 0.03) a card is dark slate glass with a dim slate rim
 and avatar; an `emissive` of 0.09 or more lights it in `color`: tinted fill, rim,
 avatar and a faint glow. Card colors are display colors, as a 2D layer would draw
 them, mapped back through the tonemap. A card with a `title` shows an avatar
@@ -489,7 +530,7 @@ its grain size follows the target resolution. Additional `reads` follow the fixe
 at group 0 binding 6 onward; declare their WGSL bindings explicitly. Raw
 `GPURenderGraph` exposes the full resource/pass contract.
 
-## TypeGPU effects
+## Writing a custom TypeGPU effect
 
 `defineWorldEffect` declares a reusable multi-pass effect with typed, animatable
 params. Params are a TypeGPU struct (`d.f32` or `d.vec3f` fields); the pack
@@ -574,7 +615,7 @@ pulse following, changed rows, stage flights and voxel reduction.
 `cinematic-title.mdx` combines a mirror floor, lit monoliths, volumetric fog,
 drifting particles and continuous camera moves behind normal text overlays.
 
-### Assembly and landing events
+## Parts, assembly and landing events
 
 `Choreography` moves reusable instance templates between layouts on the presentation
 clock. A part has an id, local `instances`, and a `home` pose (`position`, optional
@@ -582,7 +623,9 @@ Euler XYZ `rotation` in radians, `scale`, and `color`). Use `primitive`,
 `cardInstances`, or custom mesh instances to build the templates.
 
 ```tsx
-const part = (id, x) => ({ id, home: { position: [x, 0, 0] },
+import { Choreography, primitive, type ChoreographyPart } from "slides:world/World";
+
+const part = (id: string, x: number): ChoreographyPart => ({ id, home: { position: [x, 0, 0] },
   instances: [primitive("box", { scale: [1, 0.6, 0.4] })] });
 <Choreography id="assembly"
   layouts={[{ id: "pair", parts: [part("a", -2), part("b", 2)] },
@@ -683,3 +726,25 @@ pulses accept head `emissive` (default 5) and `trailEmissive` (defaults to the h
 `emissive` (default 12) and a repeating `colors` palette. Tunnel `strips` and
 `edges` accept a `material`; a black albedo removes their diffuse lighting while
 retaining emission. These controls leave the default materials unchanged.
+
+## Performance tips
+
+- Keep one World for related builds when possible. Retain its scene children in
+  deck-local TSX; rebuilding thousands of tracks on every key press costs JS work.
+- Use `Rows`, `Orbs`, `Text3D` and part templates for instancing. Fewer objects and
+  shorter tracks reduce UI-thread sampling and uniform uploads as well as GPU work.
+- Bake complex choreography once; sample it with tracks or WGSL. Do not animate
+  with JS timers, React updates or a per-frame JS uniform loop.
+- Start with DOF disabled. Add it, mirror floors, shadow maps and custom passes
+  individually; each can add offscreen work. Reduce DOF scale/samples, bloom scale
+  or SDF march steps before compromising legible text.
+- Use a fixed quality and render scale for comparisons; `auto` can change resolution
+  during playback. `renderScale={0.75}` reduces target pixel count to about 56%.
+- Check the actual fullscreen audience at its display resolution. Native audience
+  present cadence measures presentation delivery; browser throughput, preview fps
+  and video capture cadence answer different questions. Compare the same scene,
+  build mode and effects before attributing a slowdown.
+
+The source examples `world-steps.mdx`, `world-effects.mdx`, `assembly.mdx` and
+`lighting.mdx` under `apps/slides/examples/` cover timing, custom effects, parts and
+lighting. When copying an example, keep its local TSX/assets and effect pack pins.
