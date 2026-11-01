@@ -3,7 +3,7 @@ import { evaluateCamera, flyTo, type CameraOptions, type ClockSample, type Vec3 
 import { activationAt, layoutTree, subset, tree, wave } from "../packs/world/graph";
 import { buildWorldGraph } from "../packs/world/render";
 import { compileTrack, customInstances, graphInstances, instanceOpacity, instancePosition, orbInstances, prepareWorldScene, primitive, pulseInstances,
-  resolveAnchor, rowInstances, rowLogicalIndex, sampleTrack, sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+  resolveAnchor, rowInstances, rowLogicalIndex, sampleTrack, sampleWorldCamera, sampleWorldUniforms, sdfInstance, settledKey, sprayInstances, voxelInstances, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { advancePlayback, createPlaybackState, transitionPlayback } from "../../presentation/src/playbackState";
 
 function clock(time: number, step = 0, origins: Record<number, number> = { 0: 0 }): ClockSample {
@@ -230,6 +230,26 @@ test("pulse trails reconstruct exact curved subsegments and restart at a turn wi
   expect(scene.instances.filter(instance => instance.pulse)).toHaveLength(2);
   expect(sampleWorldUniforms(scene, clock(1), undefined, 1, 0.75)[35]).toBe(0.75);
   expect(sampleWorldUniforms(scene, clock(1))[35]).toBe(1);
+});
+
+test("keyframed instances reuse cached uniforms only while every track has settled", () => {
+  const scene = prepareWorldScene({ instances: [primitive("box", { id: "a", position: [{ step: 0, value: [0, 0, 0] }, { step: 1, delay: 1, value: [2, 0, 0], duration: 1 }] })],
+    camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
+  const box = scene.instances.find(instance => instance.id === "a")!;
+  expect(box.motion).toBe("tracks");
+  const key = (time: number, step: number, origins: Record<number, number>) => settledKey(box.settle!, clock(time, step, origins));
+  expect(key(5, 0, { 0: 0 })).toBe(key(6, 0, { 0: 0 }));
+  expect(key(10.5, 1, { 0: 0, 1: 10 })).toBe(key(10.9, 1, { 0: 0, 1: 10 }));
+  expect(key(11.5, 1, { 0: 0, 1: 10 })).toBeNaN();
+  expect(key(12.5, 1, { 0: 0, 1: 10 })).not.toBe(key(10.5, 1, { 0: 0, 1: 10 }));
+  expect(key(12.5, 1, { 0: 0, 1: 10 })).toBe(key(30, 1, { 0: 0, 1: 10 }));
+  // Cached sampling still lands on the settled value after the span.
+  const values = sampleWorldUniforms(scene, clock(10.5, 1, { 0: 0, 1: 10 }), undefined, 1, 1, true);
+  sampleWorldUniforms(scene, clock(11.5, 1, { 0: 0, 1: 10 }), undefined, 1, 1, true);
+  const settled = sampleWorldUniforms(scene, clock(12.5, 1, { 0: 0, 1: 10 }), undefined, 1, 1, true);
+  const index = worldHeaderSize + scene.instances.indexOf(box) * worldInstanceSize;
+  expect(settled[index]).toBeCloseTo(2);
+  expect(values).toBe(settled);
 });
 
 test("recycle glow scales the travelling container's accent", () => {

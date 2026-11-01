@@ -66,8 +66,10 @@ export type Instance = {
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
   anchor?: boolean;
-  /** Set by prepareWorldScene: the slot never changes, or changes only with its voxel collapse progress. */
-  motion?: "static" | "voxel";
+  /** Set by prepareWorldScene: the slot never changes, changes only with its voxel collapse progress, or changes only inside its keyframe spans. */
+  motion?: "static" | "voxel" | "tracks";
+  /** Keyframe spans of a "tracks" instance: per step (ascending), the earliest start and latest end delay; plus slide-time `at` spans. */
+  settle?: { steps: number[]; first: number[]; last: number[]; at: number[] };
 };
 export type GraphOptions = {
   data: TreeNode; layout?: "cone"; radius?: number; levelHeight?: number; position?: Vec3;
@@ -626,6 +628,38 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
 }
 type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array };
 /** With reuse, every call for the same prepared scene returns one buffer and rewrites only slots whose inputs changed. */
+/** Per-step keyframe spans of a set of tracks, for skipping instances whose tracks have all settled. */
+export function keyframeSpans(tracks: Track<unknown>[]): NonNullable<Instance["settle"]> {
+  const steps = new Map<number, [number, number]>(), at: number[] = [];
+  for (const track of tracks) for (const frame of track.frames) {
+    const duration = frame.duration ?? 0.65;
+    if (frame.at !== undefined) { at.push(frame.at, frame.at + duration); continue; }
+    const step = frame.step ?? 0, start = frame.delay ?? 0, span = steps.get(step);
+    steps.set(step, span ? [Math.min(span[0], start), Math.max(span[1], start + duration)] : [start, start + duration]);
+  }
+  const order = [...steps.keys()].sort((a, b) => a - b);
+  return { steps: order, first: order.map(step => steps.get(step)![0]), last: order.map(step => steps.get(step)![1]), at };
+}
+/** Cache key of a "tracks" instance: NaN while any keyframe can still be moving (mirrors sampleTrackFrames' frame selection),
+ * else the step plus the number of finished spans, which changes whenever a settled value may have changed. */
+export function settledKey(settle: NonNullable<Instance["settle"]>, clock: ClockSample) {
+  "worklet";
+  let finished = 0;
+  for (let k = 0; k < settle.at.length; k += 2) {
+    if (clock.slideTime >= settle.at[k + 1]) finished++;
+    else if (clock.slideTime >= settle.at[k]) return NaN;
+  }
+  for (let k = 0; k < settle.steps.length; k++) {
+    const step = settle.steps[k];
+    if (step > clock.stepIndex) break;
+    const origin = clock.stepOrigins[step];
+    if (origin === undefined && step < clock.stepIndex) { finished++; continue; }
+    const elapsed = clock.slideTime - (origin ?? clock.slideTime - clock.stepTime);
+    if (elapsed >= settle.last[k]) finished++;
+    else if (elapsed >= settle.first[k]) return NaN;
+  }
+  return clock.stepIndex * 4096 + finished;
+}
 export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
@@ -672,7 +706,8 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   for (let i = 0; i < count; i++) {
     const instance = scene.instances[i];
     if (cache) {
-      const key = instance.motion === "static" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock) : NaN;
+      const key = instance.motion === "static" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
+        : instance.motion === "tracks" ? settledKey(instance.settle!, clock) : NaN;
       if (cache.keys[i] === key) continue;
       cache.keys[i] = key;
     }
@@ -865,6 +900,13 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
       !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
+    else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
+      !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor) {
+      instance.motion = "tracks";
+      instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
+        ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
+        ...(instance.stages ?? []).flatMap(stage => [stage.position, stage.glow])]);
+    }
   }
   const fields: [number, Animated<number>][] = [[18, scene.emissiveScale ?? 1], [19, scene.floor?.emissive ?? 0], [9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
