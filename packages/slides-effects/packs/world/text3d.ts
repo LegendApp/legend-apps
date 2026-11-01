@@ -111,11 +111,11 @@ export function text3dInstances(options: Text3DOptions): Instance[] {
       scale = enterTrack(enter, enter.scale ?? 1, 1, delay, duration, enter.ease ?? "spring");
       opacity = enterTrack(enter, 0, 1, delay, duration * (enter.fade ?? 0.35), "cubic");
     }
-    const motion = { offset, rotation, scale, opacity, color: options.color ?? "#f2f4f8", emissive: options.emissive ?? 0.6, ...custom };
+    const motion = { offset, rotation, scale, opacity, color: options.color ?? "#f2f4f8", emissive: options.emissive ?? 0.75, ...custom };
     const scaleTrack = compileTrack(motion.scale, (value: number): Vec3 => [value, value, value]);
     return {
       ...primitive("box", { id: options.id ? `${options.id}:${i}` : undefined, position: options.position, size, color: motion.color, emissive: motion.emissive,
-        material: options.material ?? { albedo: options.side ?? "#3a3d44", metal: options.metal ?? 0.85, roughness: options.roughness ?? 0.32, rim: 0.4 } }),
+        material: options.material ?? { albedo: options.side ?? "#2a2c31", metal: options.metal ?? 0.85, roughness: options.roughness ?? 0.32, rim: 0.4 } }),
       scale: scaleTrack,
       glyph: { font: name, index: glyph.index, segments, rotation: compileTrack<Vec3>(motion.rotation), opacity: compileTrack(motion.opacity),
         offset: compileTrack<Vec3>(motion.offset), home, pivot: [glyph.advance / 2, font.capHeight / 2], depth, bevel, bevelWidth },
@@ -213,7 +213,7 @@ fn rotate(v:vec3f,degrees:vec3f)->vec3f {
 // A soft studio environment: dark floor, a bright overhead band and a cool horizon, so metal sides read without an environment map.
 fn studio(direction:vec3f)->vec3f {
  let y=direction.y;
- return mix(vec3f(.012,.012,.014),vec3f(.08,.085,.1),smoothstep(-.3,.15,y))+vec3f(.9,.92,1.)*smoothstep(.55,.75,y)*(1.-smoothstep(.85,1.,y))*.55;
+ return mix(vec3f(.012,.012,.014),vec3f(.08,.085,.1),smoothstep(-.3,.15,y))+vec3f(.9,.92,1.)*smoothstep(.55,.75,y)*(1.-smoothstep(.85,1.,y))*.3;
 }
 @fragment fn glyphFragment(in:GlyphVertex)->@location(0) vec4f {
  let base=slot(in.instance); let opacity=uniforms[base+23u];

@@ -343,7 +343,7 @@ Keep the generated source and notices together when rebuilding or installing a p
 
 ```tsx
 <Text3D id="title" text={"EVERY LETTER\nMOVES ON ITS OWN"} position={[0, 1.2, 0]} size={1.25} depth={0.26}
-  color="#f2f4f8" emissive={0.6} side="#3a3d44" metal={0.85} roughness={0.32}
+  color="#f2f4f8" emissive={0.75} side="#2a2c31" metal={0.85} roughness={0.32}
   enter={{ at: 0.3, offset: [0, 0.4, 9], spread: [10, 4, 4], rotation: [-40, 70, 25], scale: 0.4, stagger: 0.045, order: "random" }} />
 ```
 
