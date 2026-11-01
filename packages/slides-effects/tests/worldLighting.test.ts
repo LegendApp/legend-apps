@@ -49,6 +49,12 @@ test("floor markings and veil compile into the floor pass", () => {
   expect(floor).toContain("abs(abs(world.x)-9.)");
   expect(floor).toContain("fract(world.z/period)");
   expect(floor).toContain("*0.4000*(1.-mask)");
+  expect(floor).toContain("var color=illuminate(world");
+  const unlit = buildWorldGraph(scene({ floor: { mirror: true, lit: false } })).passes.find(pass => pass.id === "floor")!.code;
+  expect(unlit).toContain("var color=material.emissive;");
+  expect(unlit).not.toContain("1.-2.*(1.-reflected)");
+  const overlay = buildWorldGraph(scene({ floor: { mirror: true, reflectionBlend: "overlay" } })).passes.find(pass => pass.id === "floor")!.code;
+  expect(overlay).toContain("reflected=select(2.*reflected*material.albedo,1.-2.*(1.-reflected)*(1.-material.albedo),reflected>vec3f(.5));");
 });
 
 test("tunnels place portal frames with strips between them along axis-aligned paths", () => {

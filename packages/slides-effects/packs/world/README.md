@@ -232,7 +232,10 @@ Floor markings are static and run along z: `lines` at `x` (mirrored to `-x` unle
 `symmetric={false}`), solid or dashed (`dash`, `gap`); `kerbs` alternate two
 colors in `stripe`-long blocks from `x` to `x + width`; `grid` draws faint
 antialiased cell lines. `veil` is the floor's opacity over its mirror reflection;
-markings stay opaque. `intensity` scales each marking color.
+markings stay opaque. `intensity` scales each marking color. `lit={false}` keeps
+scene lights off the floor, as an unlit reflector would; key shadows still apply.
+`reflectionBlend="overlay"` overlays the reflection on the floor color per channel,
+as three.js `Reflector` does, so only bright reflections survive.
 
 `Tunnel` places a portal frame (two posts and a beam in dark metal, or `color`
 and `material`) every `spacing` along `path`, an axis-aligned polyline, or from

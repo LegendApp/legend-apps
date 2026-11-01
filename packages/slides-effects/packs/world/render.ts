@@ -410,7 +410,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let world=vector(0u)+ray*distance;
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
  let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vector(40u)*uniforms[19],uniforms[37],uniforms[43]);
- var color=illuminate(world,normal,material,vec3f(0.),0.,0.);
+ var color=${markings.lit === false ? "material.emissive" : "illuminate(world,normal,material,vec3f(0.),0.,0.)"};
  var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
  ${paint}
  ${mirror ? `let roughness=clamp(uniforms[37],0.,1.);
@@ -418,6 +418,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let pixel=vec2f(spread,spread*frame.aspect);
  var reflected=textureSampleLevel(reflection,linearSampler,in.uv,0.).rgb*.4;
  reflected+=(textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(0.,1.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(0.,1.),0.).rgb)*.15;
+ ${markings.reflectionBlend === "overlay" ? "reflected=select(2.*reflected*material.albedo,1.-2.*(1.-reflected)*(1.-material.albedo),reflected>vec3f(.5));" : ""}
  let fresnel=.04+.96*pow(1.-clamp(dot(normal,view),0.,1.),5.);
  let edgeFade=1.-smoothstep(uniforms[39]*.85,uniforms[39],max(abs(world.x),abs(world.z)));
  let distanceFade=exp(-max(0.,uniforms[12])*distance*roughness);
@@ -545,7 +546,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
-    floorMarkings: scene.floor && { veil: scene.floor.veil, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
+    floorMarkings: scene.floor && { veil: scene.floor.veil, lit: scene.floor.lit, reflectionBlend: scene.floor.reflectionBlend, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
     customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
