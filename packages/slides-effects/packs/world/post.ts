@@ -58,8 +58,7 @@ ${depthCode()}
 @fragment fn fog(@location(0) uv:vec2f)->@location(0) vec4f {
  let distance=depthAt(uv); let world=vector(0u)+worldRay(uv)*distance;
  let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
- let opticalDepth=distance*uniforms[12]*heightDensity;
- let fogAmount=1.-exp(-select(opticalDepth,opticalDepth*opticalDepth,uniforms[19]>.5));
+ let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
  var color=mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,vector(20u),clamp(fogAmount,0.,1.));
  ${shafts ? "color+=shaftAt(uv);" : ""}
  return vec4f(color,1.);
@@ -142,7 +141,7 @@ fn toneMap(input:vec3f)->vec3f {
   return `fn toneMap(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }`;
 }
 
-export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", colorLift = false) {
+export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb") {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 ${toneMappingCode(toneMapping)}
@@ -163,7 +162,6 @@ fn digit(p:vec2f,value:u32)->f32 {
 @fragment fn tonemap(@location(0) uv:vec2f,@builtin(position) pixel:vec4f)->@location(0) vec4f {
  let shift=(uv-.5)*uniforms[44]*${toneMapping === "aces" ? "1." : "-1."};
  var color=vec3f(textureSampleLevel(source,linearSampler,uv+shift,0.).r,textureSampleLevel(source,linearSampler,uv,0.).g,textureSampleLevel(source,linearSampler,uv-shift,0.).b);
- ${colorLift ? "color=max(color+vector(24u),vec3f(0.));" : ""}
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}

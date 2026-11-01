@@ -4,7 +4,7 @@ import { compileTrack, labelInstance, primitive, type Animated, type Instance, t
 export type RoundedBoxOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & { radius?: number; edge?: number };
 export type TubePulse = { step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number; emissive?: number; trailEmissive?: number };
 export type RoutedTubeOptions = {
-  id: string; path: Vec3[]; draw?: Animated<number>; thickness?: number; color?: Animated<string>; emissive?: Animated<number>; material?: PrimitiveOptions["material"]; pulses?: TubePulse[];
+  id: string; path: Vec3[]; draw?: Animated<number>; thickness?: number; color?: Animated<string>; emissive?: Animated<number>; pulses?: TubePulse[];
 };
 export type PillarOptions = {
   id: string; value: number; from?: number; maximum?: number; position?: Vec3; height?: number; width?: number; depth?: number;
@@ -53,14 +53,14 @@ fn shade(iid:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
 }
 
 /** Straight segments share an arc-length draw track and a fixed pool of pulse beads. */
-export function routedTubeInstances({ id, path, draw = 1, thickness = 0.018, color = "#334155", emissive = 0.5, material, pulses = [] }: RoutedTubeOptions): Instance[] {
+export function routedTubeInstances({ id, path, draw = 1, thickness = 0.018, color = "#334155", emissive = 0.5, pulses = [] }: RoutedTubeOptions): Instance[] {
   if (path.length < 2 || path.some(p => p.some(n => !Number.isFinite(n))) || !Number.isFinite(thickness) || thickness <= 0) throw new Error("RoutedTube needs a finite path and positive thickness");
   const points = path.filter((p, i) => i === 0 || p.some((n, axis) => n !== path[i - 1][axis]));
   if (points.length < 2) throw new Error("RoutedTube path must have nonzero length");
   const lengths = [0];
   for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1] + Math.hypot(...points[i].map((v, axis) => v - points[i - 1][axis])));
   const route = { points, lengths, draw: compileTrack(draw) };
-  const instances = points.slice(1).map((end, index) => ({ ...primitive("tube", { id: `${id}:${index}`, position: points[index], end, color, emissive, material, thickness }), route: { ...route, segment: index } }));
+  const instances = points.slice(1).map((end, index) => ({ ...primitive("tube", { id: `${id}:${index}`, position: points[index], end, color, emissive, thickness }), route: { ...route, segment: index } }));
   const beads: Instance[] = [];
   pulses.forEach((pulse, index) => {
     if (!Number.isFinite(pulse.duration ?? 0.5) || (pulse.duration ?? 0.5) <= 0) throw new Error("Tube pulses need a positive duration");

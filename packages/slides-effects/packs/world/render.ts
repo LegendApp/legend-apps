@@ -145,7 +145,7 @@ fn toScene(display:vec3f)->vec3f {
 fn over(dst:vec4f,color:vec3f,alpha:f32)->vec4f { return vec4f(color*alpha+dst.rgb*(1.-alpha),alpha+dst.a*(1.-alpha)); }
 // Gaussian blur of a stroke of the given width centred on the edge.
 fn blurredStroke(d:f32,width:f32,sigma:f32)->f32 { return width/(2.5066*sigma)*exp(-d*d/(2.*sigma*sigma)); }
-fn fogAt(z:f32,y:f32)->f32 { let opticalDepth=z*uniforms[12]*exp(clamp(-(y-uniforms[13])*uniforms[14],-8.,8.)); return 1.-exp(-select(opticalDepth,opticalDepth*opticalDepth,uniforms[19]>.5)); }
+fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniforms[13])*uniforms[14],-8.,8.))); }
 @fragment fn cardFragment(in:CardVertex)->CardResult {
  let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=vector(base)+rotation*vec3f(p,half.z);
  ${reflection ? "if(world.y<uniforms[36]+.001) { discard; }" : ""}
@@ -395,7 +395,7 @@ function glyphBuffer() {
   }
   return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
 }
-function floorCode(lights: number, mirror: boolean, look: Look = {}, markings: FloorMarkings = {}, unlit = false) {
+function floorCode(lights: number, mirror: boolean, look: Look = {}, markings: FloorMarkings = {}) {
   const paint = floorMarkingsCode(markings);
   return `${worldBindings}${lightingCode(lights, false, look)}
 ${mirror ? "@group(0) @binding(3) var reflection:texture_2d<f32>;" : ""}
@@ -409,8 +409,8 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  if(ray.y>=-.0001 || vector(0u).y<=uniforms[36]) { discard; } let distance=(uniforms[36]-vector(0u).y)/ray.y;
  let world=vector(0u)+ray*distance;
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
- let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vec3f(0.),uniforms[37],uniforms[43]);
- var color=${unlit ? `vector(40u)*uniforms[18]*${(markings.veil ?? 1).toFixed(4)}` : "illuminate(world,normal,material,vec3f(0.),0.,0.)"};
+ let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vector(40u)*uniforms[19],uniforms[37],uniforms[43]);
+ var color=illuminate(world,normal,material,vec3f(0.),0.,0.);
  var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
  ${paint}
  ${mirror ? `let roughness=clamp(uniforms[37],0.,1.);
@@ -422,7 +422,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let edgeFade=1.-smoothstep(uniforms[39]*.85,uniforms[39],max(abs(world.x),abs(world.z)));
  let distanceFade=exp(-max(0.,uniforms[12])*distance*roughness);
  let strength=clamp(uniforms[38],0.,1.)*mix(fresnel,1.,clamp(uniforms[43],0.,1.))*(1.-roughness*.7)*distanceFade*edgeFade*${(1 - (markings.veil ?? 0)).toFixed(4)}*(1.-mask);
- ${unlit ? "color+=reflected*strength;" : "color=mix(color,reflected,strength);"}` : ""}
+ color=mix(color,reflected,strength);` : ""}
  ${look.shadowBinding !== undefined ? "color*=keyShadow(world,normal);" : ""}
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
@@ -505,8 +505,8 @@ type CustomDraw = CustomGeometry & { offset: number; count: number };
 type GlyphDraw = { font: string; segments: number; offset: number; count: number; vertexCount: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
-  quality: WorldScene["quality"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; colorLift?: boolean; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
-  floor?: boolean; floorUnlit?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
+  quality: WorldScene["quality"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
+  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
@@ -540,8 +540,8 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
       previousSDF = instance.sdf;
     } else counts[instance.kind]++;
   }
-  return { quality: scene.quality, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, colorLift: scene.colorLift !== undefined, counts, backgroundVector: scene.backgroundVector,
-    floor: !!scene.floor, floorUnlit: scene.floor?.unlit, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
+  return { quality: scene.quality, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
+    floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
@@ -612,7 +612,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale });
     renderScene(true);
   }
-  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, environment: false, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings, topology.floorUnlit),
+  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, environment: false, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings),
     vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: [...topology.mirror ? ["reflect"] : [], ...shadowMap ? ["shadow"] : []] });
   renderScene(false, !!topology.floor);
   if (topology.shafts) {
@@ -660,7 +660,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     custom(stage, false);
   }
   custom("tonemap", true);
-  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace, topology.colorLift), "tonemap", [color], "tonemapped");
+  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace), "tonemap", [color], "tonemapped");
   custom("tonemap", false);
   fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
   if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");
