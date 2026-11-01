@@ -1,13 +1,16 @@
 import type { Vec3 } from "./camera";
 import type { TreeNode } from "./graph";
-import { cardInstances, labelInstance, primitive, type Instance, type Keyframe } from "./scene";
+import { labelInstance, type Animated, type Instance, type Keyframe } from "./scene";
+import { roundedBoxInstances, routedTubeInstances } from "./stage";
 
 /** One step's renders: every node, a list of ids, or a node with all its descendants. */
-export type RenderFlash = "all" | string[] | { subtree: string };
+export type RenderSelection = "all" | string[] | { subtree: string };
+export type RenderFlash = RenderSelection | { nodes: RenderSelection; type?: string; color?: string };
 export type RenderTreeOptions = {
   id?: string; data: TreeNode; flashes: (RenderFlash | undefined)[]; labels?: Record<string, string>;
   position?: Vec3; spacing?: [column: number, row: number]; card?: [width: number, height: number];
-  color?: string; edgeColor?: string; total?: { position: Vec3; size?: number } | false;
+  color?: string; edgeColor?: string; flashColors?: Record<string, string>; depth?: number; radius?: number;
+  routing?: "direct" | "orthogonal"; draw?: Animated<number>; pulses?: boolean; pulseDuration?: number; total?: { position: Vec3; size?: number } | false;
 };
 
 type Placed = { node: TreeNode; x: number; depth: number; parent?: Placed; ids: string[] };
@@ -30,7 +33,7 @@ function place(data: TreeNode) {
   return { placed, columns: column, depth: depth + 1 };
 }
 
-function selected(flash: RenderFlash | undefined, placed: Placed[]) {
+function selected(flash: RenderSelection | undefined, placed: Placed[]) {
   if (!flash) return new Set<string>();
   if (flash === "all") return new Set(placed.map(item => item.node.id));
   if (Array.isArray(flash)) return new Set(flash);
@@ -54,27 +57,32 @@ function visibility(steps: boolean[]) {
 
 /** Cards, edges and count labels for a render tree; flashes per step glow, and counts accumulate. */
 export function renderTreeInstances({ id = "tree", data, flashes, labels = {}, position = [0, 0, 0], spacing = [2.4, 1.7], card = [2, 0.56], color = "#ffb547",
-  edgeColor = "#2b3a4e", total = false }: RenderTreeOptions): Instance[] {
+  edgeColor = "#2b3a4e", flashColors = {}, depth = 0.35, radius = 0.1, routing = "orthogonal", draw = 1, pulses = true, pulseDuration = 0.14, total = false }: RenderTreeOptions): Instance[] {
   const { placed, columns } = place(data);
   const at = (item: Placed): Vec3 => [position[0] + (item.x - (columns - 1) / 2) * spacing[0], position[1] - item.depth * spacing[1], position[2]];
-  const current = flashes.map(flash => selected(flash, placed));
+  const current = flashes.map(flash => selected(flash && typeof flash === "object" && "nodes" in flash ? flash.nodes : flash, placed));
+  const colors = flashes.map(flash => flash && typeof flash === "object" && "nodes" in flash ? flash.color ?? flashColors[flash.type ?? "render"] ?? color : flashColors.render ?? color);
   const instances: Instance[] = [];
   const totals = current.map((_, step) => current.slice(0, step + 1).reduce((sum, set) => sum + set.size, 0));
   for (const item of placed) {
-    const nodeId = `${id}:${item.node.id}`, renders = current.map(set => set.has(item.node.id)), delay = item.depth * 0.14;
+    const nodeId = `${id}:${item.node.id}`, renders = current.map(set => set.has(item.node.id)), delay = item.depth * pulseDuration;
+    const nodeColors = [{ step: 0, value: color, duration: 0 }, ...renders.flatMap((on, step) => on ? [{ step, value: colors[step], delay, duration: 0.08 }] : [])];
     const [x, y, z] = at(item);
-    instances.push(...cardInstances({ id: nodeId, position: [x, y, z], scale: [card[0], card[1], 0.14], radius: 0.14, avatar: 0, color,
+    instances.push(...roundedBoxInstances({ id: nodeId, position: [x, y, z], scale: [card[0], card[1], depth], radius, color: nodeColors,
       emissive: pulseFrames(renders, 0.025, 0.42, 0.11, delay) }));
     instances.push(labelInstance({ id: `${nodeId}:label`, attach: nodeId, text: labels[item.node.id] ?? item.node.id, mono: true, align: "center",
-      position: [0, 0, 0.09], size: card[1] * 0.34, color: "#c9d5e3", emissive: 0.9 }));
+      position: [0, 0, depth / 2 + 0.015], size: card[1] * 0.34, color: "#c9d5e3", emissive: 0.9 }));
     const counts = renders.map((_, step) => renders.slice(0, step + 1).filter(Boolean).length);
     for (const count of new Set(counts.filter(Boolean))) instances.push(labelInstance({ id: `${nodeId}:count:${count}`, attach: nodeId, text: String(count), mono: true,
-      align: "right", position: [card[0] / 2 - 0.1, card[1] / 2 + 0.2, 0.09], size: card[1] * 0.42, color, emissive: 2.2,
+      align: "right", position: [card[0] / 2 - 0.1, card[1] / 2 + 0.2, depth / 2 + 0.015], size: card[1] * 0.42, color, emissive: 2.2,
       opacity: visibility(counts.map(value => value === count)) }));
     if (item.parent) {
       const [px, py] = at(item.parent);
-      instances.push(primitive("tube", { id: `${nodeId}:edge`, position: [px, py - card[1] / 2, z - 0.02], end: [x, y + card[1] / 2, z - 0.02], thickness: 0.018,
-        color: { 0: edgeColor, ...Object.fromEntries(renders.map((on, step) => [step, on ? color : edgeColor])) }, emissive: pulseFrames(renders, 0.25, 3.2, 0.5, delay - 0.07) }));
+      const from: Vec3 = [px, py - card[1] / 2, z], to: Vec3 = [x, y + card[1] / 2, z];
+      const middle = (from[1] + to[1]) / 2;
+      instances.push(...routedTubeInstances({ id: `${nodeId}:edge`, path: routing === "direct" ? [from, to] : [from, [px, middle, z], [x, middle, z], to], draw,
+        thickness: 0.018, color: edgeColor, emissive: 0.5,
+        pulses: pulses ? renders.flatMap((on, step) => on ? [{ step, delay: 0.25 + (item.depth - 1) * pulseDuration, duration: pulseDuration, color: colors[step] }] : []) : [] }));
     }
   }
   if (total) for (const value of new Set(totals)) instances.push(labelInstance({ id: `${id}:total:${value}`, text: String(value), mono: true, align: "right",

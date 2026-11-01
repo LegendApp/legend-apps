@@ -1,4 +1,5 @@
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
+import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
 import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
 import { PixelRatio, View } from "react-native";
@@ -13,6 +14,8 @@ import { cardInstances, compileTrack, customInstances, graphInstances, labelInst
   type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
   type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 
+export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
+export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
@@ -34,6 +37,9 @@ export function Graph(_: GraphOptions) { return null; }
 export function Orbs(_: OrbsOptions) { return null; }
 export function Sphere(_: PrimitiveOptions) { return null; }
 export function Box(_: PrimitiveOptions) { return null; }
+export function RoundedBox(_: RoundedBoxOptions) { return null; }
+export function RoutedTube(_: RoutedTubeOptions) { return null; }
+export function Pillar(_: PillarOptions) { return null; }
 export function Tube(_: PrimitiveOptions) { return null; }
 export function Ring(_: PrimitiveOptions & { radius?: Animated<number> }) { return null; }
 export function Fog(_: NonNullable<WorldScene["fog"]>) { return null; }
@@ -122,6 +128,9 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === Orbs) add(orbInstances(options), stages);
       else if (child.type === Sphere) add([primitive("sphere", options)], stages);
       else if (child.type === Box) add([primitive("box", options)], stages);
+      else if (child.type === RoundedBox) add(roundedBoxInstances(options as RoundedBoxOptions), stages);
+      else if (child.type === RoutedTube) add(routedTubeInstances(options as RoutedTubeOptions), stages);
+      else if (child.type === Pillar) add(pillarInstances(options as PillarOptions), stages);
       else if (child.type === Tube) add([primitive("tube", options)], stages);
       else if (child.type === Ring) add([primitive("ring", { ...options, size: options.radius ?? options.size } as PrimitiveOptions)], stages);
       else if (child.type === PathPulse) add(pulseInstances(options as PulseOptions), stages);

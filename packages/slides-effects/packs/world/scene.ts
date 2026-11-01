@@ -1,4 +1,6 @@
 import { rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
+import { routePoint, tubePulseProgress, digitSegments } from "./stageMotion";
+import type { TubePulse } from "./stage";
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
@@ -46,6 +48,8 @@ export type Instance = {
   emissive: Track<number>; scale: Track<Vec3>; end: Vec3; curve: number; thickness: number;
   drift?: number; seed?: number;
   choreography?: ChoreographyMotion; burst?: BurstMotion;
+  route?: { points: Vec3[]; lengths: number[]; draw: Track<number>; segment?: number; pulse?: TubePulse; bead?: number };
+  pillar?: { value: Track<number>; maximum: number; height: number; role: "body" | "top" | "digit"; digit?: number; segment?: number };
   endpoints?: [string, string];
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
@@ -455,6 +459,14 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
     const point = sampleBurst(instance.burst, clock).position, offset = stageOffset(instance.stages, clock);
     return [point[0] + offset[0], point[1] + offset[1], point[2] + offset[2]];
   }
+  if (instance.route?.pulse) {
+    const route = instance.route, progress = tubePulseProgress(route.pulse!, clock) - (route.bead ?? 0) * 0.025;
+    position = routePoint(route.points, route.lengths, progress * route.lengths[route.lengths.length - 1]);
+  }
+  if (instance.pillar) {
+    const pillar = instance.pillar, height = pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum));
+    position = [position[0], position[1] + (pillar.role === "body" ? height / 2 : height), position[2]];
+  }
   if (instance.pulse) {
     const pulse = instance.pulse;
     const range = pulseRange(pulse, clock);
@@ -507,6 +519,19 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   "worklet";
   if (instance.choreography) return samplePartMotion(instance.choreography, clock).opacity * (instance.label ? sampleTrack(instance.label.opacity, clock) : 1);
   if (instance.burst) return sampleBurst(instance.burst, clock).opacity;
+  if (instance.route) {
+    const route = instance.route, drawn = Math.max(0, Math.min(1, sampleTrack(route.draw, clock)));
+    if (route.pulse) {
+      const progress = tubePulseProgress(route.pulse, clock) - (route.bead ?? 0) * 0.025;
+      return progress < 0 || progress > 1 || progress > drawn ? 0 : 1;
+    }
+    return drawn * route.lengths[route.lengths.length - 1] <= route.lengths[route.segment!] ? 0 : 1;
+  }
+  if (instance.pillar?.role === "digit") {
+    const pillar = instance.pillar, value = Math.max(0, Math.round(sampleTrack(pillar.value, clock))), place = Math.pow(10, pillar.digit!);
+    if (pillar.digit! > 0 && value < place) return 0;
+    return digitSegments[Math.floor(value / place) % 10] & (1 << pillar.segment!) ? 1 : 0;
+  }
   if (instance.label) {
     const label = instance.label;
     let opacity = sampleTrack(label.opacity, clock) * (label.parent ? instanceOpacity(label.parent, clock) : 1);
@@ -666,7 +691,17 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const offset = stageOffset(instance.stages, clock);
     let endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
       : !instance.stages?.length ? instance.end : [instance.end[0] + offset[0], instance.end[1] + offset[1], instance.end[2] + offset[2]];
+    if (instance.route && !instance.route.pulse) {
+      const route = instance.route, segment = route.segment!, distance = Math.min(route.lengths[segment + 1], Math.max(route.lengths[segment],
+        sampleTrack(route.draw, clock) * route.lengths[route.lengths.length - 1]));
+      const end = routePoint(route.points, route.lengths, distance);
+      endpoint = [end[0] + offset[0], end[1] + offset[1], end[2] + offset[2]];
+    }
     const scale: Vec3 = [...sampleTrack(instance.scale, clock)];
+    if (instance.pillar?.role === "body") {
+      const pillar = instance.pillar;
+      scale[1] = Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum)));
+    }
     if (part) {
       for (let axis = 0; axis < 3; axis++) { scale[axis] *= part.scale[axis]; values[index + 20 + axis] = part.rotation[axis]; }
       const local = instance.choreography!.local;
@@ -798,7 +833,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
-      !instance.choreography && !instance.burst && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
+      !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
   }
   const fields: [number, Animated<number>][] = [[9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
