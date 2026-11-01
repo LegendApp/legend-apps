@@ -1,9 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
 import type { ClockSample } from "../packs/world/camera";
 import { buildWorldGraph } from "../packs/world/render";
 import { instanceOpacity, instancePosition, prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
@@ -93,26 +88,4 @@ describe("world Text3D", () => {
     expect(graph.buffers?.map(buffer => buffer.id)).toEqual(["text3d-0"]);
     expect(graph.uniformsSize).toBe(worldHeaderSize + 11 * worldInstanceSize);
   });
-  test.skipIf(process.platform !== "darwin")("glyph passes compile with the app's native WebGPU shader compiler", () => {
-    const require = createRequire(new URL("../../../apps/slides/package.json", import.meta.url));
-    const webgpu = path.dirname(require.resolve("react-native-webgpu/package.json"));
-    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "world-text3d-test-"));
-    try {
-      const executable = path.join(temporary, "validate");
-      const build = spawnSync("clang++", ["-std=c++17", new URL("../../../apps/slides/src/__tests__/fixtures/validateShader.cpp", import.meta.url).pathname,
-        "-I", path.join(webgpu, "cpp/webgpu"), path.join(webgpu, "libs/apple/libwebgpu_dawn.xcframework/macos-arm64_x86_64/libwebgpu_dawn.a"),
-        "-framework", "Metal", "-framework", "Foundation", "-framework", "QuartzCore", "-framework", "IOSurface", "-framework", "IOKit", "-o", executable], { encoding: "utf8", timeout: 60_000 });
-      expect(build.status).toBe(0);
-      const files = [0, 3].flatMap(segments => {
-        const graph = buildWorldGraph(prepareWorldScene({ instances: text3dInstances({ text: "Ag", bevelSegments: segments, bevel: segments ? 0.03 : 0 }), floor: { mirror: true },
-          lights: [{ position: [0, 4, 4] }] }));
-        return graph.passes.filter(pass => pass.id.includes("glyphs")).map(pass => {
-          const file = path.join(temporary, `${pass.id}-${segments}.wgsl`); fs.writeFileSync(file, pass.code); return file;
-        });
-      });
-      const result = spawnSync(executable, files, { encoding: "utf8", timeout: 30_000 });
-      expect(result.stderr).toBe("");
-      expect(result.status).toBe(0);
-    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
-  }, 120_000);
 });

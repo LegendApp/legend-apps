@@ -127,8 +127,8 @@ export function text3dBuffer(name: string, id: string) {
   let buffer = words.get(name);
   if (!buffer) {
     const font = text3dFont(name);
-    const binary = atob(font.data), bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const bytes = new Uint8Array(font.data.length / 2);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(font.data.substr(i * 2, 2), 16);
     const source = new Int16Array(bytes.buffer);
     const total = font.glyphs.reduce((sum, [, points, segments, triangles]) => sum + points * 6 + segments + triangles, 0);
     buffer = new Float32Array(font.glyphs.length * 6 + total);
