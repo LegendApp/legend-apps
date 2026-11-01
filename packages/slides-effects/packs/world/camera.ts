@@ -107,7 +107,7 @@ function evaluateShots(options: CameraOptions, clock: ClockSample, objects: Obje
   const end = destination(shot, from, elapsed, objects, clock);
   const duration = shot.duration ?? options.duration ?? 1.2;
   const completed = shot.at === undefined && (shot.step ?? 0) < clock.stepIndex && clock.stepOrigins[shot.step ?? 0] === undefined;
-  const t = index === 0 && !shot.via?.length && !shot.crane || completed ? 1 : easeProgress(duration <= 0 ? 1 : elapsed / duration, shot.ease ?? options.ease);
+  const t = (index === 0 && !shot.via?.length && !shot.crane) || completed ? 1 : easeProgress(duration <= 0 ? 1 : elapsed / duration, shot.ease ?? options.ease);
   let position = shot.via?.length ? cameraPathPoint([from.position, ...shot.via, end.position], t) : mixVector(from.position, end.position, t);
   if (shot.arc && t > 0 && t < 1) position[1] += Math.sin(t * Math.PI) * shot.arc;
   if (shot.crane && t > 0 && t < 1) {

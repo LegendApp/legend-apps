@@ -408,3 +408,42 @@ WGSL compilation/validation errors use the normal slide diagnostic path. The
 pulse following, changed rows, stage flights and voxel reduction.
 `cinematic-title.mdx` combines a mirror floor, lit monoliths, volumetric fog,
 drifting particles and continuous camera moves behind normal text overlays.
+
+## Camera paths and stage geometry
+
+Shots also accept `via: Vec3[]`, a smooth interpolating path through world-space
+points between the prior pose and the destination. `crane: { height, pullback }`
+adds a mid-move rise and retreat; both vanish at the endpoints. After settling,
+`idle: { position: [0.14, 0.05, 0.08], target, speed: 0.2 }` adds a gentle bounded
+drift. Amplitudes are world units, speed is radians per second. These effects
+use the shot's existing `step` or slide-clock `at`; reverse navigation resamples
+without accumulating motion.
+
+`RoundedBox` takes the usual primitive props plus `radius` and `edge`. Its full
+size defaults to `[2, 0.7, 0.35]` through `scale`. The front, back and rounded
+sides are lit solid geometry; `edge` adds the familiar card rim highlight.
+
+`RoutedTube` takes `id`, a `path` of world-space points, `thickness`, `color`,
+`emissive`, and animated `draw` coverage from zero to one. Coverage and pulses
+advance by total path length, including across bends. `pulses` is a list of
+`{ step, at, delay, duration, color, size }` events; all timing is in seconds.
+Pulse beads use a fixed instance pool and disappear after arrival.
+
+`RenderTree` uses solid rounded nodes and orthogonal routes by default. Existing
+flash selections still work. A typed flash is
+`{ nodes: ["Model", "Store"], type: "update" }`; `nodes` also accepts `"all"`
+or `{ subtree: "Model" }`. Use `flashColors={{ render: "#ff704d", update: "#a78bfa" }}`
+or a flash's explicit `color` to select its flare/pulse color. Node `depth` and
+`radius` control the solid shape. `draw` animates route coverage; `routing="direct"`
+uses straight edges, and `pulses={false}` disables traveling signals.
+`pulseDuration` is the time per tree level (default 0.14 seconds), so each pulse
+arrives at the destination node's flash peak.
+
+`Pillar` takes a unique `id`, a nonnegative `value`, optional `from` (zero),
+`maximum`, `height`, `width`, `depth`, floor-anchor `position`, `color`, `label`
+and `counterSize`. `step` or `at`, `delay`, `duration` (default 1.6 seconds) and
+`ease` (default `smoothstep`) drive one shared numeric track. Column height is
+`height * clamp(value / maximum, 0, 1)`; the extruded integer counter rides on
+its top and rounds that same sampled value. Values above `maximum` retain their
+counter while height saturates. Digits are fixed-width seven-segment meshes,
+with no per-tick geometry allocation. See `apps/slides/examples/stage.mdx`.

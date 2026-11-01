@@ -66,7 +66,7 @@ export function pillarInstances(options: PillarOptions): Instance[] {
   if (![value, from, maximum, height, width, depth, counterSize].every(Number.isFinite) || value < 0 || from < 0 || maximum <= 0 || height <= 0 || width <= 0 || depth <= 0 || counterSize <= 0) throw new Error("Pillar needs nonnegative values and positive dimensions");
   const track = compileTrack([{ step: 0, value: from, duration: 0 }, { step: options.step ?? 0, at: options.at, value, delay: options.delay,
     duration: options.duration ?? 1.6, ease: options.ease ?? "smoothstep" }]);
-  const pillar = { value: track, maximum, height, base: position };
+  const pillar = { value: track, maximum, height };
   const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: 1.2, material: { metal: 0.35, roughness: 0.22 } });
   body.pillar = { ...pillar, role: "body" };
   const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: 5 });

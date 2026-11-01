@@ -65,3 +65,21 @@ test("pillar body height, top position, and extruded counter read the same eased
   // Rewinding is stateless: floor origin and count both return to zero.
   expect(instancePosition(instances.find(i => i.id === "metric:cap")!, clock(1, 0))).toEqual([2, -4, 0]);
 });
+
+test("reused uniform buffers keep route and pillar motion live across samples and direct jumps", () => {
+  const scene = prepareWorldScene({ instances: [
+    ...routedTubeInstances({ id: "edge", path: [[0, 0, 0], [4, 0, 0]], draw: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 2, ease: "linear" }], pulses: [{ step: 1 }] }),
+    ...pillarInstances({ id: "value", value: 100, maximum: 100, height: 4, step: 1, duration: 2 }),
+  ] });
+  const early = sampleWorldUniforms(scene, clock(2.5), undefined, 1, 1, true);
+  const body = worldHeaderSize + scene.instances.findIndex(i => i.id === "value") * worldInstanceSize;
+  const earlyHeight = early[body + 9];
+  const later = sampleWorldUniforms(scene, clock(4), undefined, 1, 1, true);
+  expect(later).toBe(early);
+  expect(later[body + 9]).toBe(4);
+  expect(earlyHeight).toBeLessThan(later[body + 9]);
+  const jumped: ClockSample = { slideTime: 0, stepTime: 0, stepIndex: 3, stepOrigins: {} };
+  const pulse = scene.instances.find(i => i.id === "edge:pulse:0:0")!;
+  expect(instanceOpacity(pulse, jumped)).toBe(0);
+  expect(instancePosition(scene.instances.find(i => i.id === "value:cap")!, jumped)[1]).toBe(0);
+});

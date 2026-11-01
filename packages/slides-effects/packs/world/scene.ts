@@ -46,7 +46,7 @@ export type Instance = {
   emissive: Track<number>; scale: Track<Vec3>; end: Vec3; curve: number; thickness: number;
   drift?: number; seed?: number;
   route?: { points: Vec3[]; lengths: number[]; draw: Track<number>; segment?: number; pulse?: TubePulse; bead?: number };
-  pillar?: { value: Track<number>; maximum: number; height: number; base: Vec3; role: "body" | "top" | "digit"; digit?: number; segment?: number };
+  pillar?: { value: Track<number>; maximum: number; height: number; role: "body" | "top" | "digit"; digit?: number; segment?: number };
   endpoints?: [string, string];
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
