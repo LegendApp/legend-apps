@@ -8,6 +8,9 @@ import { spawnSync } from "node:child_process";
 import { createConstellation } from "../packs/particles/Constellation";
 import { createInterfaceReveal } from "../packs/particles/InterfaceReveal";
 import { createGlowField } from "../packs/particles/GlowField";
+import { buildWorldGraph } from "../packs/world/render";
+import { prepareWorldScene } from "../packs/world/scene";
+import { text3dInstances } from "../packs/world/text3d";
 
 
 
@@ -18,7 +21,9 @@ const programs = Object.fromEntries([
   ["smallConstellation", createConstellation({ particleCount: 256, rows: 3, speed: 0.7, scale: 0.6 })],
   ["smallInterface", createInterfaceReveal({ particleCount: 256, columns: 24, speed: 1.5, scale: 0.8 })],
   ["smallGlow", createGlowField({ particleCount: 256, speed: 0.5, scale: 0.7, tintA: [1,0.3,0.1], tintB: [0.4,0.7,1] })],
-].map(([name, {program}]) => [name, program]));
+].map(([name, {program}]) => [name, program]).concat([0, 3].flatMap(segments => buildWorldGraph(prepareWorldScene({
+  instances: text3dInstances({ text: "Ag", bevelSegments: segments, bevel: segments ? 0.03 : 0 }), floor: { mirror: true }, lights: [{ position: [0, 4, 4] }] }))
+  .passes.filter(pass => pass.id.includes("glyphs")).map(pass => [`world-${pass.id}-${segments}`, pass.code]))));
 test.skipIf(process.platform !== "darwin")("default and configured particle programs compile with the app's native WebGPU shader compiler", () => {
   const require = createRequire(new URL("../../../apps/slides/package.json", import.meta.url));
   const webgpu = path.dirname(require.resolve("react-native-webgpu/package.json"));

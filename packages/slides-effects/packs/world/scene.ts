@@ -2,6 +2,7 @@ import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shot
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
 import type { EnvironmentOptions, FloorMarkings, KeyLightOptions } from "./lighting";
+import type { GlyphInstance } from "./text3d";
 
 /** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
@@ -52,6 +53,7 @@ export type Instance = {
   rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3; scroll?: Track<number>; recycleColor?: Vec3; ghost?: number };
   label?: { text: string; align: LabelAlign; mono: boolean; weight: LabelWeight; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
+  glyph?: GlyphInstance;
   custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle>;
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
@@ -470,6 +472,10 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
     const offset = sampleTrack(instance.label.offset, clock);
     position = [offset[0], offset[1], offset[2]];
   }
+  if (instance.glyph) {
+    const glyph = instance.glyph, offset = sampleTrack(glyph.offset, clock);
+    position = [position[0] + glyph.home[0] + offset[0], position[1] + glyph.home[1] + offset[1], position[2] + glyph.home[2] + offset[2]];
+  }
   if (instance.rows?.options.recycle) position = recycledRowPosition(instance.rows, position, clock) ?? position;
   else if (instance.rows) {
     const rows = instance.rows, scroll = rowScroll(rows, clock);
@@ -527,6 +533,7 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   if (instance.voxel) {
     return Math.max(0, Math.min(1, voxelRemaining(instance, clock) - instance.voxel.index));
   }
+  if (instance.glyph) return sampleTrack(instance.glyph.opacity, clock);
   if (instance.spray) {
     const spray = instance.spray, elapsed = spray.options.step === undefined ? clock.slideTime : triggerElapsed(spray.options.step, clock);
     if (elapsed < 0) return 0;
@@ -690,6 +697,11 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     } else { values[index + 24] = values[index + 4]; values[index + 25] = values[index + 5]; values[index + 26] = values[index + 6]; }
     values[index + 27] = sampleTrack(material.roughness, clock); values[index + 28] = sampleTrack(material.metal, clock); values[index + 29] = sampleTrack(material.rim, clock) * activation;
     values[index + 30] = activation;
+    if (instance.glyph) {
+      const glyph = instance.glyph, rotation = sampleTrack(glyph.rotation, clock);
+      values[index + 11] = glyph.index; values[index + 12] = rotation[0]; values[index + 13] = rotation[1]; values[index + 14] = rotation[2];
+      values[index + 15] = glyph.pivot[1]; values[index + 16] = glyph.depth; values[index + 17] = glyph.bevel; values[index + 18] = glyph.bevelWidth; values[index + 19] = glyph.pivot[0];
+    }
   }
   return values;
 }
@@ -765,7 +777,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   }
   instances.forEach(verifyAnchors);
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
-  const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
+  const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.glyph ? `1g:${instance.glyph.font}:${instance.glyph.segments}` : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
   instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
   const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));
@@ -775,6 +787,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     const material = instance.materialTracks!;
     if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
+      (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
       !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
   }

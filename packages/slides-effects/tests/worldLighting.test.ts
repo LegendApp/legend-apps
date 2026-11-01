@@ -56,3 +56,14 @@ test("tunnels place portal frames with strips between them along axis-aligned pa
   const turn = tunnelInstances({ path: [[0, 0, 0], [0, 0, -8], [10, 0, -8]], spacing: 5, strips: false, edges: false });
   expect(turn.filter(instance => instance.id!.includes(":beam:")).map(instance => instance.position.initial)).toEqual([[0, 10, 0], [0, 10, -5], [2, 10, -8], [7, 10, -8]]);
 });
+
+test("Text3D glyphs cast key-light shadows and receive the key light and environment", async () => {
+  const { text3dInstances } = await import("../packs/world/text3d");
+  const graph = buildWorldGraph(prepareWorldScene({ keyLight: {}, environment: {}, instances: text3dInstances({ id: "t", text: "AB" }) }));
+  const shadow = graph.passes.find(pass => pass.id === "shadow-glyphs-0")!;
+  expect(shadow).toMatchObject({ color: [], depth: "shadow", fragment: "shadowFragment", reads: ["text3d-0"] });
+  const scene = graph.passes.find(pass => pass.id === "scene-glyphs-0")!;
+  expect(scene.reads).toEqual(["text3d-0", "shadow"]);
+  expect(scene.code).toContain("@binding(4) var shadowMap");
+  expect(scene.code).toContain("environmentLight(normal");
+});
