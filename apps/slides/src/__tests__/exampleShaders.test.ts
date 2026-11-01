@@ -21,11 +21,11 @@ import { boidsProgram } from "../../examples/components/TypeGPUBoids";
 const require = createRequire(import.meta.url);
 const programs = { cloudProgram, gameOfLifeShader, boidsProgram };
 const root = path.resolve(import.meta.dir, "../../../..");
-const worldDecks = ["world-tour", "data-flow", "cinematic-title"];
+const worldDecks = ["world-tour", "data-flow", "cinematic-title", "lighting"];
 const compiledDecks = new Map();
 
 function compileWorldDeck(name) {
-  const file = path.join(root, "apps/slides/examples/3d", `${name}.mdx`);
+  const file = path.join(root, "apps/slides/examples", name === "lighting" ? "" : "3d", `${name}.mdx`);
   if (!compiledDecks.has(name)) compiledDecks.set(name, compileDeck(file, {
     source: fs.readFileSync(file, "utf8"), effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
   }).then(result => {
