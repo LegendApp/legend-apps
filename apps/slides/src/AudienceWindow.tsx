@@ -14,6 +14,9 @@ import { nativeTransitionStyles } from "./nativeTransitionStyles";
 import { DeckRenderer, SlideCanvas, SlideBackgroundHost } from "./DeckRenderer";
 import { setSlidesState, slidesState$ } from "./slidesStore";
 
+// A cut swaps layers once a newly selected background has drawn its first frames.
+const cutHoldMs = 50;
+
 function preparationIndexes(index: number, count: number) {
   const first = Math.max(0, index - 1);
   const last = Math.min(count - 1, index + 1);
@@ -60,6 +63,7 @@ function AudienceContent() {
     progress: createTransitionProgress(1),
     contentReady: true,
     ready: true,
+    cut: false,
     motions: new Map<number, FocusMotion>(),
   }));
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
@@ -83,13 +87,15 @@ function AudienceContent() {
         : cut ? [...new Set([...transitionState.preparedIndexes, currentSlide])]
           .filter(index => preparationIndexes(currentSlide, slideCount).includes(index)) : transitionState.preparedIndexes,
       revision,
-      outgoing: cut ? null : transitionState.index,
+      // A navigation cut keeps the outgoing layer until the hold ends.
+      outgoing: transitionState.revision !== revision ? null : transitionState.index,
       frozenSteps,
       ...resolved,
-      progress: createTransitionProgress(cut ? 1 : 0),
+      progress: createTransitionProgress(transitionState.revision !== revision ? 1 : 0),
       contentReady: cut,
       ready: cut,
-      duration: hasShared && resolved.duration === 0 ? 320 : resolved.duration,
+      cut,
+      duration: cut ? cutHoldMs : hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
     });
   }
@@ -211,15 +217,16 @@ function AudienceContent() {
     transitionState.definition ? "none" : transition, progress, hasBackground, transitionState.motions.size > 0,
   );
   // Render from state: ref changes do not invalidate React's cached output.
-  // The layout effect establishes the outgoing layer before paint; cuts never
-  // have one, even when the previous transition has not cleaned up yet.
+  // The layout effect establishes the outgoing layer before paint. A cut keeps
+  // the incoming layer behind the background until it replaces the outgoing one.
   const outgoingSlide = previousSlide === currentSlide ? null : previousSlide;
   const visibleStyle = visibleSlideStyle(progress);
+  const fixedStyle = Boolean(transitionState.definition) || transitionState.cut;
   const layers = outgoingSlide === null
-    ? [{ index: currentSlide, style: transitionState.definition ? visibleStyle : enteringStyle }]
+    ? [{ index: currentSlide, style: fixedStyle ? visibleStyle : enteringStyle }]
     : [
-        { index: outgoingSlide, style: transitionState.definition ? visibleStyle : outgoingStyle },
-        { index: currentSlide, style: transitionState.definition ? visibleStyle : enteringStyle },
+        { index: outgoingSlide, style: fixedStyle ? visibleStyle : outgoingStyle },
+        { index: currentSlide, style: fixedStyle ? visibleStyle : enteringStyle },
       ];
   // Retain keyed surfaces during motion, then replenish one neighbor per idle
   // commit. Finishing a transition must not synchronously cold-mount its slots.
@@ -238,7 +245,7 @@ function AudienceContent() {
         // Reveal only after its first native progress event, keeping the live
         // content measurable behind the background until then.
         const incoming = layer.index === currentSlide;
-        const behindBackground = isPreload || incoming && !transitionState.ready;
+        const behindBackground = isPreload || incoming && (!transitionState.ready || transitionState.cut && previousSlide !== null);
         return (
           <AudienceSlide key={layer.index} index={layer.index} preparing={isPreload || incoming && !transitionState.ready} incoming={incoming}
             onPrepared={incoming && !transitionState.contentReady ? preparationReady : undefined}
