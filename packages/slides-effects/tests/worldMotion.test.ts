@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { burstInstances, choreographyInstances, eventElapsed, railPoint, rotatePart, samplePartMotion, settleProgress, type ChoreographyLayout, type ChoreographyOptions } from "../packs/world/motion";
-import { instanceOpacity, instancePosition, prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { burstInstances, choreographyInstances, composePartRotation, eventElapsed, partsFromInstances, railPoint, rotatePart, settleProgress, type ChoreographyLayout, type ChoreographyOptions } from "../packs/world/motion";
+import { instanceOpacity, instancePosition, prepareWorldScene, primitive, cardInstances, customInstances, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import type { ClockSample, Vec3 } from "../packs/world/camera";
 
 const clock = (time: number, step = 0, stepOrigins: Record<number, number> = { 0: 0 }): ClockSample => ({ slideTime: time, stepTime: time - (stepOrigins[step] ?? 0), stepIndex: step, stepOrigins });
@@ -101,4 +101,52 @@ test("invalid mappings and timings fail at scene construction", () => {
   expect(() => choreographyInstances({ ...options, transitions: [{ ...options.transitions[0], swapAt: 1.5 }] })).toThrow("swap");
   expect(() => burstInstances({ position: [0, 0, 0], at: 1, step: 1 })).toThrow("either at or step");
   expect(eventElapsed({ step: 1 }, clock(5, 2, { 2: 5 }))).toBe(Infinity);
+});
+
+
+test("rigid pose rotation composes with the published glyph degree convention", () => {
+  const local: Vec3 = [25, -17, 33], pose: Vec3 = [0.3, 0.5, -0.2];
+  const combined = composePartRotation(local, pose).map(value => value * Math.PI / 180) as Vec3;
+  const expected = rotatePart(rotatePart([0.3, -0.7, 1.2], local.map(value => value * Math.PI / 180) as Vec3), pose);
+  rotatePart([0.3, -0.7, 1.2], combined).forEach((value, axis) => expect(value).toBeCloseTo(expected[axis], 7));
+});
+
+
+test("local card text offsets and template opacity survive rigid placement", () => {
+  const templates = cardInstances({ id: "card", position: [2, 0, 0], title: "Tile", titleOpacity: 0.7 });
+  const instances = choreographyInstances({ id: "card-pose", layouts: [{ id: "one", parts: [{ id: "card", instances: templates, home: { position: [3, 0, 0] } }] }], transitions: [] });
+  const label = instances.find(instance => instance.label?.text === "Tile")!;
+  const origin = templates.find(instance => instance.label?.text === "Tile")!;
+  expect(instancePosition(label, clock(0))[0]).toBeCloseTo(5 + origin.label!.offset.initial[0]);
+  expect(instanceOpacity(label, clock(0))).toBe(0.7);
+});
+test("an interrupted route cannot fire a future landing burst", () => {
+  const instances = choreographyInstances({ ...options, transitions: [
+    { from: "many", to: "few", at: 0, duration: 2, stagger: 0, onLand: { count: 1 } },
+    { from: "few", to: "bases", at: 1, duration: 1, stagger: 0 },
+  ] });
+  const spark = instances.find(instance => instance.id === "motion:land:0:0:0")!;
+  expect(instanceOpacity(spark, clock(2.1))).toBe(0);
+});
+
+
+test("custom geometry retains its template instance index across clone draw groups", () => {
+  const templates = customInstances({ count: 3, vertexCount: 3, wgsl: "mesh" });
+  const scene = prepareWorldScene({ instances: choreographyInstances({ id: "custom", layouts: [{ id: "one", parts: [{ id: "third", instances: [templates[2]], home: { position: [0, 0, 0] } }] }], transitions: [] }) });
+  const values = sampleWorldUniforms(scene, clock(0));
+  expect(values[worldHeaderSize + 31]).toBe(3);
+  const still = prepareWorldScene({ instances: templates });
+  expect(sampleWorldUniforms(still, clock(0))[worldHeaderSize + 31]).toBe(0);
+});
+
+
+test("existing instance centers become independent homes and burst landing points", () => {
+  const parts = partsFromInstances([primitive("box", { id: "placed", position: [4, 2, -1] })]);
+  expect(parts[0].home.position).toEqual([4, 2, -1]);
+  const instances = choreographyInstances({ id: "centers", layouts: [{ id: "start", parts }, { id: "end", parts: [{ ...parts[0], home: { position: [8, 1, 3] } }] }],
+    transitions: [{ from: "start", to: "end", at: 1, duration: 1, onLand: { count: 1 } }] });
+  expect(instancePosition(instances[0], clock(0))).toEqual([4, 2, -1]);
+  const landed = instances.find(instance => instance.id === "centers:home:end:placed:placed")!;
+  expect(instancePosition(landed, clock(2))).toEqual([8, 1, 3]);
+  expect(instances.find(instance => instance.burst)!.burst!.options.position).toEqual([8, 1, 3]);
 });

@@ -563,3 +563,8 @@ and `counterSize`. `step` or `at`, `delay`, `duration` (default 1.6 seconds) and
 its top and rounds that same sampled value. Values above `maximum` retain their
 counter while height saturates. Digits are fixed-width seven-segment meshes,
 with no per-tick geometry allocation. See `apps/slides/examples/stage.mdx`.
+
+`partsFromInstances(instances)` converts existing mesh arrays into independent
+parts at their original centers, including Text3D glyph arrays. It sets each
+part's `origin` to that center so its rail, rotation pivot, and landing burst
+share the same home. Explicit groups default to local origin `[0, 0, 0]`.

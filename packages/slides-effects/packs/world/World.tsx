@@ -27,7 +27,7 @@ export { layoutText3D, registerText3DFont, text3dInstances } from "./text3d";
 export type { GlyphMotion, Text3DEnter, Text3DFont, Text3DOptions } from "./text3d";
 export type { Animated, CardOptions, CardStyle, GraphOptions, LabelOptions, LabelWeight, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
-export { burstInstances, choreographyInstances, railPoint, settleProgress } from "./motion";
+export { burstInstances, choreographyInstances, partsFromInstances, railPoint, settleProgress } from "./motion";
 export type { BurstOptions, BurstStyle, ChoreographyOptions, ChoreographyLayout, ChoreographyPart, ChoreographyTransition, PartPose, PartRoute } from "./motion";
 export type { Instance } from "./scene";
 export function Choreography(_: ChoreographyOptions) { return null; }

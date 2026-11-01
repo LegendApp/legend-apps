@@ -1,8 +1,8 @@
 import { easeProgress, mixVector, type ClockSample, type Vec3 } from "./camera";
-import { colorVector, instancePosition, primitive, type Instance } from "./scene";
+import { colorVector, instanceOpacity, instancePosition, primitive, type Instance } from "./scene";
 
 export type PartPose = { position: Vec3; rotation?: Vec3; scale?: Vec3; color?: string };
-export type ChoreographyPart = { id: string; instances: Instance[]; home: PartPose };
+export type ChoreographyPart = { id: string; instances: Instance[]; home: PartPose; origin?: Vec3 };
 export type ChoreographyLayout = { id: string; parts: ChoreographyPart[] };
 export type BurstStyle = { count?: number; lifetime?: number; color?: string; size?: number; speed?: number; spread?: Vec3; gravity?: Vec3; seed?: number };
 export type BurstOptions = BurstStyle & { id?: string; position: Vec3; step?: number; at?: number; delay?: number };
@@ -14,9 +14,18 @@ type Trigger = { step?: number; at?: number; delay?: number };
 type Route = { from: number; to: number; via: [Vec3, Vec3]; delay: number; swapAt: number };
 type Transition = Trigger & { from: number; to: number; duration: number; overshoot: number; routes: Route[] };
 type Model = { layouts: Pose[][]; transitions: Transition[] };
-export type ChoreographyMotion = { model: Model; layout?: number; part?: number; transition?: number; route?: number; side?: "from" | "to"; local: Vec3 };
-export type BurstMotion = { options: BurstOptions; velocity: Vec3; gravity: Vec3 };
+export type ChoreographyMotion = { model: Model; layout?: number; part?: number; transition?: number; route?: number; side?: "from" | "to"; local: Vec3; endOffset: Vec3; opacity: number };
+export type BurstMotion = { options: BurstOptions; velocity: Vec3; gravity: Vec3; until?: Trigger };
 export type SampledPart = Pose & { opacity: number };
+const templateClock: ClockSample = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+
+/** Turn an existing mesh/instance array into independently moving parts, centered at their original homes. */
+export function partsFromInstances(instances: Instance[]): ChoreographyPart[] {
+  return instances.map((instance, index) => {
+    const position = instancePosition(instance, templateClock);
+    return { id: instance.id ?? `part:${index}`, instances: [instance], home: { position }, origin: position };
+  });
+}
 
 /** Missing epochs on an earlier step mean a direct jump: previous events are already finished. */
 export function eventElapsed(event: Trigger, clock: ClockSample) {
@@ -33,6 +42,16 @@ export function rotatePart(point: Vec3, rotation: Vec3): Vec3 {
   const a = y * Math.cos(rx) - z * Math.sin(rx), b = y * Math.sin(rx) + z * Math.cos(rx);
   const c = x * Math.cos(ry) + b * Math.sin(ry), d = -x * Math.sin(ry) + b * Math.cos(ry);
   return [c * Math.cos(rz) - a * Math.sin(rz), c * Math.sin(rz) + a * Math.cos(rz), d];
+}
+/** Compose a rigid pose with Text3D's local Euler rotation (degrees). */
+export function composePartRotation(localDegrees: Vec3, pose: Vec3): Vec3 {
+  "worklet";
+  const local: Vec3 = [localDegrees[0] * Math.PI / 180, localDegrees[1] * Math.PI / 180, localDegrees[2] * Math.PI / 180];
+  const x = rotatePart(rotatePart([1, 0, 0], local), pose), y = rotatePart(rotatePart([0, 1, 0], local), pose), z = rotatePart(rotatePart([0, 0, 1], local), pose);
+  const ry = Math.asin(Math.max(-1, Math.min(1, -x[2])));
+  const rx = Math.abs(x[2]) < 0.9999999 ? Math.atan2(y[2], z[2]) : Math.atan2(-z[1], y[1]);
+  const rz = Math.abs(x[2]) < 0.9999999 ? Math.atan2(x[1], x[0]) : 0;
+  return [rx * 180 / Math.PI, ry * 180 / Math.PI, rz * 180 / Math.PI];
 }
 /** Cubic rails: controls are explicit World points; defaults keep each handle axis-aligned. */
 export function railPoint(from: Vec3, to: Vec3, via: [Vec3, Vec3], progress: number): Vec3 {
@@ -112,7 +131,11 @@ export function sampleBurst(motion: BurstMotion, clock: ClockSample) {
   const age = Math.max(0, Math.min(lifetime, elapsed));
   const origin = motion.options.position, v = motion.velocity, g = motion.gravity;
   const position: Vec3 = [origin[0] + v[0] * age + g[0] * age * age * 0.5, origin[1] + v[1] * age + g[1] * age * age * 0.5, origin[2] + v[2] * age + g[2] * age * age * 0.5];
-  return { position, opacity: elapsed >= 0 && elapsed < lifetime ? Math.pow(1 - age / lifetime, 1.5) : 0 };
+  const vx = v[0] + g[0] * age, vy = v[1] + g[1] * age, vz = v[2] + g[2] * age;
+  const rotation: Vec3 = [Math.atan2(vz, Math.hypot(vx, vy)), 0, -Math.atan2(vx, vy)];
+  const interrupted = motion.until ? eventElapsed(motion.until, clock) : -Infinity;
+  const cancelled = interrupted >= 0 && elapsed < interrupted;
+  return { position, rotation, opacity: !cancelled && elapsed >= 0 && elapsed < lifetime ? Math.pow(1 - age / lifetime, 1.5) : 0 };
 }
 export function choreographyInstances(options: ChoreographyOptions): Instance[] {
   if (!options.layouts.length) throw new Error("World choreography needs at least one layout");
@@ -148,15 +171,19 @@ export function choreographyInstances(options: ChoreographyOptions): Instance[] 
     if (source.some((_, part) => !routes.some(route => route.from === part)) || target.some((_, part) => !routes.some(route => route.to === part))) throw new Error("World choreography mapping must cover every source and target part");
     return { from, to, step: transition.step, at: transition.at, duration, overshoot, routes };
   });
-  const instances: Instance[] = [], initialClock: ClockSample = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
-  const clone = (part: ChoreographyPart, prefix: string, motion: Omit<ChoreographyMotion, "model" | "local">) => {
+  const instances: Instance[] = [];
+  const clone = (part: ChoreographyPart, prefix: string, motion: Omit<ChoreographyMotion, "model" | "local" | "endOffset" | "opacity">) => {
     const names = new Map(part.instances.filter(instance => instance.id).map(instance => [instance.id!, `${prefix}:${instance.id}`]));
+    const parents = new Map(part.instances.filter(instance => instance.id).map(instance => [instance.id!, instance]));
     for (let i = 0; i < part.instances.length; i++) {
       const template = part.instances[i];
+      const local = template.label?.attach ? { ...template, label: { ...template.label, parent: parents.get(template.label.attach) } } : template;
+      const position = instancePosition(local, templateClock), origin = part.origin ?? [0, 0, 0];
       instances.push({ ...template, id: template.id ? names.get(template.id) : `${prefix}:${i}`, motion: undefined,
         label: template.label ? { ...template.label, attach: template.label.attach ? names.get(template.label.attach) : undefined,
           parent: template.label.parent?.id ? { ...template.label.parent, id: names.get(template.label.parent.id) } : undefined } : undefined,
-        choreography: { model, ...motion, local: instancePosition(template, initialClock) } });
+        choreography: { model, ...motion, local: [position[0] - origin[0], position[1] - origin[1], position[2] - origin[2]],
+          endOffset: [template.end[0] - position[0], template.end[1] - position[1], template.end[2] - position[2]], opacity: instanceOpacity(local, templateClock) } });
     }
   };
   options.layouts.forEach((layout, layoutIndex) => layout.parts.forEach((part, partIndex) => clone(part, `${options.id}:home:${layout.id}:${part.id}`, { layout: layoutIndex, part: partIndex })));
@@ -166,8 +193,13 @@ export function choreographyInstances(options: ChoreographyOptions): Instance[] 
       clone(part, `${options.id}:flight:${index}:${routeIndex}:${side}`, { transition: index, route: routeIndex, side });
     }
     const style = options.transitions[index].onLand;
-    if (style) instances.push(...burstInstances({ ...style, id: `${options.id}:land:${index}:${routeIndex}`, step: transition.step, at: transition.at,
-      delay: route.delay + transition.duration, position: model.layouts[transition.to][route.to].position, seed: (style.seed ?? 1) + routeIndex }));
+    if (style) {
+      const sparks = burstInstances({ ...style, id: `${options.id}:land:${index}:${routeIndex}`, step: transition.step, at: transition.at,
+        delay: route.delay + transition.duration, position: model.layouts[transition.to][route.to].position, seed: (style.seed ?? 1) + routeIndex });
+      const next = options.transitions[index + 1];
+      if (next) for (const spark of sparks) spark.burst!.until = { step: next.step, at: next.at };
+      instances.push(...sparks);
+    }
   }));
   return instances;
 }

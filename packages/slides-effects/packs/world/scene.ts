@@ -1,4 +1,4 @@
-import { rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
+import { composePartRotation, rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
 import { routePoint, tubePulseProgress, digitSegments } from "./stageMotion";
 import type { TubePulse } from "./stage";
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
@@ -51,6 +51,7 @@ export type Instance = {
   choreography?: ChoreographyMotion; burst?: BurstMotion;
   route?: { points: Vec3[]; lengths: number[]; draw: Track<number>; segment?: number; pulse?: TubePulse; bead?: number };
   pillar?: { value: Track<number>; maximum: number; height: number; role: "body" | "top" | "digit"; digit?: number; segment?: number };
+  customIndex?: number;
   endpoints?: [string, string];
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
@@ -317,7 +318,7 @@ export function customInstances(options: CustomOptions): Instance[] {
   const count = options.count ?? 1;
   if (!Number.isInteger(count) || count < 1 || count > 10000 || !Number.isInteger(options.vertexCount) || options.vertexCount < 1) throw new Error("World custom geometry needs count between one and 10000 and positive integer vertexCount");
   const custom = { wgsl: options.wgsl, vertexCount: options.vertexCount };
-  return Array.from({ length: count }, (_, index) => ({ ...primitive("box", { ...options, size: options.size ?? 1, id: options.id ? `${options.id}:${index}` : undefined }), custom }));
+  return Array.from({ length: count }, (_, index) => ({ ...primitive("box", { ...options, size: options.size ?? 1, id: options.id ? `${options.id}:${index}` : undefined }), custom, customIndex: index }));
 }
 export function sdfInstance(options: SDFOptions): Instance {
   if (options.bounds.some(bound => bound.some(value => !Number.isFinite(value))) || options.bounds[0].some((value, index) => value >= options.bounds[1][index])) throw new Error("World SDF bounds must be finite and have positive extent");
@@ -450,7 +451,6 @@ function pulseRange(pulse: NonNullable<Instance["pulse"]>, clock: ClockSample) {
 }
 export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
   "worklet";
-  let position = sampleTrack(instance.position, clock);
   if (instance.choreography) {
     const pose = samplePartMotion(instance.choreography, clock), local = instance.choreography.local;
     const point = rotatePart([local[0] * pose.scale[0], local[1] * pose.scale[1], local[2] * pose.scale[2]], pose.rotation);
@@ -461,6 +461,7 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
     const point = sampleBurst(instance.burst, clock).position, offset = stageOffset(instance.stages, clock);
     return [point[0] + offset[0], point[1] + offset[1], point[2] + offset[2]];
   }
+  let position = sampleTrack(instance.position, clock);
   if (instance.route?.pulse) {
     const route = instance.route, progress = tubePulseProgress(route.pulse!, clock) - (route.bead ?? 0) * 0.025;
     position = routePoint(route.points, route.lengths, progress * route.lengths[route.lengths.length - 1]);
@@ -519,7 +520,7 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
 }
 export function instanceOpacity(instance: Instance, clock: ClockSample): number {
   "worklet";
-  if (instance.choreography) return samplePartMotion(instance.choreography, clock).opacity * (instance.label ? sampleTrack(instance.label.opacity, clock) : 1);
+  if (instance.choreography) return samplePartMotion(instance.choreography, clock).opacity * instance.choreography.opacity;
   if (instance.burst) return sampleBurst(instance.burst, clock).opacity;
   if (instance.route) {
     const route = instance.route, drawn = Math.max(0, Math.min(1, sampleTrack(route.draw, clock)));
@@ -699,15 +700,19 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       const end = routePoint(route.points, route.lengths, distance);
       endpoint = [end[0] + offset[0], end[1] + offset[1], end[2] + offset[2]];
     }
-    const scale: Vec3 = [...sampleTrack(instance.scale, clock)];
+    const baseScale = sampleTrack(instance.scale, clock);
+    const scale: Vec3 = part ? [baseScale[0] * part.scale[0], baseScale[1] * part.scale[1], baseScale[2] * part.scale[2]] : baseScale;
     if (instance.pillar?.role === "body") {
       const pillar = instance.pillar;
       scale[1] = Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum)));
     }
     if (part) {
-      for (let axis = 0; axis < 3; axis++) { scale[axis] *= part.scale[axis]; values[index + 20 + axis] = part.rotation[axis]; }
-      const local = instance.choreography!.local;
-      endpoint = [position[0] + instance.end[0] - local[0], position[1] + instance.end[1] - local[1], position[2] + instance.end[2] - local[2]];
+      for (let axis = 0; axis < 3; axis++) values[index + 20 + axis] = part.rotation[axis];
+      const end = instance.choreography!.endOffset;
+      endpoint = [position[0] + end[0], position[1] + end[1], position[2] + end[2]];
+    } else if (instance.burst) {
+      const rotation = sampleBurst(instance.burst, clock).rotation;
+      for (let axis = 0; axis < 3; axis++) values[index + 20 + axis] = rotation[axis];
     }
     let color = part?.color ?? sampleTrack(instance.color, clock);
     const activation = instance.graph ? activationAt(instance.graph.node, instance.graph.nodes, instance.graph.activate, clock) : 1;
@@ -746,7 +751,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index + 23] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {
-      const sampledAlbedo = part?.color ?? sampleTrack(material.albedo, clock);
+      const sampledAlbedo = part?.color && !("glyph" in instance) ? part.color : sampleTrack(material.albedo, clock);
       const albedo = instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo;
       values[index + 24] = albedo[0]; values[index + 25] = albedo[1]; values[index + 26] = albedo[2];
     } else { values[index + 24] = values[index + 4]; values[index + 25] = values[index + 5]; values[index + 26] = values[index + 6]; }
@@ -756,6 +761,13 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       const glyph = instance.glyph, rotation = sampleTrack(glyph.rotation, clock);
       values[index + 11] = glyph.index; values[index + 12] = rotation[0]; values[index + 13] = rotation[1]; values[index + 14] = rotation[2];
       values[index + 15] = glyph.pivot[1]; values[index + 16] = glyph.depth; values[index + 17] = glyph.bevel; values[index + 18] = glyph.bevelWidth; values[index + 19] = glyph.pivot[0];
+    }
+    values[index + 31] = instance.choreography && instance.customIndex !== undefined ? instance.customIndex + 1 : 0;
+    // Text3D's published instance layout stores its local Euler degrees in fields 12–14.
+    // Keep this after shape-specific fields so the glyph and rigid pose compose once.
+    if (part && "glyph" in instance) {
+      const rotation = composePartRotation([values[index + 12], values[index + 13], values[index + 14]], part.rotation);
+      for (let axis = 0; axis < 3; axis++) values[index + 12 + axis] = rotation[axis];
     }
   }
   return values;

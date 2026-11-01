@@ -191,13 +191,14 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
 }`;
 }
 function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
-  const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
+  const shape = custom ? `let shapeVertex=shape(geometryId(iid),vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
   return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection, look)}${vertexFields}
 ${look.shadowCaster ? "@fragment fn shadowFragment(in:WorldVertex) { if(in.opacity<.5) { discard; } }" : ""}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
+${custom ? "fn geometryId(iid:u32)->u32 { let marker=uniforms[slot(iid)+31u]; if(marker>0.) { return u32(marker)-1u; } return iid; }" : ""}
 @vertex fn worldVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->WorldVertex {
  let base=slot(iid);
  let origin=vector(base); let radius=max(uniforms[base+3u],.0001);
@@ -280,7 +281,7 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let normal=normalize(in.normal);
  ${kind === "box" && !custom ? "if(in.opacity>=.999 && dot(normal,eye()-in.world)<0.) { discard; }" : ""}
- let material=${custom ? "shade(in.instance,in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
+ let material=${custom ? "shade(geometryId(in.instance),in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
  let color=illuminate(in.world,normal,material,in.color,in.material.z,in.material.w);
  return vec4f(color*in.opacity,in.opacity);
 }`}`;
