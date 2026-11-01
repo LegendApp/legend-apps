@@ -2,6 +2,8 @@ import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentatio
 import { worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
+import { contactShadowCode, environmentCode, floorMarkingsCode, keyLightCode, type FloorMarkings } from "./lighting";
+import { depthCode } from "./post";
 import { glyphAtlas, glyphEm, glyphFirst, glyphLast, glyphRange, glyphMetrics, glyphKernings, glyphPixelCount } from "./glyphs";
 
 export const worldBindings = `
@@ -59,8 +61,10 @@ const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
 ` },
 };
 
-function lightingCode(lightCount: number, reflection: boolean) {
-  return `
+/** Key light, environment and the shadow-map binding (when this pass receives shadows). */
+type Look = { key?: boolean; environment?: boolean; shadowBinding?: number };
+function lightingCode(lightCount: number, reflection: boolean, look: Look = {}) {
+  return `${look.key ? keyLightCode(look.shadowBinding) : ""}${look.environment ? environmentCode : ""}
 fn eye()->vec3f { let camera=vector(0u); return ${reflection ? "vec3f(camera.x,2.*uniforms[36]-camera.y,camera.z)" : "camera"}; }
 fn projected(world:vec3f)->vec4f { return project(${reflection ? "vec3f(world.x,2.*uniforms[36]-world.y,world.z)" : "world"}); }
 struct Material { albedo:vec3f, emissive:vec3f, roughness:f32, metal:f32 }
@@ -71,7 +75,9 @@ fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimInten
  let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));
  var color=material.albedo*uniforms[52]+material.emissive;
  let roughness=clamp(material.roughness,.04,1.); let metal=clamp(material.metal,0.,1.);
- ${lightCount === 0 ? "color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55;" : ""}
+ ${lightCount === 0 && !look.key && !look.environment ? "color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55;" : ""}
+ ${look.key ? "color+=keyLight(world,normal,view,material.albedo,roughness,metal);" : ""}
+ ${look.environment ? "color+=environmentLight(normal,view,material.albedo,roughness,metal);" : ""}
  for(var light=0u;light<${lightCount}u;light++) {
   let base=64u+light*12u; let delta=vector(base)-world; let distance=max(length(delta),.001); let toward=delta/distance;
   let range=max(.001,uniforms[base+7u]); let cutoff=pow(max(0.,1.-pow(distance/range,4.)),2.);
@@ -175,11 +181,11 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  return CardResult(vec4f(color,alpha),depth);
 }`;
 }
-function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry) {
+function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
   const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
-  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}${vertexFields}
+  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection, look)}${vertexFields}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
 @vertex fn worldVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->WorldVertex {
@@ -267,14 +273,33 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  return vec4f(color*in.opacity,in.opacity);
 }`}`;
 }
+// Depth-only draw from the key light. Spheres are light-facing discs; other shapes reuse their mesh.
+function shadowCasterCode(kind: PrimitiveKind, offset: number, custom?: CustomGeometry) {
+  const sphere = kind === "sphere" && !custom;
+  const shape = custom ? `let shapeVertex=shape(iid,vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
+  return `${worldBindings}${triangleCorner}${lightingCode(0, false, { key: true })}
+${custom?.wgsl ?? ""}
+struct ShadowVertex { @builtin(position) position:vec4f, @location(0) local:vec2f, @location(1) opacity:f32 }
+@vertex fn shadowVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->ShadowVertex {
+ let base=${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u;
+ let origin=vector(base); let radius=max(uniforms[base+3u],.0001); let scale=max(vector(base+8u),vec3f(.0001));
+ var point=vec3f(0.); var normal=vec3f(0.,1.,0.); var result:ShadowVertex; result.opacity=uniforms[base+23u]; result.local=vec2f(0.);
+ ${sphere ? `let local=corner(vid)*2.-1.; result.local=local; let r=scale*radius; let world=origin+keyRight()*local.x*max(r.x,r.z)+keyUp()*local.y*r.y;`
+    : `${shape}\n let world=origin+point*scale;`}
+ let p=keyProject(world); result.position=vec4f(p.xy,clamp(p.z,0.,1.),1.);
+ if(result.opacity<.5) { result.position=vec4f(2.,2.,0.,1.); }
+ return result;
+}
+@fragment fn shadowFragment(in:ShadowVertex) { ${sphere ? "if(dot(in.local,in.local)>1.) { discard; }" : ""} }`;
+}
 const glyphCount = glyphLast - glyphFirst + 1;
 const glyphMetricsSize = glyphMetrics.length * glyphCount * 6;
 const glyphPixelsStart = glyphMetricsSize + glyphMetrics.length * glyphCount * glyphCount;
 // Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
 // so text is lit, reflected, focused and bloomed with the rest of the scene.
-function labelCode(offset: number, lights: number, reflection: boolean) {
+function labelCode(offset: number, lights: number, reflection: boolean, look: Look = {}) {
   const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
-  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}
+  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection, look)}
 @group(0) @binding(3) var<storage,read> glyphs:array<u32>;
 fn metric(face:u32,code:u32,field:u32)->f32 { return bitcast<f32>(glyphs[(face*${glyphCount}u+clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*6u+field]); }
 fn kern(face:u32,a:u32,b:u32)->f32 { return bitcast<f32>(glyphs[${glyphMetricsSize}u+face*${glyphCount * glyphCount}u+(clamp(a,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*${glyphCount}u+clamp(b,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u]); }
@@ -362,8 +387,9 @@ function glyphBuffer() {
   }
   return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
 }
-function floorCode(lights: number, mirror: boolean) {
-  return `${worldBindings}${lightingCode(lights, false)}
+function floorCode(lights: number, mirror: boolean, look: Look = {}, markings: FloorMarkings = {}) {
+  const paint = floorMarkingsCode(markings);
+  return `${worldBindings}${lightingCode(lights, false, look)}
 ${mirror ? "@group(0) @binding(3) var reflection:texture_2d<f32>;" : ""}
 struct FloorVertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @vertex fn floorVertex(@builtin(vertex_index) id:u32)->FloorVertex {
@@ -377,6 +403,8 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
  let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vec3f(0.),uniforms[37],uniforms[43]);
  var color=illuminate(world,normal,material,vec3f(0.),0.,0.);
+ var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
+ ${paint}
  ${mirror ? `let roughness=clamp(uniforms[37],0.,1.);
  let spread=roughness*roughness*min(distance,80.)*.0015;
  let pixel=vec2f(spread,spread*frame.aspect);
@@ -385,8 +413,9 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let fresnel=.04+.96*pow(1.-clamp(dot(normal,view),0.,1.),5.);
  let edgeFade=1.-smoothstep(uniforms[39]*.85,uniforms[39],max(abs(world.x),abs(world.z)));
  let distanceFade=exp(-max(0.,uniforms[12])*distance*roughness);
- let strength=clamp(uniforms[38],0.,1.)*mix(fresnel,1.,clamp(uniforms[43],0.,1.))*(1.-roughness*.7)*distanceFade*edgeFade;
+ let strength=clamp(uniforms[38],0.,1.)*mix(fresnel,1.,clamp(uniforms[43],0.,1.))*(1.-roughness*.7)*distanceFade*edgeFade*${(1 - (markings.veil ?? 0)).toFixed(4)}*(1.-mask);
  color=mix(color,reflected,strength);` : ""}
+ ${look.shadowBinding !== undefined ? "color*=keyShadow(world,normal);" : ""}
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
 }
@@ -449,6 +478,7 @@ export type WorldGraphTopology = {
   quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
+  key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
 };
 export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopology {
@@ -478,6 +508,9 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
   return { quality: scene.quality, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
+    key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
+    shadowScale: scene.keyLight?.shadowScale,
+    floorMarkings: scene.floor && { veil: scene.floor.veil, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
     customs, sdfs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
@@ -496,12 +529,25 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const lights = topology.lightCount ?? 0;
   const labels = topology.labels, cards = topology.cards;
   const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0) + (cards?.count ?? 0) + (labels?.count ?? 0);
+  const shadowMap = topology.shadow === "map";
+  const look: Look = { key: topology.key, environment: topology.environment, shadowBinding: shadowMap ? 3 : undefined };
+  if (shadowMap) {
+    targets.push({ id: "shadow", format: "depth32float", scale: topology.shadowScale ?? .5 });
+    let offset = 0, draws = 0;
+    const cast = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry) => passes.push({ kind: "render", id: `shadow-${id}`,
+      code: shadowCasterCode(kind, start, custom), vertex: "shadowVertex", fragment: "shadowFragment", color: [], depth: "shadow",
+      vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, clear: draws++ === 0 ? [0, 0, 0, 0] : false });
+    for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) cast(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
+    for (const [index, draw] of customDraws.entries()) cast(`custom-${index}`, "box", draw.count, draw.offset, draw);
+    if (!draws) cast("empty", "box", 0, 0);
+  }
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
     let offset = 0, draws = 0;
     const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
-      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf), vertex: "worldVertex", fragment: "worldFragment",
-        color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false });
+      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, look), vertex: "worldVertex", fragment: "worldFragment",
+        color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false,
+        ...shadowMap ? { reads: ["shadow"] } : {} });
     };
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
@@ -509,7 +555,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
       color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
     if (!draws && !cleared) add("empty", "box", 0, 0);
-    if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection), vertex: "labelVertex", fragment: "labelFragment",
+    if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
       color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
   };
   if (topology.mirror) {
@@ -517,7 +563,8 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale, samples: msaa }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale, samples: msaa });
     renderScene(true);
   }
-  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror), vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: topology.mirror ? ["reflect"] : [] });
+  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined }, topology.floorMarkings),
+    vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: [...topology.mirror ? ["reflect"] : [], ...shadowMap ? ["shadow"] : []] });
   renderScene(false, !!topology.floor);
   if (topology.shafts) {
     targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .5) });
@@ -530,6 +577,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     if (output !== "screen" && output !== "dof" && targetScale === scale) transientTargets.add(output);
     passes.push({ kind: "fullscreen", id, code, fragment, reads, output }); color = output;
   };
+  if (topology.shadow === "contact") fullscreen("contact-shadow", contactShadowCode(worldBindings, depthCode()), "contactShadow", [color, "depth"]);
   const stages = ["scene", "fog", "dof", "bloom", "tonemap"];
   for (const item of topology.passes ?? []) {
     if (item.before && item.after || !stages.includes(item.before ?? item.after ?? "bloom") || item.before === "scene") throw new Error("Invalid World post-pass placement");

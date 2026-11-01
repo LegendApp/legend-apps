@@ -1,6 +1,7 @@
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
+import type { EnvironmentOptions, FloorMarkings, KeyLightOptions } from "./lighting";
 
 /** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
@@ -74,10 +75,11 @@ export type WorldScene = {
   bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number> }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
   stages?: { stage: StageMotion; parents: StageMotion[] }[]; materials?: Record<string, MaterialOptions>;
   dof?: { focus?: Animated<number | string>; aperture?: Animated<number>; maxBlur?: Animated<number>; scale?: number; samples?: number };
-  floor?: { mirror?: boolean; y?: Animated<number>; roughness?: Animated<number>; reflectivity?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number>; scale?: number };
+  floor?: { mirror?: boolean; y?: Animated<number>; roughness?: Animated<number>; reflectivity?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number>; scale?: number } & FloorMarkings;
   shafts?: { intensity?: Animated<number>; density?: Animated<number>; anisotropy?: Animated<number>; scale?: number; samples?: number };
   chromatic?: Animated<number>; rim?: { color?: Animated<string>; intensity?: Animated<number> }; ambient?: Animated<number>;
   lights?: LightOptions[]; passes?: PostOptions[];
+  keyLight?: KeyLightOptions; environment?: EnvironmentOptions;
   postOrder?: ("fog" | "dof" | "bloom")[];
   counter?: { source: string; position?: [number, number]; size?: number; color?: string };
 };
@@ -696,6 +698,15 @@ export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fo
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
   focusTrack?: Track<number | string>; counterColor?: Vec3; counterIndex?: number;
   lightTracks: { position: Track<Vec3>; target: Track<Vec3>; color: Track<Vec3>; intensity: Track<number>; range: Track<number>; angle: Track<number>; spot: boolean }[] };
+function keyLightFields({ keyLight: key, environment }: WorldScene): [number, Animated<number>][] {
+  return [[115, key ? key.intensity ?? 2.2 : 0], [119, key?.shadowSize ?? 20], [123, key?.softness ?? 2], [124, environment ? environment.intensity ?? 1 : 0], [125, key?.shadowStrength ?? 0.85]];
+}
+/** Key position and target share the color-track sampler: both are plain vectors. */
+function keyLightVectors({ keyLight: key }: WorldScene): { index: number; track: Track<Vec3> }[] {
+  if (!key) return [];
+  return [{ index: 112, track: compileTrack<Vec3>(key.position ?? [6, 16, 12]) }, { index: 116, track: compileTrack(key.color ?? "#ffffff", colorVector) },
+    { index: 120, track: compileTrack<Vec3>(key.target ?? [0, 0, 0]) }];
+}
 export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   if ((scene.lights?.length ?? 0) > 4) throw new Error("World supports at most four point or spot lights");
   for (const effect of [scene.dof, scene.floor, scene.shafts]) if (effect) {
@@ -771,11 +782,13 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
     [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
     [38, scene.floor?.reflectivity ?? 0.8], [39, scene.floor?.size ?? 40], [43, scene.floor?.metal ?? 0.8], [44, scene.chromatic ?? 0],
-    [45, scene.shafts?.intensity ?? 0], [46, scene.shafts?.density ?? 0.03], [47, scene.shafts?.anisotropy ?? 0.3], [51, scene.rim ? scene.rim.intensity ?? 0.8 : 0], [52, scene.ambient ?? 0.12]];
+    [45, scene.shafts?.intensity ?? 0], [46, scene.shafts?.density ?? 0.03], [47, scene.shafts?.anisotropy ?? 0.3], [51, scene.rim ? scene.rim.intensity ?? 0.8 : 0], [52, scene.ambient ?? 0.12],
+    ...keyLightFields(scene)];
   return { ...scene, instances, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
     backgroundVector: colorVector(scene.backgroundColor ?? "#05060a"), postTracks: fields.map(([index, value]) => ({ index, track: compileTrack(value) })),
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
-    colorTracks: [{ index: 40, track: compileTrack(scene.floor?.color ?? "#101827", colorVector) }, { index: 48, track: compileTrack(scene.rim?.color ?? "#ffffff", colorVector) }],
+    colorTracks: [{ index: 40, track: compileTrack(scene.floor?.color ?? "#101827", colorVector) }, { index: 48, track: compileTrack(scene.rim?.color ?? "#ffffff", colorVector) },
+      ...keyLightVectors(scene)],
     counterColor: scene.counter ? colorVector(scene.counter.color ?? "#ffffff") : undefined,
     counterIndex: scene.counter ? instances.findIndex(instance => instance.voxel?.options.id === scene.counter!.source) : undefined,
     lightTracks: (scene.lights ?? []).map(light => ({ position: compileTrack<Vec3>(light.position ?? [0, 8, 0]), target: compileTrack<Vec3>(light.target ?? [0, 0, 0]),
