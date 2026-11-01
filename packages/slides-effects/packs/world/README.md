@@ -509,9 +509,11 @@ Transitions form an itinerary. Each uses a `step` or absolute slide-time `at`.
 The default mapping pairs cyclically up to the larger layout's count. Explicit
 `mapping: [{ from, to, via?, delay?, swapAt? }]` must cover all parts; repeated
 sources split and repeated targets merge. `via` contains two absolute cubic
-control points; default handles rise vertically from the endpoints. `swapAt`
+control points; default handles rise from departure and approach along depth. `swapAt`
 selects source or destination geometry at raw normalized flight progress.
 Each staggered flight travels, pushes past its seat, and settles exactly home.
+During a merge, the earliest arrival owns the destination geometry; extra
+incoming sources shrink away after the swap point instead of duplicating it.
 
 `onLand` emits a seeded, one-shot burst at each route's destination. Standalone
 `<Burst position={[0, 0, 0]} step={1} delay={0.5} count={24} seed={7} />` uses

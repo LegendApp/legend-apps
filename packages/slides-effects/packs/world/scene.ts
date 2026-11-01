@@ -1,4 +1,4 @@
-import { composePartRotation, rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
+import { composePartRotation, rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motionSample";
 import { routePoint, tubePulseProgress, digitSegments } from "./stageMotion";
 import type { TubePulse } from "./stage";
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";

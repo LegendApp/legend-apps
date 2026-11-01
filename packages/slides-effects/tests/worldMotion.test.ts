@@ -150,3 +150,15 @@ test("existing instance centers become independent homes and burst landing point
   expect(instancePosition(landed, clock(2))).toEqual([8, 1, 3]);
   expect(instances.find(instance => instance.burst)!.burst!.options.position).toEqual([8, 1, 3]);
 });
+
+test("merged destinations have one geometry owner while extra sources shrink into their seats", () => {
+  const instances = choreographyInstances({ ...options, transitions: [{ from: "many", to: "few", at: 1, duration: 2, stagger: 0, swapAt: 0.5 }] });
+  const state = clock(2.4);
+  const target = instances.filter(instance => instance.choreography?.side === "to" && instanceOpacity(instance, state) > 0);
+  expect(target).toHaveLength(7);
+  const source = instances.find(instance => instance.id === "motion:flight:0:7:from:0")!;
+  expect(instanceOpacity(source, state)).toBeGreaterThan(0); expect(instanceOpacity(source, state)).toBeLessThan(1);
+  const motion = source.choreography!;
+  expect(motion.model.transitions[0].routes[7].merge).toBe(true);
+  expect(motion.model.transitions[0].routes[0].merge).toBe(false);
+});
