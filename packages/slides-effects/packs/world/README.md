@@ -180,9 +180,9 @@ and radial falloff; bloom supplies the surrounding halo. Emission contributes
 HDR radiance but does not automatically create a local light. Place a point light
 near an emissive subject when it should illuminate nearby surfaces.
 
-The mirror redraws the scene about the floor plane into a half-resolution
-reflection target and clips geometry below it. Roughness broadens and fades the
-reflection with distance; reflectivity controls its strength, with fresnel and
+The mirror redraws the scene about the floor plane into a half-resolution,
+single-sampled reflection target without key-light shadows and clips geometry
+below it. Roughness broadens and fades the reflection with distance; reflectivity controls its strength, with fresnel and
 metal controlling its viewing-angle response. Reflection taps stay inside the
 viewport and fade near the finite floor boundary. The regular fog stage also
 fades the floor into the scene.
@@ -213,7 +213,8 @@ GGX response as point lights. By default it renders a shadow map: boxes, rings,
 tubes, custom geometry and spheres cast (spheres as light-facing discs), and the
 same shapes and the floor receive. The square shadow box is `shadowSize` half-width
 around `target`, widened to the canvas aspect. `softness` is the penumbra in
-shadow-map texels, filtered with a tent-weighted 5x5 PCF and a slope-scaled bias;
+shadow-map texels, filtered with a tent-weighted 5x5 PCF (skipped when the kernel's
+corners and center agree) and a slope-scaled bias;
 `shadowStrength` is the fraction of key light removed in shadow. On the floor the
 shadow also darkens the mirror, like a shadow-catching layer. `shadowScale`
 (default 0.5) sets the static map resolution relative to the scene target. Cards,

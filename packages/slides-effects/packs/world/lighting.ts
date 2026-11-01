@@ -123,6 +123,15 @@ fn keyShadow(world:vec3f,normal:vec3f)->f32 {
  let slope=min(sqrt(1.-facing*facing)/facing,4.);
  let bias=(texel*.6+texel*soft*2.*slope*.6)/(2.*keyRange());
  let cell=uv*size/soft-.5; let origin=floor(cell); let t=cell-origin;
+ // When the kernel's corners and center agree the receiver is fully lit or fully shadowed: skip the 25 compares outside penumbrae.
+ var agree=0.;
+ for(var k=0;k<5;k++) {
+  let o=select(vec2f(f32(k&1)*4.-1.,f32(k>>1u)*4.-1.),vec2f(1.),k==4);
+  let pixel=clamp(vec2i((origin+o+.5)*soft),vec2i(0),vec2i(size)-vec2i(1));
+  agree+=select(0.,1.,p.z-bias<=textureLoad(shadowMap,pixel,0));
+ }
+ if(agree==5.) { return 1.; }
+ if(agree==0.) { return 1.-clamp(uniforms[125],0.,1.); }
  var lit=0.;
  for(var j=0;j<5;j++) { for(var i=0;i<5;i++) {
   let pixel=clamp(vec2i((origin+vec2f(f32(i-1),f32(j-1))+.5)*soft),vec2i(0),vec2i(size)-vec2i(1));

@@ -6,7 +6,7 @@ import { orbInstances, prepareWorldScene, primitive, sampleWorldUniforms, type W
 const scene = (extra: Partial<WorldScene>) => prepareWorldScene({ instances: [primitive("box"), ...orbInstances({ count: 4 })], ...extra });
 const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
 
-test("a key light shadow map draws casters first and every lit pass reads it", () => {
+test("a key light shadow map draws casters first and every lit scene pass reads it", () => {
   const graph = buildWorldGraph(scene({ keyLight: { position: [6, 16, 12] }, floor: { mirror: true } }));
   const shadow = graph.targets.find(target => target.id === "shadow")!;
   expect(shadow).toMatchObject({ format: "depth32float", scale: 0.5 });
@@ -14,12 +14,15 @@ test("a key light shadow map draws casters first and every lit pass reads it", (
   expect(casters.map(pass => pass.id)).toEqual(["shadow-box", "shadow-sphere"]);
   expect(graph.passes.indexOf(casters[0])).toBe(0);
   for (const pass of casters) if (pass.kind === "render") expect(pass).toMatchObject({ color: [], depth: "shadow" });
-  for (const id of ["scene-box", "scene-sphere", "reflection-box", "floor"]) {
+  for (const id of ["scene-box", "scene-sphere", "floor"]) {
     const pass = graph.passes.find(pass => pass.id === id)!;
     expect(pass.reads).toContain("shadow");
     expect(pass.code).toContain("fn keyShadow");
     expect(pass.code).toContain(`@binding(${pass.reads!.indexOf("shadow") + 3}) var shadowMap`);
   }
+  const reflection = graph.passes.find(pass => pass.id === "reflection-box")!;
+  expect(reflection.reads).toBeUndefined();
+  expect(reflection.code).not.toContain("var shadowMap");
 });
 
 test("shadow off and contact fallback skip the shadow map", () => {

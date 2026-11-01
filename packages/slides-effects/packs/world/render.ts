@@ -564,19 +564,21 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   }
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
+    // The floor veils and blurs its reflection, so the mirrored scene skips shadow-map filtering.
+    const shadows = shadowMap && !reflection, sceneLook = shadows ? look : { ...look, shadowBinding: undefined };
     let offset = 0, draws = 0;
     const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
-      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, look), vertex: "worldVertex", fragment: "worldFragment",
+      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, sceneLook), vertex: "worldVertex", fragment: "worldFragment",
         color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false,
-        ...shadowMap ? { reads: ["shadow"] } : {} });
+        ...shadows ? { reads: ["shadow"] } : {} });
     };
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
     for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-glyphs-${index}`,
-      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, reflection, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, reflection),
+      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, reflection, { ...look, shadowBinding: shadows ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, reflection),
       vertex: "glyphVertex", fragment: "glyphFragment", color: [color], depth, vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
-      clear: draws++ === 0 && !cleared ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });
+      clear: draws++ === 0 && !cleared ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadows ? ["shadow"] : []] });
     if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
       color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
     if (!draws && !cleared) add("empty", "box", 0, 0);
@@ -584,8 +586,9 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
       color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
   };
   if (topology.mirror) {
-    const reflectionScale = scale * (topology.reflectionScale ?? 1);
-    targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale, samples: msaa }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale, samples: msaa });
+    // The floor blurs its reflection, so by default it renders single-sampled at half the scene scale.
+    const reflectionScale = scale * (topology.reflectionScale ?? .5);
+    targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale });
     renderScene(true);
   }
   if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, environment: false, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings),

@@ -18,7 +18,8 @@ for (const quality of ["low", "medium", "high"] as const) test(`all enabled post
   for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-composite", "tonemap"]) expect(ids).toContain(id);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
-  expect(target("reflect").scale).toBe(scale);
+  expect(target("reflect").scale).toBe(scale * .5);
+  expect(target("reflect").samples).toBeUndefined();
   expect(target("reflectDepth").scale).toBe(target("reflect").scale);
   expect(target("dof").scale).toBe(scale * .5);
   expect(target("shafts").scale).toBe(scale * .5);
@@ -130,7 +131,7 @@ test("custom ids cannot shadow built-in passes or another custom pass", () => {
 test("auto quality drops MSAA only where the drawable already supersamples the slide", () => {
   const scene = prepareWorldScene({ quality: "auto", instances: [primitive("box")], floor: { mirror: true } });
   const samples = (topology: object) => buildWorldGraph({ ...worldGraphTopology(scene), ...topology }).targets.filter(target => target.samples === 4).map(target => target.id);
-  expect(samples({})).toEqual(["hdr", "depth", "reflect", "reflectDepth"]);
+  expect(samples({})).toEqual(["hdr", "depth"]);
   expect(samples({ supersampled: true })).toEqual([]);
-  expect(samples({ supersampled: true, quality: "high" })).toHaveLength(4);
+  expect(samples({ supersampled: true, quality: "high" })).toHaveLength(2);
 });
