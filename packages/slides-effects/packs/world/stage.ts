@@ -9,6 +9,8 @@ export type RoutedTubeOptions = {
 export type PillarOptions = {
   id: string; value: number; from?: number; maximum?: number; position?: Vec3; height?: number; width?: number; depth?: number;
   step?: number; at?: number; delay?: number; duration?: number; ease?: Ease; color?: string; label?: string; counterSize?: number;
+  /** Body glow; the top cap stays bright. */
+  emissive?: number;
 };
 
 /** Rounded solid geometry, instanced with the same material/rim controls as World cards. */
@@ -76,7 +78,7 @@ export function pillarInstances(options: PillarOptions): Instance[] {
   const track = compileTrack([{ step: 0, value: from, duration: 0 }, { step: options.step ?? 0, at: options.at, value, delay: options.delay,
     duration: options.duration ?? 1.6, ease: options.ease ?? "smoothstep" }]);
   const pillar = { value: track, maximum, height };
-  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: 1.2, material: { metal: 0.35, roughness: 0.22 } });
+  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: { metal: 0.35, roughness: 0.22 } });
   body.pillar = { ...pillar, role: "body" };
   const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: 5 });
   cap.pillar = { ...pillar, role: "top" };
