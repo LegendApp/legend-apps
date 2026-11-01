@@ -39,3 +39,11 @@ test("Unreal bloom radius redistributes mip energy without adding render passes"
     expect(unreal.passes.find(pass => pass.id === `bloom-up-${mip}`)!.code).toContain(`mix(${factor},1.2-${factor},clamp(uniforms[11],0.,1.))`);
   }
 });
+
+test("floor emission stays opt-in and is sampled with the scene color controls", () => {
+  const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+  expect(sampleWorldUniforms(prepareWorldScene({ instances: [], floor: {} }), clock)[19]).toBe(0);
+  const scene = prepareWorldScene({ instances: [], floor: { emissive: 1.25 } });
+  expect(sampleWorldUniforms(scene, clock)[19]).toBe(1.25);
+  expect(buildWorldGraph(scene).passes.find(pass => pass.id === "floor")!.code).toContain("vector(40u)*uniforms[19]");
+});

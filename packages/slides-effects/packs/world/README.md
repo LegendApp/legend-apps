@@ -587,3 +587,7 @@ output encoding. The default preserves the existing display-space finish.
 smoothing width) without subtracting the threshold from the HDR highlights. Its
 radius blends the five mip weights from `[1, .8, .6, .4, .2]` toward their
 mirrors about .6, matching UnrealBloomPass without adding render passes.
+
+`Floor.emissive` (animated, default 0) adds self-lit floor color before reflections,
+shadows, fog and bloom, for painted or luminous surfaces. It also follows
+`World.emissiveScale`.

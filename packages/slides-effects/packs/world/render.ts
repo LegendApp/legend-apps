@@ -409,7 +409,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  if(ray.y>=-.0001 || vector(0u).y<=uniforms[36]) { discard; } let distance=(uniforms[36]-vector(0u).y)/ray.y;
  let world=vector(0u)+ray*distance;
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
- let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vec3f(0.),uniforms[37],uniforms[43]);
+ let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vector(40u)*uniforms[19],uniforms[37],uniforms[43]);
  var color=illuminate(world,normal,material,vec3f(0.),0.,0.);
  var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
  ${paint}
