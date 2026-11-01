@@ -40,6 +40,7 @@
     "music": "bun scripts/run-app.ts music",
     "markdown": "bun scripts/run-app.ts markdown",
     "slides": "bun scripts/run-app.ts slides",
+    "slides:record": "bun scripts/slides-record.ts",
     "test-kitchen-sink": "bun scripts/run-app.ts test-kitchen-sink",
     "theme:generate": "bun scripts/generate-theme-css.ts",
     "start": "bun scripts/start-app.ts",

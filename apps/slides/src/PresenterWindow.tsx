@@ -8,11 +8,11 @@ import { useObservable, useObserveEffect, useValue } from "@legendapp/state/reac
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { registerDocumentOpenGuard } from "./documentOpen";
-import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, setWindowBounds, setWindowFullscreen, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
+import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
 import { addAppListener } from "@legendapp/spark/app";
 import { onSystemEvent, preventSleep } from "@legendapp/spark/system";
 import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
-import { openOrShowWindow, ownRegistration } from "@legend-apps/runtime-utils";
+import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
@@ -27,7 +27,7 @@ import { getRehearsalEnabled, rememberRehearsalEnabled, getPresentationDisplayId
 import { defaultPresenterLayout, resizePresenterLayout } from "./presenterLayout";
 import { createPresenterResizeResponder } from "./presenterResizeResponder";
 import { getSlideStepCount, getNextPresentationTarget, nextSlide, previousSlide, retrySlideContent, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
-import { openSlidesSettingsWindow, slidesWindows } from "./slidesWindows";
+import { openSlidesAudienceWindow, openSlidesSettingsWindow } from "./slidesWindows";
 import { audienceFullscreenForDisplayCount, createAudienceSession } from "./audienceSession";
 import { useSlidesMenus } from "./slidesMenus";
 import { presenterAppearanceToolbarItemId, createPresenterToolbarItems, formatPresenterElapsed, presenterDisplayToolbarItemId, presenterEditToolbarItemId, presenterElapsedToolbarItemId, presenterModePresentationValue, presenterModeRehearsalValue, presenterModeToolbarItemId, presenterStartToolbarItemId, presenterStartValue, presenterStopValue, presenterTimerPauseValue, presenterTimerRestartValue, presenterTimerResumeValue, } from "./presenterToolbar";
@@ -403,11 +403,7 @@ export function PresenterWindow() {
     const audienceOpen = useValue(slidesState$.audienceOpen);
     const blackout = useValue(slidesState$.blackout);
     const [audience] = useState(() => createAudienceSession({
-        async open(display, fullscreen) {
-            await openOrShowWindow("slides-audience", () => slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } }));
-            await setWindowBounds("slides-audience", { displayId: display.id, x: 0, y: 0, ...display.size });
-            await setWindowFullscreen("slides-audience", fullscreen);
-        },
+        open: openSlidesAudienceWindow,
         async close() {
             const result = await closeWindow("slides-audience");
             if (!result.closed) throw new Error("Closing the audience window was vetoed.");
