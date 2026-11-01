@@ -1,3 +1,4 @@
+import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
 import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
 import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
 import { PixelRatio, View } from "react-native";
@@ -21,6 +22,12 @@ export type { RenderFlash, RenderTreeOptions } from "./renderTree";
 export { layoutText3D, registerText3DFont, text3dInstances } from "./text3d";
 export type { GlyphMotion, Text3DEnter, Text3DFont, Text3DOptions } from "./text3d";
 export type { Animated, CardOptions, CardStyle, GraphOptions, LabelOptions, LabelWeight, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
+
+export { burstInstances, choreographyInstances, railPoint, settleProgress } from "./motion";
+export type { BurstOptions, BurstStyle, ChoreographyOptions, ChoreographyLayout, ChoreographyPart, ChoreographyTransition, PartPose, PartRoute } from "./motion";
+export type { Instance } from "./scene";
+export function Choreography(_: ChoreographyOptions) { return null; }
+export function Burst(_: BurstOptions) { return null; }
 
 export function Camera(_: CameraOptions) { return null; }
 export function Graph(_: GraphOptions) { return null; }
@@ -108,6 +115,8 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
         scene.stages!.push({ stage, parents: stages });
         collect(options.children as ReactNode, [...stages, stage]);
       }
+      else if (child.type === Choreography) add(choreographyInstances(options as ChoreographyOptions), stages);
+      else if (child.type === Burst) add(burstInstances(options as BurstOptions), stages);
       else if (child.type === Camera) scene.camera = options as CameraOptions;
       else if (child.type === Graph) add(graphInstances(options as GraphOptions), stages);
       else if (child.type === Orbs) add(orbInstances(options), stages);

@@ -11,6 +11,13 @@ struct Frame { time:f32, dt:f32, frame:f32, step:f32, aspect:f32, brightness:f32
 @group(0) @binding(1) var<storage,read> uniforms:array<f32>;
 @group(0) @binding(2) var linearSampler:sampler;
 fn vector(i:u32)->vec3f { return vec3f(uniforms[i],uniforms[i+1u],uniforms[i+2u]); }
+// Euler XYZ pose for rigid World meshes; labels retain their packed text fields.
+fn partRotation(base:u32)->mat3x3f {
+ let a=vector(base+20u); let c=cos(a); let s=sin(a);
+ return mat3x3f(vec3f(c.y*c.z,c.y*s.z,-s.y),
+  vec3f(s.x*s.y*c.z-c.x*s.z,s.x*s.y*s.z+c.x*c.z,s.x*c.y),
+  vec3f(c.x*s.y*c.z+s.x*s.z,c.x*s.y*s.z-s.x*c.z,c.x*c.y));
+}
 fn cameraForward()->vec3f { return normalize(vector(4u)-vector(0u)); }
 fn cameraRight()->vec3f {
  let forward=cameraForward();
@@ -114,7 +121,7 @@ fn roundRect(p:vec2f,half:vec2f,radius:f32)->f32 { let q=abs(p)-half+radius; ret
 @vertex fn cardVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->CardVertex {
  let base=slot(iid); let half=cardHalf(base); let margin=uniforms[base+16u]*presence(half)*2.5+.01;
  let local=mix(-half.xy-margin,half.xy+margin,corner(vid));
- var result:CardVertex; result.position=projected(vector(base)+vec3f(local,half.z)); result.local=local; result.instance=iid;
+ var result:CardVertex; result.position=projected(vector(base)+partRotation(base)*vec3f(local,half.z)); result.local=local; result.instance=iid;
  if(uniforms[base+23u]<=.001 || presence(half)<=0.) { result.position=vec4f(2.,2.,0.,1.); }
  return result;
 }
@@ -133,9 +140,9 @@ fn over(dst:vec4f,color:vec3f,alpha:f32)->vec4f { return vec4f(color*alpha+dst.r
 fn blurredStroke(d:f32,width:f32,sigma:f32)->f32 { return width/(2.5066*sigma)*exp(-d*d/(2.*sigma*sigma)); }
 fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniforms[13])*uniforms[14],-8.,8.))); }
 @fragment fn cardFragment(in:CardVertex)->CardResult {
- let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let world=vector(base)+vec3f(p,half.z);
+ let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=vector(base)+rotation*vec3f(p,half.z);
  ${reflection ? "if(world.y<uniforms[36]+.001) { discard; }" : ""}
- if(eye().z<world.z) { discard; }
+ if(dot(rotation[2],eye()-world)<0.) { discard; }
  let pixel=max(length(fwidth(p))*.7071,.00001);
  let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
  let accent=encode(vector(base+4u)); let shown=presence(half); let edge=uniforms[base+17u]/.6;
@@ -189,8 +196,8 @@ fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInsta
  var point=vec3f(0.); var normal=vec3f(0.,1.,0.);
  ${shape}
  ${sdf ? `point=mix(${bounds[0]},${bounds[1]},point/radius*.5+.5)*radius;` : ""}
- let scale=max(vector(base+8u),vec3f(.0001)); let world=origin+point*scale;
- var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(normal/scale);
+ let scale=max(vector(base+8u),vec3f(.0001)); let rotation=partRotation(base); let world=origin+rotation*(point*scale);
+ var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(rotation*(normal/scale));
  result.color=vector(base+4u); result.emissive=uniforms[base+7u]; result.material=vec4f(uniforms[base+27u],uniforms[base+28u],uniforms[base+29u],uniforms[base+30u]);
  result.albedo=vector(base+24u); result.opacity=uniforms[base+23u]; result.instance=iid;
  ${sphere ? `
@@ -215,7 +222,8 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SphereResult {
  let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
  let radii=max(vector(base+8u),vec3f(.0001))*max(uniforms[base+3u],.0001);
- let origin=(eye()-vector(base))/radii; let ray=normalize((in.world-eye())/radii);
+ let rotation=partRotation(base); let inverse=transpose(rotation);
+ let origin=(inverse*(eye()-vector(base)))/radii; let ray=normalize((inverse*(in.world-eye()))/radii);
  let along=dot(origin,ray); let closest=origin-ray*along; let field=1.-dot(closest,closest);
  let edge=max(fwidth(field),.00001);
  if(field<=0. || in.opacity<=.001) { discard; }
@@ -223,13 +231,13 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  var local=vec3f(0.); var hit=vec3f(0.); var clip=vec4f(0.); var found=false;
  for(var root=0u;root<2u;root++) {
   if(roots[root]<0.) { continue; }
-  local=origin+ray*roots[root]; hit=vector(base)+local*radii; clip=projected(hit);
+  local=origin+ray*roots[root]; hit=vector(base)+rotation*(local*radii); clip=projected(hit);
   if(clip.w<=.05 || clip.z<0. || clip.z>clip.w) { continue; }
   ${reflection ? "if(hit.y<uniforms[36]) { continue; }" : ""}
   found=true; break;
  }
  if(!found) { discard; }
- let normal=normalize(local/radii); let facing=max(0.,dot(normal,normalize(eye()-hit)));
+ let normal=normalize(rotation*(local/radii)); let facing=max(0.,dot(normal,normalize(eye()-hit)));
  let emission=(in.color*(.1+.9*pow(facing,3.))+vec3f(.35*pow(facing,16.)))*in.emissive;
  let material=Material(in.albedo,emission,in.material.x,in.material.y);
  let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w);
@@ -241,7 +249,8 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  if(in.opacity<=.001) { discard; }
  let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
  let origin=vector(base); let scale=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
- let rayOrigin=(eye()-origin)/scale; let rayDirection=normalize((in.world-eye())/scale);
+ let rotation=partRotation(base); let inverse=transpose(rotation);
+ let rayOrigin=(inverse*(eye()-origin))/scale; let rayDirection=normalize((inverse*(in.world-eye()))/scale);
  let direction=select(rayDirection,vec3f(.000001),abs(rayDirection)<vec3f(.000001));
  let a=(${bounds[0]}-rayOrigin)/direction; let b=(${bounds[1]}-rayOrigin)/direction;
  let lower=min(a,b); let upper=max(a,b); var distance=max(0.,max(lower.x,max(lower.y,lower.z))); let exitDistance=min(upper.x,min(upper.y,upper.z));
@@ -251,9 +260,9 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
   if(abs(field)<.001) { found=true; break; } distance+=max(.0005,abs(field));
  }
  if(!found) { discard; }
- let hit=origin+local*scale;
+ let hit=origin+rotation*(local*scale);
  ${reflection ? "if(hit.y<uniforms[36]+.001) { discard; }" : ""}
- let e=.001; let normal=normalize(vec3f(sdf(local+vec3f(e,0.,0.))-sdf(local-vec3f(e,0.,0.)),sdf(local+vec3f(0.,e,0.))-sdf(local-vec3f(0.,e,0.)),sdf(local+vec3f(0.,0.,e))-sdf(local-vec3f(0.,0.,e)))/scale);
+ let e=.001; let normal=normalize(rotation*(vec3f(sdf(local+vec3f(e,0.,0.))-sdf(local-vec3f(e,0.,0.)),sdf(local+vec3f(0.,e,0.))-sdf(local-vec3f(0.,e,0.)),sdf(local+vec3f(0.,0.,e))-sdf(local-vec3f(0.,0.,e)))/scale));
  let material=Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y);
  let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w); let clip=projected(hit);
  return SDFResult(vec4f(color*in.opacity,in.opacity),clamp(clip.z/clip.w,0.,1.));
