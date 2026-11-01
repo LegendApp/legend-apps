@@ -51,9 +51,10 @@ const jumpDefinitions = [
     { id: "delete", title: "Delete Slide Number", defaultBindings: ["Backspace"], allowExtraModifiers: true, repeat: true },
 ];
 const escapeDefinitions = [{ id: "close", title: "Close Audience", defaultBindings: ["Escape"], allowExtraModifiers: true }];
-function PresenterKeyboard({ windowId, editingDeck, presenter$, keyboardJump$, audienceOpen, closeAudience, jumpTimeout }: {
+const startDefinitions = [{ id: "start", title: "Start Presentation", defaultBindings: ["Cmd+Enter"] }];
+function PresenterKeyboard({ windowId, editingDeck, presenter$, keyboardJump$, audienceOpen, startAudience, closeAudience, jumpTimeout }: {
     windowId: string; editingDeck: boolean; presenter$: Observable<PresenterSession>;
-    keyboardJump$: Observable<string>; audienceOpen: boolean; closeAudience(): Promise<unknown>; jumpTimeout: { current: ReturnType<typeof setTimeout> | undefined };
+    keyboardJump$: Observable<string>; audienceOpen: boolean; startAudience(): Promise<unknown>; closeAudience(): Promise<unknown>; jumpTimeout: { current: ReturnType<typeof setTimeout> | undefined };
 }) {
     const notesEditing = useValue(presenter$.notesEditing);
     const hasJump = useValue(() => Boolean(keyboardJump$.get()));
@@ -71,6 +72,8 @@ function PresenterKeyboard({ windowId, editingDeck, presenter$, keyboardJump$, a
         handlers: { jump: () => { setCurrentSlide(Number(keyboardJump$.peek()) - 1); keyboardJump$.set(""); }, delete: () => keyboardJump$.set(keyboardJump$.peek().slice(0, -1)) }, onError: console.error });
     useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: escapeDefinitions, scope, enabled: !editingDeck && !notesEditing && audienceOpen,
         handlers: { close: () => { void closeAudience(); } }, onError: console.error });
+    useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: startDefinitions, scope, enabled: !editingDeck && !notesEditing && !audienceOpen,
+        handlers: { start: () => { void startAudience(); } }, onError: console.error });
     return null;
 }
 function Button({ disabled, label, onPress }: {
@@ -560,7 +563,7 @@ export function PresenterWindow() {
         }
     }, []);
     return (<NotesEditingBoundary style={styles.root}>
-      {["slides-presenter", "slides-audience", "slides-notes"].map(windowId => <PresenterKeyboard key={windowId} windowId={windowId} editingDeck={editingDeck} presenter$={presenter$} keyboardJump$={keyboardJump$} audienceOpen={audienceOpen} closeAudience={closeAudience} jumpTimeout={jumpTimeout}/>) }
+      {["slides-presenter", "slides-audience", "slides-notes"].map(windowId => <PresenterKeyboard key={windowId} windowId={windowId} editingDeck={editingDeck} presenter$={presenter$} keyboardJump$={keyboardJump$} audienceOpen={audienceOpen} startAudience={startAudience} closeAudience={closeAudience} jumpTimeout={jumpTimeout}/>) }
       {editingDeck && deckPath ? <DeckEditor path={deckPath} onExit={finishEditing}/> : <>
       <ConnectedPresenterToolbar presenter$={presenter$} audienceOpen={audienceOpen} canEditDeck={Boolean(deckPath)} onEditDeck={() => setEditingDeck(true)} onDisplayChange={selectDisplay} onModeChange={selectMode} onStart={startAudience} onStop={stopAudience}/>
       <PresenterDeckContent keyboardJump$={keyboardJump$} presenter$={presenter$} onNotesEditingChange={setNotesEditing} onSaveNotes={saveSpeakerNotes}/>
