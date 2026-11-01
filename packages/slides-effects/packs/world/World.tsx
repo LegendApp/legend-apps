@@ -1,5 +1,3 @@
-import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
-import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
 import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
 import { PixelRatio, View } from "react-native";
@@ -14,6 +12,9 @@ import { cardInstances, compileTrack, customInstances, graphInstances, labelInst
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
   type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
+// motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
+import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
+import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 
 export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
 export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";
