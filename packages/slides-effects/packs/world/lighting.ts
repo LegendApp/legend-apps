@@ -98,7 +98,8 @@ const v3 = (color: string, scale = 1) => `vec3f(${colorVector(color).map(c => f(
  * Key light and environment WGSL shared by every lit pass. Header slots: 112 key position, 115 intensity, 116 color,
  * 119 shadow half-size, 120 target, 123 softness, 124 environment intensity, 125 shadow strength.
  */
-export function keyLightCode(shadowBinding?: number) {
+/** `shadeKey` false leaves the key term unshadowed, for passes that shade their whole color (the floor). */
+export function keyLightCode(shadowBinding?: number, shadeKey = true) {
   return `
 fn keyDirection()->vec3f { return normalize(vector(120u)-vector(112u)+vec3f(0.,-.00001,0.)); }
 fn keyRight()->vec3f { let d=keyDirection(); return normalize(cross(d,select(vec3f(0.,1.,0.),vec3f(1.,0.,0.),abs(d.y)>.99))); }
@@ -117,16 +118,16 @@ fn keyShadow(world:vec3f,normal:vec3f)->f32 {
  let p=keyProject(world+normal*texel*1.5);
  let uv=vec2f(p.x*.5+.5,.5-p.y*.5);
  if(any(uv<vec2f(0.)) || any(uv>vec2f(1.)) || p.z>=1.) { return 1.; }
- // 16 taps on a jittered 4x4 grid spaced by the softness in texels; a sloped receiver moves away across the kernel, so the bias follows its slope.
+ // A 4x4-cell bilinear PCF (5x5 texel compares with tent weights) on a grid spaced by the softness in texels: smooth and noise-free.
+ // A sloped receiver moves away across the kernel, so the bias follows its slope.
  let slope=min(sqrt(1.-facing*facing)/facing,4.);
  let bias=(texel*.6+texel*soft*2.*slope*.6)/(2.*keyRange());
- let screen=fract(52.9829189*fract(dot(floor(world*512.),vec3f(.06711056,.00583715,.0327))));
- let jitter=vec2f(screen,fract(screen*7.31))-.5;
+ let cell=uv*size/soft-.5; let origin=floor(cell); let t=cell-origin;
  var lit=0.;
- for(var j=0;j<4;j++) { for(var i=0;i<4;i++) {
-  let offset=(vec2f(f32(i),f32(j))-1.5+jitter*.9)*soft;
-  let pixel=clamp(vec2i(uv*size+offset),vec2i(0),vec2i(size)-vec2i(1));
-  lit+=select(0.,1.,p.z-bias<=textureLoad(shadowMap,pixel,0));
+ for(var j=0;j<5;j++) { for(var i=0;i<5;i++) {
+  let pixel=clamp(vec2i((origin+vec2f(f32(i-1),f32(j-1))+.5)*soft),vec2i(0),vec2i(size)-vec2i(1));
+  let w=vec2f(select(select(1.,t.x,i==4),1.-t.x,i==0),select(select(1.,t.y,j==4),1.-t.y,j==0));
+  lit+=w.x*w.y*select(0.,1.,p.z-bias<=textureLoad(shadowMap,pixel,0));
  } }
  return mix(1.,lit/16.,clamp(uniforms[125],0.,1.));
 }`}
@@ -139,7 +140,7 @@ fn keyLight(world:vec3f,normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal
  let visibility=.5/max(.0001,nl*sqrt(nv*nv*(1.-a2)+a2)+nv*sqrt(nl*nl*(1.-a2)+a2));
  let f0=mix(vec3f(.04),albedo,metal); let fresnel=f0+(1.-f0)*pow(1.-max(0.,dot(view,halfVector)),5.);
  let diffuse=albedo*(1.-fresnel)*(1.-metal)/3.14159265;
- return (diffuse+fresnel*distribution*visibility)*nl*vector(116u)*uniforms[115]*keyShadow(world,normal);
+ return (diffuse+fresnel*distribution*visibility)*nl*vector(116u)*uniforms[115]${shadeKey ? "*keyShadow(world,normal)" : ""};
 }
 `;
 }
