@@ -295,6 +295,40 @@ The proportional source is `packages/slides-web/assets/Roboto.ttf`; monospace
 inputs are from [JetBrains Mono v2.304](https://github.com/JetBrains/JetBrainsMono/tree/v2.304).
 Keep the generated source and notices together when rebuilding or installing a pack.
 
+## 3D text
+
+```tsx
+<Text3D id="title" text={"EVERY LETTER\nMOVES ON ITS OWN"} position={[0, 1.2, 0]} size={1.25} depth={0.26}
+  color="#f2f4f8" emissive={0.6} side="#3a3d44" metal={0.85} roughness={0.32}
+  enter={{ at: 0.3, offset: [0, 0.4, 9], spread: [10, 4, 4], rotation: [-40, 70, 25], scale: 0.4, stagger: 0.045, order: "random" }} />
+```
+
+Extruded, beveled type. Each visible glyph is its own instance (`<id>:<index>`), so it moves, turns, scales
+and glows on its own, yet every glyph of one font draws in a single instanced pass. `size` is the em in world
+units; `depth`, `bevel` (thickness) and `bevelWidth` are in em, and `bevelSegments` rounds the bevel. The face
+uses `color` and self-glow `emissive`, so type stays readable under the bloom threshold; the sides and bevel
+use `side`, `metal` and `roughness` (or a `material`) with a soft studio reflection. `align`, `lineHeight`,
+`tracking` and `uppercase` shape the layout; `\n` breaks lines and unsupported characters become `?`.
+
+`enter` flies glyphs in from `offset`, `rotation` (Euler degrees) and `scale` on `step` or slide time `at`, one
+every `stagger` seconds in `forward`, `reverse`, `center` or `random` order, with `spread` adding seeded
+scatter. `glyphs` (an array, or `(index, char, home) => motion`) sets per-glyph `offset`, `rotation`, `scale`,
+`color`, `emissive` and `opacity` tracks and overrides `enter`. `text3dInstances` and `layoutText3D` expose the
+same instances and em layout for custom choreography.
+
+The default font is Barlow Condensed ExtraBold Italic and `mono` selects JetBrains Mono Bold (both SIL Open
+Font License 1.1; the notices ship in `text3d-font.ts` and `text3d-mono.ts`). Bake another font, for example in a private deck, with a build-time tool: install
+`opentype.js@1.3.4` and `earcut@3.0.1` in a tools directory, then run from the repo root
+
+```sh
+NODE_PATH=/path/to/tools/node_modules node packages/slides-effects/scripts/world-text3d.cjs \
+  /path/to/Font.ttf /path/to/LICENSE.txt /path/to/deck/my-font.ts "My Font"
+```
+
+and pass the module's export: `import { font } from "./my-font"` then `<Text3D font={font} … />`. The module
+stores flattened outlines, shading normals and cap triangles; the shader builds caps, bevels and sides, so depth
+and bevel stay runtime options. Only bake fonts whose license allows redistribution with the deck.
+
 ## Render trees
 
 ```tsx
