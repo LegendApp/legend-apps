@@ -5,6 +5,7 @@ import { renderTreeInstances } from "../packs/world/renderTree";
 import { prepareWorldScene, sampleWorldUniforms, instancePosition, instanceOpacity, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { roundedBoxInstances, routedTubeInstances, pillarInstances } from "../packs/world/stage";
 import { routePoint } from "../packs/world/stageMotion";
+import { worldGraphTopology } from "../packs/world/render";
 
 const clock = (time: number, step = 1): ClockSample => ({ slideTime: time, stepTime: time - 2, stepIndex: step, stepOrigins: { 0: 0, 1: 2 } });
 
@@ -84,4 +85,9 @@ test("reused uniform buffers keep route and pillar motion live across samples an
   const pulse = scene.instances.find(i => i.id === "edge:pulse:0:0")!;
   expect(instanceOpacity(pulse, jumped)).toBe(0);
   expect(instancePosition(scene.instances.find(i => i.id === "value:cap")!, jumped)[1]).toBe(0);
+});
+
+test("rounded boxes with the same geometry share one custom draw", () => {
+  const instances = [...roundedBoxInstances({ id: "a", radius: .08 }), ...roundedBoxInstances({ id: "b", radius: .08, position: [2, 0, 0] })];
+  expect(worldGraphTopology(prepareWorldScene({ instances })).customs?.map(draw => draw.count)).toEqual([2]);
 });

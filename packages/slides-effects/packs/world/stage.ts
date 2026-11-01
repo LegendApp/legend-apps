@@ -15,7 +15,15 @@ export type PillarOptions = {
 export function roundedBoxInstances({ radius = 0.1, edge = 0.6, ...options }: RoundedBoxOptions): Instance[] {
   if (!Number.isFinite(radius) || radius < 0 || !Number.isFinite(edge) || edge < 0) throw new Error("RoundedBox needs a nonnegative radius and edge");
   return [{ ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [2, 0.7, 0.35], emissive: options.emissive ?? 0.08,
-  }), custom: { vertexCount: 6 * 8 * 8 * 6, wgsl: `
+  }), custom: roundedBoxGeometry(radius, edge) }];
+}
+
+// One geometry object per shape so equal boxes batch into a single custom draw (draws group by geometry identity).
+const roundedBoxGeometries = new Map<string, { vertexCount: number; wgsl: string }>();
+function roundedBoxGeometry(radius: number, edge: number) {
+  const key = `${radius}:${edge}`;
+  let geometry = roundedBoxGeometries.get(key);
+  if (!geometry) roundedBoxGeometries.set(key, geometry = { vertexCount: 6 * 8 * 8 * 6, wgsl: `
 fn bevelCoordinate(v:f32,half:f32,radius:f32)->f32 {
  let t=abs(v); return sign(v)*select((half-radius)+radius*(t-.25)/.75,t*4.*(half-radius),t<=.25);
 }
@@ -38,7 +46,8 @@ fn shape(iid:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
 fn shade(iid:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
  let base=slot(iid); let color=vector(base+4u); let edge=pow(1.-abs(normal.z),.6)*${edge.toFixed(6)};
  return Material(vector(base+24u),color*(uniforms[base+7u]+edge*.3),uniforms[base+27u],uniforms[base+28u]);
-}` } }];
+}` });
+  return geometry;
 }
 
 /** Straight segments share an arc-length draw track and a fixed pool of pulse beads. */
