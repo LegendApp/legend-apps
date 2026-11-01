@@ -1,6 +1,6 @@
 export type Vec3 = [number, number, number];
 export type Ease = "linear" | "cubic" | "out" | "smoothstep" | "expo" | "spring";
-export type ClockSample = { slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
+export type ClockSample = { entryTime?: number; slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
 export type CameraPose = { position: Vec3; target: Vec3; fov: number; roll: number };
 export type Shot = {
   step?: number; at?: number; position?: Vec3; target?: Vec3; fov?: number; roll?: number;
@@ -128,7 +128,7 @@ export function evaluateCamera(options: CameraOptions, clock: ClockSample, objec
   "worklet";
   let pose = evaluateShots(options, clock, objects, options.shots?.length ?? 0);
   if (previous) {
-    const t = easeProgress(enterDuration <= 0 ? 1 : clock.slideTime / enterDuration, options.ease);
+    const t = easeProgress(enterDuration <= 0 ? 1 : (clock.entryTime ?? clock.slideTime) / enterDuration, options.ease);
     pose = { position: mixVector(previous.position, pose.position, t), target: mixVector(previous.target, pose.target, t),
       fov: previous.fov + (pose.fov - previous.fov) * t, roll: previous.roll + (pose.roll - previous.roll) * t };
   }

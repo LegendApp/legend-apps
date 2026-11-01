@@ -335,6 +335,8 @@ export function sdfInstance(options: SDFOptions): Instance {
 }
 
 export const worldHeaderSize = 128;
+/** Reserved header slots for the projected World clock used by custom WGSL contexts. */
+export const worldClockOffset = 24;
 export const worldInstanceSize = 32;
 export function triggerElapsed(step: number, clock: ClockSample) {
   "worklet";
@@ -675,6 +677,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   const values = cache?.values ?? new Array<number>(worldHeaderSize + count * worldInstanceSize).fill(0);
   const objects: Record<string, Vec3> = {};
   for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance, clock);
+  values[worldClockOffset] = clock.slideTime; values[worldClockOffset + 1] = clock.stepTime; values[worldClockOffset + 2] = clock.stepIndex;
   const camera = sampleWorldCamera(scene, clock, previous, enterDuration);
   values[0] = camera.position[0]; values[1] = camera.position[1]; values[2] = camera.position[2]; values[3] = Math.tan(camera.fov * Math.PI / 360);
   values[4] = camera.target[0]; values[5] = camera.target[1]; values[6] = camera.target[2]; values[7] = camera.roll;

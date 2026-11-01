@@ -1,4 +1,4 @@
-import type { WorldScene } from "./scene";
+import { worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 
 export type CustomGeometry = { wgsl: string; vertexCount: number };
@@ -111,7 +111,7 @@ fn sampleHDR(uv:vec2f)->vec4f { return textureSampleLevel(sceneHDR,linearSampler
 fn sampleDepth(uv:vec2f)->f32 { return depthAt(uv); }
 ${wgsl}
 @fragment fn customPost(@location(0) uv:vec2f)->@location(0) vec4f {
- return customPass(uv,textureSampleLevel(previous,linearSampler,uv,0.),PassContext(frame.time,frame.slideTime,frame.stepTime,frame.step,depthAt(uv)));
+ return customPass(uv,textureSampleLevel(previous,linearSampler,uv,0.),PassContext(uniforms[${worldClockOffset}],uniforms[${worldClockOffset}],uniforms[${worldClockOffset + 1}],uniforms[${worldClockOffset + 2}],depthAt(uv)));
 }`;
 }
 // Linear-sRGB operators adapted from three.js r180, Copyright (c) 2010-2025 three.js authors (MIT).
@@ -170,7 +170,7 @@ fn digit(p:vec2f,value:u32)->f32 {
  let shift=(uv-.5)*uniforms[44]*${toneMapping === "aces" ? "1." : "-1."};
  var color=sceneAt(uv);
  if(uniforms[44]!=0.) { color=vec3f(sceneAt(uv+shift).r,color.g,sceneAt(uv-shift).b); }
- let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
+ let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(uniforms[${worldClockOffset}]*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
  color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;

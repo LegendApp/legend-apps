@@ -45,6 +45,45 @@ import { Background } from "@legend-apps/presentation";
 World animation time restarts on slide entry, including inside `<Background>`.
 This includes drifting objects, scrolling rows, sprays and custom WGSL time uniforms.
 
+## Local builds and navigation
+
+Use `clock="step"` to author every build's `at` keyframes from zero, including
+step 0 on a new slide. Custom geometry and post-pass contexts, ambient motion,
+and grain sample that same projected time. The default `clock="slide"` keeps the existing timeline
+through a slide's steps. `clock="global"` also preserves the deck-wide clock
+when the World is inside a `Background`.
+
+```tsx
+<World id="assembly" clock="step" buildDuration={3} advanceDuration={0.3}>
+  <Box id="part" position={[
+    { at: 0, value: [-4, 0, 0] },
+    { at: 0.2, value: [0, 0, 0], duration: 2.8 },
+  ]} />
+</World>
+```
+
+`buildDuration` declares the settled endpoint in seconds on the chosen clock.
+Include delays and staggered arrivals in that duration. On early Next, the
+current build fast-forwards to that endpoint over `advanceDuration` seconds
+(default 0.3, smoothstep), then navigation starts the next build. Repeated Next
+presses during catch-up coalesce into one advance. Back or another navigation
+cancels the queued advance. All frame sampling stays on the UI thread; pausing
+freezes catch-up with the presentation clock.
+
+With `buildDuration`, Back starts at that endpoint by default. Set
+`replayOnBack` to replay from zero instead. Ambient motion can continue after
+the endpoint. Preparation still samples zero; thumbnails use `previewTime`.
+Without `buildDuration`, navigation keeps its existing immediate behavior.
+
+For step-local scenes, earlier step-triggered tracks are settled and the current
+step starts at zero. Author each build's `at` baseline as the previous build's
+endpoint so catch-up can hand off without a jump. Reuse `<World id>` and
+`enter={{ from: "previous", duration: 0.5 }}` for the existing camera handoff
+across slides. Keep carried parts in both scenes with the same ids and resting
+positions; the local clock does not remove or relocate them. Camera entry does
+not replay on each step. See `apps/slides/examples/3d/world-steps.mdx` for a
+small two-slide deck with local builds and carried geometry.
+
 `Camera.shots` are ordered keyframes with either a `step` or an `at` time in
 seconds. Times and step numbers should increase within their respective clock.
 Each shot inherits unspecified values from the pose sampled when it starts;
@@ -84,7 +123,7 @@ The first value is the baseline. Default scalar/vector transitions last 0.65s.
 Colors use `#RGB` or `#RRGGBB` and interpolate in linear light. Direct entry into
 a later step settles missing earlier steps and animates the current step from
 that state. Scrubbing and reverse navigation do not depend on prior GPU frames.
-Backward navigation restarts the selected step's scripted transition.
+Without an authored `buildDuration`, backward navigation restarts the selected step's scripted transition.
 Keyframe tables and graph activation are sampled in a UI worklet into one storage
 uniform array. This keeps frame work off JavaScript, but uniform evaluation and
 upload still scale with the instance count; the graph API targets 20–60 nodes.

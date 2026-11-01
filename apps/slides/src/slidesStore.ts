@@ -1,6 +1,7 @@
 import { observable, ObservableHint, type OpaqueObject } from "@legendapp/state";
 import type { ComponentType } from "react";
 import type { DeckConfig, PresentationTemplates, PresentationTransitions, SlideConfig } from "@legend-apps/presentation";
+import { deferPresentationAdvance } from "../../../packages/presentation/src/advanceGuard";
 import type { CompileDeckSuccess } from "@legend-apps/presentation";
 
 export type DeckSlide = {
@@ -79,6 +80,7 @@ export function setSlidesState(update: Partial<SlidesState> | ((current: SlidesS
   const slideRestarted = next.currentSlide !== state.currentSlide || next.revision !== state.revision
     || next.retryRevision !== state.retryRevision || (next.audienceOpen && !state.audienceOpen);
   if (slideRestarted) {
+    next.direction = next.currentSlide < state.currentSlide ? "backward" : "forward";
     next.slideStartedAt = performance.now();
   }
   if (slideRestarted || next.currentStep !== state.currentStep) {
@@ -129,6 +131,16 @@ export function setCurrentSlide(index: number) {
 }
 
 export function nextSlide() {
+  const state = getSlidesState();
+  const isCurrent = () => {
+    const current = getSlidesState();
+    return current.currentSlide === state.currentSlide && current.currentStep === state.currentStep &&
+      current.slideStartedAt === state.slideStartedAt && current.stepStartedAt === state.stepStartedAt;
+  };
+  if (!deferPresentationAdvance(advanceSlide, isCurrent)) advanceSlide();
+}
+
+function advanceSlide() {
   const state = getSlidesState();
   const target = getNextPresentationTarget(state);
   if (target.slideIndex === state.currentSlide && target.stepIndex !== state.currentStep) {

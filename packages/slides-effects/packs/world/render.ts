@@ -1,5 +1,5 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
-import { worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
 import { glyphVertexCount, text3dBuffer, text3dCode, text3dFont } from "./text3d";
@@ -79,7 +79,7 @@ fn projected(world:vec3f)->vec4f { ${look.shadowCaster ? "let p=keyProject(world
 struct Material { albedo:vec3f, emissive:vec3f, roughness:f32, metal:f32 }
 struct ShapeContext { time:f32, slideTime:f32, stepTime:f32, step:f32 }
 struct ShapeVertex { position:vec3f, normal:vec3f }
-fn shapeContext()->ShapeContext { return ShapeContext(frame.time,frame.slideTime,frame.stepTime,frame.step); }
+fn shapeContext()->ShapeContext { return ShapeContext(uniforms[${worldClockOffset}],uniforms[${worldClockOffset}],uniforms[${worldClockOffset + 1}],uniforms[${worldClockOffset + 2}]); }
 fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimIntensity:f32,activation:f32)->vec3f {
  let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));
  var color=material.albedo*uniforms[52]+material.emissive*uniforms[18];

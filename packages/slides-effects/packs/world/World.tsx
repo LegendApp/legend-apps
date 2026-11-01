@@ -1,9 +1,10 @@
-import { GPURenderGraph, PresentationCanvasScaleContext, PresentationObservableProvider, samplePlayback, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
-import { Children, Component, Fragment, isValidElement, useContext, useMemo, useState, type ReactNode } from "react";
+import { GPURenderGraph, registerAdvanceGuard, PresentationCanvasScaleContext, PresentationObservableProvider, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
+import { Children, Component, Fragment, isValidElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, View } from "react-native";
-import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
+import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
+import { sampleWorldClock, type CatchUp, type WorldClock } from "./timing";
 import { advanceResolution, createResolutionState } from "./resolution";
 import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
 import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
@@ -94,6 +95,9 @@ export type WorldProps = {
   toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; emissiveScale?: Animated<number>;
   quality?: WorldScene["quality"]; exposure?: Animated<number>; previewTime?: number; borderRadius?: number;
   renderScale?: number;
+  clock?: WorldClock;
+  /** End time of this build, in seconds; enables early-advance settling and settled back steps. */
+  buildDuration?: number; advanceDuration?: number; replayOnBack?: boolean;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
   children?: ReactNode; accessibilityLabel?: string;
   postOrder?: WorldScene["postOrder"];
@@ -102,7 +106,7 @@ export function World(props: WorldProps) {
   const background = usePresentationValue("playbackScope") === "background";
   // id defines a continuity boundary; changing it creates a fresh sampled origin.
   const surface = <WorldSurface key={props.id ?? "world"} {...props} />;
-  return background ? <WorldSlideClock>{surface}</WorldSlideClock> : surface;
+  return background && props.clock !== "global" ? <WorldSlideClock>{surface}</WorldSlideClock> : surface;
 }
 function WorldSlideClock({ children }: { children: ReactNode }) {
   const sourceRuntime$ = usePresentation$();
@@ -194,7 +198,7 @@ function WorldSurface(props: WorldProps) {
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  previewTime = 4, borderRadius = 0, renderScale = 1, enter, fallback, active = true, prepared, topology, continuity, origin, resolution }:
+  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, topology, continuity, origin, resolution }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; topology: string; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
@@ -203,7 +207,43 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   // One UI copy of the baked scene shared by both worklets; capturing it in each closure copied it twice.
   const scene = useMemo(() => makeMutable(prepared), [prepared]);
   const playback = usePlayback();
-  const sampleClock = samplePlayback;
+  if (buildDuration !== undefined && (!Number.isFinite(buildDuration) || buildDuration < 0)) throw new Error("World buildDuration must be nonnegative");
+  if (!Number.isFinite(advanceDuration) || advanceDuration < 0) throw new Error("World advanceDuration must be nonnegative");
+  const phase = usePresentationValue("playbackPhase");
+  const direction = usePresentationValue("direction");
+  const catchUp = useSharedValue<CatchUp | null>(null);
+  const requestId = useRef(0);
+  const completion = useRef<{ request: number; resolve: () => void } | undefined>(undefined);
+  const finish = useCallback((request: number) => {
+    if (completion.current?.request === request) {
+      const { resolve } = completion.current;
+      completion.current = undefined;
+      resolve();
+    }
+  }, []);
+  const sampleClock = sampleWorldClock;
+  const settledBack = direction === "backward" && !replayOnBack;
+  useEffect(() => {
+    if (!active || phase !== "playing" || buildDuration === undefined) return;
+    const remove = registerAdvanceGuard(() => new Promise<void>(resolve => {
+      const request = ++requestId.current;
+      completion.current = { request, resolve };
+      runOnUI(() => {
+        "worklet";
+        const state = playback.value;
+        const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack);
+        const from = clockMode === "step" ? clock.stepTime : clock.slideTime;
+        if (state.phase !== "playing" || from >= buildDuration || advanceDuration === 0) runOnJS(finish)(request);
+        else catchUp.value = { request, key: `${state.slideKey}/${state.stepKey}`, start: state.slideTime, from, to: buildDuration };
+      })();
+    }));
+    return () => { remove(); if (completion.current) finish(completion.current.request); };
+  }, [active, phase, buildDuration, advanceDuration, playback, previewTime, clockMode, settledBack, catchUp, finish]);
+  useAnimatedReaction(() => {
+    "worklet";
+    const state = playback.value, pending = catchUp.value;
+    return pending && (pending.key !== `${state.slideKey}/${state.stepKey}` || state.slideTime - pending.start >= advanceDuration) ? pending.request : null;
+  }, (request, previous) => { "worklet"; if (request !== null && request !== previous) runOnJS(finish)(request); }, [playback, catchUp, advanceDuration, finish]);
   const cameraEvaluator = sampleWorldCamera;
   const sampleUniforms = sampleWorldUniforms;
   const resolutionEvaluator = advanceResolution;
@@ -223,23 +263,22 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   }, [renderScale, adaptivePlayback]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
-  const phase = usePresentationValue("playbackPhase");
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
   useAnimatedReaction(() => playback.value, state => {
     "worklet";
     if (!continuity || !active || state.phase !== "playing") return;
     if (origin.value.key !== state.slideKey) origin.value = { key: state.slideKey, pose: continuePrevious ? continuity.value : null };
-    const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
+    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     continuity.value = cameraEvaluator(scene.value, clock, origin.value.pose, enterDuration);
-  }, [scene, playback, continuePrevious, enterDuration, previewTime, active]);
+  }, [scene, playback, continuePrevious, enterDuration, previewTime, active, clockMode, buildDuration, settledBack, catchUp, advanceDuration]);
   const uniforms = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
-    const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
+    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
     return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale]);
+  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
