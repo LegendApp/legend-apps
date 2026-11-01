@@ -1,10 +1,11 @@
-import { d, tgpu } from "typegpu";
+import { d } from "typegpu";
+import { floatLayout, loaderCode, type FloatField, type FloatFields } from "./layout";
 import type { Animated } from "./scene";
 import type { Vec3 } from "./camera";
 
 /** Effect parameters are scalars or 3-vectors; the same TypeGPU struct types the TS writer and the WGSL `params()` loader. */
-export type WorldEffectParam = d.F32 | d.Vec3f;
-export type WorldEffectParams = Record<string, WorldEffectParam>;
+export type WorldEffectParam = FloatField;
+export type WorldEffectParams = FloatFields;
 type ParamValue<T> = T extends d.Vec3f ? Animated<Vec3 | string> : Animated<number>;
 export type WorldEffectValues<P extends WorldEffectParams> = { [K in keyof P]?: ParamValue<P[K]> };
 
@@ -32,7 +33,9 @@ export type WorldEffectDefinition<P extends WorldEffectParams, O> = {
   build(context: WorldEffectContext<O>): WorldEffectGraph;
 };
 export type WorldEffect<P extends WorldEffectParams = WorldEffectParams, O = Record<string, unknown>> = {
-  definition: WorldEffectDefinition<P, O>; struct: d.WgslStruct<P>; size: number;
+  definition: WorldEffectDefinition<P, O>; struct: d.WgslStruct<P>;
+  /** Float offset of each param from the effect's base, and their total. */
+  offsets: Record<keyof P, number>; size: number;
   (values?: WorldEffectValues<P>, options?: O): WorldEffectUse;
 };
 /** A deck's configured effect. Options must be JSON: they select pipeline topology; animated values travel as params. */
@@ -44,30 +47,20 @@ export function worldEffect(name: string) {
   if (!effect) throw new Error(`Unknown World effect: ${name}`);
   return effect;
 }
-const width = (type: WorldEffectParam) => type.type === "vec3f" ? 3 : 1;
 
 /** Declares a TypeGPU post effect for the World render graph. Re-defining a name replaces it, so hot reload picks up edits. */
 export function defineWorldEffect<P extends WorldEffectParams, O = Record<string, unknown>>(definition: WorldEffectDefinition<P, O>): WorldEffect<P, O> {
   if (!/^[a-z][a-z0-9-]*$/.test(definition.name)) throw new Error(`World effect name must be kebab-case: ${definition.name}`);
   const struct = d.struct(definition.params).$name(`${definition.name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase())}Params`);
-  const size = Object.values(definition.params).reduce((sum, type) => sum + width(type), 0);
+  const { offsets, size } = floatLayout(definition.params);
   const effect = Object.assign((values: WorldEffectValues<P> = {}, options = {} as O): WorldEffectUse => {
     for (const key of Object.keys(values)) if (!(key in definition.params)) throw new Error(`World effect ${definition.name} has no param ${key}`);
     return { effect: definition.name, values: { ...definition.defaults, ...values } as WorldEffectUse["values"], options: options as Record<string, unknown> };
-  }, { definition, struct, size }) as WorldEffect<P, O>;
+  }, { definition, struct, offsets, size }) as WorldEffect<P, O>;
   registry.set(definition.name, effect);
   return effect;
 }
 
-/** Float offset of each param from the effect's base; scalars take one slot, vectors three. */
-export function paramLayout(effect: WorldEffect<any, any>) {
-  let offset = 0;
-  return Object.entries(effect.definition.params as WorldEffectParams).map(([key, type]) => {
-    const field = { key, offset, vector: width(type) === 3 };
-    offset += width(type);
-    return field;
-  });
-}
 /**
  * WGSL for the typed params struct and `params()`, which loads it from the World uniform array.
  * `slots` binds fields to fixed header indices instead of the effect's appended block (built-in effects only).
@@ -75,9 +68,5 @@ export function paramLayout(effect: WorldEffect<any, any>) {
 export function paramsCode(effect: WorldEffect<any, any>, base: number, slots?: Record<string, number>) {
   // WGSL has no empty structs.
   if (!effect.size) return "";
-  const fields = paramLayout(effect).map(({ key, offset, vector }) => {
-    const index = slots?.[key] ?? base + offset;
-    return vector ? `vector(${index}u)` : `uniforms[${index}]`;
-  });
-  return tgpu.resolve({ externals: { Params: effect.struct }, template: `\nfn params()->Params { return Params(${fields.join(",")}); }\n` });
+  return loaderCode(effect.struct, "fn params()", key => `${slots?.[key] ?? base + effect.offsets[key]}u`);
 }

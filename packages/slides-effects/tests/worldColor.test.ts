@@ -35,7 +35,7 @@ test("luminance bloom preserves HDR color above the threshold and leaves soft-kn
   expect(code()).toContain("soft*soft");
   expect(code("unreal")).toContain("dot(color,vec3f(.2126,.7152,.0722))");
   expect(code("unreal")).toContain("color*smoothstep(params().threshold,params().threshold+.01,brightness)");
-  expect(code("unreal")).toContain("BloomParams(uniforms[9],uniforms[10],uniforms[11])");
+  expect(code("unreal")).toContain("BloomParams(uniforms[9u],uniforms[10u],uniforms[11u])");
 });
 
 test("Unreal bloom radius redistributes mip energy without adding render passes", () => {

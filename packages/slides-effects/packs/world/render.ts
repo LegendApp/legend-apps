@@ -1,9 +1,10 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
-import { worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { instanceField, WorldInstance, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
 import { d } from "typegpu";
-import { defineWorldEffect, paramLayout, paramsCode, worldEffect, type WorldEffect, type WorldEffectPass, type WorldEffectStage } from "./effects";
+import { loaderCode } from "./layout";
+import { defineWorldEffect, paramsCode, worldEffect, type WorldEffect, type WorldEffectPass, type WorldEffectStage } from "./effects";
 import { glyphVertexCount, text3dBuffer, text3dCode, text3dFont } from "./text3d";
 import { contactShadowCode, environmentCode, floorMarkingsCode, keyLightCode, type FloorMarkings } from "./lighting";
 import { depthCode } from "./post";
@@ -55,19 +56,19 @@ const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
 ` },
   tube: { count: 12 * 6 * 6, code: `
   let cell=vid/6u; let uv=(vec2f(f32(cell%12u),f32(cell/12u))+corner(vid))/vec2f(12.,6.);
-  let endpoint=vector(base+12u)-origin;
-  let control=endpoint*.5+vec3f(0.,length(endpoint)*uniforms[base+15u],0.);
+  let endpoint=part.endpoint-origin;
+  let control=endpoint*.5+vec3f(0.,length(endpoint)*part.curve,0.);
   let t=uv.x; let tangent=normalize(2.*(1.-t)*control+2.*t*(endpoint-control));
   let axis=select(vec3f(0.,1.,0.),vec3f(1.,0.,0.),abs(tangent.y)>.95);
   let right=normalize(cross(tangent,axis)); let up=cross(right,tangent);
   normal=right*cos(uv.y*6.2831853)+up*sin(uv.y*6.2831853);
-  point=2.*(1.-t)*t*control+t*t*endpoint+normal*uniforms[base+19u];
+  point=2.*(1.-t)*t*control+t*t*endpoint+normal*part.thickness;
 ` },
   ring: { count: 128 * 6 * 6, code: `
   let cell=vid/6u; let uv=(vec2f(f32(cell%128u),f32(cell/128u))+corner(vid))/vec2f(128.,6.);
   let a=uv.x*6.2831853; let b=uv.y*6.2831853; let radial=vec3f(cos(a),0.,sin(a));
   normal=radial*cos(b)+vec3f(0.,sin(b),0.);
-  point=radial*radius+normal*uniforms[base+19u];
+  point=radial*radius+normal*part.thickness;
 ` },
 };
 
@@ -192,6 +193,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  return CardResult(vec4f(color,alpha),depth);
 }`;
 }
+const instanceLoader = loaderCode(WorldInstance, "fn instanceAt(base:u32)", key => `base+${instanceField[key as keyof typeof instanceField]}u`);
 function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
   const shape = custom ? `let shapeVertex=shape(geometryId(iid),vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
@@ -200,17 +202,18 @@ function geometryCode(kind: PrimitiveKind, offset: number, lights: number, refle
 ${look.shadowCaster ? "@fragment fn shadowFragment(in:WorldVertex) { if(in.opacity<.5) { discard; } }" : ""}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
-${custom ? "fn geometryId(iid:u32)->u32 { let marker=uniforms[slot(iid)+31u]; if(marker>0.) { return u32(marker)-1u; } return iid; }" : ""}
+${instanceLoader}
+${custom ? "fn geometryId(iid:u32)->u32 { let marker=instanceAt(slot(iid)).geometry; if(marker>0.) { return u32(marker)-1u; } return iid; }" : ""}
 @vertex fn worldVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->WorldVertex {
- let base=slot(iid);
- let origin=vector(base); let radius=max(uniforms[base+3u],.0001);
+ let base=slot(iid); let part=instanceAt(base);
+ let origin=part.position; let radius=max(part.radius,.0001);
  var point=vec3f(0.); var normal=vec3f(0.,1.,0.);
  ${shape}
  ${sdf ? `point=mix(${bounds[0]},${bounds[1]},point/radius*.5+.5)*radius;` : ""}
- let scale=max(vector(base+8u),vec3f(.0001)); let rotation=partRotation(base); let world=origin+rotation*(point*scale);
+ let scale=max(part.scale,vec3f(.0001)); let rotation=partRotation(base); let world=origin+rotation*(point*scale);
  var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(rotation*(normal/scale));
- result.color=vector(base+4u); result.emissive=uniforms[base+7u]; result.material=vec4f(uniforms[base+27u],uniforms[base+28u],uniforms[base+29u],uniforms[base+30u]);
- result.albedo=vector(base+24u); result.opacity=uniforms[base+23u]; result.instance=iid;
+ result.color=part.color; result.emissive=part.emissive; result.material=vec4f(part.roughness,part.metal,part.rim,part.activation);
+ result.albedo=part.albedo; result.opacity=part.opacity; result.instance=iid;
  ${sphere ? `
  let center=projected(origin); let radii=scale*radius;
  let extent=max(radii.x,max(radii.y,radii.z));
@@ -231,10 +234,10 @@ ${custom ? "fn geometryId(iid:u32)->u32 { let marker=uniforms[slot(iid)+31u]; if
 ${sphere ? `
 struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SphereResult {
- let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
- let radii=max(vector(base+8u),vec3f(.0001))*max(uniforms[base+3u],.0001);
+ let base=slot(in.instance); let part=instanceAt(base);
+ let radii=max(part.scale,vec3f(.0001))*max(part.radius,.0001);
  let rotation=partRotation(base); let inverse=transpose(rotation);
- let origin=(inverse*(eye()-vector(base)))/radii; let ray=normalize((inverse*(in.world-eye()))/radii);
+ let origin=(inverse*(eye()-part.position))/radii; let ray=normalize((inverse*(in.world-eye()))/radii);
  let along=dot(origin,ray); let closest=origin-ray*along; let field=1.-dot(closest,closest);
  let edge=max(fwidth(field),.00001);
  if(field<=0. || in.opacity<=.001) { discard; }
@@ -242,7 +245,7 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  var local=vec3f(0.); var hit=vec3f(0.); var clip=vec4f(0.); var found=false;
  for(var root=0u;root<2u;root++) {
   if(roots[root]<0.) { continue; }
-  local=origin+ray*roots[root]; hit=vector(base)+rotation*(local*radii); clip=projected(hit);
+  local=origin+ray*roots[root]; hit=part.position+rotation*(local*radii); clip=projected(hit);
   if(clip.w<=.05 || clip.z<0. || clip.z>clip.w) { continue; }
   ${reflection ? "if(hit.y<uniforms[36]) { continue; }" : ""}
   found=true; break;
@@ -258,8 +261,8 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SDFResult {
  if(in.opacity<=.001) { discard; }
- let base=${worldHeaderSize}u+(in.instance+${offset}u)*${worldInstanceSize}u;
- let origin=vector(base); let scale=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001));
+ let base=slot(in.instance); let part=instanceAt(base);
+ let origin=part.position; let scale=max(part.scale*part.radius,vec3f(.0001));
  let rotation=partRotation(base); let inverse=transpose(rotation);
  let rayOrigin=(inverse*(eye()-origin))/scale; let rayDirection=normalize((inverse*(in.world-eye()))/scale);
  let direction=select(rayDirection,vec3f(.000001),abs(rayDirection)<vec3f(.000001));
@@ -290,14 +293,14 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 }
 // Depth-only sphere draw from the key light: a light-facing disc. Other shapes reuse their scene vertex shader in light space.
 function sphereShadowCode(offset: number) {
-  return `${worldBindings}${triangleCorner}${keyLightCode()}
+  return `${worldBindings}${triangleCorner}${keyLightCode()}${instanceLoader}
 struct ShadowVertex { @builtin(position) position:vec4f, @location(0) local:vec2f }
 @vertex fn shadowVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->ShadowVertex {
- let base=${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u;
- let r=max(vector(base+8u),vec3f(.0001))*max(uniforms[base+3u],.0001); let local=corner(vid)*2.-1.;
- let p=keyProject(vector(base)+keyRight()*local.x*max(r.x,r.z)+keyUp()*local.y*r.y);
+ let part=instanceAt(${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u);
+ let r=max(part.scale,vec3f(.0001))*max(part.radius,.0001); let local=corner(vid)*2.-1.;
+ let p=keyProject(part.position+keyRight()*local.x*max(r.x,r.z)+keyUp()*local.y*r.y);
  var result:ShadowVertex; result.local=local; result.position=vec4f(p.xy,clamp(p.z,0.,1.),1.);
- if(uniforms[base+23u]<.5) { result.position=vec4f(2.,2.,0.,1.); }
+ if(part.opacity<.5) { result.position=vec4f(2.,2.,0.,1.); }
  return result;
 }
 @fragment fn shadowFragment(in:ShadowVertex) { if(dot(in.local,in.local)>1.) { discard; } }`;
@@ -669,7 +672,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
       }
     });
     if (!graph.add) { color = graph.passes.at(-1)!.output; return undefined; }
-    const gain = slots?.[graph.add.gain] ?? base + paramLayout(effect).find(field => field.key === graph.add!.gain)!.offset;
+    const gain = slots?.[graph.add.gain] ?? base + effect.offsets[graph.add.gain];
     if (fuse) return { source: graph.add.source, gain: `uniforms[${gain}]` };
     fullscreen(`${prefix}-composite`, `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;

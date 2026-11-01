@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { d } from "typegpu";
 import { defineWorldEffect, type WorldEffectGraph } from "../../../../packages/slides-effects/packs/world/effects";
 import { buildWorldGraph } from "../../../../packages/slides-effects/packs/world/render";
-import { prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../../../../packages/slides-effects/packs/world/scene";
+import { instanceField, prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../../../../packages/slides-effects/packs/world/scene";
 
 const clock = (stepIndex: number) => ({ slideTime: 2, stepTime: 1, stepIndex, stepOrigins: {} as Record<number, number> });
 
@@ -27,7 +27,7 @@ test("World effects get typed params after the instances, named bindings and Pas
   expect(ids.slice(ids.indexOf("bloom-composite"))).toEqual(["bloom-composite", "test-tint-2-blur", "test-tint-2-mix", "tonemap", "test-tint-blur", "test-tint-mix", "screen"]);
   const mix = graph.passes.find(pass => pass.id === "test-tint-mix")!;
   expect(mix.code).toContain("struct TestTintParams {");
-  expect(mix.code).toContain(`fn params()->TestTintParams { return TestTintParams(uniforms[${base}],vector(${base + 1}u)); }`);
+  expect(mix.code).toContain(`fn params()->TestTintParams { return TestTintParams(uniforms[${base}u],vector(${base + 1}u)); }`);
   expect(mix.code).toContain("@group(0) @binding(4) var blurred:texture_2d<f32>;");
   expect(mix.code).toContain("texture_depth_multisampled_2d");
   for (const step of [0, 1]) {
@@ -42,4 +42,16 @@ test("World effects reject unknown params and placements", () => {
   expect(() => testTint({ strength: 1 } as never)).toThrow("has no param strength");
   expect(() => buildWorldGraph(prepareWorldScene({ instances: [], effects: [{ use: testTint(), before: "scene" }] }))).toThrow("Invalid World post-pass placement");
   expect(() => prepareWorldScene({ instances: [], effects: [{ use: { effect: "missing", values: {}, options: {} } }] })).toThrow("Unknown World effect: missing");
+});
+
+test("World mesh instances write and load the same typed WorldInstance layout", () => {
+  const scene = prepareWorldScene({ instances: [primitive("box", { position: [1, 2, 3], color: "#ff0000", size: 2 })] });
+  const values = sampleWorldUniforms(scene, clock(0)), base = worldHeaderSize;
+  expect(worldInstanceSize).toBe(32);
+  expect([values[base + instanceField.position], values[base + instanceField.position + 2], values[base + instanceField.radius]]).toEqual([1, 3, 2]);
+  expect(values[base + instanceField.color]).toBe(1);
+  const code = buildWorldGraph(scene).passes.find(pass => pass.id === "scene-box")!.code;
+  expect(code).toContain("struct WorldInstance {");
+  expect(code).toContain(`vector(base+${instanceField.color}u)`);
+  expect(code).toContain("result.color=part.color;");
 });

@@ -6,7 +6,9 @@ import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNo
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
 import type { GlyphInstance } from "./text3d";
 import type { EnvironmentOptions, FloorMarkings, KeyLightOptions } from "./lighting";
-import { paramLayout, worldEffect, type WorldEffectStage, type WorldEffectUse } from "./effects";
+import { worldEffect, type WorldEffectStage, type WorldEffectUse } from "./effects";
+import { d } from "typegpu";
+import { floatLayout } from "./layout";
 
 /** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
@@ -339,7 +341,19 @@ export function sdfInstance(options: SDFOptions): Instance {
 export const worldHeaderSize = 128;
 /** Reserved header slots for the projected World clock used by custom WGSL contexts. */
 export const worldClockOffset = 24;
-export const worldInstanceSize = 32;
+/**
+ * One mesh instance's 32 floats, shared by the TS writer and the WGSL `instanceAt` loader. Labels and Text3D glyphs
+ * pack their own fields into `detail`, `endpoint`, `curve`, `extra` and `thickness`.
+ */
+export const WorldInstance = d.struct({
+  position: d.vec3f, radius: d.f32, color: d.vec3f, emissive: d.f32, scale: d.vec3f, detail: d.f32, endpoint: d.vec3f, curve: d.f32,
+  extra: d.vec3f, thickness: d.f32, rotation: d.vec3f, opacity: d.f32, albedo: d.vec3f, roughness: d.f32, metal: d.f32, rim: d.f32,
+  activation: d.f32, geometry: d.f32,
+}).$name("WorldInstance");
+const instanceLayout = floatLayout(WorldInstance.propTypes);
+/** Float offset of each WorldInstance field from the instance's base. */
+export const instanceField = instanceLayout.offsets;
+export const worldInstanceSize = instanceLayout.size;
 export function triggerElapsed(step: number, clock: ClockSample) {
   "worklet";
   if (clock.stepIndex < step) return -1;
@@ -664,6 +678,7 @@ export function settledKey(settle: NonNullable<Instance["settle"]>, clock: Clock
   }
   return clock.stepIndex * 4096 + finished;
 }
+const I = instanceField;
 export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
@@ -755,18 +770,18 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       scale = [scale[0], Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum))), scale[2]];
     }
     if (part) {
-      for (let axis = 0; axis < 3; axis++) values[index + 20 + axis] = part.rotation[axis];
+      for (let axis = 0; axis < 3; axis++) values[index + I.rotation + axis] = part.rotation[axis];
       const end = instance.choreography!.endOffset;
       endpoint = [position[0] + end[0], position[1] + end[1], position[2] + end[2]];
     } else if (instance.burst) {
       const rotation = sampleBurst(instance.burst, clock).rotation;
-      for (let axis = 0; axis < 3; axis++) values[index + 20 + axis] = rotation[axis];
+      for (let axis = 0; axis < 3; axis++) values[index + I.rotation + axis] = rotation[axis];
     }
     let color = part?.color ?? sampleTrack(instance.color, clock);
     const activation = instance.graph ? activationAt(instance.graph.node, instance.graph.nodes, instance.graph.activate, clock) : 1;
     const dim = instance.graph?.dim ?? color;
-    values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2];
-    values[index + 3] = sampleTrack(instance.size, clock) * (instance.voxel ? instanceOpacity(instance, clock) : 1);
+    values[index + I.position] = position[0]; values[index + I.position + 1] = position[1]; values[index + I.position + 2] = position[2];
+    values[index + I.radius] = sampleTrack(instance.size, clock) * (instance.voxel ? instanceOpacity(instance, clock) : 1);
     let emissive = sampleTrack(instance.emissive, clock) * activation;
     if (instance.pulse?.tail) emissive *= 0.3;
     if (instance.rows && !instance.rows.ghost) {
@@ -780,12 +795,12 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       emissive = emissive * (1 - 0.6 * outside) + glow * (instance.rows.ghost ? 0.5 : 0.35) * (instance.rows.options.recycle?.glow ?? 1);
     }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
-    values[index + 4] = dim[0] + (color[0] - dim[0]) * activation;
-    values[index + 5] = dim[1] + (color[1] - dim[1]) * activation;
-    values[index + 6] = dim[2] + (color[2] - dim[2]) * activation;
-    values[index + 7] = emissive;
-    values[index + 8] = scale[0]; values[index + 9] = scale[1]; values[index + 10] = scale[2];
-    values[index + 12] = endpoint[0]; values[index + 13] = endpoint[1]; values[index + 14] = endpoint[2];
+    values[index + I.color] = dim[0] + (color[0] - dim[0]) * activation;
+    values[index + I.color + 1] = dim[1] + (color[1] - dim[1]) * activation;
+    values[index + I.color + 2] = dim[2] + (color[2] - dim[2]) * activation;
+    values[index + I.emissive] = emissive;
+    values[index + I.scale] = scale[0]; values[index + I.scale + 1] = scale[1]; values[index + I.scale + 2] = scale[2];
+    values[index + I.endpoint] = endpoint[0]; values[index + I.endpoint + 1] = endpoint[1]; values[index + I.endpoint + 2] = endpoint[2];
     let curve = instance.curve;
     if (instance.pulse?.tail) {
       const pulse = instance.pulse, range = pulseRange(pulse, clock);
@@ -794,23 +809,23 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       const chord = Math.hypot(endpoint[0] - position[0], endpoint[1] - position[1], endpoint[2] - position[2]);
       curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
     }
-    values[index + 15] = curve; values[index + 19] = instance.thickness;
+    values[index + I.curve] = curve; values[index + I.thickness] = instance.thickness;
     if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; }
-    values[index + 23] = instanceOpacity(instance, clock);
+    values[index + I.opacity] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {
       const sampledAlbedo = part?.color && !("glyph" in instance) ? part.color : sampleTrack(material.albedo, clock);
       const albedo = instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo;
-      values[index + 24] = albedo[0]; values[index + 25] = albedo[1]; values[index + 26] = albedo[2];
-    } else { values[index + 24] = values[index + 4]; values[index + 25] = values[index + 5]; values[index + 26] = values[index + 6]; }
-    values[index + 27] = sampleTrack(material.roughness, clock); values[index + 28] = sampleTrack(material.metal, clock); values[index + 29] = sampleTrack(material.rim, clock) * activation;
-    values[index + 30] = activation;
+      values[index + I.albedo] = albedo[0]; values[index + I.albedo + 1] = albedo[1]; values[index + I.albedo + 2] = albedo[2];
+    } else { values[index + I.albedo] = values[index + I.color]; values[index + I.albedo + 1] = values[index + I.color + 1]; values[index + I.albedo + 2] = values[index + I.color + 2]; }
+    values[index + I.roughness] = sampleTrack(material.roughness, clock); values[index + I.metal] = sampleTrack(material.metal, clock); values[index + I.rim] = sampleTrack(material.rim, clock) * activation;
+    values[index + I.activation] = activation;
     if (instance.glyph) {
       const glyph = instance.glyph, rotation = sampleTrack(glyph.rotation, clock);
       values[index + 11] = glyph.index; values[index + 12] = rotation[0]; values[index + 13] = rotation[1]; values[index + 14] = rotation[2];
       values[index + 15] = glyph.pivot[1]; values[index + 16] = glyph.depth; values[index + 17] = glyph.bevel; values[index + 18] = glyph.bevelWidth; values[index + 19] = glyph.pivot[0];
     }
-    values[index + 31] = instance.choreography && instance.customIndex !== undefined ? instance.customIndex + 1 : 0;
+    values[index + I.geometry] = instance.choreography && instance.customIndex !== undefined ? instance.customIndex + 1 : 0;
     // Text3D's published instance layout stores its local Euler degrees in fields 12–14.
     // Keep this after shape-specific fields so the glyph and rigid pose compose once.
     if (part && "glyph" in instance) {
@@ -926,8 +941,8 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   let uniformCount = worldHeaderSize + instances.length * worldInstanceSize;
   const effectUses = (scene.effects ?? []).map(({ use, before, after }) => {
     const effect = worldEffect(use.effect), base = uniformCount;
-    for (const { key, offset, vector } of paramLayout(effect)) {
-      if (vector) colorTracks.push({ index: base + offset, track: compileTrack(use.values[key] as Animated<Vec3 | string>, value => typeof value === "string" ? colorVector(value) : value) });
+    for (const [key, offset] of Object.entries(effect.offsets)) {
+      if (effect.definition.params[key].type === "vec3f") colorTracks.push({ index: base + offset, track: compileTrack(use.values[key] as Animated<Vec3 | string>, value => typeof value === "string" ? colorVector(value) : value) });
       else fields.push([base + offset, use.values[key] as Animated<number>]);
     }
     uniformCount += effect.size;
