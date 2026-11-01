@@ -19,7 +19,7 @@ for (const quality of ["low", "medium", "high"] as const) {
       expect(draw.code).toContain("@builtin(frag_depth)");
       expect(draw.code).toContain("if(field<=0.");
       expect(draw.code).toContain("fwidth(field)");
-      expect(draw.code).toContain("normal=normalize(local/radii)");
+      expect(draw.code).toContain("normal=normalize(rotation*(local/radii))");
       expect(draw.code).toContain("(iid+1u)");
     }
     const reflection = graph.targets.find(target => target.id === "reflect")!;
