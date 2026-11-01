@@ -231,7 +231,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (origin.value.key !== state.slideKey) origin.value = { key: state.slideKey, pose: continuePrevious ? continuity.value : null };
     const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
     continuity.value = cameraEvaluator(scene.value, clock, origin.value.pose, enterDuration);
-  }, [scene, continuePrevious, enterDuration, previewTime, active]);
+  }, [scene, playback, continuePrevious, enterDuration, previewTime, active]);
   const uniforms = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
@@ -239,7 +239,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
     return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [scene, previewTime, enterDuration, entryPose, effectiveScale]);
+  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
