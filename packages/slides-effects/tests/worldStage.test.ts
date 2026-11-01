@@ -25,11 +25,15 @@ test("camera spline visits via points, cranes, and drifts only after settling", 
 test("route draw-in and pulses share arc length through orthogonal bends", () => {
   const path: [number, number, number][] = [[0, 0, 0], [0, 1, 0], [3, 1, 0]];
   expect(routePoint(path, [0, 1, 4], 2)).toEqual([1, 1, 0]);
-  const instances = routedTubeInstances({ id: "route", path, draw: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 2, ease: "linear" }], pulses: [{ step: 1, duration: 2 }] });
+  const instances = routedTubeInstances({ id: "route", path, material: { albedo: "#000000", roughness: .3, metal: .8 }, draw: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 2, ease: "linear" }], pulses: [{ step: 1, duration: 2 }] });
   const scene = prepareWorldScene({ instances }), sample = clock(3), values = sampleWorldUniforms(scene, sample);
   const segment = scene.instances.findIndex(i => i.id === "route:1"), base = worldHeaderSize + segment * worldInstanceSize;
   expect(Array.from(values.slice(base + 12, base + 15))).toEqual([1, 1, 0]);
+  expect(Array.from(values.slice(base + 24, base + 27))).toEqual([0, 0, 0]);
+  expect(values[base + 27]).toBeCloseTo(.3);
+  expect(values[base + 28]).toBeCloseTo(.8);
   const bead = instances.find(i => i.id === "route:pulse:0:0")!;
+  expect(bead.material).toBeUndefined();
   expect(instancePosition(bead, sample)).toEqual([1, 1, 0]);
   expect(instanceOpacity(bead, clock(1, 0))).toBe(0);
   expect(instanceOpacity(bead, clock(5))).toBe(0);
