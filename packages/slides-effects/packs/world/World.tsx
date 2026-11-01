@@ -20,7 +20,7 @@ export type { Shot, CameraPose, Vec3 } from "./camera";
 export type { RenderFlash, RenderTreeOptions } from "./renderTree";
 export type { Animated, CardOptions, CardStyle, GraphOptions, LabelOptions, LabelWeight, RecycleOptions, RowLabel, OrbsOptions, PrimitiveOptions, WorldScene, MaterialOptions, LightOptions, PulseOptions, RowsOptions, VoxelsOptions } from "./scene";
 
-export { burstInstances, choreographyInstances, railPoint, settleProgress } from "./motion";
+export { burstInstances, choreographyInstances, partsFromInstances, railPoint, settleProgress } from "./motion";
 export type { BurstOptions, BurstStyle, ChoreographyOptions, ChoreographyLayout, ChoreographyPart, ChoreographyTransition, PartPose, PartRoute } from "./motion";
 export type { Instance } from "./scene";
 export function Choreography(_: ChoreographyOptions) { return null; }

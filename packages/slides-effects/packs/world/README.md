@@ -446,3 +446,8 @@ and card bodies rotate in 3D; atlas `Label` strings retain their facing plane.
 Use glyph meshes for rigid 3D type. `apps/slides/examples/assembly.mdx` demonstrates
 18 tiles arriving on rails, merging into seven nodes, then three bases. Use
 `quality="high" renderScale={1}` for device-resolution proof.
+
+`partsFromInstances(instances)` converts existing mesh arrays into independent
+parts at their original centers, including Text3D glyph arrays. It sets each
+part's `origin` to that center so its rail, rotation pivot, and landing burst
+share the same home. Explicit groups default to local origin `[0, 0, 0]`.
