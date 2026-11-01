@@ -405,3 +405,14 @@ test("custom and bounded geometry keep their own draw groups and validate resour
   expect(() => prepareWorldScene({ instances: [], dof: { scale: 0 } })).toThrow("scale");
   expect(() => prepareWorldScene({ instances: [], lights: Array.from({ length: 5 }, () => ({})) })).toThrow("four");
 });
+
+test("dense back-to-back keyframes sample linearly and stay piecewise linear", () => {
+  // Baked curves: each linear frame starts where the previous one ends.
+  const frames = Array.from({ length: 400 }, (_, i) => ({ at: i * .03, value: (i + 1) * 2, duration: .03, ease: "linear" as const }));
+  const track = compileTrack<number>(frames);
+  expect(sampleTrack(track, clock(100 * .03 + .015))).toBeCloseTo(201, 6);
+  let reads = 0;
+  const counted = { ...track, frames: new Proxy(track.frames, { get(target, key, receiver) { if (typeof key === "string" && /^\d+$/.test(key)) reads++; return Reflect.get(target, key, receiver); } }) };
+  expect(sampleTrack(counted, clock(399 * .03 + .015))).toBeCloseTo(799, 6);
+  expect(reads).toBeLessThan(3 * frames.length);
+});

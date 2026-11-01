@@ -121,10 +121,14 @@ function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: Cloc
   if (index < 0) return track.initial;
   const frame = track.frames[index];
   const origin = frame.at ?? (clock.stepOrigins[frame.step ?? 0] ?? clock.slideTime - clock.stepTime) + (frame.delay ?? 0);
-  const value = sampleTrackFrames(track, clockAtTime(clock, origin), index);
   const elapsed = Math.max(0, clock.slideTime - origin);
   const completed = frame.at === undefined && (frame.step ?? 0) < clock.stepIndex && clock.stepOrigins[frame.step ?? 0] === undefined;
-  const t = completed ? 1 : easeProgress((frame.duration ?? 0.65) <= 0 ? 1 : elapsed / (frame.duration ?? 0.65), frame.ease);
+  const progress = completed || (frame.duration ?? 0.65) <= 0 ? 1 : elapsed / (frame.duration ?? 0.65);
+  // A finished frame holds its value. Skipping its start value keeps dense back-to-back keyframes linear instead of
+  // recursing through every earlier frame; the tolerance absorbs float drift where one frame ends as the next begins.
+  if (progress >= 1 - 1e-6) return frame.value;
+  const value = sampleTrackFrames(track, clockAtTime(clock, origin), index);
+  const t = easeProgress(progress, frame.ease);
   return (typeof value === "number" ? value + ((frame.value as number) - value) * t : mixVector(value, frame.value as Vec3, t)) as T;
 }
 export function sampleTrack<T extends number | Vec3>(track: Track<T>, clock: ClockSample): T {
