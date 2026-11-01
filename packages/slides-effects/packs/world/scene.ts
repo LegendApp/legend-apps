@@ -702,10 +702,11 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       endpoint = [end[0] + offset[0], end[1] + offset[1], end[2] + offset[2]];
     }
     const baseScale = sampleTrack(instance.scale, clock);
-    const scale: Vec3 = part ? [baseScale[0] * part.scale[0], baseScale[1] * part.scale[1], baseScale[2] * part.scale[2]] : baseScale;
+    let scale: Vec3 = part ? [baseScale[0] * part.scale[0], baseScale[1] * part.scale[1], baseScale[2] * part.scale[2]] : baseScale;
     if (instance.pillar?.role === "body") {
+      // A constant track returns the scene's own array; write a copy so the frozen scene stays shared.
       const pillar = instance.pillar;
-      scale[1] = Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum)));
+      scale = [scale[0], Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum))), scale[2]];
     }
     if (part) {
       for (let axis = 0; axis < 3; axis++) values[index + 20 + axis] = part.rotation[axis];

@@ -55,7 +55,10 @@ test("rounded nodes have mesh thickness, and typed flashes retain selection and 
 test("pillar body height, top position, and extruded counter read the same eased value", () => {
   const instances = pillarInstances({ id: "metric", value: 100, maximum: 100, height: 6, position: [2, -4, 0], step: 1, duration: 2 });
   const scene = prepareWorldScene({ instances });
+  const before = JSON.stringify(scene);
   const sample = clock(3), values = sampleWorldUniforms(scene, sample);
+  // The prepared scene is shared with worklets (frozen in development), so sampling must not write into it.
+  expect(JSON.stringify(scene)).toBe(before);
   const bodyIndex = scene.instances.findIndex(i => i.id === "metric"), base = worldHeaderSize + bodyIndex * worldInstanceSize;
   expect(values[base + 9]).toBeCloseTo(3);
   expect(values[base + 1]).toBeCloseTo(-2.5);
