@@ -1,6 +1,6 @@
 import type { ClockSample, Vec3 } from "./camera";
 import { colorVector, instanceOpacity, instancePosition, primitive, type Instance } from "./scene";
-import type { BurstOptions, ChoreographyMotion, ChoreographyOptions, ChoreographyPart, Model, PartRoute, Route, Trigger } from "./motionSample";
+import type { BurstOptions, ChoreographyMotion, ChoreographyOptions, ChoreographyPart, HomeWindow, Model, PartRoute, Route, Trigger } from "./motionSample";
 
 export * from "./motionSample";
 
@@ -77,7 +77,9 @@ export function choreographyInstances(options: ChoreographyOptions): Instance[] 
     return { from, to, step: transition.step, at: transition.at, duration, overshoot, routes };
   });
   const instances: Instance[] = [];
-  const clone = (part: ChoreographyPart, prefix: string, motion: Omit<ChoreographyMotion, "model" | "local" | "endOffset" | "opacity">) => {
+  // Worklet deserialization copies object aliases: retain only this part's poses and timing.
+  const timeline = model.transitions.map(({ step, at }) => ({ step, at }));
+  const clone = (part: ChoreographyPart, prefix: string, motion: Omit<ChoreographyMotion, "timeline" | "local" | "endOffset" | "opacity">) => {
     const names = new Map(part.instances.filter(instance => instance.id).map(instance => [instance.id!, `${prefix}:${instance.id}`]));
     const parents = new Map(part.instances.filter(instance => instance.id).map(instance => [instance.id!, instance]));
     for (let i = 0; i < part.instances.length; i++) {
@@ -87,15 +89,25 @@ export function choreographyInstances(options: ChoreographyOptions): Instance[] 
       instances.push({ ...template, id: template.id ? names.get(template.id) : `${prefix}:${i}`, motion: undefined,
         label: template.label ? { ...template.label, attach: template.label.attach ? names.get(template.label.attach) : undefined,
           parent: template.label.parent?.id ? { ...template.label.parent, id: names.get(template.label.parent.id) } : undefined } : undefined,
-        choreography: { model, ...motion, local: [position[0] - origin[0], position[1] - origin[1], position[2] - origin[2]],
+        choreography: { timeline, ...motion, local: [position[0] - origin[0], position[1] - origin[1], position[2] - origin[2]],
           endOffset: [template.end[0] - position[0], template.end[1] - position[1], template.end[2] - position[2]], opacity: instanceOpacity(local, templateClock) } });
     }
   };
-  options.layouts.forEach((layout, layoutIndex) => layout.parts.forEach((part, partIndex) => clone(part, `${options.id}:home:${layout.id}:${part.id}`, { layout: layoutIndex, part: partIndex })));
+  options.layouts.forEach((layout, layoutIndex) => layout.parts.forEach((part, partIndex) => {
+    const windows: HomeWindow[] = [];
+    model.transitions.forEach((transition, index) => {
+      if (transition.from === layoutIndex) windows.push({ transition: index,
+        depart: transition.routes.reduce((delay, route) => route.from === partIndex ? Math.min(delay, route.delay) : delay, Infinity) });
+      if (transition.to === layoutIndex) windows.push({ transition: index,
+        land: transition.routes.reduce((delay, route) => route.to === partIndex ? Math.min(delay, route.delay + transition.duration) : delay, Infinity) });
+    });
+    clone(part, `${options.id}:home:${layout.id}:${part.id}`, { home: { pose: model.layouts[layoutIndex][partIndex], initial: layoutIndex === (model.transitions[0]?.from ?? 0), windows } });
+  }));
   model.transitions.forEach((transition, index) => transition.routes.forEach((route, routeIndex) => {
+    const flight = { ...route, transition: index, from: model.layouts[transition.from][route.from], to: model.layouts[transition.to][route.to], duration: transition.duration, overshoot: transition.overshoot };
     for (const side of ["from", "to"] as const) {
       const part = options.layouts[transition[side]].parts[route[side]];
-      clone(part, `${options.id}:flight:${index}:${routeIndex}:${side}`, { transition: index, route: routeIndex, side });
+      clone(part, `${options.id}:flight:${index}:${routeIndex}:${side}`, { flight, side });
     }
     const style = options.transitions[index].onLand;
     if (style) {
