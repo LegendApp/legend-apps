@@ -145,16 +145,24 @@ fn keyLight(world:vec3f,normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal
 `;
 }
 
-/** Studio softboxes over a dark gradient; roughness widens each lobe with conserved energy, standing in for a prefiltered map. */
+/** Studio panels and a horizon band over a dark floor; roughness blurs every edge with conserved energy, standing in for a prefiltered map. */
 export const environmentCode = `
-fn envLobe(d:vec3f,center:vec3f,width:f32,energy:f32,a:f32)->f32 { let w=width+a; return energy*width/w*exp((dot(d,normalize(center))-1.)/w); }
+// A soft rectangle in azimuth/elevation: centre, half-size and blur in radians.
+fn envPanel(az:f32,el:f32,center:vec2f,half:vec2f,blur:f32)->f32 {
+ let dx=abs(fract((az-center.x)/6.2831853+.5)-.5)*6.2831853; let dy=abs(el-center.y);
+ let x=1.-smoothstep(-blur,blur,dx-half.x); let y=1.-smoothstep(-blur,blur,dy-half.y);
+ return x*y*half.x*half.y/((half.x+blur)*(half.y+blur));
+}
 fn environment(d:vec3f,roughness:f32)->vec3f {
- let a=roughness*roughness*.6;
- var c=mix(vec3f(.006,.006,.008),vec3f(.03,.032,.04),smoothstep(-.3,.8,d.y));
- c+=vec3f(1.,.98,.95)*envLobe(d,vec3f(0.,1.,.15),.03,2.4,a);
- c+=vec3f(.9,.94,1.)*envLobe(d,vec3f(-1.,.35,.35),.015,1.6,a);
- c+=vec3f(1.,.95,.9)*envLobe(d,vec3f(1.,.25,-.25),.015,1.2,a);
- c+=vec3f(.8,.85,1.)*envLobe(d,vec3f(.15,.15,1.),.06,.5,a);
+ let a=roughness*roughness; let blur=.015+a*1.2;
+ let az=atan2(d.x,d.z); let el=asin(clamp(d.y,-1.,1.));
+ var c=mix(vec3f(.004,.004,.005),vec3f(.018,.019,.024),smoothstep(-.05,.6,d.y));
+ c+=vec3f(.09,.095,.11)*exp(-abs(el)/(.05+a))*(.05+a)/(.05+a*3.);
+ c+=vec3f(1.,.98,.95)*2.2*envPanel(az,el,vec2f(0.,1.35),vec2f(3.2,.22),blur);
+ c+=vec3f(.92,.95,1.)*2.6*envPanel(az,el,vec2f(-1.65,.3),vec2f(.22,.4),blur);
+ c+=vec3f(1.,.96,.92)*1.6*envPanel(az,el,vec2f(1.4,.25),vec2f(.12,.32),blur);
+ c+=vec3f(.85,.9,1.)*.9*envPanel(az,el,vec2f(3.1416,.3),vec2f(.5,.15),blur);
+ c+=vec3f(.8,.85,1.)*.5*envPanel(az,el,vec2f(.3,.18),vec2f(.6,.1),blur);
  return c;
 }
 fn environmentLight(normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal:f32)->vec3f {
@@ -207,12 +215,17 @@ fn screenOf(world:vec3f)->vec3f {
 }
 @fragment fn contactShadow(@location(0) uv:vec2f,@builtin(position) position:vec4f)->@location(0) vec4f {
  let color=textureSampleLevel(source,linearSampler,uv,0.);
- let distance=depthAt(uv); if(distance>=400.) { return color; }
- let world=vector(0u)+worldRay(uv)*distance; let toward=-keyDirectionContact();
+ let distance=depthAt(uv); let world=vector(0u)+worldRay(uv)*distance; let toward=-keyDirectionContact();
+ // Surfaces facing away from the key are already unlit; lit ones start a little off their depth-derived normal to avoid self-hits.
+ let normal=normalize(cross(dpdy(world),dpdx(world))+vec3f(0.,.00001,0.));
+ if(distance>=400.) { return color; }
+ let facing=dot(normal,toward)*sign(dot(normal,vector(0u)-world));
+ if(facing<=.05) { return color; }
+ let start=world+normal*sign(dot(normal,vector(0u)-world))*distance*.004;
  let jitter=fract(52.9829189*fract(dot(floor(position.xy),vec2f(.06711056,.00583715))));
  let reach=max(uniforms[119],1.)*.08; var occlusion=0.;
  for(var i=0u;i<12u;i++) {
-  let t=(f32(i)+jitter)/12.; let p=world+toward*(reach*t*t+.02); let s=screenOf(p);
+  let t=(f32(i)+jitter)/12.; let p=start+toward*(reach*t*t+.02); let s=screenOf(p);
   if(any(s.xy<vec2f(0.)) || any(s.xy>vec2f(1.))) { break; }
   let scene=depthAt(s.xy); let thickness=reach*.5;
   if(scene<s.z-.02 && scene>s.z-thickness) { occlusion=max(occlusion,1.-t); }

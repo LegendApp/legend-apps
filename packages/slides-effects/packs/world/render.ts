@@ -583,7 +583,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale, samples: msaa }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale, samples: msaa });
     renderScene(true);
   }
-  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings),
+  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, environment: false, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings),
     vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: [...topology.mirror ? ["reflect"] : [], ...shadowMap ? ["shadow"] : []] });
   renderScene(false, !!topology.floor);
   if (topology.shafts) {
