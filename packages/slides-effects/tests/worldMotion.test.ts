@@ -159,6 +159,16 @@ test("merged destinations have one geometry owner while extra sources shrink int
   const source = instances.find(instance => instance.id === "motion:flight:0:7:from:0")!;
   expect(instanceOpacity(source, state)).toBeGreaterThan(0); expect(instanceOpacity(source, state)).toBeLessThan(1);
   const motion = source.choreography!;
-  expect(motion.model.transitions[0].routes[7].merge).toBe(true);
-  expect(motion.model.transitions[0].routes[0].merge).toBe(false);
+  expect(motion.flight!.merge).toBe(true);
+  expect(instances.find(instance => instance.id === "motion:flight:0:0:from:0")!.choreography!.flight!.merge).toBe(false);
+});
+
+test("serialized motion data grows with the part count instead of copying every layout per instance", () => {
+  const bytes = (factor: number) => {
+    const layouts = [18, 7, 3].map((count, layout) => ({ id: `layout-${layout}`, parts: Array.from({ length: count * factor }, (_, i) => part(`part-${i}`, i)) }));
+    return JSON.stringify(choreographyInstances({ id: "payload", layouts, transitions: [
+      { from: "layout-0", to: "layout-1", step: 1 }, { from: "layout-1", to: "layout-2", step: 2 },
+    ] })).length;
+  };
+  expect(bytes(4)).toBeLessThan(bytes(1) * 5);
 });

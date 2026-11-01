@@ -14,7 +14,10 @@ export type Trigger = { step?: number; at?: number; delay?: number };
 export type Route = { from: number; to: number; via: [Vec3, Vec3]; delay: number; swapAt: number; merge: boolean };
 type Transition = Trigger & { from: number; to: number; duration: number; overshoot: number; routes: Route[] };
 export type Model = { layouts: Pose[][]; transitions: Transition[] };
-export type ChoreographyMotion = { model: Model; layout?: number; part?: number; transition?: number; route?: number; side?: "from" | "to"; local: Vec3; endOffset: Vec3; opacity: number };
+export type HomeWindow = { transition: number; depart?: number; land?: number };
+type Flight = Omit<Route, "from" | "to"> & { transition: number; from: Pose; to: Pose; duration: number; overshoot: number };
+export type ChoreographyMotion = { timeline: Trigger[]; home?: { pose: Pose; initial: boolean; windows: HomeWindow[] }; flight?: Flight;
+  side?: "from" | "to"; local: Vec3; endOffset: Vec3; opacity: number };
 export type BurstMotion = { options: BurstOptions; velocity: Vec3; gravity: Vec3; until?: Trigger };
 export type SampledPart = Pose & { opacity: number };
 
@@ -57,36 +60,35 @@ export function settleProgress(progress: number, overshoot = 0.08) {
   if (t < 0.78) return easeProgress(t / 0.78, "cubic");
   return 1 + overshoot * Math.sin((t - 0.78) / 0.22 * Math.PI);
 }
-function activeTransition(model: Model, clock: ClockSample) {
+function activeTransition(timeline: Trigger[], clock: ClockSample) {
   "worklet";
   let active = -1;
-  for (let i = 0; i < model.transitions.length; i++) if (eventElapsed(model.transitions[i], clock) >= 0) active = i;
+  for (let i = 0; i < timeline.length; i++) if (eventElapsed(timeline[i], clock) >= 0) active = i;
   return active;
 }
 export function samplePartMotion(motion: ChoreographyMotion, clock: ClockSample): SampledPart {
   "worklet";
-  const model = motion.model, active = activeTransition(model, clock), transition = model.transitions[active];
-  if (motion.layout !== undefined) {
-    const pose = model.layouts[motion.layout][motion.part!];
-    let visible = active < 0 ? motion.layout === (model.transitions[0]?.from ?? 0) : false;
-    if (transition) {
-      const elapsed = eventElapsed(transition, clock);
-      if (motion.layout === transition.from) visible = !transition.routes.some(route => route.from === motion.part && elapsed >= route.delay);
-      if (motion.layout === transition.to) visible = transition.routes.some(route => route.to === motion.part && elapsed >= route.delay + transition.duration);
+  const active = activeTransition(motion.timeline, clock);
+  if (motion.home) {
+    const home = motion.home, window = home.windows.find(item => item.transition === active);
+    let visible = active < 0 && home.initial;
+    if (window) {
+      const elapsed = eventElapsed(motion.timeline[active], clock);
+      visible = window.depart !== undefined ? elapsed < window.depart : elapsed >= window.land!;
     }
-    return { ...pose, opacity: visible ? 1 : 0 };
+    return { ...home.pose, opacity: visible ? 1 : 0 };
   }
-  const own = model.transitions[motion.transition!], route = own.routes[motion.route!];
-  const from = model.layouts[own.from][route.from], to = model.layouts[own.to][route.to];
-  const progress = Math.max(0, Math.min(1, (eventElapsed(own, clock) - route.delay) / own.duration));
-  const t = settleProgress(progress, own.overshoot);
+  const route = motion.flight!, from = route.from, to = route.to;
+  const elapsed = eventElapsed(motion.timeline[route.transition], clock);
+  const progress = Math.max(0, Math.min(1, (elapsed - route.delay) / route.duration));
+  const t = settleProgress(progress, route.overshoot);
   const point = progress <= 0.78 ? railPoint(from.position, to.position, route.via, t) : to.position;
   // Overshoot follows the arrival tangent, rather than extrapolating a cubic back off its rail.
   const tangent: Vec3 = [to.position[0] - route.via[1][0], to.position[1] - route.via[1][1], to.position[2] - route.via[1][2]];
   const position: Vec3 = [point[0] + tangent[0] * Math.max(0, t - 1), point[1] + tangent[1] * Math.max(0, t - 1), point[2] + tangent[2] * Math.max(0, t - 1)];
   const blend = easeProgress(progress, "smoothstep");
   const weight = route.merge && progress >= route.swapAt ? 1 - easeProgress((progress - route.swapAt) / Math.max(0.0001, 1 - route.swapAt), "smoothstep") : 1;
-  const visible = active === motion.transition && eventElapsed(own, clock) >= route.delay && progress < 1 &&
+  const visible = active === route.transition && elapsed >= route.delay && progress < 1 &&
     (motion.side === "from" ? route.merge || progress < route.swapAt : !route.merge && progress >= route.swapAt);
   const scale = mixVector(from.scale, to.scale, blend);
   return { position, rotation: mixVector(from.rotation, to.rotation, blend), scale: route.merge ? [scale[0] * weight, scale[1] * weight, scale[2] * weight] : scale,
