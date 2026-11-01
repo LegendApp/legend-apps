@@ -109,7 +109,8 @@ ${wgsl}
  return customPass(uv,textureSampleLevel(previous,linearSampler,uv,0.),PassContext(frame.time,frame.slideTime,frame.stepTime,frame.step,depthAt(uv)));
 }`;
 }
-// Linear-sRGB operators from three.js r180 (MIT); the legacy ACES fit keeps existing decks unchanged.
+// Linear-sRGB operators adapted from three.js r180, Copyright (c) 2010-2025 three.js authors (MIT).
+// The legacy ACES fit keeps existing decks unchanged.
 function toneMappingCode(mode: NonNullable<WorldScene["toneMapping"]>) {
   if (mode === "neutral") return `
 fn toneMap(input:vec3f)->vec3f {

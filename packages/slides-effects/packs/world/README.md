@@ -591,3 +591,9 @@ mirrors about .6, matching UnrealBloomPass without adding render passes.
 `Floor.emissive` (animated, default 0) adds self-lit floor color before reflections,
 shadows, fog and bloom, for painted or luminous surfaces. It also follows
 `World.emissiveScale`.
+
+Pillar accepts `material` for its body and `capEmissive` (default 5). Routed-tube
+pulses accept head `emissive` (default 5) and `trailEmissive` (defaults to the head). Burst accepts
+`emissive` (default 12) and a repeating `colors` palette. Tunnel `strips` and
+`edges` accept a `material`; a black albedo removes their diffuse lighting while
+retaining emission. These controls leave the default materials unchanged.

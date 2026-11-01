@@ -4,7 +4,7 @@ import type { Instance } from "./scene";
 export type PartPose = { position: Vec3; rotation?: Vec3; scale?: Vec3; color?: string };
 export type ChoreographyPart = { id: string; instances: Instance[]; home: PartPose; origin?: Vec3 };
 export type ChoreographyLayout = { id: string; parts: ChoreographyPart[] };
-export type BurstStyle = { count?: number; lifetime?: number; color?: string; size?: number; speed?: number; spread?: Vec3; gravity?: Vec3; seed?: number };
+export type BurstStyle = { count?: number; lifetime?: number; color?: string; colors?: string[]; emissive?: number; size?: number; speed?: number; spread?: Vec3; gravity?: Vec3; seed?: number };
 export type BurstOptions = BurstStyle & { id?: string; position: Vec3; step?: number; at?: number; delay?: number };
 export type PartRoute = { from: string; to: string; via?: [Vec3, Vec3]; delay?: number; swapAt?: number };
 export type ChoreographyTransition = { from: string; to: string; step?: number; at?: number; duration?: number; stagger?: number; swapAt?: number; overshoot?: number; mapping?: PartRoute[]; onLand?: BurstStyle };

@@ -36,9 +36,9 @@ export type TunnelOptions = {
   spacing?: number; width?: number; height?: number; thickness?: number;
   color?: string; material?: string | MaterialOptions;
   /** Emissive strips under the top beam, running between frames. */
-  strips?: { color?: string; intensity?: number; count?: number; length?: number; width?: number } | false;
+  strips?: { color?: string; intensity?: number; material?: MaterialOptions; count?: number; length?: number; width?: number } | false;
   /** Low emissive edge lights along both walls. */
-  edges?: { color?: string; intensity?: number; height?: number; length?: number } | false;
+  edges?: { color?: string; intensity?: number; material?: MaterialOptions; height?: number; length?: number } | false;
 };
 
 const tunnelMaterial: MaterialOptions = { albedo: "#0d0e11", roughness: 0.4, metal: 0.8 };
@@ -49,9 +49,9 @@ export function tunnelInstances({ id = "tunnel", path, from = [0, 0, 20], to = [
   const points = path ?? [from, to];
   if (points.length < 2 || !(spacing > 0)) throw new Error("Tunnel needs a path of two or more points and a positive spacing");
   const instances: Instance[] = [];
-  const box = (name: string, position: Vec3, scale: Vec3, glow?: { color: string; intensity: number }) => instances.push(primitive("box", {
+  const box = (name: string, position: Vec3, scale: Vec3, glow?: { color: string; intensity: number; material?: MaterialOptions }) => instances.push(primitive("box", {
     id: `${id}:${name}:${instances.length}`, position, scale, size: 0.5, color: glow?.color ?? color, emissive: glow?.intensity ?? 0,
-    ...(glow ? {} : { material }) }));
+    material: glow ? glow.material : material }));
   let carry = 0;
   for (let segment = 0; segment + 1 < points.length; segment++) {
     const a = points[segment], b = points[segment + 1];
@@ -79,11 +79,11 @@ export function tunnelInstances({ id = "tunnel", path, from = [0, 0, 20], to = [
         for (let i = 0; i < count; i++) {
           const x = count === 1 ? 0 : (i / (count - 1) - 0.5) * width / 2;
           box("strip", half(x, height - 0.25, 0), across(strips.width ?? 0.18, 0.06, spacing * (strips.length ?? 0.55)),
-            { color: strips.color ?? "#cfe0ff", intensity: strips.intensity ?? 2.2 });
+            { color: strips.color ?? "#cfe0ff", intensity: strips.intensity ?? 2.2, material: strips.material });
         }
       }
       if (edges) for (const side of [-1, 1]) box("edge", half(side * (width / 2 - 0.3), edges.height ?? 0.3, 0), across(0.06, 0.06, spacing * (edges.length ?? 0.7)),
-        { color: edges.color ?? "#ff3b30", intensity: edges.intensity ?? 1.8 });
+        { color: edges.color ?? "#ff3b30", intensity: edges.intensity ?? 1.8, material: edges.material });
     }
     if (carry <= length + 1e-6) carry += Math.floor((length - carry) / spacing + 1e-6) * spacing + spacing;
     carry -= length;

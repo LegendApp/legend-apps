@@ -37,7 +37,7 @@ export function burstInstances(options: BurstOptions): Instance[] {
     const angle = random() * Math.PI * 2, elevation = 0.15 + random() * 0.85, magnitude = speed * (0.4 + random() * 0.6);
     const velocity: Vec3 = [Math.cos(angle) * Math.sqrt(1 - elevation * elevation) * magnitude * spread[0], elevation * magnitude * spread[1], Math.sin(angle) * Math.sqrt(1 - elevation * elevation) * magnitude * spread[2]];
     return { ...primitive("box", { id: `${options.id ?? "burst"}:${index}`, position: options.position, size: options.size ?? 0.025,
-      scale: [0.6, 2.5, 0.6], color: options.color ?? "#ffc76b", emissive: 12 }),
+      scale: [0.6, 2.5, 0.6], color: options.colors?.[index % options.colors.length] ?? options.color ?? "#ffc76b", emissive: options.emissive ?? 12 }),
       burst: { options, velocity, gravity: options.gravity ?? [0, -9.8, 0] } };
   });
 }

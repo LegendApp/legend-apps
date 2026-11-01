@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
 import { prepareWorldScene, sampleWorldUniforms } from "../packs/world/scene";
+import { pillarInstances, routedTubeInstances } from "../packs/world/stage";
+import { burstInstances } from "../packs/world/motion";
+import { tunnelInstances } from "../packs/world/lighting";
 import { clockAtTime } from "../packs/world/camera";
 
 test("scene emissive scale has an identity default and shares the animated uniform snapshot", () => {
@@ -46,4 +49,21 @@ test("floor emission stays opt-in and is sampled with the scene color controls",
   const scene = prepareWorldScene({ instances: [], floor: { emissive: 1.25 } });
   expect(sampleWorldUniforms(scene, clock)[19]).toBe(1.25);
   expect(buildWorldGraph(scene).passes.find(pass => pass.id === "floor")!.code).toContain("vector(40u)*uniforms[19]");
+});
+
+test("material controls preserve primitive defaults and support authored HDR accents", () => {
+  expect(pillarInstances({ id: "column", value: 1 })[1].emissive.initial).toBe(5);
+  const material = { albedo: "#808080", metal: .3, roughness: .35 };
+  const column = pillarInstances({ id: "column", value: 1, capEmissive: 1.2, material });
+  expect(column[0].material).toEqual(material);
+  expect(column[1].emissive.initial).toBe(1.2);
+  const pulses = routedTubeInstances({ id: "path", path: [[0, 0, 0], [1, 0, 0]], pulses: [{ emissive: 10, trailEmissive: 4 }] }).filter(instance => instance.route?.pulse);
+  expect(pulses[0].emissive.initial).toBe(10);
+  expect(pulses[1].emissive.initial).toBeLessThan(4);
+  const sparks = burstInstances({ position: [0, 0, 0], count: 3, colors: ["#ffffff", "#ff0000"], emissive: 6 });
+  expect(sparks.map(instance => instance.emissive.initial)).toEqual([6, 6, 6]);
+  expect(sparks[0].color.initial).toEqual(sparks[2].color.initial);
+  expect(sparks[0].color.initial).not.toEqual(sparks[1].color.initial);
+  const portals = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -6], strips: { material: { albedo: "#000000" } } });
+  expect(portals.find(instance => instance.id?.includes(":strip:"))!.material).toEqual({ albedo: "#000000" });
 });

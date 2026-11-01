@@ -2,15 +2,15 @@ import type { Ease, Vec3 } from "./camera";
 import { compileTrack, labelInstance, primitive, type Animated, type Instance, type PrimitiveOptions } from "./scene";
 
 export type RoundedBoxOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & { radius?: number; edge?: number };
-export type TubePulse = { step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number };
+export type TubePulse = { step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number; emissive?: number; trailEmissive?: number };
 export type RoutedTubeOptions = {
   id: string; path: Vec3[]; draw?: Animated<number>; thickness?: number; color?: Animated<string>; emissive?: Animated<number>; pulses?: TubePulse[];
 };
 export type PillarOptions = {
   id: string; value: number; from?: number; maximum?: number; position?: Vec3; height?: number; width?: number; depth?: number;
   step?: number; at?: number; delay?: number; duration?: number; ease?: Ease; color?: string; label?: string; counterSize?: number;
-  /** Body glow; the top cap stays bright. */
-  emissive?: number;
+  /** Body glow and independent cap glow (default 5). */
+  emissive?: number; capEmissive?: number; material?: PrimitiveOptions["material"];
 };
 
 /** Rounded solid geometry, instanced with the same material/rim controls as World cards. */
@@ -65,7 +65,7 @@ export function routedTubeInstances({ id, path, draw = 1, thickness = 0.018, col
   pulses.forEach((pulse, index) => {
     if (!Number.isFinite(pulse.duration ?? 0.5) || (pulse.duration ?? 0.5) <= 0) throw new Error("Tube pulses need a positive duration");
     for (let bead = 0; bead < 7; bead++) beads.push({ ...primitive("sphere", { id: `${id}:pulse:${index}:${bead}`, size: (pulse.size ?? thickness * 2.7) * (1 - bead * 0.09),
-      color: pulse.color ?? "#22d3ee", emissive: 5 * (1 - bead / 8) }), route: { ...route, pulse, bead } });
+      color: pulse.color ?? "#22d3ee", emissive: (bead ? pulse.trailEmissive ?? pulse.emissive ?? 5 : pulse.emissive ?? 5) * (1 - bead / 8) }), route: { ...route, pulse, bead } });
   });
   return [...instances, ...beads];
 }
@@ -78,9 +78,9 @@ export function pillarInstances(options: PillarOptions): Instance[] {
   const track = compileTrack([{ step: 0, value: from, duration: 0 }, { step: options.step ?? 0, at: options.at, value, delay: options.delay,
     duration: options.duration ?? 1.6, ease: options.ease ?? "smoothstep" }]);
   const pillar = { value: track, maximum, height };
-  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: { metal: 0.35, roughness: 0.22 } });
+  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: options.material ?? { metal: 0.35, roughness: 0.22 } });
   body.pillar = { ...pillar, role: "body" };
-  const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: 5 });
+  const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: options.capEmissive ?? 5 });
   cap.pillar = { ...pillar, role: "top" };
   const instances = [body, cap];
   const digits = String(Math.round(Math.max(from, value))).length, advance = counterSize * 0.68;
