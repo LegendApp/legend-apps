@@ -153,7 +153,7 @@ describe("recycled rows", () => {
 describe("world cards", () => {
   test("lay out an avatar initial, title, subtitle and meta from the card's largest size", () => {
     const [card, ...labels] = cardInstances({ id: "ada", title: "ada", subtitle: "Lovelace", meta: "key 1", scale: [{ step: 0, value: [4, 0, 0] }, { step: 1, value: [4, 0.6, 0.2] }] });
-    expect(card.card).toEqual({ radius: 0.12, glow: 0.14, edge: 0.6, avatar: 0.62 });
+    expect(card.card).toEqual({ radius: 0.12, glow: 0.14, edge: 0.6, avatar: 0.62, fill: 1 });
     expect(labels.map(label => [label.id, label.label!.text, label.label!.attach])).toEqual([
       ["ada:initials", "A", "ada"], ["ada:title", "ada", "ada"], ["ada:subtitle", "Lovelace", "ada"], ["ada:meta", "key 1", "ada"]]);
     const [initials, title, , meta] = labels.map(label => label.label!.offset.initial);
@@ -165,11 +165,11 @@ describe("world cards", () => {
     expect(() => cardInstances({ title: "Ada" })).toThrow("needs an id");
   });
   test("write their shape into the slot and draw in card passes before labels", () => {
-    const scene = prepareWorldScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2 }), primitive("box")], floor: { mirror: true } });
+    const scene = prepareWorldScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2, fill: 0.6 }), primitive("box")], floor: { mirror: true } });
     const index = scene.instances.findIndex(item => item.card);
     const values = sampleWorldUniforms(scene, clock(0)) as number[];
     const base = worldHeaderSize + index * worldInstanceSize;
-    expect([values[base + 11], values[base + 16], values[base + 17], values[base + 18]]).toEqual([0.2, 0.14, 0.6, 0.62]);
+    expect([values[base + 11], values[base + 16], values[base + 17], values[base + 18], values[base + 19], values[base + 21]]).toEqual([0.2, 0.14, 0.6, 0.62, 0.6, 0]);
     const ids = buildWorldGraph(scene).passes.map(pass => pass.id);
     expect(ids.indexOf("scene-cards")).toBeGreaterThan(ids.indexOf("scene-box"));
     expect(ids.indexOf("scene-labels")).toBeGreaterThan(ids.indexOf("scene-cards"));
@@ -179,7 +179,7 @@ describe("world cards", () => {
   });
   test("rows can be cards and their labels can show the item's initial", () => {
     const [slot] = rowInstances({ id: "pool", count: 2, height: 0.66, card: { avatar: 0.62 } });
-    expect(slot.card).toEqual({ radius: 0.12, glow: 0.14, edge: 0.6, avatar: 0.62 });
+    expect(slot.card).toEqual({ radius: 0.12, glow: 0.14, edge: 0.6, avatar: 0.62, fill: 1 });
     expect(slot.scale.initial[1]).toBe(0.66);
     expect(formatRowLabel("{initial}", ["grace"], 0, 0)).toBe("G");
   });

@@ -119,7 +119,7 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
 // Cards are one quad in the card's front plane. The fragment shades a 2D rounded-rect distance field: coverage is antialiased over one
 // device pixel, and the outer glow, glass gradient, inner glow, rim and avatar layer like a 2D canvas in display space, so edges
 // stay crisp at any resolution without MSAA. Emissive from .03 to .09 blends a resting slate card into one lit in its color.
-// Shape fields: 11 corner radius, 16 glow blur width, 17 rim strength, 18 avatar radius / half height.
+// Shape fields: 11 corner radius, 16 glow blur width, 17 rim strength, 18 avatar radius / half height, 19 fill opacity (cards have no thickness).
 function cardCode(offset: number, reflection: boolean, background: Vec3) {
   return `${worldBindings}${triangleCorner}${lightingCode(0, reflection)}
 struct CardVertex { @builtin(position) position:vec4f, @location(0) local:vec2f, @location(1) @interpolate(flat) instance:u32 }
@@ -162,7 +162,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  var layer=vec4f(0.);
  layer=over(layer,accent,.45*h*edge*shown*blurredStroke(d,5.*unit,sigma));
  let fill=mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v);
- layer=over(layer,fill,coverage);
+ layer=over(layer,fill,coverage*uniforms[base+19u]);
  layer=over(layer,accent,.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
  let line=max(1.4*unit,pixel);
  let rim=(1.-smoothstep(line*.5-pixel*.5,line*.5+pixel*.5,abs(d)))*min(1.,1.4*unit/pixel);
