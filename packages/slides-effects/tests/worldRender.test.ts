@@ -15,7 +15,10 @@ const scene = (options: Partial<WorldScene> = {}) => prepareWorldScene({ instanc
 for (const quality of ["low", "medium", "high"] as const) test(`all enabled post effects remain present at ${quality} quality`, () => {
   const graph = buildWorldGraph(scene({ quality, floor: { mirror: true }, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));
   const ids = graph.passes.map(pass => pass.id);
-  for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-composite", "tonemap"]) expect(ids).toContain(id);
+  for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
+  // Bloom is the last HDR stage with nothing placed after it, so the tonemap adds it instead of a separate composite pass.
+  expect(ids).not.toContain("bloom-composite");
+  expect(graph.passes.find(pass => pass.id === "tonemap")!.reads).toEqual([expect.any(String), "bloom-up@0"]);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
   expect(target("reflect").scale).toBe(scale * .5);
@@ -134,4 +137,16 @@ test("auto quality drops MSAA only where the drawable already supersamples the s
   expect(samples({})).toEqual(["hdr", "depth"]);
   expect(samples({ supersampled: true })).toEqual([]);
   expect(samples({ supersampled: true, quality: "high" })).toHaveLength(2);
+});
+
+test("fog directly before focus folds into the focus passes unless shafts or hooks sit between them", () => {
+  const ids = (options: Partial<WorldScene>) => buildWorldGraph(scene(options)).passes.map(pass => pass.id);
+  const fused = buildWorldGraph(scene({ dof: {} }));
+  expect(fused.passes.map(pass => pass.id)).not.toContain("fog");
+  expect(fused.passes.find(pass => pass.id === "dof-gather")!.reads?.[0]).toBe("hdr");
+  for (const id of ["dof-gather", "dof-composite"]) expect((fused.passes.find(pass => pass.id === id) as { code: string }).code).toContain("heightDensity");
+  expect(ids({})).toContain("fog");
+  expect(ids({ dof: {}, shafts: { intensity: 1 } })).toContain("fog");
+  expect(ids({ dof: {}, passes: [{ wgsl: scanlines, before: "dof" }] })).toContain("fog");
+  expect(ids({ dof: {}, postOrder: ["dof", "fog", "bloom"] })).toContain("fog");
 });

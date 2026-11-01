@@ -15,9 +15,12 @@ test("scene emissive scale has an identity default and shares the animated unifo
 
 test("color operators survive serialized topology and keep a single output conversion", () => {
   for (const toneMapping of ["aces", "neutral", "aces-filmic", "agx"] as const) {
-    const scene = prepareWorldScene({ instances: [], toneMapping });
+    const scene = prepareWorldScene({ instances: [], toneMapping, bloom: { mode: "unreal" } });
     const graph = buildWorldGraph(JSON.parse(JSON.stringify(worldGraphTopology(scene))));
     const output = graph.passes.find(pass => pass.id === "tonemap")!;
+    expect(graph.passes.map(pass => pass.id)).not.toContain("bloom-composite");
+    expect(output.reads).toEqual([expect.any(String), "bloom-up@0"]);
+    expect(output.code).toContain("textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9]");
     expect(output.code.match(/fn toneMap\(/g)).toHaveLength(1);
     expect(output.code.match(/color=srgb\(color\)/g)).toHaveLength(1);
     expect(output.code).toContain("color=toneMap(color*uniforms[8]*frame.brightness)");

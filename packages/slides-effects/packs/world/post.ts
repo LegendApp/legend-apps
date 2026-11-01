@@ -43,6 +43,13 @@ ${depthCode()}
  return vec4f(scattering*uniforms[45],1.);
 }`;
 }
+const heightFog = `
+fn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f {
+ let world=vector(0u)+worldRay(uv)*distance;
+ let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
+ let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
+ return mix(color,vector(20u),clamp(fogAmount,0.,1.));
+}`;
 export function fogCode(bindings: string, shafts: boolean) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
@@ -54,21 +61,19 @@ fn shaftAt(uv:vec2f)->vec3f {
  for(var i=0;i<4;i++) { sum+=textureSampleLevel(shaftField,linearSampler,uv+vec2f(f32(i&1)*2.-1.,f32(i>>1u)*2.-1.)*texel,0.).rgb; }
  return sum*.25;
 }` : ""}
-${depthCode()}
+${depthCode()}${heightFog}
 @fragment fn fog(@location(0) uv:vec2f)->@location(0) vec4f {
- let distance=depthAt(uv); let world=vector(0u)+worldRay(uv)*distance;
- let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
- let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
- var color=mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,vector(20u),clamp(fogAmount,0.,1.));
+ var color=fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,depthAt(uv));
  ${shafts ? "color+=shaftAt(uv);" : ""}
  return vec4f(color,1.);
 }`;
 }
-export function dofCode(bindings: string, samples: number) {
+/** `fog` applies height fog to each tap instead of a separate full-resolution fog pass before the focus blur. */
+export function dofCode(bindings: string, samples: number, fog = false) {
   const common = `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var depth:texture_depth_2d;
-${depthCode()}
+${depthCode()}${fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
 fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.,1.); }
 `;
   return {
@@ -83,15 +88,15 @@ fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.
   // Reject distant background crossing a nearer silhouette; let foreground bokeh spread.
   let foreground=sampleDepth<=centerDepth+.1;
   let contribution=select(exp(-abs(sampleDepth-centerDepth)/max(.1,centerDepth*.025)),1.,foreground);
-  let w=contribution*max(.05,sampleCoc); color+=textureSampleLevel(source,linearSampler,sampleUV,0.).rgb*w; weight+=w;
+  let w=contribution*max(.05,sampleCoc); color+=fogged(textureSampleLevel(source,linearSampler,sampleUV,0.).rgb,sampleUV,sampleDepth)*w; weight+=w;
  }
  return vec4f(color/max(weight,.0001),1.);
 }`,
     composite: `${common}
 @group(0) @binding(5) var blurred:texture_2d<f32>;
 @fragment fn focusComposite(@location(0) uv:vec2f)->@location(0) vec4f {
- let amount=smoothstep(0.,.15,coc(depthAt(uv)));
- return vec4f(mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,textureSampleLevel(blurred,linearSampler,uv,0.).rgb,amount),1.);
+ let distance=depthAt(uv); let amount=smoothstep(0.,.15,coc(distance));
+ return vec4f(mix(fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,distance),textureSampleLevel(blurred,linearSampler,uv,0.).rgb,amount),1.);
 }`,
   };
 }
@@ -141,9 +146,11 @@ fn toneMap(input:vec3f)->vec3f {
   return `fn toneMap(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }`;
 }
 
-export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb") {
+export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", bloom = false) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
+${bloom ? "@group(0) @binding(4) var bloom:texture_2d<f32>;" : ""}
+fn sceneAt(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb${bloom ? "+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9]" : ""}; }
 ${toneMappingCode(toneMapping)}
 fn srgb(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
 fn rectangle(p:vec2f,center:vec2f,halfSize:vec2f)->f32 { let q=abs(p-center)-halfSize; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.); }
@@ -161,7 +168,8 @@ fn digit(p:vec2f,value:u32)->f32 {
 }
 @fragment fn tonemap(@location(0) uv:vec2f,@builtin(position) pixel:vec4f)->@location(0) vec4f {
  let shift=(uv-.5)*uniforms[44]*${toneMapping === "aces" ? "1." : "-1."};
- var color=vec3f(textureSampleLevel(source,linearSampler,uv+shift,0.).r,textureSampleLevel(source,linearSampler,uv,0.).g,textureSampleLevel(source,linearSampler,uv-shift,0.).b);
+ var color=sceneAt(uv);
+ if(uniforms[44]!=0.) { color=vec3f(sceneAt(uv+shift).r,color.g,sceneAt(uv-shift).b); }
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
