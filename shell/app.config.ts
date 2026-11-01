@@ -56,7 +56,6 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => {
     version: "0.0.0",
     orientation: "portrait",
     userInterfaceStyle: "light",
-    newArchEnabled: true,
     ios: {
       ...config.ios,
       supportsTablet: true,
@@ -64,7 +63,6 @@ export default ({ config }: { config: ExpoConfig }): ExpoConfig => {
     },
     android: {
       ...config.android,
-      edgeToEdgeEnabled: true,
       package: app.androidPackage,
       predictiveBackGestureEnabled: false,
     },
