@@ -79,9 +79,10 @@ export type OrbsOptions = {
   id?: string; count?: number; colors?: string[]; radius?: number; spread?: Vec3; position?: Vec3; seed?: number; drift?: number; emissive?: number;
 };
 export type WorldScene = {
-  camera?: CameraOptions; instances: Instance[]; exposure?: Animated<number>; quality?: "auto" | "low" | "medium" | "high";
+  camera?: CameraOptions; instances: Instance[]; exposure?: Animated<number>;
+  toneMapping?: "aces" | "neutral" | "aces-filmic" | "agx"; outputColorSpace?: "srgb" | "linear-srgb"; emissiveScale?: Animated<number>; quality?: "auto" | "low" | "medium" | "high";
   backgroundColor?: string; fog?: { density?: Animated<number>; color?: Animated<string>; height?: Animated<number>; falloff?: Animated<number> };
-  bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number> }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
+  bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number>; mode?: "soft" | "unreal" }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
   stages?: { stage: StageMotion; parents: StageMotion[] }[]; materials?: Record<string, MaterialOptions>;
   dof?: { focus?: Animated<number | string>; aperture?: Animated<number>; maxBlur?: Animated<number>; scale?: number; samples?: number };
   floor?: { mirror?: boolean; y?: Animated<number>; roughness?: Animated<number>; reflectivity?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number>; scale?: number } & FloorMarkings;
@@ -864,7 +865,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
       !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
   }
-  const fields: [number, Animated<number>][] = [[9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
+  const fields: [number, Animated<number>][] = [[18, scene.emissiveScale ?? 1], [9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
     [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
     [38, scene.floor?.reflectivity ?? 0.8], [39, scene.floor?.size ?? 40], [43, scene.floor?.metal ?? 0.8], [44, scene.chromatic ?? 0],

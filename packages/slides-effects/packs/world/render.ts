@@ -82,7 +82,7 @@ struct ShapeVertex { position:vec3f, normal:vec3f }
 fn shapeContext()->ShapeContext { return ShapeContext(frame.time,frame.slideTime,frame.stepTime,frame.step); }
 fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimIntensity:f32,activation:f32)->vec3f {
  let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));
- var color=material.albedo*uniforms[52]+material.emissive;
+ var color=material.albedo*uniforms[52]+material.emissive*uniforms[18];
  let roughness=clamp(material.roughness,.04,1.); let metal=clamp(material.metal,0.,1.);
  ${lightCount === 0 && !look.key && !look.environment ? "color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55;" : ""}
  ${look.key ? "color+=keyLight(world,normal,view,material.albedo,roughness,metal);" : ""}
@@ -445,17 +445,38 @@ fn tent9(uv:vec2f)->vec3f {
  return (tap(uv,vec2f(-.5,-.5))+tap(uv,vec2f(.5,-.5))+tap(uv,vec2f(-.5,.5))+tap(uv,vec2f(.5,.5)))*.25;
 }
 `;
-const downsample = `${filterCode}
-@fragment fn downsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(downsample13(uv,false),1.); }`;
+function downsampleCode(weight = "1.") {
+  return `${filterCode}
+@fragment fn downsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(downsample13(uv,false)*${weight},1.); }`;
+}
+const downsample = downsampleCode();
 const threshold = `${filterCode}
 @fragment fn threshold(@location(0) uv:vec2f)->@location(0) vec4f {
  let color=downsample13(uv,true); let brightness=max(color.r,max(color.g,color.b));
  let knee=uniforms[10]*.5; let soft=clamp(brightness-uniforms[10]+knee,0.,2.*knee);
  return vec4f(color*max(soft*soft/(4.*knee+.0001),brightness-uniforms[10])/max(.0001,brightness),1.);
 }`;
+// Luminance high-pass used by UnrealBloomPass; HDR values pass through without subtracting the threshold.
+const luminosityThreshold = `${filterCode}
+@fragment fn threshold(@location(0) uv:vec2f)->@location(0) vec4f {
+ let color=textureSampleLevel(source,linearSampler,uv,0.).rgb;
+ let brightness=dot(color,vec3f(.2126,.7152,.0722));
+ return vec4f(color*smoothstep(uniforms[10],uniforms[10]+.01,brightness),1.);
+}`;
 const upsample = `${filterCode}
 @group(0) @binding(4) var high:texture_2d<f32>;
 @fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb+tent9(uv)*uniforms[11],1.); }`;
+function unrealBloomWeight(mip: number) {
+  const factor = (1 - mip * .2).toFixed(1);
+  return `mix(${factor},1.2-${factor},clamp(uniforms[11],0.,1.))`;
+}
+function unrealUpsample(mip: number) {
+  return `${filterCode}
+@group(0) @binding(4) var high:texture_2d<f32>;
+@fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f {
+ return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb*${unrealBloomWeight(mip)}+tent9(uv),1.);
+}`;
+}
 const bloomComposite = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var bloom:texture_2d<f32>;
@@ -484,7 +505,7 @@ type CustomDraw = CustomGeometry & { offset: number; count: number };
 type GlyphDraw = { font: string; segments: number; offset: number; count: number; vertexCount: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
-  quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
+  quality: WorldScene["quality"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
@@ -519,7 +540,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
       previousSDF = instance.sdf;
     } else counts[instance.kind]++;
   }
-  return { quality: scene.quality, counts, backgroundVector: scene.backgroundVector,
+  return { quality: scene.quality, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
@@ -630,16 +651,16 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     }
     if (stage === "bloom") {
       const bloomSource = color;
-      passes.push({ kind: "fullscreen", id: "bloom-threshold", code: threshold, fragment: "threshold", reads: [color], output: "bloom@0" });
+      passes.push({ kind: "fullscreen", id: "bloom-threshold", code: topology.bloomMode === "unreal" ? luminosityThreshold : threshold, fragment: "threshold", reads: [color], output: "bloom@0" });
       for (let mip = 1; mip < levels; mip++) passes.push({ kind: "fullscreen", id: `bloom-down-${mip}`, code: downsample, fragment: "downsample", reads: [`bloom@${mip - 1}`], output: `bloom@${mip}` });
-      passes.push({ kind: "fullscreen", id: `bloom-up-${levels - 1}`, code: downsample, fragment: "downsample", reads: [`bloom@${levels - 1}`], output: `bloom-up@${levels - 1}` });
-      for (let mip = levels - 2; mip >= 0; mip--) passes.push({ kind: "fullscreen", id: `bloom-up-${mip}`, code: upsample, fragment: "upsample", reads: [`bloom-up@${mip + 1}`, `bloom@${mip}`], output: `bloom-up@${mip}` });
+      passes.push({ kind: "fullscreen", id: `bloom-up-${levels - 1}`, code: topology.bloomMode === "unreal" ? downsampleCode(unrealBloomWeight(levels - 1)) : downsample, fragment: "downsample", reads: [`bloom@${levels - 1}`], output: `bloom-up@${levels - 1}` });
+      for (let mip = levels - 2; mip >= 0; mip--) passes.push({ kind: "fullscreen", id: `bloom-up-${mip}`, code: topology.bloomMode === "unreal" ? unrealUpsample(mip) : upsample, fragment: "upsample", reads: [`bloom-up@${mip + 1}`, `bloom@${mip}`], output: `bloom-up@${mip}` });
       fullscreen("bloom-composite", bloomComposite, "bloomComposite", [bloomSource, "bloom-up@0"]);
     }
     custom(stage, false);
   }
   custom("tonemap", true);
-  fullscreen("tonemap", finalCode(worldBindings), "tonemap", [color], "tonemapped");
+  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace), "tonemap", [color], "tonemapped");
   custom("tonemap", false);
   fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
   if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");

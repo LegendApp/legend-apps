@@ -91,6 +91,7 @@ class WorldGPU extends Component<{ fallback: ReactNode; children: ReactNode }, {
 
 export type WorldProps = {
   id?: string; width?: number; height?: number; background?: boolean; backgroundColor?: string;
+  toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; emissiveScale?: Animated<number>;
   quality?: WorldScene["quality"]; exposure?: Animated<number>; previewTime?: number; borderRadius?: number;
   renderScale?: number;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
@@ -108,8 +109,8 @@ function WorldSlideClock({ children }: { children: ReactNode }) {
   const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), playbackScope: "slide" }), [sourceRuntime$]);
   return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
-function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"]) {
-  const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], quality, exposure, backgroundColor, postOrder,
+function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"], toneMapping: WorldScene["toneMapping"], outputColorSpace: WorldScene["outputColorSpace"], emissiveScale: Animated<number>) {
+  const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], quality, exposure, backgroundColor, postOrder, toneMapping, outputColorSpace, emissiveScale,
     scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
   function add(instances: Instance[], stages: StageMotion[]) { for (const instance of instances) { if (stages.length) instance.stages = stages; scene.instances.push(instance); } }
@@ -173,12 +174,12 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
   return { prepared: prepareWorldScene(scene), overlay };
 }
 function WorldSurface(props: WorldProps) {
-  const { children, quality = "auto", exposure = 1, backgroundColor = "#05060a", scrim = false, postOrder,
+  const { children, quality = "auto", exposure = 1, backgroundColor = "#05060a", scrim = false, postOrder, toneMapping, outputColorSpace, emissiveScale = 1,
     width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, borderRadius = 0, accessibilityLabel } = props;
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
-  const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder), [children, quality, exposure, backgroundColor, scrim, postOrder]);
+  const { prepared, overlay } = useMemo(() => worldContent(children, quality, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [children, quality, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
   const supersampled = PixelRatio.get() * useContext(PresentationCanvasScaleContext) >= 1.5;
   const topology = JSON.stringify({ ...worldGraphTopology(prepared), supersampled });

@@ -571,3 +571,19 @@ with no per-tick geometry allocation. See `apps/slides/examples/stage.mdx`.
 parts at their original centers, including Text3D glyph arrays. It sets each
 part's `origin` to that center so its rail, rotation pivot, and landing burst
 share the same home. Explicit groups default to local origin `[0, 0, 0]`.
+
+### Color output
+
+World/scene accepts `toneMapping` (`"aces"` for the existing fit, `"neutral"`,
+`"aces-filmic"`, or `"agx"`), `exposure` (default 1), `emissiveScale` (default 1),
+and `outputColorSpace` (`"srgb"`, the default, or `"linear-srgb"`). The three new
+operators match three.js r180 in linear sRGB; ACES Filmic includes its 1/0.6
+viewing-environment scale. They apply vignette and grain before tonemapping and
+output encoding. The default preserves the existing display-space finish.
+
+`Bloom` accepts animated `intensity`, `threshold`, and `radius`. Its default
+`mode="soft"` retains the existing max-channel soft knee;
+`mode="unreal"` selects the UnrealBloom luminance high-pass (0.01
+smoothing width) without subtracting the threshold from the HDR highlights. Its
+radius blends the five mip weights from `[1, .8, .6, .4, .2]` toward their
+mirrors about .6, matching UnrealBloomPass without adding render passes.

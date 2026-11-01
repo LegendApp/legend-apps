@@ -1,3 +1,4 @@
+import type { WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 
 export type CustomGeometry = { wgsl: string; vertexCount: number };
@@ -108,10 +109,41 @@ ${wgsl}
  return customPass(uv,textureSampleLevel(previous,linearSampler,uv,0.),PassContext(frame.time,frame.slideTime,frame.stepTime,frame.step,depthAt(uv)));
 }`;
 }
-export function finalCode(bindings: string) {
+// Linear-sRGB operators from three.js r180 (MIT); the legacy ACES fit keeps existing decks unchanged.
+function toneMappingCode(mode: NonNullable<WorldScene["toneMapping"]>) {
+  if (mode === "neutral") return `
+fn toneMap(input:vec3f)->vec3f {
+ var color=input; let x=min(color.r,min(color.g,color.b));
+ let offset=select(.04,x-6.25*x*x,x<.08); color-=offset;
+ let peak=max(color.r,max(color.g,color.b)); if(peak<.76) { return color; }
+ let newPeak=1.-.24*.24/(peak+.24-.76); color*=newPeak/peak;
+ let g=1.-1./(.15*(peak-newPeak)+1.); return mix(color,vec3f(newPeak),g);
+}`;
+  if (mode === "aces-filmic") return `
+fn toneMap(input:vec3f)->vec3f {
+ let inMat=mat3x3f(vec3f(.59719,.07600,.02840),vec3f(.35458,.90834,.13383),vec3f(.04823,.01566,.83777));
+ let outMat=mat3x3f(vec3f(1.60475,-.10208,-.00327),vec3f(-.53108,1.10813,-.07276),vec3f(-.07367,-.00605,1.07602));
+ let v=inMat*(input/.6); let a=v*(v+.0245786)-.000090537; let b=v*(.983729*v+.4329510)+.238081;
+ return clamp(outMat*(a/b),vec3f(0.),vec3f(1.));
+}`;
+  if (mode === "agx") return `
+fn toneMap(input:vec3f)->vec3f {
+ let to2020=mat3x3f(vec3f(.6274,.0691,.0164),vec3f(.3293,.9195,.0880),vec3f(.0433,.0113,.8956));
+ let from2020=mat3x3f(vec3f(1.6605,-.1246,-.0182),vec3f(-.5876,1.1329,-.1006),vec3f(-.0728,-.0083,1.1187));
+ let inset=mat3x3f(vec3f(.8566271533,.1373189729,.1118982130),vec3f(.0951212405,.7612419906,.0767994186),vec3f(.0482516061,.1014390365,.8113023684));
+ let outset=mat3x3f(vec3f(1.1271005818,-.1413297635,-.1413297635),vec3f(-.1106066431,1.1578237022,-.1106066431),vec3f(-.0164939387,-.0164939387,1.2519364066));
+ let x=clamp((log2(max(inset*(to2020*input),vec3f(1e-10)))+12.47393)/16.499999,vec3f(0.),vec3f(1.));
+ let x2=x*x; let x4=x2*x2;
+ let contrast=15.5*x4*x2-40.14*x4*x+31.96*x4-6.868*x2*x+.4298*x2+.1191*x-.00232;
+ return clamp(from2020*pow(max(outset*contrast,vec3f(0.)),vec3f(2.2)),vec3f(0.),vec3f(1.));
+}`;
+  return `fn toneMap(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }`;
+}
+
+export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb") {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
-fn aces(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }
+${toneMappingCode(toneMapping)}
 fn srgb(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
 fn rectangle(p:vec2f,center:vec2f,halfSize:vec2f)->f32 { let q=abs(p-center)-halfSize; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.); }
 fn digit(p:vec2f,value:u32)->f32 {
@@ -127,12 +159,17 @@ fn digit(p:vec2f,value:u32)->f32 {
  return 1.-smoothstep(0.,.025,distance);
 }
 @fragment fn tonemap(@location(0) uv:vec2f,@builtin(position) pixel:vec4f)->@location(0) vec4f {
- let shift=(uv-.5)*uniforms[44];
+ let shift=(uv-.5)*uniforms[44]*${toneMapping === "aces" ? "1." : "-1."};
  var color=vec3f(textureSampleLevel(source,linearSampler,uv+shift,0.).r,textureSampleLevel(source,linearSampler,uv,0.).g,textureSampleLevel(source,linearSampler,uv-shift,0.).b);
- color=srgb(aces(color*uniforms[8]*frame.brightness));
- color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
- color+=noise*uniforms[16];
+ ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
+ ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
+ color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;
+ color+=noise*uniforms[16];` : `color*=1.-uniforms[15]*smoothstep(.25,.85,length((uv-.5)*vec2f(1.1,1.)));
+ color=max(vec3f(0.),color+noise*uniforms[16]*(.3+color));
+ color=toneMap(color*uniforms[8]*frame.brightness);
+ ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
+ color*=1.-uniforms[17]*.65;`}
  if(uniforms[53]>.5) {
   let value=floor(clamp(uniforms[56],0.,999999.)); var digits=1.; var remaining=u32(value);
   for(var place=0u;place<5u;place++) { if(remaining>=10u) { digits+=1.; remaining/=10u; } }
