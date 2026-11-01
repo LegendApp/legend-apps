@@ -70,8 +70,9 @@ export function choreographyInstances(options: ChoreographyOptions): Instance[] 
       if (a < 0 || b < 0) throw new Error("World choreography route references an unknown part");
       const start = source[a].home.position, end = target[b].home.position, swapAt = route.swapAt ?? transition.swapAt ?? 0.5;
       unit(swapAt, "geometry swap point"); positive(route.delay ?? 0, "route delay", true);
-      return { from: a, to: b, via: route.via ?? [[start[0], start[1] + 3, start[2]], [end[0], end[1] + 3, end[2]]], delay: i * stagger + (route.delay ?? 0), swapAt };
+      return { from: a, to: b, via: route.via ?? [[start[0], start[1] + 3, start[2]], [end[0], end[1], end[2] + 3]], delay: i * stagger + (route.delay ?? 0), swapAt, merge: false };
     });
+    routes.forEach((route, i) => { route.merge = routes.some((candidate, j) => candidate.to === route.to && (candidate.delay < route.delay || candidate.delay === route.delay && j < i)); });
     if (source.some((_, part) => !routes.some(route => route.from === part)) || target.some((_, part) => !routes.some(route => route.to === part))) throw new Error("World choreography mapping must cover every source and target part");
     return { from, to, step: transition.step, at: transition.at, duration, overshoot, routes };
   });

@@ -11,7 +11,7 @@ export type ChoreographyTransition = { from: string; to: string; step?: number; 
 export type ChoreographyOptions = { id: string; layouts: ChoreographyLayout[]; transitions: ChoreographyTransition[] };
 type Pose = { position: Vec3; rotation: Vec3; scale: Vec3; color?: Vec3 };
 export type Trigger = { step?: number; at?: number; delay?: number };
-export type Route = { from: number; to: number; via: [Vec3, Vec3]; delay: number; swapAt: number };
+export type Route = { from: number; to: number; via: [Vec3, Vec3]; delay: number; swapAt: number; merge: boolean };
 type Transition = Trigger & { from: number; to: number; duration: number; overshoot: number; routes: Route[] };
 export type Model = { layouts: Pose[][]; transitions: Transition[] };
 export type ChoreographyMotion = { model: Model; layout?: number; part?: number; transition?: number; route?: number; side?: "from" | "to"; local: Vec3; endOffset: Vec3; opacity: number };
@@ -85,9 +85,12 @@ export function samplePartMotion(motion: ChoreographyMotion, clock: ClockSample)
   const tangent: Vec3 = [to.position[0] - route.via[1][0], to.position[1] - route.via[1][1], to.position[2] - route.via[1][2]];
   const position: Vec3 = [point[0] + tangent[0] * Math.max(0, t - 1), point[1] + tangent[1] * Math.max(0, t - 1), point[2] + tangent[2] * Math.max(0, t - 1)];
   const blend = easeProgress(progress, "smoothstep");
-  const visible = active === motion.transition && eventElapsed(own, clock) >= route.delay && progress < 1 && (motion.side === "from" ? progress < route.swapAt : progress >= route.swapAt);
-  return { position, rotation: mixVector(from.rotation, to.rotation, blend), scale: mixVector(from.scale, to.scale, blend),
-    color: from.color && to.color ? mixVector(from.color, to.color, blend) : motion.side === "from" ? from.color : to.color, opacity: visible ? 1 : 0 };
+  const weight = route.merge && progress >= route.swapAt ? 1 - easeProgress((progress - route.swapAt) / Math.max(0.0001, 1 - route.swapAt), "smoothstep") : 1;
+  const visible = active === motion.transition && eventElapsed(own, clock) >= route.delay && progress < 1 &&
+    (motion.side === "from" ? route.merge || progress < route.swapAt : !route.merge && progress >= route.swapAt);
+  const scale = mixVector(from.scale, to.scale, blend);
+  return { position, rotation: mixVector(from.rotation, to.rotation, blend), scale: route.merge ? [scale[0] * weight, scale[1] * weight, scale[2] * weight] : scale,
+    color: from.color && to.color ? mixVector(from.color, to.color, blend) : motion.side === "from" ? from.color : to.color, opacity: visible ? weight : 0 };
 }
 export function sampleBurst(motion: BurstMotion, clock: ClockSample) {
   "worklet";
