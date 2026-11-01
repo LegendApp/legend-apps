@@ -33,6 +33,8 @@ test("route draw-in and pulses share arc length through orthogonal bends", () =>
   expect(instanceOpacity(bead, clock(1, 0))).toBe(0);
   expect(instanceOpacity(bead, clock(5))).toBe(0);
   expect(instanceOpacity(instances[1], clock(2))).toBe(0);
+  const hidden = sampleWorldUniforms(scene, clock(2));
+  expect(Array.from(hidden.slice(base + 12, base + 15))).not.toEqual(Array.from(hidden.slice(base, base + 3)));
 });
 
 test("rounded nodes have mesh thickness, and typed flashes retain selection and pulse colors", () => {

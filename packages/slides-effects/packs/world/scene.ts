@@ -695,8 +695,9 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     let endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
       : !instance.stages?.length ? instance.end : [instance.end[0] + offset[0], instance.end[1] + offset[1], instance.end[2] + offset[2]];
     if (instance.route && !instance.route.pulse) {
-      const route = instance.route, segment = route.segment!, distance = Math.min(route.lengths[segment + 1], Math.max(route.lengths[segment],
-        sampleTrack(route.draw, clock) * route.lengths[route.lengths.length - 1]));
+      const route = instance.route, segment = route.segment!, drawn = sampleTrack(route.draw, clock) * route.lengths[route.lengths.length - 1];
+      // Hidden segments still need a valid tangent in the tube vertex shader.
+      const distance = drawn <= route.lengths[segment] ? route.lengths[segment + 1] : Math.min(route.lengths[segment + 1], drawn);
       const end = routePoint(route.points, route.lengths, distance);
       endpoint = [end[0] + offset[0], end[1] + offset[1], end[2] + offset[2]];
     }
