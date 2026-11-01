@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "packs": {
+    "charts": {
+      "path": "../../../packages/slides-effects/packs/charts"
+    },
+    "world": {
+      "path": "../../../packages/slides-effects/packs/world"
+    }
+  }
+}
