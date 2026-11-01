@@ -1,0 +1,51 @@
+name: Slides World
+
+on:
+  pull_request:
+    paths:
+      - apps/slides/**
+      - packages/presentation/**
+      - packages/slides-effects/**
+      - patches/**
+      - shell/src/global.css
+      - shell/package.json
+      - scripts/compile-slides.ts
+      - package.json
+      - bun.lock
+      - .github/workflows/slides-world.yml
+  workflow_dispatch:
+
+jobs:
+  # Compiles the real World decks and runs the mocked host tests. Darwin-only
+  # Hermes and Dawn tests are skipped here, not validated.
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      # Bun shares module mocks across files, so each file gets its own process.
+      - run: |
+          for file in \
+            apps/slides/src/__tests__/typeGPUShader.test.ts \
+            apps/slides/src/__tests__/gpuRenderGraph.test.ts \
+            apps/slides/src/__tests__/exampleShaders.test.ts \
+            packages/presentation/src/__tests__/compileDeck.test.ts \
+            packages/slides-effects/tests/worldDataFlow.test.tsx \
+            packages/slides-effects/tests/worldRender.test.ts; do
+            bun test --timeout 60000 --preload ./apps/slides/src/__tests__/nativeMock.ts "$file"
+          done
+
+  # Executes compiled decks in React Native's macOS Hermes runtime; needs no GPU.
+  hermes:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: bun test --timeout 60000 --preload ./apps/slides/src/__tests__/nativeMock.ts packages/presentation/src/__tests__/compileDeck.test.ts -t "in Hermes"
+      - run: bun test --timeout 60000 --preload ./apps/slides/src/__tests__/nativeMock.ts apps/slides/src/__tests__/exampleShaders.test.ts -t "evaluate in Hermes"

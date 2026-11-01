@@ -1,0 +1,162 @@
+---
+title: Data Flow
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050811"
+  color: "#f8fafc"
+---
+
+import { Background } from "@legend-apps/presentation"
+import { Text } from "react-native"
+import { World, Camera, Graph, tree, wave, subset, PathPulse, Spray, Orbs, Rows, Voxels, WorldCounter, Stage, flyTo, Box, Ring, Floor, PointLight, RimLight, Bloom, Fog, DOF, Vignette, Grain } from "slides:world/World"
+
+export const network = tree("root", [
+  ["north", [["n1", ["n11", "n12", "n13"]], ["n2", ["n21", "n22", "n23"]], ["n3", ["n31", "n32", "n33"]]]],
+  ["east", [["e1", ["e11", "e12", "e13"]], ["e2", ["e21", "e22", "e23"]], ["e3", ["e31", "e32", "e33"]]]],
+  ["south", [["s1", ["s11", "s12", "s13"]], ["s2", ["s21", "s22", "s23"]], ["s3", ["s31", "s32", "s33"]]]],
+  ["west", [["w1", ["w11", "w12", "w13"]], ["w2", ["w21", "w22", "w23"]], ["w3", ["w31", "w32", "w33"]]]],
+])
+
+export const branching = { data: network, radius: 6.8, levelHeight: 1.7, position: [0, 3.2, 0], edge: { curve: 0.45, thickness: 0.025, glow: 3 } }
+
+export const atmosphere = <>
+  <Fog density={0.035} height={-3} falloff={0.12} color="#101c30" />
+  <Bloom intensity={1.8} threshold={0.7} radius={0.9} />
+  <Vignette amount={0.25} /><Grain amount={0.012} />
+</>
+
+<Background>
+  <World background quality="auto" exposure={1.3} scrim={0.08}>
+    <Camera duration={1.8} shots={[
+      { step: 0, position: [8, 1.8, 13], target: [0, 0.6, 0], fov: 44 },
+      { step: 2, follow: "node:e2", dolly: 10, focus: "node:e2" },
+    ]} />
+    <Graph {...branching} node={{ color: "#ff36c8", dim: "#647b9a", size: 0.24, emissive: 7 }} edge={{ ...branching.edge, color: "#ff36c8" }} activate={[
+      wave({ from: "root", step: 1, speed: 0.32, duration: 0.45 }),
+      subset({ branches: ["east"], step: 2, duration: 0.8 }),
+    ]} />
+    <Spray under="leaves:lit" color="#ff9ee5" rate={36} lifetime={1.6} size={0.025} spread={[0.35, 0.2, 0.35]} velocity={[0, -0.8, 0]} />
+    <Ring position={[0, -2.8, 0]} radius={6.8} thickness={0.025} color="#ff36c8" emissive={2.5} />
+    <Floor mirror y={-3} color="#101827" roughness={0.08} reflectivity={0.65} size={40} />
+    <PointLight position={[4, 6, 10]} color="#d6e7ff" intensity={220} range={40} />
+    <DOF focus={{ 0: "node:n2", 2: "node:e2" }} aperture={0.45} maxBlur={10} />
+    {atmosphere}
+  </World>
+</Background>
+
+<View className="flex-1 justify-end items-start">
+  <View className="rounded-2xl bg-black/70 px-8 py-5">
+    <Steps count={3}>{step => <Text className="text-6xl font-bold text-white">{step === 2 ? "Pruned subset" : "Cascade"}</Text>}</Steps>
+  </View>
+</View>
+
+---
+
+<Background>
+  <World background quality="auto" exposure={1.3} scrim={0.08}>
+    <Camera duration={1.5} shots={[
+      { step: 0, position: [8, 1.8, 13], target: [0, 0.6, 0], fov: 44 },
+      { step: 1, follow: "pulse", dolly: 7, focus: "pulse", fov: 48 },
+    ]} />
+    <Graph {...branching} node={{ color: "#22d3ee", dim: "#647b9a", size: 0.2 }} />
+    <PathPulse id="pulse" path={["root", "north", "n2", "n22"]} step={1} duration={4.5} color="#22d3ee" size={0.2} emissive={14} trail={0.1} />
+    <Ring position={[0, -2.8, 0]} radius={6.8} thickness={0.025} color="#22d3ee" emissive={1.8} />
+    <Floor mirror y={-3} color="#101827" roughness={0.08} reflectivity={0.6} size={40} />
+    <PointLight position={[4, 6, 10]} color="#d6e7ff" intensity={220} range={40} />
+    <DOF focus={{ 0: "node:n2", 1: "pulse" }} aperture={0.65} maxBlur={12} />
+    {atmosphere}
+  </World>
+</Background>
+
+<View className="flex-1 justify-end items-start">
+  <View className="rounded-2xl bg-black/70 px-8 py-5">
+    <Steps count={2}>{() => <Text className="text-6xl font-bold text-white">One path</Text>}</Steps>
+  </View>
+</View>
+
+---
+
+<Background>
+  <World background quality="auto" exposure={1.3} scrim={0.08}>
+    <Camera shots={[{ step: 0, position: [4, -3, 7], target: [0, 1, 0], fov: 46 }]} />
+    <Rows id="rows" count={15} position={[0, 0, 0]} spacing={1} speed={0.3} width={4} depth={0.7} changes={[{ row: 7, step: 1 }, { row: 9, step: 2 }]} flashDuration={2.4} color="#607b96" flashColor="#ff36c8" />
+    <DOF focus={{ 0: "rows:row:7", 2: "rows:row:9" }} aperture={0.8} maxBlur={14} />
+    <PointLight position={[3, 5, 7]} color="#c5e9ff" intensity={140} range={30} />
+    <Orbs count={48} colors={["#22d3ee", "#ff36c8"]} radius={0.025} spread={[12, 16, 8]} seed={12} drift={0.15} emissive={3} />
+    <Floor mirror y={-8} color="#101827" roughness={0.12} reflectivity={0.5} size={40} />
+    {atmosphere}
+  </World>
+</Background>
+
+<View className="flex-1 justify-end items-start">
+  <View className="rounded-2xl bg-black/70 px-8 py-5">
+    <Steps count={3}>{() => <Text className="text-6xl font-bold text-white">Changed rows</Text>}</Steps>
+  </View>
+</View>
+
+---
+
+<Background>
+  <World background quality="auto" exposure={1.3} scrim={0.08}>
+    <Camera shots={[
+      flyTo("a", { step: 0, offset: [2, 2.5, 10], fov: 46, focus: "stage:a" }),
+      flyTo("b", { step: 1, arc: 3, duration: 1.8, offset: [2, 2.5, 10], focus: "stage:b" }),
+      flyTo("c", { step: 2, arc: 3, duration: 1.8, offset: [2, 2.5, 10], focus: "stage:c" }),
+    ]} />
+    <Stage id="a" position={[-10, 0, 0]} glow={{ 0: 1, 1: 0.35 }}>
+      <Box scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={6} />
+      <Orbs count={20} colors={["#22d3ee"]} radius={0.08} spread={[6, 3, 5]} seed={3} drift={0.15} emissive={4} />
+      <Ring position={[0, -2, 0]} radius={3} color="#f59e0b" emissive={3} />
+    </Stage>
+    <Stage id="b" position={[0, 0, 0]} glow={{ 0: 0.08, 1: 0.7, 2: 0.25 }}>
+      <Box scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={6} />
+      <Orbs count={20} colors={["#22d3ee"]} radius={0.08} spread={[6, 3, 5]} seed={3} drift={0.15} emissive={4} id="middle" />
+      <Ring position={[0, -2, 0]} radius={3} color="#f59e0b" emissive={3} />
+    </Stage>
+    <Stage id="c" position={[10, 0, 0]} glow={{ 0: 0.08, 2: 0.45 }}>
+      <Box scale={[0.7, 2, 0.7]} color="#22d3ee" emissive={6} />
+      <Orbs count={20} colors={["#22d3ee"]} radius={0.08} spread={[6, 3, 5]} seed={3} drift={0.15} emissive={4} id="last" />
+      <Ring position={[0, -2, 0]} radius={3} color="#f59e0b" emissive={3} />
+    </Stage>
+    <Floor mirror y={-3} color="#101827" roughness={0.08} reflectivity={0.7} size={40} />
+    <PointLight position={[0, 6, 6]} color="#d6e7ff" intensity={180} range={40} />
+    <RimLight color="#f59e0b" intensity={0.5} />
+    <DOF aperture={0.45} maxBlur={10} />
+    {atmosphere}
+  </World>
+</Background>
+
+<View className="flex-1 justify-end items-start">
+  <View className="rounded-2xl bg-black/70 px-8 py-5">
+    <Steps count={3}>{() => <Text className="text-6xl font-bold text-white">Three stages</Text>}</Steps>
+  </View>
+</View>
+
+---
+
+<Background>
+  <World background quality="auto" exposure={1.3} scrim={0.08}>
+    <Camera duration={2.4} shots={[
+      { step: 0, position: [7, 3.5, 10], target: [0, 0, 0], fov: 42 },
+      { step: 1, position: [4.5, 2, 7], target: [0, 0, 0], focus: 8.5 },
+    ]} />
+    <Voxels id="voxels" grid={[10, 10, 10]} spacing={0.45} size={0.17} color="#22d3ee" emissive={3} collapse={{ step: 1, to: 0.2, duration: 2.4 }} />
+    <WorldCounter source="voxels" position={[0.82, 0.19]} size={0.065} color="#ffffff" />
+    <Ring position={[0, -2.8, 0]} radius={4} thickness={0.025} color="#f59e0b" emissive={2.5} />
+    <Floor mirror y={-3} color="#101827" roughness={0.08} reflectivity={0.65} size={40} />
+    <RimLight color="#f59e0b" intensity={0.5} />
+    <DOF aperture={0.3} maxBlur={8} />
+    {atmosphere}
+  </World>
+</Background>
+
+<View className="flex-1 justify-end items-start">
+  <View className="rounded-2xl bg-black/70 px-8 py-5">
+    <Steps count={2}>{() => <Text className="text-6xl font-bold text-white">Less to carry</Text>}</Steps>
+  </View>
+</View>
+<View className="absolute top-0 right-0 rounded-2xl bg-black/70 px-8 py-5">
+  <Text className="text-3xl text-white">Active cells</Text>
+</View>

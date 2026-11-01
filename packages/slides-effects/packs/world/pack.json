@@ -1,0 +1,7 @@
+{
+  "id": "world",
+  "version": "1.0.0",
+  "hostApiVersion": 2,
+  "exports": { "World": "./World.tsx" },
+  "capabilities": ["webgpu", "webgpu-multipass", "reanimated"]
+}

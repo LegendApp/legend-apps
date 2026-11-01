@@ -30,3 +30,18 @@ diff --git a/cpp/rnwgpu/SurfaceRegistry.h b/cpp/rnwgpu/SurfaceRegistry.h
    }
 
    SurfaceRegistry(const SurfaceRegistry &) = delete;
+diff --git a/cpp/rnwgpu/api/GPUDevice.cpp b/cpp/rnwgpu/api/GPUDevice.cpp
+--- a/cpp/rnwgpu/api/GPUDevice.cpp
++++ b/cpp/rnwgpu/api/GPUDevice.cpp
+@@ -161,7 +161,10 @@ GPUDevice::createTexture(std::shared_ptr<GPUTextureDescriptor> descriptor) {
+     throw std::runtime_error("Error with GPUTextureDescriptor");
+   }
+   auto texture = _instance.CreateTexture(&desc);
+-  return std::make_shared<GPUTexture>(texture, descriptor->label.value_or(""));
++  // GPU memory is not Hermes heap: charging it as external memory lets a few
++  // full-screen render targets exhaust the runtime's heap limit and abort.
++  return std::make_shared<GPUTexture>(texture, descriptor->label.value_or(""),
++                                      false);
+ }
+ 
+ std::shared_ptr<GPUShaderModule> GPUDevice::createShaderModule(

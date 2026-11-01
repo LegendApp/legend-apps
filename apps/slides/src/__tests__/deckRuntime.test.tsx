@@ -9,7 +9,7 @@ import React from "react";
 import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
-import { usePresentation } from "@legend-apps/presentation";
+import { GPURenderGraph, usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const titleSpeed$ = state.observable(1);
@@ -468,5 +468,51 @@ test("brightness changes preserve the measured preview stage and mounted slide",
     if (renderer) await act(() => renderer.unmount());
     brightness$.set(1);
     setSlidesState(initial);
+  }
+});
+
+test("selected backgrounds retain the GPU renderer through registration, selection and removal", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const DeckRenderer = compiledRenderer();
+  const SlideBackgroundHost = compiledRenderer("SlideBackgroundHost");
+  const uniforms = { value: [1] };
+  const passes = [{ kind: "fullscreen", id: "background", code: "@fragment fn shade()->@location(0) vec4f { return vec4f(0.,0.,0.,1.); }", fragment: "shade", output: "screen" }];
+  let mounts = 0, unmounts = 0;
+  function BackgroundGraph() {
+    React.useEffect(() => { mounts++; return () => { unmounts++; }; }, []);
+    return <GPURenderGraph targets={[]} passes={passes} uniforms={uniforms} width={64} height={64} />;
+  }
+  function Document({ components: { Deck, Slide, Background } }) {
+    return <Deck configJson="{}"><Slide metadataJson="{}" notes="">
+      <Background><BackgroundGraph /></Background>
+    </Slide></Deck>;
+  }
+  const content = (slideIndex = 0, visible = true) => <SlideBackgroundHost slideIndex={slideIndex} color="#000000">
+    {visible && <DeckRenderer targetIndex={0} />}
+  </SlideBackgroundHost>;
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let renderer;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, slides: [], config: {}, runtimeErrors: [] });
+    await act(() => { renderer = create(content()); });
+    const shader = renderer.root.findByType("gpu-shader");
+    expect(shader.props.renderGraph.passes).toBe(passes);
+    expect(shader.props.frameData).toBe(uniforms);
+    expect(mounts).toBe(1); expect(unmounts).toBe(0);
+    await act(() => renderer.update(content(1)));
+    expect(renderer.root.findAllByType("gpu-shader")).toHaveLength(0);
+    expect(unmounts).toBe(1);
+    await act(() => renderer.update(content()));
+    expect(renderer.root.findAllByType("gpu-shader")).toHaveLength(1);
+    expect(mounts).toBe(2);
+    await act(() => renderer.update(content(0, false)));
+    expect(renderer.root.findAllByType("gpu-shader")).toHaveLength(0);
+    expect(unmounts).toBe(2);
+    expect(getSlidesState().runtimeErrors).toEqual([]);
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
   }
 });

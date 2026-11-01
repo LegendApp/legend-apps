@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "packs": {
+    "world": {
+      "path": "../../../../packages/slides-effects/packs/world"
+    }
+  }
+}

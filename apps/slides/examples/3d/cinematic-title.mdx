@@ -1,0 +1,82 @@
+---
+title: Quiet Structures
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#04060b"
+  color: "#f8fafc"
+---
+
+import { Background } from "@legend-apps/presentation"
+import { Text } from "react-native"
+import { World, Camera, Box, Ring, Orbs, Material, Floor, SpotLight, RimLight, Fog, Shafts, DOF, Bloom, Vignette, Grain } from "slides:world/World"
+
+export const structures = <>
+  <Material id="stone" albedo="#101827" roughness={0.45} metal={0.2} rim={1.5} emissive={0} />
+  <Box material="stone" position={[-5, 0.5, 0]} scale={[1, 7, 1]} />
+  <Box material="stone" position={[-2, 0, 0]} scale={[1, 6, 1]} />
+  <Box material="stone" position={[1, 1, 0]} scale={[1, 8, 1]} />
+  <Box material="stone" position={[4, -0.5, 0]} scale={[1, 5, 1]} />
+  <Ring position={[0, -2.97, 0]} radius={7.5} thickness={0.025} color="#22d3ee" emissive={2} />
+  <Floor mirror y={-3} color="#04060b" roughness={0.06} reflectivity={0.85} size={60} />
+  <RimLight color="#f59e0b" intensity={0.15} />
+</>
+
+<Background>
+  <World id="quiet-structures" background quality="auto" exposure={1.1} scrim={0.12}>
+    <Camera shots={[{ step: 0, orbit: { center: [0, 0, 0], radius: 20, height: 5, speed: 0.045 }, fov: 38 }]} />
+    {structures}
+    <Orbs count={24} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[16, 6, 12]} position={[0, 1, 0]} seed={7} drift={0.25} emissive={3} />
+    <SpotLight position={[-6, 9, 3]} target={[-2, -3, 0]} color="#22d3ee" intensity={8} range={35} angle={0.35} />
+    <SpotLight position={[7, 10, -2]} target={[2, -3, 0]} color="#f59e0b" intensity={14} range={35} angle={0.35} />
+    <Fog density={0.035} height={-3} falloff={0.12} color="#07101b" />
+    <Shafts intensity={0.55} density={0.025} anisotropy={0.35} samples={32} />
+    <DOF focus={20} aperture={0.25} maxBlur={6} />
+    <Bloom intensity={0.9} /><Vignette amount={0.35} /><Grain amount={0.01} />
+  </World>
+</Background>
+
+# Quiet structures
+
+<Text className="text-3xl text-slate-300 text-center self-center">Light, air and a slow orbit</Text>
+
+---
+
+<Background>
+  <World id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={[{ step: 0, value: 0.55 }, { step: 1, value: 1.2, duration: 2.5 }]} scrim={0.1}>
+    <Camera duration={2.5} shots={[{ step: 0, position: [9, 4, 15], target: [0, 0, 0], fov: 38 }, { step: 1, orbit: { center: [0, 0, 0], radius: 18, height: 4, speed: 0.04 } }]} />
+    {structures}
+    <Orbs count={24} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[16, 6, 12]} position={[0, 1, 0]} seed={7} drift={0.25} emissive={3} />
+    <SpotLight position={[-6, 9, 3]} target={[-2, -3, 0]} color="#22d3ee" intensity={[{ step: 0, value: 0.3 }, { step: 1, value: 12, duration: 2.5 }]} range={35} angle={0.35} />
+    <SpotLight position={[7, 10, -2]} target={[2, -3, 0]} color="#f59e0b" intensity={[{ step: 0, value: 0.5 }, { step: 1, value: 18, duration: 2.5 }]} range={35} angle={0.35} />
+    <Fog density={[{ step: 0, value: 0.09 }, { step: 1, value: 0.035, duration: 2.5 }]} height={-3} falloff={0.12} color="#07101b" />
+    <Shafts intensity={[{ step: 0, value: 0.1 }, { step: 1, value: 0.7, duration: 2.5 }]} density={0.025} anisotropy={0.35} samples={32} />
+    <DOF focus={18} aperture={0.25} maxBlur={6} />
+    <Bloom intensity={1} /><Vignette amount={0.35} /><Grain amount={0.01} />
+  </World>
+</Background>
+
+# Through the air
+
+<Step at={1}><Text className="text-3xl text-cyan-300 text-center self-center">A quiet reveal</Text></Step>
+
+---
+
+<Background>
+  <World id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={1} scrim={0.12}>
+    <Camera shots={[{ at: 0, position: [8, 5, 20], target: [0, 0, 0], fov: 38 }, { at: 1.5, position: [0, 7, 34], target: [0, 0, 0], duration: 6, ease: "smoothstep" }]} />
+    {structures}
+    <Orbs count={64} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[24, 10, 18]} position={[0, 2, 0]} seed={7} drift={0.25} emissive={2} />
+    <SpotLight position={[-6, 9, 3]} target={[-2, -3, 0]} color="#22d3ee" intensity={8} range={35} angle={0.35} />
+    <SpotLight position={[7, 10, -2]} target={[2, -3, 0]} color="#f59e0b" intensity={12} range={35} angle={0.35} />
+    <Fog density={0.025} height={-3} falloff={0.12} color="#07101b" />
+    <Shafts intensity={0.4} density={0.025} anisotropy={0.35} samples={32} />
+    <DOF focus={26} aperture={0.2} maxBlur={5} />
+    <Bloom intensity={0.8} /><Vignette amount={0.3} /><Grain amount={0.01} />
+  </World>
+</Background>
+
+# Room to breathe
+
+<Text className="text-3xl text-slate-300 text-center self-center">A wider view</Text>

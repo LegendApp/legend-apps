@@ -25,11 +25,11 @@ test("browser images upload premultiplied pixels and release decoding handles ev
   expect(events).toEqual(["closed","closed"]);
 });
 test("native file URLs decode once, upload pixels, and release Skia handles",async()=>{
-  const events=[],texture={},pixels=new Uint8Array(48);
+  const events=[],texture={},pixels=Uint8Array.from({length:56},(_,index)=>index).subarray(4,52);
   const image={width:()=>4,height:()=>3,readPixels:(_,__,options)=>{expect(options.alphaType).toBe("premul");return pixels;},dispose:()=>events.push("image")};
   const skia={AlphaType:{Premul:"premul"},ColorType:{RGBA_8888:"rgba"},Skia:{Data:{fromURI:async uri=>{expect(uri).toBe("file:///deck/image.png");return {dispose:()=>events.push("data")};}},Image:{MakeImageFromEncoded:()=>image}}};
   const load=loader("macos",skia,null,events);
-  const device={createTexture:d=>{expect(d.usage).toBe(6);return texture;},queue:{writeTexture:(to,data,layout,size)=>{expect(to.texture).toBe(texture);expect(data).toBe(pixels);expect(layout.bytesPerRow).toBe(16);expect(size).toEqual([4,3]);}}};
+  const device={createTexture:d=>{expect(d.usage).toBe(6);return texture;},queue:{writeTexture:(to,data,layout,size)=>{expect(to.texture).toBe(texture);expect(data).toBe(pixels.buffer);expect(layout).toEqual({offset:4,bytesPerRow:16});expect(new Uint8Array(data,layout.offset,48)).toEqual(pixels);expect(size).toEqual([4,3]);}}};
   expect(await load(device,"file:///deck/image.png")).toBe(texture);
   expect(events).toEqual(["image","data"]);
 });

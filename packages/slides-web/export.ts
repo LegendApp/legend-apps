@@ -20,7 +20,7 @@ const workletsPlugin = require("react-native-worklets/plugin");
 const src = path.join(webRoot, "src");
 // How the web player renders each effect pack capability; any other capability is unsupported on web.
 const webCapabilities: Record<string, string> = {
-  reanimated: "Reanimated web", skia: "CanvasKit", lottie: "Skottie", "native-video": "HTML video", webgpu: "WebGPU (requires a WebGPU browser)",
+  reanimated: "Reanimated web", skia: "CanvasKit", lottie: "Skottie", "native-video": "HTML video", webgpu: "WebGPU (requires a WebGPU browser)", "webgpu-multipass": "WebGPU multipass (requires a WebGPU browser)",
 };
 
 export function webEffectSupport(found: { id: string; capabilities?: unknown }[]) {

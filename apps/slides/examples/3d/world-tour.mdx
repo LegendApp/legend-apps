@@ -1,0 +1,240 @@
+---
+title: World Tour
+aspectRatio: 16:9
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050811"
+  color: "#f8fafc"
+---
+
+import { Text } from "react-native"
+import { World, Camera, Graph, tree, wave, subset, Orbs, Sphere, Box, Tube, Ring, Spray, Material, PointLight, SpotLight, RimLight, Floor, Fog, Shafts, Bloom, DOF, Chromatic, Vignette, Grain, Pass, Custom, SDF } from "slides:world/World"
+
+export const scanlines = `
+fn customPass(uv:vec2f, color:vec4f, ctx:PassContext)->vec4f {
+  let line=.96+.04*sin(uv.y*800.+ctx.slideTime*.3);
+  return vec4f(color.rgb*line,color.a);
+}`
+
+export const ribbons = `
+fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
+  let corners=array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.));
+  let p=corners[vid%6u];
+  let x=p.x+(f32(id)-1.)*3.;
+  return ShapeVertex(vec3f(x,p.y+sin(ctx.slideTime+f32(id))*.4,0.),vec3f(0.,0.,1.));
+}
+fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
+  return Material(vec3f(.03,.3,.4),vec3f(.03,.7,.9)*2.,.4,.1);
+}`
+
+export const roundedBlock = `
+fn sdf(p:vec3f)->f32 {
+  let q=abs(p)-vec3f(.8,1.3,.8);
+  return length(max(q,vec3f(0.)))+min(max(q.x,max(q.y,q.z)),0.)-.15;
+}`
+
+export const network = tree("root", [
+  ["north", [["n1", ["n11", "n12", "n13"]], ["n2", ["n21", "n22", "n23"]]]],
+  ["east", [["e1", ["e11", "e12", "e13"]], ["e2", ["e21", "e22", "e23"]]]],
+  ["west", [["w1", ["w11", "w12", "w13"]], ["w2", ["w21", "w22", "w23"]]]],
+])
+
+# Into the world
+
+<World width={1696} height={650} quality="medium" exposure={1.1}>
+  <Camera shots={[{ at: 0, position: [0, 4, 19], target: [0, 0, 0], fov: 42 }, { at: 2, position: [6, 3, 14], target: [0, 0, 0], fov: 42 }]} duration={3} />
+  <Orbs count={48} colors={["#22d3ee", "#f59e0b"]} />
+  <Fog density={0.035} />
+  <Bloom intensity={1.4} />
+  <Vignette amount={0.3} />
+  <Grain amount={0.025} />
+</World>
+
+---
+
+# A moving viewpoint
+
+<World id="orbit" width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 5, 18], target: [0, 0, 0], fov: 40 }, { step: 1, orbit: { center: [0, 0, 0], radius: 15, height: 5, speed: 0.15 } }, { step: 2, position: [2, 1, 9], target: [0, 0, 0], fov: 40 }]} duration={1.5} ease="cubic" />
+  <Orbs count={32} colors={["#22d3ee", "#f59e0b"]} />
+  <Ring radius={7} color="#22d3ee" />
+  <Bloom intensity={1.2} />
+  <Fog density={0.025} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Orbit</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">Dolly</Text></Step>
+
+---
+
+# One continuous camera
+
+<World id="orbit" enter={{ from: "previous", duration: 1.5 }} width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, position: [-6, 3, 12], target: [0, 0, 0], fov: 40 }]} />
+  <Orbs count={32} colors={["#22d3ee", "#f59e0b"]} />
+  <Ring radius={7} color="#22d3ee" />
+  <Bloom intensity={1.2} /><Fog density={0.025} />
+</World>
+
+---
+
+# Across the branches
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ step: 0, position: [0, 6, 22], target: [0, 0, 0], fov: 42 }, { step: 2, position: [8, 4, 17], target: [0, 0, 0], fov: 42 }]} duration={1.4} />
+  <Graph data={network} node={{ color: "#22d3ee", dim: "#101d35", size: 0.3 }} edge={{ curve: 0.4, glow: 0.6 }} activate={[wave({ from: "root", step: 1, speed: 0.35 }), subset({ branches: ["east"], step: 2 })]} />
+  <Ring radius={8} color="#f59e0b" />
+  <Bloom intensity={1.5} />
+  <Fog density={0.025} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Cascade</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">One branch</Text></Step>
+
+---
+
+# Light in the fog
+
+<World width={1696} height={650} quality="high" exposure={1.2} scrim>
+  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 17, height: 4, speed: 0.06 }, fov: 40 }]} />
+  <Orbs count={60} colors={["#22d3ee", "#f59e0b"]} />
+  <Fog density={0.055} color="#071020" />
+  <Bloom intensity={1.8} />
+  <Vignette amount={0.4} />
+  <Grain amount={0.03} />
+  <Text className="absolute bottom-12 left-12 text-5xl font-bold text-white">Room for a thought</Text>
+</World>
+
+---
+
+# Simple shapes
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, position: [0, 5, 16], target: [0, 0, 0], fov: 42 }]} />
+  <Sphere position={[-4, 0, 0]} size={1} color="#22d3ee" emissive={2} />
+  <Box position={[0, 0, 0]} size={1} scale={[0.7, 1.6, 0.7]} color="#f59e0b" emissive={1.5} />
+  <Tube position={[-4, 0, 0]} end={[4, 0, 0]} curve={0.5} thickness={0.04} color="#22d3ee" emissive={3} />
+  <Ring position={[4, 0, 0]} radius={1.5} color="#f59e0b" emissive={3} />
+  <Bloom intensity={1.2} />
+  <Fog density={0.02} />
+</World>
+
+
+---
+
+# A point of focus
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ step: 0, position: [0, 2, 16], target: [0, 0, 0], fov: 40 }]} />
+  <Sphere id="far" position={[-3, 0, -5]} size={1} color="#f59e0b" emissive={1.2} />
+  <Sphere position={[0, 0, 0]} size={1} color="#22d3ee" emissive={1.2} />
+  <Sphere id="near" position={[3, 0, 5]} size={1} color="#f59e0b" emissive={1.2} />
+  <DOF focus={{ 0: 16, 1: "near", 2: "far" }} aperture={0.9} maxBlur={18} />
+  <Bloom intensity={0.7} /><Fog density={0.015} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Near</Text></Step>
+<Step at={2}><Text className="text-3xl text-amber-300">Far</Text></Step>
+
+---
+
+# On a mirror floor
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ at: 0, position: [8, 4, 16], target: [0, 0, 0], fov: 40 }]} />
+  <Box position={[-4, -0.5, 0]} scale={[1, 3, 1]} color="#22d3ee" emissive={1.5} />
+  <Box position={[0, 0, 0]} scale={[1, 4, 1]} color="#f59e0b" emissive={1.5} />
+  <Box position={[4, -0.75, 0]} scale={[1, 2.5, 1]} color="#22d3ee" emissive={1.5} />
+  <Floor mirror y={-2} roughness={0.06} reflectivity={0.85} size={40} />
+  <Bloom intensity={1.2} /><Fog density={0.02} />
+</World>
+
+---
+
+# Shape the light
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 15, height: 4, speed: 0.1 } }]} />
+  <Material id="stone" albedo="#243047" roughness={0.6} metal={0.15} rim={0.8} />
+  <Sphere position={[-2, 0, 0]} size={1.5} material="stone" emissive={0.05} />
+  <Box position={[2, 0, 0]} scale={[1.5, 2.5, 1.5]} material="stone" emissive={0.05} />
+  <PointLight position={[-4, 5, 4]} color="#f59e0b" intensity={6} range={20} />
+  <RimLight color="#22d3ee" intensity={2} />
+  <Bloom intensity={0.7} /><Fog density={0.015} />
+</World>
+
+---
+
+# Light through the air
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ at: 0, position: [10, 6, 18], target: [0, 0, 0], fov: 40 }]} />
+  <SpotLight position={[-3, 7, 0]} target={[-3, -3, 0]} color="#22d3ee" angle={0.35} intensity={15} range={24} />
+  <SpotLight position={[3, 7, 0]} target={[3, -3, 0]} color="#f59e0b" angle={0.35} intensity={15} range={24} />
+  <Floor mirror y={-3} roughness={0.1} reflectivity={0.5} />
+  <Fog density={0.04} /><Shafts intensity={0.8} density={0.04} anisotropy={0.3} />
+  <Bloom intensity={1.4} />
+</World>
+
+---
+
+# A drifting spray
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, position: [0, 3, 16], target: [0, 0, 0], fov: 40 }]} />
+  <Spray id="ambient" position={[0, 3, 0]} spread={[8, 1, 3]} rate={40} lifetime={2.5} color="#22d3ee" />
+  <Ring position={[0, -3, 0]} radius={5} color="#f59e0b" emissive={2} />
+  <Bloom intensity={1.2} /><Fog density={0.03} />
+</World>
+
+---
+
+# A small color shift
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ step: 0, position: [0, 3, 15], target: [0, 0, 0], fov: 40 }]} />
+  <Sphere position={[-4, 0, 0]} size={1.3} color="#ffffff" emissive={1.5} />
+  <Sphere position={[4, 0, 0]} size={1.3} color="#ffffff" emissive={1.5} />
+  <Ring radius={6} color="#22d3ee" emissive={2} />
+  <Chromatic amount={{ 0: 0, 1: 0.008 }} />
+  <Bloom intensity={0.8} /><Fog density={0.01} />
+</World>
+
+<Step at={1}><Text className="text-3xl text-cyan-300">Separate the edges</Text></Step>
+
+
+---
+
+# A pass of your own
+
+<World width={1696} height={650} quality="medium">
+  <Camera shots={[{ at: 0, position: [0, 3, 17], target: [0, 0, 0], fov: 40 }]} />
+  <Orbs count={32} colors={["#22d3ee", "#f59e0b"]} />
+  <Bloom intensity={1.1} /><Fog density={0.02} />
+  <Pass wgsl={scanlines} after="bloom" />
+</World>
+
+---
+
+# Geometry in a few lines
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ at: 0, position: [0, 3, 15], target: [0, 0, 0], fov: 40 }]} />
+  <Custom wgsl={ribbons} count={3} vertexCount={6} />
+  <Bloom intensity={1} /><Fog density={0.02} />
+</World>
+
+---
+
+# A bounded distance field
+
+<World width={1696} height={650} quality="high">
+  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 9, height: 3, speed: 0.1 }, fov: 40 }]} />
+  <SDF id="rounded" wgsl={roundedBlock} bounds={[[-2, -2, -2], [2, 2, 2]]} color="#22d3ee" emissive={0.3} />
+  <PointLight position={[4, 6, 4]} color="#f59e0b" intensity={8} range={25} />
+  <RimLight color="#22d3ee" intensity={1.5} />
+  <Floor mirror y={-1.6} roughness={0.1} reflectivity={0.5} />
+  <Bloom intensity={0.8} /><Fog density={0.02} />
+</World>
