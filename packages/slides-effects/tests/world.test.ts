@@ -232,6 +232,16 @@ test("pulse trails reconstruct exact curved subsegments and restart at a turn wi
   expect(sampleWorldUniforms(scene, clock(1))[35]).toBe(1);
 });
 
+test("recycle glow scales the travelling container's accent", () => {
+  const travelling = (glow?: number) => {
+    const scene = prepareWorldScene({ instances: rowInstances({ id: "rows", count: 5, speed: 0, start: 1.5, emissive: 0.1, recycle: { above: 1, glow } }),
+      camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
+    return sampleWorldUniforms(scene, clock(0))[worldHeaderSize + 7]; // slot 0 holds the row leaving the top
+  };
+  expect(travelling()).toBeCloseTo(0.1 + 0.35);
+  expect(travelling(4)).toBeCloseTo(0.1 + 1.4);
+});
+
 test("changed rows stay highlighted for the whole step while the others dim", () => {
   const scene = prepareWorldScene({ instances: rowInstances({ id: "rows", count: 4, speed: 0, color: "#808080", flashColor: "#ff0000", changes: [{ row: 1, step: 1 }, { row: 2, step: 2 }], flashDuration: 0.5 }),
     camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });

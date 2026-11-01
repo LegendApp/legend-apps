@@ -274,6 +274,7 @@ active leaves. Motion, birth and lifetime are analytic samples of absolute time.
 Rows keep a fixed instance pool while logical row ids advance with the clock.
 Listed changes flash on entry, then stay in `flashColor` with a steady glow while
 the other rows dim; recycled slots do not inherit a previous row's highlight.
+A `recycle` pool sends the slot leaving the top around to the bottom; `recycle.glow` scales its accent.
 Use `rows:row:4` to follow or focus logical row 4 while it is visible.
 `width`, `depth`, `start`, `flashDuration` and `position` configure the column.
 Stages offset nested primitives and multiply their glow. Stage positions and glow

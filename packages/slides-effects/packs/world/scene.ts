@@ -32,7 +32,8 @@ export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> 
   opacity?: Animated<number>; titleOpacity?: Animated<number> };
 /** `text` substitutes `{item}` (items[index]), `{initial}` (its first letter), `{index}` (the logical row) and `{slot}` (the pooled container). */
 export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
-export type RecycleOptions = { above?: number; below?: number; reach?: number; lift?: number; color?: string; ghosts?: number };
+/** `glow` scales the travelling and docking accent (default 1). */
+export type RecycleOptions = { above?: number; below?: number; reach?: number; lift?: number; color?: string; ghosts?: number; glow?: number };
 export type RowsOptions = { id: string; count?: number; position?: Vec3; spacing?: number; speed?: number; start?: number; width?: number; height?: number; depth?: number; color?: string; flashColor?: string; changes?: { row: number; step: number }[]; flashDuration?: number;
   scroll?: Animated<number>; items?: string[]; labels?: RowLabel[]; recycle?: RecycleOptions; emissive?: number; material?: string | MaterialOptions; card?: CardStyle };
 export type VoxelsOptions = { id: string; grid?: Vec3; spacing?: number; size?: number; position?: Vec3; color?: Animated<string>; emissive?: Animated<number>; collapse?: Collapse };
@@ -736,7 +737,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     if (instance.rows?.recycleColor) {
       const glow = recycleGlow(instance, clock), outside = rowOutside(instance, clock);
       color = mixVector(mixVector(color, [0, 0, 0], 0.55 * outside), instance.rows.recycleColor, glow);
-      emissive = emissive * (1 - 0.6 * outside) + glow * (instance.rows.ghost ? 0.5 : 0.35);
+      emissive = emissive * (1 - 0.6 * outside) + glow * (instance.rows.ghost ? 0.5 : 0.35) * (instance.rows.options.recycle?.glow ?? 1);
     }
     for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
     values[index + 4] = dim[0] + (color[0] - dim[0]) * activation;
