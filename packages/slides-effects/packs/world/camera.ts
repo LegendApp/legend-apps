@@ -7,6 +7,10 @@ export type Shot = {
   orbit?: { center: Vec3; radius: number; speed?: number; height?: number; phase?: number };
   dolly?: number; follow?: string; duration?: number; ease?: Ease; focus?: number | string;
   stage?: string; offset?: Vec3; arc?: number;
+  /** Interpolating camera path, in world space, between the previous pose and this shot. */
+  via?: Vec3[];
+  crane?: { height?: number; pullback?: number };
+  idle?: { position?: Vec3; target?: Vec3; speed?: number };
 };
 export type CameraOptions = { shots?: Shot[]; duration?: number; ease?: Ease };
 type ObjectPositions = Record<string, Vec3> | ((id: string, clock: ClockSample) => Vec3 | undefined);
@@ -71,6 +75,25 @@ function destination(shot: Shot, base: CameraPose, elapsed: number, objects: Obj
   return { position, target, fov: shot.fov ?? base.fov, roll: shot.roll ?? base.roll };
 }
 
+/** Catmull–Rom spline: every via point is visited, with a continuous tangent at each join. */
+export function cameraPathPoint(points: Vec3[], progress: number): Vec3 {
+  "worklet";
+  const travel = Math.max(0, Math.min(1, progress)) * (points.length - 1);
+  const segment = Math.min(points.length - 2, Math.floor(travel)), t = travel - segment;
+  const a = points[Math.max(0, segment - 1)], b = points[segment], c = points[segment + 1], d = points[Math.min(points.length - 1, segment + 2)];
+  const result: Vec3 = [0, 0, 0];
+  for (let axis = 0; axis < 3; axis++) result[axis] = 0.5 * (2 * b[axis] + (-a[axis] + c[axis]) * t +
+    (2 * a[axis] - 5 * b[axis] + 4 * c[axis] - d[axis]) * t * t + (-a[axis] + 3 * b[axis] - 3 * c[axis] + d[axis]) * t * t * t);
+  return result;
+}
+function idleOffset(vector: Vec3, amplitude: Vec3 | undefined, time: number, speed: number): Vec3 {
+  "worklet";
+  if (!amplitude) return vector;
+  const fade = easeProgress(time / 1.2, "smoothstep");
+  return [vector[0] + Math.sin(time * speed) * amplitude[0] * fade,
+    vector[1] + Math.sin(time * speed * 0.73) * amplitude[1] * fade,
+    vector[2] + Math.sin(time * speed * 0.51) * amplitude[2] * fade];
+}
 function evaluateShots(options: CameraOptions, clock: ClockSample, objects: ObjectPositions, count: number): CameraPose {
   "worklet";
   const shots = options.shots ?? [];
@@ -84,10 +107,19 @@ function evaluateShots(options: CameraOptions, clock: ClockSample, objects: Obje
   const end = destination(shot, from, elapsed, objects, clock);
   const duration = shot.duration ?? options.duration ?? 1.2;
   const completed = shot.at === undefined && (shot.step ?? 0) < clock.stepIndex && clock.stepOrigins[shot.step ?? 0] === undefined;
-  const t = index === 0 || completed ? 1 : easeProgress(duration <= 0 ? 1 : elapsed / duration, shot.ease ?? options.ease);
-  const position = mixVector(from.position, end.position, t);
+  const t = index === 0 && !shot.via?.length && !shot.crane || completed ? 1 : easeProgress(duration <= 0 ? 1 : elapsed / duration, shot.ease ?? options.ease);
+  let position = shot.via?.length ? cameraPathPoint([from.position, ...shot.via, end.position], t) : mixVector(from.position, end.position, t);
   if (shot.arc && t > 0 && t < 1) position[1] += Math.sin(t * Math.PI) * shot.arc;
-  return { position, target: mixVector(from.target, end.target, t),
+  if (shot.crane && t > 0 && t < 1) {
+    const lift = Math.sin(t * Math.PI);
+    const dx = position[0] - end.target[0], dz = position[2] - end.target[2], distance = Math.max(0.001, Math.hypot(dx, dz));
+    position = [position[0] + dx / distance * (shot.crane.pullback ?? 0) * lift,
+      position[1] + (shot.crane.height ?? 3) * lift, position[2] + dz / distance * (shot.crane.pullback ?? 0) * lift];
+  }
+  const idleTime = Math.max(0, elapsed - duration), speed = shot.idle?.speed ?? 0.2;
+  position = idleOffset(position, shot.idle?.position, idleTime, speed);
+  const target = idleOffset(mixVector(from.target, end.target, t), shot.idle?.target, idleTime, speed);
+  return { position, target,
     fov: from.fov + (end.fov - from.fov) * t, roll: from.roll + (end.roll - from.roll) * t };
 }
 /** Stateless evaluation also handles direct step jumps and backwards scrubbing. */
