@@ -15,7 +15,10 @@ const scene = (options: Partial<WorldScene> = {}) => prepareWorldScene({ instanc
 for (const quality of ["low", "medium", "high"] as const) test(`all enabled post effects remain present at ${quality} quality`, () => {
   const graph = buildWorldGraph(scene({ quality, floor: { mirror: true }, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));
   const ids = graph.passes.map(pass => pass.id);
-  for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-composite", "tonemap"]) expect(ids).toContain(id);
+  for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
+  // Bloom is the last HDR stage with nothing placed after it, so the tonemap adds it instead of a separate composite pass.
+  expect(ids).not.toContain("bloom-composite");
+  expect(graph.passes.find(pass => pass.id === "tonemap")!.reads).toEqual([expect.any(String), "bloom-up@0"]);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
   expect(target("reflect").scale).toBe(scale * .5);

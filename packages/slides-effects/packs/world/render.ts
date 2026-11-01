@@ -619,6 +619,8 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   };
   const order = topology.postOrder ?? ["fog", "dof", "bloom"];
   if (order.length !== 3 || new Set(order).size !== 3 || order.some(stage => !["fog", "dof", "bloom"].includes(stage))) throw new Error("World postOrder must contain fog, dof and bloom exactly once");
+  // With nothing placed between bloom and the tonemap, the tonemap adds the bloom itself instead of a separate full-resolution composite.
+  const fuseBloom = order[2] === "bloom" && !(topology.passes ?? []).some(item => item.before === "tonemap" || (item.after ?? (item.before ? undefined : "bloom")) === "bloom");
   custom("scene", false);
   for (const stage of order) {
     custom(stage, true);
@@ -634,12 +636,12 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
       for (let mip = 1; mip < levels; mip++) passes.push({ kind: "fullscreen", id: `bloom-down-${mip}`, code: downsample, fragment: "downsample", reads: [`bloom@${mip - 1}`], output: `bloom@${mip}` });
       passes.push({ kind: "fullscreen", id: `bloom-up-${levels - 1}`, code: downsample, fragment: "downsample", reads: [`bloom@${levels - 1}`], output: `bloom-up@${levels - 1}` });
       for (let mip = levels - 2; mip >= 0; mip--) passes.push({ kind: "fullscreen", id: `bloom-up-${mip}`, code: upsample, fragment: "upsample", reads: [`bloom-up@${mip + 1}`, `bloom@${mip}`], output: `bloom-up@${mip}` });
-      fullscreen("bloom-composite", bloomComposite, "bloomComposite", [bloomSource, "bloom-up@0"]);
+      if (!fuseBloom) fullscreen("bloom-composite", bloomComposite, "bloomComposite", [bloomSource, "bloom-up@0"]);
     }
     custom(stage, false);
   }
   custom("tonemap", true);
-  fullscreen("tonemap", finalCode(worldBindings), "tonemap", [color], "tonemapped");
+  fullscreen("tonemap", finalCode(worldBindings, fuseBloom), "tonemap", fuseBloom ? [color, "bloom-up@0"] : [color], "tonemapped");
   custom("tonemap", false);
   fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
   if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");

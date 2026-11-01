@@ -108,9 +108,12 @@ ${wgsl}
  return customPass(uv,textureSampleLevel(previous,linearSampler,uv,0.),PassContext(frame.time,frame.slideTime,frame.stepTime,frame.step,depthAt(uv)));
 }`;
 }
-export function finalCode(bindings: string) {
+/** `bloom` folds the bloom composite into this pass: the scene plus the blurred bloom chain, sampled where the tonemap samples. */
+export function finalCode(bindings: string, bloom = false) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
+${bloom ? "@group(0) @binding(4) var bloom:texture_2d<f32>;" : ""}
+fn sceneAt(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb${bloom ? "+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9]" : ""}; }
 fn aces(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }
 fn srgb(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
 fn rectangle(p:vec2f,center:vec2f,halfSize:vec2f)->f32 { let q=abs(p-center)-halfSize; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.); }
@@ -128,7 +131,8 @@ fn digit(p:vec2f,value:u32)->f32 {
 }
 @fragment fn tonemap(@location(0) uv:vec2f,@builtin(position) pixel:vec4f)->@location(0) vec4f {
  let shift=(uv-.5)*uniforms[44];
- var color=vec3f(textureSampleLevel(source,linearSampler,uv+shift,0.).r,textureSampleLevel(source,linearSampler,uv,0.).g,textureSampleLevel(source,linearSampler,uv-shift,0.).b);
+ var color=sceneAt(uv);
+ if(uniforms[44]!=0.) { color=vec3f(sceneAt(uv+shift).r,color.g,sceneAt(uv-shift).b); }
  color=srgb(aces(color*uniforms[8]*frame.brightness));
  color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(frame.time*24.))*43758.5453)-.5;
