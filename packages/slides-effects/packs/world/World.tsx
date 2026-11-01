@@ -199,6 +199,8 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
+  // One UI copy of the baked scene shared by both worklets; capturing it in each closure copied it twice.
+  const scene = useMemo(() => makeMutable(prepared), [prepared]);
   const playback = usePlayback();
   const sampleClock = samplePlayback;
   const cameraEvaluator = sampleWorldCamera;
@@ -227,16 +229,16 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (!continuity || !active || state.phase !== "playing") return;
     if (origin.value.key !== state.slideKey) origin.value = { key: state.slideKey, pose: continuePrevious ? continuity.value : null };
     const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
-    continuity.value = cameraEvaluator(prepared, clock, origin.value.pose, enterDuration);
-  }, [prepared, continuePrevious, enterDuration, previewTime, active]);
+    continuity.value = cameraEvaluator(scene.value, clock, origin.value.pose, enterDuration);
+  }, [scene, continuePrevious, enterDuration, previewTime, active]);
   const uniforms = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
     const clock = { ...state, slideTime: sampleClock(state, previewTime, "slide"), stepTime: sampleClock(state, previewTime, "step") };
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
-    return sampleUniforms(prepared, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [prepared, previewTime, enterDuration, entryPose, effectiveScale]);
+    return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
+  }, [scene, previewTime, enterDuration, entryPose, effectiveScale]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />

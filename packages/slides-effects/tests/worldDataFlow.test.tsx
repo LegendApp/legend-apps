@@ -43,7 +43,7 @@ beforeAll(async () => {
       usePlayback: () => playback, samplePlayback: (state, _preview, clock) => clock === "step" ? state.stepTime : state.slideTime,
     };
     if (name === "react-native-reanimated") return {
-      useSharedValue: value => React.useRef({ value }).current,
+      useSharedValue: value => React.useRef({ value }).current, makeMutable: value => ({ value }),
       useDerivedValue: read => ({ get value() { return read(); } }), useAnimatedReaction() {},
     };
     return require(name);
