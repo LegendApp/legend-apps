@@ -23,6 +23,7 @@ test("color operators survive serialized topology and keep a single output conve
     expect(output.code).toContain("color=toneMap(color*uniforms[8]*frame.brightness)");
     const linear = buildWorldGraph(prepareWorldScene({ instances: [], toneMapping, outputColorSpace: "linear-srgb" }));
     expect(linear.passes.find(pass => pass.id === "tonemap")!.code).not.toContain("color=srgb(color)");
+    expect(linear.passes.find(pass => pass.id === "tonemap")!.code).toContain("color=mix(color,vector(60u),amount)");
   }
 });
 
@@ -43,12 +44,12 @@ test("Unreal bloom radius redistributes mip energy without adding render passes"
   }
 });
 
-test("floor emission stays opt-in and is sampled with the scene color controls", () => {
-  const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
-  expect(sampleWorldUniforms(prepareWorldScene({ instances: [], floor: {} }), clock)[19]).toBe(0);
-  const scene = prepareWorldScene({ instances: [], floor: { emissive: 1.25 } });
-  expect(sampleWorldUniforms(scene, clock)[19]).toBe(1.25);
-  expect(buildWorldGraph(scene).passes.find(pass => pass.id === "floor")!.code).toContain("vector(40u)*uniforms[19]");
+test("unlit floor color bypasses lighting without changing the default floor", () => {
+  const lit = buildWorldGraph(prepareWorldScene({ instances: [], floor: {} })).passes.find(pass => pass.id === "floor")!.code;
+  expect(lit).toContain("var color=illuminate(world,normal,material,vec3f(0.),0.,0.)");
+  const scene = prepareWorldScene({ instances: [], floor: { unlit: true } });
+  const graph = buildWorldGraph(JSON.parse(JSON.stringify(worldGraphTopology(scene))));
+  expect(graph.passes.find(pass => pass.id === "floor")!.code).toContain("var color=vector(40u)*uniforms[18]");
 });
 
 test("material controls preserve primitive defaults and support authored HDR accents", () => {
@@ -57,6 +58,7 @@ test("material controls preserve primitive defaults and support authored HDR acc
   const column = pillarInstances({ id: "column", value: 1, capEmissive: 1.2, material });
   expect(column[0].material).toEqual(material);
   expect(column[1].emissive.initial).toBe(1.2);
+  expect(routedTubeInstances({ id: "metal", path: [[0, 0, 0], [1, 0, 0]], material })[0].material).toEqual(material);
   const pulses = routedTubeInstances({ id: "path", path: [[0, 0, 0], [1, 0, 0]], pulses: [{ emissive: 10, trailEmissive: 4 }] }).filter(instance => instance.route?.pulse);
   expect(pulses[0].emissive.initial).toBe(10);
   expect(pulses[1].emissive.initial).toBeLessThan(4);
@@ -66,4 +68,23 @@ test("material controls preserve primitive defaults and support authored HDR acc
   expect(sparks[0].color.initial).not.toEqual(sparks[1].color.initial);
   const portals = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -6], strips: { material: { albedo: "#000000" } } });
   expect(portals.find(instance => instance.id?.includes(":strip:"))!.material).toEqual({ albedo: "#000000" });
+});
+
+test("exponential-squared fog is opt-in and shares the scene uniform snapshot", () => {
+  const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+  expect(sampleWorldUniforms(prepareWorldScene({ instances: [], fog: {} }), clock)[19]).toBe(0);
+  const scene = prepareWorldScene({ instances: [], fog: { mode: "exp2", falloff: 0 } });
+  expect(sampleWorldUniforms(scene, clock)[19]).toBe(1);
+  expect(sampleWorldUniforms(scene, clock)[14]).toBe(0);
+  expect(buildWorldGraph(scene).passes.find(pass => pass.id === "fog")!.code).toContain("select(opticalDepth,opticalDepth*opticalDepth,uniforms[19]>.5)");
+});
+
+test("HDR color lift is opt-in, animated and retained by serialized graph topology", () => {
+  const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+  const scene = prepareWorldScene({ instances: [], colorLift: [{ at: 0, value: [0, 0, 0] }, { at: 1, value: [.002, .004, .006], duration: 1, ease: "linear" }] });
+  expect(sampleWorldUniforms(scene, clockAtTime(clock, 1.5)).slice(24, 27)).toEqual([.001, .002, .003]);
+  const graph = buildWorldGraph(JSON.parse(JSON.stringify(worldGraphTopology(scene))));
+  expect(graph.passes.find(pass => pass.id === "tonemap")!.code).toContain("color=max(color+vector(24u),vec3f(0.))");
+  const defaults = buildWorldGraph(prepareWorldScene({ instances: [] }));
+  expect(defaults.passes.find(pass => pass.id === "tonemap")!.code).not.toContain("color+vector(24u)");
 });

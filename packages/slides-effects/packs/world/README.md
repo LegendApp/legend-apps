@@ -588,12 +588,21 @@ smoothing width) without subtracting the threshold from the HDR highlights. Its
 radius blends the five mip weights from `[1, .8, .6, .4, .2]` toward their
 mirrors about .6, matching UnrealBloomPass without adding render passes.
 
-`Floor.emissive` (animated, default 0) adds self-lit floor color before reflections,
-shadows, fog and bloom, for painted or luminous surfaces. It also follows
-`World.emissiveScale`.
+`Floor.unlit` (default false) uses the floor's linear color at its veil opacity, before
+reflections, shadows, fog and bloom. Self-lit floor color follows
+`World.emissiveScale`; lit floors retain their existing material response.
+RoutedTube accepts `material` to set its albedo independently of pulse/emission color.
 
 Pillar accepts `material` for its body and `capEmissive` (default 5). Routed-tube
 pulses accept head `emissive` (default 5) and `trailEmissive` (defaults to the head). Burst accepts
 `emissive` (default 12) and a repeating `colors` palette. Tunnel `strips` and
 `edges` accept a `material`; a black albedo removes their diffuse lighting while
 retaining emission. These controls leave the default materials unchanged.
+
+`Fog.mode="exp2"` selects exponential-squared distance fog; the default
+`"exponential"` preserves existing scenes. Set `falloff={0}` for uniform density.
+
+`World.colorLift` / `scene.colorLift` is an animated linear-sRGB `[r, g, b]`
+offset before vignette, grain, exposure and tonemapping. It defaults to zero and
+clamps negative radiance, allowing shadow-color calibration without changing
+material emissive values.
