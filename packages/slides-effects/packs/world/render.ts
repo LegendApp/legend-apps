@@ -508,7 +508,7 @@ type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
   quality: WorldScene["quality"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
-  dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
+  bloomScale?: number; dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
 };
@@ -543,7 +543,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
   }
   return { quality: scene.quality, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
-    dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
+    bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
     floorMarkings: scene.floor && { veil: scene.floor.veil, lit: scene.floor.lit, reflectionBlend: scene.floor.reflectionBlend, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
@@ -558,7 +558,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const msaa = topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4;
   const passes: GPUPass[] = [];
   const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa },
-    { id: "bloom", format: "rgba16float", scale: scale * .5, mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * .5, mips: levels }];
+    { id: "bloom", format: "rgba16float", scale: scale * (topology.bloomScale ?? .5), mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * (topology.bloomScale ?? .5), mips: levels }];
   const background = topology.backgroundVector;
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
   const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [], glyphDraws = topology.glyphs ?? [];

@@ -156,7 +156,8 @@ import { DOF, Floor, Material, PointLight, SpotLight, RimLight, Shafts, Chromati
 </World>
 ```
 
-Focus accepts an animated distance or object id. Camera shots also accept `focus`.
+Focus accepts an animated distance or object id. `focusRange` is the world-space
+half-width of the sharp focus band (default 0). Camera shots also accept `focus`.
 An explicit DOF focus track takes precedence; otherwise the active shot supplies
 focus, falling back to the camera target.
 Object focus resolves the same sampled position as camera follow, then uses
@@ -171,7 +172,9 @@ inverse-square attenuation beyond one world unit and a smooth cutoff at range.
 Spot angle is the outer cone half-angle. Materials use GGX specular, Schlick
 fresnel and energy-conserving diffuse; `metal` tints specular with albedo and
 reduces diffuse. Surface radiance is capped at 4096 linear units to retain
-half-float headroom for bloom. At most four local lights are supported. `RimLight`
+half-float headroom for bloom. Bloom `scale` controls its render resolution
+(default 0.5); smaller values spread the halo farther with fewer pixels.
+At most four local lights are supported. `RimLight`
 adds a shared view-dependent rim color/intensity, including on dark materials.
 
 Spheres, orbs and spray use six-vertex analytic spheres with curved normals,

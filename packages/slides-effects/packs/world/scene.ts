@@ -82,9 +82,9 @@ export type WorldScene = {
   camera?: CameraOptions; instances: Instance[]; exposure?: Animated<number>;
   toneMapping?: "aces" | "neutral" | "aces-filmic" | "agx"; outputColorSpace?: "srgb" | "linear-srgb"; emissiveScale?: Animated<number>; quality?: "auto" | "low" | "medium" | "high";
   backgroundColor?: string; fog?: { density?: Animated<number>; color?: Animated<string>; height?: Animated<number>; falloff?: Animated<number> };
-  bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number>; mode?: "soft" | "unreal" }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
+  bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number>; mode?: "soft" | "unreal"; scale?: number }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
   stages?: { stage: StageMotion; parents: StageMotion[] }[]; materials?: Record<string, MaterialOptions>;
-  dof?: { focus?: Animated<number | string>; aperture?: Animated<number>; maxBlur?: Animated<number>; scale?: number; samples?: number };
+  dof?: { focus?: Animated<number | string>; focusRange?: Animated<number>; aperture?: Animated<number>; maxBlur?: Animated<number>; scale?: number; samples?: number };
   floor?: { mirror?: boolean; y?: Animated<number>; roughness?: Animated<number>; emissive?: Animated<number>; reflectivity?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number>; scale?: number } & FloorMarkings;
   shafts?: { intensity?: Animated<number>; density?: Animated<number>; anisotropy?: Animated<number>; scale?: number; samples?: number };
   chromatic?: Animated<number>; rim?: { color?: Animated<string>; intensity?: Animated<number> }; ambient?: Animated<number>;
@@ -795,7 +795,7 @@ function keyLightVectors({ keyLight: key }: WorldScene): { index: number; track:
 }
 export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   if ((scene.lights?.length ?? 0) > 4) throw new Error("World supports at most four point or spot lights");
-  for (const effect of [scene.dof, scene.floor, scene.shafts]) if (effect) {
+  for (const effect of [scene.bloom, scene.dof, scene.floor, scene.shafts]) if (effect) {
     if (effect.scale !== undefined && (!Number.isFinite(effect.scale) || effect.scale <= 0 || effect.scale > 1)) throw new Error("World effect scale must be greater than zero and at most one");
     if ("samples" in effect && effect.samples !== undefined && (!Number.isInteger(effect.samples) || effect.samples < 1 || effect.samples > 64)) throw new Error("World effect samples must be an integer between one and 64");
   }
@@ -867,7 +867,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   }
   const fields: [number, Animated<number>][] = [[18, scene.emissiveScale ?? 1], [19, scene.floor?.emissive ?? 0], [9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
-    [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
+    [54, scene.dof?.focusRange ?? 0], [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
     [38, scene.floor?.reflectivity ?? 0.8], [39, scene.floor?.size ?? 40], [43, scene.floor?.metal ?? 0.8], [44, scene.chromatic ?? 0],
     [45, scene.shafts?.intensity ?? 0], [46, scene.shafts?.density ?? 0.03], [47, scene.shafts?.anisotropy ?? 0.3], [51, scene.rim ? scene.rim.intensity ?? 0.8 : 0], [52, scene.ambient ?? 0.12],
     ...keyLightFields(scene)];

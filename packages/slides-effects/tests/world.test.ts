@@ -334,7 +334,7 @@ test("stages, material references, light direction and HDR post settings share a
   const scene = prepareWorldScene({ instances: [{ ...primitive("tube", { id: "tube", position: [0, 0, 0], end: [2, 0, 0], material: "stone", emissive: 4 }), stages: [stage] }],
     stages: [{ stage, parents: [] }], materials: { stone: { albedo: "#ffffff", roughness: 0.7, metal: 0.2, rim: 0.9 } },
     camera: { shots: [flyTo("b", { step: 0, offset: [0, 0, 10] })] },
-    dof: { focus: "stage:b", aperture: 0.8 }, floor: { mirror: true, y: -3 }, shafts: { intensity: 0.7 }, chromatic: 0.003,
+    dof: { focus: "stage:b", focusRange: { 0: 0, 1: 2 }, aperture: 0.8 }, floor: { mirror: true, y: -3 }, shafts: { intensity: 0.7 }, chromatic: 0.003,
     lights: [{ kind: "spot", position: [0, 5, 0], target: [0, 0, 0], angle: 0.4 }], rim: { color: "#22d3ee", intensity: 2 } });
   const sample = clock(2, 1, { 0: 0, 1: 1 }), values = sampleWorldUniforms(scene, sample);
   expect(resolveAnchor(scene, "stage:b", sample)).toEqual([12, 0, 0]);
@@ -344,7 +344,8 @@ test("stages, material references, light direction and HDR post settings share a
   expect(values.slice(worldHeaderSize + 24, worldHeaderSize + 27)).toEqual([1, 1, 1]);
   expect(values[worldHeaderSize + 27]).toBe(0.7); expect(values[worldHeaderSize + 28]).toBe(0.2);
   expect(values[32]).toBe(10); expect(values[33]).toBe(0.8); expect(values[36]).toBe(-3); expect(values[44]).toBe(0.003);
-  expect(values[51]).toBe(2);
+  expect(values[51]).toBe(2); expect(values[54]).toBe(2);
+  expect(sampleWorldUniforms(prepareWorldScene({ instances: [] }), sample)[54]).toBe(0);
   expect(sampleWorldUniforms(prepareWorldScene({ instances: [] }), sample)[51]).toBe(0);
   expect(values.slice(72, 75)).toEqual([0, -1, 0]); expect(values[75]).toBeCloseTo(Math.cos(0.4));
   const named = prepareWorldScene({ instances: [primitive("sphere", { id: "b", position: [1, 2, 3] })], stages: scene.stages });
@@ -403,6 +404,7 @@ test("custom and bounded geometry keep their own draw groups and validate resour
   expect(scene.instances.at(-1)?.sdf).toBeDefined();
   expect(() => prepareWorldScene({ instances: [primitive("box", { material: "missing" })] })).toThrow("material");
   expect(() => prepareWorldScene({ instances: [], dof: { scale: 0 } })).toThrow("scale");
+  expect(() => prepareWorldScene({ instances: [], bloom: { scale: 1.1 } })).toThrow("scale");
   expect(() => prepareWorldScene({ instances: [], lights: Array.from({ length: 5 }, () => ({})) })).toThrow("four");
 });
 

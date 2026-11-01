@@ -74,7 +74,7 @@ export function dofCode(bindings: string, samples: number, fog = false) {
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var depth:texture_depth_2d;
 ${depthCode()}${fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
-fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.,1.); }
+fn coc(z:f32)->f32 { return clamp(max(0.,abs(z-uniforms[32])-max(0.,uniforms[54]))/max(z,.05)*uniforms[33],0.,1.); }
 `;
   return {
     gather: `${common}

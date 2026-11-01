@@ -31,10 +31,11 @@ for (const quality of ["low", "medium", "high"] as const) test(`all enabled post
 
 test("animated floor, light and focus changes preserve topology while static quality controls change it", () => {
   const a = scene({ dof: { focus: 12, aperture: .5 }, floor: { mirror: true, roughness: .1 }, shafts: { intensity: .5 }, lights: [{ intensity: 1 }] });
-  const b = scene({ dof: { focus: { 0: 12, 2: 5 }, aperture: 1 }, floor: { mirror: true, roughness: .8 }, shafts: { intensity: 2 }, lights: [{ intensity: { 0: 1, 2: 4 } }] });
+  const b = scene({ dof: { focus: { 0: 12, 2: 5 }, focusRange: { 0: 0, 2: 2 }, aperture: 1 }, floor: { mirror: true, roughness: .8 }, shafts: { intensity: 2 }, lights: [{ intensity: { 0: 1, 2: 4 } }] });
   expect(worldGraphTopology(a)).toEqual(worldGraphTopology(b));
-  const graph = buildWorldGraph(scene({ dof: { scale: .25, samples: 7 }, floor: { mirror: true, scale: .3 }, shafts: { scale: .125, samples: 5 } }));
+  const graph = buildWorldGraph(scene({ bloom: { scale: .25 }, dof: { scale: .25, samples: 7 }, floor: { mirror: true, scale: .3 }, shafts: { scale: .125, samples: 5 } }));
   expect(graph.targets.find(target => target.id === "dof")?.scale).toBe(.25);
+  for (const id of ["bloom", "bloom-up"]) expect(graph.targets.find(target => target.id === id)?.scale).toBe(.25);
   expect(graph.targets.find(target => target.id === "reflect")?.scale).toBe(.3);
   expect(graph.targets.find(target => target.id === "shafts")?.scale).toBe(.125);
 });
