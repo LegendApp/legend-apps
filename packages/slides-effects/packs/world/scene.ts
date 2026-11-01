@@ -1,3 +1,4 @@
+import { rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
@@ -43,6 +44,7 @@ export type Instance = {
   id?: string; kind: PrimitiveKind; position: Track<Vec3>; size: Track<number>; color: Track<Vec3>;
   emissive: Track<number>; scale: Track<Vec3>; end: Vec3; curve: number; thickness: number;
   drift?: number; seed?: number;
+  choreography?: ChoreographyMotion; burst?: BurstMotion;
   endpoints?: [string, string];
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
@@ -441,6 +443,16 @@ function pulseRange(pulse: NonNullable<Instance["pulse"]>, clock: ClockSample) {
 export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
   "worklet";
   let position = sampleTrack(instance.position, clock);
+  if (instance.choreography) {
+    const pose = samplePartMotion(instance.choreography, clock), local = instance.choreography.local;
+    const point = rotatePart([local[0] * pose.scale[0], local[1] * pose.scale[1], local[2] * pose.scale[2]], pose.rotation);
+    const offset = stageOffset(instance.stages, clock);
+    return [pose.position[0] + point[0] + offset[0], pose.position[1] + point[1] + offset[1], pose.position[2] + point[2] + offset[2]];
+  }
+  if (instance.burst) {
+    const point = sampleBurst(instance.burst, clock).position, offset = stageOffset(instance.stages, clock);
+    return [point[0] + offset[0], point[1] + offset[1], point[2] + offset[2]];
+  }
   if (instance.pulse) {
     const pulse = instance.pulse;
     const range = pulseRange(pulse, clock);
@@ -487,6 +499,8 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
 }
 export function instanceOpacity(instance: Instance, clock: ClockSample): number {
   "worklet";
+  if (instance.choreography) return samplePartMotion(instance.choreography, clock).opacity * (instance.label ? sampleTrack(instance.label.opacity, clock) : 1);
+  if (instance.burst) return sampleBurst(instance.burst, clock).opacity;
   if (instance.label) {
     const label = instance.label;
     let opacity = sampleTrack(label.opacity, clock) * (label.parent ? instanceOpacity(label.parent, clock) : 1);
@@ -622,9 +636,10 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       cache.keys[i] = key;
     }
     const index = worldHeaderSize + i * worldInstanceSize;
+    const part = instance.choreography ? samplePartMotion(instance.choreography, clock) : undefined;
     if (instance.label) {
-      const label = instance.label, position = instancePosition(instance, clock), color = sampleTrack(instance.color, clock);
-      values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2]; values[index + 3] = sampleTrack(instance.size, clock);
+      const label = instance.label, position = instancePosition(instance, clock), color = part?.color ?? sampleTrack(instance.color, clock);
+      values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2]; values[index + 3] = sampleTrack(instance.size, clock) * (part ? Math.max(part.scale[0], part.scale[1]) : 1);
       values[index + 4] = color[0]; values[index + 5] = color[1]; values[index + 6] = color[2];
       let emissive = sampleTrack(instance.emissive, clock) * (label.parent?.rows ? 1 - 0.6 * rowOutside(label.parent, clock) : 1);
       for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
@@ -642,10 +657,15 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     }
     const position = instance.endpoints ? objects[instance.endpoints[0]] : instance.anchor ? objects[instance.id!] : instancePosition(instance, clock);
     const offset = stageOffset(instance.stages, clock);
-    const endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
+    let endpoint = instance.pulse?.tail ? objects[instance.pulse.options.id] : instance.endpoints ? objects[instance.endpoints[1]]
       : !instance.stages?.length ? instance.end : [instance.end[0] + offset[0], instance.end[1] + offset[1], instance.end[2] + offset[2]];
-    const scale = sampleTrack(instance.scale, clock);
-    let color = sampleTrack(instance.color, clock);
+    const scale: Vec3 = [...sampleTrack(instance.scale, clock)];
+    if (part) {
+      for (let axis = 0; axis < 3; axis++) { scale[axis] *= part.scale[axis]; values[index + 20 + axis] = part.rotation[axis]; }
+      const local = instance.choreography!.local;
+      endpoint = [position[0] + instance.end[0] - local[0], position[1] + instance.end[1] - local[1], position[2] + instance.end[2] - local[2]];
+    }
+    let color = part?.color ?? sampleTrack(instance.color, clock);
     const activation = instance.graph ? activationAt(instance.graph.node, instance.graph.nodes, instance.graph.activate, clock) : 1;
     const dim = instance.graph?.dim ?? color;
     values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2];
@@ -682,7 +702,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[index + 23] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {
-      const sampledAlbedo = sampleTrack(material.albedo, clock);
+      const sampledAlbedo = part?.color ?? sampleTrack(material.albedo, clock);
       const albedo = instance.graph ? mixVector(dim, sampledAlbedo, activation) : sampledAlbedo;
       values[index + 24] = albedo[0]; values[index + 25] = albedo[1]; values[index + 26] = albedo[2];
     } else { values[index + 24] = values[index + 4]; values[index + 25] = values[index + 5]; values[index + 26] = values[index + 6]; }
@@ -765,7 +785,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
-      !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
+      !instance.choreography && !instance.burst && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
   }
   const fields: [number, Animated<number>][] = [[9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
     [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],

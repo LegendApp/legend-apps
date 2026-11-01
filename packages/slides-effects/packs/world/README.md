@@ -408,3 +408,41 @@ WGSL compilation/validation errors use the normal slide diagnostic path. The
 pulse following, changed rows, stage flights and voxel reduction.
 `cinematic-title.mdx` combines a mirror floor, lit monoliths, volumetric fog,
 drifting particles and continuous camera moves behind normal text overlays.
+
+### Assembly and landing events
+
+`Choreography` moves reusable instance templates between layouts on the presentation
+clock. A part has an id, local `instances`, and a `home` pose (`position`, optional
+Euler XYZ `rotation` in radians, `scale`, and `color`). Use `primitive`,
+`cardInstances`, or custom mesh instances to build the templates.
+
+```tsx
+const part = (id, x) => ({ id, home: { position: [x, 0, 0] },
+  instances: [primitive("box", { scale: [1, 0.6, 0.4] })] });
+<Choreography id="assembly"
+  layouts={[{ id: "pair", parts: [part("a", -2), part("b", 2)] },
+    { id: "base", parts: [part("c", 0)] }]}
+  transitions={[{ from: "pair", to: "base", step: 1, duration: 1.4,
+    stagger: 0.06, swapAt: 0.55, overshoot: 0.08,
+    onLand: { count: 18, seed: 9 } }]} />
+```
+
+Transitions form an itinerary. Each uses a `step` or absolute slide-time `at`.
+The default mapping pairs cyclically up to the larger layout's count. Explicit
+`mapping: [{ from, to, via?, delay?, swapAt? }]` must cover all parts; repeated
+sources split and repeated targets merge. `via` contains two absolute cubic
+control points; default handles rise vertically from the endpoints. `swapAt`
+selects source or destination geometry at raw normalized flight progress.
+Each staggered flight travels, pushes past its seat, and settles exactly home.
+
+`onLand` emits a seeded, one-shot burst at each route's destination. Standalone
+`<Burst position={[0, 0, 0]} step={1} delay={0.5} count={24} seed={7} />` uses
+the same event clock. Burst style supports `lifetime`, `color`, `size`, `speed`,
+`spread`, and `gravity`. Events are sampled effects, without JS callbacks or a
+particle frame loop, so seeking backward or sampling a still reproduces the frame.
+
+Templates use their initial local positions; home poses own rigid motion. Meshes
+and card bodies rotate in 3D; atlas `Label` strings retain their facing plane.
+Use glyph meshes for rigid 3D type. `apps/slides/examples/assembly.mdx` demonstrates
+18 tiles arriving on rails, merging into seven nodes, then three bases. Use
+`quality="high" renderScale={1}` for device-resolution proof.
