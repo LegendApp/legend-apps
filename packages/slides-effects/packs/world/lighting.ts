@@ -1,0 +1,222 @@
+import type { Vec3 } from "./camera";
+import { colorVector, primitive, type Animated, type Instance, type MaterialOptions } from "./scene";
+
+/** A directional key light. `position` and `target` set its direction; the shadow box is centred on `target`. */
+export type KeyLightOptions = {
+  position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>;
+  /** "map" renders a shadow map, "contact" a cheaper screen-space contact shadow; false lights without shadows. */
+  shadow?: "map" | "contact" | false;
+  /** Half-width of the square shadow box in world units. */
+  shadowSize?: Animated<number>;
+  /** Penumbra width in shadow-map texels. */
+  softness?: Animated<number>;
+  /** 0 leaves shadowed areas lit, 1 removes all key light there. */
+  shadowStrength?: Animated<number>;
+  /** Static shadow-map resolution relative to the scene target (default 0.5). */
+  shadowScale?: number;
+};
+/** A small analytic studio environment, prefiltered by roughness, for glossy and metal reflections. */
+export type EnvironmentOptions = { intensity?: Animated<number> };
+
+/** Painted lines run along the floor's z axis at `x` (mirrored to -x unless `symmetric` is false). `dash` is the dash length; 0 draws a solid line. */
+export type FloorLine = { x: number; width?: number; color?: string; intensity?: number; dash?: number; gap?: number; symmetric?: boolean };
+/** Alternating kerb stripes between `x` and `x + width`, `stripe` long. */
+export type FloorKerb = { x: number; width?: number; stripe?: number; colors?: [string, string]; intensity?: number; symmetric?: boolean };
+export type FloorMarkings = {
+  /** Opacity of the floor surface over its mirror reflection; markings stay opaque. */
+  veil?: number;
+  grid?: { spacing?: number; color?: string; intensity?: number; width?: number };
+  lines?: FloorLine[]; kerbs?: FloorKerb[];
+};
+
+export type TunnelOptions = {
+  id?: string;
+  /** Axis-aligned polyline the tunnel follows; the floor of each frame sits at the point's y. Defaults to `from` → `to`. */
+  path?: Vec3[]; from?: Vec3; to?: Vec3;
+  spacing?: number; width?: number; height?: number; thickness?: number;
+  color?: string; material?: string | MaterialOptions;
+  /** Emissive strips under the top beam, running between frames. */
+  strips?: { color?: string; intensity?: number; count?: number; length?: number; width?: number } | false;
+  /** Low emissive edge lights along both walls. */
+  edges?: { color?: string; intensity?: number; height?: number; length?: number } | false;
+};
+
+const tunnelMaterial: MaterialOptions = { albedo: "#0d0e11", roughness: 0.4, metal: 0.8 };
+
+/** Repeated portal frames (two posts and a beam) with light strips, built from boxes. */
+export function tunnelInstances({ id = "tunnel", path, from = [0, 0, 20], to = [0, 0, -120], spacing = 6, width = 22, height = 10, thickness = 0.4,
+  color = "#0d0e11", material = tunnelMaterial, strips = {}, edges = {} }: TunnelOptions = {}): Instance[] {
+  const points = path ?? [from, to];
+  if (points.length < 2 || !(spacing > 0)) throw new Error("Tunnel needs a path of two or more points and a positive spacing");
+  const instances: Instance[] = [];
+  const box = (name: string, position: Vec3, scale: Vec3, glow?: { color: string; intensity: number }) => instances.push(primitive("box", {
+    id: `${id}:${name}:${instances.length}`, position, scale, size: 0.5, color: glow?.color ?? color, emissive: glow?.intensity ?? 0,
+    ...(glow ? {} : { material }) }));
+  let carry = 0;
+  for (let segment = 0; segment + 1 < points.length; segment++) {
+    const a = points[segment], b = points[segment + 1];
+    const delta: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const length = Math.hypot(delta[0], delta[2]);
+    if (length === 0) continue;
+    const alongX = Math.abs(delta[0]) > Math.abs(delta[2]);
+    const direction: Vec3 = [delta[0] / length, delta[1] / length, delta[2] / length];
+    // Local axes: `across` is horizontal and perpendicular to the path; sizes swap x/z when the path runs along x.
+    const across = (x: number, y: number, z: number): Vec3 => alongX ? [z, y, x] : [x, y, z];
+    for (let distance = carry; distance <= length + 1e-6; distance += spacing) {
+      const p: Vec3 = [a[0] + direction[0] * distance, a[1] + direction[1] * distance, a[2] + direction[2] * distance];
+      const at = (x: number, y: number, z: number): Vec3 => { const o = across(x, y, z); return [p[0] + o[0], p[1] + o[1], p[2] + o[2]]; };
+      for (const side of [-1, 1]) box("post", at(side * width / 2, height / 2, 0), across(thickness, height, thickness));
+      box("beam", at(0, height, 0), across(width + thickness, thickness, thickness));
+      const next = distance + spacing <= length + 1e-6 || segment + 2 < points.length;
+      if (!next) continue;
+      // Strips and edges sit halfway to the next frame, along the path.
+      const half = (x: number, y: number, z: number): Vec3 => {
+        const o = across(x, y, z);
+        return [p[0] + o[0] + direction[0] * spacing / 2, p[1] + o[1] + direction[1] * spacing / 2, p[2] + o[2] + direction[2] * spacing / 2];
+      };
+      if (strips) {
+        const count = strips.count ?? 2;
+        for (let i = 0; i < count; i++) {
+          const x = count === 1 ? 0 : (i / (count - 1) - 0.5) * width / 2;
+          box("strip", half(x, height - 0.25, 0), across(strips.width ?? 0.18, 0.06, spacing * (strips.length ?? 0.55)),
+            { color: strips.color ?? "#cfe0ff", intensity: strips.intensity ?? 2.2 });
+        }
+      }
+      if (edges) for (const side of [-1, 1]) box("edge", half(side * (width / 2 - 0.3), edges.height ?? 0.3, 0), across(0.06, 0.06, spacing * (edges.length ?? 0.7)),
+        { color: edges.color ?? "#ff3b30", intensity: edges.intensity ?? 1.8 });
+    }
+    if (carry <= length + 1e-6) carry += Math.floor((length - carry) / spacing + 1e-6) * spacing + spacing;
+    carry -= length;
+  }
+  return instances;
+}
+
+const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
+const v3 = (color: string, scale = 1) => `vec3f(${colorVector(color).map(c => f(c * scale)).join(",")})`;
+
+/**
+ * Key light and environment WGSL shared by every lit pass. Header slots: 112 key position, 115 intensity, 116 color,
+ * 119 shadow half-size, 120 target, 123 softness, 124 environment intensity, 125 shadow strength.
+ */
+/** `shadeKey` false leaves the key term unshadowed, for passes that shade their whole color (the floor). */
+export function keyLightCode(shadowBinding?: number, shadeKey = true) {
+  return `
+fn keyDirection()->vec3f { return normalize(vector(120u)-vector(112u)+vec3f(0.,-.00001,0.)); }
+fn keyRight()->vec3f { let d=keyDirection(); return normalize(cross(d,select(vec3f(0.,1.,0.),vec3f(1.,0.,0.),abs(d.y)>.99))); }
+fn keyUp()->vec3f { return cross(keyRight(),keyDirection()); }
+fn keyRange()->f32 { return max(uniforms[119],1.)*4.; }
+/** Orthographic light space: x/y in [-1,1] across the shadow box (x widened by the target aspect), z in [0,1]. */
+fn keyProject(p:vec3f)->vec3f {
+ let q=p-vector(120u); let half=max(uniforms[119],.01);
+ return vec3f(dot(q,keyRight())/(half*frame.aspect),dot(q,keyUp())/half,dot(q,keyDirection())/(2.*keyRange())+.5);
+}
+${shadowBinding === undefined ? "fn keyShadow(world:vec3f,normal:vec3f)->f32 { return 1.; }" : `
+@group(0) @binding(${shadowBinding}) var shadowMap:texture_depth_2d;
+fn keyShadow(world:vec3f,normal:vec3f)->f32 {
+ let size=vec2f(textureDimensions(shadowMap)); let texel=2.*max(uniforms[119],.01)/size.y;
+ let soft=max(uniforms[123],.5); let facing=clamp(abs(dot(normal,keyDirection())),.05,1.);
+ let p=keyProject(world+normal*texel*1.5);
+ let uv=vec2f(p.x*.5+.5,.5-p.y*.5);
+ if(any(uv<vec2f(0.)) || any(uv>vec2f(1.)) || p.z>=1.) { return 1.; }
+ // A 4x4-cell bilinear PCF (5x5 texel compares with tent weights) on a grid spaced by the softness in texels: smooth and noise-free.
+ // A sloped receiver moves away across the kernel, so the bias follows its slope.
+ let slope=min(sqrt(1.-facing*facing)/facing,4.);
+ let bias=(texel*.6+texel*soft*2.*slope*.6)/(2.*keyRange());
+ let cell=uv*size/soft-.5; let origin=floor(cell); let t=cell-origin;
+ var lit=0.;
+ for(var j=0;j<5;j++) { for(var i=0;i<5;i++) {
+  let pixel=clamp(vec2i((origin+vec2f(f32(i-1),f32(j-1))+.5)*soft),vec2i(0),vec2i(size)-vec2i(1));
+  let w=vec2f(select(select(1.,t.x,i==4),1.-t.x,i==0),select(select(1.,t.y,j==4),1.-t.y,j==0));
+  lit+=w.x*w.y*select(0.,1.,p.z-bias<=textureLoad(shadowMap,pixel,0));
+ } }
+ return mix(1.,lit/16.,clamp(uniforms[125],0.,1.));
+}`}
+fn keyLight(world:vec3f,normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal:f32)->vec3f {
+ let toward=-keyDirection(); let nl=max(0.,dot(normal,toward));
+ if(nl<=0. || uniforms[115]<=0.) { return vec3f(0.); }
+ let halfVector=normalize(toward+view); let nh=max(0.,dot(normal,halfVector)); let nv=max(.0001,dot(normal,view));
+ let alpha=roughness*roughness; let a2=alpha*alpha; let denominator=nh*nh*(a2-1.)+1.;
+ let distribution=a2/(3.14159265*denominator*denominator);
+ let visibility=.5/max(.0001,nl*sqrt(nv*nv*(1.-a2)+a2)+nv*sqrt(nl*nl*(1.-a2)+a2));
+ let f0=mix(vec3f(.04),albedo,metal); let fresnel=f0+(1.-f0)*pow(1.-max(0.,dot(view,halfVector)),5.);
+ let diffuse=albedo*(1.-fresnel)*(1.-metal)/3.14159265;
+ return (diffuse+fresnel*distribution*visibility)*nl*vector(116u)*uniforms[115]${shadeKey ? "*keyShadow(world,normal)" : ""};
+}
+`;
+}
+
+/** Studio softboxes over a dark gradient; roughness widens each lobe with conserved energy, standing in for a prefiltered map. */
+export const environmentCode = `
+fn envLobe(d:vec3f,center:vec3f,width:f32,energy:f32,a:f32)->f32 { let w=width+a; return energy*width/w*exp((dot(d,normalize(center))-1.)/w); }
+fn environment(d:vec3f,roughness:f32)->vec3f {
+ let a=roughness*roughness*.6;
+ var c=mix(vec3f(.006,.006,.008),vec3f(.03,.032,.04),smoothstep(-.3,.8,d.y));
+ c+=vec3f(1.,.98,.95)*envLobe(d,vec3f(0.,1.,.15),.03,2.4,a);
+ c+=vec3f(.9,.94,1.)*envLobe(d,vec3f(-1.,.35,.35),.015,1.6,a);
+ c+=vec3f(1.,.95,.9)*envLobe(d,vec3f(1.,.25,-.25),.015,1.2,a);
+ c+=vec3f(.8,.85,1.)*envLobe(d,vec3f(.15,.15,1.),.06,.5,a);
+ return c;
+}
+fn environmentLight(normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal:f32)->vec3f {
+ let nv=max(0.,dot(normal,view)); let f0=mix(vec3f(.04),albedo,metal);
+ // Analytic split-sum approximation (Karis, mobile).
+ let c0=vec4f(-1.,-.0275,-.572,.022); let c1=vec4f(1.,.0425,1.04,-.04);
+ let r=roughness*c0+c1; let a004=min(r.x*r.x,exp2(-9.28*nv))*r.x+r.y; let ab=vec2f(-1.04,1.04)*a004+r.zw;
+ let specular=environment(reflect(-view,normal),roughness)*(f0*ab.x+ab.y);
+ let diffuse=environment(normal,1.)*albedo*(1.-metal)*.6;
+ return (specular+diffuse)*uniforms[124];
+}
+`;
+
+/** Floor markings, static in the shader; returns WGSL statements that read `world` and update `color` and `mask`. */
+export function floorMarkingsCode(markings: FloorMarkings) {
+  const lines: string[] = [];
+  if (markings.grid) {
+    const g = markings.grid, spacing = f(g.spacing ?? 2);
+    lines.push(`{ let cell=world.xz/${spacing}; let g=abs(fract(cell)-.5)/max(fwidth(cell),vec2f(.00001)); let grid=(1.-min(min(g.x,g.y)/${f(g.width ?? 1)},1.))*fade;
+  color+=${v3(g.color ?? "#ffffff", g.intensity ?? 0.022)}*grid; }`);
+  }
+  for (const line of markings.lines ?? []) {
+    const width = f(line.width ?? 0.08), dash = line.dash ?? 0, gap = line.gap ?? dash;
+    const distance = line.symmetric === false ? `abs(world.x-${f(line.x)})` : `abs(abs(world.x)-${f(Math.abs(line.x))})`;
+    lines.push(`{ let d=${distance}; let aa=max(fwidth(world.x),.0001); var paint=1.-smoothstep(${width}*.5-aa*.5,${width}*.5+aa*.5,d);
+  ${dash > 0 ? `let period=${f(dash + gap)}; let z=fract(world.z/period)*period; let dz=max(fwidth(world.z),.0001); paint*=smoothstep(0.,dz,z)*(1.-smoothstep(${f(dash)}-dz,${f(dash)},z));` : ""}
+  paint*=fade; color=mix(color,${v3(line.color ?? "#ffffff", line.intensity ?? 0.55)},paint); mask=max(mask,paint); }`);
+  }
+  for (const kerb of markings.kerbs ?? []) {
+    const width = kerb.width ?? 0.8, stripe = f(kerb.stripe ?? 1.6), [a, b] = kerb.colors ?? ["#808080", "#ff3b30"];
+    const x = kerb.symmetric === false ? "world.x" : "abs(world.x)", from = kerb.symmetric === false ? kerb.x : Math.abs(kerb.x);
+    lines.push(`{ let aa=max(fwidth(world.x),.0001); let k=smoothstep(${f(from)}-aa,${f(from)}+aa,${x})*(1.-smoothstep(${f(from + width)}-aa,${f(from + width)}+aa,${x}));
+  let s=smoothstep(.5-fwidth(world.z/${stripe})*.5,.5+fwidth(world.z/${stripe})*.5,abs(fract(world.z/${stripe})-.5)*2.);
+  let paint=k*fade; color=mix(color,mix(${v3(a, kerb.intensity ?? 0.45)},${v3(b, kerb.intensity ?? 0.45)},s),paint); mask=max(mask,paint); }`);
+  }
+  return lines.join("\n ");
+}
+
+/** Screen-space contact shadow toward the key light: a short depth-buffer march, darkening the lit scene where it is blocked. */
+export function contactShadowCode(bindings: string, depthCode: string) {
+  return `${bindings}
+@group(0) @binding(3) var source:texture_2d<f32>;
+@group(0) @binding(4) var depth:texture_depth_2d;
+${depthCode}
+fn keyDirectionContact()->vec3f { return normalize(vector(120u)-vector(112u)+vec3f(0.,-.00001,0.)); }
+fn screenOf(world:vec3f)->vec3f {
+ let delta=world-vector(0u); let z=dot(delta,cameraForward());
+ let ndc=vec2f(dot(delta,cameraRight())/(uniforms[3]*frame.aspect),dot(delta,cameraUp())/uniforms[3])/max(z,.0001);
+ return vec3f(ndc.x*.5+.5,.5-ndc.y*.5,z);
+}
+@fragment fn contactShadow(@location(0) uv:vec2f,@builtin(position) position:vec4f)->@location(0) vec4f {
+ let color=textureSampleLevel(source,linearSampler,uv,0.);
+ let distance=depthAt(uv); if(distance>=400.) { return color; }
+ let world=vector(0u)+worldRay(uv)*distance; let toward=-keyDirectionContact();
+ let jitter=fract(52.9829189*fract(dot(floor(position.xy),vec2f(.06711056,.00583715))));
+ let reach=max(uniforms[119],1.)*.08; var occlusion=0.;
+ for(var i=0u;i<12u;i++) {
+  let t=(f32(i)+jitter)/12.; let p=world+toward*(reach*t*t+.02); let s=screenOf(p);
+  if(any(s.xy<vec2f(0.)) || any(s.xy>vec2f(1.))) { break; }
+  let scene=depthAt(s.xy); let thickness=reach*.5;
+  if(scene<s.z-.02 && scene>s.z-thickness) { occlusion=max(occlusion,1.-t); }
+ }
+ return vec4f(color.rgb*(1.-occlusion*clamp(uniforms[125],0.,1.)*.75),color.a);
+}`;
+}

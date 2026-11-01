@@ -1,0 +1,58 @@
+import { expect, test } from "bun:test";
+import { tunnelInstances } from "../packs/world/lighting";
+import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
+import { orbInstances, prepareWorldScene, primitive, sampleWorldUniforms, type WorldScene } from "../packs/world/scene";
+
+const scene = (extra: Partial<WorldScene>) => prepareWorldScene({ instances: [primitive("box"), ...orbInstances({ count: 4 })], ...extra });
+const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+
+test("a key light shadow map draws casters first and every lit pass reads it", () => {
+  const graph = buildWorldGraph(scene({ keyLight: { position: [6, 16, 12] }, floor: { mirror: true } }));
+  const shadow = graph.targets.find(target => target.id === "shadow")!;
+  expect(shadow).toMatchObject({ format: "depth32float", scale: 0.5 });
+  const casters = graph.passes.filter(pass => pass.id.startsWith("shadow-"));
+  expect(casters.map(pass => pass.id)).toEqual(["shadow-box", "shadow-sphere"]);
+  expect(graph.passes.indexOf(casters[0])).toBe(0);
+  for (const pass of casters) if (pass.kind === "render") expect(pass).toMatchObject({ color: [], depth: "shadow" });
+  for (const id of ["scene-box", "scene-sphere", "reflection-box", "floor"]) {
+    const pass = graph.passes.find(pass => pass.id === id)!;
+    expect(pass.reads).toContain("shadow");
+    expect(pass.code).toContain("fn keyShadow");
+    expect(pass.code).toContain(`@binding(${pass.reads!.indexOf("shadow") + 3}) var shadowMap`);
+  }
+});
+
+test("shadow off and contact fallback skip the shadow map", () => {
+  const off = buildWorldGraph(scene({ keyLight: { shadow: false } }));
+  expect(off.targets.some(target => target.id === "shadow")).toBe(false);
+  expect(off.passes.find(pass => pass.id === "scene-box")!.code).toContain("keyLight(world");
+  const contact = buildWorldGraph(scene({ keyLight: { shadow: "contact" } }));
+  expect(contact.targets.some(target => target.id === "shadow")).toBe(false);
+  expect(contact.passes.some(pass => pass.id === "contact-shadow")).toBe(true);
+});
+
+test("key light and environment animate through uniforms without changing topology", () => {
+  const a = scene({ keyLight: { intensity: 2, position: [1, 2, 3] }, environment: { intensity: 1 } });
+  const b = scene({ keyLight: { intensity: { 0: 1, 1: 3 }, position: { 0: [1, 2, 3], 1: [3, 2, 1] } }, environment: { intensity: { 0: 0.5, 1: 1 } } });
+  expect(worldGraphTopology(a)).toEqual(worldGraphTopology(b));
+  const values = sampleWorldUniforms(a, clock);
+  expect([values[112], values[113], values[114], values[115], values[124]]).toEqual([1, 2, 3, 2, 1]);
+  expect(buildWorldGraph(a).passes.find(pass => pass.id === "scene-box")!.code).toContain("environmentLight(normal");
+});
+
+test("floor markings and veil compile into the floor pass", () => {
+  const graph = buildWorldGraph(scene({ floor: { mirror: true, veil: 0.6, grid: { spacing: 2 }, lines: [{ x: 9, width: 0.1 }, { x: 3, dash: 1.5 }], kerbs: [{ x: 9.2 }] } }));
+  const floor = graph.passes.find(pass => pass.id === "floor")!.code;
+  expect(floor).toContain("abs(abs(world.x)-9.)");
+  expect(floor).toContain("fract(world.z/period)");
+  expect(floor).toContain("*0.4000*(1.-mask)");
+});
+
+test("tunnels place portal frames with strips between them along axis-aligned paths", () => {
+  const straight = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -12], spacing: 6, edges: false });
+  const frames = straight.filter(instance => instance.id!.includes(":beam:"));
+  expect(frames.map(instance => instance.position.initial[2])).toEqual([0, -6, -12]);
+  expect(straight.filter(instance => instance.id!.includes(":strip:"))).toHaveLength(4);
+  const turn = tunnelInstances({ path: [[0, 0, 0], [0, 0, -8], [10, 0, -8]], spacing: 5, strips: false, edges: false });
+  expect(turn.filter(instance => instance.id!.includes(":beam:")).map(instance => instance.position.initial)).toEqual([[0, 10, 0], [0, 10, -5], [2, 10, -8], [7, 10, -8]]);
+});

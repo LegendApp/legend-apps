@@ -7,6 +7,7 @@ import { makeMutable, useAnimatedReaction, useDerivedValue, useSharedValue, type
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
 import { advanceResolution, createResolutionState } from "./resolution";
+import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
 import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
 import { text3dInstances, type Text3DOptions } from "./text3d";
 import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
@@ -67,6 +68,11 @@ export function Material(_: MaterialOptions & { id: string }) { return null; }
 export function Pass(_: PostOptions) { return null; }
 export function Custom(_: CustomOptions) { return null; }
 export function SDF(_: SDFOptions) { return null; }
+export function KeyLight(_: KeyLightOptions) { return null; }
+export function Environment(_: EnvironmentOptions) { return null; }
+export function Tunnel(_: TunnelOptions) { return null; }
+export { tunnelInstances } from "./lighting";
+export type { EnvironmentOptions, FloorKerb, FloorLine, FloorMarkings, KeyLightOptions, TunnelOptions } from "./lighting";
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
 function retainedPose(id: string) {
@@ -150,6 +156,9 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === Shafts) scene.shafts = options;
       else if (child.type === Chromatic) scene.chromatic = options.amount as Animated<number> | undefined;
       else if (child.type === RimLight) scene.rim = options;
+      else if (child.type === KeyLight) scene.keyLight = options;
+      else if (child.type === Environment) scene.environment = options;
+      else if (child.type === Tunnel) add(tunnelInstances(options), stages);
       else if (child.type === PointLight || child.type === SpotLight) scene.lights!.push({ ...options, kind: child.type === PointLight ? "point" : "spot" });
       else if (child.type === Pass) scene.passes!.push(options as PostOptions);
       else if (child.type === Fog) scene.fog = options;

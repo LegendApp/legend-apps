@@ -1,0 +1,119 @@
+---
+title: World lighting
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050506"
+  color: "#f4f4f5"
+---
+
+import { Background } from "@legend-apps/presentation"
+import { Text } from "react-native"
+import { World, Camera, Box, Sphere, Material, Floor, KeyLight, Environment, Tunnel, PointLight, Orbs, Fog, Bloom, Vignette, Grain } from "slides:world/World"
+
+export const grid = { spacing: 2, intensity: 0.02 }
+export const lines = [{ x: 9, width: 0.12, intensity: 0.55 }, { x: 3, width: 0.08, dash: 1.5, gap: 1.5, intensity: 0.2 }]
+export const kerbs = [{ x: 9.4, width: 0.8, stripe: 1.6, colors: ["#808080", "#ff3b30"] }]
+
+export const parts = <>
+  <Material id="chrome" albedo="#c8ccd4" roughness={0.3} metal={1} rim={0} />
+  <Material id="satin" albedo="#d9d9de" roughness={0.55} metal={0} rim={0} />
+  <Material id="carbon" albedo="#18191d" roughness={0.18} metal={0.5} rim={0} />
+  <Box material="chrome" position={[-4, 1, 0]} scale={[2, 2, 2]} emissive={0} />
+  <Box material="satin" position={[0, 1.5, -1]} scale={[1.2, 3, 1.2]} emissive={0} />
+  <Box material="carbon" position={[4, 0.75, 0]} scale={[3, 1.5, 1]} emissive={0} />
+  <Sphere material="chrome" position={[0, 1, 2.5]} size={1} emissive={0} />
+  <Box position={[4, 1.53, 0.51]} scale={[2.6, 0.06, 0.02]} color="#ff3b30" emissive={3} />
+</>
+
+export const look = <>
+  <Fog density={0.012} color="#050506" />
+  <Bloom intensity={0.9} threshold={1} /><Vignette amount={0.3} /><Grain amount={0.008} />
+</>
+
+<Background>
+  <World id="lighting" background quality="auto" exposure={1.1}>
+    <Camera shots={[{ step: 0, orbit: { center: [0, 1, 0], radius: 15, height: 5, speed: 0.05 }, fov: 40 }]} />
+    {parts}
+    <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
+    <Environment intensity={0.9} />
+    <Floor mirror y={0} color="#0a0a0c" roughness={0.08} reflectivity={0.85} size={200} veil={0.6} grid={grid} lines={lines} kerbs={kerbs} />
+    {look}
+  </World>
+</Background>
+
+# Key light and shadows
+
+<Text className="text-2xl text-zinc-400 text-center self-center">A shadow map falls across the floor and onto the parts</Text>
+
+---
+
+<Background>
+  <World id="lighting" background quality="auto" exposure={1.1} enter={{ from: "previous", duration: 1.2 }}>
+    <Camera duration={1.6} shots={[{ step: 0, position: [7, 3, 9], target: [0, 1.2, 0], fov: 34 }, { step: 1, position: [-6, 2.5, 8], target: [0, 1.2, 0] }]} />
+    {parts}
+    <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
+    <Environment intensity={[{ step: 0, value: 0 }, { step: 1, value: 1.2, duration: 1.6 }]} />
+    <Floor mirror y={0} color="#0a0a0c" roughness={0.08} reflectivity={0.85} size={200} veil={0.6} grid={grid} lines={lines} kerbs={kerbs} />
+    {look}
+  </World>
+</Background>
+
+# Environment reflections
+
+<Step at={1}><Text className="text-2xl text-zinc-400 text-center self-center">Metal and gloss pick up a soft studio environment</Text></Step>
+
+---
+
+<Background>
+  <World id="lighting-floor" background quality="auto" exposure={1.1}>
+    <Camera shots={[{ at: 0, position: [-2, 1.2, 14], target: [0, 0.4, -20], fov: 46 }, { at: 0.5, position: [2, 1.6, 4], target: [0, 0.4, -30], duration: 8, ease: "smoothstep" }]} />
+    {parts}
+    <KeyLight position={[8, 14, -10]} target={[0, 0, 0]} intensity={2} shadowSize={14} />
+    <Environment intensity={0.8} />
+    <Floor mirror y={0} color="#0a0a0c" roughness={0.06} reflectivity={0.9} size={300} veil={0.6} grid={grid} lines={lines} kerbs={kerbs} />
+    <PointLight position={[0, 4, -30]} color="#ff3b30" intensity={30} range={40} />
+    <Orbs count={40} colors={["#ffffff", "#ff3b30"]} radius={0.03} spread={[24, 6, 40]} position={[0, 3, -10]} seed={5} drift={0.2} emissive={3} />
+    {look}
+  </World>
+</Background>
+
+# Floor markings
+
+<Text className="text-2xl text-zinc-400 text-center self-center">Lines, dashes and kerb stripes under a mirror veil</Text>
+
+---
+
+<Background>
+  <World id="lighting-tunnel" background quality="auto" exposure={1.15}>
+    <Camera shots={[{ at: 0, position: [0, 3.2, 26], target: [0, 3, -10], fov: 50 }, { at: 0.3, position: [0, 3, -40], target: [0, 2.6, -90], duration: 12, ease: "smoothstep" }]} />
+    <Tunnel from={[0, 0, 18]} to={[0, 0, -110]} spacing={8} width={24} height={11} />
+    <KeyLight position={[6, 16, 12]} target={[0, 0, -20]} intensity={1.2} shadowSize={30} softness={3} />
+    <Environment intensity={0.6} />
+    <Floor mirror y={0} color="#0a0a0c" roughness={0.06} reflectivity={0.9} size={300} veil={0.6} grid={grid} lines={lines} kerbs={kerbs} />
+    <Fog density={0.018} color="#050506" />
+    <Bloom intensity={1.1} threshold={1} /><Vignette amount={0.3} /><Grain amount={0.008} />
+  </World>
+</Background>
+
+# Tunnel
+
+<Text className="text-2xl text-zinc-400 text-center self-center">Portal frames with light strips along a path</Text>
+
+---
+
+<Background>
+  <World id="lighting-contact" background quality="auto" exposure={1.1}>
+    <Camera shots={[{ step: 0, orbit: { center: [0, 1, 0], radius: 15, height: 5, speed: 0.05 }, fov: 40 }]} />
+    {parts}
+    <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} shadow="contact" />
+    <Environment intensity={0.9} />
+    <Floor mirror y={0} color="#0a0a0c" roughness={0.08} reflectivity={0.85} size={200} veil={0.6} grid={grid} lines={lines} kerbs={kerbs} />
+    {look}
+  </World>
+</Background>
+
+# Contact shadow fallback
+
+<Text className="text-2xl text-zinc-400 text-center self-center">A cheaper screen-space shadow for heavy scenes</Text>

@@ -195,6 +195,50 @@ Static `scale` overrides are available on DOF, Floor (reflection resolution) and
 Shafts; DOF and Shafts also accept `samples`. These change pipeline topology.
 Animated focus, aperture, blur radius, lighting and effect strengths update uniforms.
 
+## Key light, environment, floor markings and tunnels
+
+```tsx
+import { KeyLight, Environment, Floor, Tunnel } from "slides:world/World";
+
+<KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
+<Environment intensity={0.9} />
+<Floor mirror y={0} color="#0a0a0c" reflectivity={0.85} size={200} veil={0.6} grid={{ spacing: 2 }}
+  lines={[{ x: 9, width: 0.12 }, { x: 3, dash: 1.5, gap: 1.5, intensity: 0.2 }]}
+  kerbs={[{ x: 9.4, width: 0.8, stripe: 1.6, colors: ["#808080", "#ff3b30"] }]} />
+<Tunnel from={[0, 0, 18]} to={[0, 0, -110]} spacing={8} width={24} height={11} />
+```
+
+`KeyLight` is a directional light from `position` toward `target`, using the same
+GGX response as point lights. By default it renders a shadow map: boxes, rings,
+tubes, custom geometry and spheres cast (spheres as light-facing discs), and the
+same shapes and the floor receive. The square shadow box is `shadowSize` half-width
+around `target`, widened to the canvas aspect. `softness` is the penumbra in
+shadow-map texels, filtered with a tent-weighted 5x5 PCF and a slope-scaled bias;
+`shadowStrength` is the fraction of key light removed in shadow. On the floor the
+shadow also darkens the mirror, like a shadow-catching layer. `shadowScale`
+(default 0.5) sets the static map resolution relative to the scene target. Cards,
+labels and SDFs do not cast. `shadow="contact"` replaces the map with a short
+screen-space march toward the light that darkens the lit image where the depth
+buffer blocks it; `shadow={false}` lights without shadows. Position, target,
+color, intensity, shadow size, softness and strength animate.
+
+`Environment` adds image-based lighting from a small analytic studio: soft boxes
+over a dark gradient, widened by roughness with conserved energy in place of a
+prefiltered map, and an analytic split-sum response. Metal and glossy sides pick
+up highlights without extra lights. Its intensity animates.
+
+Floor markings are static and run along z: `lines` at `x` (mirrored to `-x` unless
+`symmetric={false}`), solid or dashed (`dash`, `gap`); `kerbs` alternate two
+colors in `stripe`-long blocks from `x` to `x + width`; `grid` draws faint
+antialiased cell lines. `veil` is the floor's opacity over its mirror reflection;
+markings stay opaque. `intensity` scales each marking color.
+
+`Tunnel` places a portal frame (two posts and a beam in dark metal, or `color`
+and `material`) every `spacing` along `path`, an axis-aligned polyline, or from
+`from` to `to`. Between frames it adds emissive `strips` under the beam and low
+`edges` along both walls; pass `false` to omit either. `tunnelInstances` returns
+the boxes for custom scenes. The `lighting.mdx` deck shows each feature.
+
 ## Paths, recycled rows and stages
 
 ```tsx
