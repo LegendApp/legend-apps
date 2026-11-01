@@ -36,6 +36,11 @@ test("route draw-in and pulses share arc length through orthogonal bends", () =>
   expect(instanceOpacity(instances[1], clock(2))).toBe(0);
   const hidden = sampleWorldUniforms(scene, clock(2));
   expect(Array.from(hidden.slice(base + 12, base + 15))).not.toEqual(Array.from(hidden.slice(base, base + 3)));
+  const long = routedTubeInstances({ id: "long", path, pulses: [{ at: 0, duration: 1, size: 0.11, trailSize: 0.06, beads: 14, spacing: 0.05 }] }).filter(i => i.id!.includes(":pulse:"));
+  expect(long).toHaveLength(14);
+  expect([long[0].size.initial, long[1].size.initial]).toEqual([0.11, 0.06 * (1 - 0.63 / 14)]);
+  expect(instanceOpacity(long[13], clock(1.6))).toBe(1);
+  expect(instanceOpacity(long[6], clock(1.6))).toBe(0);
 });
 
 test("rounded nodes have mesh thickness, and typed flashes retain selection and pulse colors", () => {

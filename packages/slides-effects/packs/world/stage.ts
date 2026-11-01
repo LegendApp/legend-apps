@@ -2,7 +2,8 @@ import type { Ease, Vec3 } from "./camera";
 import { compileTrack, labelInstance, primitive, type Animated, type Instance, type PrimitiveOptions } from "./scene";
 
 export type RoundedBoxOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & { radius?: number; edge?: number };
-export type TubePulse = { step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number; emissive?: number; trailEmissive?: number };
+/** `beads` (default 7) spheres trail the head, `spacing` (default 0.025) apart in path progress, tapering from `trailSize` (default `size`). */
+export type TubePulse = { step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number; emissive?: number; trailEmissive?: number; trailSize?: number; beads?: number; spacing?: number };
 export type RoutedTubeOptions = {
   id: string; path: Vec3[]; draw?: Animated<number>; thickness?: number; color?: Animated<string>; emissive?: Animated<number>; pulses?: TubePulse[];
 };
@@ -64,8 +65,9 @@ export function routedTubeInstances({ id, path, draw = 1, thickness = 0.018, col
   const beads: Instance[] = [];
   pulses.forEach((pulse, index) => {
     if (!Number.isFinite(pulse.duration ?? 0.5) || (pulse.duration ?? 0.5) <= 0) throw new Error("Tube pulses need a positive duration");
-    for (let bead = 0; bead < 7; bead++) beads.push({ ...primitive("sphere", { id: `${id}:pulse:${index}:${bead}`, size: (pulse.size ?? thickness * 2.7) * (1 - bead * 0.09),
-      color: pulse.color ?? "#22d3ee", emissive: (bead ? pulse.trailEmissive ?? pulse.emissive ?? 5 : pulse.emissive ?? 5) * (1 - bead / 8) }), route: { ...route, pulse, bead } });
+    const count = pulse.beads ?? 7;
+    for (let bead = 0; bead < count; bead++) beads.push({ ...primitive("sphere", { id: `${id}:pulse:${index}:${bead}`, size: (bead ? pulse.trailSize ?? pulse.size ?? thickness * 2.7 : pulse.size ?? thickness * 2.7) * (1 - bead * 0.63 / count),
+      color: pulse.color ?? "#22d3ee", emissive: (bead ? pulse.trailEmissive ?? pulse.emissive ?? 5 : pulse.emissive ?? 5) * (1 - bead / (count + 1)) }), route: { ...route, pulse, bead } });
   });
   return [...instances, ...beads];
 }

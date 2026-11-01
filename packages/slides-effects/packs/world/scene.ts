@@ -468,7 +468,7 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
   }
   let position = sampleTrack(instance.position, clock);
   if (instance.route?.pulse) {
-    const route = instance.route, progress = tubePulseProgress(route.pulse!, clock) - (route.bead ?? 0) * 0.025;
+    const route = instance.route, progress = tubePulseProgress(route.pulse!, clock) - (route.bead ?? 0) * (route.pulse!.spacing ?? 0.025);
     position = routePoint(route.points, route.lengths, progress * route.lengths[route.lengths.length - 1]);
   }
   if (instance.pillar) {
@@ -530,7 +530,7 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   if (instance.route) {
     const route = instance.route, drawn = Math.max(0, Math.min(1, sampleTrack(route.draw, clock)));
     if (route.pulse) {
-      const progress = tubePulseProgress(route.pulse, clock) - (route.bead ?? 0) * 0.025;
+      const progress = tubePulseProgress(route.pulse, clock) - (route.bead ?? 0) * (route.pulse.spacing ?? 0.025);
       return progress < 0 || progress > 1 || progress > drawn ? 0 : 1;
     }
     return drawn * route.lengths[route.lengths.length - 1] <= route.lengths[route.segment!] ? 0 : 1;
