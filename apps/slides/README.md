@@ -80,6 +80,31 @@ in trusted deck code are not sandboxed by React error boundaries.
 
 `examples/showcase.mdx` exercises inline and fenced code, executable expressions, local TypeScript components, React state, speaker notes, per-slide transitions, and a lifecycle-aware React Native animation. `examples/demo.mdx` is a smaller starting point.
 
+## Record stills and videos
+
+`bun run slides:record` renders a deck in the native dev build without anyone
+at the Mac. It launches the app on its own, drives slides and steps over the
+Metro inspector (no keystrokes or Accessibility permission), captures the full-screen
+audience window at device pixels, and quits the instance it launched by PID:
+
+```sh
+bun run slides:record deck.mdx --slide 3 --step 2 --out slide3.png  # one still
+bun run slides:record deck.mdx --slide 3,7-9 --out-dir stills       # every step of those slides
+bun run slides:record deck.mdx --all --out-dir stills               # every step of the deck
+bun run slides:record deck.mdx --slide 7 --video slide7.mp4         # 60 fps: entering slide 7, then each step
+```
+
+Slides and steps are 1-based, as in the presenter. Stills are taken `--settle`
+ms (default 2500) after each navigation; videos hold each step for
+`--step-seconds` (default 3). Metro is started on `--port` if it isn't running
+and stopped afterwards. Legend Slides is single-instance, so the recorder waits
+(`--wait`, default 600 s) for any other instance to quit. Window lookup and video
+use the video-recording skill's ScreenCaptureKit recorder: set
+`LEGEND_VIDEO_RECORDING_SKILL` to its directory. The host process needs Screen
+Recording permission. When `LEGEND_APP_LOCK` names a lock command, the whole run
+holds it for the `slides` app. `--effect-packs packages/slides-effects/packs` resolves
+`slides:` imports from this checkout's packs instead of the installed ones. Build errors stop the run; runtime errors are printed and make the command exit 1.
+
 ## Editing
 
 With the audience closed, choose **Edit Source**. Editing replaces the presenter
