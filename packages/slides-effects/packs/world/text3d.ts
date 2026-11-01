@@ -4,7 +4,7 @@ import { compileTrack, primitive, type Animated, type Instance, type Keyframe, t
 
 /** A font baked by scripts/world-text3d.cjs. `glyphs` holds advance (em), outline point, side segment and cap triangle counts per char. */
 export type Text3DFont = { name: string; chars: string; space: number; ascent: number; descent: number; capHeight: number;
-  glyphs: [number, number, number, number][]; kerning: Record<string, number>; data: string; license: string };
+  glyphs: number[][]; kerning: Record<string, number>; data: string; license: string };
 /** Per-glyph motion. `offset` is added to the glyph's home position; `rotation` is Euler XYZ in degrees about the glyph's center. */
 export type GlyphMotion = { offset?: Animated<Vec3>; rotation?: Animated<Vec3>; scale?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number> };
