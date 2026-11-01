@@ -1,7 +1,9 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
 import { worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
-import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
+import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
+import { d } from "typegpu";
+import { defineWorldEffect, paramLayout, paramsCode, worldEffect, type WorldEffect, type WorldEffectPass, type WorldEffectStage } from "./effects";
 import { glyphVertexCount, text3dBuffer, text3dCode, text3dFont } from "./text3d";
 import { contactShadowCode, environmentCode, floorMarkingsCode, keyLightCode, type FloorMarkings } from "./lighting";
 import { depthCode } from "./post";
@@ -428,8 +430,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
 }
-const filterCode = `${worldBindings}
-@group(0) @binding(3) var source:texture_2d<f32>;
+const filterCode = `
 fn tap(uv:vec2f,offset:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv+offset/vec2f(textureDimensions(source)),0.).rgb; }
 fn box(color:vec3f,weight:f32,karis:bool)->vec4f { let w=weight*select(1.,1./(1.+max(color.r,max(color.g,color.b))),karis); return vec4f(color*w,w); }
 // 13 taps as five overlapping 2x2 boxes; the Karis average keeps single HDR pixels from flaring.
@@ -454,34 +455,43 @@ const downsample = downsampleCode();
 const threshold = `${filterCode}
 @fragment fn threshold(@location(0) uv:vec2f)->@location(0) vec4f {
  let color=downsample13(uv,true); let brightness=max(color.r,max(color.g,color.b));
- let knee=uniforms[10]*.5; let soft=clamp(brightness-uniforms[10]+knee,0.,2.*knee);
- return vec4f(color*max(soft*soft/(4.*knee+.0001),brightness-uniforms[10])/max(.0001,brightness),1.);
+ let level=params().threshold; let knee=level*.5; let soft=clamp(brightness-level+knee,0.,2.*knee);
+ return vec4f(color*max(soft*soft/(4.*knee+.0001),brightness-level)/max(.0001,brightness),1.);
 }`;
 // Luminance high-pass used by UnrealBloomPass; HDR values pass through without subtracting the threshold.
 const luminosityThreshold = `${filterCode}
 @fragment fn threshold(@location(0) uv:vec2f)->@location(0) vec4f {
  let color=textureSampleLevel(source,linearSampler,uv,0.).rgb;
  let brightness=dot(color,vec3f(.2126,.7152,.0722));
- return vec4f(color*smoothstep(uniforms[10],uniforms[10]+.01,brightness),1.);
+ return vec4f(color*smoothstep(params().threshold,params().threshold+.01,brightness),1.);
 }`;
 const upsample = `${filterCode}
-@group(0) @binding(4) var high:texture_2d<f32>;
-@fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb+tent9(uv)*uniforms[11],1.); }`;
+@fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb+tent9(uv)*params().radius,1.); }`;
 function unrealBloomWeight(mip: number) {
   const factor = (1 - mip * .2).toFixed(1);
-  return `mix(${factor},1.2-${factor},clamp(uniforms[11],0.,1.))`;
+  return `mix(${factor},1.2-${factor},clamp(params().radius,0.,1.))`;
 }
 function unrealUpsample(mip: number) {
   return `${filterCode}
-@group(0) @binding(4) var high:texture_2d<f32>;
 @fragment fn upsample(@location(0) uv:vec2f)->@location(0) vec4f {
  return vec4f(textureSampleLevel(high,linearSampler,uv,0.).rgb*${unrealBloomWeight(mip)}+tent9(uv),1.);
 }`;
 }
-const bloomComposite = `${worldBindings}
-@group(0) @binding(3) var source:texture_2d<f32>;
-@group(0) @binding(4) var bloom:texture_2d<f32>;
-@fragment fn bloomComposite(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(source,linearSampler,uv,0.).rgb+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9],1.); }`;
+/** Header slots the scene writes bloom values to. */
+export const bloomSlots = { intensity: 9, threshold: 10, radius: 11 };
+/** Dual-filter bloom: a thresholded 13-tap downsample chain and a tent upsample chain, added onto the scene. */
+export const bloomEffect = defineWorldEffect<{ intensity: d.F32; threshold: d.F32; radius: d.F32 }, { mode?: "soft" | "unreal"; scale?: number }>({
+  name: "bloom", params: { intensity: d.f32, threshold: d.f32, radius: d.f32 }, defaults: { intensity: 0, threshold: 1, radius: .8 },
+  build({ input, options, scale, levels, id }) {
+    const unreal = options.mode === "unreal", down = id(), up = id("up");
+    const targetScale = scale * (options.scale ?? .5);
+    const passes: WorldEffectPass[] = [{ id: id("threshold"), wgsl: unreal ? luminosityThreshold : threshold, fragment: "threshold", reads: { source: input }, output: `${down}@0` }];
+    for (let mip = 1; mip < levels; mip++) passes.push({ id: id(`down-${mip}`), wgsl: downsample, fragment: "downsample", reads: { source: `${down}@${mip - 1}` }, output: `${down}@${mip}` });
+    passes.push({ id: id(`up-${levels - 1}`), wgsl: unreal ? downsampleCode(unrealBloomWeight(levels - 1)) : downsample, fragment: "downsample", reads: { source: `${down}@${levels - 1}` }, output: `${up}@${levels - 1}` });
+    for (let mip = levels - 2; mip >= 0; mip--) passes.push({ id: id(`up-${mip}`), wgsl: unreal ? unrealUpsample(mip) : upsample, fragment: "upsample", reads: { source: `${up}@${mip + 1}`, high: `${down}@${mip}` }, output: `${up}@${mip}` });
+    return { targets: [{ id: down, scale: targetScale, mips: levels }, { id: up, scale: targetScale, mips: levels }], passes, add: { source: `${up}@0`, gain: "intensity" } };
+  },
+});
 // FXAA on the display-referred image catches what MSAA cannot: shading edges, the floor horizon and low-quality scenes.
 const fxaaCode = `${worldBindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
@@ -511,6 +521,7 @@ export type WorldGraphTopology = {
   bloomScale?: number; dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
+  effects?: { effect: string; options: Record<string, unknown>; before?: WorldEffectStage; after?: WorldEffectStage; base: number }[];
 };
 export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopology {
   const counts: Record<PrimitiveKind, number> = { box: 0, ring: 0, sphere: 0, tube: 0 };
@@ -547,7 +558,8 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
     floorMarkings: scene.floor && { veil: scene.floor.veil, lit: scene.floor.lit, reflectionBlend: scene.floor.reflectionBlend, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
-    customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
+    customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder,
+    effects: scene.effectUses.map(({ effect, options, before, after, base }) => ({ effect, options, before, after, base })) };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
 export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology): GPURenderGraphDefinition & { uniformsSize: number } {
@@ -557,8 +569,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const samples = topology.quality === "low" ? 8 : topology.quality === "medium" ? 12 : 16;
   const msaa = topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4;
   const passes: GPUPass[] = [];
-  const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa },
-    { id: "bloom", format: "rgba16float", scale: scale * (topology.bloomScale ?? .5), mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * (topology.bloomScale ?? .5), mips: levels }];
+  const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa }];
   const background = topology.backgroundVector;
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
   const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [], glyphDraws = topology.glyphs ?? [];
@@ -629,43 +640,69 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   };
   if (topology.shadow === "contact") fullscreen("contact-shadow", contactShadowCode(worldBindings, depthCode()), "contactShadow", [color, "depth"]);
   const stages = ["scene", "fog", "dof", "bloom", "tonemap"];
-  for (const item of topology.passes ?? []) {
+  // Repeated effects are numbered in declaration order: glow, glow-2, ...
+  const declared = new Map<string, number>();
+  const effectUses = (topology.effects ?? []).map(use => {
+    const count = (declared.get(use.effect) ?? 0) + 1;
+    declared.set(use.effect, count);
+    return { ...use, prefix: count > 1 ? `${use.effect}-${count}` : use.effect, after: use.after ?? (use.before ? undefined : worldEffect(use.effect).definition.after ?? "bloom") };
+  });
+  for (const item of [...topology.passes ?? [], ...effectUses]) {
     if (item.before && item.after || !stages.includes(item.before ?? item.after ?? "bloom") || item.before === "scene") throw new Error("Invalid World post-pass placement");
   }
+  /** Compiles an effect into fullscreen passes; returns its additive term, which the caller fuses into the tone map or composites. */
+  const runEffect = (effect: WorldEffect<any, any>, options: Record<string, unknown>, base: number, slots?: Record<string, number>, fuse = false, prefix = effect.definition.name) => {
+    const graph = effect.definition.build({ input: color, options, quality: topology.quality ?? "auto", scale, samples, levels, id: (part?: string) => part ? `${prefix}-${part}` : prefix });
+    const params = paramsCode(effect, base, slots);
+    const owned = new Set((graph.targets ?? []).map(target => target.id));
+    for (const target of graph.targets ?? []) targets.push({ id: target.id, format: "rgba16float", scale: target.scale ?? scale, ...target.mips ? { mips: target.mips } : {} });
+    const passCode = (pass: WorldEffectPass) => worldBindings + Object.entries(pass.reads).map(([binding, target], index) =>
+      `@group(0) @binding(${3 + index}) var ${binding}:${target === "depth" ? "texture_depth_2d" : "texture_2d<f32>"};\n`).join("")
+      + (Object.values(pass.reads).includes("depth") ? depthCode() : "") + params + pass.wgsl;
+    graph.passes.forEach((pass, index) => {
+      const reads = Object.values(pass.reads), isOwned = owned.has(pass.output.split("@")[0]);
+      // Only the final full-resolution result may share the post ping-pong targets; intermediates keep their own.
+      if (!isOwned && index === graph.passes.length - 1 && !graph.add) fullscreen(pass.id, passCode(pass), pass.fragment, reads, pass.output);
+      else {
+        if (!isOwned) targets.push({ id: pass.output, format: "rgba16float", scale });
+        passes.push({ kind: "fullscreen", id: pass.id, code: passCode(pass), fragment: pass.fragment, reads, output: pass.output });
+      }
+    });
+    if (!graph.add) { color = graph.passes.at(-1)!.output; return undefined; }
+    const gain = slots?.[graph.add.gain] ?? base + paramLayout(effect).find(field => field.key === graph.add!.gain)!.offset;
+    if (fuse) return { source: graph.add.source, gain: `uniforms[${gain}]` };
+    fullscreen(`${prefix}-composite`, `${worldBindings}
+@group(0) @binding(3) var source:texture_2d<f32>;
+@group(0) @binding(4) var added:texture_2d<f32>;
+@fragment fn composite(@location(0) uv:vec2f)->@location(0) vec4f { return vec4f(textureSampleLevel(source,linearSampler,uv,0.).rgb+textureSampleLevel(added,linearSampler,uv,0.).rgb*uniforms[${gain}],1.); }`,
+      "composite", [color, graph.add.source]);
+    return undefined;
+  };
   const custom = (stage: string, before: boolean) => {
     for (const item of topology.passes ?? []) {
       if ((before ? item.before : item.after ?? (!item.before ? "bloom" : undefined)) !== stage) continue;
       const id = `custom-post-${customIndex++}`;
       fullscreen(item.id ?? id, customPostCode(worldBindings, item.wgsl), "customPost", [color, "depth", "hdr", ...(item.reads ?? [])], id);
     }
+    for (const use of effectUses) if ((before ? use.before : use.after) === stage) runEffect(worldEffect(use.effect), use.options, use.base, undefined, false, use.prefix);
   };
   const order = topology.postOrder ?? ["fog", "dof", "bloom"];
   if (order.length !== 3 || new Set(order).size !== 3 || order.some(stage => !["fog", "dof", "bloom"].includes(stage))) throw new Error("World postOrder must contain fog, dof and bloom exactly once");
   // With nothing placed between bloom and the tonemap, the tonemap adds the bloom itself instead of a separate full-resolution composite.
-  const fuseBloom = order[2] === "bloom" && !(topology.passes ?? []).some(item => item.before === "tonemap" || (item.after ?? (item.before ? undefined : "bloom")) === "bloom");
+  const fuseBloom = order[2] === "bloom" && ![...topology.passes ?? [], ...effectUses].some(item => item.before === "tonemap" || (item.after ?? (item.before ? undefined : "bloom")) === "bloom");
+  let fused: { source: string; gain: string } | undefined;
   // Fog directly followed by focus folds into the focus passes, which already read depth for every tap.
   const fuseFog = !!topology.dof && !topology.shafts && order[order.indexOf("fog") + 1] === "dof" && !(topology.passes ?? []).some(item => item.after === "fog" || item.before === "dof" || item.reads?.includes("fog"));
   custom("scene", false);
   for (const stage of order) {
     custom(stage, true);
     if (stage === "fog" && !fuseFog) fullscreen("fog", fogCode(worldBindings, !!topology.shafts), "fog", [color, "depth", ...(topology.shafts ? ["shafts"] : [])]);
-    if (stage === "dof" && topology.dof) {
-      const source = color, dof = dofCode(worldBindings, topology.dofSamples ?? samples, fuseFog);
-      fullscreen("dof-gather", dof.gather, "gather", [source, "depth"], "dof", scale * (topology.dofScale ?? .5));
-      fullscreen("dof-composite", dof.composite, "focusComposite", [source, "depth", "dof"]);
-    }
-    if (stage === "bloom") {
-      const bloomSource = color;
-      passes.push({ kind: "fullscreen", id: "bloom-threshold", code: topology.bloomMode === "unreal" ? luminosityThreshold : threshold, fragment: "threshold", reads: [color], output: "bloom@0" });
-      for (let mip = 1; mip < levels; mip++) passes.push({ kind: "fullscreen", id: `bloom-down-${mip}`, code: downsample, fragment: "downsample", reads: [`bloom@${mip - 1}`], output: `bloom@${mip}` });
-      passes.push({ kind: "fullscreen", id: `bloom-up-${levels - 1}`, code: topology.bloomMode === "unreal" ? downsampleCode(unrealBloomWeight(levels - 1)) : downsample, fragment: "downsample", reads: [`bloom@${levels - 1}`], output: `bloom-up@${levels - 1}` });
-      for (let mip = levels - 2; mip >= 0; mip--) passes.push({ kind: "fullscreen", id: `bloom-up-${mip}`, code: topology.bloomMode === "unreal" ? unrealUpsample(mip) : upsample, fragment: "upsample", reads: [`bloom-up@${mip + 1}`, `bloom@${mip}`], output: `bloom-up@${mip}` });
-      if (!fuseBloom) fullscreen("bloom-composite", bloomComposite, "bloomComposite", [bloomSource, "bloom-up@0"]);
-    }
+    if (stage === "dof" && topology.dof) runEffect(dofEffect, { samples: topology.dofSamples, scale: topology.dofScale, fog: fuseFog }, 0, dofSlots);
+    if (stage === "bloom") fused = runEffect(bloomEffect, { mode: topology.bloomMode, scale: topology.bloomScale }, 0, bloomSlots, fuseBloom);
     custom(stage, false);
   }
   custom("tonemap", true);
-  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace, fuseBloom), "tonemap", fuseBloom ? [color, "bloom-up@0"] : [color], "tonemapped");
+  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace, fused?.gain), "tonemap", fused ? [color, fused.source] : [color], "tonemapped");
   custom("tonemap", false);
   fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
   if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");
@@ -686,5 +723,6 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (const id of used) targets.push({ id, format: "rgba16float", scale });
   }
   const buffers = [...labels ? [glyphBuffer()] : [], ...glyphFonts.map((font, index) => text3dBuffer(font, `text3d-${index}`))];
-  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
+  const effectEnd = effectUses.reduce((end, use) => Math.max(end, use.base + worldEffect(use.effect).size), 0);
+  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: Math.max(worldHeaderSize + instanceCount * worldInstanceSize, effectEnd) };
 }

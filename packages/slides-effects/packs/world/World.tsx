@@ -12,7 +12,7 @@ import { text3dInstances, type Text3DOptions } from "./text3d";
 import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
-  type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
+  type EffectOptions, type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 // motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
 import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
@@ -68,6 +68,10 @@ export function PointLight(_: Omit<LightOptions, "kind">) { return null; }
 export function SpotLight(_: Omit<LightOptions, "kind">) { return null; }
 export function Material(_: MaterialOptions & { id: string }) { return null; }
 export function Pass(_: PostOptions) { return null; }
+/** Adds a `defineWorldEffect` effect: `<Effect use={glow({ gain: { 0: 0, 1: 1 } })} after="bloom" />`. */
+export function Effect(_: EffectOptions) { return null; }
+export { defineWorldEffect } from "./effects";
+export type { WorldEffect, WorldEffectContext, WorldEffectGraph, WorldEffectPass, WorldEffectStage, WorldEffectTarget, WorldEffectUse } from "./effects";
 export function Custom(_: CustomOptions) { return null; }
 export function SDF(_: SDFOptions) { return null; }
 export function KeyLight(_: KeyLightOptions) { return null; }
@@ -114,7 +118,7 @@ function WorldSlideClock({ children }: { children: ReactNode }) {
   return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
 function worldContent(children: ReactNode, quality: WorldScene["quality"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"], toneMapping: WorldScene["toneMapping"], outputColorSpace: WorldScene["outputColorSpace"], emissiveScale: Animated<number>) {
-  const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], quality, exposure, backgroundColor, postOrder, toneMapping, outputColorSpace, emissiveScale,
+  const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], effects: [], quality, exposure, backgroundColor, postOrder, toneMapping, outputColorSpace, emissiveScale,
     scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
   function add(instances: Instance[], stages: StageMotion[]) { for (const instance of instances) { if (stages.length) instance.stages = stages; scene.instances.push(instance); } }
@@ -167,6 +171,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], expos
       else if (child.type === Tunnel) add(tunnelInstances(options), stages);
       else if (child.type === PointLight || child.type === SpotLight) scene.lights!.push({ ...options, kind: child.type === PointLight ? "point" : "spot" });
       else if (child.type === Pass) scene.passes!.push(options as PostOptions);
+      else if (child.type === Effect) scene.effects!.push(options as EffectOptions);
       else if (child.type === Fog) scene.fog = options;
       else if (child.type === Bloom) scene.bloom = options;
       else if (child.type === Vignette) scene.vignette = options.amount as Animated<number> | undefined;

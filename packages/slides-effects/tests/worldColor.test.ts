@@ -34,7 +34,8 @@ test("luminance bloom preserves HDR color above the threshold and leaves soft-kn
   const code = (mode?: "soft" | "unreal") => buildWorldGraph(prepareWorldScene({ instances: [], bloom: { mode } })).passes.find(pass => pass.id === "bloom-threshold")!.code;
   expect(code()).toContain("soft*soft");
   expect(code("unreal")).toContain("dot(color,vec3f(.2126,.7152,.0722))");
-  expect(code("unreal")).toContain("color*smoothstep(uniforms[10],uniforms[10]+.01,brightness)");
+  expect(code("unreal")).toContain("color*smoothstep(params().threshold,params().threshold+.01,brightness)");
+  expect(code("unreal")).toContain("BloomParams(uniforms[9],uniforms[10],uniforms[11])");
 });
 
 test("Unreal bloom radius redistributes mip energy without adding render passes", () => {
@@ -43,7 +44,7 @@ test("Unreal bloom radius redistributes mip energy without adding render passes"
   expect(unreal.passes.map(pass => pass.id)).toEqual(soft.passes.map(pass => pass.id));
   expect(unreal.targets).toEqual(soft.targets);
   for (const [mip, factor] of [[0, "1.0"], [4, "0.2"]] as const) {
-    expect(unreal.passes.find(pass => pass.id === `bloom-up-${mip}`)!.code).toContain(`mix(${factor},1.2-${factor},clamp(uniforms[11],0.,1.))`);
+    expect(unreal.passes.find(pass => pass.id === `bloom-up-${mip}`)!.code).toContain(`mix(${factor},1.2-${factor},clamp(params().radius,0.,1.))`);
   }
 });
 

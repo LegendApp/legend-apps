@@ -489,6 +489,46 @@ its grain size follows the target resolution. Additional `reads` follow the fixe
 at group 0 binding 6 onward; declare their WGSL bindings explicitly. Raw
 `GPURenderGraph` exposes the full resource/pass contract.
 
+## TypeGPU effects
+
+`defineWorldEffect` declares a reusable multi-pass effect with typed, animatable
+params. Params are a TypeGPU struct (`d.f32` or `d.vec3f` fields); the pack
+writes their sampled values after the instance data and generates the matching
+WGSL `struct` and `params()` loader from the same schema, so TS and WGSL cannot
+drift. The built-in DOF and bloom are defined the same way.
+
+```tsx
+import { d } from "typegpu";
+import { defineWorldEffect, Effect, type WorldEffectGraph } from "slides:world/World";
+
+const depthTint = defineWorldEffect({
+  name: "depth-tint", params: { amount: d.f32, tint: d.vec3f }, defaults: { amount: 0, tint: "#3b82f6" },
+  build: ({ input, id }): WorldEffectGraph => ({ passes: [{
+    id: id(), fragment: "main", reads: { source: input, depth: "depth" }, output: id(),
+    wgsl: `@fragment fn main(@location(0) uv:vec2f)->@location(0) vec4f {
+      let p=params(); let color=textureSampleLevel(source,linearSampler,uv,0.).rgb;
+      return vec4f(mix(color,p.tint,p.amount*smoothstep(0.,40.,depthAt(uv))),1.);
+    }` }] }),
+});
+<Effect use={depthTint({ amount: { 0: 0, 1: 0.8 } })} after="bloom" />
+```
+
+`build` runs once per pipeline topology with `input` (the incoming color
+target), static `options`, `quality`, `scale`, `samples`, `levels` and `id(name)`,
+which namespaces pass and target ids (`id()` is the effect name; a repeated
+effect becomes `name-2`). Each pass names its texture bindings in `reads`:
+`depth: "depth"` binds linear depth through `depthAt(uv)`, any other entry binds
+`texture_2d<f32>`. `frame`, `uniforms`, `linearSampler` and the camera helpers
+are in scope. Declare reduced-scale or mip targets in `targets`; other
+intermediate outputs get a full-resolution target, and the last pass becomes the
+stage color. An effect returning `add: { source, gain }` instead adds `source`
+times the param `gain` onto its input; when it is last before tonemapping the
+add folds into the tonemap. Placement matches `Pass`: one `before` or `after`
+stage, defaulting to the definition's `after`, then `bloom`. The second argument
+to an effect, `glow(values, options)`, carries JSON options that select topology.
+Param values accept constants, step maps or keyframes; they change no pipeline.
+See `apps/slides/examples/3d/world-effects.mdx`.
+
 Custom instanced geometry supplies local positions/normals and a material. The
 pack handles camera projection, depth, lighting, fog and the post chain.
 

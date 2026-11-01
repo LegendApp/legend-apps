@@ -13,6 +13,14 @@ import { compileDeck } from "../../../../packages/presentation/src/compiler";
 import { hostModules } from "../../../../packages/presentation/src/compiler/compileDeck";
 import { buildWorldGraph } from "../../../../packages/slides-effects/packs/world/render";
 import { cardInstances, customInstances, prepareWorldScene, primitive, sdfInstance } from "../../../../packages/slides-effects/packs/world/scene";
+import { defineWorldEffect } from "../../../../packages/slides-effects/packs/world/effects";
+import { d } from "typegpu";
+
+const shaderTint = defineWorldEffect({ name: "shader-tint", params: { gain: d.f32, tint: d.vec3f }, defaults: { gain: 1, tint: "#ffffff" },
+  build: ({ input, id }) => ({ targets: [{ id: id("half"), scale: .5 }], passes: [
+    { id: id("half"), fragment: "half", reads: { source: input }, output: id("half"), wgsl: "@fragment fn half(@location(0) uv:vec2f)->@location(0) vec4f { return textureSampleLevel(source,linearSampler,uv,0.); }" },
+    { id: id(), fragment: "tint", reads: { source: input, half: id("half"), depth: "depth" }, output: id(),
+      wgsl: "@fragment fn tint(@location(0) uv:vec2f)->@location(0) vec4f { let p=params(); return vec4f(textureSampleLevel(source,linearSampler,uv,0.).rgb+textureSampleLevel(half,linearSampler,uv,0.).rgb*p.tint*p.gain*depthAt(uv),1.); }" }] }) });
 
 import { gameOfLifeShader } from "../../examples/components/GameOfLifeProgram";
 
@@ -21,7 +29,7 @@ import { boidsProgram } from "../../examples/components/TypeGPUBoids";
 const require = createRequire(import.meta.url);
 const programs = { cloudProgram, gameOfLifeShader, boidsProgram };
 const root = path.resolve(import.meta.dir, "../../../..");
-const worldDecks = ["world-tour", "data-flow", "cinematic-title", "lighting"];
+const worldDecks = ["world-tour", "data-flow", "cinematic-title", "lighting", "world-effects"];
 const compiledDecks = new Map();
 
 function compileWorldDeck(name) {
@@ -137,6 +145,7 @@ const qualityGraphs = () => ["low", "medium", "high", "auto"].flatMap(quality =>
     ...cardInstances({ id: "card", title: "Ada", subtitle: "Lovelace", meta: "key 1" })],
   floor: { mirror: true }, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }, { kind: "spot" }], fog: { density: .02 },
   bloom: { intensity: 1 }, chromatic: .2, rim: { intensity: 1 }, passes: [{ id: "lines", wgsl: "fn customPass(uv:vec2f,color:vec4f,ctx:PassContext)->vec4f { return color; }" }],
+  effects: [{ use: shaderTint({ gain: { 0: 0, 1: 1 } }), after: "dof" }, { use: shaderTint(), after: "tonemap" }],
 })).passes.map(pass => ({ ...pass, label: `quality-${quality}-${pass.id}` })));
 
 test.skipIf(process.platform !== "darwin")("example and World programs compile with the app's native WebGPU shader compiler", async () => {

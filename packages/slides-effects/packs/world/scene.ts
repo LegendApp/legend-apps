@@ -6,6 +6,7 @@ import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNo
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
 import type { GlyphInstance } from "./text3d";
 import type { EnvironmentOptions, FloorMarkings, KeyLightOptions } from "./lighting";
+import { paramLayout, worldEffect, type WorldEffectStage, type WorldEffectUse } from "./effects";
 
 /** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
@@ -40,6 +41,7 @@ export type VoxelsOptions = { id: string; grid?: Vec3; spacing?: number; size?: 
 export type CustomOptions = PrimitiveOptions & { wgsl: string; count?: number; vertexCount: number };
 export type SDFOptions = PrimitiveOptions & { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
 export type PostOptions = { id?: string; wgsl: string; before?: string; after?: string; reads?: string[] };
+export type EffectOptions = { use: WorldEffectUse; before?: WorldEffectStage; after?: WorldEffectStage };
 export type PrimitiveOptions = {
   id?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; scale?: Animated<Vec3>; end?: Vec3; curve?: number; thickness?: number;
@@ -91,7 +93,7 @@ export type WorldScene = {
   floor?: { mirror?: boolean; y?: Animated<number>; roughness?: Animated<number>; emissive?: Animated<number>; reflectivity?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number>; scale?: number } & FloorMarkings;
   shafts?: { intensity?: Animated<number>; density?: Animated<number>; anisotropy?: Animated<number>; scale?: number; samples?: number };
   chromatic?: Animated<number>; rim?: { color?: Animated<string>; intensity?: Animated<number> }; ambient?: Animated<number>;
-  lights?: LightOptions[]; passes?: PostOptions[];
+  lights?: LightOptions[]; passes?: PostOptions[]; effects?: EffectOptions[];
   keyLight?: KeyLightOptions; environment?: EnvironmentOptions;
   postOrder?: ("fog" | "dof" | "bloom")[];
   counter?: { source: string; position?: [number, number]; size?: number; color?: string };
@@ -670,11 +672,11 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
     cache = caches.get(scene);
     if (!cache) {
-      cache = { values: new Float32Array(worldHeaderSize + count * worldInstanceSize), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN) };
+      cache = { values: new Float32Array(scene.uniformCount), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN) };
       caches.set(scene, cache);
     }
   }
-  const values = cache?.values ?? new Array<number>(worldHeaderSize + count * worldInstanceSize).fill(0);
+  const values = cache?.values ?? new Array<number>(scene.uniformCount).fill(0);
   const objects: Record<string, Vec3> = {};
   for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance, clock);
   values[worldClockOffset] = clock.slideTime; values[worldClockOffset + 1] = clock.stepTime; values[worldClockOffset + 2] = clock.stepIndex;
@@ -822,6 +824,8 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
 export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fogTrack: Track<Vec3>; backgroundVector: Vec3;
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
   focusTrack?: Track<number | string>; counterColor?: Vec3; counterIndex?: number;
+  /** Each effect's params occupy `size` floats from `base`, after the instances; `uniformCount` covers them. */
+  effectUses: (WorldEffectUse & { before?: WorldEffectStage; after?: WorldEffectStage; base: number })[]; uniformCount: number;
   lightTracks: { position: Track<Vec3>; target: Track<Vec3>; color: Track<Vec3>; intensity: Track<number>; range: Track<number>; angle: Track<number>; spot: boolean }[] };
 function keyLightFields({ keyLight: key, environment }: WorldScene): [number, Animated<number>][] {
   return [[115, key ? key.intensity ?? 2.2 : 0], [119, key?.shadowSize ?? 20], [123, key?.softness ?? 2], [124, environment ? environment.intensity ?? 1 : 0], [125, key?.shadowStrength ?? 0.85]];
@@ -917,11 +921,22 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     [38, scene.floor?.reflectivity ?? 0.8], [39, scene.floor?.size ?? 40], [43, scene.floor?.metal ?? 0.8], [44, scene.chromatic ?? 0],
     [45, scene.shafts?.intensity ?? 0], [46, scene.shafts?.density ?? 0.03], [47, scene.shafts?.anisotropy ?? 0.3], [51, scene.rim ? scene.rim.intensity ?? 0.8 : 0], [52, scene.ambient ?? 0.12],
     ...keyLightFields(scene)];
+  const colorTracks = [{ index: 40, track: compileTrack(scene.floor?.color ?? "#101827", colorVector) }, { index: 48, track: compileTrack(scene.rim?.color ?? "#ffffff", colorVector) },
+    ...keyLightVectors(scene)];
+  let uniformCount = worldHeaderSize + instances.length * worldInstanceSize;
+  const effectUses = (scene.effects ?? []).map(({ use, before, after }) => {
+    const effect = worldEffect(use.effect), base = uniformCount;
+    for (const { key, offset, vector } of paramLayout(effect)) {
+      if (vector) colorTracks.push({ index: base + offset, track: compileTrack(use.values[key] as Animated<Vec3 | string>, value => typeof value === "string" ? colorVector(value) : value) });
+      else fields.push([base + offset, use.values[key] as Animated<number>]);
+    }
+    uniformCount += effect.size;
+    return { ...use, before, after, base };
+  });
   return { ...scene, instances, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
     backgroundVector: colorVector(scene.backgroundColor ?? "#05060a"), postTracks: fields.map(([index, value]) => ({ index, track: compileTrack(value) })),
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
-    colorTracks: [{ index: 40, track: compileTrack(scene.floor?.color ?? "#101827", colorVector) }, { index: 48, track: compileTrack(scene.rim?.color ?? "#ffffff", colorVector) },
-      ...keyLightVectors(scene)],
+    colorTracks, effectUses, uniformCount,
     counterColor: scene.counter ? colorVector(scene.counter.color ?? "#ffffff") : undefined,
     counterIndex: scene.counter ? instances.findIndex(instance => instance.voxel?.options.id === scene.counter!.source) : undefined,
     lightTracks: (scene.lights ?? []).map(light => ({ position: compileTrack<Vec3>(light.position ?? [0, 8, 0]), target: compileTrack<Vec3>(light.target ?? [0, 0, 0]),

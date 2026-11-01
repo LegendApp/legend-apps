@@ -1,5 +1,7 @@
 import { worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
+import { d } from "typegpu";
+import { defineWorldEffect, type WorldEffectGraph } from "./effects";
 
 export type CustomGeometry = { wgsl: string; vertexCount: number };
 export type SDFGeometry = { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
@@ -68,21 +70,22 @@ ${depthCode()}${heightFog}
  return vec4f(color,1.);
 }`;
 }
-/** `fog` applies height fog to each tap instead of a separate full-resolution fog pass before the focus blur. */
-export function dofCode(bindings: string, samples: number, fog = false) {
-  const common = `${bindings}
-@group(0) @binding(3) var source:texture_2d<f32>;
-@group(0) @binding(4) var depth:texture_depth_2d;
-${depthCode()}${fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
-fn coc(z:f32)->f32 { return clamp(max(0.,abs(z-uniforms[32])-max(0.,uniforms[54]))/max(z,.05)*uniforms[33],0.,1.); }
+/** Header slots the scene writes DOF values to; animated focus resolves object ids before sampling. */
+export const dofSlots = { focus: 32, aperture: 33, maxBlur: 34, renderScale: 35, focusRange: 54 };
+/** Half-resolution focus gather and a depth-aware composite. Option `fog` applies height fog to each tap instead of a separate full-resolution fog pass. */
+export const dofEffect = defineWorldEffect<{ focus: d.F32; aperture: d.F32; maxBlur: d.F32; renderScale: d.F32; focusRange: d.F32 }, { samples?: number; scale?: number; fog?: boolean }>({
+  name: "dof", params: { focus: d.f32, aperture: d.f32, maxBlur: d.f32, renderScale: d.f32, focusRange: d.f32 },
+  defaults: { focus: 16, aperture: .6, maxBlur: 12, renderScale: 1, focusRange: 0 },
+  build({ input, options, scale, samples, id }): WorldEffectGraph {
+    const common = `${options.fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
+fn coc(z:f32)->f32 { let p=params(); return clamp(max(0.,abs(z-p.focus)-max(0.,p.focusRange))/max(z,.05)*p.aperture,0.,1.); }
 `;
-  return {
-    gather: `${common}
+    return { targets: [{ id: id(), scale: scale * (options.scale ?? .5) }], passes: [{ id: id("gather"), fragment: "gather", reads: { source: input, depth: "depth" }, output: id(), wgsl: `${common}
 @fragment fn gather(@location(0) uv:vec2f)->@location(0) vec4f {
- let centerDepth=depthAt(uv); let radius=coc(centerDepth)*uniforms[34]*uniforms[35];
+ let centerDepth=depthAt(uv); let radius=coc(centerDepth)*params().maxBlur*params().renderScale;
  let pixel=1./vec2f(textureDimensions(depth)); var color=vec3f(0.); var weight=0.;
- for(var i=0u;i<${samples}u;i++) {
-  let angle=f32(i)*2.39996323; let disk=sqrt((f32(i)+.5)/${samples}.);
+ for(var i=0u;i<${options.samples ?? samples}u;i++) {
+  let angle=f32(i)*2.39996323; let disk=sqrt((f32(i)+.5)/${options.samples ?? samples}.);
   let sampleUV=uv+vec2f(cos(angle),sin(angle))*disk*radius*pixel;
   let sampleDepth=depthAt(sampleUV); let sampleCoc=coc(sampleDepth);
   // Reject distant background crossing a nearer silhouette; let foreground bokeh spread.
@@ -91,15 +94,13 @@ fn coc(z:f32)->f32 { return clamp(max(0.,abs(z-uniforms[32])-max(0.,uniforms[54]
   let w=contribution*max(.05,sampleCoc); color+=fogged(textureSampleLevel(source,linearSampler,sampleUV,0.).rgb,sampleUV,sampleDepth)*w; weight+=w;
  }
  return vec4f(color/max(weight,.0001),1.);
-}`,
-    composite: `${common}
-@group(0) @binding(5) var blurred:texture_2d<f32>;
+}` }, { id: id("composite"), fragment: "focusComposite", reads: { source: input, depth: "depth", blurred: id() }, output: id("composite"), wgsl: `${common}
 @fragment fn focusComposite(@location(0) uv:vec2f)->@location(0) vec4f {
  let distance=depthAt(uv); let amount=smoothstep(0.,.15,coc(distance));
  return vec4f(mix(fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,distance),textureSampleLevel(blurred,linearSampler,uv,0.).rgb,amount),1.);
-}`,
-  };
-}
+}` }] };
+  },
+});
 export function customPostCode(bindings: string, wgsl: string) {
   return `${bindings}
 @group(0) @binding(3) var previous:texture_2d<f32>;
@@ -146,11 +147,12 @@ fn toneMap(input:vec3f)->vec3f {
   return `fn toneMap(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }`;
 }
 
-export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", bloom = false) {
+/** `bloomGain` is the WGSL gain of a fused additive effect bound as `bloom`. */
+export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", bloomGain?: string) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
-${bloom ? "@group(0) @binding(4) var bloom:texture_2d<f32>;" : ""}
-fn sceneAt(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb${bloom ? "+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*uniforms[9]" : ""}; }
+${bloomGain ? "@group(0) @binding(4) var bloom:texture_2d<f32>;" : ""}
+fn sceneAt(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb${bloomGain ? `+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*${bloomGain}` : ""}; }
 ${toneMappingCode(toneMapping)}
 fn srgb(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
 fn rectangle(p:vec2f,center:vec2f,halfSize:vec2f)->f32 { let q=abs(p-center)-halfSize; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.); }
