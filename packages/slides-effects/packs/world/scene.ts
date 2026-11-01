@@ -1,4 +1,4 @@
-import { composePartRotation, rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motion";
+import { composePartRotation, rotatePart, sampleBurst, samplePartMotion, type BurstMotion, type ChoreographyMotion } from "./motionSample";
 import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shotOrigin, type CameraOptions, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
