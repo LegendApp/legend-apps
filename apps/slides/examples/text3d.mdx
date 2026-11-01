@@ -1,0 +1,54 @@
+---
+title: Text in 3D
+width: 1920
+height: 1080
+transition: fade
+theme:
+  backgroundColor: "#050506"
+  color: "#f2f4f8"
+---
+
+import { Background } from "@legend-apps/presentation"
+import { World, Camera, Text3D, Box, Floor, SpotLight, PointLight, RimLight, Fog, Bloom, Vignette, Grain } from "slides:world/World"
+
+export const stage = <>
+  <Floor mirror y={-1.6} color="#060607" roughness={0.12} reflectivity={0.55} size={60} metal={0.6} />
+  <Box position={[0, -1.55, 1.2]} scale={[7.2, 0.02, 0.05]} color="#ff3a1c" emissive={3} size={1} />
+  <SpotLight position={[-4, 7, 7]} target={[0, 0.6, 0]} color="#ffffff" intensity={30} range={30} angle={0.6} />
+  <PointLight position={[6, 2, 4]} color="#ff3a1c" intensity={10} range={14} />
+  <PointLight position={[-6, 3, -2]} color="#b47cff" intensity={6} range={14} />
+  <RimLight color="#ffffff" intensity={0.25} />
+  <Fog density={0.02} height={-1.6} falloff={0.2} color="#050506" />
+  <Bloom intensity={0.7} threshold={1.1} radius={0.7} />
+  <Vignette amount={0.3} /><Grain amount={0.012} />
+</>
+
+<Background>
+  <World id="text3d" background quality="auto" exposure={1.1} backgroundColor="#050506">
+    <Camera shots={[{ at: 0, position: [-6.5, -0.6, 7.5], target: [0, 0.6, 0], fov: 40 },
+      { at: 0.2, position: [0, 0.9, 11.5], target: [0, 0.6, 0], duration: 2.4, ease: "smoothstep" },
+      { at: 2.8, position: [0.8, 1.1, 11.2], target: [0, 0.6, 0], duration: 12, ease: "linear" }]} />
+    {stage}
+    <Text3D id="kicker" text="EXTRUDED · BEVELED · INSTANCED" position={[0, 2.75, 0]} size={0.24} depth={0.12} bevel={0.012} tracking={0.12}
+      color="#ff3a1c" emissive={0.9} enter={{ at: 1.6, offset: [0, -0.6, 0], stagger: 0.02, duration: 0.6, ease: "cubic" }} />
+    <Text3D id="statement" text={"EVERY LETTER\nMOVES ON ITS OWN"} position={[0, 1.15, 0]} size={1.25} lineHeight={1.02} depth={0.26} tracking={0.02}
+      enter={{ at: 0.3, offset: [0, 0.4, 9], spread: [10, 4, 4], rotation: [-40, 70, 25], scale: 0.4, stagger: 0.045, duration: 1.1, order: "random", seed: 3 }} />
+  </World>
+</Background>
+
+---
+
+<Background>
+  <World id="text3d" background quality="auto" exposure={1.1} backgroundColor="#050506" enter={{ from: "previous", duration: 1.2 }}>
+    <Camera shots={[{ step: 0, position: [3.5, 2.2, 10.5], target: [0, 0.4, 0], fov: 40 }, { step: 1, position: [0, 0.8, 11], target: [0, 0.4, 0], duration: 1.6, ease: "smoothstep" }]} />
+    {stage}
+    <Text3D id="draw" text="ONE DRAW CALL" position={[0, 1.4, 0]} size={1.4} depth={0.3} side="#4a4f59" metal={0.9} roughness={0.25}
+      enter={{ step: 1, offset: [-14, 0, 0], rotation: [0, 0, -25], stagger: 0.06, duration: 0.9, order: "reverse" }} />
+    <Text3D id="detail" text="per-glyph transform, color and glow" position={[0, -0.2, 0]} size={0.42} depth={0.1} bevel={0.015}
+      color="#b47cff" emissive={0.8}
+      glyphs={(index) => ({ offset: [{ step: 0, value: [0, -2.4, 0] }, { step: 1, value: [0, 0, 0], delay: 0.6 + index * 0.025, duration: 0.7, ease: "spring" }],
+        opacity: [{ step: 0, value: 0 }, { step: 1, value: 1, delay: 0.6 + index * 0.025, duration: 0.3 }] })} />
+  </World>
+</Background>
+
+<Step at={1} />

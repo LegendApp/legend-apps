@@ -2,6 +2,7 @@ import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentatio
 import { worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofCode, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
+import { glyphVertexCount, text3dBuffer, text3dCode, text3dFont } from "./text3d";
 import { glyphAtlas, glyphEm, glyphFirst, glyphLast, glyphRange, glyphMetrics, glyphKernings, glyphPixelCount } from "./glyphs";
 
 export const worldBindings = `
@@ -444,16 +445,17 @@ fn luma(color:vec3f)->f32 { return dot(color,vec3f(.299,.587,.114)); }
 }`;
 
 type CustomDraw = CustomGeometry & { offset: number; count: number };
+type GlyphDraw = { font: string; segments: number; offset: number; count: number; vertexCount: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
   quality: WorldScene["quality"]; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
-  customs?: CustomDraw[]; sdfs?: SDFDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
+  customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
 };
 export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopology {
   const counts: Record<PrimitiveKind, number> = { box: 0, ring: 0, sphere: 0, tube: 0 };
-  const customs: CustomDraw[] = [], sdfs: SDFDraw[] = [];
+  const customs: CustomDraw[] = [], sdfs: SDFDraw[] = [], glyphs: GlyphDraw[] = [];
   let previousCustom: CustomGeometry | undefined, previousSDF: SDFGeometry | undefined, labels: { offset: number; count: number } | undefined, cards: typeof labels;
   for (let offset = 0; offset < scene.instances.length; offset++) {
     const instance = scene.instances[offset];
@@ -463,6 +465,11 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     } else if (instance.card) {
       cards ??= { offset, count: 0 };
       cards.count++;
+    } else if (instance.glyph) {
+      const { font, segments, index } = instance.glyph, last = glyphs.at(-1);
+      const vertexCount = glyphVertexCount(text3dFont(font), index, segments);
+      if (last && last.font === font && last.segments === segments) { last.count++; last.vertexCount = Math.max(last.vertexCount, vertexCount); }
+      else glyphs.push({ font, segments, offset, count: 1, vertexCount });
     } else if (instance.custom) {
       const last = customs.at(-1);
       if (last && last.offset + last.count === offset && previousCustom === instance.custom) last.count++;
@@ -478,7 +485,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
   return { quality: scene.quality, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
-    customs, sdfs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
+    customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder };
 }
 /** Pure topology: animated values travel only through the uniform snapshot. */
 export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology): GPURenderGraphDefinition & { uniformsSize: number } {
@@ -492,10 +499,11 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     { id: "bloom", format: "rgba16float", scale: scale * .5, mips: levels }, { id: "bloom-up", format: "rgba16float", scale: scale * .5, mips: levels }];
   const background = topology.backgroundVector;
   const clear: [number, number, number, number] = [background[0], background[1], background[2], 1];
-  const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [];
+  const customDraws = topology.customs ?? [], sdfDraws = topology.sdfs ?? [], glyphDraws = topology.glyphs ?? [];
+  const glyphFonts = [...new Set(glyphDraws.map(draw => draw.font))];
   const lights = topology.lightCount ?? 0;
   const labels = topology.labels, cards = topology.cards;
-  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws].reduce((sum, draw) => sum + draw.count, 0) + (cards?.count ?? 0) + (labels?.count ?? 0);
+  const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws, ...glyphDraws].reduce((sum, draw) => sum + draw.count, 0) + (cards?.count ?? 0) + (labels?.count ?? 0);
   const renderScene = (reflection: boolean, cleared = false) => {
     const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
     let offset = 0, draws = 0;
@@ -506,6 +514,10 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
+    for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-glyphs-${index}`,
+      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, reflection)}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, reflection),
+      vertex: "glyphVertex", fragment: "glyphFragment", color: [color], depth, vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
+      clear: draws++ === 0 && !cleared ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`] });
     if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
       color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
     if (!draws && !cleared) add("empty", "box", 0, 0);
@@ -583,5 +595,6 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (let i = targets.length - 1; i >= 0; i--) if (transientTargets.has(targets[i].id)) targets.splice(i, 1);
     for (const id of used) targets.push({ id, format: "rgba16float", scale });
   }
-  return { targets, ...labels ? { buffers: [glyphBuffer()] } : {}, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
+  const buffers = [...labels ? [glyphBuffer()] : [], ...glyphFonts.map((font, index) => text3dBuffer(font, `text3d-${index}`))];
+  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: worldHeaderSize + instanceCount * worldInstanceSize };
 }
