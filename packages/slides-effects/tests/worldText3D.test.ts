@@ -88,4 +88,10 @@ describe("world Text3D", () => {
     expect(graph.buffers?.map(buffer => buffer.id)).toEqual(["text3d-0"]);
     expect(graph.uniformsSize).toBe(worldHeaderSize + 11 * worldInstanceSize);
   });
+  test("each font gets its own pass and outline buffer", () => {
+    const graph = buildWorldGraph(prepareWorldScene({ instances: [...text3dInstances({ text: "AB" }), ...text3dInstances({ text: "cd", mono: true }), ...text3dInstances({ text: "E" })] }));
+    expect(graph.passes.filter(pass => pass.id.includes("glyphs")).map(pass => [pass.id, (pass as { instanceCount?: number }).instanceCount, pass.reads])).toEqual([
+      ["scene-glyphs-0", 3, ["text3d-0"]], ["scene-glyphs-1", 2, ["text3d-1"]]]);
+    expect(graph.buffers?.map(buffer => buffer.id)).toEqual(["text3d-0", "text3d-1"]);
+  });
 });

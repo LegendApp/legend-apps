@@ -1,5 +1,6 @@
 import type { Ease, Vec3 } from "./camera";
 import { font as defaultFont } from "./text3d-font";
+import { font as monoFont } from "./text3d-mono";
 import { compileTrack, primitive, type Animated, type Instance, type Keyframe, type MaterialOptions, type Track } from "./scene";
 
 /** A font baked by scripts/world-text3d.cjs. `glyphs` holds advance (em), outline point, side segment and cap triangle counts per char. */
@@ -12,7 +13,8 @@ export type GlyphMotion = { offset?: Animated<Vec3>; rotation?: Animated<Vec3>; 
 export type Text3DEnter = { step?: number; at?: number; offset?: Vec3; rotation?: Vec3; scale?: number; spread?: Vec3; stagger?: number;
   duration?: number; ease?: Ease; order?: "forward" | "reverse" | "center" | "random"; seed?: number; fade?: number };
 export type Text3DOptions = {
-  id?: string; text: string; font?: Text3DFont; position?: Animated<Vec3>; size?: number;
+  /** `mono` selects the bundled JetBrains Mono Bold; `font` takes any baked font. */
+  id?: string; text: string; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
   /** Extrusion depth, bevel thickness and bevel width, in em. */
   depth?: number; bevel?: number; bevelWidth?: number; bevelSegments?: number;
   align?: "left" | "center" | "right"; lineHeight?: number; tracking?: number; uppercase?: boolean;
@@ -24,7 +26,7 @@ export type Text3DOptions = {
 export type GlyphInstance = { font: string; index: number; segments: number; rotation: Track<Vec3>; opacity: Track<number>; offset: Track<Vec3>;
   home: Vec3; pivot: [number, number]; depth: number; bevel: number; bevelWidth: number };
 
-const fonts = new Map<string, Text3DFont>([[defaultFont.name, defaultFont]]);
+const fonts = new Map<string, Text3DFont>([[defaultFont.name, defaultFont], [monoFont.name, monoFont]]);
 export function registerText3DFont(font: Text3DFont) {
   const existing = fonts.get(font.name);
   if (existing && existing !== font && existing.data !== font.data) throw new Error(`A different Text3D font is already registered as ${font.name}`);
@@ -88,7 +90,7 @@ function enterTrack<T>(enter: Text3DEnter, from: T, to: T, delay: number, durati
 
 /** One instance per visible glyph, drawn together in a single instanced pass per font. Glyph ids are `<id>:<index>`. */
 export function text3dInstances(options: Text3DOptions): Instance[] {
-  const font = options.font ?? defaultFont;
+  const font = options.font ?? (options.mono ? monoFont : defaultFont);
   const name = registerText3DFont(font);
   const size = options.size ?? 1, depth = options.depth ?? 0.25, bevel = Math.min(options.bevel ?? 0.03, depth / 2), bevelWidth = options.bevelWidth ?? 0.014;
   const segments = Math.max(0, Math.min(6, Math.round(options.bevelSegments ?? (bevel > 0 ? 2 : 0))));
