@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cameraPathPoint, evaluateCamera, type ClockSample } from "../packs/world/camera";
+import { cameraPathPoint, easeProgress, evaluateCamera, type ClockSample } from "../packs/world/camera";
 import { tree } from "../packs/world/graph";
 import { renderTreeInstances } from "../packs/world/renderTree";
 import { prepareWorldScene, sampleWorldUniforms, instancePosition, instanceOpacity, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
@@ -90,4 +90,8 @@ test("reused uniform buffers keep route and pillar motion live across samples an
 test("rounded boxes with the same geometry share one custom draw", () => {
   const instances = [...roundedBoxInstances({ id: "a", radius: .08 }), ...roundedBoxInstances({ id: "b", radius: .08, position: [2, 0, 0] })];
   expect(worldGraphTopology(prepareWorldScene({ instances })).customs?.map(draw => draw.count)).toEqual([2]);
+});
+
+test("out ease decelerates into the target", () => {
+  expect(easeProgress(.5, "out")).toBeCloseTo(.875);
 });

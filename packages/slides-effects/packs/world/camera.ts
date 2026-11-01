@@ -1,5 +1,5 @@
 export type Vec3 = [number, number, number];
-export type Ease = "linear" | "cubic" | "smoothstep" | "expo" | "spring";
+export type Ease = "linear" | "cubic" | "out" | "smoothstep" | "expo" | "spring";
 export type ClockSample = { slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
 export type CameraPose = { position: Vec3; target: Vec3; fov: number; roll: number };
 export type Shot = {
@@ -32,6 +32,7 @@ export function easeProgress(value: number, ease: Ease = "cubic") {
   const p = Math.max(0, Math.min(1, value));
   if (ease === "linear") return p;
   if (ease === "smoothstep") return p * p * (3 - 2 * p);
+  if (ease === "out") return 1 - Math.pow(1 - p, 3);
   if (ease === "expo") return p === 0 || p === 1 ? p : p < 0.5 ? Math.pow(2, 20 * p - 10) / 2 : (2 - Math.pow(2, -20 * p + 10)) / 2;
   if (ease === "spring") return p === 1 ? 1 : 1 - Math.exp(-7 * p) * Math.cos(p * 10);
   return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
