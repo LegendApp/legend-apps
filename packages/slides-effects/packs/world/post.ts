@@ -42,6 +42,13 @@ ${depthCode()}
  return vec4f(scattering*uniforms[45],1.);
 }`;
 }
+const heightFog = `
+fn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f {
+ let world=vector(0u)+worldRay(uv)*distance;
+ let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
+ let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
+ return mix(color,vector(20u),clamp(fogAmount,0.,1.));
+}`;
 export function fogCode(bindings: string, shafts: boolean) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
@@ -53,21 +60,19 @@ fn shaftAt(uv:vec2f)->vec3f {
  for(var i=0;i<4;i++) { sum+=textureSampleLevel(shaftField,linearSampler,uv+vec2f(f32(i&1)*2.-1.,f32(i>>1u)*2.-1.)*texel,0.).rgb; }
  return sum*.25;
 }` : ""}
-${depthCode()}
+${depthCode()}${heightFog}
 @fragment fn fog(@location(0) uv:vec2f)->@location(0) vec4f {
- let distance=depthAt(uv); let world=vector(0u)+worldRay(uv)*distance;
- let heightDensity=exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
- let fogAmount=1.-exp(-distance*uniforms[12]*heightDensity);
- var color=mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,vector(20u),clamp(fogAmount,0.,1.));
+ var color=fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,depthAt(uv));
  ${shafts ? "color+=shaftAt(uv);" : ""}
  return vec4f(color,1.);
 }`;
 }
-export function dofCode(bindings: string, samples: number) {
+/** `fog` applies height fog to each tap instead of a separate full-resolution fog pass before the focus blur. */
+export function dofCode(bindings: string, samples: number, fog = false) {
   const common = `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 @group(0) @binding(4) var depth:texture_depth_2d;
-${depthCode()}
+${depthCode()}${fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
 fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.,1.); }
 `;
   return {
@@ -82,15 +87,15 @@ fn coc(z:f32)->f32 { return clamp(abs(z-uniforms[32])/max(z,.05)*uniforms[33],0.
   // Reject distant background crossing a nearer silhouette; let foreground bokeh spread.
   let foreground=sampleDepth<=centerDepth+.1;
   let contribution=select(exp(-abs(sampleDepth-centerDepth)/max(.1,centerDepth*.025)),1.,foreground);
-  let w=contribution*max(.05,sampleCoc); color+=textureSampleLevel(source,linearSampler,sampleUV,0.).rgb*w; weight+=w;
+  let w=contribution*max(.05,sampleCoc); color+=fogged(textureSampleLevel(source,linearSampler,sampleUV,0.).rgb,sampleUV,sampleDepth)*w; weight+=w;
  }
  return vec4f(color/max(weight,.0001),1.);
 }`,
     composite: `${common}
 @group(0) @binding(5) var blurred:texture_2d<f32>;
 @fragment fn focusComposite(@location(0) uv:vec2f)->@location(0) vec4f {
- let amount=smoothstep(0.,.15,coc(depthAt(uv)));
- return vec4f(mix(textureSampleLevel(source,linearSampler,uv,0.).rgb,textureSampleLevel(blurred,linearSampler,uv,0.).rgb,amount),1.);
+ let distance=depthAt(uv); let amount=smoothstep(0.,.15,coc(distance));
+ return vec4f(mix(fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,distance),textureSampleLevel(blurred,linearSampler,uv,0.).rgb,amount),1.);
 }`,
   };
 }

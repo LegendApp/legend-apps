@@ -138,3 +138,15 @@ test("auto quality drops MSAA only where the drawable already supersamples the s
   expect(samples({ supersampled: true })).toEqual([]);
   expect(samples({ supersampled: true, quality: "high" })).toHaveLength(2);
 });
+
+test("fog directly before focus folds into the focus passes unless shafts or hooks sit between them", () => {
+  const ids = (options: Partial<WorldScene>) => buildWorldGraph(scene(options)).passes.map(pass => pass.id);
+  const fused = buildWorldGraph(scene({ dof: {} }));
+  expect(fused.passes.map(pass => pass.id)).not.toContain("fog");
+  expect(fused.passes.find(pass => pass.id === "dof-gather")!.reads?.[0]).toBe("hdr");
+  for (const id of ["dof-gather", "dof-composite"]) expect((fused.passes.find(pass => pass.id === id) as { code: string }).code).toContain("heightDensity");
+  expect(ids({})).toContain("fog");
+  expect(ids({ dof: {}, shafts: { intensity: 1 } })).toContain("fog");
+  expect(ids({ dof: {}, passes: [{ wgsl: scanlines, before: "dof" }] })).toContain("fog");
+  expect(ids({ dof: {}, postOrder: ["dof", "fog", "bloom"] })).toContain("fog");
+});

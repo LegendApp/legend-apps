@@ -621,12 +621,14 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   if (order.length !== 3 || new Set(order).size !== 3 || order.some(stage => !["fog", "dof", "bloom"].includes(stage))) throw new Error("World postOrder must contain fog, dof and bloom exactly once");
   // With nothing placed between bloom and the tonemap, the tonemap adds the bloom itself instead of a separate full-resolution composite.
   const fuseBloom = order[2] === "bloom" && !(topology.passes ?? []).some(item => item.before === "tonemap" || (item.after ?? (item.before ? undefined : "bloom")) === "bloom");
+  // Fog directly followed by focus folds into the focus passes, which already read depth for every tap.
+  const fuseFog = !!topology.dof && !topology.shafts && order[order.indexOf("fog") + 1] === "dof" && !(topology.passes ?? []).some(item => item.after === "fog" || item.before === "dof" || item.reads?.includes("fog"));
   custom("scene", false);
   for (const stage of order) {
     custom(stage, true);
-    if (stage === "fog") fullscreen("fog", fogCode(worldBindings, !!topology.shafts), "fog", [color, "depth", ...(topology.shafts ? ["shafts"] : [])]);
+    if (stage === "fog" && !fuseFog) fullscreen("fog", fogCode(worldBindings, !!topology.shafts), "fog", [color, "depth", ...(topology.shafts ? ["shafts"] : [])]);
     if (stage === "dof" && topology.dof) {
-      const source = color, dof = dofCode(worldBindings, topology.dofSamples ?? samples);
+      const source = color, dof = dofCode(worldBindings, topology.dofSamples ?? samples, fuseFog);
       fullscreen("dof-gather", dof.gather, "gather", [source, "depth"], "dof", scale * (topology.dofScale ?? .5));
       fullscreen("dof-composite", dof.composite, "focusComposite", [source, "depth", "dof"]);
     }
