@@ -12,7 +12,7 @@ import { Background } from "@legend-apps/presentation"
 import { World, Camera, Text3D, Box, Floor, SpotLight, PointLight, RimLight, Fog, Bloom, Vignette, Grain } from "slides:world/World"
 
 export const stage = <>
-  <Floor mirror y={-1.6} color="#060607" roughness={0.12} reflectivity={0.55} size={60} metal={0.6} />
+  <Floor mirror y={-1.6} color="#060607" roughness={0.35} reflectivity={0.22} size={60} metal={0.4} />
   <Box position={[0, -1.55, 1.2]} scale={[7.2, 0.02, 0.05]} color="#ff3a1c" emissive={3} size={1} />
   <SpotLight position={[-4, 7, 7]} target={[0, 0.6, 0]} color="#ffffff" intensity={30} range={30} angle={0.6} />
   <PointLight position={[6, 2, 4]} color="#ff3a1c" intensity={10} range={14} />
@@ -42,7 +42,7 @@ export const stage = <>
   <World id="text3d" background quality="auto" exposure={1.1} backgroundColor="#050506" enter={{ from: "previous", duration: 1.2 }}>
     <Camera shots={[{ step: 0, position: [3.5, 2.2, 10.5], target: [0, 0.4, 0], fov: 40 }, { step: 1, position: [0, 0.8, 11], target: [0, 0.4, 0], duration: 1.6, ease: "smoothstep" }]} />
     {stage}
-    <Text3D id="draw" text="ONE DRAW CALL" position={[0, 1.4, 0]} size={1.4} depth={0.3} side="#4a4f59" metal={0.9} roughness={0.25}
+    <Text3D id="draw" text="ONE DRAW CALL" position={[0, 1.4, 0]} size={1.4} depth={0.3} side="#33363d" metal={0.9} roughness={0.25}
       enter={{ step: 1, offset: [-14, 0, 0], rotation: [0, 0, -25], stagger: 0.06, duration: 0.9, order: "reverse" }} />
     <Text3D id="detail" text="per-glyph transform, color and glow" position={[0, -0.2, 0]} size={0.42} depth={0.1} bevel={0.015}
       color="#b47cff" emissive={0.8}
