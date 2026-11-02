@@ -151,3 +151,18 @@ test("fog directly before focus folds into the focus passes unless shafts or hoo
   expect(ids({ dof: {}, passes: [{ wgsl: scanlines, before: "dof" }] })).toContain("fog");
   expect(ids({ dof: {}, postOrder: ["dof", "fog", "bloom"] })).toContain("fog");
 });
+
+test("explicit MSAA samples preserve high-quality scales and FXAA while changing depth reads", () => {
+  const build = (msaaSamples?: 1 | 4) => buildWorldGraph(JSON.parse(JSON.stringify(worldGraphTopology(scene({ quality: "high", msaaSamples, dof: {} })))));
+  const standard = build(), single = build(1), multisampled = build(4);
+  expect(multisampled).toEqual(standard);
+  for (const id of ["hdr", "depth"]) {
+    expect(standard.targets.find(target => target.id === id)).toMatchObject({ scale: 1, samples: 4 });
+    expect(single.targets.find(target => target.id === id)).toMatchObject({ scale: 1, samples: 1 });
+  }
+  const gather = (graph: typeof single) => graph.passes.find(pass => pass.id === "dof-gather")!.code;
+  expect(gather(standard)).toContain("texture_depth_multisampled_2d");
+  expect(gather(single)).toContain("texture_depth_2d");
+  expect(gather(single)).not.toContain("texture_depth_multisampled_2d");
+  expect(single.passes.at(-1)).toMatchObject({ id: "screen", fragment: "fxaa" });
+});

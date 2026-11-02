@@ -519,7 +519,7 @@ type CustomDraw = CustomGeometry & { offset: number; count: number };
 type GlyphDraw = { font: string; segments: number; offset: number; count: number; vertexCount: number };
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
-  quality: WorldScene["quality"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
+  quality: WorldScene["quality"]; msaaSamples?: WorldScene["msaaSamples"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   bloomScale?: number; dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
@@ -555,7 +555,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
       previousSDF = instance.sdf;
     } else counts[instance.kind]++;
   }
-  return { quality: scene.quality, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
+  return { quality: scene.quality, msaaSamples: scene.msaaSamples, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
     floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
@@ -570,7 +570,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   const scale = topology.quality === "low" ? .65 : topology.quality === "medium" ? .85 : 1;
   const levels = topology.quality === "low" ? 3 : 5;
   const samples = topology.quality === "low" ? 8 : topology.quality === "medium" ? 12 : 16;
-  const msaa = topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4;
+  const msaa = topology.msaaSamples ?? (topology.quality === "low" || topology.quality === "auto" && topology.supersampled ? 1 : 4);
   const passes: GPUPass[] = [];
   const targets: GPURenderGraphDefinition["targets"] = [{ id: "hdr", format: "rgba16float", scale, samples: msaa }, { id: "depth", format: "depth32float", scale, samples: msaa }];
   const background = topology.backgroundVector;

@@ -92,7 +92,7 @@ export type OrbsOptions = {
 };
 export type WorldScene = {
   camera?: CameraOptions; instances: Instance[]; exposure?: Animated<number>;
-  toneMapping?: "aces" | "neutral" | "aces-filmic" | "agx"; outputColorSpace?: "srgb" | "linear-srgb"; emissiveScale?: Animated<number>; quality?: "auto" | "low" | "medium" | "high";
+  toneMapping?: "aces" | "neutral" | "aces-filmic" | "agx"; outputColorSpace?: "srgb" | "linear-srgb"; emissiveScale?: Animated<number>; quality?: "auto" | "low" | "medium" | "high"; msaaSamples?: 1 | 4;
   backgroundColor?: string; fog?: { density?: Animated<number>; color?: Animated<string>; height?: Animated<number>; falloff?: Animated<number> };
   bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number>; mode?: "soft" | "unreal"; scale?: number }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
   stages?: { stage: StageMotion; parents: StageMotion[] }[]; materials?: Record<string, MaterialOptions>;

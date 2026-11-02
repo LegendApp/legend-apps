@@ -748,3 +748,5 @@ retaining emission. These controls leave the default materials unchanged.
 The source examples `world-steps.mdx`, `world-effects.mdx`, `assembly.mdx` and
 `lighting.mdx` under `apps/slides/examples/` cover timing, custom effects, parts and
 lighting. When copying an example, keep its local TSX/assets and effect pack pins.
+
+`<World msaaSamples={1}>` disables MSAA without changing render or post-effect scales; `msaaSamples={4}` forces 4× MSAA. FXAA remains enabled. Omitting `msaaSamples` preserves the quality preset.
