@@ -155,7 +155,8 @@ function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: Cloc
 }
 export function sampleTrack<T extends number | Vec3>(track: Track<T>, clock: ClockSample): T {
   "worklet";
-  return sampleTrackFrames(track, clock, track.frames.length);
+  const count = track.frames.length;
+  return count ? sampleTrackFrames(track, clock, count) : track.initial;
 }
 export function primitive(kind: PrimitiveKind, options: PrimitiveOptions = {}): Instance {
   return { id: options.id, kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]), size: compileTrack(options.size ?? 0.5),
