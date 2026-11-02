@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { evaluateCamera, flyTo, type CameraOptions, type ClockSample, type Vec3 } from "../packs/world/camera";
 import { activationAt, layoutTree, subset, tree, wave } from "../packs/world/graph";
 import { buildWorldGraph } from "../packs/world/render";
-import { compileTrack, customInstances, graphInstances, instanceOpacity, instancePosition, orbInstances, prepareWorldScene, primitive, pulseInstances,
+import { compileTrack, customInstances, graphInstances, instanceField, instanceOpacity, instancePosition, orbInstances, prepareWorldScene, primitive, pulseInstances,
   resolveAnchor, rowInstances, rowLogicalIndex, sampleTrack, sampleWorldCamera, sampleWorldUniforms, sdfInstance, settledKey, sprayInstances, voxelInstances, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { advancePlayback, createPlaybackState, transitionPlayback } from "../../presentation/src/playbackState";
 
@@ -329,7 +329,7 @@ test("voxel compaction keeps topology fixed and its counter matches the survivin
   expect(sampleWorldUniforms(scene, clock(0))[56]).toBe(512);
 });
 
-test("reused uniforms keep one buffer and match fresh sampling while static and collapsing slots are skipped", () => {
+test("reused uniforms keep one buffer and match fresh sampling while static, collapsing and hidden slots are skipped", () => {
   const scene = prepareWorldScene({ instances: [
     ...voxelInstances({ id: "cells", grid: [4, 4, 4], collapse: { step: 1, to: 0.2, duration: 2 } }), primitive("box", { id: "still", position: [2, 0, 0] }),
     ...orbInstances({ count: 3, drift: 0.4 }), ...graphInstances({ data: tree("root", ["a"]), activate: [wave({ from: "root", step: 1 })] }),
@@ -340,7 +340,13 @@ test("reused uniforms keep one buffer and match fresh sampling while static and 
   const reused = sampleWorldUniforms(scene, clock(0), undefined, 1, 1, true);
   for (const sample of [clock(0.5), clock(0.5, 1, { 0: 0, 1: 0.5 }), clock(1.5, 1, { 0: 0, 1: 0.5 }), clock(4, 1, { 0: 0, 1: 0.5 }), clock(5, 1, { 0: 0, 1: 0.5 }), clock(0.2)]) {
     expect(sampleWorldUniforms(scene, sample, undefined, 1, 1, true)).toBe(reused);
-    expect(reused).toEqual(Float32Array.from(sampleWorldUniforms(scene, sample)));
+    const fresh = Float32Array.from(sampleWorldUniforms(scene, sample));
+    // A hidden live instance keeps its last values; shaders discard it by opacity alone.
+    scene.instances.forEach((_, i) => {
+      const at = worldHeaderSize + i * worldInstanceSize;
+      if (fresh[at + instanceField.opacity] === 0) { expect(reused[at + instanceField.opacity]).toBe(0); fresh.set(reused.subarray(at, at + worldInstanceSize), at); }
+    });
+    expect(reused).toEqual(fresh);
   }
 });
 

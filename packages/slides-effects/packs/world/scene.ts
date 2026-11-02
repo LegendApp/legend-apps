@@ -730,7 +730,9 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const instance = scene.instances[i];
     if (cache) {
       const key = instance.motion === "static" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
-        : instance.motion === "tracks" ? settledKey(instance.settle!, clock) : NaN;
+        : instance.motion === "tracks" ? settledKey(instance.settle!, clock)
+        // Shaders discard transparent instances, so a hidden live instance (an idle tube pulse bead) is written once, then skipped.
+        : instanceOpacity(instance, clock) === 0 ? -1 : NaN;
       if (cache.keys[i] === key) continue;
       cache.keys[i] = key;
     }
