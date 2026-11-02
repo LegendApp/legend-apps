@@ -71,8 +71,9 @@ export type Instance = {
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
   anchor?: boolean;
-  /** Set by prepareWorldScene: the slot never changes, changes only with its voxel collapse progress, or changes only inside its keyframe spans. */
-  motion?: "static" | "voxel" | "tracks";
+  /** Set by prepareWorldScene: the slot never changes, changes only with its voxel collapse progress, changes only inside its keyframe spans,
+   * or only its drifting position changes. */
+  motion?: "static" | "voxel" | "tracks" | "drift";
   /** Keyframe spans of a "tracks" instance: per step (ascending), the earliest start and latest end delay; plus slide-time `at` spans. */
   settle?: { steps: number[]; first: number[]; last: number[]; at: number[] };
 };
@@ -729,11 +730,17 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   for (let i = 0; i < count; i++) {
     const instance = scene.instances[i];
     if (cache) {
-      const key = instance.motion === "static" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
+      const key = instance.motion === "static" || instance.motion === "drift" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
         : instance.motion === "tracks" ? settledKey(instance.settle!, clock)
         // Shaders discard transparent instances, so a hidden live instance (an idle tube pulse bead) is written once, then skipped.
         : instanceOpacity(instance, clock) === 0 ? -1 : NaN;
-      if (cache.keys[i] === key) continue;
+      if (cache.keys[i] === key) {
+        if (instance.motion === "drift") {
+          const position = instancePosition(instance, clock), at = worldHeaderSize + i * worldInstanceSize + I.position;
+          values[at] = position[0]; values[at + 1] = position[1]; values[at + 2] = position[2];
+        }
+        continue;
+      }
       cache.keys[i] = key;
     }
     const index = worldHeaderSize + i * worldInstanceSize;
@@ -926,7 +933,11 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
-      !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) instance.motion = instance.voxel?.options.collapse ? "voxel" : "static";
+      !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
+      const collapses = !!instance.voxel?.options.collapse;
+      if (!instance.drift) instance.motion = collapses ? "voxel" : "static";
+      else if (!collapses) instance.motion = "drift";
+    }
     else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
       !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor) {
       instance.motion = "tracks";

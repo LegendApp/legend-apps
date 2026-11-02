@@ -329,13 +329,14 @@ test("voxel compaction keeps topology fixed and its counter matches the survivin
   expect(sampleWorldUniforms(scene, clock(0))[56]).toBe(512);
 });
 
-test("reused uniforms keep one buffer and match fresh sampling while static, collapsing and hidden slots are skipped", () => {
+test("reused uniforms keep one buffer and match fresh sampling while static, collapsing, drifting and hidden slots are skipped", () => {
   const scene = prepareWorldScene({ instances: [
     ...voxelInstances({ id: "cells", grid: [4, 4, 4], collapse: { step: 1, to: 0.2, duration: 2 } }), primitive("box", { id: "still", position: [2, 0, 0] }),
     ...orbInstances({ count: 3, drift: 0.4 }), ...graphInstances({ data: tree("root", ["a"]), activate: [wave({ from: "root", step: 1 })] }),
     ...pulseInstances({ id: "pulse", path: ["root", "a"], step: 1 }),
   ], counter: { source: "cells" } });
   expect(scene.instances.filter(instance => instance.motion === "voxel")).toHaveLength(64);
+  expect(scene.instances.filter(instance => instance.motion === "drift")).toHaveLength(3);
   expect(scene.instances.filter(instance => instance.anchor).map(instance => instance.id).sort()).toEqual(["node:a", "node:root", "pulse"]);
   const reused = sampleWorldUniforms(scene, clock(0), undefined, 1, 1, true);
   for (const sample of [clock(0.5), clock(0.5, 1, { 0: 0, 1: 0.5 }), clock(1.5, 1, { 0: 0, 1: 0.5 }), clock(4, 1, { 0: 0, 1: 0.5 }), clock(5, 1, { 0: 0, 1: 0.5 }), clock(0.2)]) {
