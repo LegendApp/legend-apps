@@ -14,7 +14,8 @@ import { floatLayout } from "./layout";
 export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
 export type Animated<T> = T | Record<number, T> | Keyframe<T>[];
 export type PrimitiveKind = "sphere" | "box" | "tube" | "ring";
-export type Track<T> = { initial: T; frames: Keyframe<T>[] };
+/** `steps` (set when every frame is a step keyframe in ascending step order) lets sampling skip frames of later steps by binary search. */
+export type Track<T> = { initial: T; frames: Keyframe<T>[]; steps?: number[] };
 export type MaterialOptions = { id?: string; albedo?: Animated<string>; emissive?: Animated<number>; roughness?: Animated<number>; metal?: Animated<number>; rim?: Animated<number> };
 export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>; range?: Animated<number>; angle?: Animated<number> };
 export type StageOptions = { id: string; position?: Animated<Vec3>; glow?: Animated<number> };
@@ -118,12 +119,21 @@ export function compileTrack<T, U = T>(value: Animated<T>, transform: (value: T)
   else if (typeof value === "object" && !Array.isArray(value) && value !== null) frames = Object.entries(value).map(([step, v]) => ({ step: Number(step), value: v })).sort((a, b) => a.step! - b.step!);
   else return { initial: transform(value as T), frames: [] };
   if (frames.length === 0) throw new Error("World keyframes must not be empty");
-  return { initial: transform(frames[0].value), frames: frames.map(frame => ({ ...frame, value: transform(frame.value) })) };
+  const steps = frames.map(frame => frame.step ?? 0);
+  const ordered = frames.every((frame, index) => frame.at === undefined && (index === 0 || steps[index - 1] <= steps[index]));
+  return { initial: transform(frames[0].value), frames: frames.map(frame => ({ ...frame, value: transform(frame.value) })), steps: ordered ? steps : undefined };
 }
 function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: ClockSample, count: number): T {
   "worklet";
   // The last started frame wins, so scan backwards and stop at the first match: the recursive start-value lookup below
   // usually finds its frame immediately instead of rescanning every earlier keyframe each frame.
+  // Frames of later steps cannot have started: with ordered steps, begin the scan below the first of them.
+  const steps = track.steps;
+  if (steps) {
+    let low = 0, high = count;
+    while (low < high) { const middle = (low + high) >> 1; if (steps[middle] <= clock.stepIndex) low = middle + 1; else high = middle; }
+    count = low;
+  }
   let index = -1;
   for (let i = count - 1; i >= 0; i--) {
     const frame = track.frames[i], step = frame.step ?? 0;

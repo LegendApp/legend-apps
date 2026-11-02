@@ -237,6 +237,19 @@ test("pulse trails reconstruct exact curved subsegments and restart at a turn wi
   expect(sampleWorldUniforms(scene, clock(1))[35]).toBe(1);
 });
 
+test("step-ordered tracks skip later steps' frames and sample like a full scan", () => {
+  const frames = [0, 0, 1, 1, 1, 3, 3].map((step, index) => ({ step, value: index + 1, delay: (index % 3) * 0.2, duration: 0.5 }));
+  const ordered = compileTrack(frames);
+  expect(ordered.steps).toEqual([0, 0, 1, 1, 1, 3, 3]);
+  expect(compileTrack([{ step: 1, value: 1 }, { step: 0, value: 2 }]).steps).toBeUndefined();
+  expect(compileTrack([{ step: 0, value: 1 }, { at: 2, value: 2 }]).steps).toBeUndefined();
+  const scan = { ...ordered, steps: undefined };
+  for (const [time, step, origins] of [[0.1, 0, { 0: 0 }], [0.45, 0, { 0: 0 }], [2.3, 1, { 0: 0, 1: 2 }], [2.9, 2, { 0: 0, 1: 2, 2: 2.6 }], [5.2, 3, { 3: 5 }], [9, 3, { 3: 5 }]] as const) {
+    const sample = clock(time, step, origins);
+    expect(sampleTrack(ordered, sample)).toBe(sampleTrack(scan, sample));
+  }
+});
+
 test("keyframed instances reuse cached uniforms only while every track has settled", () => {
   const scene = prepareWorldScene({ instances: [primitive("box", { id: "a", position: [{ step: 0, value: [0, 0, 0] }, { step: 1, delay: 1, value: [2, 0, 0], duration: 1 }] })],
     camera: { shots: [{ position: [0, 0, 10], target: [0, 0, 0] }] } });
