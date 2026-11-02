@@ -77,6 +77,8 @@ export type Instance = {
   motion?: "static" | "voxel" | "tracks" | "drift";
   /** Keyframe spans of a "tracks" instance: per step (ascending), the earliest start and latest end delay; plus slide-time `at` spans. */
   settle?: { steps: number[]; first: number[]; last: number[]; at: number[] };
+  /** Set on "tracks" instances whose only animated fields are position, scale, opacity and glyph rotation: once written, a moving slot rewrites just those. */
+  posed?: boolean;
 };
 export type GraphOptions = {
   data: TreeNode; layout?: "cone"; radius?: number; levelHeight?: number; position?: Vec3;
@@ -661,7 +663,7 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
 }
-type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array };
+type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array; written: Uint8Array };
 /** With reuse, every call for the same prepared scene returns one buffer and rewrites only slots whose inputs changed. */
 /** Per-step keyframe spans of a set of tracks, for skipping instances whose tracks have all settled. */
 export function keyframeSpans(tracks: Track<unknown>[]): NonNullable<Instance["settle"]> {
@@ -704,7 +706,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
     cache = caches.get(scene);
     if (!cache) {
-      cache = { values: new Float32Array(scene.uniformCount), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN) };
+      cache = { values: new Float32Array(scene.uniformCount), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN), written: new Uint8Array(count) };
       caches.set(scene, cache);
     }
   }
@@ -755,6 +757,15 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
         continue;
       }
       cache.keys[i] = key;
+      if (instance.posed && cache.written[i]) {
+        const at = worldHeaderSize + i * worldInstanceSize, position = instancePosition(instance, clock), scale = sampleTrack(instance.scale, clock);
+        values[at + I.position] = position[0]; values[at + I.position + 1] = position[1]; values[at + I.position + 2] = position[2];
+        values[at + I.scale] = scale[0]; values[at + I.scale + 1] = scale[1]; values[at + I.scale + 2] = scale[2];
+        values[at + I.opacity] = instanceOpacity(instance, clock);
+        if (instance.glyph) { const rotation = sampleTrack(instance.glyph.rotation, clock); values[at + 12] = rotation[0]; values[at + 13] = rotation[1]; values[at + 14] = rotation[2]; }
+        continue;
+      }
+      cache.written[i] = 1;
     }
     const index = worldHeaderSize + i * worldInstanceSize;
     const part = instance.choreography ? samplePartMotion(instance.choreography, clock) : undefined;
@@ -954,6 +965,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
       !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor) {
       instance.motion = "tracks";
+      instance.posed = [instance.size, instance.color, instance.emissive, material.albedo, material.roughness, material.metal, material.rim].every(still) && !instance.label && !instance.stages?.length;
       instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
         ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
         ...(instance.stages ?? []).flatMap(stage => [stage.position, stage.glow])]);
