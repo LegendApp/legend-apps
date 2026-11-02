@@ -121,11 +121,13 @@ export function compileTrack<T, U = T>(value: Animated<T>, transform: (value: T)
 }
 function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: ClockSample, count: number): T {
   "worklet";
+  // The last started frame wins, so scan backwards and stop at the first match: the recursive start-value lookup below
+  // usually finds its frame immediately instead of rescanning every earlier keyframe each frame.
   let index = -1;
-  for (let i = 0; i < count; i++) {
+  for (let i = count - 1; i >= 0; i--) {
     const frame = track.frames[i], step = frame.step ?? 0;
     if (frame.at !== undefined ? clock.slideTime >= frame.at : clock.stepIndex >= step &&
-      (!frame.delay || clock.stepIndex > step && clock.stepOrigins[step] === undefined || clock.slideTime >= (clock.stepOrigins[step] ?? clock.slideTime - clock.stepTime) + frame.delay)) index = i;
+      (!frame.delay || clock.stepIndex > step && clock.stepOrigins[step] === undefined || clock.slideTime >= (clock.stepOrigins[step] ?? clock.slideTime - clock.stepTime) + frame.delay)) { index = i; break; }
   }
   if (index < 0) return track.initial;
   const frame = track.frames[index];

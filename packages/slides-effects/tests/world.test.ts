@@ -138,6 +138,11 @@ test("scalar/vector keyframes and post settings are clock-driven", () => {
   const overlapping = compileTrack([{ at: 0, value: 0 }, { at: 1, value: 10, duration: 2, ease: "linear" }, { at: 2, value: 20, duration: 2, ease: "linear" }]);
   expect(sampleTrack(overlapping, clock(2))).toBe(5);
   expect(sampleTrack(overlapping, clock(3))).toBe(12.5);
+  // The last started frame in declaration order wins, even when an earlier entry started later.
+  const unordered = compileTrack([{ at: 0, value: 0 }, { at: 2, value: 20, duration: 0 }, { at: 1, value: 10, duration: 0 }]);
+  expect(sampleTrack(unordered, clock(3))).toBe(10);
+  expect(sampleTrack(unordered, clock(1.5))).toBe(10);
+  expect(sampleTrack(unordered, clock(0.5))).toBe(0);
 });
 
 test("HDR scene and five-level half-resolution bloom describe independent attachments", () => {
