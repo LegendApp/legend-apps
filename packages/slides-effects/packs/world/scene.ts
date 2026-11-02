@@ -563,11 +563,13 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   if (instance.choreography) return samplePartMotion(instance.choreography, clock).opacity * instance.choreography.opacity;
   if (instance.burst) return sampleBurst(instance.burst, clock).opacity;
   if (instance.route) {
-    const route = instance.route, drawn = Math.max(0, Math.min(1, sampleTrack(route.draw, clock)));
+    const route = instance.route;
     if (route.pulse) {
+      // Idle beads (outside the pulse) skip sampling the draw track.
       const progress = tubePulseProgress(route.pulse, clock) - (route.bead ?? 0) * (route.pulse.spacing ?? 0.025);
-      return progress < 0 || progress > 1 || progress > drawn ? 0 : 1;
+      return progress < 0 || progress > 1 || progress > Math.max(0, Math.min(1, sampleTrack(route.draw, clock))) ? 0 : 1;
     }
+    const drawn = Math.max(0, Math.min(1, sampleTrack(route.draw, clock)));
     return drawn * route.lengths[route.lengths.length - 1] <= route.lengths[route.segment!] ? 0 : 1;
   }
   if (instance.pillar?.role === "digit") {
