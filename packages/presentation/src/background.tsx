@@ -51,6 +51,11 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
   const [size, setSize] = useState({ width: 0, height: 0 });
   const selected = useValue(() => Object.values(entries).filter((entry) => entry.runtime$.slideIndex.get() === slideIndex)
     .sort((a, b) => b.priority - a.priority)[0]);
+  // A cold slide registers in its layout effect. Retain the last surface through
+  // that commit so its GPU and continuity state survive the registration gap.
+  const [retained, setRetained] = useState<Entry>();
+  useLayoutEffect(() => { setRetained(selected); }, [selected]);
+  const visible = selected ?? retained;
   const brightnessScale=useSharedValue(1);
   const motion=useSharedValue<BackgroundMotion>({time:0,raw:0,burst:3.5,slideIndex:-1,owner:""});
   const multiplier=selected?.intensityMultiplier ?? 1;
@@ -64,14 +69,14 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     <BrightnessScaleContext.Provider value={brightnessScale}>
     <IntensityContext.Provider value={intensity}>
       <RegistryContext.Provider value={register}>
-        <HasBackgroundContext.Provider value={Boolean(selected)}>
+        <HasBackgroundContext.Provider value={Boolean(visible)}>
           <View style={[styles.host, { backgroundColor: color }]} onLayout={(event) => {
             const { width, height } = event.nativeEvent.layout;
             setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
           }}>
             <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
               <SizeContext.Provider value={size}>
-                {selected && <SelectedBackground entry={selected} isPreview={isPreview} Boundary={boundary} />}
+                {visible && <SelectedBackground entry={visible} retained={!selected} isPreview={isPreview} Boundary={boundary} />}
               </SizeContext.Provider>
             </View>
             {children}
@@ -83,9 +88,10 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     </MotionContext.Provider>
   );
 }
-function SelectedBackground({ entry, isPreview, Boundary }: { entry: Entry; isPreview: boolean; Boundary: ComponentType<{ children?: ReactNode }> }) {
+function SelectedBackground({ entry, retained, isPreview, Boundary }: { entry: Entry; retained: boolean; isPreview: boolean; Boundary: ComponentType<{ children?: ReactNode }> }) {
   const sourceRuntime$ = entry.runtime$;
-  const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), isActive: !isPreview, isPreview, isPreparing: false, playbackPhase: isPreview ? "preview" : "playing", playbackScope: "background" }), [sourceRuntime$, isPreview]);
+  const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), isActive: !isPreview && !retained, isPreview, isPreparing: false,
+    playbackPhase: isPreview ? "preview" : retained ? "paused" : "playing", playbackScope: "background" }), [sourceRuntime$, isPreview, retained]);
   return <PresentationObservableProvider value={runtime$}><Boundary>{entry.children}</Boundary></PresentationObservableProvider>;
 }
 
