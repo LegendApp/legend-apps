@@ -8,7 +8,7 @@
     "react": "catalog:",
     "react-native": "catalog:",
     "react-native-reanimated": "4.3.4",
-    "typegpu": "^0.12.4",
+    "typegpu": "^0.12.9",
     "lottie-react-native": "7.3.8"
   },
   "devDependencies": {
