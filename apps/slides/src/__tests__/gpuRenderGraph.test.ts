@@ -7,7 +7,7 @@ import { transformSync } from "@babel/core";
 import { prepareRenderGraph, encodeRenderGraph } from "../gpuRenderGraph";
 
 function gpu() {
-  const textures = [], pipelines = [], groups = [], commands = [], writes = [];
+  const textures = [], views = [], pipelines = [], groups = [], commands = [], writes = [];
   const device = {
     queue: { writeBuffer: (...args) => writes.push(args) },
     createBuffer: descriptor => ({ descriptor }), createSampler: () => ({}),
@@ -16,7 +16,7 @@ function gpu() {
     createComputePipeline: descriptor => { pipelines.push(descriptor); return descriptor; },
     createRenderPipeline: descriptor => { pipelines.push(descriptor); return descriptor; },
     createTexture: descriptor => {
-      const texture = { descriptor, width: descriptor.size[0], height: descriptor.size[1], destroyed: false, createView: view => ({ texture, view }), destroy() { this.destroyed = true; } };
+      const texture = { descriptor, width: descriptor.size[0], height: descriptor.size[1], destroyed: false, createView: view => { const result = { texture, view }; views.push(result); return result; }, destroy() { this.destroyed = true; } };
       textures.push(texture); return texture;
     },
     createBindGroup: descriptor => { groups.push(descriptor); return descriptor; },
@@ -28,7 +28,7 @@ function gpu() {
       return { setPipeline() {}, setBindGroup() {}, draw: (...args) => commands.push(["draw", ...args]), end() {} };
     },
   };
-  return { device, encoder, textures, pipelines, groups, commands, writes };
+  return { device, encoder, textures, views, pipelines, groups, commands, writes };
 }
 const definition = {
   targets: [{ id: "hdr", format: "rgba16float" }, { id: "depth", format: "depth32float" }, { id: "bloom", format: "rgba16float", scale: .5, mips: 3 }],
@@ -61,10 +61,15 @@ test("multipass setup binds declared resources, initializes buffers, and submits
   expect(g.commands[2]).toEqual(["draw", 24, 40]);
   expect(g.commands[1][1].depthStencilAttachment.depthClearValue).toBe(1);
   expect(g.commands.at(-2)[1].colorAttachments[0].view).toBe("screen");
+  const viewCount = g.views.length;
   encodeRenderGraph(r, g.device, g.encoder, screen);
+  expect(g.views).toHaveLength(viewCount);
   expect(g.groups).toHaveLength(4); expect(g.textures).toHaveLength(3);
   encodeRenderGraph(r, g.device, g.encoder, { ...screen, width: 3840, height: 2160 });
   expect(g.pipelines).toHaveLength(4); expect(g.groups).toHaveLength(8);
+  expect(g.views).toHaveLength(viewCount * 2);
+  expect(g.groups[4].entries[4].resource.texture).toBe(g.textures[3]);
+  expect(g.groups[7].entries[4].resource.texture).toBe(g.textures[4]);
   expect(g.textures.slice(0, 3).every(t => t.destroyed)).toBe(true);
   expect(g.textures.slice(3).map(t => t.descriptor.size)).toEqual([[3840, 2160], [3840, 2160], [1920, 1080]]);
 });
@@ -92,6 +97,9 @@ test("consecutive draws into the same multisampled attachments share one pass; t
   expect(first).toMatchObject({ loadOp: "clear", storeOp: "store", resolveTarget: undefined });
   expect(second).toMatchObject({ loadOp: "load", storeOp: "discard" });
   expect(second.resolveTarget).toBeDefined();
+  const viewCount = g.views.length;
+  encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
+  expect(g.views).toHaveLength(viewCount);
 });
 
 test("instance culling retains draw order and shader indices as visibility changes, including an empty clear", async () => {

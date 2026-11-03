@@ -9,7 +9,7 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
 
 type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[] };
 export type RenderGraphResources = {
-  targets: GPUTarget[]; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
+  targets: GPUTarget[]; views: Record<string, GPUTextureView>; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
   width: number; height: number; scale: number;
 };
@@ -29,7 +29,7 @@ function targetFor(targets: GPUTarget[], value: string) {
 function view(r: RenderGraphResources, value: string) {
   "worklet";
   const [id, mip] = reference(value);
-  return r.textures[id].createView({ baseMipLevel: mip, mipLevelCount: 1 });
+  return r.views[value] ??= r.textures[id].createView({ baseMipLevel: mip, mipLevelCount: 1 });
 }
 function multisampled(r: { targets: GPUTarget[] }, value: string) {
   "worklet";
@@ -63,7 +63,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (!Number.isFinite(target.scale ?? 1) || (target.scale ?? 1) <= 0 || !Number.isInteger(target.mips ?? 1) || (target.mips ?? 1) < 1) throw new Error("Invalid GPU target dimensions: " + target.id);
     if (![1, 4].includes(target.samples ?? 1) || ((target.samples ?? 1) > 1 && ((target.mips ?? 1) > 1 || target.format === "r32float"))) throw new Error("Invalid GPU target samples: " + target.id);
   }
-  const r: RenderGraphResources = { targets, textures: {}, buffers: {}, passes: [], clock, uniforms,
+  const r: RenderGraphResources = { targets, views: {}, textures: {}, buffers: {}, passes: [], clock, uniforms,
     sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1 };
   for (const buffer of buffers) {
     if (!Number.isInteger(buffer.size) || buffer.size <= 0 || buffer.size % 4 || (buffer.init && buffer.init.byteLength > buffer.size)) throw new Error("Invalid GPU buffer size: " + buffer.id);
@@ -136,6 +136,7 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
   "worklet";
   if (!Number.isFinite(renderScale) || renderScale <= 0) throw new Error("GPU renderScale must be finite and positive");
   if (r.width === width && r.height === height && r.scale === renderScale) return;
+  r.views = {};
   for (const target of r.targets) {
     const old = r.textures[target.id];
     const [w, h] = dimensions(r, target.id, width, height, renderScale);
@@ -193,7 +194,7 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
       const resolves = r.passes[last].resolves;
       const command = encoder.beginRenderPass({ colorAttachments: colors.map((color, slot) => color === "screen" || !multisampled(r, color)
         ? { view: color === "screen" ? screen.createView() : view(r, color), clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: "store" as const }
-        : { view: r.textures[color + "#ms"].createView(), resolveTarget: resolves[slot] ? view(r, color) : undefined,
+        : { view: r.views[color + "#ms"] ??= r.textures[color + "#ms"].createView(), resolveTarget: resolves[slot] ? view(r, color) : undefined,
           clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: resolves[slot] ? "discard" as const : "store" as const }),
         ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) });
       for (; index <= last; index++) {
