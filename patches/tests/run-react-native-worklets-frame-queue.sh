@@ -12,8 +12,10 @@ trap 'rm -rf "$dir"' EXIT
 mkdir "$dir/include"
 ln -s "$rn/React/Base" "$dir/include/React"
 flags=(-fobjc-arc -O1 -DNDEBUG -Wno-deprecated-declarations -I"$dir/include" -I"$rn/React/Base" -I"$rn/ReactCommon"
-  -I"$worklets/apple" -I"$worklets/Common/cpp")
-clang -x objective-c "${flags[@]}" -c "$rn/React/Base/macOS/RCTPlatformDisplayLink.m" -o "$dir/link.o"
+  -I"$worklets/apple" -I"$worklets/Common/cpp" -I"$rn/ReactApple/Libraries" -I"$rn")
+link="$rn/ReactApple/Libraries/RCTUIKit/RCTPlatformDisplayLink.m"
+[ -f "$link" ] || link="$rn/React/Base/macOS/RCTPlatformDisplayLink.m"
+clang -x objective-c "${flags[@]}" -c "$link" -o "$dir/link.o"
 for source in "$queue" "$worklets/apple/worklets/apple/SlowAnimations.mm" "$(dirname "$0")/react-native-worklets-frame-queue.test.mm"; do
   clang++ -x objective-c++ -std=c++20 "${flags[@]}" -c "$source" -o "$dir/$(basename "$source").o"
 done
