@@ -6,7 +6,7 @@ import { act, create } from "react-test-renderer";
 import { observable } from "@legendapp/state";
 import { BackgroundHost, GPUShaderProvider, PresentationObservableProvider } from "@legend-apps/presentation";
 import { frames, flushUI } from "../../../apps/slides/src/__tests__/uiClockMock";
-import { Card, WorldSlide } from "../packs/world/World";
+import { Box, Card, WorldSlide } from "../packs/world/World";
 import { worldHeaderSize } from "../packs/world/scene";
 
 test("per-slide components retain one World, including reverse travel, independent previews and a world reset", async () => {
@@ -38,7 +38,7 @@ test("per-slide components retain one World, including reverse travel, independe
     flushUI(); tick(0); tick(3000);
     const start = Array.from(values(renderer));
     expect(start[worldHeaderSize]).toBe(-3);
-    expect(start[2]).toBeCloseTo(17.64);
+    expect(start[2]).toBeCloseTo(14);
     await act(() => {
       first$.assign({ currentSlide: 1, isActive: false, playbackPhase: "outgoing" });
       second$.assign({ currentSlide: 1, isActive: true, isPreparing: false, playbackPhase: "playing", startedAt: 3000, stepStartedAt: 3000 });
@@ -56,7 +56,7 @@ test("per-slide components retain one World, including reverse travel, independe
     flushUI();
     const still = Array.from(values(preview));
     expect(still[worldHeaderSize]).toBe(-3);
-    expect(still[2]).toBe(18);
+    expect(still[2]).toBe(14);
     expect(Array.from(values(renderer))).toEqual(halfway);
     await act(() => {
       second$.assign({ currentSlide: 0, isActive: false, playbackPhase: "outgoing" });
@@ -66,13 +66,13 @@ test("per-slide components retain one World, including reverse travel, independe
     flushUI(); tick(4000);
     expect(Array.from(values(renderer).slice(0, 8))).toEqual(halfway.slice(0, 8));
     tick(5000);
-    expect(values(renderer)[2]).toBeLessThan(halfway[2]);
+    expect(values(renderer)[2]).toBeGreaterThan(halfway[2]);
     expect(values(renderer)[worldHeaderSize]).toBeCloseTo(-1.5);
     expect(Array.from(values(preview))).toEqual(still);
     expect(mounts).toBe(2);
     await act(() => renderer.update(content(0, false, "new-journey")));
     flushUI();
-    expect(values(renderer)[2]).toBeCloseTo(18 - 0.12);
+    expect(values(renderer)[2]).toBeCloseTo(14);
     expect(values(renderer)[worldHeaderSize]).toBe(-3);
   } finally {
     await act(() => { renderer?.unmount(); preview?.unmount(); });
@@ -109,11 +109,55 @@ test("a cold slide's background registration retains the World; a slide without 
     expect(mounts).toBe(1);
     expect(Array.from(values().slice(0, 8))).toEqual(before.slice(0, 8));
     expect(values()[worldHeaderSize]).toBe(4);
-    tick(4000);
-    expect(values()[2]).toBeLessThan(before[2]);
+    tick(7000);
+    expect(values()[2]).toBeGreaterThan(before[2]);
     expect(values()[worldHeaderSize]).toBeCloseTo(2);
     await act(() => renderer.update(content(1, runtime(1), false)));
     flushUI();
     expect(renderer.root.findAllByType("world-gpu")).toHaveLength(0);
+  } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test("omitted geometry keeps its draw slot and fixed world pose across forward and reverse UI clocks", async () => {
+  const runtime = index => observable({ currentSlide: index, currentStep: 0, slideIndex: index, stepIndex: 0,
+    slideCount: 3, stepCount: 1, startedAt: 0, stepStartedAt: 0, isActive: true,
+    isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide",
+    direction: "forward", goTo() {}, next() {}, previous() {} });
+  const runtime$ = runtime(0);
+  let mounts = 0;
+  function Renderer(props) { useEffect(() => { mounts++; }, []); return <world-gpu {...props} />; }
+  const content = index => <GPUShaderProvider renderer={Renderer}>
+    <BackgroundHost slideIndex={index} color="#05060a">
+      <PresentationObservableProvider value={runtime$}>
+        <WorldSlide world="retired-test" track={{ duration: 2 }} quality="high">
+          {index === 0 && <Box id="marker" position={[-5, 0, 0]} />}
+        </WorldSlide>
+      </PresentationObservableProvider>
+    </BackgroundHost>
+  </GPUShaderProvider>;
+  let renderer;
+  const values = () => Array.from(renderer.root.findByType("world-gpu").props.frameData.value);
+  const tick = timestamp => frames.forEach(frame => frame.tick(timestamp));
+  const go = async (index, timestamp) => {
+    await act(() => {
+      runtime$.assign({ currentSlide: index, slideIndex: index, startedAt: timestamp, stepStartedAt: timestamp });
+      renderer.update(content(index));
+    });
+    flushUI(); tick(timestamp);
+  };
+  try {
+    await act(() => { renderer = create(content(0)); });
+    flushUI(); tick(0);
+    const initial = values().slice(worldHeaderSize);
+    await go(1, 1000);
+    tick(1500);
+    expect(values().slice(worldHeaderSize)).toEqual(initial);
+    tick(3000);
+    expect(values()[worldHeaderSize + 23]).toBe(0);
+    await go(2, 3000); tick(5000);
+    expect(values()[worldHeaderSize + 23]).toBe(0);
+    await go(0, 5000); tick(9000);
+    expect(values().slice(worldHeaderSize)).toEqual(initial);
+    expect(mounts).toBe(1);
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });

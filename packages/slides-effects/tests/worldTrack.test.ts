@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
 import { cardInstances, prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
-import { createTrackFrame, sampleTrackFrame, trackIds, type TrackFrame } from "../packs/world/track";
+import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
-const options = { spacing: 18, duration: 2, cruise: 0.12 };
+const options = { spacing: 32, duration: 2 };
 const scene = (column = false, extra = false) => prepareWorldScene({ instances: [
   ...cardInstances({ id: "sample", title: "const a = 24", avatar: 0, titleOpacity: column ? 0 : 1,
     position: column ? [3, -1, 0] : [-3, 1, 0], scale: column ? [1, 5, 1] : [4, 1.5, 0.2] }),
@@ -16,22 +16,22 @@ const scene = (column = false, extra = false) => prepareWorldScene({ instances: 
 function sample(previous: TrackFrame, time: number, slide = "0", column = false, phase: "playing" | "preview" | "preparing" | "paused" | "outgoing" = "playing", step = "0", extra = false) {
   const playback = { ...createPlaybackState({ phase, slideKey: slide, stepKey: step, stepIndex: Number(step) }), slideTime: time, stepTime: time };
   const prepared = scene(column, extra);
-  return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, options, 4);
+  return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, options);
 }
 const part = (frame: TrackFrame, id: string) => frame.values.slice(worldHeaderSize + frame.ids.indexOf(id) * worldInstanceSize);
 
-test("a panel and its label become a column continuously by id, with a forward-only camera", () => {
+test("a panel and its label become a column continuously by id, while the camera travels between stations", () => {
   let frame = sample(createTrackFrame(), 0);
   frame = sample(frame, 3);
-  expect(frame.distance).toBeCloseTo(0.36);
+  expect(frame.cursor).toBe(0);
   expect(part(frame, "card:sample")[23]).toBe(1);
   const start = frame;
   frame = sample(frame, 0, "1", true);
-  expect(frame.distance).toBe(start.distance);
+  expect(frame.cursor).toBe(start.cursor);
   expect(part(frame, "card:sample").slice(0, 11)).toEqual(part(start, "card:sample").slice(0, 11));
   expect(part(frame, "label:sample:title").slice(0, 8)).toEqual(part(start, "label:sample:title").slice(0, 8));
   frame = sample(frame, 1, "1", true);
-  expect(frame.distance).toBeCloseTo(9.48);
+  expect(frame.cursor).toBeCloseTo(0.5);
   expect(part(frame, "card:sample")[0]).toBeCloseTo(0);
   [2.5, 3.25, 0.6].forEach((value, axis) => expect(part(frame, "card:sample")[8 + axis]).toBeCloseTo(value));
   expect(part(frame, "label:sample:title")[23]).toBeCloseTo(0.5);
@@ -40,23 +40,83 @@ test("a panel and its label become a column continuously by id, with a forward-o
   expect(part(frame, "card:sample").slice(8, 11)).toEqual([1, 5, 1]);
   expect(part(frame, "label:sample:title")[23]).toBe(0);
   expect(part(frame, "label:sample:title")[3]).toBe(0);
-  expect(frame.values[1]).toBe(4);
+  expect(frame.values[1]).toBe(3.6);
 });
 
-test("Previous, direct jumps, reverse steps and interrupted travel all begin at the last live pose", () => {
-  let frame = sample(sample(createTrackFrame(), 0), 3);
-  frame = sample(sample(frame, 0, "7", true), 0.7, "7", true);
-  for (const [slide, step, column] of [["0", "0", false], ["0", "1", false], ["0", "0:back", true]] as const) {
-    const before = frame;
-    frame = sample(frame, 0, slide, column, "playing", step);
-    expect(frame.values.slice(0, 8)).toEqual(before.values.slice(0, 8));
-    expect(part(frame, "card:sample").slice(0, 11)).toEqual(part(before, "card:sample").slice(0, 11));
-    for (let tick = 1; tick <= 60; tick++) {
-      const distance = frame.distance;
-      frame = sample(frame, tick / 60, slide, column, "playing", step);
-      expect(frame.distance).toBeGreaterThan(distance);
-    }
+test("the camera holds exactly at stations and steps do not move it", () => {
+  const first = sample(createTrackFrame(), 0);
+  expect(sample(first, 0.2).values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+  expect(sample(first, 300).values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+  const entered = sample(first, 0, "1", true);
+  const settled = sample(entered, 2, "1", true);
+  expect(sample(settled, 300, "1", true).values.slice(0, 8)).toEqual(settled.values.slice(0, 8));
+  expect(sample(settled, 2, "1", true, "playing", "1").values.slice(0, 8)).toEqual(settled.values.slice(0, 8));
+});
+
+test("Previous retraces the authored rail, including after an interrupted move", () => {
+  const first = sample(createTrackFrame(), 0);
+  const entered = sample(first, 0, "1", true);
+  const forward = Array.from({ length: 61 }, (_, i) => sample(entered, i / 30, "1", true));
+  const reverse = sample(forward[60], 0, "0:again");
+  expect(reverse.values.slice(0, 8)).toEqual(forward[60].values.slice(0, 8));
+  for (let i = 0; i <= 60; i++) {
+    const back = sample(reverse, i / 30, "0:again");
+    forward[60 - i].values.slice(0, 8).forEach((value, field) => expect(back.values[field]).toBeCloseTo(value, 9));
   }
+  const middle = forward[30];
+  const reversed = sample(middle, 0, "0:again");
+  expect(reversed.values.slice(0, 8)).toEqual(middle.values.slice(0, 8));
+  const halfwayBack = sample(reversed, 1, "0:again");
+  expect(halfwayBack.cursor).toBeCloseTo(0.25);
+  expect(halfwayBack.values.slice(0, 3)).toEqual([0.9375, 4.3125, 3]);
+  expect(halfwayBack.values.slice(4, 8)).toEqual([0, 0, -10.25, 0]);
+  expect(sample(reversed, 2, "0:again").values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+});
+
+test("a cold jump uses all intervening rail segments and returns to the original station", () => {
+  const first = sample(createTrackFrame(), 0);
+  const jump = sample(first, 0, "4", true);
+  expect(jump.values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+  expect(sample(jump, 4, "4", true).cursor).toBe(2);
+  const settled = sample(jump, 8, "4", true);
+  expect(settled.values[2]).toBe(-114);
+  const back = sample(settled, 0, "0:again");
+  expect(sample(back, 8, "0:again").values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+});
+
+test("default motion has a 1.7 second cubic flight, a quadratic rise, 40 degree FOV and zero roll", () => {
+  const prepared = scene();
+  const at = (previous: TrackFrame, slideKey: string, time: number) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, {});
+  };
+  const first = at(createTrackFrame(), "0", 0), start = at(first, "1", 0);
+  const middle = at(start, "1", 0.85);
+  expect(middle.values.slice(0, 3)).toEqual([1.25, 4.55, -6]);
+  expect(middle.values.slice(4, 8)).toEqual([0, 0, -19, 0]);
+  expect(middle.values[3]).toBe(Math.tan(40 * Math.PI / 360));
+  expect(at(start, "1", 0.425).cursor).toBe(0.0625);
+  expect(at(start, "1", 1.7).values.slice(0, 3)).toEqual([0, 3.6, -18]);
+});
+
+test("per-slide camera and look controls, durations and object morphs are retained on reverse", () => {
+  const at = (previous: TrackFrame, slideKey: string, time: number, track: WorldTrack) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    const prepared = scene(slideKey === "1");
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
+  };
+  const first = at(createTrackFrame(), "0", 0, {});
+  const start = at(first, "1", 0, { duration: 2,
+    position: [-2, 4, 14], target: [1, 1, 0], via: [6, 8, 20], viaTarget: [2, 4, 12] });
+  const forward = at(start, "1", 1, {});
+  expect(forward.values.slice(0, 3)).toEqual([2.5, 5.9, -7]);
+  expect(forward.values.slice(4, 7)).toEqual([1.25, 2.25, -18]);
+  const settled = at(start, "1", 2, {});
+  const back = at(settled, "0:again", 0, {});
+  const middle = at(back, "0:again", 1, {});
+  expect(middle.values.slice(0, 8)).toEqual(forward.values.slice(0, 8));
+  part(forward, "card:sample").slice(0, 11).forEach((value, field) => expect(part(middle, "card:sample")[field]).toBeCloseTo(value, 12));
+  expect(at(back, "0:again", 2, {}).values.slice(0, 8)).toEqual(first.values.slice(0, 8));
 });
 
 test("static previews and preparation do not mutate live continuity; paused and outgoing freeze", () => {
@@ -64,7 +124,7 @@ test("static previews and preparation do not mutate live continuity; paused and 
   live = sample(sample(live, 0, "1", true), 1, "1", true);
   const original = structuredClone(live);
   expect(sample(live, 0, "9", false, "preview").values).toEqual(sample(live, 300, "9", false, "preview").values);
-  expect(sample(live, 0, "9", false, "preparing").distance).toBe(0);
+  expect(sample(live, 0, "9", false, "preparing").cursor).toBe(0);
   expect(sample(live, 300, "9", false, "paused")).toBe(live);
   expect(sample(live, 300, "9", false, "outgoing")).toBe(live);
   expect(live).toEqual(original);
@@ -85,18 +145,46 @@ test("matching follows ids across reordered draw slots; tube endpoints share sta
   const next = prepareWorldScene({ keyLight: {}, lights: [{ position: [0, 6, 4] }], instances: [primitive("box", { id: "b", position: [8, 0, 0] }), primitive("box", { id: "a", position: [-8, 0, 0] }),
     primitive("tube", { position: [-8, 0, 0], end: [8, 0, 0] })] });
   const sampleScene = (previous: TrackFrame, prepared: typeof first, slide: string, time: number) =>
-    sampleTrackFrame(previous, sampleWorldUniforms(prepared, clock(slide, time)) as number[], trackIds(prepared), clock(slide, time), options, 4);
+    sampleTrackFrame(previous, sampleWorldUniforms(prepared, clock(slide, time)) as number[], trackIds(prepared), clock(slide, time), options);
   const start = sampleScene(createTrackFrame(), first, "0", 0);
   const entered = sampleScene(start, next, "1", 0);
   expect(part(entered, "box:a")[0]).toBe(-4);
   expect(part(entered, "box:b")[0]).toBe(4);
   const settled = sampleScene(entered, next, "1", 2);
   expect(part(settled, "box:a")[0]).toBe(-8);
-  expect(part(settled, "tube:")[2]).toBe(-18);
-  expect(part(settled, "tube:")[14]).toBe(-18);
-  expect(settled.values[122]).toBe(-18);
-  expect(settled.values[114]).toBe(-6);
-  expect(settled.values[66]).toBe(-14);
+  expect(part(settled, "tube:")[2]).toBe(-32);
+  expect(part(settled, "tube:")[14]).toBe(-32);
+  expect(settled.values[122]).toBe(-32);
+  expect(settled.values[114]).toBe(-20);
+  expect(settled.values[66]).toBe(-28);
+});
+
+test("omitted objects stay at their last pose until fully behind the camera, then return in place", () => {
+  const initial = prepareWorldScene({ instances: [primitive("box", { id: "marker", position: [-5, 0, 0] }),
+    primitive("tube", { id: "rail", position: [0, 0, 0], end: [0, 0, -64] })] });
+  const empty = prepareWorldScene({ instances: [] });
+  const retained = retainTrackScene(empty, initial);
+  const at = (previous: TrackFrame, scene: typeof initial, slideKey: string, time: number, declared: string[]) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(scene, playback) as number[], trackIds(scene), playback, options, declared);
+  };
+  const first = at(createTrackFrame(), initial, "0", 0, trackIds(initial));
+  const start = at(first, retained, "1", 0, []);
+  const stillVisible = at(start, retained, "1", 0.5, []);
+  expect(part(stillVisible, "box:marker").slice(0, 11)).toEqual(part(first, "box:marker").slice(0, 11));
+  expect(part(stillVisible, "box:marker")[23]).toBe(1);
+  const passed = at(start, retained, "1", 2, []);
+  expect(part(passed, "box:marker")[23]).toBe(0);
+  expect(part(passed, "tube:rail")[23]).toBe(1);
+  const farther = at(passed, retained, "2", 0, []);
+  const end = at(farther, retained, "2", 2, []);
+  const reverse = at(end, retained, "0:again", 0, []);
+  const restored = at(reverse, retained, "0:again", 4, []);
+  expect(part(restored, "box:marker").slice(0, worldInstanceSize)).toEqual(part(first, "box:marker").slice(0, worldInstanceSize));
+  expect(first.retired).toEqual({});
+  const declaredAgain = at(restored, initial, "0:new", 0, trackIds(initial));
+  expect(part(declaredAgain, "box:marker")[23]).toBe(1);
+  expect(retainTrackScene(initial, retained).instances).toHaveLength(2);
 });
 
 test("the generic MDX deck compiles three local slide components against the installed World API", async () => {

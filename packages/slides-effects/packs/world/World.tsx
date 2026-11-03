@@ -16,7 +16,7 @@ import { cardInstances, compileTrack, customInstances, graphInstances, labelInst
 // motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
 import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
-import { createTrackFrame, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
+import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
 export type { WorldTrack } from "./track";
 
@@ -197,27 +197,39 @@ function WorldSurface(props: WorldProps) {
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
+  const declared = useMemo(() => trackIds(prepared), [prepared]);
+  // Retention depends on committed scene history, including objects absent from the new declaration.
+  const [retained, setRetained] = useState({ input: prepared, scene: prepared });
+  let trackScene = retained.scene;
+  if (props.track && retained.input !== prepared) {
+    trackScene = retainTrackScene(prepared, retained.scene);
+    setRetained({ input: prepared, scene: trackScene });
+  }
+  const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
   const supersampled = PixelRatio.get() * useContext(PresentationCanvasScaleContext) >= 1.5;
-  const topology = JSON.stringify({ ...worldGraphTopology(prepared), supersampled });
+  const topology = JSON.stringify({ ...worldGraphTopology(renderScene), supersampled });
   const [continuity] = useState(() => props.id ? retainedPose(props.id) : undefined);
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const resolution = useSharedValue(createResolutionState());
   const trackFrame = useSharedValue(createTrackFrame());
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
-    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={prepared} topology={topology}
+    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={renderScene} declared={declared} topology={topology}
       continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, topology, continuity, origin, resolution, track, trackFrame }:
-  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; topology: string; continuity?: SharedValue<CameraPose | null>;
+  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
+  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; declared: string[]; topology: string; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
-  if (track && [track.spacing ?? 18, track.duration ?? 1.5, track.cruise ?? 0.12].some(value => !Number.isFinite(value) || value <= 0)) {
+  if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error("World track values must be positive and finite");
+  }
+  if (track && [track.position, track.target, track.via, track.viaTarget].some(point => point && point.some(value => !Number.isFinite(value)))) {
+    throw new Error("World track points must be finite");
   }
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
@@ -287,9 +299,9 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     const values = sampleUniforms(scene, clock) as number[];
     values[35] = scale;
-    const next = trackSampler(trackFrame.value, values, ids, state, track, previewTime);
+    const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
     trackFrame.value = next;
-  }, [playback, scene, effectiveScale, track, active, ids, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration]);
+  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
@@ -306,14 +318,14 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
-        return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock) as number[], ids, state, track, previewTime).values;
+        return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock) as number[], ids, state, track, declared).values;
       }
       return trackFrame.value.values;
     }
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
     return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, track, trackFrame, ids]);
+  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, track, trackFrame, ids, declared]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />
