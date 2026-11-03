@@ -7,7 +7,7 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
   return GraphVertex(vec4f(p * 2.0 - 1.0, 0.0, 1.0), vec2f(p.x, 1.0 - p.y));
 }`;
 
-type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[] };
+type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; descriptor?: GPURenderPassDescriptor };
 export type RenderGraphResources = {
   targets: GPUTarget[]; views: Record<string, GPUTextureView>; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
@@ -153,6 +153,7 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
   }
   for (const resource of r.passes) {
     const pass = resource.pass;
+    resource.descriptor = undefined;
     resource.group = device.createBindGroup({ layout: resource.layout, entries: [
       { binding: 0, resource: { buffer: r.clock } }, { binding: 1, resource: { buffer: r.uniforms } }, { binding: 2, resource: r.sampler },
       ...[...(pass.reads ?? []), ...(pass.kind === "compute" ? pass.writes ?? [] : [])].map((value, index) => {
@@ -192,11 +193,13 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
         last++;
       }
       const resolves = r.passes[last].resolves;
-      const command = encoder.beginRenderPass({ colorAttachments: colors.map((color, slot) => color === "screen" || !multisampled(r, color)
+      const descriptor = resource.descriptor ?? { colorAttachments: colors.map((color, slot) => color === "screen" || !multisampled(r, color)
         ? { view: color === "screen" ? screen.createView() : view(r, color), clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: "store" as const }
         : { view: r.views[color + "#ms"] ??= r.textures[color + "#ms"].createView(), resolveTarget: resolves[slot] ? view(r, color) : undefined,
           clearValue: clear || [0, 0, 0, 0], loadOp: clear === false ? "load" as const : "clear" as const, storeOp: resolves[slot] ? "discard" as const : "store" as const }),
-        ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) });
+        ...(pass.kind === "render" && pass.depth ? { depthStencilAttachment: { view: view(r, pass.depth), depthClearValue: 1, depthLoadOp: clear === false ? "load" as const : "clear" as const, depthStoreOp: "store" as const } } : {}) };
+      if (!colors.includes("screen")) resource.descriptor = descriptor;
+      const command = encoder.beginRenderPass(descriptor);
       for (; index <= last; index++) {
         const draw = r.passes[index], drawPass = draw.pass;
         command.setPipeline(draw.pipeline as GPURenderPipeline); command.setBindGroup(0, draw.group!);
