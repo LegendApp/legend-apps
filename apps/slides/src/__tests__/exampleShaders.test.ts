@@ -103,8 +103,9 @@ test("World decks compile to Hermes-ready modules that require only host package
   }
 }, 60_000);
 
-test.skipIf(process.platform !== "darwin")("World decks evaluate in Hermes with strict host modules", async () => {
-  const hermesPath = path.join(path.dirname(require.resolve("react-native/package.json")), "sdks/hermesc/osx-bin/hermes");
+const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
+
+test.skipIf(process.platform !== "darwin" || !fs.existsSync(hermesPath))("World decks evaluate in Hermes with strict host modules", async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "slides-world-hermes-"));
   try {
     for (const name of worldDecks) {

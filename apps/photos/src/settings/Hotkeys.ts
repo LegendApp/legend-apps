@@ -88,7 +88,7 @@ export const hotkeys$ = createJSONManager<Record<HotkeyName, HotkeyValue>>({
   filename: 'hotkeys.json',
   initialValue: DEFAULT_HOTKEYS,
   saveDefaultToFile: true,
-  transform: { load: value => loadHotkeys(value, DEFAULT_HOTKEYS) },
+  transform: { load: loadHotkeys },
 });
 
 export const isHotkeysLoaded$ = observable(() => !!syncState(hotkeys$).isPersistLoaded.get());

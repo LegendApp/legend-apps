@@ -124,13 +124,15 @@ test("far jumps skip intermediate slides and cuts, revisions, and unmount cancel
   expect(h.indexes()).toEqual([16,17,18]);
   expect(mounts.some(index=>index>=12 && index<=14)).toBe(false);
   await act(() => setSlidesState({config:{transition:"none"},currentSlide:2}));
+  expect(h.indexes()).toEqual([2,17]);
+  await h.finish();
   expect(h.indexes()).toEqual([2]);
   const stale = h.jobs.values().next().value;
   await act(() => setSlidesState({revision:getSlidesState().revision+1,currentSlide:3}));
   await act(() => stale());
   await h.drain();
   expect(h.indexes()).toEqual([2,3,4]);
-  await act(() => setCurrentSlide(10));
+  await act(() => setCurrentSlide(10)); await h.finish();
   expect(h.jobs.size).toBe(1);
   const cancelled = h.jobs.values().next().value;
   await h.unmount();

@@ -5,6 +5,8 @@ const bindings$ = observable({ Help: "A" });
 const state$ = observable({ showSettings: false });
 const registrations = new Set();
 mock.module("@legend-apps/runtime-utils", () => ({ ownRegistration }));
+// Use test:photos (--isolate) so this mock cannot replace the real Hotkeys
+// module exercised by persistence.test.js.
 mock.module("../src/settings/Hotkeys", () => ({
   getHotkey: name => bindings$[name].get(), hotkeys$: bindings$,
   getHotkeyMetadata: () => ({ description: "Test shortcut", repeat: true }),

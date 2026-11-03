@@ -1,1 +1,1 @@
-export { Directory, File, Paths } from "expo-file-system/next";
+export { Directory, File, Paths } from "expo-file-system";

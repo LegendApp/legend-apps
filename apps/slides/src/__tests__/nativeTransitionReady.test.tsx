@@ -3,7 +3,7 @@ import { expect, mock, spyOn, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import "./nativeMock";
-import { reactUI } from "./uiClockMock";
+import { flushUI, reactUI } from "./uiClockMock";
 import { useNativeTransitionReady } from "../useNativeTransitionReady";
 import { BackgroundHost } from "@legend-apps/presentation";
 const renders = new Map();
@@ -73,6 +73,31 @@ test("first native progress reveals only the incoming layer without rerendering 
     expect([...renders]).toEqual(before);
     await act(() => { progress.value = 0.5; reactUI(); });
     expect([...renders]).toEqual(before);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+    renders.clear();
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test("cuts keep the outgoing layer above the incoming one until the hold ends, then swap in one commit", async () => {
+  const initial = getSlidesState();
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ currentSlide: 0, config: { transition: "none" },
+      slides: Array.from({ length: 4 }, () => ({ metadata: {}, notes: "" })) });
+    await act(() => { tree = create(<AudienceWindow />); });
+    await act(() => setCurrentSlide(1));
+    const zIndex = index => tree.root.findAllByType("animated-view")
+      .filter(node => node.props.accessibilityElementsHidden !== undefined)
+      .find(node => node.findByType("deck").props.targetIndex === index).props.style[2].zIndex;
+    expect([zIndex(0), zIndex(1)]).toEqual([1, -1]);
+    await act(() => flushUI());
+    expect([zIndex(0), zIndex(1)]).toEqual([1, -1]);
+    await act(() => new Promise(resolve => setTimeout(resolve, 300)));
+    expect([zIndex(0), zIndex(1)]).toEqual([-1, 1]);
   } finally {
     if (tree) await act(() => tree.unmount());
     renders.clear();

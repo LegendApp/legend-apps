@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -12,6 +11,9 @@ import { renderNativeChildren } from "../nativeChildren";
 import { getDeckSourceStructure } from "../speakerNotesSource";
 
 const temporaryDirectories: string[] = [];
+// RN 0.83 supplies this interpreter through the app's Hermes pod; prepare it
+// with `bun run spark slides build` to include the Hermes execution test.
+const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
 
 function createDeck(files: Record<string, string>) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-"));
@@ -397,7 +399,7 @@ describe("compileDeck", () => {
     expect(result.code).toContain('template":false');
   });
 
-  test.skipIf(process.platform !== "darwin")("preserves classes, template exports and captured loop bindings in Hermes", async () => {
+  test.skipIf(process.platform !== "darwin" || !fs.existsSync(hermesPath))("preserves classes, template exports and captured loop bindings in Hermes", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
         "---",
@@ -434,8 +436,6 @@ describe("compileDeck", () => {
         '  content: content, fallback: boundary.render(), inherited: boundary instanceof Component,',
         "}));",
       ].join("\n"));
-      const reactNativeRoot = path.dirname(createRequire(import.meta.url).resolve("react-native/package.json"));
-      const hermesPath = path.join(reactNativeRoot, "sdks/hermesc/osx-bin/hermes");
       const probe = spawnSync(hermesPath, [probePath], { encoding: "utf8" });
       expect(probe.error).toBeUndefined();
       expect(probe.stderr).toBe("");

@@ -13,7 +13,7 @@ jest.mock("../../Toast", () => ({
     showToast: jest.fn(),
 }));
 
-const FileSystem = require("expo-file-system/next") as {
+const FileSystem = require("expo-file-system") as {
     __resetMockFileSystem(): void;
     File: new (...segments: unknown[]) => { write(content: string): void };
 };

@@ -1,7 +1,7 @@
 import { loadLocalPlaylists, localMusicState$ } from "../LocalMusicState";
 import { addTracksToPlaylist } from "../LocalPlaylists";
 
-const FileSystem = require("expo-file-system/next") as {
+const FileSystem = require("expo-file-system") as {
     __resetMockFileSystem(): void;
     Directory: new (...segments: unknown[]) => { create(): void };
     File: new (...segments: unknown[]) => { path: string; write(content: string): void; textSync(): string };
