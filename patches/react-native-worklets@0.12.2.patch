@@ -1,5 +1,5 @@
 diff --git a/apple/worklets/apple/AnimationFrameQueue.mm b/apple/worklets/apple/AnimationFrameQueue.mm
-index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..269867101163a0cab6b0c7e3be50ebf299f9b668 100644
+index b93cd2c..2698671 100644
 --- a/apple/worklets/apple/AnimationFrameQueue.mm
 +++ b/apple/worklets/apple/AnimationFrameQueue.mm
 @@ -6,7 +6,9 @@

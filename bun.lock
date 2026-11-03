@@ -167,17 +167,17 @@
         "@legendapp/motion": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
-        "@shopify/react-native-skia": "^2.11.1",
+        "@shopify/react-native-skia": "^2.14.0",
         "@typegpu/noise": "^0.12.1",
         "@typegpu/react": "^0.12.3",
         "fflate": "^0.8.3",
         "lottie-react-native": "7.3.8",
         "number-flow-react-native": "0.5.1",
         "react-native-enriched-markdown": "1.1.1",
-        "react-native-reanimated": "4.3.4",
+        "react-native-reanimated": "4.6.0",
         "react-native-webgpu": "^0.20.0",
         "react-native-webview": "16.0.0",
-        "react-native-worklets": "0.8.3",
+        "react-native-worklets": "0.12.2",
         "typegpu": "^0.12.9",
         "uniwind": "^1.6.3",
       },
@@ -575,14 +575,14 @@
         "@legendapp/state": "catalog:",
         "@mdx-js/mdx": "^3.1.1",
         "@react-native/babel-preset": "0.83.10",
-        "@shopify/react-native-skia": "^2.11.1",
+        "@shopify/react-native-skia": "^2.14.0",
         "babel-plugin-react-compiler": "1.0.0",
         "esbuild": "^0.25.9",
         "react": "catalog:",
         "react-dom": "19.2.0",
         "react-native": "catalog:",
-        "react-native-reanimated": "4.3.4",
-        "react-native-worklets": "0.8.3",
+        "react-native-reanimated": "4.6.0",
+        "react-native-worklets": "0.12.2",
         "remark-directive": "^4.0.0",
         "remark-frontmatter": "^5.0.0",
         "remark-gfm": "^4.0.1",
@@ -671,11 +671,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@legend-apps/presentation": "workspace:*",
-        "@shopify/react-native-skia": "^2.11.1",
+        "@shopify/react-native-skia": "^2.14.0",
         "lottie-react-native": "7.3.8",
         "react": "catalog:",
         "react-native": "catalog:",
-        "react-native-reanimated": "4.3.4",
+        "react-native-reanimated": "4.6.0",
         "typegpu": "^0.12.9",
       },
       "devDependencies": {
@@ -689,15 +689,15 @@
         "@babel/core": "^7.29.0",
         "@legend-apps/presentation": "0.0.0",
         "@legendapp/state": "catalog:",
-        "@shopify/react-native-skia": "2.11.1",
+        "@shopify/react-native-skia": "2.14.0",
         "canvaskit-wasm": "0.41.0",
         "esbuild": "^0.25.9",
         "html-to-image": "^1.11.13",
         "react": "catalog:",
         "react-dom": "19.2.0",
-        "react-native-reanimated": "4.3.4",
+        "react-native-reanimated": "4.6.0",
         "react-native-web": "^0.21.2",
-        "react-native-worklets": "0.8.3",
+        "react-native-worklets": "0.12.2",
         "uniwind": "1.6.3",
       },
       "devDependencies": {
@@ -868,12 +868,12 @@
     "react-native-enriched-markdown",
   ],
   "patchedDependencies": {
-    "react-native-worklets@0.8.3": "patches/react-native-worklets@0.8.3.patch",
+    "react-native-worklets@0.12.2": "patches/react-native-worklets@0.12.2.patch",
     "react-native-macos@0.83.0": "patches/react-native-macos@0.83.0.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-webgpu@0.20.0": "patches/react-native-webgpu@0.20.0.patch",
-    "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
+    "@shopify/react-native-skia@2.14.0": "patches/@shopify+react-native-skia@2.14.0.patch",
   },
   "catalog": {
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
@@ -1488,7 +1488,7 @@
 
     "@rnx-kit/types-plugin-typescript": ["@rnx-kit/types-plugin-typescript@1.0.0", "", {}, "sha512-5zFk5wPiAEinfT5XH+t7Ka5I/CUnRf/fqnCS7LDj21ReOgGfdrUQ1wXVsV7EoClCNCgUHvWFDdWkbNOFeFa60A=="],
 
-    "@shopify/react-native-skia": ["@shopify/react-native-skia@2.11.1", "", { "dependencies": { "canvaskit-wasm": "0.41.0", "react-native-skia-android": "152.0.0", "react-native-skia-apple-ios": "152.0.0", "react-native-skia-apple-macos": "152.0.0", "react-native-skia-apple-tvos": "152.0.0", "react-reconciler": "0.31.0" }, "peerDependencies": { "react": ">=19.0", "react-native": ">=0.78", "react-native-reanimated": ">=4.0.0", "react-native-worklets": ">=0.7.0" }, "optionalPeers": ["react-native", "react-native-reanimated", "react-native-worklets"], "bin": { "setup-skia-web": "scripts/setup-canvaskit.js" } }, "sha512-UEj84/gIOgnJFMlvvkXU8wp/RYwmWLIqu0XWCvkDfvk5k4DokFIWKmdv4MWsBdwFaGKTzCIvt9W9e5/v8PDO8w=="],
+    "@shopify/react-native-skia": ["@shopify/react-native-skia@2.14.0", "", { "dependencies": { "canvaskit-wasm": "0.41.0", "react-native-skia-android": "154.0.0", "react-native-skia-apple-ios": "154.0.0", "react-native-skia-apple-macos": "154.0.0", "react-native-skia-apple-tvos": "154.0.0", "react-reconciler": "0.31.0" }, "peerDependencies": { "react": ">=19.0", "react-native": ">=0.78", "react-native-reanimated": ">=4.0.0", "react-native-worklets": ">=0.7.0" }, "optionalPeers": ["react-native", "react-native-reanimated", "react-native-worklets"], "bin": { "setup-skia-web": "scripts/setup-canvaskit.js" } }, "sha512-mzizcTeUAgvam+m1BsxTs+K8ujUXkzoCmwumUhV5NWcoImmKJiWUMfQYgw2OOt1p6qpr7+G5pPOELAmNzZRvlw=="],
 
     "@sideway/address": ["@sideway/address@4.1.5", "", { "dependencies": { "@hapi/hoek": "^9.0.0" } }, "sha512-IqO/DUQHUkPeixNQ8n0JA6102hT9CmaljNTPmQ1u8MEhBo/R4Q8eKLN/vGZxuebwOroDB4cbpjheD4+/sKFK4Q=="],
 
@@ -2626,15 +2626,15 @@
 
     "react-native-nitro-modules": ["react-native-nitro-modules@0.37.0", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-ULS2CBZcdwGw5d4Y35EV/tbCOsNsQOnQ9LC9CehMhDNm5c90lwF/LxRamzKuFpjI547G7teTQgD0peqYSGnP9g=="],
 
-    "react-native-reanimated": ["react-native-reanimated@4.3.4", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.3.1", "semver": "^7.7.3" }, "peerDependencies": { "react": "*", "react-native": "0.81 - 0.85", "react-native-worklets": "0.8.x" } }, "sha512-kQJMiDROed3eO+asdXfodDxgsDDIGM/ifnHFAiPsKWxmrcPu+Bz4vO0fg79eyuEmKCeQuDczmn4tkTb4RbSVYA=="],
+    "react-native-reanimated": ["react-native-reanimated@4.6.0", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.3.1", "semver": "^7.7.3" }, "peerDependencies": { "react": "*", "react-native": "0.83 - 0.87", "react-native-worklets": "0.12.x" } }, "sha512-9vbQmok5BPX2J3RLPFt2UnwmK2QQoMDPDi0VB4a9JWIiEc55pdzvwEsdH91V/JXKNErqM6a9fElTBMc/1cbtBA=="],
 
-    "react-native-skia-android": ["react-native-skia-android@152.0.0", "", {}, "sha512-X++QG8bpPLHpavUyNfQvAxvtjH3r8fnivxS1PTFZsKL4ZiAJ1V9IVsJi4qltafWJbzhq7IutpZQNYd06uwNkjg=="],
+    "react-native-skia-android": ["react-native-skia-android@154.0.0", "", {}, "sha512-brjJaJcrYguSOwdbvMBlh+tHJdIvzOMUZSjTmIpiIe4/V9x0HsBZM9sy3q32+WGoSPWibylR7hbDmaO12EYAUA=="],
 
-    "react-native-skia-apple-ios": ["react-native-skia-apple-ios@152.0.0", "", {}, "sha512-rmnHYWkwvxm7B9fXZCkTRdZVoQwVnNydjytfphxatweQmEqwYE+/g1LOL/emhM/ulmwAFKFT0VNAEzAlvHId2A=="],
+    "react-native-skia-apple-ios": ["react-native-skia-apple-ios@154.0.0", "", {}, "sha512-7xq2XYEbcfQYcqyXEnTDXF9GjQzKHuDiUep6wOvOXzoK62108DR8dM3VYgOqJqCTqspPHC9fEJeT52fK3UU5Qg=="],
 
-    "react-native-skia-apple-macos": ["react-native-skia-apple-macos@152.0.0", "", {}, "sha512-boWCDyPPJUuKwcE+DU8X7dop6EwLdrOH+v7pxYAj+43NbOwgfV1wzq4g+kWIQqag5ZOQInq2mVwCc8S1eJjlXw=="],
+    "react-native-skia-apple-macos": ["react-native-skia-apple-macos@154.0.0", "", {}, "sha512-0BE6/oVMXYOKsxI4JJP1MwwrgmaDnZAl9l6N+7q434MFiT+w0z96a0gTilZukzo1y+35sDi/sA+iAdTz16ElYA=="],
 
-    "react-native-skia-apple-tvos": ["react-native-skia-apple-tvos@152.0.0", "", {}, "sha512-+UnXke4Yz9Jmy3uTcDbYFrVG/+CZMqYbaTV3f52wovaMzf8wWy+iZampZr6dW6rOWLWrsUFiq7yMImg6UGbiFg=="],
+    "react-native-skia-apple-tvos": ["react-native-skia-apple-tvos@154.0.0", "", {}, "sha512-W06tUa+O3TJTYg5G+Lly/pwxE+2zKsmwJ/23yeR+25zSu7VmfdSz3VqFN3BM0jEioN4ASMm/0cMECocV7vxbMQ=="],
 
     "react-native-web": ["react-native-web@0.21.4", "", { "dependencies": { "@babel/runtime": "^7.18.6", "@react-native/normalize-colors": "^0.74.1", "fbjs": "^3.0.4", "inline-style-prefixer": "^7.0.1", "memoize-one": "^6.0.0", "nullthrows": "^1.1.1", "postcss-value-parser": "^4.2.0", "styleq": "^0.1.3" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-77B6KlalB4osNIck91TNFixPkYPsTbuNEvw8P7IV+4v4/5wZSBRKZnw0Zhx6YjuauDTz71gc8IW+fVhcBMjr5A=="],
 
@@ -2644,7 +2644,7 @@
 
     "react-native-webview": ["react-native-webview@16.0.0", "", { "dependencies": { "escape-string-regexp": "^4.0.0", "invariant": "2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-KIg5Yhy04lQfHdXC1JQPM+0kftMfPnH6AqDH7v6YskQ9kzfUacooofOFRmbaZHASq/0WY87Fx0peiFETFjOcCg=="],
 
-    "react-native-worklets": ["react-native-worklets@0.8.3", "", { "dependencies": { "@babel/plugin-transform-arrow-functions": "^7.27.1", "@babel/plugin-transform-class-properties": "^7.27.1", "@babel/plugin-transform-classes": "^7.28.4", "@babel/plugin-transform-nullish-coalescing-operator": "^7.27.1", "@babel/plugin-transform-optional-chaining": "^7.27.1", "@babel/plugin-transform-shorthand-properties": "^7.27.1", "@babel/plugin-transform-template-literals": "^7.27.1", "@babel/plugin-transform-unicode-regex": "^7.27.1", "@babel/preset-typescript": "^7.27.1", "convert-source-map": "^2.0.0", "semver": "^7.7.3" }, "peerDependencies": { "@babel/core": "*", "@react-native/metro-config": "*", "react": "*", "react-native": "0.81 - 0.85" } }, "sha512-oCBJROyLU7yG/1R8s0INMflygTH71bx+5XcYkH0CM938TlhSoVbiunE1WVW5FZa51vwYqfLie/IXMX2s1Kh3eg=="],
+    "react-native-worklets": ["react-native-worklets@0.12.2", "", { "dependencies": { "@babel/generator": "^7.27.1", "@babel/plugin-transform-arrow-functions": "^7.27.1", "@babel/plugin-transform-class-properties": "^7.28.6", "@babel/plugin-transform-classes": "^7.28.6", "@babel/plugin-transform-nullish-coalescing-operator": "^7.28.6", "@babel/plugin-transform-optional-chaining": "^7.28.6", "@babel/plugin-transform-shorthand-properties": "^7.27.1", "@babel/plugin-transform-template-literals": "^7.27.1", "@babel/plugin-transform-unicode-regex": "^7.27.1", "@babel/preset-typescript": "^7.28.5", "@babel/traverse": "^7.27.1", "@babel/types": "^7.27.1", "convert-source-map": "^2.0.0", "semver": "^7.7.4" }, "peerDependencies": { "@babel/core": "*", "@react-native/metro-config": "*", "react": "*", "react-native": "0.83 - 0.87" } }, "sha512-TB6Aze0WJg/U0XOu4Zfx/yV8i5i7C/lbMymUXPbq1izDy2nuzZ9ujQAMwAHM2Ygyhzi8sdRk/7FukuTTfuil9A=="],
 
     "react-reconciler": ["react-reconciler@0.32.0", "", { "dependencies": { "scheduler": "^0.26.0" }, "peerDependencies": { "react": "^19.1.0" } }, "sha512-2NPMOzgTlG0ZWdIf3qG+dcbLSoAc/uLfOwckc3ofy5sSK0pLJqnQLpUFxvGcN2rlXSjnVtGeeFLNimCQEj5gOQ=="],
 
@@ -3212,6 +3212,8 @@
 
     "expo-modules-autolinking/commander": ["commander@7.2.0", "", {}, "sha512-QrWXB+ZQSVPmIWIhtEO9H+gwHaMGYiF5ChvoJ+K9ZGHG/sVsa6yiesAD1GC/x46sET00Xlwo1u49RVVVzvcSkw=="],
 
+    "expo-modules-core/react-native-worklets": ["react-native-worklets@0.8.3", "", { "dependencies": { "@babel/plugin-transform-arrow-functions": "^7.27.1", "@babel/plugin-transform-class-properties": "^7.27.1", "@babel/plugin-transform-classes": "^7.28.4", "@babel/plugin-transform-nullish-coalescing-operator": "^7.27.1", "@babel/plugin-transform-optional-chaining": "^7.27.1", "@babel/plugin-transform-shorthand-properties": "^7.27.1", "@babel/plugin-transform-template-literals": "^7.27.1", "@babel/plugin-transform-unicode-regex": "^7.27.1", "@babel/preset-typescript": "^7.27.1", "convert-source-map": "^2.0.0", "semver": "^7.7.3" }, "peerDependencies": { "@babel/core": "*", "@react-native/metro-config": "*", "react": "*", "react-native": "0.81 - 0.85" } }, "sha512-oCBJROyLU7yG/1R8s0INMflygTH71bx+5XcYkH0CM938TlhSoVbiunE1WVW5FZa51vwYqfLie/IXMX2s1Kh3eg=="],
+
     "fast-xml-builder/path-expression-matcher": ["path-expression-matcher@1.6.2", "", {}, "sha512-enSlaiat05iasnzmgNxRj8reFdj3puY2QpNgP1aPIaVfT6nn9ICuPoFlKHk8EN22HcwewshO+mN2DGbkCEOtqQ=="],
 
     "fast-xml-parser/fast-xml-builder": ["fast-xml-builder@1.1.5", "", { "dependencies": { "path-expression-matcher": "^1.1.3" } }, "sha512-4TJn/8FKLeslLAH3dnohXqE3QSoxkhvaMzepOIZytwJXZO69Bfz0HBdDHzOTOon6G59Zrk6VQ2bEiv1t61rfkA=="],
@@ -3656,13 +3658,13 @@
 
     "react-native-macos/semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
-    "react-native-reanimated/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
+    "react-native-reanimated/semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
     "react-native-web/@react-native/normalize-colors": ["@react-native/normalize-colors@0.74.89", "", {}, "sha512-qoMMXddVKVhZ8PA1AbUCk83trpd6N+1nF2A6k1i6LsQObyS92fELuk8kU/lQs6M7BsMHwqyLCpQJ1uFgNvIQXg=="],
 
     "react-native-web/memoize-one": ["memoize-one@6.0.0", "", {}, "sha512-rkpe71W0N0c0Xz6QD0eJETuWAJGnJ9afsl1srmwPrI+yBCkge5EycXXbYRyvL29zZVUWQCY7InPRCv3GDXuZNw=="],
 
-    "react-native-worklets/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
+    "react-native-worklets/semver": ["semver@7.8.5", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
 
     "react-reconciler/scheduler": ["scheduler@0.26.0", "", {}, "sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA=="],
 
@@ -3979,6 +3981,8 @@
     "expo-desktop/glob/minimatch": ["minimatch@9.0.9", "", { "dependencies": { "brace-expansion": "^2.0.2" } }, "sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg=="],
 
     "expo-desktop/glob/path-scurry": ["path-scurry@1.11.1", "", { "dependencies": { "lru-cache": "^10.2.0", "minipass": "^5.0.0 || ^6.0.2 || ^7.0.0" } }, "sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA=="],
+
+    "expo-modules-core/react-native-worklets/semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
     "expo/pretty-format/@jest/schemas": ["@jest/schemas@29.6.3", "", { "dependencies": { "@sinclair/typebox": "^0.27.8" } }, "sha512-mo5j5X+jIZmJQveBKeS/clAueipV7KgiX1vMgCxam1RNYiqE1w62n0/tJJnHtjW8ZHcQco5gY85jA3mi0L+nSA=="],
 

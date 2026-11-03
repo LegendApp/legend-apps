@@ -1,12 +1,23 @@
+diff --git a/apple/ViewScreenshotService.mm b/apple/ViewScreenshotService.mm
+index 4b10530..3c15840 100644
 --- a/apple/ViewScreenshotService.mm
 +++ b/apple/ViewScreenshotService.mm
-@@ -7,0 +8,3 @@
+@@ -5,6 +5,9 @@
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wdocumentation"
+ 
 +#if TARGET_OS_OSX
 +#include "include/utils/mac/SkCGUtils.h"
 +#endif
-@@ -91 +94,13 @@
+ #include "include/core/SkData.h"
+ 
+ #pragma clang diagnostic pop
+@@ -89,7 +92,19 @@ - (instancetype)initWithViewRegistry:(RCTViewRegistry *)viewRegistry {
+   // ... and then create the SkImage itself!
+   return SkImages::RasterFromData(info, skData, bytesPerRow);
+ #else
 -  return nullptr;
-+  NSView *view = [_uiManager viewForReactTag:viewTag];
++  NSView *view = [_viewRegistry viewForReactTag:viewTag];
 +  if (view == nil || NSIsEmptyRect(view.bounds)) {
 +    return nullptr;
 +  }
@@ -19,9 +30,14 @@
 +  [view cacheDisplayInRect:view.bounds toBitmapImageRep:bitmap];
 +  CGImageRef image = bitmap.CGImage;
 +  return image == nil ? nullptr : SkMakeImageFromCGImage(image);
+ #endif // !TARGET_OS_OSX
+ }
+ 
+diff --git a/apple/SkiaUIView.mm b/apple/SkiaUIView.mm
+index 6443fbf..ec2f9d8 100644
 --- a/apple/SkiaUIView.mm
 +++ b/apple/SkiaUIView.mm
-@@ -78,6 +78,16 @@
+@@ -54,6 +54,16 @@ - (void)viewWillMoveToSuperview:(NSView *)newSuperView {
        _impl->getDrawView()->setShowDebugOverlays(_debugMode);
        _impl->setUseP3ColorSpace(_useP3ColorSpace);
        _impl->setHighBitDepth(_highBitDepth);
@@ -38,64 +54,84 @@
      }
    }
  }
---- a/cpp/rnskia/RNSkPictureView.h
-+++ b/cpp/rnskia/RNSkPictureView.h
-@@ -55 +55,4 @@ public:
--    _picture = picture;
-+    {
-+      std::lock_guard<std::mutex> lock(_pictureMutex);
-+      _picture = std::move(picture);
-+    }
-@@ -59 +62,4 @@ public:
--  sk_sp<SkPicture> getPicture() const { return _picture; }
-+  sk_sp<SkPicture> getPicture() const {
-+    std::lock_guard<std::mutex> lock(_pictureMutex);
-+    return _picture;
-+  }
-@@ -63,3 +69,3 @@ private:
--    // Capture picture pointer to ensure thread safety - _picture can be
--    // modified from the JS thread while we're drawing on the render thread
--    sk_sp<SkPicture> picture = _picture;
-+    // Retain under the same lock as setPicture: copying sk_sp concurrently
-+    // with assignment can reference a picture that has already been released.
-+    sk_sp<SkPicture> picture = getPicture();
-@@ -78,0 +85 @@ private:
-+  mutable std::mutex _pictureMutex;
+diff --git a/apple/RNSkAppleVideo.h b/apple/RNSkAppleVideo.h
+index 6505769..3b34734 100644
 --- a/apple/RNSkAppleVideo.h
 +++ b/apple/RNSkAppleVideo.h
-@@ -3,0 +4,2 @@
+@@ -1,6 +1,8 @@
+ #pragma once
+ 
+ #include <string>
 +#include <memory>
 +#include <mutex>
-@@ -22,0 +25,5 @@
+ 
+ #include <AVFoundation/AVFoundation.h>
+ #include <CoreVideo/CoreVideo.h>
+@@ -20,6 +22,11 @@ namespace RNSkia {
+ 
+ class RNSkAppleVideo : public RNSkVideo {
+ private:
 +  struct DisplayLinkState : std::enable_shared_from_this<DisplayLinkState> {
 +    std::mutex mutex;
 +    RNSkAppleVideo *video = nullptr;
 +  };
 +  std::shared_ptr<DisplayLinkState> _displayLinkState;
+   std::string _url;
+   AVPlayer *_player = nullptr;
+   AVPlayerItem *_playerItem = nullptr;
+diff --git a/apple/RNSkAppleVideo.mm b/apple/RNSkAppleVideo.mm
+index aba8fdf..cdf4a60 100644
 --- a/apple/RNSkAppleVideo.mm
 +++ b/apple/RNSkAppleVideo.mm
-@@ -34,0 +35,2 @@
+@@ -32,6 +32,8 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+ 
+ RNSkAppleVideo::RNSkAppleVideo(std::string url, RNSkPlatformContext *context)
+     : _url(std::move(url)), _context(context) {
 +  _displayLinkState = std::make_shared<DisplayLinkState>();
 +  _displayLinkState->video = this;
-@@ -54,0 +57,4 @@
+   setupPlayer();
+   setupDisplayLink();
+ }
+@@ -52,6 +54,10 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+     CVDisplayLinkRelease(_displayLink);
+     _displayLink = nullptr;
+   }
 +  {
 +    std::lock_guard<std::mutex> lock(_displayLinkState->mutex);
 +    _displayLinkState->video = nullptr;
 +  }
-@@ -124 +130,2 @@
+ #endif
+   if (_endObserver) {
+     [[NSNotificationCenter defaultCenter] removeObserver:_endObserver];
+@@ -121,7 +127,8 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+ #else
+   // Create CVDisplayLink for macOS
+   CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink);
 -  CVDisplayLinkSetOutputCallback(_displayLink, &displayLinkCallback, this);
 +  CVDisplayLinkSetOutputCallback(_displayLink, &displayLinkCallback,
 +                                 _displayLinkState.get());
-@@ -175 +182,2 @@
+   _displayLinkRunning = false;
+ #endif
+ }
+@@ -172,10 +179,14 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+                                              CVOptionFlags flagsIn,
+                                              CVOptionFlags *flagsOut,
+                                              void *context) {
 -  RNSkAppleVideo *video = static_cast<RNSkAppleVideo *>(context);
 +  auto *state = static_cast<DisplayLinkState *>(context);
 +  auto retainedState = state->shared_from_this();
-@@ -178 +186,4 @@
+   // Dispatch to main thread since video operations need to happen there
+   dispatch_async(dispatch_get_main_queue(), ^{
 -    video->onDisplayLink();
 +    std::lock_guard<std::mutex> lock(retainedState->mutex);
 +    if (retainedState->video) {
 +      retainedState->video->onDisplayLink();
 +    }
+   });
+   return kCVReturnSuccess;
+ }
+diff --git a/apple/MetalWindowContext.mm b/apple/MetalWindowContext.mm
+index b93d4c3..3bde459 100644
 --- a/apple/MetalWindowContext.mm
 +++ b/apple/MetalWindowContext.mm
 @@ -22,11 +22,19 @@
@@ -119,9 +155,11 @@
    _layer.drawableSize = CGSizeMake(width, height);
    BOOL supportsWideColor = NO;
    if (useP3ColorSpace) {
+diff --git a/apple/MetalWindowContext.h b/apple/MetalWindowContext.h
+index 4fa3fd2..28c5760 100644
 --- a/apple/MetalWindowContext.h
 +++ b/apple/MetalWindowContext.h
-@@ -19,11 +19,11 @@
+@@ -19,11 +19,11 @@ public:
    void present() override;
  
    int getWidth() override {
