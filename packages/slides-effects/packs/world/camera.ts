@@ -1,6 +1,6 @@
 export type Vec3 = [number, number, number];
 export type Ease = "linear" | "cubic" | "out" | "smoothstep" | "expo" | "spring";
-export type ClockSample = { entryTime?: number; slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
+export type ClockSample = { entryTime?: number; time?: number; slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
 export type CameraPose = { position: Vec3; target: Vec3; fov: number; roll: number };
 export type Shot = {
   step?: number; at?: number; position?: Vec3; target?: Vec3; fov?: number; roll?: number;

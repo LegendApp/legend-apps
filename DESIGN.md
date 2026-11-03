@@ -75,6 +75,10 @@ them in place. Redeclaring an id resumes its normal morph. Retention belongs to
 the World surface, independently for each audience and preview host, and ends
 when that surface is reset. It is bounded by the ids visited in that World.
 
+## One shared scene
+
+Replacing the declaration on each slide suits small scenes. With thousands of parts it rebuilds pipelines and re-sends the scene on every key press. `track.frame: "world"` instead lets slides pass one identical `children` array: tracks hold a pose per running beat (`stepOffset`), and `track.carry` flies each changed id between poses on a bowed path, with Previous as its exact mirror. Uniforms stay cached; only parts in flight are written, into a separate output. See the World README.
+
 ## Motion matched from reference
 
 The source's main station-to-station moves last **1.7 seconds**, with **32 units**

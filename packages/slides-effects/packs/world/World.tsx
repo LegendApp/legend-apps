@@ -18,7 +18,7 @@ import { burstInstances, choreographyInstances, type BurstOptions, type Choreogr
 import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
-export type { WorldTrack } from "./track";
+export type { WorldCarry, WorldTrack } from "./track";
 
 export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
 export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";
@@ -104,6 +104,8 @@ export type WorldProps = {
   renderScale?: number;
   track?: WorldTrack;
   clock?: WorldClock;
+  /** Added to the step index with `clock="step"`, so slides sharing one scene can address its tracks by a running step number. */
+  stepOffset?: number;
   /** End time of this build, in seconds; enables early-advance settling and settled back steps. */
   buildDuration?: number; advanceDuration?: number; replayOnBack?: boolean;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
@@ -221,7 +223,7 @@ function WorldSurface(props: WorldProps) {
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
+  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; declared: string[]; topology: string; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
@@ -296,12 +298,12 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     "worklet";
     if (!track || !input || input.state.phase !== "playing") return;
     const { state, scene, scale } = input;
-    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
-    const values = sampleUniforms(scene, clock) as number[];
+    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
+    const values = sampleUniforms(scene, clock, null, 1, 1, track.frame === "world") as number[];
     values[35] = scale;
     const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
     trackFrame.value = next;
-  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration]);
+  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
@@ -315,7 +317,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const uniforms = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
-    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
+    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
         return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock) as number[], ids, state, track, declared).values;
@@ -325,7 +327,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const previous = state.phase === "preview" || state.phase === "preparing" ? null
       : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
     return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, track, trackFrame, ids, declared]);
+  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, track, trackFrame, ids, declared]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />

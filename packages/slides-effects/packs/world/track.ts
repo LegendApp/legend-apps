@@ -2,21 +2,26 @@ import type { PlaybackState } from "@legend-apps/presentation";
 import { easeProgress, type CameraPose, type Vec3 } from "./camera";
 import { prepareWorldScene, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
-/** Camera points are local to the incoming station; via points are quadratic controls. */
+/** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
+export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
+/** Camera points are local to the incoming station; via points are quadratic controls.
+ * `frame: "world"` authors parts and lights in fixed world coordinates, so slides can share one retained scene. */
 export type WorldTrack = {
   spacing?: number; duration?: number;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
+  frame?: "station" | "world"; carry?: WorldCarry;
 };
 type Station = { offset: number; track: WorldTrack };
 export type TrackFrame = {
-  key: string; slideKey: string; origin: number; cursor: number; morphDuration: number;
+  key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
+  reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
   stations: Record<number, Station>; ids: string[]; declared: string[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
 };
 
 export function createTrackFrame(): TrackFrame {
   "worklet";
-  return { key: "", slideKey: "", origin: 0, cursor: 0, morphDuration: 0,
+  return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
     stations: {}, ids: [], declared: [], from: [], sources: [], retired: {}, values: [] };
 }
 
@@ -61,6 +66,83 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, sp
   return { position, target, fov: 40, roll: 0 };
 }
 
+function hidden(values: ArrayLike<number>, at: number) {
+  "worklet";
+  return values[at + 23] <= 0.002 || Math.max(Math.abs(values[at + 8]), Math.abs(values[at + 9]), Math.abs(values[at + 10])) <= 0.002;
+}
+function reveal(from: number, to: number, value: number) {
+  "worklet";
+  const u = Math.min(1, Math.max(0, (value - from) / (to - from)));
+  return u * u * (3 - 2 * u);
+}
+function blend(values: Float32Array | number[], at: number, from: ArrayLike<number>, old: number, start: number, end: number, amount: number) {
+  "worklet";
+  for (let field = start; field < end; field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * amount;
+}
+/** Carries one part along a bowed path. Reversed travel mirrors its delay, so Previous retraces the same flight. */
+function carrySlot(values: Float32Array | number[], at: number, from: ArrayLike<number>, old: number, time: number, carry: WorldCarry, id: string, seed: number, reversed: boolean) {
+  "worklet";
+  const stagger = Math.min(0.9, carry.stagger ?? 0), delay = stagger * (reversed ? 1 - seed : seed);
+  const p = easeProgress(Math.min(1, Math.max(0, (time - delay) / (1 - stagger))), "cubic");
+  const dx = values[at] - from[old], dy = values[at + 1] - from[old + 1], dz = values[at + 2] - from[old + 2];
+  // Short hops stay flat; the seed picks the side, so a group and both directions share one path.
+  const reach = Math.min(1, Math.hypot(dx, dy, dz) / 8), side = seed < 0.5 ? -1 : 1, bow = 2 * p * (1 - p) * reach;
+  blend(values, at, from, old, 0, 3, p);
+  values[at] += bow * side * (carry.spread ?? 0) * (0.5 + seed / 2);
+  values[at + 1] += bow * (carry.lift ?? 0) * (0.8 + seed * 0.4);
+  // A part that ends hidden shrinks on landing; one that starts hidden appears on takeoff.
+  const shrink = hidden(values, at), appear = hidden(from, old);
+  const presence = shrink ? reveal(0.8, 1, p) : appear ? reveal(0, 0.2, p) : p;
+  blend(values, at, from, old, 3, 8, p);
+  blend(values, at, from, old, 23, 24, presence);
+  // Labels pack their text into the fields below.
+  if (id.startsWith("label:")) return;
+  blend(values, at, from, old, 8, 11, presence);
+  blend(values, at, from, old, 24, 27, p);
+  const spin = Math.sin(p * Math.PI) * (carry.spin ?? 0) * reach;
+  const glyph = id.startsWith("glyph:"), tube = id.startsWith("tube:");
+  if (glyph || tube) blend(values, at, from, old, 12, 15, p);
+  if (glyph) { values[at + 12] += spin * 0.6; values[at + 13] += spin * side; }
+  else if (!tube) values[at + 22] += spin * side * 0.0044;
+}
+/** Ids sharing a prefix before `/` fly as one object. */
+function seedOf(id: string) {
+  "worklet";
+  const group = id.indexOf("/");
+  let hash = 7;
+  for (let i = id.indexOf(":") + 1, end = group < 0 ? id.length : group; i < end; i++) hash = (hash * 31 + id.charCodeAt(i)) % 65521;
+  return ((hash * 40503) % 65521) / 65521;
+}
+
+/** World-frame scenes keep their cached uniforms intact: only parts whose pose changes are written, into a separate output. */
+function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: boolean, elapsed: number) {
+  "worklet";
+  const { ids, from, sources, carry, reversed } = frame;
+  if (changed) {
+    frame.moving = []; frame.seeds = [];
+    if (elapsed < 1) for (let slot = 0; slot < ids.length; slot++) {
+      const source = sources[slot];
+      if (source < 0) continue;
+      const at = worldHeaderSize + slot * worldInstanceSize, old = worldHeaderSize + source * worldInstanceSize;
+      const was = hidden(from, old), is = hidden(values, at);
+      let moved = Math.abs(values[at] - from[old]) + Math.abs(values[at + 1] - from[old + 1]) + Math.abs(values[at + 2] - from[old + 2]) > 0.001;
+      if (ids[slot].startsWith("tube:")) moved ||= Math.abs(values[at + 12] - from[old + 12]) + Math.abs(values[at + 13] - from[old + 13]) + Math.abs(values[at + 14] - from[old + 14]) > 0.001;
+      // A part hidden or shown in place swaps at once, so successive states of one label never overlap.
+      if (moved && !(was && is)) { frame.moving.push(slot); frame.seeds.push(seedOf(ids[slot])); }
+    }
+  }
+  // The next change reads this frame as its source, and the cache will have moved on by then.
+  const output = frame.output?.length === values.length ? frame.output : new Float32Array(values.length);
+  output.set(values);
+  frame.output = output; frame.values = output as unknown as number[];
+  if (elapsed >= 1) return frame;
+  for (let i = 0; i < frame.moving.length; i++) {
+    const slot = frame.moving[i];
+    carrySlot(output, worldHeaderSize + slot * worldInstanceSize, from, worldHeaderSize + sources[slot] * worldInstanceSize, elapsed, carry ?? {}, ids[slot], frame.seeds[i], reversed);
+  }
+  return frame;
+}
+
 /** UI-thread sampling. The caller supplies a fresh uniform buffer, keeping the scene cache untouched. */
 export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: string[], playback: PlaybackState,
   options: WorldTrack, declared = ids): TrackFrame {
@@ -70,6 +152,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const key = `${playback.slideKey}/${playback.stepKey}`;
   const changed = key !== previous.key, slideChanged = playback.slideKey !== previous.slideKey;
   const first = !previous.key || preview;
+  const world = options.frame === "world";
   // Activation epochs change on re-entry; the slide's numeric index is its stable station identity.
   const index = preview ? 0 : Number(playback.slideKey.split(":")[0]);
   const spacing = options.spacing ?? 32;
@@ -81,10 +164,15 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, "cubic");
   const cursor = origin + (index - origin) * travel;
   const camera = sampleTrackCamera(stations, cursor, spacing);
-  const station = stations[index].offset;
+  const station = world ? 0 : stations[index].offset;
+  const reversed = changed ? slideChanged ? index < origin : playback.stepIndex < previous.stepIndex : previous.reversed;
+  // Travel back keeps the carry of the segment being retraced.
+  const carry = changed ? (slideChanged ? stations[Math.max(index, Math.ceil(origin))]?.track.carry : options.carry) ?? options.carry : previous.carry;
   const retired = changed ? { ...previous.retired } : previous.retired;
   const from = changed ? previous.values.slice() : previous.from;
-  if (changed) for (let slot = 0; slot < previous.ids.length; slot++) {
+  // A world-frame scene is one retained declaration, so slots and ids never change between stations.
+  const same = world && previous.ids.length === ids.length;
+  if (changed && !same) for (let slot = 0; slot < previous.ids.length; slot++) {
     const id = previous.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
     if (previous.declared.includes(id) && !declared.includes(id)) retired[id] = previous.values.slice(at, at + worldInstanceSize);
     if (previous.declared.includes(id) && declared.includes(id)) delete retired[id];
@@ -92,12 +180,16 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     if (saved) for (let field = 0; field < worldInstanceSize; field++) from[at + field] = saved[field];
   }
   const morphDuration = changed ? slideChanged ? travelDuration : duration : previous.morphDuration;
-  const progress = first || from.length === 0 ? 1 : easeProgress(playback.stepTime / morphDuration, "cubic");
-  const sources = changed ? ids.map(id => id.slice(id.indexOf(":") + 1) ? previous.ids.indexOf(id) : -1) : previous.sources;
+  const elapsed = first || from.length === 0 ? 1 : Math.min(1, playback.stepTime / morphDuration);
+  const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, "cubic");
+  const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previous.ids.indexOf(id) : -1) : previous.sources;
+  const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output: previous.output,
+    stations, ids, declared, from, sources, retired, values };
   values[0] = camera.position[0]; values[1] = camera.position[1]; values[2] = camera.position[2];
   values[3] = Math.tan(camera.fov * Math.PI / 360);
   values[4] = camera.target[0]; values[5] = camera.target[1]; values[6] = camera.target[2]; values[7] = camera.roll;
   values[32] = Math.hypot(camera.position[0] - camera.target[0], camera.position[1] - camera.target[1], camera.position[2] - camera.target[2]);
+  if (world) return sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
   values[114] -= station;
@@ -131,6 +223,5 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       values[at + 23] = from[old + 23] + (values[at + 23] - from[old + 23]) * progress;
     } else if (!first && progress < 1) values[at + 23] *= progress;
   }
-  return { key, slideKey: playback.slideKey, origin, cursor, morphDuration,
-    stations, ids, declared, from, sources, retired, values };
+  return frame;
 }

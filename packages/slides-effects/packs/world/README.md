@@ -196,6 +196,35 @@ runs only with `paced: true` in the harness; its per-sample scale history is a
 controller and callback-cadence check, rather than a steady-state cost at one resolution.
 
 
+## One scene across slides
+
+`WorldSlide` keeps a named World alive between slides. When several slides pass an identical `children` array and `track.frame: "world"`, they share one prepared scene: navigation swaps no GPU pipelines and re-sends no scene data, so a heavy scene changes slides without a stall. Parts and lights are authored in fixed world coordinates, while the camera stays local to each station.
+
+```tsx
+const scene = buildScene(); // built once
+export function Chapter({ slide }: { slide: number }) {
+  const step = usePresentationValue("stepIndex");
+  return <WorldSlide world="talk" clock="step" stepOffset={FIRST_BEAT[slide]} buildDuration={BEAT_LENGTH[FIRST_BEAT[slide] + step]}
+    track={{ frame: "world", duration: 1.7, position: [0, 3.6, 13], via: [2.5, 5.5, 22], carry: { lift: 3, spread: 3, spin: 40, stagger: 0.28 } }}>
+    {scene}
+  </WorldSlide>;
+}
+```
+
+`stepOffset` adds to the step index, so tracks in the shared scene address a running beat with `{ step, delay, value }`. Give a part one pose per beat; the track samples the flight between them.
+
+`carry` shapes that flight, for any id whose pose changes on navigation:
+
+| Option | Effect |
+| --- | --- |
+| `lift`, `spread` | World units that bow the path up and to one side; hops under 8 units bow proportionally less |
+| `spin` | Peak tumble, in degrees |
+| `stagger` | Share of the move spent waiting, varied per id |
+
+Ids that share a prefix before `/` (`node1/body`, `node1/label`) fly as one object. A part with zero scale or opacity on the next beat keeps its size and shrinks on landing, so parking it at a destination carries it there; a part hidden on the current beat appears on takeoff. Parts hidden or shown without moving swap at once. Previous mirrors each flight exactly in time.
+
+Custom WGSL can read `continuousTime()`, which keeps running through navigation, for ambient motion that must not jump when a clock restarts.
+
 ## Materials, lights and environment
 
 Start with one reusable material, a key light and the studio environment:

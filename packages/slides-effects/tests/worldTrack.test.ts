@@ -195,3 +195,42 @@ test("the generic MDX deck compiles three local slide components against the ins
   expect(result.effectPackIds).toEqual(["world"]);
   expect(result.warnings ?? []).toEqual([]);
 }, 30000);
+
+const worldTrack: WorldTrack = { spacing: 32, duration: 2, frame: "world", carry: { lift: 4, stagger: 0.25 } };
+const cut = (a: [number, number, number], b: [number, number, number]) => [{ step: 0, value: a, duration: 0 }, { step: 1, value: b, duration: 0 }];
+const carried = prepareWorldScene({ instances: [
+  primitive("box", { id: "a/body", position: cut([0, 0, 0], [0, 0, -32]), scale: cut([1, 1, 1], [0, 0, 0]) }),
+  primitive("box", { id: "a/rim", position: cut([0, 1, 0], [0, 1, -32]), scale: cut([1, 1, 1], [0, 0, 0]) }),
+  primitive("box", { id: "still", position: [5, 0, 0] }),
+] });
+function sampleCarried(previous: TrackFrame, slide: string, stepIndex: number, time: number) {
+  const playback = { ...createPlaybackState({ phase: "playing", slideKey: slide, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+  const clock = { ...sampleWorldClock(playback, 4, "step", undefined, false, null, 0.3, stepIndex) };
+  return sampleTrackFrame(previous, sampleWorldUniforms(carried, clock, null, 1, 1, true) as number[], trackIds(carried), playback, worldTrack);
+}
+const body = (frame: TrackFrame, id = "box:a/body") => Array.from(part(frame, id).slice(0, 24));
+
+test("a world-frame scene carries parts on a bowed path from a cached uniform source, and Previous retraces it", () => {
+  const start = sampleCarried(createTrackFrame(), "0", 0, 3);
+  expect(body(start)[2]).toBe(0);
+  const entered = sampleCarried(start, "1", 1, 0);
+  expect(body(entered).slice(0, 3)).toEqual([0, 0, 0]);
+  expect(entered.moving.map(slot => entered.ids[slot]).sort()).toEqual(["box:a/body", "box:a/rim"]);
+  const middle = sampleCarried(entered, "1", 1, 1);
+  expect(body(middle)[1]).toBeGreaterThan(1);
+  expect(body(middle)[2]).toBeLessThan(0);
+  // Grouped parts share one flight; a part ending hidden keeps its size until it lands.
+  expect(body(middle, "box:a/rim")[2]).toBeCloseTo(body(middle)[2]);
+  expect(body(middle)[8]).toBeCloseTo(1);
+  const landed = sampleCarried(middle, "1", 1, 2);
+  expect(body(landed).slice(0, 3)).toEqual([0, 0, -32]);
+  expect(body(landed)[8]).toBe(0);
+  expect(body(landed, "box:still")[0]).toBe(5);
+  const back = sampleCarried(landed, "0", 0, 0);
+  expect(body(back).slice(0, 3)).toEqual([0, 0, -32]);
+  expect(back.reversed).toBe(true);
+  // The flight mirrors in time: same bow at the mirrored moment, in the opposite direction.
+  const forward = sampleCarried(entered, "1", 1, 0.6), reverse = sampleCarried(back, "0", 0, 1.4);
+  body(forward).slice(0, 3).forEach((value, axis) => expect(body(reverse)[axis]).toBeCloseTo(value));
+  expect(sampleCarried(reverse, "0", 0, 2).values[worldHeaderSize + 1 + worldInstanceSize * reverse.ids.indexOf("box:a/body")]).toBe(0);
+});
