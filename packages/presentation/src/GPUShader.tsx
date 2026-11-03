@@ -41,6 +41,8 @@ export type GPUPass =
       reads?: string[]; writes?: string[] }
   | { kind: "render"; id: string; code: string; vertex: string; fragment: string;
       color: string[]; depth?: string; vertexCount: number; instanceCount?: number;
+      /** Skip instances whose float in the uniform snapshot is <= threshold; retain their original instance indices. */
+      instanceCull?: { offset: number; stride: number; threshold: number };
       blend?: "none" | "additive" | "over"; reads?: string[];
       clear?: [number, number, number, number] | false;
       depthCompare?: "never" | "less" | "equal" | "less-equal" | "greater" | "not-equal" | "greater-equal" | "always" }

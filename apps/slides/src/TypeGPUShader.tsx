@@ -359,7 +359,7 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   }
   const encoder = device.createCommandEncoder();
   if (r.graph) {
-    encodeRenderGraph(r.graph.value, device, encoder, context.getCurrentTexture(), renderScale);
+    encodeRenderGraph(r.graph.value, device, encoder, context.getCurrentTexture(), renderScale, data);
     device.queue.submit([encoder.finish()]); context.present();
     return;
   }

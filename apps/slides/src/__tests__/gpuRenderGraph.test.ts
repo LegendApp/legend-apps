@@ -94,6 +94,30 @@ test("consecutive draws into the same multisampled attachments share one pass; t
   expect(second.resolveTarget).toBeDefined();
 });
 
+test("instance culling retains draw order and shader indices as visibility changes, including an empty clear", async () => {
+  const g = gpu();
+  const r = await prepareRenderGraph(g.device, { targets: definition.targets, passes: [
+    { kind: "render", id: "glyphs", code: "", vertex: "vertex", fragment: "fragment", color: ["hdr"], depth: "depth", vertexCount: 1200, instanceCount: 6,
+      instanceCull: { offset: 1, stride: 2, threshold: .001 } },
+  ] }, "bgra8unorm", {}, {});
+  const screen = { width: 64, height: 64, createView: () => "screen" };
+  const values = [99, 0, 99, .5, 99, 1, 99, 0, 99, .0005, 99, 1];
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.filter(c => c[0] === "draw")).toEqual([["draw", 1200, 2, 0, 1], ["draw", 1200, 1, 0, 5]]);
+  g.commands.length = 0;
+  values.fill(0);
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.map(c => c[0])).toEqual(["render"]);
+  expect(g.commands[0][1].colorAttachments[0].loadOp).toBe("clear");
+  g.commands.length = 0;
+  values.fill(1);
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.filter(c => c[0] === "draw")).toEqual([["draw", 1200, 6, 0, 0]]);
+  g.commands.length = 0;
+  encodeRenderGraph(r, g.device, g.encoder, screen);
+  expect(g.commands.filter(c => c[0] === "draw")).toEqual([["draw", 1200, 6]]);
+});
+
 test("graph rejects invalid references and shader diagnostics before a frame can receive pipelines", async () => {
   const g = gpu();
   await expect(prepareRenderGraph(g.device, { ...definition, passes: [{ ...definition.passes[3], reads: ["bloom@3"] }] }, "bgra8unorm", {}, {})).rejects.toThrow("Invalid GPU mip");

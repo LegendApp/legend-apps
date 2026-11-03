@@ -80,7 +80,7 @@ export async function benchmarkRenderGraph({ definition, uniformsAt, renderScale
           return encoder.beginComputePass({ ...descriptor, timestampWrites: { querySet: query, beginningOfPassWriteIndex: offset, endOfPassWriteIndex: offset + 1 } });
         },
       } as GPUCommandEncoder : encoder;
-      encodeRenderGraph(graph, device, timedEncoder, context!.getCurrentTexture(), renderScale);
+      encodeRenderGraph(graph, device, timedEncoder, context!.getCurrentTexture(), renderScale, values);
       if (query && timed) {
         encoder.resolveQuerySet(query, 0, passCount * 2, resolve!, 0);
         encoder.copyBufferToBuffer(resolve!, 0, readback!, 0, queryBytes);

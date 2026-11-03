@@ -164,7 +164,7 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
 }
 
 /** One encoder for every pass; the caller submits and presents the final screen. */
-export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture, renderScale = 1) {
+export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture, renderScale = 1, values?: ArrayLike<number>) {
   "worklet";
   resizeRenderGraph(r, device, screen.width, screen.height, renderScale);
   for (let index = 0; index < r.passes.length; index++) {
@@ -202,7 +202,19 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
         // Dawn reports zero-count draws through a logging callback that calls the JS runtime from this UI thread, which can crash Hermes.
         // An empty pass still clears its attachments.
         const vertices = drawPass.kind === "render" ? drawPass.vertexCount : 3, instances = drawPass.kind === "render" ? drawPass.instanceCount ?? 1 : 1;
-        if (vertices > 0 && instances > 0) command.draw(vertices, instances);
+        if (vertices > 0 && instances > 0) {
+          const cull = drawPass.kind === "render" ? drawPass.instanceCull : undefined;
+          if (cull && values) {
+            let first = 0;
+            while (first < instances) {
+              while (first < instances && values[cull.offset + first * cull.stride] <= cull.threshold) first++;
+              let end = first;
+              while (end < instances && !(values[cull.offset + end * cull.stride] <= cull.threshold)) end++;
+              if (end > first) command.draw(vertices, end - first, 0, first);
+              first = end;
+            }
+          } else command.draw(vertices, instances);
+        }
       }
       index = last;
       command.end();

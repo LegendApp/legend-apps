@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { text3dInstances } from "../packs/world/text3d";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
 import { customInstances, prepareWorldScene, primitive, rowInstances, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
 
@@ -165,4 +166,13 @@ test("explicit MSAA samples preserve high-quality scales and FXAA while changing
   expect(gather(single)).toContain("texture_depth_2d");
   expect(gather(single)).not.toContain("texture_depth_multisampled_2d");
   expect(single.passes.at(-1)).toMatchObject({ id: "screen", fragment: "fxaa" });
+});
+
+test("text draws cull by their own opacity slots in scene, reflection and shadow", () => {
+  const graph = buildWorldGraph(scene({ keyLight: {}, floor: { mirror: true },
+    instances: [primitive("sphere"), ...text3dInstances({ text: "Ab" })] }));
+  const glyphs = graph.passes.filter(pass => pass.kind === "render" && pass.id.includes("glyphs"));
+  expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "reflection-glyphs-0", "scene-glyphs-0"]);
+  for (const pass of glyphs) expect(pass).toMatchObject({ instanceCount: 2,
+    instanceCull: { offset: worldHeaderSize + worldInstanceSize + 23, stride: worldInstanceSize, threshold: .001 } });
 });

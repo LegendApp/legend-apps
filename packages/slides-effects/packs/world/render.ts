@@ -595,6 +595,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
       code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(0, false, { key: true, shadowCaster: true })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, false)
         + "\n@fragment fn shadowFragment(in:GlyphVertex) {}",
       vertex: "glyphVertex", fragment: "shadowFragment", color: [], depth: "shadow", vertexCount: draw.vertexCount, instanceCount: draw.count,
+      instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
       clear: draws++ === 0 ? [0, 0, 0, 0] : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`] });
     if (!draws) cast("empty", "box", 0, 0);
   }
@@ -614,6 +615,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-glyphs-${index}`,
       code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, reflection, { ...look, shadowBinding: shadows ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, reflection),
       vertex: "glyphVertex", fragment: "glyphFragment", color: [color], depth, vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
+      instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
       clear: draws++ === 0 && !cleared ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadows ? ["shadow"] : []] });
     if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
       color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
