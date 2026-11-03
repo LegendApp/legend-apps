@@ -127,7 +127,7 @@
   "patchedDependencies": {
     "@shopify/react-native-skia@2.11.1": "patches/@shopify+react-native-skia@2.11.1.patch",
     "react-native-macos@0.83.0": "patches/react-native-macos@0.83.0.patch",
-    "react-native-webgpu@0.8.5": "patches/react-native-webgpu@0.8.5.patch",
+    "react-native-webgpu@0.20.0": "patches/react-native-webgpu@0.20.0.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-worklets@0.8.3": "patches/react-native-worklets@0.8.3.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",

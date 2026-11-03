@@ -21,7 +21,7 @@
     "number-flow-react-native": "0.5.1",
     "react-native-enriched-markdown": "1.1.1",
     "react-native-reanimated": "4.3.4",
-    "react-native-webgpu": "^0.8.5",
+    "react-native-webgpu": "^0.20.0",
     "react-native-webview": "16.0.0",
     "react-native-worklets": "0.8.3",
     "typegpu": "^0.12.9",

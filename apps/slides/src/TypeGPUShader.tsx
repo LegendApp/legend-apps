@@ -69,7 +69,7 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   if (!supported) throw new Error("WebGPU is required to render this effect");
   if (error) throw new Error(error);
   return <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
-    <Canvas ref={canvas} style={{ width, height }} transparent />
+    <Canvas ref={canvas} style={{ width, height }} />
     {resources && <UIFrames key={resources.id} resources={resources} renderScale={renderScale} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} displayScale={displayScale} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={message => { setError(message); reportSlideError(message, errorContext.current.slideIndex, errorContext.current.isPreview); }} onReady={() => setPreparedResources(resources)} />}
     {resources && children}
   </View>;
