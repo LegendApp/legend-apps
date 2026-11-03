@@ -1,5 +1,5 @@
 diff --git a/apple/worklets/apple/AnimationFrameQueue.mm b/apple/worklets/apple/AnimationFrameQueue.mm
-index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9c35dd05a 100644
+index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..269867101163a0cab6b0c7e3be50ebf299f9b668 100644
 --- a/apple/worklets/apple/AnimationFrameQueue.mm
 +++ b/apple/worklets/apple/AnimationFrameQueue.mm
 @@ -6,7 +6,9 @@
@@ -12,7 +12,7 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
  #endif // TARGET_OS_OSX
  
  #import <React/RCTAssert.h>
-@@ -20,6 +22,124 @@
+@@ -20,6 +22,127 @@
  const auto POOR = CAFrameRateRangeMake(10, 24, 24);
  } // namespace FrameRateRange
  
@@ -33,6 +33,8 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
 +  std::mutex controlMutex_;
 +  std::atomic<bool> tickPending_;
 +  std::atomic<bool> invalidated_;
++  // Display time of the pulse that queued the pending tick, so frames keep vsync timestamps.
++  std::atomic<NSTimeInterval> pulseTimestamp_;
 +}
 +
 ++ (instancetype)displayLinkWithTarget:(id)target selector:(SEL)selector
@@ -46,7 +48,7 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
 +static CVReturn WorkletsFrameLinkCallback(
 +    CVDisplayLinkRef,
 +    const CVTimeStamp *,
-+    const CVTimeStamp *,
++    const CVTimeStamp *outputTime,
 +    CVOptionFlags,
 +    CVOptionFlags *,
 +    void *context)
@@ -55,6 +57,9 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
 +  if (link->invalidated_ || link->tickPending_.exchange(true)) {
 +    return kCVReturnSuccess;
 +  }
++  // Like CADisplayLink.timestamp: the display update before the one this tick is scheduled for.
++  link->pulseTimestamp_ = (NSTimeInterval)outputTime->hostTime / (NSTimeInterval)CVGetHostClockFrequency() -
++      (NSTimeInterval)outputTime->videoRefreshPeriod / (NSTimeInterval)outputTime->videoTimeScale;
 +  CFRunLoopRef runLoop = link->runLoop_.getCFRunLoop;
 +  CFRunLoopPerformBlock(runLoop, (__bridge CFTypeRef)link->mode_, ^{
 +    @autoreleasepool {
@@ -118,9 +123,7 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
 +
 +- (NSTimeInterval)timestamp
 +{
-+  CVTimeStamp now = {};
-+  CVDisplayLinkGetCurrentTime(link_, &now);
-+  return (NSTimeInterval)now.hostTime / (NSTimeInterval)CVGetHostClockFrequency();
++  return pulseTimestamp_;
 +}
 +
 +- (NSTimeInterval)duration
@@ -137,7 +140,7 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
  @implementation AnimationFrameQueue {
    /* DisplayLink is thread safe. */
    WorkletsDisplayLink *displayLink_;
-@@ -45,9 +165,9 @@ - (instancetype)init
+@@ -45,9 +168,9 @@ - (instancetype)init
  
      SEL frameCallback = supportsProMotion ? @selector(executeQueueForProMotion:) : @selector(executeQueue:);
      currentFrameRate_ = supportsProMotion ? FrameRateRange::BEST : FrameRateRange::STANDARD;
@@ -149,7 +152,7 @@ index b93cd2c625ef8a03415ce23c6fc584e51d3696a9..e955364572c134b57ae54bf0a2bce1c9
    }
  
  #if TARGET_OS_OSX
-@@ -87,7 +207,19 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
+@@ -87,7 +210,19 @@ - (void)executeQueue:(WorkletsDisplayLink *)displayLink
    RCTAssertMainQueue();
  
    auto frameCallbacks = [self pullCallbacks];

@@ -112,6 +112,9 @@ int main()
       CHECK(median(frameDeltas) < 1.5 * period, "busy %.0f ms keeps one frame per pulse (median %.2f ms)", busyMs, median(frameDeltas));
       auto timestampDeltas = deltas(loop.timestamps);
       CHECK(*std::min_element(timestampDeltas.begin(), timestampDeltas.end()) > 0, "busy %.0f ms timestamps increase", busyMs);
+      double jitter = 0;
+      for (double delta : timestampDeltas) jitter = std::max(jitter, fabs(delta - period * std::round(delta / period)));
+      CHECK(jitter < 0.25, "busy %.0f ms timestamps are whole display periods apart (max jitter %.2f ms)", busyMs, jitter);
       CHECK(fabs(loop.timestamps.back() - loop.calls.back()) < 3 * period, "timestamps are milliseconds near the media clock");
     }
 
