@@ -84,6 +84,13 @@ fn coc(z:f32)->f32 { let p=params(); return clamp(max(0.,abs(z-p.focus)-max(0.,p
 @fragment fn gather(@location(0) uv:vec2f)->@location(0) vec4f {
  let centerDepth=depthAt(uv); let radius=coc(centerDepth)*params().maxBlur*params().renderScale;
  let pixel=1./vec2f(textureDimensions(depth)); var color=vec3f(0.); var weight=0.;
+ // Every zero-radius tap is identical; retain the sum order to preserve rounding.
+ if(radius==0.) {
+  let w=max(.05,coc(centerDepth));
+  let sample=fogged(textureSampleLevel(source,linearSampler,uv,0.).rgb,uv,centerDepth);
+  for(var i=0u;i<${options.samples ?? samples}u;i++) { color+=sample*w; weight+=w; }
+  return vec4f(color/max(weight,.0001),1.);
+ }
  for(var i=0u;i<${options.samples ?? samples}u;i++) {
   let angle=f32(i)*2.39996323; let disk=sqrt((f32(i)+.5)/${options.samples ?? samples}.);
   let sampleUV=uv+vec2f(cos(angle),sin(angle))*disk*radius*pixel;
