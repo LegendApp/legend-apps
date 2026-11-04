@@ -44,21 +44,18 @@ for (const [app, items] of Object.entries({ code: codeMenuConfig, diff: diffMenu
   });
 }
 
-test("all workspace consumers resolve the locally selected or catalog Spark SDK", async () => {
+test("all workspace consumers resolve the root catalog Spark SDK", async () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const repo = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(repo.dependencies["@legendapp/spark"], "catalog:");
   assert.equal(repo.overrides?.["@legendapp/spark"], undefined);
-  const localFile = path.join(root, "spark.local.json");
-  const sdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync(localFile) ? JSON.parse(fs.readFileSync(localFile, "utf8")).sdk : repo.catalog["@legendapp/spark"]);
-  const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(root, sdk.slice(5))}` : sdk;
+  const sdk = repo.catalog["@legendapp/spark"];
   const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
   const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
-  assert.equal(generated.dependencies["@legendapp/spark"], selectedSdk);
-  assert.equal(generated.overrides["@legendapp/spark"], selectedSdk);
-  if (!sdk.startsWith("file:")) {
-    assert.ok(Object.values(generated.overrides).every(value => typeof value !== "string" || !value.includes("legend-spark/artifacts")));
-  }
+  assert.equal(generated.dependencies["@legendapp/spark"], sdk);
+  assert.equal(generated.overrides["@legendapp/spark"], sdk);
+  assert.match(sdk, /^\d+\.\d+\.\d+$/);
+  assert.ok(Object.values(generated.overrides).every(value => typeof value !== "string" || !value.includes("legend-spark/artifacts")));
   for (const pkg of sparkSdkPackages) assert.ok(pkg.root.startsWith(sdkRoot));
   for (const folder of ["apps", "packages"]) for (const name of fs.readdirSync(path.join(root, folder))) {
     const file = path.join(root, folder, name, "package.json");

@@ -32,10 +32,10 @@ test("a standalone checkout prepares consumers of its root install", () => {
     fs.mkdirSync(path.join(root, "shell"));
     fs.copyFileSync(path.join(source, "shell/package.json"), path.join(root, "shell/package.json"));
     const repo = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
-    repo.catalog["@legendapp/spark"] = "0.0.1";
     const repoSource = JSON.stringify(repo);
     fs.writeFileSync(path.join(root, "package.json"), repoSource);
-    const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const project = prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8" });
+    fs.writeFileSync(path.join(root, "spark.local.json"), JSON.stringify({ sdk: "file:missing-sdk.tgz" }));
+    const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const project = prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_SDK: "file:another-missing-sdk.tgz" } });
     assert.equal(result.status, 0, result.stderr);
     const { project, shared, hash } = JSON.parse(result.stdout);
     assert.equal(shared, root);
