@@ -1,5 +1,6 @@
 import React, { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
+import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { Box, Card, Custom, DOF, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
@@ -138,7 +139,7 @@ export function createTypography(metrics: Record<string, { glyphs: Record<string
   return { layout, TYPE };
 }
 
-export type AuthoredPart = { kind: string; id: string; text: string; order: number; [key: string]: unknown };
+export type AuthoredPart = { kind: string; id: string; text: string; tokens?: CodeToken[]; order: number; [key: string]: unknown };
 export type AuthoredSlide = { id: string; layout?: string; durations: number[]; camera?: WorldTrack; parts: AuthoredPart[] };
 export type ScenePlan = { elements: ReactElement[]; starts: number[]; end: number; slideBeats: number[]; tracks: (WorldTrack | undefined)[] };
 type PartProps = { id: string; children?: ReactNode; [key: string]: unknown };
@@ -302,6 +303,15 @@ export function codeSource(node: ReactNode): string {
   });
   return result;
 }
+function codeHighlight(node: ReactNode): CodeHighlight | undefined {
+  let highlighted: CodeHighlight | undefined;
+  Children.forEach(node, child => {
+    if (isValidElement<{ highlighted?: CodeHighlight; children?: ReactNode }>(child)) {
+      highlighted ??= child.props.highlighted ?? codeHighlight(child.props.children);
+    }
+  });
+  return highlighted;
+}
 export function readScenes(content: readonly ReactNode[], world?: string): AuthoredSlide[] {
   const slides: AuthoredSlide[] = [];
   for (const children of content) collect(children, child => {
@@ -315,7 +325,7 @@ export function readScenes(content: readonly ReactNode[], world?: string): Autho
       const { children, ...props } = node.props;
       const source = codeSource(children as ReactNode);
       const text = kind === "code" ? source.replace(/\n$/, "") : source;
-      parts.push({ ...place(kind, props), kind, order: parts.length, text } as AuthoredPart);
+      parts.push({ ...place(kind, props), kind, order: parts.length, text, tokens: codeHighlight(children as ReactNode)?.tokens } as AuthoredPart);
     });
     for (const part of parts) if (part.kind === "tree") part.nodes = placeTree(part.nodes as TreeNode[], part as { width?: number; levelHeight?: number });
     const ids = new Set<string>();
@@ -522,24 +532,37 @@ function form(id: string, at: V3, props: Record<string, unknown>) {
         </Fragment>; })}
     </Stage>; })}</Stage>;
 }
-type DiffLine = [" " | "-" | "+", string];
+function lineTokens(tokens: CodeToken[] | undefined, offset: number, length: number) {
+  return tokens?.filter(token => token.offset < offset + length && token.offset + token.content.length > offset).map(token => {
+    const start = Math.max(offset, token.offset), end = Math.min(offset + length, token.offset + token.content.length);
+    return { ...token, offset: start - offset, content: token.content.slice(start - token.offset, end - token.offset) };
+  });
+}
+type DiffLine = [" " | "-" | "+", string, CodeToken[] | undefined];
 /** Code that morphs by diff on each step from `step`: removed lines are struck through and collapse, the rest close up, and added lines grow in.
  * Each `diff` fence starts from the previous result. */
 function codeMorph(id: string, at: V3, props: Record<string, unknown>, children: ReactNode) {
-  const diffs = Children.toArray(children).map(codeSource).filter(text => text.trim())
-    .map(text => text.replace(/\n$/, "").split("\n").map(line => [line[0] ?? " ", line.slice(1)] as DiffLine));
+  const diffs = Children.toArray(children).filter(child => codeSource(child).trim()).map(child => {
+    const tokens = codeHighlight(child)?.tokens;
+    let offset = 0;
+    return codeSource(child).replace(/\n$/, "").split("\n").map(line => {
+      const result = [line[0] ?? " ", line.slice(1), lineTokens(tokens, offset + 1, line.length - 1)] as DiffLine;
+      offset += line.length + 1;
+      return result;
+    });
+  });
   if (diffs.some(diff => diff.some(([mark]) => !" -+".includes(mark)))) throw Error(`Code morph ${id}: diff lines start with a space, - or +.`);
   const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .55;
-  const lines: { text: string; rows: (number | undefined)[] }[] = [];
-  let state = diffs[0].filter(([mark]) => mark !== "+").map(([, text]) => lines.push({ text, rows: [] }) - 1);
+  const lines: { text: string; tokens?: CodeToken[]; rows: (number | undefined)[] }[] = [];
+  let state = diffs[0].filter(([mark]) => mark !== "+").map(([, text, tokens]) => lines.push({ text, tokens, rows: [] }) - 1);
   const states = [state];
   diffs.forEach((diff, t) => {
     const before = diff.filter(([mark]) => mark !== "+");
     if (before.length !== state.length || before.some(([, text], i) => lines[state[i]].text !== text)) throw Error(`Code morph ${id}: diff ${t} must start from the previous code.`);
     let i = 0;
     const next: number[] = [];
-    for (const [mark, text] of diff) {
-      if (mark === "+") next.push(lines.push({ text, rows: [] }) - 1);
+    for (const [mark, text, tokens] of diff) {
+      if (mark === "+") next.push(lines.push({ text, tokens, rows: [] }) - 1);
       else { const line = state[i++]; if (mark === " ") next.push(line); }
     }
     states.push(state = next);
@@ -554,16 +577,16 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       const shown = line.rows.flatMap((row, s) => row === undefined ? [] : [s]), enter = shown[0], exit = shown[shown.length - 1] + 1, y = (s: number) => -line.rows[s]! * lineHeight;
       const addedAt = enter > 0 ? first + enter - 1 : undefined, removedAt = exit < states.length ? first + exit - 1 : undefined;
       const indent = line.text.length - line.text.trimStart().length, strike = (line.text.trimEnd().length - indent) * advance + .1, x = indent * advance;
-      const glyphs = addedAt === undefined && removedAt === undefined ? undefined : (i: number): GlyphMotion => {
+      const glyphs = addedAt === undefined && removedAt === undefined ? undefined : (i: number, _char: string, _home: V3, color = INK.white): GlyphMotion => {
         const start = addedAt === undefined ? 1 : 0, grow = settle + .45 + i * .006;
         return {
           opacity: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .2)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .3)]],
           scale: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .35)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .35)]],
-          color: [{ step: 0, value: addedAt === undefined ? INK.white : INK.green }, ...addedAt === undefined ? [] : [key(addedAt, INK.white, 2.4, .8)], ...removedAt === undefined ? [] : [key(removedAt, INK.red, 0, .2)]],
+          color: [{ step: 0, value: addedAt === undefined ? color : INK.green }, ...addedAt === undefined ? [] : [key(addedAt, color, 2.4, .8)], ...removedAt === undefined ? [] : [key(removedAt, INK.red, 0, .2)]],
         };
       };
       return <Fragment key={n}>
-        <Text3D id={`${id}/${n}`} text={line.text} mono size={em} align="left" glyphs={glyphs}
+        <Text3D id={`${id}/${n}`} text={line.text} tokens={line.tokens} mono size={em} align="left" glyphs={glyphs}
           position={[{ step: 0, value: [0, y(enter), 0] }, ...shown.slice(1).map(s => key(first + s - 1, [0, y(s), 0] as V3, settle, .5))]} />
         {removedAt !== undefined && strike > .1 && <Box id={`${id}/${n}/strike`} size={.5} color={INK.red} emissive={3}
           position={[{ step: 0, value: [x, y(exit - 1), .1] }, key(removedAt, [x + strike / 2, y(exit - 1), .1], 0, .35)]}
@@ -574,7 +597,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
 }
 /** Code that highlights where state is created (`source`), passed (`pass`) and read (`reads`) on `mark`, collapses everything else on `collapse`,
  * and lifts the source and read lines into a tree of `nodes` labels on `extract`. */
-function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: string) {
+function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: string, tokens?: CodeToken[]) {
   const lines = source.replace(/\n$/, "").split("\n"), size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), em = size * TYPE, advance = em * MONO;
   const origin = Number(props.source), reads = props.reads as number[], pass = (props.pass ?? []) as number[], labels = props.nodes as string[];
   const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
@@ -588,13 +611,14 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
       position={[{ step: 0, value: [width / 2 - .3, -(full - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
-      const kept = hot.indexOf(n), color = [{ step: 0, value: INK.white }, key(mark, tone(n), 0, .4)];
-      if (kept < 0) return <Text3D key={n} id={`${id}/${n}`} text={text} mono size={em} align="left" position={[0, -n * lineHeight, 0]}
-        glyphs={() => ({ color, scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} />;
+      const kept = hot.indexOf(n), color = (initial = INK.white) => [{ step: 0, value: initial }, key(mark, tone(n), 0, .4)];
+      const syntax = lineTokens(tokens, lines.slice(0, n).reduce((sum, line) => sum + line.length + 1, 0), text.length);
+      if (kept < 0) return <Text3D key={n} id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" position={[0, -n * lineHeight, 0]}
+        glyphs={(_i, _char, _home, initial) => ({ color: color(initial), scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} />;
       const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2, y0 = -n * lineHeight, y1 = -kept * gap;
       const target = node(n === origin ? 0 : 1 + reads.indexOf(n));
       return <Fragment key={n}>
-        <Text3D id={`${id}/${n}`} text={text} mono size={em} align="left" glyphs={() => ({ color, emissive: [{ step: 0, value: .75 }, key(mark, 1.8, 0, .4)], opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
+        <Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" glyphs={(_i, _char, _home, initial) => ({ color: color(initial), emissive: [{ step: 0, value: .75 }, key(mark, 1.8, 0, .4)], opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
           position={[{ step: 0, value: [0, y0, 0] }, key(collapse, [0, y1, 0], .45, .5), key(extract, [0, y1, 1.4], 0, .45), key(extract, [target[0] - middle, target[1], 1.4], .55, .9)]} />
         <Box id={`${id}/${n}/glow`} size={.5} color={tone(n)} emissive={1.2} position={[{ step: 0, value: [middle, y0, -.08] }, key(collapse, [middle, y1, -.08], .45, .5)]}
           scale={[{ step: 0, value: [0, 0, 0] }, key(mark, [end - indent + .2, lineHeight * .9, .04], 0, .4), key(extract, [0, 0, 0], 0, .3)]} />
@@ -663,7 +687,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
     if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place));
     const { children, id, at = [0, 3.2, 0], ...props } = place(kind, child.props) as PartProps;
     const source = codeSource(children), position = at as V3;
-    if (kind === "headline" || kind === "quote") return textLine(kind, { ...props, id, position, text: source });
+    if (kind === "headline" || kind === "quote") return textLine(kind, { ...props, id, position, text: source, tokens: codeHighlight(children)?.tokens });
     if (kind === "list") return <Stage id={id} position={position}><Rows {...props} id={`${id}/rows`} items={props.items as string[]}
       count={Number(props.count ?? 9)} spacing={Number(props.spacing ?? .62)} width={Number(props.width ?? 5.4)} /></Stage>;
     if (kind === "counter") {
@@ -693,7 +717,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
       const marks = (props.marks ?? []) as CodeMark[];
       return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
         <Card id={`${id}/card`} position={[width / 2 - .3, -(height - .6) / 2, -.14]} scale={[width,height,.06]} fill={.75} />
-        <Text3D id={`${id}/code`} text={text} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left" />
+        <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left" />
         {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
           const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
           return <Box key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} size={.5} color={mark.color ?? INK.amber} emissive={1.4}
@@ -728,7 +752,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
     if (kind === "grid") return grid(id, position, props);
     if (kind === "form") return form(id, position, props);
     if (kind === "morph") return codeMorph(id, position, props, children);
-    if (kind === "trace") return codeTrace(id, position, props, source);
+    if (kind === "trace") return codeTrace(id, position, props, source, codeHighlight(children)?.tokens);
     if (kind === "cloud") return cloud(id, position, props);
     if (kind === "layers") return layers(id, position, props);
     if (kind === "editor") {

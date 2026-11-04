@@ -226,10 +226,10 @@ function MarkdownCode({ children }: { children?: ReactNode }) {
 function MarkdownPre({ children }: { children?: ReactNode }) {
   const child = Children.count(children) === 1 ? Children.toArray(children)[0] : undefined;
   if (isValidElement(child)) {
-    const props = child.props as { children?: unknown; className?: unknown };
+    const props = child.props as { children?: unknown; className?: unknown; highlighted?: import("@legend-apps/presentation").CodeHighlight };
     const source = getCodeSource(props.children);
     if (source !== undefined) {
-      return <CodeBlock language={getCodeLanguage(props.className)} source={source} />;
+      return <CodeBlock language={getCodeLanguage(props.className)} source={source} highlighted={props.highlighted} />;
     }
   }
   return <NativeView style={styles.pre}>{children}</NativeView>;

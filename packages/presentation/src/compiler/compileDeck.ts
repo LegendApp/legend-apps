@@ -14,6 +14,7 @@ import remarkGfm from "remark-gfm";
 import typegpuPlugin from "unplugin-typegpu/babel";
 import { remarkSlideAttributes } from "./remarkSlideAttributes";
 import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
+import { codeHighlightVersion, remarkCodeHighlight } from "./remarkCodeHighlight";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
@@ -85,7 +86,7 @@ function compileReactSource(source: string, filename: string, onTiming?: Timing)
     if (!transformVersion) {
       const version = createHash("sha256").update(fs.readFileSync(import.meta.filename));
       if (typeof __SLIDES_COMPILER_BUNDLE__ === "undefined") version.update(fs.readFileSync(path.resolve(import.meta.dirname, "../../../../bun.lock")));
-      transformVersion = version.digest("hex");
+      transformVersion = version.update(codeHighlightVersion).digest("hex");
     }
     key = createHash("sha256").update(JSON.stringify([transformVersion, process.versions, process.cwd(), filename,
       process.env.NODE_ENV, process.env.BABEL_ENV, Object.entries(process.env).filter(([name]) => name.startsWith("WORKLETS_")).sort()]))
@@ -202,6 +203,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
             () => () => { onTiming?.("mdxParse", performance.now() - started); },
             remarkFrontmatter,
             remarkGfm,
+            remarkCodeHighlight,
             [remarkNativeMarkdown, { deckPath: args.path, dependencies: extraDependencies }],
             remarkSlideAttributes,
             [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
