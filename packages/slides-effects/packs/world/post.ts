@@ -1,4 +1,4 @@
-import { worldClockOffset, type WorldScene } from "./scene";
+import { travelSpeedSlot, worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { d } from "typegpu";
 import { defineWorldEffect, type WorldEffectGraph } from "./effects";
@@ -179,6 +179,8 @@ fn digit(p:vec2f,value:u32)->f32 {
  let shift=(uv-.5)*uniforms[44]*${toneMapping === "aces" ? "1." : "-1."};
  var color=sceneAt(uv);
  if(uniforms[44]!=0.) { color=vec3f(sceneAt(uv+shift).r,color.g,sceneAt(uv-shift).b); }
+ let blur=uniforms[${travelSpeedSlot + 1}];
+ if(blur>.002) { let stride=(uv-.5)*blur*.012; for(var i=1;i<10;i++) { color+=sceneAt(uv-stride*f32(i)); } color*=.1; }
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(uniforms[${worldClockOffset}]*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}

@@ -1,5 +1,5 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
-import { instanceField, WorldInstance, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
 import { d } from "typegpu";
@@ -84,6 +84,8 @@ struct ShapeContext { time:f32, slideTime:f32, stepTime:f32, step:f32 }
 struct ShapeVertex { position:vec3f, normal:vec3f }
 /** Runs on through navigation, for ambient motion that must not jump when a step or slide restarts its clock. */
 fn continuousTime()->f32 { return uniforms[${worldClockOffset + 3}]; }
+/** 0 at rest, rising to 1 at the peak of a camera move between stations. */
+fn travelSpeed()->f32 { return uniforms[${travelSpeedSlot}]; }
 fn shapeContext()->ShapeContext { return ShapeContext(uniforms[${worldClockOffset}],uniforms[${worldClockOffset}],uniforms[${worldClockOffset + 1}],uniforms[${worldClockOffset + 2}]); }
 fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimIntensity:f32,activation:f32)->vec3f {
  let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));

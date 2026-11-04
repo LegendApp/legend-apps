@@ -16,13 +16,13 @@ import { cardInstances, compileTrack, customInstances, graphInstances, labelInst
   type EffectOptions, type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 // motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
-import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
+import { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions, type StoplightOptions } from "./stage";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
 export type { WorldCarry, WorldStepCamera, WorldTrack } from "./track";
 
-export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
-export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";
+export { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances } from "./stage";
+export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, StoplightLamp, StoplightOptions, TubePulse } from "./stage";
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
@@ -47,6 +47,7 @@ export function Box(_: PrimitiveOptions) { return null; }
 export function RoundedBox(_: RoundedBoxOptions) { return null; }
 export function RoutedTube(_: RoutedTubeOptions) { return null; }
 export function Pillar(_: PillarOptions) { return null; }
+export function Stoplight(_: StoplightOptions) { return null; }
 export function Tube(_: PrimitiveOptions) { return null; }
 export function Ring(_: PrimitiveOptions & { radius?: Animated<number> }) { return null; }
 export function Fog(_: NonNullable<WorldScene["fog"]>) { return null; }
@@ -194,6 +195,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
       else if (child.type === KeyLight) scene.keyLight = options;
       else if (child.type === Environment) scene.environment = options;
       else if (child.type === Tunnel) add(tunnelInstances(options), stages);
+      else if (child.type === Stoplight) add(stoplightInstances(options as StoplightOptions), stages);
       else if (child.type === PointLight || child.type === SpotLight) scene.lights!.push({ ...options, kind: child.type === PointLight ? "point" : "spot" });
       else if (child.type === Pass) scene.passes!.push(options as PostOptions);
       else if (child.type === Effect) scene.effects!.push(options as EffectOptions);

@@ -345,6 +345,34 @@ and `material`) every `spacing` along `path`, an axis-aligned polyline, or from
 `edges` along both walls; pass `false` to omit either. `tunnelInstances` returns
 the boxes for custom scenes. The `lighting.mdx` deck shows each feature.
 
+### Track touches
+
+A tunnel adds light rigs to every second frame by default: `lights={{ every, count, color, intensity, chase, streak }}`
+places `count` lamps on each post's inner face, chasing down the tunnel at `chase` (0 holds them steady) and
+stretching `streak` world units along the path at peak travel speed; `lights={false}` omits them. A floor with
+`lines` or `kerbs` paints a checkered start line at `start.z` (default 0) with `rows` staggered grid slots
+behind it; `start={false}` omits it. Dashes, kerbs and the start line smear `motionBlur` world units along z at
+peak travel speed (default 2.5; 0 keeps them sharp). `speedTrails(length, { stretch, boost, accent })`
+lengthens and brightens its streaks with speed.
+
+On a station track, ids starting with a `fixed` prefix (default `["tunnel:", "trails:"]`) keep their world
+coordinates, so the camera flies past them between stations; `fixed: []` carries every part with its station.
+`blur` (default 1, 0 off) sets a radial motion blur toward the frame's centre at peak travel speed. Custom WGSL
+reads that speed, 0 at rest to 1 at the move's peak, as `travelSpeed()`.
+
+```tsx
+import { Stoplight } from "slides:world/World";
+
+<Stoplight position={[0, 4.4, 0]} size={0.42} lights={[
+  { color: "#ff2d2d", glow: { 0: 6, 1: 0 } }, "#ffb020", { color: "#2dff7a", glow: { 0: 0, 1: 7 } },
+]} />
+```
+
+`Stoplight` is a housing of lamps in a row facing +z, left to right; the default five run red, red, amber,
+green, green. Each lamp is a color, or `{ color, glow }` where either animates and glow 0 is off. `size` is the
+lamp diameter, `glow` the default lamp glow and `housing` its color. Bloom supplies the halo.
+`apps/slides/examples/3d/world-track.mdx` shows each touch.
+
 ## Paths, recycled rows and stages
 
 ```tsx

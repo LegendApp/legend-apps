@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
-import { cardInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { cardInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
@@ -330,4 +330,26 @@ test("station-frame caching matches fresh sampling across steps, navigation and 
     expect(Array.from(input)).toEqual(original);
     fresh.values.forEach((value, i) => expect(cached.values[i]).toBeCloseTo(value, 4));
   }
+});
+
+test("travel speed peaks mid-move, and fixed track parts stay put while the camera passes them", () => {
+  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "tunnel:post", position: [0, 0, -4] }), primitive("box", { id: "panel", position: [0, 1, 0] })] });
+  const at = (previous: TrackFrame, time: number, slide: string, track: WorldTrack = options) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: slide, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, track);
+  };
+  const z = (frame: TrackFrame, id: string) => part(frame, id)[2];
+  const rest = at(createTrackFrame(), 3, "0");
+  expect(rest.values[travelSpeedSlot]).toBe(0);
+  const middle = at(at(rest, 0, "1"), 1, "1");
+  expect(middle.values[travelSpeedSlot]).toBeCloseTo(1);
+  expect(middle.values[travelSpeedSlot + 1]).toBeCloseTo(1);
+  expect(at(at(rest, 0, "1", { ...options, blur: 0 }), 1, "1", { ...options, blur: 0 }).values[travelSpeedSlot + 1]).toBe(0);
+  expect(z(middle, "box:tunnel:post")).toBe(-4);
+  expect(z(middle, "box:panel")).toBeCloseTo(-16);
+  const arrived = at(middle, 2, "1");
+  expect(arrived.values[travelSpeedSlot]).toBe(0);
+  expect(z(arrived, "box:tunnel:post")).toBe(-4);
+  expect(z(arrived, "box:panel")).toBe(-32);
+  expect(z(at(at(rest, 0, "1", { ...options, fixed: [] }), 2, "1", { ...options, fixed: [] }), "box:tunnel:post")).toBe(-36);
 });

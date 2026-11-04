@@ -2,6 +2,7 @@ import React, { Children, Fragment, isValidElement, type ReactElement, type Reac
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
 import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
+import { colorVector } from "./scene";
 import { ambientEffects, authoringError, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
 import { Box, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
@@ -430,8 +431,9 @@ fn boxVertex(vid:u32)->ShapeVertex {
  return ShapeVertex(vec3f(q.x,q.y,sgn),vec3f(0.,0.,sgn));
 }`;
 const f32 = (n: number) => n.toFixed(8);
-/** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units. */
-export function speedTrails(length = 250) {
+/** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units.
+ * At peak travel speed each streak is `stretch` times longer and `boost` times brighter. Every other streak is `accent` (default red). */
+export function speedTrails(length = 250, { stretch = 3, boost = 1.6, accent }: { stretch?: number; boost?: number; accent?: string } = {}) {
   const count = 26, trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
     l: 6 + 10 * hash(i * 7 + 3), ph: hash(i * 11 + 3), sp: .6 + .8 * hash(i * 13 + 3), gain: 2.2 * (.4 + .6 * hash(i * 17 + 3)) }));
   return <Custom id="trails" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`${boxWgsl}
@@ -440,10 +442,10 @@ const E=array<vec2f,${count}>(${trails.map(d => `vec2f(${f32(d.sp)},${f32(d.gain
 fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
  let d=D[id]; let z=20.-fract(continuousTime()*18.*E[id].x/${f32(length)}+d.w)*${f32(length)};
  let mesh=boxVertex(vid);
- return ShapeVertex(vec3f(d.x,d.y,z)+mesh.position*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5),mesh.normal);
+ return ShapeVertex(vec3f(d.x,d.y,z)+mesh.position*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5*(1.+travelSpeed()*${f32(stretch - 1)})),mesh.normal);
 }
 fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
- return Material(vec3f(0.),select(vec3f(1.),vec3f(1.,.04231141,.01161225),id%2u==0u)*E[id].y,1.,0.);
+ return Material(vec3f(0.),select(vec3f(1.),${accent ? `vec3f(${colorVector(accent).map(f32).join(",")})` : "vec3f(1.,.04231141,.01161225)"},id%2u==0u)*E[id].y*(1.+travelSpeed()*${f32(boost - 1)}),1.,0.);
 }`} />;
 }
 /** Fourteen streaks burst from each landing point `p` at slide time `t`, arc down under gravity and fade within .7 s. */

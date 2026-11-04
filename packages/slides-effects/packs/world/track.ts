@@ -1,6 +1,6 @@
 import type { PlaybackState } from "@legend-apps/presentation";
 import { easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
-import { prepareWorldScene, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
+import { prepareWorldScene, travelSpeedSlot, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
 export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
@@ -11,16 +11,21 @@ export type WorldTrack = {
   spacing?: number; duration?: number; ease?: Ease;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
   frame?: "station" | "world"; carry?: WorldCarry;
+  /** Raw part-id prefixes that keep fixed world coordinates inside a station-frame scene, so the camera travels past them (default `["tunnel:", "trails:"]`; `[]` moves everything with the station). */
+  fixed?: string[];
+  /** Radial motion blur toward the frame's centre at peak travel speed (default 1; 0 turns it off). */
+  blur?: number;
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
 };
 /** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds with `ease`. */
 export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number; ease?: Ease };
 type Station = { offset: number; track: WorldTrack };
+const defaultFixed = ["tunnel:", "trails:"];
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
-  stations: Record<number, Station>; ids: string[]; declared: string[]; declaredSlots: boolean[];
+  stations: Record<number, Station>; ids: string[]; declared: string[]; declaredSlots: boolean[]; fixedSlots: boolean[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
   cameraDelta?: number[]; entering?: boolean;
@@ -29,7 +34,7 @@ export type TrackFrame = {
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], declaredSlots: [], from: [], sources: [], retired: {}, values: [] };
+    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], from: [], sources: [], retired: {}, values: [] };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -220,11 +225,17 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const output = cached && !world ? previous.output?.length === input.length ? previous.output : new Float32Array(input.length) : previous.output;
   if (cached && !world) { output!.set(input); values = output as unknown as number[]; }
   const declaredSlots = declaredSet ? ids.map(id => declaredSet.has(id)) : previous.declaredSlots;
+  const fixed = options.fixed ?? defaultFixed;
+  const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
-    stations, ids, declared, declaredSlots, from, sources, retired, values, cameraDelta, entering };
+    stations, ids, declared, declaredSlots, fixedSlots, from, sources, retired, values, cameraDelta, entering };
   for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[7] = camera.roll;
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
+  // Travel speed as a share of the eased move's peak, for speed effects in WGSL (`travelSpeed()`).
+  const u = Math.min(1, playback.slideTime / travelDuration);
+  values[travelSpeedSlot] = first || origin === index ? 0 : u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u);
+  values[travelSpeedSlot + 1] = values[travelSpeedSlot] * (options.blur ?? 1);
   if (world) return sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
@@ -245,6 +256,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       } else values[at + 23] = 0;
       continue;
     }
+    if (fixedSlots[slot]) continue;
     values[at + 2] -= station;
     // Hidden titles must not expand to the height of their destination column.
     const label = id.startsWith("label:");
