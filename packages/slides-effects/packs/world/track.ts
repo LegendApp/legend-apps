@@ -19,7 +19,7 @@ type Station = { offset: number; track: WorldTrack };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
-  stations: Record<number, Station>; ids: string[]; declared: string[];
+  stations: Record<number, Station>; ids: string[]; declared: string[]; declaredSlots: boolean[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
   cameraDelta?: number[]; entering?: boolean;
@@ -28,7 +28,7 @@ export type TrackFrame = {
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], from: [], sources: [], retired: {}, values: [] };
+    stations: {}, ids: [], declared: [], declaredSlots: [], from: [], sources: [], retired: {}, values: [] };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -38,10 +38,12 @@ export function trackIds(scene: PreparedWorldScene): string[] {
 
 /** Keep draw descriptors so an omitted object can remain visible, then return on reverse.
  * Only parts `declared` by the previous slide are kept, so retained parts don't pile up slide after slide. */
-export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene, declared = previous): PreparedWorldScene {
+export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene, declared = previous, layoutOnly = false): PreparedWorldScene {
   const ids = new Set(trackIds(scene)), oldIds = trackIds(previous), last = new Set(trackIds(declared));
   const omitted = previous.instances.filter((part, index) => part.id && !ids.has(oldIds[index]) && last.has(oldIds[index]));
-  return omitted.length ? prepareWorldScene({ ...scene, instances: [...scene.instances, ...omitted] }) : scene;
+  if (!omitted.length) return scene;
+  const combined = { ...scene, instances: [...scene.instances, ...omitted] };
+  return layoutOnly ? combined : prepareWorldScene(combined);
 }
 
 function quadratic(a: Vec3, control: Vec3, b: Vec3, t: number): Vec3 {
@@ -161,7 +163,7 @@ function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: bool
   return frame;
 }
 
-/** UI-thread sampling. The caller supplies a fresh uniform buffer, keeping the scene cache untouched. */
+/** UI-thread sampling. Cached inputs are copied before station transforms, keeping the scene cache untouched. */
 export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: string[], playback: PlaybackState,
   options: WorldTrack, declared = ids): TrackFrame {
   "worklet";
@@ -189,26 +191,35 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const retired = changed ? { ...previous.retired } : previous.retired;
   const from = changed ? previous.values.slice() : previous.from;
   // A world-frame scene is one retained declaration, so slots and ids never change between stations.
-  const same = world && previous.ids.length === ids.length;
+  const same = world && previous.ids.length === ids.length && (previous.ids === ids || ids.every((id, slot) => id === previous.ids[slot]));
+  const declaredSet = changed || ids !== previous.ids || declared !== previous.declared ? new Set(declared) : null;
+  const previousDeclared = changed && !same ? new Set(previous.declared) : null;
   if (changed && !same) for (let slot = 0; slot < previous.ids.length; slot++) {
     const id = previous.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
-    if (previous.declared.includes(id) && !declared.includes(id)) retired[id] = previous.values.slice(at, at + worldInstanceSize);
-    if (previous.declared.includes(id) && declared.includes(id)) delete retired[id];
+    if (previousDeclared!.has(id) && !declaredSet!.has(id)) retired[id] = previous.values.slice(at, at + worldInstanceSize);
+    if (previousDeclared!.has(id) && declaredSet!.has(id)) delete retired[id];
     const saved = retired[id];
     if (saved) for (let field = 0; field < worldInstanceSize; field++) from[at + field] = saved[field];
   }
   const morphDuration = changed ? slideChanged ? travelDuration : duration : previous.morphDuration;
   const elapsed = first || from.length === 0 ? 1 : Math.min(1, playback.stepTime / morphDuration);
   const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, "cubic");
-  const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previous.ids.indexOf(id) : -1) : previous.sources;
+  const previousSlots = changed && !same ? new Map(previous.ids.map((id, slot) => [id, slot])) : null;
+  const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previousSlots!.get(id) ?? -1 : -1) : previous.sources;
   // A step camera eases from wherever the camera was when navigation began, including mid-move.
   const posed = [camera.position[0], camera.position[1], camera.position[2], Math.tan(camera.fov * Math.PI / 360), camera.target[0], camera.target[1], camera.target[2]];
   const cameraDelta = !changed ? previous.cameraDelta : !first && from.length > 7 && (options.steps || previous.cameraDelta) ? posed.map((value, i) => from[i] - value) : undefined;
   const entering = changed ? slideChanged : previous.entering;
   const moveDuration = options.steps?.[playback.stepIndex]?.duration ?? duration;
   const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), "cubic")) : 0;
-  const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output: previous.output,
-    stations, ids, declared, from, sources, retired, values, cameraDelta, entering };
+  // Sampling into a cached scene buffer requires a separate station output: transforms must never accumulate in the cache.
+  const input = values;
+  const cached = input instanceof Float32Array;
+  const output = cached && !world ? previous.output?.length === input.length ? previous.output : new Float32Array(input.length) : previous.output;
+  if (cached && !world) { output!.set(input); values = output as unknown as number[]; }
+  const declaredSlots = declaredSet ? ids.map(id => declaredSet.has(id)) : previous.declaredSlots;
+  const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
+    stations, ids, declared, declaredSlots, from, sources, retired, values, cameraDelta, entering };
   for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[7] = camera.roll;
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
@@ -219,7 +230,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[122] -= station;
   for (let slot = 0; slot < ids.length; slot++) {
     const at = worldHeaderSize + slot * worldInstanceSize, id = ids[slot];
-    if (!declared.includes(id)) {
+    if (!declaredSlots[slot]) {
       const saved = retired[id];
       if (saved) {
         for (let field = 0; field < worldInstanceSize; field++) values[at + field] = saved[field];

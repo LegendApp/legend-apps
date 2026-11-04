@@ -1,7 +1,7 @@
 import React, { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
-import { Box, Card, Custom, DOF, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
+import { Box, Card, Custom, DOF, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -338,10 +338,28 @@ function scenePlan(prepare: NonNullable<SceneProps["prepare"]>, slides: Authored
   if (cached?.key !== key) { cached = { key, plan: prepare(slides) }; plans.set(prepare, cached); }
   return cached.plan;
 }
+const slidePlans = new WeakMap<SceneProps, { declarations: SceneProps[]; slides: WorldProps[] }>();
+function plannedSlides(content: readonly ReactNode[], world: string) {
+  const declarations: SceneProps[] = [];
+  for (const children of content) collect(children, child => {
+    if (child.type === Scene && !child.props.prepare && (child.props.world ?? "scene") === world) declarations.push(child.props as SceneProps);
+  });
+  if (!declarations.length) return [];
+  let cached = slidePlans.get(declarations[0]);
+  if (!cached || declarations.length !== cached.declarations.length || declarations.some((props, i) => props !== cached!.declarations[i])) {
+    cached = { declarations, slides: prepareWorldSlides(declarations.map(({ children, layout, camera, ...props }) => ({ ...props,
+      track: { spacing: 32, ...findLayout(layout, false)?.camera, ...camera }, children: expandScene(children, layout) }))) };
+    slidePlans.set(declarations[0], cached);
+  }
+  return cached.slides;
+}
 export function Scene({ id, world = "scene", prepare, layout, durations, camera, children, ...appearance }: SceneProps) {
   const content = useDeckContent(), step = usePresentationValue("stepIndex");
-  if (!prepare) return <WorldSlide {...appearance} world={world} track={{ spacing: 32, ...findLayout(layout, false)?.camera, ...camera }}
-    buildDuration={durations?.[step]}>{expandScene(children, layout)}</WorldSlide>;
+  if (!prepare) {
+    const planned = plannedSlides(content, world).find(slide => slide.id === id);
+    return <WorldSlide {...appearance} {...planned} world={world} track={planned?.track ?? { spacing: 32, ...findLayout(layout, false)?.camera, ...camera }}
+      buildDuration={durations?.[step]}>{planned?.children ?? expandScene(children, layout)}</WorldSlide>;
+  }
   const slides = readScenes(content, world), plan = scenePlan(prepare, slides), slide = slides.findIndex(s => s.id === id), beat = plan.slideBeats[slide] + step;
   return <WorldSlide {...appearance} world={world} track={plan.tracks[slide] ?? { spacing: 32 }} clock="step"
     stepOffset={plan.slideBeats[slide]} buildDuration={(plan.starts[beat + 1] ?? plan.end) - plan.starts[beat]}>{plan.elements}</WorldSlide>;

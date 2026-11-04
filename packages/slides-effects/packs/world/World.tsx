@@ -4,6 +4,7 @@ import { PixelRatio, View } from "react-native";
 import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
+import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanIds, type WorldPlan } from "./plan";
 import { sampleWorldClock, type CatchUp, type WorldClock } from "./timing";
 import { advanceResolution, createResolutionState } from "./resolution";
 import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
@@ -98,6 +99,7 @@ class WorldGPU extends Component<{ fallback: ReactNode; children: ReactNode }, {
 }
 
 export type WorldProps = {
+  scenePlan?: { content: ReturnType<typeof worldContent>; pool?: WorldPlan };
   id?: string; width?: number; height?: number; background?: boolean; backgroundColor?: string;
   toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; emissiveScale?: Animated<number>;
   quality?: WorldScene["quality"]; msaaSamples?: WorldScene["msaaSamples"]; exposure?: Animated<number>; previewTime?: number; borderRadius?: number;
@@ -192,39 +194,49 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
   collect(children);
   return { prepared: prepareWorldScene(scene), overlay };
 }
+/** Bake declarations and one compatible GPU layout before navigation starts. */
+export function prepareWorldSlides(slides: WorldProps[]): WorldProps[] {
+  const contents = slides.map(props => worldContent(props.children, props.quality ?? "auto", props.msaaSamples, props.exposure ?? 1,
+    props.backgroundColor ?? "#05060a", props.scrim ?? false, props.postOrder, props.toneMapping, props.outputColorSpace, props.emissiveScale ?? 1));
+  const pools = prepareWorldPlans(contents.map(content => content.prepared));
+  return slides.map((props, i) => ({ ...props, scenePlan: { content: contents[i], pool: props.track?.frame === "world" ? undefined : pools.get(contents[i].prepared) } }));
+}
 function WorldSurface(props: WorldProps) {
   const { children, quality = "auto", msaaSamples, exposure = 1, backgroundColor = "#05060a", scrim = false, postOrder, toneMapping, outputColorSpace, emissiveScale = 1,
     width: configuredWidth = 1920, height: configuredHeight = 1080, background = false, borderRadius = 0, accessibilityLabel } = props;
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
-  const { prepared, overlay } = useMemo(() => worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
+  const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
+  const requestedPool = props.scenePlan?.pool;
   // Retention depends on committed scene history, including objects absent from the new declaration.
-  const [retained, setRetained] = useState({ input: prepared, scene: prepared });
-  let trackScene = retained.scene;
+  const [retained, setRetained] = useState({ input: prepared, scene: prepared, pool: requestedPool, sourcePool: requestedPool });
+  let trackScene = retained.scene, pool = props.track ? retained.pool : requestedPool;
   if (props.track && retained.input !== prepared) {
-    trackScene = retainTrackScene(prepared, retained.scene, retained.input);
-    setRetained({ input: prepared, scene: trackScene });
+    // A raw World or another plan can contain draw families absent from this pool.
+    pool = retained.sourcePool === requestedPool ? requestedPool : undefined;
+    trackScene = retainTrackScene(prepared, retained.scene, retained.input, !!pool);
+    setRetained({ input: prepared, scene: trackScene, pool, sourcePool: requestedPool });
   }
   const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
   const supersampled = PixelRatio.get() * useContext(PresentationCanvasScaleContext) >= 1.5;
-  const topology = JSON.stringify({ ...worldGraphTopology(renderScene), supersampled });
+  const topology = JSON.stringify({ ...(pool?.topology ?? worldGraphTopology(renderScene)), supersampled });
   const [continuity] = useState(() => props.id ? retainedPose(props.id) : undefined);
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const resolution = useSharedValue(createResolutionState());
   const trackFrame = useSharedValue(createTrackFrame());
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
-    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={renderScene} declared={declared} topology={topology}
-      continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} />
+    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={pool ? prepared : renderScene} retained={renderScene} declared={declared} topology={topology}
+      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
-  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; declared: string[]; topology: string; continuity?: SharedValue<CameraPose | null>;
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame }:
+  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[]; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
@@ -237,7 +249,10 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
   // One UI copy of the baked scene shared by both worklets; capturing it in each closure copied it twice.
   const scene = useMemo(() => makeMutable(prepared), [prepared]);
-  const ids = useMemo(() => trackIds(prepared), [prepared]);
+  const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
+  const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
+  const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [prepared, pool]);
+  const planSampler = sampleWorldPlan;
   const playback = usePlayback();
   if (buildDuration !== undefined && (!Number.isFinite(buildDuration) || buildDuration < 0)) throw new Error("World buildDuration must be nonnegative");
   if (!Number.isFinite(advanceDuration) || advanceDuration < 0) throw new Error("World advanceDuration must be nonnegative");
@@ -299,11 +314,12 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (!track || !input || input.state.phase !== "playing") return;
     const { state, scene, scale } = input;
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
-    const values = sampleUniforms(scene, clock, null, 1, 1, track.frame === "world") as number[];
+    const sampled = sampleUniforms(scene, clock, null, 1, 1, true);
+    const values = (pool ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
     values[35] = scale;
     const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
     trackFrame.value = next;
-  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset]);
+  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, pool, planSampler, copies, pooledOutput]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
@@ -318,16 +334,19 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     "worklet";
     const state = playback.value;
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
+    let values: number[] | Float32Array<ArrayBuffer>;
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
-        return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock, null, 1, 1, track.frame === "world") as number[], ids, state, track, declared).values;
-      }
-      return trackFrame.value.values;
+        const sampled = sampleUniforms(scene.value, clock, null, 1, 1, true);
+        values = trackSampler(createTrackFrame(), (pool ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[], ids, state, track, declared).values;
+      } else values = trackFrame.value.values;
+    } else {
+      const previous = state.phase === "preview" || state.phase === "preparing" ? null
+        : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
+      values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
     }
-    const previous = state.phase === "preview" || state.phase === "preparing" ? null
-      : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
-    return sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
-  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, track, trackFrame, ids, declared]);
+    return pool && !track ? planSampler(values, copies, pooledOutput.value) : values;
+  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, track, trackFrame, ids, declared, copies, pooledOutput, pool]);
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />

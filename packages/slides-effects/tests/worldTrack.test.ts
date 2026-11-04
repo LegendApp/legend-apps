@@ -300,3 +300,20 @@ test("retained parts do not pile up across slides: only the previous slide's omi
   expect(second.instances.map(part => part.id)).toEqual(["b", "a"]);
   expect(retainTrackScene(c, second, b).instances.map(part => part.id)).toEqual(["c", "b"]);
 });
+
+test("station-frame caching matches fresh sampling across steps, navigation and reverse without transforming the input", () => {
+  const a = scene(), b = retainTrackScene(scene(true, true), a);
+  let cached = createTrackFrame(), fresh = createTrackFrame();
+  for (const [prepared, slideKey, stepKey, time] of [
+    [a, "0", "0", 0], [a, "0", "0", 2], [b, "1", "0", 0], [b, "1", "0", 1], [b, "1", "0", 3],
+    [b, "1", "1", 0], [b, "1", "1", 3], [a, "0:again", "0", 0], [a, "0:again", "0", 1], [a, "0:again", "0", 3],
+  ] as const) {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey, stepIndex: Number(stepKey) }), slideTime: time, stepTime: time };
+    const input = sampleWorldUniforms(prepared, playback, null, 1, 1, true), original = Array.from(input);
+    const ids = trackIds(prepared);
+    cached = sampleTrackFrame(cached, input as number[], ids, playback, options, ids);
+    fresh = sampleTrackFrame(fresh, sampleWorldUniforms(prepared, playback) as number[], ids, playback, options);
+    expect(Array.from(input)).toEqual(original);
+    fresh.values.forEach((value, i) => expect(cached.values[i]).toBeCloseTo(value, 4));
+  }
+});
