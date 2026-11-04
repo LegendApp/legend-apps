@@ -148,7 +148,7 @@ Keyframe tables and graph activation are sampled in a UI worklet into one storag
 uniform array. This keeps frame work off JavaScript, but uniform evaluation and
 upload still scale with the instance count; the graph API targets 20–60 nodes.
 
-The pipeline is an instanced HDR scene with depth, optional planar reflections,
+The pipeline is an instanced HDR scene with depth,
 height fog and volumetric lights, depth of field, a half-resolution bloom mip
 chain with a soft threshold knee and round 13-tap/tent filters, chromatic aberration, ACES exposure/tonemapping, sRGB encoding, vignette
 and grain, then FXAA. The drawable is backed at device pixels. `high`, `medium` and `auto` render
@@ -242,7 +242,7 @@ import { World, Material, Box, KeyLight, Environment } from "slides:world/World"
 
 `albedo` is the lit surface color; `emissive` adds self-lit color and can feed bloom.
 Use roughness for highlight width and metal for the metallic response. Environment
-is an analytic studio reflection, not an HDR image loader. Add a floor, local
+is analytic studio lighting, not an HDR image loader. Add a floor, local
 lights or post effects only when the scene benefits from them.
 
 ### Focus, floor and lighting
@@ -257,7 +257,7 @@ import { DOF, Floor, Material, PointLight, SpotLight, RimLight, Shafts, Chromati
   <PointLight position={[-4, 5, 4]} color="#f59e0b" intensity={6} range={20} />
   <SpotLight position={[3, 7, 0]} target={[0, 0, 0]} color="#22d3ee" angle={0.4} intensity={12} range={24} />
   <RimLight color="#22d3ee" intensity={1.5} />
-  <Floor mirror y={-1.5} roughness={0.06} reflectivity={0.8} size={40} />
+  <Floor y={-1.5} roughness={0.06} size={40} />
   <DOF focus={{ 0: 16, 1: "subject" }} aperture={0.6} maxBlur={12} />
   <Fog density={0.03} /><Shafts intensity={0.6} density={0.03} anisotropy={0.3} />
   <Bloom intensity={1.2} /><Chromatic amount={0.002} />
@@ -291,18 +291,13 @@ and radial falloff; bloom supplies the surrounding halo. Emission contributes
 HDR radiance but does not automatically create a local light. Place a point light
 near an emissive subject when it should illuminate nearby surfaces.
 
-The mirror redraws the scene about the floor plane into a half-resolution,
-single-sampled reflection target without key-light shadows and clips geometry
-below it. Roughness broadens and fades the reflection with distance; reflectivity controls its strength, with fresnel and
-metal controlling its viewing-angle response. Reflection taps stay inside the
-viewport and fade near the finite floor boundary. The regular fog stage also
-fades the floor into the scene.
+The floor is a lit, non-reflective plane; the regular fog stage fades it into the scene.
 
 DOF uses a half-resolution gather and depth-aware composite. Shafts integrate
 point/spot scattering along the visible camera ray at half resolution.
 Interleaved-gradient jitter avoids synchronized integration bands, and fog applies them
 through a 3x3 tent filter so the jitter never shows as grain.
-Static `scale` overrides are available on DOF, Floor (reflection resolution) and
+Static `scale` overrides are available on DOF and
 Shafts; DOF and Shafts also accept `samples`. These change pipeline topology.
 Animated focus, aperture, blur radius, lighting and effect strengths update uniforms.
 
@@ -313,7 +308,7 @@ import { KeyLight, Environment, Floor, Tunnel } from "slides:world/World";
 
 <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
 <Environment intensity={0.9} />
-<Floor mirror y={0} color="#0a0a0c" reflectivity={0.85} size={200} veil={0.6} grid={{ spacing: 2 }}
+<Floor y={0} color="#0a0a0c" size={200} grid={{ spacing: 2 }}
   lines={[{ x: 9, width: 0.12 }, { x: 3, dash: 1.5, gap: 1.5, intensity: 0.2 }]}
   kerbs={[{ x: 9.4, width: 0.8, stripe: 1.6, colors: ["#808080", "#ff3b30"] }]} />
 <Tunnel from={[0, 0, 18]} to={[0, 0, -110]} spacing={8} width={24} height={11} />
@@ -326,8 +321,7 @@ same shapes and the floor receive. The square shadow box is `shadowSize` half-wi
 around `target`, widened to the canvas aspect. `softness` is the penumbra in
 shadow-map texels, filtered with a tent-weighted 5x5 PCF (skipped when the kernel's
 corners and center agree) and a slope-scaled bias;
-`shadowStrength` is the fraction of key light removed in shadow. On the floor the
-shadow also darkens the mirror, like a shadow-catching layer. `shadowScale`
+`shadowStrength` is the fraction of key light removed in shadow. `shadowScale`
 (default 0.5) sets the static map resolution relative to the scene target. Cards,
 labels and SDFs do not cast. `shadow="contact"` replaces the map with a short
 screen-space march toward the light that darkens the lit image where the depth
@@ -342,11 +336,8 @@ up highlights without extra lights. Its intensity animates.
 Floor markings are static and run along z: `lines` at `x` (mirrored to `-x` unless
 `symmetric={false}`), solid or dashed (`dash`, `gap`); `kerbs` alternate two
 colors in `stripe`-long blocks from `x` to `x + width`; `grid` draws faint
-antialiased cell lines. `veil` is the floor's opacity over its mirror reflection;
-markings stay opaque. `intensity` scales each marking color. `lit={false}` keeps
-scene lights off the floor, as an unlit reflector would; key shadows still apply.
-`reflectionBlend="overlay"` overlays the reflection on the floor color per channel,
-as three.js `Reflector` does, so only bright reflections survive.
+antialiased cell lines. `intensity` scales each marking color. `lit={false}` keeps
+scene lights off the floor; key shadows still apply.
 
 `Tunnel` places a portal frame (two posts and a beam in dark metal, or `color`
 and `material`) every `spacing` along `path`, an axis-aligned polyline, or from
@@ -468,7 +459,7 @@ Extruded, beveled type. Each visible glyph is its own instance (`<id>:<index>`),
 and glows on its own, yet every glyph of one font draws in a single instanced pass. `size` is the em in world
 units; `depth`, `bevel` (thickness) and `bevelWidth` are in em, and `bevelSegments` rounds the bevel. The face
 uses `color` and self-glow `emissive`, so type stays readable under the bloom threshold; the sides and bevel
-use `side`, `metal` and `roughness` (or a `material`) with a soft studio reflection. `align`, `lineHeight`,
+use `side`, `metal` and `roughness` (or a `material`) with soft studio lighting. `align`, `lineHeight`,
 `tracking` and `uppercase` shape the layout; `\n` breaks lines and unsupported characters become `?`.
 
 `enter` flies glyphs in from `offset`, `rotation` (Euler degrees) and `scale` on `step` or slide time `at`, one
@@ -641,7 +632,7 @@ fn sdf(p:vec3f)->f32 {
 WGSL compilation/validation errors use the normal slide diagnostic path. The
 `world-tour.mdx` deck executes all three hook examples; `data-flow.mdx` shows
 pulse following, changed rows, stage flights and voxel reduction.
-`cinematic-title.mdx` combines a mirror floor, lit monoliths, volumetric fog,
+`cinematic-title.mdx` combines a glossy floor, lit monoliths, volumetric fog,
 drifting particles and continuous camera moves behind normal text overlays.
 
 ## Parts, assembly and landing events
@@ -746,7 +737,7 @@ smoothing width) without subtracting the threshold from the HDR highlights. Its
 radius blends the five mip weights from `[1, .8, .6, .4, .2]` toward their
 mirrors about .6, matching UnrealBloomPass without adding render passes.
 
-`Floor.emissive` (animated, default 0) adds self-lit floor color before reflections,
+`Floor.emissive` (animated, default 0) adds self-lit floor color before
 shadows, fog and bloom, for painted or luminous surfaces. It also follows
 `World.emissiveScale`.
 
@@ -764,7 +755,7 @@ retaining emission. These controls leave the default materials unchanged.
   shorter tracks reduce UI-thread sampling and uniform uploads as well as GPU work.
 - Bake complex choreography once; sample it with tracks or WGSL. Do not animate
   with JS timers, React updates or a per-frame JS uniform loop.
-- Start with DOF disabled. Add it, mirror floors, shadow maps and custom passes
+- Start with DOF disabled. Add it, shadow maps and custom passes
   individually; each can add offscreen work. Reduce DOF scale/samples, bloom scale
   or SDF march steps before compromising legible text.
 - Use a fixed quality and render scale for comparisons; `auto` can change resolution

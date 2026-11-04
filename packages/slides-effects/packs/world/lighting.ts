@@ -23,12 +23,8 @@ export type FloorLine = { x: number; width?: number; color?: string; intensity?:
 /** Alternating kerb stripes between `x` and `x + width`, `stripe` long. */
 export type FloorKerb = { x: number; width?: number; stripe?: number; colors?: [string, string]; intensity?: number; symmetric?: boolean };
 export type FloorMarkings = {
-  /** Opacity of the floor surface over its mirror reflection; markings stay opaque. */
-  veil?: number;
   /** `false` leaves the floor unlit: its color and markings ignore scene lights; key shadows still apply. */
   lit?: boolean;
-  /** `"overlay"` overlays the reflection on the floor color per channel, as three.js `Reflector` does: dim reflections vanish, bright ones stay. */
-  reflectionBlend?: "mix" | "overlay";
   grid?: { spacing?: number; color?: string; intensity?: number; width?: number };
   lines?: FloorLine[]; kerbs?: FloorKerb[];
 };

@@ -14,47 +14,42 @@ const scanlines = "fn customPass(uv:vec2f,color:vec4f,ctx:PassContext)->vec4f { 
 const scene = (options: Partial<WorldScene> = {}) => prepareWorldScene({ instances: [primitive("sphere")], ...options });
 
 for (const quality of ["low", "medium", "high"] as const) test(`all enabled post effects remain present at ${quality} quality`, () => {
-  const graph = buildWorldGraph(scene({ quality, floor: { mirror: true }, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));
+  const graph = buildWorldGraph(scene({ quality, floor: {}, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));
   const ids = graph.passes.map(pass => pass.id);
-  for (const id of ["reflection-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
+  for (const id of ["scene-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
   // Bloom is the last HDR stage with nothing placed after it, so the tonemap adds it instead of a separate composite pass.
   expect(ids).not.toContain("bloom-composite");
   expect(graph.passes.find(pass => pass.id === "tonemap")!.reads).toEqual([expect.any(String), "bloom-up@0"]);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
-  expect(target("reflect").scale).toBe(scale * .5);
-  expect(target("reflect").samples).toBeUndefined();
-  expect(target("reflectDepth").scale).toBe(target("reflect").scale);
   expect(target("dof").scale).toBe(scale * .5);
   expect(target("shafts").scale).toBe(scale * .5);
   expect(graph.uniformsSize).toBe(worldHeaderSize + worldInstanceSize);
 });
 
 test("animated floor, light and focus changes preserve topology while static quality controls change it", () => {
-  const a = scene({ dof: { focus: 12, aperture: .5 }, floor: { mirror: true, roughness: .1 }, shafts: { intensity: .5 }, lights: [{ intensity: 1 }] });
-  const b = scene({ dof: { focus: { 0: 12, 2: 5 }, focusRange: { 0: 0, 2: 2 }, aperture: 1 }, floor: { mirror: true, roughness: .8 }, shafts: { intensity: 2 }, lights: [{ intensity: { 0: 1, 2: 4 } }] });
+  const a = scene({ dof: { focus: 12, aperture: .5 }, floor: { roughness: .1 }, shafts: { intensity: .5 }, lights: [{ intensity: 1 }] });
+  const b = scene({ dof: { focus: { 0: 12, 2: 5 }, focusRange: { 0: 0, 2: 2 }, aperture: 1 }, floor: { roughness: .8 }, shafts: { intensity: 2 }, lights: [{ intensity: { 0: 1, 2: 4 } }] });
   expect(worldGraphTopology(a)).toEqual(worldGraphTopology(b));
-  const graph = buildWorldGraph(scene({ bloom: { scale: .25 }, dof: { scale: .25, samples: 7 }, floor: { mirror: true, scale: .3 }, shafts: { scale: .125, samples: 5 } }));
+  const graph = buildWorldGraph(scene({ bloom: { scale: .25 }, dof: { scale: .25, samples: 7 }, shafts: { scale: .125, samples: 5 } }));
   expect(graph.targets.find(target => target.id === "dof")?.scale).toBe(.25);
   for (const id of ["bloom", "bloom-up"]) expect(graph.targets.find(target => target.id === id)?.scale).toBe(.25);
-  expect(graph.targets.find(target => target.id === "reflect")?.scale).toBe(.3);
   expect(graph.targets.find(target => target.id === "shafts")?.scale).toBe(.125);
 });
 
 test("opaque boxes drop back faces so a base resting on the floor cannot z-fight with it", () => {
-  const graph = buildWorldGraph(scene({ floor: { mirror: true }, instances: [primitive("box"), ...customInstances({ wgsl: quad, vertexCount: 6, count: 1 })] }));
+  const graph = buildWorldGraph(scene({ floor: {}, instances: [primitive("box"), ...customInstances({ wgsl: quad, vertexCount: 6, count: 1 })] }));
   const code = (id: string) => graph.passes.find(pass => pass.id === id)!.code;
-  for (const id of ["scene-box", "reflection-box"]) expect(code(id)).toContain("dot(normal,eye()-in.world)<0.");
+  expect(code("scene-box")).toContain("dot(normal,eye()-in.world)<0.");
   expect(code("scene-custom-0")).not.toContain("dot(normal,eye()-in.world)<0.");
 });
 
 test("opaque floor clears the scene before translucent geometry loads its color and depth", () => {
-  const graph = buildWorldGraph(scene({ floor: { mirror: true }, instances: rowInstances({ id: "rows", count: 3 }) }));
+  const graph = buildWorldGraph(scene({ floor: {}, instances: rowInstances({ id: "rows", count: 3 }) }));
   const draws = graph.passes.filter(pass => pass.kind === "render");
-  expect(draws.map(pass => pass.id)).toEqual(["reflection-box", "floor", "scene-box"]);
+  expect(draws.map(pass => pass.id)).toEqual(["floor", "scene-box"]);
   expect(draws[0].clear).not.toBe(false);
-  expect(draws[1].clear).toEqual(draws[0].clear);
-  expect(draws[2].clear).toBe(false);
+  expect(draws[1].clear).toBe(false);
   const empty = buildWorldGraph(scene({ floor: {}, instances: [] }));
   expect(empty.passes.filter(pass => pass.kind === "render").map(pass => pass.id)).toEqual(["floor"]);
   const noFloor = buildWorldGraph(scene());
@@ -134,7 +129,7 @@ test("custom ids cannot shadow built-in passes or another custom pass", () => {
 });
 
 test("auto quality drops MSAA only where the drawable already supersamples the slide", () => {
-  const scene = prepareWorldScene({ quality: "auto", instances: [primitive("box")], floor: { mirror: true } });
+  const scene = prepareWorldScene({ quality: "auto", instances: [primitive("box")], floor: {} });
   const samples = (topology: object) => buildWorldGraph({ ...worldGraphTopology(scene), ...topology }).targets.filter(target => target.samples === 4).map(target => target.id);
   expect(samples({})).toEqual(["hdr", "depth"]);
   expect(samples({ supersampled: true })).toEqual([]);
@@ -168,11 +163,11 @@ test("explicit MSAA samples preserve high-quality scales and FXAA while changing
   expect(single.passes.at(-1)).toMatchObject({ id: "screen", fragment: "fxaa" });
 });
 
-test("text draws cull by their own opacity slots in scene, reflection and shadow", () => {
-  const graph = buildWorldGraph(scene({ keyLight: {}, floor: { mirror: true },
+test("text draws cull by their own opacity slots in scene and shadow", () => {
+  const graph = buildWorldGraph(scene({ keyLight: {}, floor: {},
     instances: [primitive("sphere"), ...text3dInstances({ text: "Ab" })] }));
   const glyphs = graph.passes.filter(pass => pass.kind === "render" && pass.id.includes("glyphs"));
-  expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "reflection-glyphs-0", "scene-glyphs-0"]);
+  expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "scene-glyphs-0"]);
   for (const pass of glyphs) expect(pass).toMatchObject({ instanceCount: 2,
     instanceCull: { offset: worldHeaderSize + worldInstanceSize + 23, stride: worldInstanceSize, threshold: .001 } });
 });

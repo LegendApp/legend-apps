@@ -4,29 +4,23 @@ import { orbInstances, prepareWorldScene, primitive, sprayInstances } from "../p
 
 for (const quality of ["low", "medium", "high"] as const) {
   test(`round particles use one instanced quad with surface depth at ${quality} quality`, () => {
-    const scene = prepareWorldScene({ quality, floor: { mirror: true }, instances: [
+    const scene = prepareWorldScene({ quality, floor: {}, instances: [
       primitive("box"), ...orbInstances({ count: 1000 }), ...sprayInstances({ rate: 1000, lifetime: 2 }),
     ] });
     const graph = buildWorldGraph(scene);
-    for (const id of ["scene-sphere", "reflection-sphere"]) {
-      const draw = graph.passes.find(pass => pass.id === id)!;
-      expect(draw.kind).toBe("render");
-      if (draw.kind !== "render") throw new Error("Expected sphere render pass");
-      expect(draw.vertexCount).toBe(6);
-      const vertex = draw.code.slice(draw.code.indexOf("@vertex"), draw.code.indexOf("struct SphereResult"));
-      expect(vertex).toContain("result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.");
-      expect(draw.instanceCount).toBe(3000);
-      expect(draw.code).toContain("@builtin(frag_depth)");
-      expect(draw.code).toContain("if(field<=0.");
-      expect(draw.code).toContain("fwidth(field)");
-      expect(draw.code).toContain("normal=normalize(rotation*(local/radii))");
-      expect(draw.code).toContain("(iid+1u)");
-    }
-    const reflection = graph.targets.find(target => target.id === "reflect")!;
-    const hdr = graph.targets.find(target => target.id === "hdr")!;
-    expect(reflection.scale).toBe(hdr.scale! * .5);
-    expect(reflection.samples).toBeUndefined();
-    expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(5);
+    const draw = graph.passes.find(pass => pass.id === "scene-sphere")!;
+    expect(draw.kind).toBe("render");
+    if (draw.kind !== "render") throw new Error("Expected sphere render pass");
+    expect(draw.vertexCount).toBe(6);
+    const vertex = draw.code.slice(draw.code.indexOf("@vertex"), draw.code.indexOf("struct SphereResult"));
+    expect(vertex).toContain("result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.");
+    expect(draw.instanceCount).toBe(3000);
+    expect(draw.code).toContain("@builtin(frag_depth)");
+    expect(draw.code).toContain("if(field<=0.");
+    expect(draw.code).toContain("fwidth(field)");
+    expect(draw.code).toContain("normal=normalize(rotation*(local/radii))");
+    expect(draw.code).toContain("(iid+1u)");
+    expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(3);
   });
 }
 

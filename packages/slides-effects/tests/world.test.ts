@@ -411,7 +411,7 @@ test("stages, material references, light direction and HDR post settings share a
   const scene = prepareWorldScene({ instances: [{ ...primitive("tube", { id: "tube", position: [0, 0, 0], end: [2, 0, 0], material: "stone", emissive: 4 }), stages: [stage] }],
     stages: [{ stage, parents: [] }], materials: { stone: { albedo: "#ffffff", roughness: 0.7, metal: 0.2, rim: 0.9 } },
     camera: { shots: [flyTo("b", { step: 0, offset: [0, 0, 10] })] },
-    dof: { focus: "stage:b", focusRange: { 0: 0, 1: 2 }, aperture: 0.8 }, floor: { mirror: true, y: -3 }, shafts: { intensity: 0.7 }, chromatic: 0.003,
+    dof: { focus: "stage:b", focusRange: { 0: 0, 1: 2 }, aperture: 0.8 }, floor: { y: -3 }, shafts: { intensity: 0.7 }, chromatic: 0.003,
     lights: [{ kind: "spot", position: [0, 5, 0], target: [0, 0, 0], angle: 0.4 }], rim: { color: "#22d3ee", intensity: 2 } });
   const sample = clock(2, 1, { 0: 0, 1: 1 }), values = sampleWorldUniforms(scene, sample);
   expect(resolveAnchor(scene, "stage:b", sample)).toEqual([12, 0, 0]);

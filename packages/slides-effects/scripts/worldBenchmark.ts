@@ -13,7 +13,7 @@ export async function benchmarkWorld(options: Options) {
   ]) as Parameters<typeof tree>[1]);
   const effectSamples = options.quality === "low" ? 8 : options.quality === "medium" ? 12 : 16;
   const effects: Partial<WorldScene> = options.allEffects ? {
-    floor: { mirror: true, y: -5.5, roughness: 0.08, reflectivity: 0.8, size: 40, scale: 0.5 },
+    floor: { y: -5.5, roughness: 0.08, size: 40 },
     dof: { focus: "bench-pulse", aperture: 0.75, maxBlur: 12, scale: 0.5, samples: effectSamples },
     shafts: { intensity: 0.6, density: 0.03, anisotropy: 0.3, scale: 0.25, samples: effectSamples }, chromatic: 0.0025,
     rim: { color: "#b56bff", intensity: 1.1 },
@@ -64,7 +64,7 @@ export async function benchmarkWorld(options: Options) {
     uniformsAt: (seconds, renderScale) => sampleWorldUniforms(scene, { slideTime: seconds, stepTime: seconds, stepIndex: 1, stepOrigins: { 0: 0, 1: 0 } }, undefined, 1, renderScale) });
   return { ...result, workload: { quality: options.quality, orbs: 64, graphNodes: 40, graphEdges: 39, rings: 1,
     allEffects: !!options.allEffects, instanceCount: scene.instances.length, adaptiveActive, manualRenderScale: options.renderScale ?? 1,
-    effects: options.allEffects ? { reflection: { sceneScaleFactor: scene.floor?.scale }, dof: { sceneScaleFactor: scene.dof?.scale, samples: scene.dof?.samples },
+    effects: options.allEffects ? { dof: { sceneScaleFactor: scene.dof?.scale, samples: scene.dof?.samples },
       shafts: { sceneScaleFactor: scene.shafts?.scale, samples: scene.shafts?.samples }, chromatic: 0.0025, lights: 2,
       pulseInstances: 2, sprayParticles: 48, rows: 8, voxels: 64, customQuads: 2, sdfObjects: 1, customPost: true } : null,
     clock: "2 + frame / 60 seconds, step 1 at time zero; each repetition replays the same samples", seed: 7 } };

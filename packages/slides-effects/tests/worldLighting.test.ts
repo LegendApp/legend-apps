@@ -7,7 +7,7 @@ const scene = (extra: Partial<WorldScene>) => prepareWorldScene({ instances: [pr
 const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
 
 test("a key light shadow map draws casters first and every lit scene pass reads it", () => {
-  const graph = buildWorldGraph(scene({ keyLight: { position: [6, 16, 12] }, floor: { mirror: true } }));
+  const graph = buildWorldGraph(scene({ keyLight: { position: [6, 16, 12] }, floor: {} }));
   const shadow = graph.targets.find(target => target.id === "shadow")!;
   expect(shadow).toMatchObject({ format: "depth32float", scale: 0.5 });
   const casters = graph.passes.filter(pass => pass.id.startsWith("shadow-"));
@@ -20,9 +20,6 @@ test("a key light shadow map draws casters first and every lit scene pass reads 
     expect(pass.code).toContain("fn keyShadow");
     expect(pass.code).toContain(`@binding(${pass.reads!.indexOf("shadow") + 3}) var shadowMap`);
   }
-  const reflection = graph.passes.find(pass => pass.id === "reflection-box")!;
-  expect(reflection.reads).toBeUndefined();
-  expect(reflection.code).not.toContain("var shadowMap");
 });
 
 test("shadow off and contact fallback skip the shadow map", () => {
@@ -43,18 +40,14 @@ test("key light and environment animate through uniforms without changing topolo
   expect(buildWorldGraph(a).passes.find(pass => pass.id === "scene-box")!.code).toContain("environmentLight(normal");
 });
 
-test("floor markings and veil compile into the floor pass", () => {
-  const graph = buildWorldGraph(scene({ floor: { mirror: true, veil: 0.6, grid: { spacing: 2 }, lines: [{ x: 9, width: 0.1 }, { x: 3, dash: 1.5 }], kerbs: [{ x: 9.2 }] } }));
+test("floor markings compile into the floor pass", () => {
+  const graph = buildWorldGraph(scene({ floor: { grid: { spacing: 2 }, lines: [{ x: 9, width: 0.1 }, { x: 3, dash: 1.5 }], kerbs: [{ x: 9.2 }] } }));
   const floor = graph.passes.find(pass => pass.id === "floor")!.code;
   expect(floor).toContain("abs(abs(world.x)-9.)");
   expect(floor).toContain("fract(world.z/period)");
-  expect(floor).toContain("*0.4000*(1.-mask)");
   expect(floor).toContain("var color=illuminate(world");
-  const unlit = buildWorldGraph(scene({ floor: { mirror: true, lit: false } })).passes.find(pass => pass.id === "floor")!.code;
+  const unlit = buildWorldGraph(scene({ floor: { lit: false } })).passes.find(pass => pass.id === "floor")!.code;
   expect(unlit).toContain("var color=material.emissive;");
-  expect(unlit).not.toContain("1.-2.*(1.-reflected)");
-  const overlay = buildWorldGraph(scene({ floor: { mirror: true, reflectionBlend: "overlay" } })).passes.find(pass => pass.id === "floor")!.code;
-  expect(overlay).toContain("reflected=select(2.*reflected*material.albedo,1.-2.*(1.-reflected)*(1.-material.albedo),reflected>vec3f(.5));");
 });
 
 test("tunnels place portal frames with strips between them along axis-aligned paths", () => {

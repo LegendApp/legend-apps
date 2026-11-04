@@ -74,11 +74,11 @@ const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
 
 /** Key light, environment and the shadow-map binding (when this pass receives shadows). */
 type Look = { key?: boolean; environment?: boolean; shadowBinding?: number; shadowCaster?: boolean; shadeAll?: boolean };
-function lightingCode(lightCount: number, reflection: boolean, look: Look = {}) {
+function lightingCode(lightCount: number, look: Look = {}) {
   return `${look.key ? keyLightCode(look.shadowBinding, !look.shadeAll) : ""}${look.environment ? environmentCode : ""}
-fn eye()->vec3f { let camera=vector(0u); return ${reflection ? "vec3f(camera.x,2.*uniforms[36]-camera.y,camera.z)" : "camera"}; }
+fn eye()->vec3f { return vector(0u); }
 fn projected(world:vec3f)->vec4f { ${look.shadowCaster ? "let p=keyProject(world); return vec4f(p.xy,clamp(p.z,0.,1.),1.);"
-  : `return project(${reflection ? "vec3f(world.x,2.*uniforms[36]-world.y,world.z)" : "world"});`} }
+  : "return project(world);"} }
 struct Material { albedo:vec3f, emissive:vec3f, roughness:f32, metal:f32 }
 struct ShapeContext { time:f32, slideTime:f32, stepTime:f32, step:f32 }
 struct ShapeVertex { position:vec3f, normal:vec3f }
@@ -122,8 +122,8 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
 // device pixel, and the outer glow, glass gradient, inner glow, rim and avatar layer like a 2D canvas in display space, so edges
 // stay crisp at any resolution without MSAA. Emissive from .03 to .09 blends a resting slate card into one lit in its color.
 // Shape fields: 11 corner radius, 16 glow blur width, 17 rim strength, 18 avatar radius / half height, 19 fill opacity (cards have no thickness).
-function cardCode(offset: number, reflection: boolean, background: Vec3) {
-  return `${worldBindings}${triangleCorner}${lightingCode(0, reflection)}
+function cardCode(offset: number, background: Vec3) {
+  return `${worldBindings}${triangleCorner}${lightingCode(0)}
 struct CardVertex { @builtin(position) position:vec4f, @location(0) local:vec2f, @location(1) @interpolate(flat) instance:u32 }
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
 fn cardHalf(base:u32)->vec3f { return max(vector(base+8u)*uniforms[base+3u],vec3f(.0001)); }
@@ -153,7 +153,6 @@ fn blurredStroke(d:f32,width:f32,sigma:f32)->f32 { return width/(2.5066*sigma)*e
 fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniforms[13])*uniforms[14],-8.,8.))); }
 @fragment fn cardFragment(in:CardVertex)->CardResult {
  let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=vector(base)+rotation*vec3f(p,half.z);
- ${reflection ? "if(world.y<uniforms[36]+.001) { discard; }" : ""}
  if(dot(rotation[2],eye()-world)<0.) { discard; }
  let pixel=max(length(fwidth(p))*.7071,.00001);
  let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
@@ -196,11 +195,11 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
 }`;
 }
 const instanceLoader = loaderCode(WorldInstance, "fn instanceAt(base:u32)", key => `base+${instanceField[key as keyof typeof instanceField]}u`);
-function geometryCode(kind: PrimitiveKind, offset: number, lights: number, reflection: boolean, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
+function geometryCode(kind: PrimitiveKind, offset: number, lights: number, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
   const shape = custom ? `let shapeVertex=shape(geometryId(iid),vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
-  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection, look)}${vertexFields}
+  return `${worldBindings}${triangleCorner}${lightingCode(lights, look)}${vertexFields}
 ${look.shadowCaster ? "@fragment fn shadowFragment(in:WorldVertex) { if(in.opacity<.5) { discard; } }" : ""}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
 fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u; }
@@ -228,7 +227,6 @@ ${custom ? "fn geometryId(iid:u32)->u32 { let marker=instanceAt(slot(iid)).geome
  let upper=select(min(vec2f(1.),centerNDC+margin),vec2f(1.),center.w<=extent);
  let ndc=mix(lower,upper,corner(vid));
  var ray=cameraForward()+cameraRight()*ndc.x*frame.aspect*uniforms[3]+cameraUp()*ndc.y*uniforms[3];
- ${reflection ? "ray.y=-ray.y;" : ""}
  result.position=vec4f(ndc,0.,1.); result.world=eye()+ray;
  ` : ""}
  return result;
@@ -249,7 +247,6 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
   if(roots[root]<0.) { continue; }
   local=origin+ray*roots[root]; hit=part.position+rotation*(local*radii); clip=projected(hit);
   if(clip.w<=.05 || clip.z<0. || clip.z>clip.w) { continue; }
-  ${reflection ? "if(hit.y<uniforms[36]) { continue; }" : ""}
   found=true; break;
  }
  if(!found) { discard; }
@@ -277,7 +274,6 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  }
  if(!found) { discard; }
  let hit=origin+rotation*(local*scale);
- ${reflection ? "if(hit.y<uniforms[36]+.001) { discard; }" : ""}
  let e=.001; let normal=normalize(rotation*(vec3f(sdf(local+vec3f(e,0.,0.))-sdf(local-vec3f(e,0.,0.)),sdf(local+vec3f(0.,e,0.))-sdf(local-vec3f(0.,e,0.)),sdf(local+vec3f(0.,0.,e))-sdf(local-vec3f(0.,0.,e)))/scale));
  let material=Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y);
  let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w); let clip=projected(hit);
@@ -285,7 +281,6 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 }` : `
 @fragment fn worldFragment(in:WorldVertex)->@location(0) vec4f {
  if(in.opacity<=.001) { discard; }
- ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let normal=normalize(in.normal);
  ${kind === "box" && !custom ? "if(in.opacity>=.999 && dot(normal,eye()-in.world)<0.) { discard; }" : ""}
  let material=${custom ? "shade(geometryId(in.instance),in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
@@ -311,10 +306,10 @@ const glyphCount = glyphLast - glyphFirst + 1;
 const glyphMetricsSize = glyphMetrics.length * glyphCount * 6;
 const glyphPixelsStart = glyphMetricsSize + glyphMetrics.length * glyphCount * glyphCount;
 // Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
-// so text is lit, reflected, focused and bloomed with the rest of the scene.
-function labelCode(offset: number, lights: number, reflection: boolean, look: Look = {}) {
+// so text is lit, focused and bloomed with the rest of the scene.
+function labelCode(offset: number, lights: number, look: Look = {}) {
   const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
-  return `${worldBindings}${triangleCorner}${lightingCode(lights, reflection, look)}
+  return `${worldBindings}${triangleCorner}${lightingCode(lights, look)}
 @group(0) @binding(3) var<storage,read> glyphs:array<u32>;
 fn metric(face:u32,code:u32,field:u32)->f32 { return bitcast<f32>(glyphs[(face*${glyphCount}u+clamp(code,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*6u+field]); }
 fn kern(face:u32,a:u32,b:u32)->f32 { return bitcast<f32>(glyphs[${glyphMetricsSize}u+face*${glyphCount * glyphCount}u+(clamp(a,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u)*${glyphCount}u+clamp(b,${glyphFirst}u,${glyphLast}u)-${glyphFirst}u]); }
@@ -368,7 +363,6 @@ fn advance(face:u32,base:u32,i:u32,count:u32)->f32 {
  }
  let alpha=clamp(distance*screenRange+.5,0.,1.)*uniforms[base+23u];
  if(alpha<=.004) { discard; }
- ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  let color=vector(base+4u);
  let lit=illuminate(in.world,vec3f(0.,0.,1.),Material(color*.25,color*uniforms[base+7u],.45,0.),color,0.,0.);
  return vec4f(lit*alpha,alpha);
@@ -402,10 +396,9 @@ function glyphBuffer() {
   }
   return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
 }
-function floorCode(lights: number, mirror: boolean, look: Look = {}, markings: FloorMarkings = {}) {
+function floorCode(lights: number, look: Look = {}, markings: FloorMarkings = {}) {
   const paint = floorMarkingsCode(markings);
-  return `${worldBindings}${lightingCode(lights, false, look)}
-${mirror ? "@group(0) @binding(3) var reflection:texture_2d<f32>;" : ""}
+  return `${worldBindings}${lightingCode(lights, look)}
 struct FloorVertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @vertex fn floorVertex(@builtin(vertex_index) id:u32)->FloorVertex {
  let p=vec2f(f32((id<<1u)&2u),f32(id&2u)); return FloorVertex(vec4f(p*2.-1.,0.,1.),vec2f(p.x,1.-p.y));
@@ -420,17 +413,6 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  var color=${markings.lit === false ? "material.emissive" : "illuminate(world,normal,material,vec3f(0.),0.,0.)"};
  var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
  ${paint}
- ${mirror ? `let roughness=clamp(uniforms[37],0.,1.);
- let spread=roughness*roughness*min(distance,80.)*.0015;
- let pixel=vec2f(spread,spread*frame.aspect);
- var reflected=textureSampleLevel(reflection,linearSampler,in.uv,0.).rgb*.4;
- reflected+=(textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(1.,0.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv+pixel*vec2f(0.,1.),0.).rgb+textureSampleLevel(reflection,linearSampler,in.uv-pixel*vec2f(0.,1.),0.).rgb)*.15;
- ${markings.reflectionBlend === "overlay" ? "reflected=select(2.*reflected*material.albedo,1.-2.*(1.-reflected)*(1.-material.albedo),reflected>vec3f(.5));" : ""}
- let fresnel=.04+.96*pow(1.-clamp(dot(normal,view),0.,1.),5.);
- let edgeFade=1.-smoothstep(uniforms[39]*.85,uniforms[39],max(abs(world.x),abs(world.z)));
- let distanceFade=exp(-max(0.,uniforms[12])*distance*roughness);
- let strength=clamp(uniforms[38],0.,1.)*mix(fresnel,1.,clamp(uniforms[43],0.,1.))*(1.-roughness*.7)*distanceFade*edgeFade*${(1 - (markings.veil ?? 0)).toFixed(4)}*(1.-mask);
- color=mix(color,reflected,strength);` : ""}
  ${look.shadowBinding !== undefined ? "color*=keyShadow(world,normal);" : ""}
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
@@ -522,8 +504,8 @@ type GlyphDraw = { font: string; segments: number; offset: number; count: number
 type SDFDraw = SDFGeometry & { offset: number; count: number };
 export type WorldGraphTopology = {
   quality: WorldScene["quality"]; msaaSamples?: WorldScene["msaaSamples"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
-  floor?: boolean; mirror?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
-  bloomScale?: number; dofScale?: number; dofSamples?: number; reflectionScale?: number; shaftScale?: number; shaftSamples?: number;
+  floor?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
+  bloomScale?: number; dofScale?: number; dofSamples?: number; shaftScale?: number; shaftSamples?: number;
   key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
   effects?: { effect: string; options: Record<string, unknown>; before?: WorldEffectStage; after?: WorldEffectStage; base: number }[];
@@ -558,11 +540,11 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     } else counts[instance.kind]++;
   }
   return { quality: scene.quality, msaaSamples: scene.msaaSamples, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
-    floor: !!scene.floor, mirror: !!scene.floor?.mirror, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
-    bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, reflectionScale: scene.floor?.scale, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
+    floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
+    bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
-    floorMarkings: scene.floor && { veil: scene.floor.veil, lit: scene.floor.lit, reflectionBlend: scene.floor.reflectionBlend, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
+    floorMarkings: scene.floor && { lit: scene.floor.lit, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
     customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder,
     effects: scene.effectUses.map(({ effect, options, before, after, base }) => ({ effect, options, before, after, base })) };
 }
@@ -588,52 +570,40 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     targets.push({ id: "shadow", format: "depth32float", scale: topology.shadowScale ?? .5 });
     let offset = 0, draws = 0;
     const cast = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry) => passes.push({ kind: "render", id: `shadow-${id}`,
-      code: kind === "sphere" && !custom ? sphereShadowCode(start) : geometryCode(kind, start, 0, false, custom, undefined, { key: true, shadowCaster: true }),
+      code: kind === "sphere" && !custom ? sphereShadowCode(start) : geometryCode(kind, start, 0, custom, undefined, { key: true, shadowCaster: true }),
       vertex: kind === "sphere" && !custom ? "shadowVertex" : "worldVertex", fragment: "shadowFragment", color: [], depth: "shadow",
       vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, clear: draws++ === 0 ? [0, 0, 0, 0] : false });
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) cast(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) cast(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `shadow-glyphs-${index}`,
-      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(0, false, { key: true, shadowCaster: true })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, false)
+      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(0, { key: true, shadowCaster: true })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments)
         + "\n@fragment fn shadowFragment(in:GlyphVertex) {}",
       vertex: "glyphVertex", fragment: "shadowFragment", color: [], depth: "shadow", vertexCount: draw.vertexCount, instanceCount: draw.count,
       instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
       clear: draws++ === 0 ? [0, 0, 0, 0] : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`] });
     if (!draws) cast("empty", "box", 0, 0);
   }
-  const renderScene = (reflection: boolean, cleared = false) => {
-    const color = reflection ? "reflect" : "hdr", depth = reflection ? "reflectDepth" : "depth";
-    // The floor veils and blurs its reflection, so the mirrored scene skips shadow-map filtering.
-    const shadows = shadowMap && !reflection, sceneLook = shadows ? look : { ...look, shadowBinding: undefined };
-    let offset = 0, draws = 0;
-    const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
-      passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-${id}`, code: geometryCode(kind, start, lights, reflection, custom, sdf, sceneLook), vertex: "worldVertex", fragment: "worldFragment",
-        color: [color], depth, vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !cleared ? clear : false,
-        ...shadows ? { reads: ["shadow"] } : {} });
-    };
-    for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
-    for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
-    for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
-    for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-glyphs-${index}`,
-      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, reflection, { ...look, shadowBinding: shadows ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments, reflection),
-      vertex: "glyphVertex", fragment: "glyphFragment", color: [color], depth, vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
-      instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
-      clear: draws++ === 0 && !cleared ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadows ? ["shadow"] : []] });
-    if (cards) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-cards`, code: cardCode(cards.offset, reflection, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
-      color: [color], depth, vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !cleared ? clear : false });
-    if (!draws && !cleared) add("empty", "box", 0, 0);
-    if (labels) passes.push({ kind: "render", id: `${reflection ? "reflection" : "scene"}-labels`, code: labelCode(labels.offset, lights, reflection, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
-      color: [color], depth, vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
+  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, { ...look, environment: false, shadeAll: true }, topology.floorMarkings),
+    vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, ...shadowMap ? { reads: ["shadow"] } : {} });
+  let offset = 0, draws = 0;
+  const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
+    passes.push({ kind: "render", id: `scene-${id}`, code: geometryCode(kind, start, lights, custom, sdf, look), vertex: "worldVertex", fragment: "worldFragment",
+      color: ["hdr"], depth: "depth", vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !topology.floor ? clear : false,
+      ...shadowMap ? { reads: ["shadow"] } : {} });
   };
-  if (topology.mirror) {
-    // The floor blurs its reflection, so by default it renders single-sampled at half the scene scale.
-    const reflectionScale = scale * (topology.reflectionScale ?? .5);
-    targets.push({ id: "reflect", format: "rgba16float", scale: reflectionScale }, { id: "reflectDepth", format: "depth32float", scale: reflectionScale });
-    renderScene(true);
-  }
-  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, !!topology.mirror, { ...look, environment: false, shadowBinding: shadowMap ? topology.mirror ? 4 : 3 : undefined, shadeAll: true }, topology.floorMarkings),
-    vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, reads: [...topology.mirror ? ["reflect"] : [], ...shadowMap ? ["shadow"] : []] });
-  renderScene(false, !!topology.floor);
+  for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
+  for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
+  for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
+  for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `scene-glyphs-${index}`,
+    code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments),
+    vertex: "glyphVertex", fragment: "glyphFragment", color: ["hdr"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
+    instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
+    clear: draws++ === 0 && !topology.floor ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });
+  if (cards) passes.push({ kind: "render", id: "scene-cards", code: cardCode(cards.offset, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
+    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !topology.floor ? clear : false });
+  if (!draws && !topology.floor) add("empty", "box", 0, 0);
+  if (labels) passes.push({ kind: "render", id: "scene-labels", code: labelCode(labels.offset, lights, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
+    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
   if (topology.shafts) {
     targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .5) });
     passes.push({ kind: "fullscreen", id: "shafts", code: shaftCode(worldBindings, lights, topology.shaftSamples ?? samples), fragment: "shafts", reads: ["depth"], output: "shafts" });

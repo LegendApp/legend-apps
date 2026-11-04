@@ -165,7 +165,7 @@ describe("world cards", () => {
     expect(() => cardInstances({ title: "Ada" })).toThrow("needs an id");
   });
   test("write their shape into the slot and draw in card passes before labels", () => {
-    const scene = prepareWorldScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2, fill: 0.6 }), primitive("box")], floor: { mirror: true } });
+    const scene = prepareWorldScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2, fill: 0.6 }), primitive("box")], floor: {} });
     const index = scene.instances.findIndex(item => item.card);
     const values = sampleWorldUniforms(scene, clock(0)) as number[];
     const base = worldHeaderSize + index * worldInstanceSize;
@@ -173,7 +173,6 @@ describe("world cards", () => {
     const ids = buildWorldGraph(scene).passes.map(pass => pass.id);
     expect(ids.indexOf("scene-cards")).toBeGreaterThan(ids.indexOf("scene-box"));
     expect(ids.indexOf("scene-labels")).toBeGreaterThan(ids.indexOf("scene-cards"));
-    expect(ids).toContain("reflection-cards");
     const pass = buildWorldGraph(scene).passes.find(pass => pass.id === "scene-cards");
     expect(pass).toMatchObject({ vertexCount: 6, depthCompare: "less-equal" });
   });
