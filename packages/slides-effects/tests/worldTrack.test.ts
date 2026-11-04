@@ -375,3 +375,39 @@ test("Previous retraces the departure from a held step orbit", () => {
     forward.values.slice(0, 8).forEach((value, field) => expect(reverse.values[field]).toBeCloseTo(value, 6));
   }
 });
+
+test("fixed environment ids stay in world space while shared station parts carry forward", () => {
+  const scene = prepareWorldScene({ instances: [boxPose("environment/post", [0, 2, 0]), boxPose("content", [2, 1, 0])] });
+  const options = { fixed: ["environment/"], carry: { lift: 4 } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const entered = continuitySample(first, scene, "1", 0, options);
+  const middle = continuitySample(entered, scene, "1", 1, options);
+  expect(continuityPart(middle, "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+  expect(continuityPart(middle, "content")[2]).toBeCloseTo(-16);
+  expect(continuityPart(middle, "content")[1]).toBeGreaterThan(2);
+  const end = continuitySample(entered, scene, "1", 2, options);
+  expect(continuityPart(end, "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+  const back = continuitySample(end, scene, "0:again", 0, options);
+  expect(continuityPart(continuitySample(back, scene, "0:again", 1, options), "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+});
+
+test("station-local step flashes keep their authored timing instead of taking a carry flight", () => {
+  const scene = prepareWorldScene({ instances: [primitive("box", { id: "flash", emissive: [
+    { step: 0, value: .06 }, { step: 1, value: 1.4, duration: .06 },
+  ] })] });
+  const options = { carry: { lift: 3 } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const flashed = continuitySample(first, scene, "0", .06, options, trackIds(scene), 1);
+  expect(continuityPart(flashed, "flash")[7]).toBeCloseTo(1.4);
+});
+
+test("world-frame retirement follows declarations even when retained draw slots keep the same order", () => {
+  const both = prepareWorldScene({ instances: [boxPose("a", [0, 1, 0]), boxPose("b", [3, 1, 0])] });
+  const next = prepareWorldScene({ instances: [boxPose("a", [0, 1, 0])] });
+  const retained = retainTrackScene(next, both), options: WorldTrack = { frame: "world" };
+  expect(trackIds(retained)).toEqual(trackIds(both));
+  const first = continuitySample(createTrackFrame(), both, "0", 3, options);
+  const entered = continuitySample(first, retained, "1", 0, options, trackIds(next));
+  expect(continuityPart(entered, "b")[23]).toBe(1);
+  expect(continuityPart(continuitySample(entered, retained, "1", 2, options, trackIds(next)), "b")[23]).toBe(0);
+});

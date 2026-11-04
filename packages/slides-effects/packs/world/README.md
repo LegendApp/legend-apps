@@ -215,6 +215,8 @@ export function Chapter({ slide }: { slide: number }) {
 
 The rail holds still at each station. `bank` sets the peak lean in degrees during travel (default 0); its sign chooses the lean, and Previous retraces the same curve and banking. Held step orbits unwind near departure and return near arrival on the reverse trip.
 
+With station-local content, `track.fixed` accepts raw part-id prefixes (for example `["environment/", "dust:"]`) that stay in world coordinates. This keeps the environment still while matching content ids carry between stations.
+
 `carry` shapes that flight, for any id whose pose changes on navigation:
 
 | Option | Effect |

@@ -185,10 +185,43 @@ test("an incoming declaration rendered twice retains the outgoing slide until th
     expect(hasTube()).toBe(true);
     await act(() => renderer.update(content(1))); tick(3100);
     expect(hasTube()).toBe(true);
+    tick(5900);
     await act(() => {
       runtime$.assign({ currentSlide: 2, slideIndex: 2, startedAt: 6000, stepStartedAt: 6000 });
       renderer.update(content(2));
     }); tick(6000);
+    expect(hasTube()).toBe(false);
+  } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test.each([true, false])("rapid navigation retains long geometry (first slide rendered: %s)", async firstFrame => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0, slideCount: 6, stepCount: 1,
+    startedAt: 0, stepStartedAt: 0, isActive: true, isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide" });
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = index => <GPUShaderProvider renderer={Renderer}><PresentationObservableProvider value={runtime$}>
+    <World id="rapid-retention" track={{ duration: 2 }}>
+      {index === 0 ? <Tube id="long" position={[0, 2, 0]} end={[0, 2, -96]} /> : index === 1 ? <Sphere id="incoming" /> : <Box id={`next${index}`} />}
+    </World>
+  </PresentationObservableProvider></GPUShaderProvider>;
+  let renderer;
+  const tick = time => { flushUI(); frames.forEach(frame => frame.tick(time)); };
+  const hasTube = () => renderer.root.findByType("gpu").props.renderGraph.passes.some(pass => pass.id === "scene-tube");
+  const go = async (index, time, render = true) => {
+    await act(() => { runtime$.assign({ currentSlide: index, slideIndex: index, startedAt: time, stepStartedAt: time }); renderer.update(content(index)); });
+    if (render) tick(time);
+  };
+  try {
+    await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
+    await go(1, 3000, firstFrame);
+    if (firstFrame) tick(3100);
+    await go(2, 3100); tick(3200);
+    expect(hasTube()).toBe(true);
+    tick(8000);
+    await go(3, 8000); tick(11000);
+    expect(hasTube()).toBe(true);
+    await go(4, 11000); tick(14000);
+    await go(5, 14000); tick(17000);
     expect(hasTube()).toBe(false);
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });

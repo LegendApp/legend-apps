@@ -200,15 +200,17 @@ function WorldSurface(props: WorldProps) {
   const height = background ? size.height : configuredHeight;
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
+  const liveIds = useSharedValue<string[]>([]);
   // Retention depends on committed scene history, including objects absent from the new declaration.
   const slide = usePresentationValue("slideIndex");
-  const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared });
+  const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared, live: [] as string[] });
   let trackScene = retained.scene;
   if (props.track && (retained.slide !== slide || retained.input !== prepared)) {
     const previous = retained.slide === slide ? retained.previous : retained.scene;
     const previousInput = retained.slide === slide ? retained.previousInput : retained.input;
-    trackScene = retainTrackScene(prepared, previous, previousInput);
-    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput });
+    const live = retained.slide === slide ? retained.live : liveIds.value;
+    trackScene = retainTrackScene(prepared, previous, previousInput, live);
+    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput, live });
   }
   const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
@@ -221,14 +223,14 @@ function WorldSurface(props: WorldProps) {
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
     <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={renderScene} declared={declared} topology={topology}
-      continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} />
+      continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} liveIds={liveIds} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame, liveIds }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; declared: string[]; topology: string; continuity?: SharedValue<CameraPose | null>;
-    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
+    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; liveIds: SharedValue<string[]> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error("World track values must be positive and finite");
@@ -306,7 +308,8 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     values[35] = scale;
     const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
     trackFrame.value = next;
-  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset]);
+    if (liveIds.value !== next.visible) liveIds.value = next.visible;
+  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, liveIds]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
