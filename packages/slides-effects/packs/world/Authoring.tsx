@@ -216,8 +216,8 @@ export const sceneLayouts: Record<string, SceneLayout> = {
     line2: { kind: "headline", at: [0,1.85,0], size: 1.25, depth: .32, track: .02, delay: .9 },
     rule: { kind: "rule", at: [0,1.27,0], width: 8, delay: 1.6 },
   } },
-  /** Heading top left over a keyed list; the camera orbits 30° to the right on step 2 to watch a container recycle behind it. */
-  keys: { camera: { position: [-1,4.2,14], target: [0,3.6,0], via: [-3.5,7,21], viaTarget: [0,2.5,12], steps: { 2: { orbit: 30, duration: 1.6 } } }, slots: {
+  /** Heading top left over a keyed list. */
+  keys: { camera: { position: [-1,4.2,14], target: [0,3.6,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
     title: { ...heading, at: [-7.4,7.3,0] }, keys: { kind: "keys", at: [0,6.2,0] },
   } },
   /** Heading top left over a large tree laid out by leaves, five levels deep. */
@@ -225,9 +225,8 @@ export const sceneLayouts: Record<string, SceneLayout> = {
     title: { ...heading, at: [-8.2,8.6,0] }, subtitle: { ...caption, at: [-8.16,8.05,0] },
     tree: { kind: "tree", at: [0,5,0], width: 16, levelHeight: 1.45, nodeWidth: 2.6, labelSize: .17 },
   } },
-  /** Three captioned trees side by side and a legend row; each later step flies the camera to the next tree. */
-  "tree-tour": { camera: { position: [0,4.6,26], target: [0,4.2,0], via: [-4,8,34], viaTarget: [0,2.5,20],
-    steps: { 1: { shift: [-9.6,0,0], dolly: .55 }, 2: { dolly: .55 }, 3: { shift: [9.6,0,0], dolly: .55 } } }, slots: {
+  /** Three captioned trees side by side, 9.6 apart, over a legend row; a slide tours them with step cameras. */
+  "tree-tour": { camera: { position: [0,4.6,26], target: [0,4.2,0], via: [-4,8,34], viaTarget: [0,2.5,20] }, slots: {
     title: { ...heading, at: [-13.5,10,0], size: 1 },
     ...Object.fromEntries([-9.6, 0, 9.6].flatMap((x, i) => [[`caption${i + 1}`, { kind: "headline", at: [x,8.5,0], size: .42, depth: .12, track: .02, delay: .4 + i * .15 }],
       [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),

@@ -808,9 +808,9 @@ composition. Name a layout and the parts place themselves:
 | `title-bars` | `title`, `note`, `bars` | A heading over a row of floor bars |
 | `title` | `line`, `kicker`, `rule` | One large centered line |
 | `statement-wide` | `line1`, `line2`, `rule` | `statement` from further back, for longer lines |
-| `keys` | `title`, `keys` | A keyed list; the camera orbits right on step 2 |
+| `keys` | `title`, `keys` | A heading over a keyed list |
 | `tree-wide` | `title`, `subtitle`, `tree` | A five-level tree laid out by leaves |
-| `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees; steps 1–3 fly the camera to each |
+| `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees side by side, 9.6 apart |
 | `code-grid` | `code`, `grid` | Code on the left, a grid of cells on the right |
 | `code-center` | `code` | One centered code panel |
 | `morph` | `morph` | A tall centered morphing code panel |
@@ -895,7 +895,8 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
 A track's `steps` move the camera within a station, by step index:
 `camera={{ steps: { 2: { orbit: 30 }, 4: { dolly: .6, fov: 48 } } }}`. `orbit` turns the
 camera about its target in degrees, `dolly` scales its distance, `shift` moves both and
-`fov` sets the field of view, eased from wherever the camera is over `duration` seconds.
+`fov` sets the field of view, eased from wherever the camera is over `duration` seconds. Layouts
+hold no step moves, so each slide declares its own.
 
 For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
 function receiving every scene declaration without mounting future slides. It

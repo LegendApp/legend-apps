@@ -62,6 +62,12 @@ test("a named layout places parts by kind and order; a named slot and explicit p
   expect(() => readScenes([<Scene id="bad" layout="track-left"><Headline id="x" slot="nope">X</Headline></Scene>])).toThrow("Unknown layout slot: nope");
 });
 
+test("layouts place parts and frame the station; step camera moves come from the slide", () => {
+  for (const [name, layout] of Object.entries(sceneLayouts)) expect([name, layout.camera?.steps]).toEqual([name, undefined]);
+  const steps = { 2: { orbit: 30, duration: 1.6 } };
+  expect(readScenes([<Scene id="list" layout="keys" camera={{ steps }} />])[0].camera).toEqual({ ...sceneLayouts.keys.camera, steps });
+});
+
 test("layouts and roles: unknown names fail without prepare, stay labels with it, and decks can add layouts", () => {
   const prepare = () => ({ elements: [], starts: [0], end: 1, slideBeats: [0], tracks: [] });
   expect(() => readScenes([<Scene id="bad" layout="nope" />])).toThrow("Unknown scene layout: nope");
