@@ -783,10 +783,41 @@ lighting. When copying an example, keep its local TSX/assets and effect pack pin
 ## MDX scene authoring
 
 `slides:world/Authoring` exports `Scene`, `Headline`, `Quote`, `CodePanel`, `List`,
-`Tree`, `Counter`, and `Editor`. Each slide declares its own composition. `at` is
-local to its station. Raw World geometry and nested `Stage` groups work alongside
-these parts, so rows, columns and free placement use the same coordinate system.
-Repeat an id in the next scene to carry its geometry along the shared World track.
+`Tree`, `Counter`, `Rule`, `Bars`, and `Editor`. Each slide declares its own
+composition. Name a layout and the parts place themselves:
+
+```mdx
+<Scene id="flow" world="journey" layout="track-left" durations={[6]}>
+  <Headline id="title">One change</Headline>
+  <Headline id="caption">THE WHOLE TREE</Headline>
+  <Tree id="tree" nodes={[{ id: "App" }, { id: "List", p: 0 }, { id: "Detail", p: 0 }]} />
+  <Counter id="renders" label="RENDERS" value={3} />
+</Scene>
+```
+
+| Layout | Slots, in fill order | Use |
+| --- | --- | --- |
+| `lead-in` | none | An empty hold before the first station |
+| `statement` | `line1`, `line2`, `kicker`, `rule` | Large centered lines |
+| `title-list` | `title`, `quote` | A title over a scrolling list, then a quote |
+| `title-panels` | `title`, `quote` | A title and quote, then a pair of panels |
+| `track-left` | `title`, `subtitle`, `note`, `tree`, `stat1`, `stat2` | Heading top left, tree, stats top right |
+| `track-left-high` | as `track-left` | The same, flown into from high above |
+| `code-panels` | `left`, `topRight`, `bottomRight` | Three code panels |
+| `title-bars` | `title`, `note`, `bars` | A heading over a row of floor bars |
+
+A part takes the next free slot of its kind. `slot="kicker"` picks one by name, and
+any explicit prop, including `at`, wins over the slot. A layout's camera is merged
+under the `camera` prop. `defineSceneLayout(name, { camera, slots })` adds or
+replaces a layout for a deck. An unknown name throws, except in a `prepare` scene,
+where `layout` may stay a label the deck reads itself.
+
+`at` is local to its station. Raw World geometry and nested `Stage` groups work
+alongside these parts, so rows, columns and free placement use the same coordinate
+system. Repeat an id in the next scene to carry its geometry along the shared World
+track. Text `size`, `depth` and `track` are world units; `delay` and `duration` time
+its entrance. `expandScene(parts, layout)` gives the same World children for a plain
+`World`, and `speedTrails(length)` returns a streak effect for one.
 
 ```mdx
 import { Scene, Headline, CodePanel } from "slides:world/Authoring"
@@ -812,10 +843,12 @@ const value = 42;
 ```
 
 `camera` accepts the normal World track options. `durations` gives build lengths
-in seconds, one per step. `Tree nodes` uses stable `id`, optional `label`, and a
-parent index `p`; omit `x`, `y`, and `d` for an automatic tree, or specify them for
-an authored arrangement. `List items` supplies row data. `Counter label` and
-`value` supply its text. `Editor` takes `name`, `email`, and a `labels` array.
+in seconds, one per step. `Tree nodes` uses stable `id`, optional `label` and
+`color`, and a parent index `p`; children fan out around their parent, and `x`, `y`,
+and `d` override that. `List items` supplies row data. `Counter label` and `value`
+supply its text. `Bars items` takes `label`, `value` and `color`. `Editor` takes
+`name`, `email`, and a `labels` array. A `beat={{ start, every, count }}` ticks a
+`Counter` (by `per`) and sends a pulse down each `Tree` edge on that schedule.
 
 For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
 function receiving every scene declaration without mounting future slides. It

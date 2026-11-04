@@ -18,6 +18,10 @@ const transitionDirectory = transitionFlag >= 0 ? process.argv[transitionFlag + 
 const packsFlag = process.argv.indexOf("--effect-packs");
 const effectPacksDirectory = packsFlag >= 0 ? process.argv[packsFlag + 1] : undefined;
 const copyFlag = process.argv.indexOf("--copy-transition");
+const timings: Record<string, number> = { startup: performance.now() };
+const onTiming = process.argv.includes("--timings") ? (phase: string, milliseconds: number) => {
+  timings[phase] = (timings[phase] ?? 0) + milliseconds;
+} : undefined;
 // The app reads one JSON line per progress update from stderr.
 const onProgress = (progress: EffectInstallProgress) => process.stderr.write(`${JSON.stringify({ effectProgress: progress })}\n`);
 async function execute() {
@@ -47,11 +51,11 @@ async function execute() {
       return { success: false, errors: [describeExportError(error)], missingEffectPacks: error instanceof ExportError ? error.missingEffectPacks : [] };
     }
   }
-  let result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory });
+  let result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory, onTiming });
   if (process.argv.includes("--install-effects")) {
     if (!result.effectPackIds?.length) return result;
     await installEffectPacks(result.effectPackIds, { directory: effectPacksDirectory, deck: deckPath, onProgress });
-    result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory });
+    result = await compileDeck(deckPath, { source, transitionDirectory, effectPacksDirectory, onTiming });
   }
   return result;
 }
@@ -62,7 +66,9 @@ if (source !== undefined) {
   catch { /* Keep the last useful index while frontmatter is incomplete. */ }
 }
 
+const encodeStarted = performance.now();
 process.stdout.write(JSON.stringify({
   data: gzipSync(JSON.stringify({ ...result, sourceSlideEnds })).toString("base64"),
   encoding: "gzip-base64",
 }));
+if (onTiming) process.stderr.write(`${JSON.stringify({ timings: { ...timings, encode: performance.now() - encodeStarted, total: performance.now() } })}\n`);
