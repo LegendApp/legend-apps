@@ -1,6 +1,6 @@
 // @ts-ignore Bun supplies this API at runtime.
 import { expect, test } from "bun:test";
-import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanIds } from "../packs/world/plan";
+import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanFits, worldPlanIds } from "../packs/world/plan";
 import { primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds } from "../packs/world/track";
 import { text3dInstances } from "../packs/world/text3d";
@@ -62,4 +62,14 @@ test("SDF draw families preserve bounds and ray-march steps", () => {
   const plan = prepareWorldPlans([a,b]).get(a)!;
   expect(plan.topology.sdfs?.map(draw => draw.steps).sort()).toEqual([16,32]);
   expect(new Set(plan.topology.sdfs?.map(draw => JSON.stringify(draw.bounds))).size).toBe(2);
+});
+
+test("rapid navigation retains live departures beyond a pool capacity", () => {
+  const scenes = ["a", "b", "c"].map(id => prepareWorldScene({ instances: [primitive("box", { id, position: [0, 1, -100] })] }));
+  const plan = prepareWorldPlans(scenes).get(scenes[0])!;
+  const second = retainTrackScene(scenes[1], scenes[0], scenes[0], true);
+  const third = retainTrackScene(scenes[2], second, scenes[1], true, trackIds(scenes[0]));
+  expect(worldPlanFits(second, plan)).toBe(true);
+  expect(worldPlanFits(third, plan)).toBe(false);
+  expect(trackIds(retainTrackScene(scenes[2], second, scenes[1], false, trackIds(scenes[0]))).sort()).toEqual(["box:a", "box:b", "box:c"]);
 });

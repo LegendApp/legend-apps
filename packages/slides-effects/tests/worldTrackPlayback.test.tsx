@@ -6,7 +6,7 @@ import { act, create } from "react-test-renderer";
 import { observable } from "@legendapp/state";
 import { BackgroundHost, GPUShaderProvider, PresentationObservableProvider } from "@legend-apps/presentation";
 import { frames, flushUI } from "../../../apps/slides/src/__tests__/uiClockMock";
-import { Box, Card, WorldSlide } from "../packs/world/World";
+import { Box, Card, Sphere, Tube, World, WorldSlide } from "../packs/world/World";
 import { Scene } from "../packs/world/Authoring";
 import { worldHeaderSize } from "../packs/world/scene";
 
@@ -119,7 +119,7 @@ test("a cold slide's background registration retains the World; a slide without 
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });
 
-test("omitted geometry keeps its draw slot and fixed world pose across forward and reverse UI clocks", async () => {
+test("omitted geometry is flown past, released on the next slide, and restored on reverse", async () => {
   const runtime = index => observable({ currentSlide: index, currentStep: 0, slideIndex: index, stepIndex: 0,
     slideCount: 3, stepCount: 1, startedAt: 0, stepStartedAt: 0, isActive: true,
     isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide",
@@ -156,9 +156,72 @@ test("omitted geometry keeps its draw slot and fixed world pose across forward a
     tick(3000);
     expect(values()[worldHeaderSize + 23]).toBe(0);
     await go(2, 3000); tick(5000);
-    expect(values()[worldHeaderSize + 23]).toBe(0);
+    expect(values().slice(worldHeaderSize)).toEqual([]);
     await go(0, 5000); tick(9000);
     expect(values().slice(worldHeaderSize)).toEqual(initial);
-    expect(mounts).toBe(1);
+    expect(mounts).toBe(3);
+  } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test("an incoming declaration rendered twice retains the outgoing slide until the next slide", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0, slideCount: 3, stepCount: 1,
+    startedAt: 0, stepStartedAt: 0, isActive: true, isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide" });
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = index => <GPUShaderProvider renderer={Renderer}><PresentationObservableProvider value={runtime$}>
+    <World id="retention" track={{ duration: 2 }}>
+      {index === 0 ? <Tube id="old" position={[0, 2, 0]} end={[1, 2, 0]} /> : index === 1 ? <Sphere id="incoming" /> : <Box id="next" />}
+    </World>
+  </PresentationObservableProvider></GPUShaderProvider>;
+  let renderer;
+  const tick = time => { flushUI(); frames.forEach(frame => frame.tick(time)); };
+  const hasTube = () => renderer.root.findByType("gpu").props.renderGraph.passes.some(pass => pass.id === "scene-tube");
+  try {
+    await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
+    await act(() => {
+      runtime$.assign({ currentSlide: 1, slideIndex: 1, startedAt: 3000, stepStartedAt: 3000 });
+      renderer.update(content(1));
+    }); tick(3000);
+    expect(hasTube()).toBe(true);
+    await act(() => renderer.update(content(1))); tick(3100);
+    expect(hasTube()).toBe(true);
+    tick(5900);
+    await act(() => {
+      runtime$.assign({ currentSlide: 2, slideIndex: 2, startedAt: 6000, stepStartedAt: 6000 });
+      renderer.update(content(2));
+    }); tick(6000);
+    expect(hasTube()).toBe(false);
+  } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test.each([true, false])("rapid navigation retains long geometry (first slide rendered: %s)", async firstFrame => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0, slideCount: 6, stepCount: 1,
+    startedAt: 0, stepStartedAt: 0, isActive: true, isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide" });
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = index => <GPUShaderProvider renderer={Renderer}><PresentationObservableProvider value={runtime$}>
+    <World id="rapid-retention" track={{ duration: 2 }}>
+      {index === 0 ? <Tube id="long" position={[0, 2, 0]} end={[0, 2, -96]} /> : index === 1 ? <Sphere id="incoming" /> : <Box id={`next${index}`} />}
+    </World>
+  </PresentationObservableProvider></GPUShaderProvider>;
+  let renderer;
+  const tick = time => { flushUI(); frames.forEach(frame => frame.tick(time)); };
+  const hasTube = () => renderer.root.findByType("gpu").props.renderGraph.passes.some(pass => pass.id === "scene-tube");
+  const go = async (index, time, render = true) => {
+    await act(() => { runtime$.assign({ currentSlide: index, slideIndex: index, startedAt: time, stepStartedAt: time }); renderer.update(content(index)); });
+    if (render) tick(time);
+  };
+  try {
+    await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
+    await go(1, 3000, firstFrame);
+    if (firstFrame) tick(3100);
+    await go(2, 3100); tick(3200);
+    expect(hasTube()).toBe(true);
+    tick(8000);
+    await go(3, 8000); tick(11000);
+    expect(hasTube()).toBe(true);
+    await go(4, 11000); tick(14000);
+    await go(5, 14000); tick(17000);
+    expect(hasTube()).toBe(false);
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });

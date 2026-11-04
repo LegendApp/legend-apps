@@ -353,3 +353,130 @@ test("travel speed peaks mid-move, and fixed track parts stay put while the came
   expect(z(arrived, "box:panel")).toBe(-32);
   expect(z(at(at(rest, 0, "1", { ...options, fixed: [] }), 2, "1", { ...options, fixed: [] }), "box:tunnel:post")).toBe(-36);
 });
+
+const boxPose = (id: string, position: [number, number, number]) => primitive("box", { id, position });
+const continuityPart = (frame: TrackFrame, id: string) => frame.values.slice(worldHeaderSize + frame.ids.indexOf(`box:${id}`) * worldInstanceSize);
+const continuitySample = (previous: TrackFrame, scene: ReturnType<typeof prepareWorldScene>, slideKey: string, time: number, options: WorldTrack = {}, declared = trackIds(scene), stepIndex = 0) => {
+  const state = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: String(stepIndex), stepIndex }), slideTime: time, stepTime: time };
+  return sampleTrackFrame(previous, sampleWorldUniforms(scene, state) as number[], trackIds(scene), state, { duration: 2, ...options }, declared);
+};
+test("world-frame omitted parts retain their final pose until behind the camera", () => {
+  const scene = prepareWorldScene({ instances: [boxPose("old", [0, 1, 0])] });
+  const next = prepareWorldScene({ instances: [boxPose("next", [0, 1, -32])] });
+  const retained = retainTrackScene(next, scene);
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, { frame: "world" });
+  const start = continuitySample(first, retained, "1", 0, { frame: "world" }, trackIds(next));
+  const early = continuitySample(start, retained, "1", .4, { frame: "world" }, trackIds(next));
+  expect(continuityPart(early, "old").slice(0, 3)).toEqual(continuityPart(first, "old").slice(0, 3));
+  expect(continuityPart(early, "old")[23]).toBe(1);
+  const passed = continuitySample(start, retained, "1", 2, { frame: "world" }, trackIds(next));
+  expect(continuityPart(passed, "old")[23]).toBe(0);
+});
+test("station carry bows shared objects and Previous retraces the flight", () => {
+  const scene = prepareWorldScene({ instances: [boxPose("shared", [0, 1, 0])] });
+  const options = { carry: { lift: 4, spread: 2, stagger: .2 } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const entered = continuitySample(first, scene, "1", 0, options);
+  const middle = continuitySample(entered, scene, "1", 1, options);
+  expect(continuityPart(middle, "shared")[1]).toBeGreaterThan(2);
+  const landed = continuitySample(entered, scene, "1", 2, options);
+  const reverse = continuitySample(landed, scene, "0:again", 0, options);
+  const forward = continuitySample(entered, scene, "1", .7, options);
+  const back = continuitySample(reverse, scene, "0:again", 1.3, options);
+  continuityPart(forward, "shared").slice(0, 3).forEach((value, i) => expect(continuityPart(back, "shared")[i]).toBeCloseTo(value,6));
+});
+test("banking holds level at stations and retraces the same roll on Previous", () => {
+  const scene = prepareWorldScene({ instances: [] }), options = { bank: 4 };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const entered = continuitySample(first, scene, "1", 0, options);
+  const forward = continuitySample(entered, scene, "1", .7, options);
+  expect(Math.abs(forward.values[7])).toBeGreaterThan(.01);
+  const end = continuitySample(entered, scene, "1", 2, options);
+  expect(end.values[7]).toBeCloseTo(0);
+  const reverse = continuitySample(end, scene, "0:again", 0, options);
+  expect(continuitySample(reverse, scene, "0:again", 1.3, options).values[7]).toBeCloseTo(forward.values[7]);
+  expect(continuitySample(entered, scene, "1", 20, options).values.slice(0, 8)).toEqual(continuitySample(entered, scene, "1", 30, options).values.slice(0, 8));
+});
+
+test("leaving an orbit unwinds sideways early without ever backing up", () => {
+  const scene = prepareWorldScene({ instances: [] });
+  const options = { steps: { 1: { orbit: 30 } } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 0, options);
+  const orbit = continuitySample(first, scene, "0", 2, options, [], 1);
+  const entered = continuitySample(orbit, scene, "1", 0, options);
+  let z = entered.values[2];
+  for (let i = 1; i <= 100; i++) {
+    const frame = continuitySample(entered, scene, "1", i / 50, options);
+    expect(frame.values[2]).toBeLessThanOrEqual(z + 1e-6);
+    z = frame.values[2];
+  }
+  const plain = continuitySample(continuitySample(first, scene, "1", 0, {}), scene, "1", .7, {});
+  const unwind = continuitySample(entered, scene, "1", .7, options);
+  expect(unwind.values[0]).toBeCloseTo(plain.values[0], 6);
+});
+
+test("Previous retraces the departure from a held step orbit", () => {
+  const scene = prepareWorldScene({ instances: [] }), options = { steps: { 1: { orbit: 30 } } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 0, options);
+  const held = continuitySample(first, scene, "0", 2, options, [], 1);
+  const entered = continuitySample(held, scene, "1", 0, options);
+  const landed = continuitySample(entered, scene, "1", 2, options);
+  const back = continuitySample(landed, scene, "0:again", 0, options, [], 1);
+  for (let i = 0; i <= 40; i++) {
+    const forward = continuitySample(entered, scene, "1", i / 20, options);
+    const reverse = continuitySample(back, scene, "0:again", 2 - i / 20, options, [], 1);
+    forward.values.slice(0, 8).forEach((value, field) => expect(reverse.values[field]).toBeCloseTo(value, 6));
+  }
+});
+
+test.each([false, true])("Previous retraces an unfinished step orbit (returning: %s)", (returning: boolean) => {
+  const scene = prepareWorldScene({ instances: [] }), options = { steps: { 1: { orbit: 30 } } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 0, options);
+  const step = returning ? 0 : 1;
+  const origin = returning ? continuitySample(first, scene, "0", 2, options, [], 1) : first;
+  const partial = continuitySample(origin, scene, "0", .4, options, [], step);
+  const entered = continuitySample(partial, scene, "1", 0, options);
+  const landed = continuitySample(entered, scene, "1", 2, options);
+  const back = continuitySample(landed, scene, "0:again", 0, options, [], step);
+  for (let i = 0; i <= 40; i++) {
+    const forward = continuitySample(entered, scene, "1", i / 20, options);
+    const reverse = continuitySample(back, scene, "0:again", 2 - i / 20, options, [], step);
+    forward.values.slice(0, 8).forEach((value, field) => expect(reverse.values[field]).toBeCloseTo(value, 6));
+  }
+});
+
+test("fixed environment ids stay in world space while shared station parts carry forward", () => {
+  const scene = prepareWorldScene({ instances: [boxPose("environment/post", [0, 2, 0]), boxPose("content", [2, 1, 0])] });
+  const options = { fixed: ["environment/"], carry: { lift: 4 } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const entered = continuitySample(first, scene, "1", 0, options);
+  const middle = continuitySample(entered, scene, "1", 1, options);
+  expect(continuityPart(middle, "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+  expect(continuityPart(middle, "content")[2]).toBeCloseTo(-16);
+  expect(continuityPart(middle, "content")[1]).toBeGreaterThan(2);
+  const end = continuitySample(entered, scene, "1", 2, options);
+  expect(continuityPart(end, "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+  const back = continuitySample(end, scene, "0:again", 0, options);
+  expect(continuityPart(continuitySample(back, scene, "0:again", 1, options), "environment/post").slice(0, 3)).toEqual([0, 2, 0]);
+});
+
+test("station-local step flashes keep their authored timing instead of taking a carry flight", () => {
+  const scene = prepareWorldScene({ instances: [primitive("box", { id: "flash", emissive: [
+    { step: 0, value: .06 }, { step: 1, value: 1.4, duration: .06 },
+  ] })] });
+  const options = { carry: { lift: 3 } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const flashed = continuitySample(first, scene, "0", .06, options, trackIds(scene), 1);
+  expect(continuityPart(flashed, "flash")[7]).toBeCloseTo(1.4);
+});
+
+test("world-frame retirement follows declarations even when retained draw slots keep the same order", () => {
+  const both = prepareWorldScene({ instances: [boxPose("a", [0, 1, 0]), boxPose("b", [3, 1, 0])] });
+  const next = prepareWorldScene({ instances: [boxPose("a", [0, 1, 0])] });
+  const retained = retainTrackScene(next, both), options: WorldTrack = { frame: "world" };
+  expect(trackIds(retained)).toEqual(trackIds(both));
+  const first = continuitySample(createTrackFrame(), both, "0", 3, options);
+  const entered = continuitySample(first, retained, "1", 0, options, trackIds(next));
+  expect(continuityPart(entered, "b")[23]).toBe(1);
+  expect(continuityPart(continuitySample(entered, retained, "1", 2, options, trackIds(next)), "b")[23]).toBe(0);
+});

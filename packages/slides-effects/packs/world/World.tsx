@@ -4,7 +4,7 @@ import { PixelRatio, View } from "react-native";
 import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import type { CameraOptions, CameraPose } from "./camera";
 import { buildWorldGraph, worldGraphTopology } from "./render";
-import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanIds, type WorldPlan } from "./plan";
+import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanFits, worldPlanIds, type WorldPlan } from "./plan";
 import { sampleWorldClock, type CatchUp, type WorldClock } from "./timing";
 import { advanceResolution, createResolutionState } from "./resolution";
 import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
@@ -227,14 +227,23 @@ function WorldSurface(props: WorldProps) {
   const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
   const requestedPool = props.scenePlan?.pool;
-  // Retention depends on committed scene history, including objects absent from the new declaration.
-  const [retained, setRetained] = useState({ input: prepared, scene: prepared, pool: requestedPool, sourcePool: requestedPool });
+  const liveIds = useSharedValue<string[]>([]);
+  const slide = usePresentationValue("slideIndex");
+  // Repeated declarations reuse the same departure; older live parts survive rapid navigation.
+  const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared,
+    live: [] as string[], pool: requestedPool, sourcePool: requestedPool });
   let trackScene = retained.scene, pool = props.track ? retained.pool : requestedPool;
-  if (props.track && retained.input !== prepared) {
-    // A raw World or another plan can contain draw families absent from this pool.
+  if (props.track && (retained.slide !== slide || retained.input !== prepared)) {
+    const previous = retained.slide === slide ? retained.previous : retained.scene;
+    const previousInput = retained.slide === slide ? retained.previousInput : retained.input;
+    const live = retained.slide === slide ? retained.live : liveIds.value;
     pool = JSON.stringify(retained.sourcePool?.topology) === JSON.stringify(requestedPool?.topology) ? retained.pool ?? requestedPool : undefined;
-    trackScene = retainTrackScene(prepared, retained.scene, retained.input, !!pool);
-    setRetained({ input: prepared, scene: trackScene, pool, sourcePool: requestedPool });
+    trackScene = retainTrackScene(prepared, previous, previousInput, !!pool, live);
+    if (pool && !worldPlanFits(trackScene, pool)) {
+      pool = undefined;
+      trackScene = retainTrackScene(prepared, previous, previousInput, false, live);
+    }
+    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput, live, pool, sourcePool: requestedPool });
   }
   const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
@@ -247,14 +256,14 @@ function WorldSurface(props: WorldProps) {
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
     <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={pool ? prepared : renderScene} retained={renderScene} declared={declared} topology={topology}
-      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} />
+      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} liveIds={liveIds} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame, liveIds }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[]; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
-    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
+    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; liveIds: SharedValue<string[]> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error("World track values must be positive and finite");
@@ -337,7 +346,8 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     values[35] = scale;
     const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
     trackFrame.value = next;
-  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, pool, planSampler, copies, pooledOutput]);
+    if (liveIds.value !== next.visible) liveIds.value = next.visible;
+  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, liveIds, pool, planSampler, copies, pooledOutput]);
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;

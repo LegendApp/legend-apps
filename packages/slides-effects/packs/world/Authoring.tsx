@@ -4,7 +4,7 @@ import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector } from "./scene";
 import { ambientEffects, authoringError, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
+import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -900,27 +900,35 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
     const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
-    // With `delay`, nodes grow in one after another from then and the edges draw once they are all in.
-    const delay = props.delay as number | undefined, grown = (j: number) => delay! + j * .07, drawn = delay === undefined ? undefined : grown(nodes.length) + .3;
+    const delay = props.delay as number | undefined;
     const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
-    return <Stage id={id} position={position}>{nodes.map(n => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
+    return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
       const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
-      const emissive = own.length ? [{ step: 0, value: 1.5 }, ...own.flatMap(f => f.flash === false ? [key(f.step, f.glow ?? .4, arrives(f, n), .4)]
-        : [key(f.step, 7, arrives(f, n), .06), key(f.step, f.glow ?? 2, arrives(f, n) + .1, .6)])]
-        : beats(n).length ? [{ at: 0, value: 1.5, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: 7, duration: .06 }, { at: t + .1, value: 1.5, duration: .6 }])] : undefined;
+      const emissive = own.length ? [{ step: 0, value: .006 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
+        : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? 0) * .1, arrives(f, n) + .1, .6)])]
+        : beats(n).length ? [{ at: 0, value: .006, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: .45, duration: .06 }, { at: t + .1, value: .006, duration: .6 }])] : .006;
       const pulses = [...beats(n).map(t => ({ at: t - HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })),
         ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
       const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
-      const size: V3 = [Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)),Number(n.height ?? .82),.5], j = nodes.indexOf(n);
+      const width = Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)), height = Number(n.height ?? .82), side = n.x < 0 ? -1 : 1, land = delay === undefined ? 1.35 + i / Math.max(1, nodes.length - 1) * .35 : delay + i * .07 + .3;
       const typed = n.typed && beat ? Array.from({ length: beat.count }, (_, k) => ({ text: `"${n.typed!.slice(0, k + 1)}"`, from: beat.start + k * beat.every + n.d * HOP, to: k + 1 < beat.count ? beat.start + (k + 1) * beat.every + n.d * HOP : undefined })) : [];
-      const appear = delay === undefined ? 1 : [{ at: 0, value: 0, duration: 0 }, { at: grown(j) + .3, value: 1, duration: .15 }];
       return <Fragment key={n.id}>
-        <Card id={`${id}/${n.id}`} position={[n.x,n.y,0]} scale={delay === undefined ? size : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: grown(j), value: size, duration: .45, ease: "spring" }]} color={color} emissive={emissive} />
-        <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={font} size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[n.x,n.y + (typed.length ? .12 : 0),.27]} opacity={appear} />
-        {typed.map((v, k) => <Text3D key={k} id={`${id}/${n.id}/typed${k}`} text={v.text} mono font={font} size={.14 * TYPE} position={[n.x,n.y - .17,.27]} color={n.color} emissive={.9}
-          opacity={[{ at: 0, value: 0, duration: 0 }, { at: v.from, value: 1, duration: 0 }, ...v.to === undefined ? [] : [{ at: v.to, value: 0, duration: 0 }]]} />)}
-        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color} draw={drawn === undefined ? undefined : [{ at: 0, value: 0, duration: 0 }, { at: drawn, value: 1, duration: .55 }]}
+        <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
+          key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>
+          <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={[width,height,.5]} color={color ?? idle} emissive={emissive}
+            material={{ albedo: "#101115", metal: .85, roughness: .3, rim: 0 }} />
+          <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
+            material={{ albedo: "#000000", metal: 0, roughness: 1 }} />
+          <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={typeof emissive === "number" ? .9 : emissive.map(frame => ({ ...frame, value: .9 + frame.value * 2 }))} material={{ albedo: "#000000" }} />
+          <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={font} size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[0,typed.length ? .12 : 0,.27]}
+            emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />
+          {typed.map((v, k) => <Text3D key={k} id={`${id}/${n.id}/typed${k}`} text={v.text} mono font={font} size={.14 * TYPE} position={[0,-.17,.27]} color={n.color} emissive={.9}
+            opacity={[{ at: 0, value: 0, duration: 0 }, { at: v.from, value: 1, duration: 0 }, ...v.to === undefined ? [] : [{ at: v.to, value: 0, duration: 0 }]]} />)}
+        </Stage>
+        <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
+        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
+          draw={[key(0, 0, 0, 0), key(0, 1, land - .15, .35)]}
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
         {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}

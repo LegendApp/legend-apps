@@ -68,6 +68,13 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
   return plans;
 }
 
+/** Rapid navigation can retain more than the two declarations reserved by a pool. */
+export function worldPlanFits(scene: PreparedWorldScene, plan: WorldPlan): boolean {
+  const entries = Object.entries(plan.slots), cursors = { ...plan.slots };
+  const limits = Object.fromEntries(entries.map(([key], i) => [key, entries[i + 1]?.[1] ?? (plan.size - worldHeaderSize) / worldInstanceSize]));
+  return scene.instances.every(part => { const key = family(part); return cursors[key] !== undefined && cursors[key]++ < limits[key]; });
+}
+
 /** Coalesce the sorted source instances into contiguous copies to the shared draw ranges. */
 export function worldPlanCopies(scene: PreparedWorldScene, plan: WorldPlan): [number, number, number][] {
   const cursors = { ...plan.slots }, copies: [number, number, number][] = [[0, worldHeaderSize, 0]];
