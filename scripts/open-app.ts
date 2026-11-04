@@ -63,9 +63,16 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
 
   const mode = readMode(runnerArgs);
   const buildMode = mode === "Release" ? "release" : "dev";
+  let sharedApp: string | undefined;
+  if (mode === "Debug") {
+    const { findSharedDebugHost, materializeDebugApp, sharedDebugAppWorkspace } = await import("./lib/sharedDebugHost");
+    const project = sharedDebugAppWorkspace(appId);
+    const host = fs.existsSync(path.join(project, "package.json")) ? findSharedDebugHost() : undefined;
+    if (host) sharedApp = materializeDebugApp(manifest, host);
+  }
   const record = path.join(sparkWorkspace(appId, buildMode), `.spark/${buildMode}-build.json`);
-  if (!fs.existsSync(record)) throw new Error(`Build the Spark app first: bun run ${appId} build macos${mode === "Debug" ? " --dev" : ""}`);
-  const built = JSON.parse(fs.readFileSync(record, "utf8"));
+  if (mode === "Debug" && !sharedApp || !sharedApp && !fs.existsSync(record)) throw new Error(`Build the Spark app first: bun run ${appId} build macos${mode === "Debug" ? " --dev" : ""}`);
+  const built = sharedApp ? { app: sharedApp } : JSON.parse(fs.readFileSync(record, "utf8"));
   const appPath = built.app as string;
   if (!fs.existsSync(appPath)) throw new Error(`Spark app is missing: ${appPath}`);
   if (mode === "Release" && (runnerArgs.includes("--arch") || runnerArgs.some(arg => arg.startsWith("--arch=")))) {
@@ -77,7 +84,7 @@ async function openOne(appId: string, platform: Platform, args: string[]) {
   const protocol = runnerArgs.includes("--https") ? "https" : "http";
   const envArgs = mode === "Debug" ? ["--env", `SPARK_BUNDLE_URL=${protocol}://127.0.0.1:${port}/index.bundle?platform=macos&dev=${!runnerArgs.includes("--no-dev")}&minify=${runnerArgs.includes("--minify")}`] : [];
   const runtimeArgs = mode === "Debug" ? ["-RCT_jsLocation", `127.0.0.1:${port}`] : [];
-  runCommand("open", [...(launchArgs.length ? ["-n"] : []), ...envArgs, appPath, ...((runtimeArgs.length || launchArgs.length) ? ["--args", ...runtimeArgs, ...launchArgs] : [])]);
+  runCommand("open", [...(sharedApp ? ["-g"] : []), ...(launchArgs.length ? ["-n"] : []), ...envArgs, appPath, ...((runtimeArgs.length || launchArgs.length) ? ["--args", ...runtimeArgs, ...launchArgs] : [])]);
 
 }
 

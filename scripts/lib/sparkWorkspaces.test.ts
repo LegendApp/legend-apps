@@ -7,9 +7,9 @@ import { execFileSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
 import sparkCapabilities from "./sparkDesktopCapabilities.json";
 import { test } from "node:test";
-import { appIds, loadAppManifest, loadAppPackageMetadata } from "./apps";
+import { appIds, loadAppManifest, loadAppPackageMetadata, rootDir } from "./apps";
 import { expandSparkSubpath } from "./sparkSubpaths";
-import { prepareSharedSparkInstall, prepareSparkReleasePackages, prepareSparkWorkspace, preservePreviousSparkInstall, sharedSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
+import { prepareSparkWorkspace, preservePreviousSparkInstall, sharedSparkWorkspace, sparkConfig, sparkMetroBlockList, sparkWorkspace } from "./sparkWorkspaces";
 import { sparkSdkPackages } from "./sparkSdk";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
@@ -20,9 +20,6 @@ import { markdownMenuConfig } from "../../apps/markdown/src/markdownMenus";
 const require = createRequire(import.meta.url);
 const sdkRoot = fs.realpathSync(path.resolve("node_modules/@legendapp/spark"));
 const releaseFile = path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json");
-const selectedSdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync("spark.local.json") ? JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk : "");
-const localReleaseMissing = selectedSdk?.startsWith("file:") && !fs.existsSync(releaseFile);
-const publishedRelease = { skip: localReleaseMissing && "Local Spark packs have no published release metadata" };
 const { toExpo } = require("@legendapp/spark/config");
 const { identity } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-desktop-config/identity.cjs"));
 
@@ -75,35 +72,30 @@ test("generated workspaces record the installed Spark version for its migration 
   const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
   const { version } = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8"));
   assert.equal(fs.readFileSync(path.join(project, ".spark/version"), "utf8"), `${version}\n`);
+  const transport = JSON.parse(fs.readFileSync(path.join(project, "app.json"), "utf8"));
+  assert.equal(transport.expo.experiments.tsconfigPaths, false);
+  assert.equal(transport.expo.extra.spark.projectId, "so.legend.helloworld.macos");
 });
 
-test("published SDK consumers use the release native archives in the shared install", publishedRelease, async () => {
-  const release = JSON.parse(fs.readFileSync(releaseFile, "utf8"));
-  const shared = await prepareSharedSparkInstall();
-  const project = prepareSparkWorkspace(await loadAppManifest("markdown"));
-  for (const directory of [shared, project]) {
-    const pkg = JSON.parse(fs.readFileSync(path.join(directory, "package.json"), "utf8"));
-    for (const [name, asset] of Object.entries(release.packages) as [string, { sha256: string }][]) {
-      const archive = path.join(shared, "spark-packages", `${name.replace(/^@/, "").replaceAll("/", "-")}-${asset.sha256}.tgz`);
-      assert.equal(pkg.overrides[name], `file:${archive}`, name);
-      if (name in pkg.dependencies) assert.equal(pkg.dependencies[name], `file:${archive}`, name);
-    }
-  }
-});
-
-test("offline release preparation verifies archives without downloading", publishedRelease, async () => {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), "spark-release-offline-"));
+test("a shared native host workspace preserves the normal app workspace", async () => {
+  const manifest = await loadAppManifest("hello-world");
+  const app = prepareSparkWorkspace(manifest);
+  const original = fs.readFileSync(path.join(app, "desktop.config.json"), "utf8");
+  const host = fs.mkdtempSync(path.join(os.tmpdir(), "legend-shared-host-"));
   try {
-    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "0.0.1" } }));
-    await assert.rejects(prepareSparkReleasePackages(project, true), /archive is missing/);
-    const release = JSON.parse(fs.readFileSync(releaseFile, "utf8"));
-    const [name, asset] = Object.entries(release.packages)[0] as [string, { sha256: string }];
-    fs.mkdirSync(path.join(project, "spark-packages"));
-    fs.writeFileSync(path.join(project, "spark-packages", `${name.replace(/^@/, "").replaceAll("/", "-")}-${asset.sha256}.tgz`), "corrupt");
-    await assert.rejects(prepareSparkReleasePackages(project, true), /archive changed/);
-    fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({ dependencies: { "@legendapp/spark": "file:local.tgz" } }));
-    await prepareSparkReleasePackages(project, true);
-  } finally { fs.rmSync(project, { recursive: true, force: true }); }
+    prepareSparkWorkspace({ ...manifest, displayName: "Shared Host" }, "dev", host);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(host, "desktop.config.json"), "utf8")).name, "Shared Host");
+    assert.equal(fs.readFileSync(path.join(app, "desktop.config.json"), "utf8"), original);
+  } finally { fs.rmSync(host, { recursive: true, force: true }); }
+});
+
+test("the root install pins Spark's published native archives", async () => {
+  const release = JSON.parse(fs.readFileSync(releaseFile, "utf8"));
+  assert.equal(rootDir, path.resolve("."));
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+  for (const [name, asset] of Object.entries(release.packages) as [string, { url: string }][]) {
+    assert.equal(pkg.overrides[name], asset.url, name);
+  }
 });
 
 test("Metro excludes sibling consumer installs while retaining its dependencies and shared source", () => {
@@ -114,7 +106,8 @@ test("Metro excludes sibling consumer installs while retaining its dependencies 
   assert.equal(blocked(path.resolve("shell/.legend/workspaces/dev/code/node_modules/react/index.js")), true);
   assert.equal(blocked(path.join(sparkWorkspace("code"), "node_modules/react/index.js")), false);
   assert.equal(blocked(path.join(sparkWorkspace("code"), ".spark/products/app")), true);
-  assert.equal(blocked(path.join(sharedSparkWorkspace, "node_modules/react/index.js")), false);
+  assert.equal(blocked(path.join(sharedSparkWorkspace, "node_modules/react/index.js")), true);
+  assert.equal(blocked(path.resolve("node_modules/react/index.js")), false);
   assert.equal(blocked(path.join(sharedSparkWorkspace, ".legacy-installs/code/node_modules/react/index.js")), true);
   assert.equal(blocked(path.resolve("packages/source-editor/src/index.tsx")), false);
   assert.equal(blocked(path.resolve("apps/code/src/App.tsx")), false);
@@ -192,7 +185,7 @@ test("manifests declare Spark modules by import subpath", async () => {
 for (const appId of appIds) {
   test(`Spark preserves ${appId} identity and explicit native graph`, async () => {
     const manifest = await loadAppManifest(appId);
-    const config = sparkConfig(manifest);
+    const config = sparkConfig(manifest, "release");
     const expo = toExpo(config).expo;
     const nativeIdentity = identity(expo);
     assert.equal(expo.macos.infoPlist.CFBundleName, manifest.displayName);
@@ -232,7 +225,7 @@ test("Spark uses native policy without replacing its application delegate", asyn
   assert.equal(music.macos.lifecycle.mainWindow.closeBehavior, "hide");
   const diff = sparkConfig(await loadAppManifest("diff"));
   assert.equal(diff.macos.lifecycle.mainWindow.closeBehavior, "request");
-  assert.equal(diff.expo.autolinking.exclude.includes("@legendapp/spark-desktop-links"), false);
+  assert.deepEqual(diff.expo.autolinking.exclude, []);
   assert.equal(diff.expo.plugins!.at(-1), path.resolve("packages/diff-parser/app.plugin.cjs"));
   assert.equal("plugins" in hello.expo, false);
 });
@@ -381,16 +374,22 @@ for (const appId of ["slides", "code", "diff", "markdown", "chat-history", "phot
 }
 
 test("shared install holds every app dependency while projects keep their native selection", async () => {
-  const shared = await prepareSharedSparkInstall();
+  const shared = rootDir;
   const pkg = JSON.parse(fs.readFileSync(path.join(shared, "package.json"), "utf8"));
-  assert.deepEqual(pkg.workspaces, ["../../../packages/*"]);
+  assert.deepEqual(pkg.workspaces, ["shell", "apps/*", "packages/*"]);
   for (const appId of appIds) {
     const manifest = await loadAppManifest(appId);
+    const declared = JSON.parse(fs.readFileSync(path.join(rootDir, "apps", appId, "package.json"), "utf8"));
+    for (const name of Object.keys(declared.dependencies ?? {})) assert.ok(name in pkg.dependencies || name in pkg.devDependencies, `${appId}: ${name} must be declared at the root`);
+    assert.deepEqual(sparkConfig(manifest).expo.autolinking.exclude, [], `${appId}: Debug must link all root modules`);
     const project = prepareSparkWorkspace(manifest);
     const app = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
     assert.equal(app.workspaces, undefined);
-    for (const [name, version] of Object.entries(app.dependencies)) assert.equal(pkg.dependencies[name], version, name);
-    for (const native of getExcludedNativePackages(manifest, "macos")) assert.equal(app.dependencies[native.name], undefined, `${appId}: ${native.name}`);
+    for (const [name, version] of Object.entries(app.dependencies)) {
+      const spec = pkg.dependencies[name] ?? pkg.devDependencies[name];
+      assert.equal(spec === "catalog:" ? pkg.catalog[name] : spec, version, name);
+    }
+    assert.deepEqual(sparkConfig(manifest, "release").include, getActiveNativePackages(manifest, "macos").map(pkg => pkg.name));
   }
   assert.equal(pkg.dependencies["@legend-apps/source-editor"], "workspace:*");
   const hello = await loadAppManifest("hello-world");
@@ -441,7 +440,8 @@ test("preparing a shared consumer preserves old installs without leaving a shado
     fs.mkdirSync(path.join(project, "node_modules/.cache"), { recursive: true });
     fs.writeFileSync(path.join(project, "node_modules/.cache/metro"), "cache");
     preservePreviousSparkInstall(project);
-    assert.equal(fs.readFileSync(path.join(project, "node_modules/.cache/metro"), "utf8"), "cache");
+    assert.equal(fs.existsSync(path.join(project, "node_modules")), false);
+    fs.mkdirSync(path.join(project, "node_modules"));
     fs.writeFileSync(path.join(project, "node_modules/source.js"), "another install");
     assert.throws(() => preservePreviousSparkInstall(project), /already exists/);
     assert.ok(fs.existsSync(path.join(project, "node_modules")));

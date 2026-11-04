@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
+import { runSharedDebugMetro } from "./lib/sparkDevServer";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { assertSupportedPlatform, loadAppManifest } from "./lib/apps";
-import { runSparkDevServer } from "./lib/sparkDevServer";
-import { assertSparkOfflineArgs, assertSparkOfflineBuild, assertSparkOfflineStart, installSparkWorkspace, parseSparkInstallArgs, SparkInstallError, sparkOfflineHelp } from "./lib/sparkInstall";
-import { prepareSharedSparkInstall, prepareSparkReleasePackages, prepareSparkWorkspace, sparkWorkspace } from "./lib/sparkWorkspaces";
+import { assertSupportedPlatform, loadAppManifest, rootDir } from "./lib/apps";
+import { assertSparkOfflineArgs, assertSparkOfflineBuild, installSparkWorkspace, parseSparkInstallArgs, SparkInstallError, sparkOfflineHelp } from "./lib/sparkInstall";
+import { prepareSparkWorkspace, sparkWorkspace } from "./lib/sparkWorkspaces";
 import { getDevSyntaxAssetSourceRoot, getSlidesCompilerPath, runCommand } from "./lib/run";
 
 const { extra, ...installOptions } = parseSparkInstallArgs(process.argv.slice(2));
@@ -18,9 +18,10 @@ if (!appId) throw new Error(`Usage: bun scripts/spark-app.ts <app> <prepare|inst
 if (!["prepare", "install", "build", "build-release", "run", "start", "analyze"].includes(action)) throw new Error(`Unknown Spark action: ${action}`);
 const manifest = await loadAppManifest(appId);
 assertSupportedPlatform(manifest, "macos");
-const sharedProject = await prepareSharedSparkInstall();
 const mode = action === "build-release" ? "release" : "dev";
-const project = sparkWorkspace(manifest.id, mode);
+const sharedDebug = mode === "dev" && ["build", "run", "start"].includes(action);
+const sharedHost = sharedDebug ? await import("./lib/sharedDebugHost") : undefined;
+const project = sharedHost ? sharedHost.sharedDebugAppWorkspace(manifest.id) : sparkWorkspace(manifest.id, mode);
 const env = {
   LEGEND_APP: appId, LEGEND_PLATFORM: "macos", SPARK_PLATFORM: "macos",
   ...(installOptions.offline ? { LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } : {}),
@@ -37,12 +38,11 @@ const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", 
 try {
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
   if (["install", "build", "build-release", "run", "start"].includes(action)) {
-    await prepareSparkReleasePackages(sharedProject, installOptions.offline);
-    installSparkWorkspace({ project: sharedProject, appId, env, ...installOptions });
+    installSparkWorkspace({ project: rootDir, appId, env, ...installOptions });
   }
-  prepareSparkWorkspace(manifest, mode);
+  prepareSparkWorkspace(manifest, mode, project);
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
-  if (installOptions.offline && ["build", "build-release", "run"].includes(action)) {
+  if (!sharedDebug && installOptions.offline && ["build", "build-release", "run"].includes(action)) {
     await assertSparkOfflineBuild(project, cli, buildArgs);
   }
 } catch (error) {
@@ -51,13 +51,17 @@ try {
 }
 if (action === "prepare") console.log(project);
 else if (action !== "install") {
-  if (action === "run") {
-    runCommand("node", [cli, ...buildArgs], { cwd: project, env });
-    if (installOptions.offline) await assertSparkOfflineStart(project, cli, actionArgs);
-    await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, appArgs, env });
+  if (action === "build" && actionArgs.includes("--help")) {
+    if (installOptions.offline) console.log(sparkOfflineHelp);
+    runCommand("node", [cli, "build", "--help"], { cwd: project, env });
   }
-  else if (action === "build-release" || action === "build") {
-    if (appId === "slides" && action === "build-release") {
+  else if (sharedHost) {
+    const { buildSharedDebugHost, materializeDebugApp } = sharedHost;
+    if (action !== "start") materializeDebugApp(manifest, await buildSharedDebugHost(cli, env, installOptions.offline, action === "build" ? actionArgs : []));
+    if (action !== "build") await runSharedDebugMetro({ appId, project, runnerArgs: actionArgs, appArgs, noOpen: action === "start", env });
+  }
+  else if (action === "build-release") {
+    if (appId === "slides") {
       const { packageSlidesCompilerArtifact } = await import("./lib/slidesCompiler");
       const arch = process.env.SPARK_MACOS_ARCH ?? process.arch;
       const artifact = await packageSlidesCompilerArtifact(path.join(project, ".spark/compiler"), arch);
@@ -65,7 +69,6 @@ else if (action !== "install") {
     }
     runCommand("node", [cli, ...buildArgs], { cwd: project, env });
   }
-  else if (action === "start") await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, noOpen: true, env });
   else if (action === "analyze") runCommand("node", [cli, "analyze", ...actionTail], { cwd: project, env });
   else throw new Error(`Unknown Spark action: ${action}`);
 }

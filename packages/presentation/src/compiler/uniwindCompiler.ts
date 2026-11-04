@@ -12,6 +12,6 @@ export type UniwindCompileVirtual = (options: {
 
 /** Source checkouts load uniwind's TypeScript entry; the shipped bundle replaces this module with a static import. */
 export async function loadUniwindCompiler(): Promise<UniwindCompileVirtual> {
-  const compilerModulePath = path.resolve(import.meta.dirname, "../../../../shell/node_modules/uniwind/src/metro/compileVirtual.ts");
+  const compilerModulePath = path.resolve(import.meta.dirname, "../../../../node_modules/uniwind/src/metro/compileVirtual.ts");
   return (await import(pathToFileURL(compilerModulePath).href)).compileVirtual;
 }

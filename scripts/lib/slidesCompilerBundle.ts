@@ -25,7 +25,7 @@ export const slidesCompilerExternals = ["esbuild", "lightningcss", "@tailwindcss
 export const slidesCompilerEntry = "runtime/compiler/dist/bin/compiler.mjs";
 
 function staticUniwind(): Plugin {
-  const compileVirtual = path.join(rootDir, "shell/node_modules/uniwind/src/metro/compileVirtual.ts");
+  const compileVirtual = path.join(rootDir, "node_modules/uniwind/src/metro/compileVirtual.ts");
   return {
     name: "slides-static-uniwind",
     setup(api) {
@@ -82,7 +82,7 @@ export async function bundleSlidesCompiler(outfile: string) {
     legalComments: "eof",
     outfile,
     external: slidesCompilerExternals,
-    nodePaths: [path.join(rootDir, "node_modules"), path.join(rootDir, "shell/node_modules"), path.join(rootDir, "packages/presentation/node_modules")],
+    nodePaths: [path.join(rootDir, "node_modules")],
     banner: { js: [
       'import { createRequire as __slidesCreateRequire } from "node:module";',
       'import { fileURLToPath as __slidesFileURLToPath } from "node:url";',

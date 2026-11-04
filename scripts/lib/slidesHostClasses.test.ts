@@ -15,7 +15,7 @@ test("packaged deck compilation retains host classes without host sources", asyn
     fs.rmSync(path.join(temp, "apps"), { recursive: true });
     fs.writeFileSync(path.join(temp, "host-classes.txt"), candidates);
     const cssPath = path.join(root, "shell/src/global.css");
-    const { compileVirtual } = await import(path.join(root, "shell/node_modules/uniwind/src/metro/compileVirtual.ts"));
+    const { compileVirtual } = await import(path.join(root, "node_modules/uniwind/src/metro/compileVirtual.ts"));
     const baseCss = `@import 'tailwindcss' source(none);\n@import 'uniwind';`;
     const withoutHost = await compileVirtual({ css: baseCss, cssPath, platform: "native", themes: ["light", "dark"], debug: false, polyfills: undefined });
     expect(Function("rt", `return (${withoutHost})`)({}).stylesheet["right-3"]).toBeUndefined();

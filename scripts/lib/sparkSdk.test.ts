@@ -5,12 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const sdkRoot = fs.realpathSync(path.resolve("node_modules/@legendapp/spark"));
-const releaseFile = path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.json");
-const selectedSdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync("spark.local.json") ? JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk : "");
-const localReleaseMissing = selectedSdk?.startsWith("file:") && !fs.existsSync(releaseFile);
-
-test("a standalone Apps checkout prepares published and temporary local SDK consumers", () => {
+test("a standalone checkout prepares consumers of its root install", () => {
   const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "spark-standalone-apps-")));
   const root = path.join(workspace, "apps");
   const source = path.resolve(import.meta.dirname, "../..");
@@ -34,55 +29,21 @@ test("a standalone Apps checkout prepares published and temporary local SDK cons
       const modules = path.join(source, "apps", app, "node_modules");
       if (fs.existsSync(modules)) fs.symlinkSync(modules, path.join(destination, "node_modules"));
     }
+    fs.mkdirSync(path.join(root, "shell"));
+    fs.copyFileSync(path.join(source, "shell/package.json"), path.join(root, "shell/package.json"));
     const repo = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
     repo.catalog["@legendapp/spark"] = "0.0.1";
     const repoSource = JSON.stringify(repo);
     fs.writeFileSync(path.join(root, "package.json"), repoSource);
-    for (const archive of ["sdk.tgz", "other.tgz"]) fs.writeFileSync(path.join(workspace, archive), "preparation fixture");
-    // This fixture exercises input hashing, without downloading release archives.
-    const { packageSources } = require(path.join(sdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.js"));
-    for (const archive of Object.values(localReleaseMissing ? {} : packageSources()) as string[]) {
-      if (!archive.startsWith("file:")) continue;
-      const file = path.resolve(root, "shell/.legend/spark", archive.slice(5));
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, "release archive input fixture");
-    }
-    const localFile = path.join(root, "spark.local.json");
-    const hashes: string[] = [];
-    const prepare = (envSdk?: string) => spawnSync(process.execPath, ["-e", 'import { loadAppManifest } from "./scripts/lib/apps.ts"; import { prepareSharedSparkInstall, prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = await prepareSharedSparkInstall(); console.log(sparkInstallHash(shared, process.cwd()));'], {
-      cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_ROOT: path.join(workspace, "absent-spark-checkout"), LEGEND_SPARK_SDK: envSdk },
-    });
-    const selections = localReleaseMissing ? ["file:../sdk.tgz", "file:../other.tgz"] : [undefined, "file:../sdk.tgz", "file:../other.tgz", undefined];
-    for (const sdk of selections) {
-      if (sdk) fs.writeFileSync(localFile, JSON.stringify({ sdk }));
-      else fs.rmSync(localFile, { force: true });
-      const result = prepare();
-      assert.equal(result.status, 0, result.stderr);
-      hashes.push(result.stdout.trim());
-      const generated = JSON.parse(fs.readFileSync(path.join(root, "shell/.legend/spark/hello-world/package.json"), "utf8"));
-      const expected = sdk ? `file:${path.resolve(root, sdk.slice(5))}` : repo.catalog["@legendapp/spark"];
-      assert.equal(generated.dependencies["@legendapp/spark"], expected);
-      assert.equal(generated.overrides["@legendapp/spark"], expected);
-      assert.equal(generated.catalog["@legendapp/spark"], "0.0.1");
-      assert.equal(fs.readFileSync(path.join(root, "package.json"), "utf8"), repoSource);
-      assert.ok(Object.values(generated.overrides).every(value => typeof value !== "string" || !value.includes("legend-spark/artifacts")));
-      assert.ok(Object.values(generated.patchedDependencies).every(value => typeof value === "string" && path.resolve(root, "shell/.legend/spark/hello-world", value).startsWith(root)));
-    }
-    if (localReleaseMissing) {
-      assert.notEqual(hashes[0], hashes[1], "changing the override must invalidate the install");
-    } else {
-      assert.notEqual(hashes[0], hashes[1], "adding a local override must invalidate the install");
-      assert.notEqual(hashes[1], hashes[2], "changing the override must invalidate the install");
-      assert.equal(hashes[0], hashes[3], "removing the override restores the published install inputs");
-    }
-    fs.writeFileSync(localFile, JSON.stringify({ sdk: "file:../sdk.tgz" }));
-    assert.equal(prepare("file:../other.tgz").status, 0);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(root, "shell/.legend/spark/package.json"), "utf8")).dependencies["@legendapp/spark"], `file:${path.join(workspace, "other.tgz")}`);
-    for (const [content, error] of [["{}", /Select a Spark SDK version/], [JSON.stringify({ sdk: "file:../missing.tgz" }), /archive is missing/], ["{", /JSON/]] as const) {
-      fs.writeFileSync(localFile, content);
-      const result = prepare();
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, error);
-    }
+    const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const project = prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    const { project, shared, hash } = JSON.parse(result.stdout);
+    assert.equal(shared, root);
+    assert.equal(hash.length, 64);
+    const generated = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
+    assert.equal(generated.dependencies["@legendapp/spark"], repo.catalog["@legendapp/spark"]);
+    assert.equal(generated.overrides["@legendapp/spark"], repo.catalog["@legendapp/spark"]);
+    assert.equal(fs.existsSync(path.join(project, "node_modules")), false);
+    assert.equal(fs.readFileSync(path.join(root, "package.json"), "utf8"), repoSource);
   } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
 });

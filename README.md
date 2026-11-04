@@ -166,6 +166,20 @@ On macOS, `run` and `start` reuse a healthy Metro server for the same app and
 port. `run` opens the development app against that server; its original terminal
 keeps ownership of Metro. A server for another project requires a different `--port`.
 
+macOS Debug commands use one root Bun install and one shared native host at
+`shell/.legend/spark/debug-host`, with one Podfile and Pods set. The root
+`package.json` defines its dependencies; `bun install` applies the repository and
+Spark patches there. Debug links every native module from that install. Native
+source, SDK or dependency changes rebuild the host; JS and window-profile changes
+reuse it.
+
+Each app gets an APFS-cloned bundle with its normal bundle ID, display name,
+storage namespace and window lifecycle policy, including Music's dark glass
+chrome. These bundles share compiled native code and are signed locally.
+Plain Expo Metro serves each app from its `<app>-shared-debug` workspace, avoiding
+Spark's per-app development-build fingerprint gate. Generated workspaces have no
+dependency installs. Release builds retain per-app native pruning and workspaces.
+
 When an app manifest or native package link changes, refresh CocoaPods before
 rebuilding macOS:
 

@@ -18,6 +18,7 @@ function fixture(t: TestContext) {
     fs.writeFileSync(location, typeof content === "string" ? content : JSON.stringify(content));
   };
   write("project/bun.lock", "shared lock");
+  write("project/bunfig.toml", '[install]\nlinker = "hoisted"\n');
   write("apps/example/package.json", { name: "example" });
   write("apps/example/src/index.ts", "app source");
   write("packages/local/package.json", { name: "local", dependencies: { nested: "file:../nested" } });
@@ -38,7 +39,7 @@ function fixture(t: TestContext) {
   return { repoRoot, project, write, options, hash, stamp };
 }
 
-for (const file of ["project/package.json", "project/bun.lock", "sdk/spark.tgz", "sdk/companion.tgz", "sdk/manifest.json", "patches/local.patch", "packages/local/package.json"]) {
+for (const file of ["project/package.json", "project/bun.lock", "project/bunfig.toml", "sdk/spark.tgz", "sdk/companion.tgz", "sdk/manifest.json", "patches/local.patch", "packages/local/package.json"]) {
   test(`install hash tracks content changes to ${file}`, t => {
     const f = fixture(t);
     const before = f.hash();
@@ -348,8 +349,6 @@ export function assertSupportedPlatform() {}
   f.write("scripts/lib/sparkWorkspaces.ts", `import fs from "node:fs";
 import path from "node:path";
 import { rootDir } from "./apps";
-export async function prepareSharedSparkInstall() { return rootDir; }
-export async function prepareSparkReleasePackages() {}
 export function sparkWorkspace(id) { return path.join(rootDir, id); }
 export function prepareSparkWorkspace(manifest) {
   fs.appendFileSync(path.join(rootDir, "prepared"), manifest.id + "\\n");
@@ -466,7 +465,18 @@ export function runCommand(command, args, options) {
 }
 `);
   f.write("scripts/lib/sparkDevServer.ts", `import { runCommand } from "./run";
-export async function runSparkDevServer(options) { runCommand("dev", options.runnerArgs, options); }
+export async function runSharedDebugMetro(options) { runCommand("dev", options.runnerArgs, options); }
+`);
+  f.write("scripts/lib/sharedDebugHost.ts", `import { runCommand } from "./run";
+import { sparkWorkspace } from "./sparkWorkspaces";
+import { assertSparkOfflineBuild } from "./sparkInstall";
+export const sharedDebugAppWorkspace = sparkWorkspace;
+export async function buildSharedDebugHost(cli, env, offline, args = []) {
+  const project = sparkWorkspace("example");
+  if (offline) await assertSparkOfflineBuild(project, cli, ["build", "--dev", ...args]);
+  runCommand("node", [cli, "build", "--dev", ...args], { cwd: project, env }); return {};
+}
+export function materializeDebugApp() {}
 `);
   const { fingerprint, projectFingerprint } = nativeFixture(f);
   const app = (action: string, args: string[] = [], offlineEnv = false) => f.invoke("spark-app", ["example", action, ...args], offlineEnv);
@@ -497,6 +507,26 @@ test("spark-app wires installs and reports Bun failures cleanly", { timeout: 30_
   assert.match(failed.stderr, /Bun install failed.*23/);
   assert.doesNotMatch(failed.stderr, /at .*sparkInstall|cache|retry/);
   assert.equal(fs.existsSync(stamp), false);
+});
+
+test("Debug defaults to the shared host and plain Metro, keeps app arguments, and leaves Release per-app", t => {
+  const f = appFixture(t);
+  f.write("scripts/lib/sparkDevServer.ts", `import { runCommand } from "./run";
+export async function runSharedDebugMetro(options) { runCommand("expo", options.appArgs, options); }
+`);
+  assert.equal(f.app("install").status, 0);
+  const run = f.invoke("spark-app", ["example", "run", "--offline", "--port", "19098", "--", "--preview"]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(f.commands().map(call => call.command), ["node", "expo"]);
+  assert.deepEqual(f.commands()[1].args, ["--preview"]);
+  assert.equal(f.commands()[1].noOpen, false);
+  const start = f.invoke("spark-app", ["example", "start", "--offline"]);
+  assert.equal(start.status, 0, start.stderr);
+  assert.equal(f.commands().at(-1).noOpen, true);
+  const release = f.invoke("spark-app", ["example", "build-release"]);
+  assert.equal(release.status, 0, release.stderr);
+  assert.equal(f.commands().at(-1).command, "node");
+  assert.deepEqual(f.commands().at(-1).args.slice(1), ["build", "--release"]);
 });
 
 test("spark-app forwards only the analyze action tail to the CLI and offline guard", { timeout: 30_000 }, t => {
@@ -552,12 +582,12 @@ for (const offlineEnv of [false, true]) {
       const refused = app(action, args, offlineEnv);
       assert.equal(refused.status, 1);
       assert.match(refused.stderr, /needs pod install.*Manifest.lock missing/);
-      assert.match(refused.stderr, /supervisor keys \(b\/g\/d\).*outside/);
+      assert.match(refused.stderr, /Offline builds require/);
     }
     assert.equal(commands().length, count);
     const help = app("build", [...args, "--help"], offlineEnv);
     assert.equal(help.status, 0, help.stderr);
-    assert.match(help.stdout, /supervisor keys \(b\/g\/d\)/);
+    assert.match(help.stdout, /Offline builds require/);
     f.write("example/macos/Pods/Manifest.lock", "pods");
     for (const [file, value, reason] of [
       ["example/.spark/native-preparation.json", { fingerprint: "stale", projectFingerprint: "stale" }, "native project needs generation"],
@@ -625,42 +655,6 @@ for (const offlineEnv of [false, true]) {
     assert.equal(afterSeparator.status, 1);
     assert.match(afterSeparator.stderr, /Offline mode does not support --project redirects/);
     assert.equal(commands().length, 0);
-    assert.equal(f.attempts().length, 1);
-  });
-}
-
-for (const offlineEnv of [false, true]) {
-  test(`offline run checks the dev target after building via ${offlineEnv ? "env" : "flag"}`, { timeout: 30_000 }, t => {
-    const f = appFixture(t);
-    const { app, commands } = f;
-    assert.equal(app("install").status, 0);
-    const args = offlineEnv ? [] : ["--offline"];
-    for (const settings of [undefined, { target: "go" }, { target: "go", goApp: "saved-runner" }]) {
-      const settingsFile = path.join(f.repoRoot, "example/.spark/settings.json");
-      if (settings) f.write("example/.spark/settings.json", settings);
-      else fs.rmSync(settingsFile);
-      const built = app("run", args, offlineEnv);
-      assert.equal(built.status, 0, built.stderr);
-      assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile, "utf8")), { target: "dev" });
-      const calls = commands().slice(-2);
-      assert.deepEqual(calls[0].args.slice(1), ["build", "--dev"]);
-      assert.equal(calls[1].command, "dev");
-    }
-    const prefixedFlags = f.invoke("spark-app", ["--offline", "example", "run"]);
-    assert.equal(prefixedFlags.status, 0, prefixedFlags.stderr);
-    for (const startup of [["--no-open"], ["--runner-binary", "local-runner"], ["--runner-binary=local-runner"]]) {
-      const allowed = app("run", [...args, ...startup], offlineEnv);
-      assert.equal(allowed.status, 0, allowed.stderr);
-    }
-    const noOpen = app("start", args, offlineEnv);
-    assert.equal(noOpen.status, 0, noOpen.stderr);
-    f.write("runner.json", { runtime: {} });
-    const localRunner = app("run", args, offlineEnv);
-    assert.equal(localRunner.status, 0, localRunner.stderr);
-    fs.rmSync(path.join(f.repoRoot, "runner.json"));
-    f.write("example/.spark/settings.json", { target: "dev" });
-    const appFlags = app("run", [...args, "--", "--project=../alternate", "--runner-binary=app-value"], offlineEnv);
-    assert.equal(appFlags.status, 0, appFlags.stderr);
     assert.equal(f.attempts().length, 1);
   });
 }
