@@ -215,7 +215,7 @@ function WorldSurface(props: WorldProps) {
   let trackScene = retained.scene, pool = props.track ? retained.pool : requestedPool;
   if (props.track && retained.input !== prepared) {
     // A raw World or another plan can contain draw families absent from this pool.
-    pool = retained.sourcePool === requestedPool ? requestedPool : undefined;
+    pool = JSON.stringify(retained.sourcePool?.topology) === JSON.stringify(requestedPool?.topology) ? retained.pool ?? requestedPool : undefined;
     trackScene = retainTrackScene(prepared, retained.scene, retained.input, !!pool);
     setRetained({ input: prepared, scene: trackScene, pool, sourcePool: requestedPool });
   }

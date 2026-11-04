@@ -30,6 +30,9 @@ test("authored slides retain one GPU graph across different geometry, steps and 
   try {
     await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
     const initial = graph();
+    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node); });
+    await act(() => { renderer.update(content(0)); }); tick(3000);
+    expect(graph()).toBe(initial);
     await act(() => {
       first$.assign({ currentSlide: 1, playbackPhase: "outgoing", isActive: false });
       second$.assign({ currentSlide: 1, isActive: true, isPreparing: false, playbackPhase: "playing", startedAt: 3000, stepStartedAt: 3000 });
