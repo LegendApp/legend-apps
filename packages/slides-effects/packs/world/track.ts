@@ -1,5 +1,5 @@
 import type { PlaybackState } from "@legend-apps/presentation";
-import { easeProgress, type CameraPose, type Vec3 } from "./camera";
+import { easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
 import { prepareWorldScene, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
@@ -7,14 +7,15 @@ export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagge
 /** Camera points are local to the incoming station; via points are quadratic controls.
  * `frame: "world"` authors parts and lights in fixed world coordinates, so slides can share one retained scene. */
 export type WorldTrack = {
-  spacing?: number; duration?: number;
+  /** `duration` and `ease` (default 1.7 s, cubic) time the flight into this station; `via`/`viaTarget` bend its curve. */
+  spacing?: number; duration?: number; ease?: Ease;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
   frame?: "station" | "world"; carry?: WorldCarry;
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
 };
-/** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds. */
-export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number };
+/** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds with `ease`. */
+export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number; ease?: Ease };
 type Station = { offset: number; track: WorldTrack };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
@@ -180,8 +181,9 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   if (first || slideChanged && !stations[index]) stations[index] = { offset: index * spacing, track: options };
   const origin = first ? index : slideChanged ? previous.cursor : previous.origin;
   const duration = options.duration ?? 1.7;
-  const travelDuration = Math.max(1, Math.abs(index - origin)) * (stations[Math.max(index, Math.ceil(origin))]?.track.duration ?? duration);
-  const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, "cubic");
+  const leg = stations[Math.max(index, Math.ceil(origin))]?.track;
+  const travelDuration = Math.max(1, Math.abs(index - origin)) * (leg?.duration ?? duration);
+  const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, leg?.ease ?? options.ease ?? "cubic");
   const cursor = origin + (index - origin) * travel;
   const camera = stepCamera(sampleTrackCamera(stations, cursor, spacing), options.steps?.[playback.stepIndex]);
   const station = world ? 0 : stations[index].offset;
@@ -210,8 +212,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const posed = [camera.position[0], camera.position[1], camera.position[2], Math.tan(camera.fov * Math.PI / 360), camera.target[0], camera.target[1], camera.target[2]];
   const cameraDelta = !changed ? previous.cameraDelta : !first && from.length > 7 && (options.steps || previous.cameraDelta) ? posed.map((value, i) => from[i] - value) : undefined;
   const entering = changed ? slideChanged : previous.entering;
-  const moveDuration = options.steps?.[playback.stepIndex]?.duration ?? duration;
-  const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), "cubic")) : 0;
+  const move = options.steps?.[playback.stepIndex], moveDuration = move?.duration ?? duration;
+  const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), move?.ease ?? options.ease ?? "cubic")) : 0;
   // Sampling into a cached scene buffer requires a separate station output: transforms must never accumulate in the cache.
   const input = values;
   const cached = input instanceof Float32Array;

@@ -862,6 +862,8 @@ and `d` override that. `List items` supplies row data. `Counter label` and `valu
 supply its text. `Bars items` takes `label`, `value` and `color`. `Editor` takes
 `name`, `email`, and a `labels` array. A `beat={{ start, every, count }}` ticks a
 `Counter` (by `per`) and sends a pulse down each `Tree` edge on that schedule.
+Scene `colors` and `ambient`, camera easing, part `enter`, `exit` and `carry`, and code and
+chart style props are listed with their defaults in `docs/slides-scene-props.md`.
 
 Every step keyframe in these parts addresses the scene's own steps, so give the
 `Scene` `clock="step"` and one duration per step:

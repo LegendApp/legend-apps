@@ -17,6 +17,7 @@ import { remarkNativeMarkdown } from "./remarkNativeMarkdown";
 import { codeHighlightVersion, remarkCodeHighlight } from "./remarkCodeHighlight";
 import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
+import { remarkSourceLocations } from "./remarkSourceLocations";
 import type { CompileDeckResult } from "./types";
 import { loadUniwindCompiler } from "./uniwindCompiler";
 import { defaultEffectPacksDirectory, MissingEffectPack, repoEffectPacksDirectory, resolveEffectPack } from "./effectPacks";
@@ -208,6 +209,7 @@ function mdxDeckPlugin(entryPath: string, extraDependencies: Set<string>, draftS
             remarkSlideAttributes,
             [remarkWebviews, { deckPath: entryPath, dependencies: extraDependencies }],
             [remarkSlides, { templates, transitions, deckPath: args.path, dependencies: extraDependencies }],
+            remarkSourceLocations({ deckPath: args.path, originalLine: (line, column) => preprocessed.originalLocation(line, column)?.line }),
           ],
         }); }
         catch (error) {
