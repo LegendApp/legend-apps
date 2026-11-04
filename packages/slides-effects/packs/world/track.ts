@@ -19,7 +19,7 @@ export type WorldTrack = {
 };
 /** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds. */
 export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number };
-type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera };
+type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera; stepIndex?: number; pose?: CameraPose };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
@@ -88,7 +88,7 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, sp
   const target = quadratic(a.target,
     worldPoint(end.track.viaTarget ?? [0, 0, (end.offset - start.offset) * 0.3125], end.offset),
     b.target, t);
-  const from = stepCamera(a, start.step), to = stepCamera(b, end.step);
+  const from = start.pose ?? stepCamera(a, start.step), to = end.pose ?? stepCamera(b, end.step);
   // A held step pose belongs to the station, so Previous follows the same unwind in reverse.
   const leave = 1 - easeProgress(t / .125, "cubic"), arrive = 1 - easeProgress((1 - t) / .125, "cubic");
   for (let axis = 0; axis < 3; axis++) {
@@ -225,7 +225,16 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const spacing = options.spacing ?? 32;
   const stations = first ? {} : changed ? { ...previous.stations } : previous.stations;
   if (first || slideChanged && !stations[index]) stations[index] = { offset: index * spacing, track: options };
-  if (changed) stations[index] = { ...stations[index], step: options.steps?.[playback.stepIndex] };
+  if (!first && slideChanged) {
+    const departure = Number(previous.slideKey.split(":")[0]);
+    if (Math.abs(previous.cursor - departure) < 1e-9 && (stations[departure]?.step || previous.cameraDelta)) {
+      const live = previous.values;
+      stations[departure] = { ...stations[departure], pose: { position: [live[0], live[1], live[2]],
+        target: [live[4], live[5], live[6]], fov: Math.atan(live[3]) * 360 / Math.PI, roll: live[7] } };
+    }
+  }
+  if (changed) stations[index] = { ...stations[index], step: options.steps?.[playback.stepIndex], stepIndex: playback.stepIndex,
+    pose: slideChanged && stations[index].stepIndex === playback.stepIndex ? stations[index].pose : undefined };
   const origin = first ? index : slideChanged ? previous.cursor : previous.origin;
   const duration = options.duration ?? 1.7;
   const travelDuration = Math.max(1, Math.abs(index - origin)) * (stations[Math.max(index, Math.ceil(origin))]?.track.duration ?? duration);

@@ -376,6 +376,22 @@ test("Previous retraces the departure from a held step orbit", () => {
   }
 });
 
+test.each([false, true])("Previous retraces an unfinished step orbit (returning: %s)", (returning: boolean) => {
+  const scene = prepareWorldScene({ instances: [] }), options = { steps: { 1: { orbit: 30 } } };
+  const first = continuitySample(createTrackFrame(), scene, "0", 0, options);
+  const step = returning ? 0 : 1;
+  const origin = returning ? continuitySample(first, scene, "0", 2, options, [], 1) : first;
+  const partial = continuitySample(origin, scene, "0", .4, options, [], step);
+  const entered = continuitySample(partial, scene, "1", 0, options);
+  const landed = continuitySample(entered, scene, "1", 2, options);
+  const back = continuitySample(landed, scene, "0:again", 0, options, [], step);
+  for (let i = 0; i <= 40; i++) {
+    const forward = continuitySample(entered, scene, "1", i / 20, options);
+    const reverse = continuitySample(back, scene, "0:again", 2 - i / 20, options, [], step);
+    forward.values.slice(0, 8).forEach((value, field) => expect(reverse.values[field]).toBeCloseTo(value, 6));
+  }
+});
+
 test("fixed environment ids stay in world space while shared station parts carry forward", () => {
   const scene = prepareWorldScene({ instances: [boxPose("environment/post", [0, 2, 0]), boxPose("content", [2, 1, 0])] });
   const options = { fixed: ["environment/"], carry: { lift: 4 } };
