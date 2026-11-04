@@ -7,6 +7,13 @@ export function defaultEffectPacksDirectory() {
   return installedPacksDirectory();
 }
 
+declare const __SLIDES_COMPILER_BUNDLE__: boolean;
+/** A compiler running from source sits in a checkout with every built-in pack. The packaged helper never does. */
+export function repoEffectPacksDirectory() {
+  if (typeof __SLIDES_COMPILER_BUNDLE__ !== "undefined" || process.env.LEGEND_SLIDES_NO_REPO_PACKS) return undefined;
+  return path.resolve(import.meta.dirname, "../../../slides-effects/packs");
+}
+
 export class MissingEffectPack extends Error {
   constructor(public id: string, detail = "is not installed") { super(`Effect pack "${id}" ${detail}. Install the required effects before presenting.`); }
 }
@@ -17,30 +24,32 @@ function localEffectPack(id: string, deckDirectory: string, locked?: EffectLock[
   if (isLocalPack(locked)) throw new Error(`Local effect pack "${id}" was not found at ${locked.path}.`);
 }
 export function resolveEffectPack(reference: string, directory: string, importerPackRoot?: string, lock?: EffectLock,
-  verified = new Set<string>(), deckDirectory?: string) {
+  verified = new Set<string>(), deckDirectory?: string, repoDirectory?: string) {
   const match = /^slides:([a-z][a-z0-9-]*)\/([A-Za-z][A-Za-z0-9-]*)$/.exec(reference);
   if (!match) throw new Error(`Invalid effect pack reference "${reference}".`);
   const [, id, entry] = match;
   const locked = lock?.packs[id];
   const local = deckDirectory ? localEffectPack(id, deckDirectory, locked) : undefined;
-  let pin: PackPin | undefined = local || isLocalPack(locked) ? undefined : locked;
-  if (lock && !local && !pin) throw new MissingEffectPack(id, "has no pinned version in this deck");
+  const repo = !local && repoDirectory && fs.existsSync(path.join(repoDirectory, id, "pack.json")) ? path.join(repoDirectory, id) : undefined;
+  const source = local ? path.resolve(deckDirectory!, local.path) : repo;
+  let pin: PackPin | undefined = source || isLocalPack(locked) ? undefined : locked;
+  if (lock && !source && !pin) throw new MissingEffectPack(id, "has no pinned version in this deck");
   const importer = importerPackRoot && JSON.parse(fs.readFileSync(path.join(importerPackRoot, "pack.json"), "utf8"));
   const expected = importer && Object.hasOwn(importer.dependencies ?? {}, id) ? importer.dependencies[id] : undefined;
   if (importer && !expected && importer.id !== id) throw new Error(`Effect pack "${importer.id}" does not declare its dependency on "${id}".`);
   if (expected && !validVersion(expected)) throw new Error("Invalid effect dependency version.");
   const active = path.join(directory, id, "active.json");
-  if (!local && !pin && fs.existsSync(active)) pin = JSON.parse(fs.readFileSync(active, "utf8"));
+  if (!source && !pin && fs.existsSync(active)) pin = JSON.parse(fs.readFileSync(active, "utf8"));
   if (pin) validatePin(pin);
   // A default dependency belongs to its importing pack's exact version, even
   // when the user has independently updated that dependency's default.
-  if (!local && !lock && expected && pin?.version !== expected) {
+  if (!source && !lock && expected && pin?.version !== expected) {
     const versions = path.join(directory, id, expected);
     const hashes = fs.existsSync(versions) ? fs.readdirSync(versions).filter(validSha) : [];
     if (hashes.length === 1) pin = { version: expected, sha256: hashes[0] };
     else if (pin || hashes.length) throw new MissingEffectPack(id, `requires reinstalling version ${expected}`);
   }
-  const selected = local ? path.resolve(deckDirectory!, local.path) : pin ? pinnedPackDirectory(directory, id, pin) : path.join(directory, id);
+  const selected = source ?? (pin ? pinnedPackDirectory(directory, id, pin) : path.join(directory, id));
   const manifest = path.join(selected, "pack.json");
   if (!fs.existsSync(manifest)) throw new MissingEffectPack(id, pin ? `version ${pin.version} is not installed` : undefined);
   if (pin && !verified.has(selected)) {

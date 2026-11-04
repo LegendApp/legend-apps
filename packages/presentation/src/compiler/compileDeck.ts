@@ -17,9 +17,9 @@ import { remarkSlides } from "./remarkSlides";
 import { remarkWebviews } from "./remarkWebviews";
 import type { CompileDeckResult } from "./types";
 import { loadUniwindCompiler } from "./uniwindCompiler";
-import { defaultEffectPacksDirectory, MissingEffectPack, resolveEffectPack } from "./effectPacks";
+import { defaultEffectPacksDirectory, MissingEffectPack, repoEffectPacksDirectory, resolveEffectPack } from "./effectPacks";
 import { isLocalPack, type EffectLock } from "../effectPacks/schema";
-import { effectLockPath, installedPacksDirectory, readEffectLock, writeEffectLock } from "../effectPacks/storage";
+import { effectLockPath, readEffectLock, writeEffectLock } from "../effectPacks/storage";
 
 // Pass plugin modules rather than paths so the shipped compiler can be a single bundle.
 const workletsPlugin = require("react-native-worklets/plugin");
@@ -205,7 +205,8 @@ export function localDeckPlugin(entryPath: string, transitionDirectory?: string,
         try {
           const importerRoot = libraryRoots.get(args.importer);
           const pack = resolveEffectPack(args.path, options.effectPacksDirectory ?? defaultEffectPacksDirectory(),
-            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified, path.dirname(entryPath));
+            importerRoot && packRoots.has(importerRoot) ? importerRoot : undefined, options.lock, verified, path.dirname(entryPath),
+            options.effectPacksDirectory ? undefined : repoEffectPacksDirectory());
           if (pack.local && options.resolvedPins) options.resolvedPins[pack.id] = pack.local;
           else if (pack.pin && options.resolvedPins) {
             const previous = options.resolvedPins[pack.id];
@@ -313,7 +314,6 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
   const missingPacks = new Set<string>(), packIds = new Set<string>();
   try {
     const lock = readEffectLock(absoluteDeckPath), pins: EffectLock["packs"] = {};
-    const packsDirectory = options.effectPacksDirectory ?? (lock ? installedPacksDirectory() : defaultEffectPacksDirectory());
     const source = options.source ?? fs.readFileSync(absoluteDeckPath, "utf8");
     const extraDependencies = new Set<string>();
     const result = await build({
@@ -329,7 +329,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       outfile: "deck.js",
       platform: "neutral",
       plugins: [
-        localDeckPlugin(absoluteDeckPath, options.transitionDirectory, { effectPacksDirectory: packsDirectory,
+        localDeckPlugin(absoluteDeckPath, options.transitionDirectory, { effectPacksDirectory: options.effectPacksDirectory,
           dependencies: extraDependencies, lock, missingPacks, packIds, resolvedPins: pins }),
         mdxDeckPlugin(absoluteDeckPath, extraDependencies, source, options.transitionDirectory),
       ],

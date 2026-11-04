@@ -159,6 +159,7 @@ test("the capture deck holds the example after a blank slide and compiles only s
   const capturePacks = path.join(directory, "packs");
   const deck = path.join(directory, "capture.mdx");
   const previous = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  process.env.LEGEND_SLIDES_NO_REPO_PACKS = "1";
   try {
     snapshotEffectPacks(packs, capturePacks, "typography", packArchiveHash(path.join(packs, "typography")));
     expect(() => snapshotEffectPacks(packs, path.join(directory, "stale"), "typography", "wrong")).toThrow("changed");
@@ -184,6 +185,7 @@ test("the capture deck holds the example after a blank slide and compiles only s
     expect(slides[1].children.length).toBeGreaterThan(0);
     expect(recordingDeckSource("# No frontmatter")).toStartWith("\n<SlideSeparator />");
   } finally {
+    delete process.env.LEGEND_SLIDES_NO_REPO_PACKS;
     if (previous === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
     else process.env.LEGEND_SLIDES_EFFECT_PACKS = previous;
     fs.rmSync(directory, { recursive: true, force: true });

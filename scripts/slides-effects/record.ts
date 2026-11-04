@@ -147,7 +147,7 @@ let recorderEvents: ReturnType<typeof observeRecorder> | undefined;
 try {
   console.log(`Opening ${slug} in ${path.basename(appPath)}…`);
   // Launch directly so the app inherits a PATH containing bun: dev builds spawn the deck compiler with it.
-  const env = [`PATH=${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, `LEGEND_SLIDES_EFFECT_PACKS=${capturePacks}`];
+  const env = [`PATH=${path.dirname(process.execPath)}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, `LEGEND_SLIDES_EFFECT_PACKS=${capturePacks}`, "LEGEND_SLIDES_NO_REPO_PACKS=1"];
   const devArgs: string[] = [];
   if (!release) {
     const { resolveDevServerPort } = await import(path.join(repo, "scripts/lib/apps.ts"));

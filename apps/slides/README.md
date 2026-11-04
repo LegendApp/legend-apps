@@ -102,8 +102,8 @@ and stopped afterwards. Legend Slides is single-instance, so the recorder waits
 use the video-recording skill's ScreenCaptureKit recorder: set
 `LEGEND_VIDEO_RECORDING_SKILL` to its directory. The host process needs Screen
 Recording permission. When `LEGEND_APP_LOCK` names a lock command, the whole run
-holds it for the `slides` app. `--effect-packs packages/slides-effects/packs` resolves
-`slides:` imports from this checkout's packs instead of the installed ones. Build errors stop the run; runtime errors are printed and make the command exit 1.
+holds it for the `slides` app. `--effect-packs <directory>` resolves `slides:` imports
+from that directory instead of this checkout's packs. Build errors stop the run; runtime errors are printed and make the command exit 1.
 
 ## Editing
 

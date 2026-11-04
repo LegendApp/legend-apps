@@ -105,6 +105,8 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(result.code).toContain("__workletHash");
     expect(result.code).toContain('require("react/compiler-runtime")');
     expect(result.uniwindCode).toContain("stylesheet");
+    // Release builds never look for packs in a source checkout.
+    expect(fs.readFileSync(path.join(compiler, "runtime/compiler/dist/bin/compiler.mjs"), "utf8")).not.toContain("slides-effects/packs");
     // Both real export fixtures run with only the packaged helper and copied decks available.
     const examples = path.join(temp, "examples");
     fs.mkdirSync(path.join(examples, "templates"), { recursive: true });

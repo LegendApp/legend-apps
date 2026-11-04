@@ -1,5 +1,5 @@
 // @ts-nocheck Bun test globals follow the repository test setup.
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -159,4 +159,74 @@ test("host API 2 accepts multipass packs while retaining API 1", () => {
   expect(effectPackIncompatibility({ hostApiVersion: 2, capabilities: ["webgpu", "webgpu-multipass", "reanimated"] })).toBeUndefined();
   expect(effectPackIncompatibility({ hostApiVersion: 1, capabilities: ["webgpu"] })).toBeUndefined();
   for (const hostApiVersion of [0, 1.5, 3]) expect(effectPackIncompatibility({ hostApiVersion })).toContain("this app provides 2");
+});
+
+describe("packs in a source checkout", () => {
+  const repoPacks = path.resolve(import.meta.dirname, "../../../slides-effects/packs");
+  const importing = 'export { AnimatedTitle } from "slides:typography/AnimatedTitle"\n\n# Title';
+  const previousInstalled = process.env.LEGEND_SLIDES_EFFECT_PACKS;
+  beforeEach(() => { process.env.LEGEND_SLIDES_EFFECT_PACKS = path.join(fixture().root, "not-installed"); });
+  afterEach(() => {
+    delete process.env.LEGEND_SLIDES_NO_REPO_PACKS;
+    if (previousInstalled === undefined) delete process.env.LEGEND_SLIDES_EFFECT_PACKS;
+    else process.env.LEGEND_SLIDES_EFFECT_PACKS = previousInstalled;
+  });
+  const manifestOf = (result, id) => result.dependencies.find(file => file.endsWith(path.join(id, "pack.json")));
+
+  test("resolve with nothing installed and leave the deck folder alone", async () => {
+    const { deck } = fixture({ "deck/deck.mdx": importing });
+    const result = await compileDeck(deck);
+    if (!result.success) throw Error(result.errors.join("\n"));
+    expect(manifestOf(result, "typography")).toBe(path.join(repoPacks, "typography/pack.json"));
+    expect(fs.readdirSync(path.dirname(deck))).toEqual(["deck.mdx"]);
+  });
+
+  test("come after deck-local packs", async () => {
+    const { deck } = fixture({
+      "deck/deck.mdx": 'export { Local } from "slides:typography/Local"',
+      "deck/effects/typography/pack.json": JSON.stringify({ id: "typography", version: "9.0.0", hostApiVersion: 1, exports: { Local: "./Local.ts" } }),
+      "deck/effects/typography/Local.ts": "export const Local = 1;",
+    });
+    const result = await compileDeck(deck);
+    if (!result.success) throw Error(result.errors.join("\n"));
+    expect(manifestOf(result, "typography")).toBe(path.join(path.dirname(deck), "effects/typography/pack.json"));
+  });
+
+  test("still report a lockfile path entry that is missing", async () => {
+    const { deck } = fixture({
+      "deck/deck.mdx": importing,
+      "deck/deck.mdx.effects.lock.json": JSON.stringify({ schemaVersion: 1, packs: { typography: { path: "gone" } } }),
+    });
+    const result = await compileDeck(deck);
+    expect(result.success).toBe(false);
+    expect(result.errors.join("\n")).toContain("was not found at gone");
+  });
+
+  test("come before a pinned version without rewriting the lockfile", async () => {
+    const lock = JSON.stringify({ schemaVersion: 1, packs: { typography: { version: "0.0.1", sha256: "a".repeat(64) } } });
+    const { deck } = fixture({ "deck/deck.mdx": importing, "deck/deck.mdx.effects.lock.json": lock });
+    const result = await compileDeck(deck);
+    if (!result.success) throw Error(result.errors.join("\n"));
+    expect(manifestOf(result, "typography")).toStartWith(repoPacks);
+    expect(fs.readFileSync(`${deck}.effects.lock.json`, "utf8")).toBe(lock);
+  });
+
+  test("come before LEGEND_SLIDES_EFFECT_PACKS, which still serves other packs", async () => {
+    const { deck, packs } = fixture({ "deck/deck.mdx": `${importing}\nexport { sample } from "slides:motion/Pose"`,
+      "packs/typography/pack.json": JSON.stringify({ id: "typography", version: "9.0.0", hostApiVersion: 1, exports: { AnimatedTitle: "./T.ts" } }),
+      "packs/typography/T.ts": "export const AnimatedTitle = 1;" });
+    process.env.LEGEND_SLIDES_EFFECT_PACKS = packs;
+    const result = await compileDeck(deck);
+    if (!result.success) throw Error(result.errors.join("\n"));
+    expect(manifestOf(result, "typography")).toStartWith(repoPacks);
+    expect(manifestOf(result, "motion")).toBe(path.join(packs, "motion/pack.json"));
+  });
+
+  test("give way to an explicit directory and to the opt-out", async () => {
+    const { deck, packs } = fixture({ "deck/deck.mdx": importing });
+    const explicit = await compileDeck(deck, { effectPacksDirectory: packs });
+    expect(explicit).toMatchObject({ success: false, missingEffectPacks: ["typography"] });
+    process.env.LEGEND_SLIDES_NO_REPO_PACKS = "1";
+    expect(await compileDeck(deck)).toMatchObject({ success: false, missingEffectPacks: ["typography"] });
+  });
 });
