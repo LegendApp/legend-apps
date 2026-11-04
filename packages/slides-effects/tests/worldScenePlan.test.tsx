@@ -1,16 +1,19 @@
 // @ts-nocheck Exercise the retained background surface and real playback clocks without a GPU.
 import "../../../apps/slides/src/__tests__/nativeMock";
 import { frames, flushUI } from "../../../apps/slides/src/__tests__/uiClockMock";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { observable } from "@legendapp/state";
 import { BackgroundHost, DeckContentContext, GPUShaderProvider, PresentationObservableProvider } from "@legend-apps/presentation";
 import React from "react";
 import { act, create } from "react-test-renderer";
+import * as Reanimated from "react-native-reanimated";
 import { Scene } from "../packs/world/Authoring";
 import { Box, Sphere, Tube, WorldSlide } from "../packs/world/World";
 
 test("authored slides retain one GPU graph across different geometry, steps and reverse navigation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const mutables = spyOn(Reanimated, "makeMutable");
+  const outputs = () => mutables.mock.calls.filter(([value]) => value instanceof Float32Array).length;
   const runtime = index => observable({ currentSlide: 0, currentStep: 0, slideIndex: index, stepIndex: 0,
     slideCount: 2, stepCount: 2, startedAt: 0, stepStartedAt: 0, isActive: index === 0,
     isPreview: false, isPreparing: index !== 0, playbackPhase: index ? "preparing" : "playing", playbackScope: "slide" });
@@ -30,8 +33,10 @@ test("authored slides retain one GPU graph across different geometry, steps and 
   try {
     await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
     const initial = graph();
-    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node); });
+    const plan = renderer.root.findAllByType(WorldSlide)[0].props.scenePlan;
+    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node, {}, React.cloneElement(node.props.children)); });
     await act(() => { renderer.update(content(0)); }); tick(3000);
+    expect(renderer.root.findAllByType(WorldSlide)[0].props.scenePlan).toBe(plan);
     expect(graph()).toBe(initial);
     await act(() => {
       first$.assign({ currentSlide: 1, playbackPhase: "outgoing", isActive: false });
@@ -39,6 +44,7 @@ test("authored slides retain one GPU graph across different geometry, steps and 
       renderer.update(content(1));
     }); tick(3000); tick(6000);
     expect(graph()).toBe(initial);
+    expect(outputs()).toBe(1);
     await act(() => { second$.assign({ stepIndex: 1, currentStep: 1, stepStartedAt: 6000 }); }); tick(6000);
     expect(graph()).toBe(initial);
     await act(() => {
@@ -48,7 +54,7 @@ test("authored slides retain one GPU graph across different geometry, steps and 
     }); tick(7000); tick(10000);
     expect(graph()).toBe(initial);
     expect(renderer.root.findByType("gpu").props.frameData.value.some(value => !Number.isFinite(value))).toBe(false);
-  } finally { await act(() => renderer?.unmount()); flushUI(); }
+  } finally { await act(() => renderer?.unmount()); flushUI(); mutables.mockRestore(); }
 });
 
 test("entering a plan from a raw World retains its outgoing geometry before joining the pool", async () => {
@@ -79,4 +85,59 @@ test("entering a plan from a raw World retains its outgoing geometry before join
       }
     }
   } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test("equivalent scene plans still invalidate for changed geometry, appearance and camera", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ stepIndex: 0, isPreview: true });
+  let declaration = <Scene id="one" world="edits"><Box id="part" /></Scene>;
+  const content = () => <DeckContentContext.Provider value={[declaration]}>
+    <PresentationObservableProvider value={runtime$}>{declaration}</PresentationObservableProvider>
+  </DeckContentContext.Provider>;
+  let renderer;
+  const plan = () => renderer.root.findByType(WorldSlide).props.scenePlan;
+  try {
+    await act(() => { renderer = create(content()); });
+    for (const update of [
+      node => React.cloneElement(node, {}, <Sphere id="part" />),
+      node => React.cloneElement(node, { exposure: 2 }),
+      node => React.cloneElement(node, { camera: { position: [2, 3, 14] } }),
+    ]) {
+      const previous = plan();
+      declaration = update(declaration);
+      await act(() => renderer.update(content()));
+      expect(plan()).not.toBe(previous);
+    }
+    expect(plan().content.prepared.instances[0].kind).toBe("sphere");
+    expect(renderer.root.findByType(WorldSlide).props.track.position).toEqual([2, 3, 14]);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("planned surfaces reuse one immutable UI scene while keeping sampled outputs separate", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const mutables = spyOn(Reanimated, "makeMutable");
+  const declarations = [<Scene id="one" world="copies"><Box id="part" position={[
+    { at: 0, value: [0, 0, 0], duration: 0 }, { at: 0, value: [2, 0, 0], duration: 2, ease: "linear" },
+  ]} /></Scene>];
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = preview => <DeckContentContext.Provider value={declarations}><GPUShaderProvider renderer={Renderer}>
+    <BackgroundHost slideIndex={0} color="#05060a" isPreview={preview}>
+      <PresentationObservableProvider value={observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0,
+        slideCount: 1, stepCount: 1, startedAt: 0, stepStartedAt: 0, isActive: !preview,
+        isPreview: preview, isPreparing: false, playbackPhase: preview ? "preview" : "playing", playbackScope: "slide" })}>
+        {declarations[0]}
+      </PresentationObservableProvider>
+    </BackgroundHost>
+  </GPUShaderProvider></DeckContentContext.Provider>;
+  let live, preview;
+  try {
+    await act(() => { live = create(content(false)); preview = create(content(true)); });
+    flushUI(); frames.forEach(frame => frame.tick(0)); frames.forEach(frame => frame.tick(1000));
+    expect(mutables.mock.calls.filter(([value]) => value?.instances).length).toBe(1);
+    const values = live.root.findByType("gpu").props.frameData.value, before = Array.from(values);
+    const still = preview.root.findByType("gpu").props.frameData.value;
+    expect(still).not.toBe(values);
+    expect(still[128]).not.toBe(values[128]);
+    expect(Array.from(values)).toEqual(before);
+  } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); mutables.mockRestore(); }
 });
