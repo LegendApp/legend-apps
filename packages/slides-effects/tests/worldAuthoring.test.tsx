@@ -6,7 +6,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
-import { Box, Card, Pillar, RoutedTube, Stage, Text3D } from "../packs/world/World";
+import { Box, Burst, Card, Pillar, RoundedBox, RoutedTube, Stage, Text3D } from "../packs/world/World";
 
 const fence = <pre><code className="language-tsx">{"function Example() {\n  return 42;\n}\n"}</code></pre>;
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
@@ -33,7 +33,10 @@ test("literal fences and scene declarations preserve code, layout and identity w
 test("tree labels, stable ids and parent layout survive edits; malformed declarations fail clearly", () => {
   const nodes = [{ id: "root", label: "Owner" }, { id: "child", label: "Child", p: 0, x: 3 }];
   const tree = flat(expandScene(<Tree id="tree" nodes={nodes} />));
-  expect(tree.find(node => node.type === Card && node.props.id === "tree/child")!.props.position).toEqual([3, .35, 0]);
+  const assembly = tree.find(node => node.type === Stage && node.props.id === "tree/child/assembly")!.props.position as { value: number[] }[];
+  expect(assembly.at(-1)!.value).toEqual([3, .35, 0]);
+  expect(tree.find(node => node.type === RoundedBox && node.props.id === "tree/child")!.props.material).toMatchObject({ metal: .85, roughness: .3 });
+  expect(tree.some(node => node.type === Burst && node.props.id === "tree/child/landing")).toBe(true);
   expect(tree.find(node => node.type === Text3D && node.props.id === "tree/root/label")!.props.text).toBe("Owner");
   expect(() => readScenes([<Scene id="bad"><Headline id="same">A</Headline><Headline id="same">B</Headline></Scene>])).toThrow("Duplicate scene part");
   expect(() => readScenes([<Scene id="bad"><Tree id="tree" nodes={[{ id: "cycle", p: 0 }]} /></Scene>])).toThrow("parent must precede child");
@@ -103,7 +106,7 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
   const tree = flat(expandScene(<Tree id="t" nodes={[{ id: "p" }, { id: "m", p: 0 }, { id: "c", p: 1 }]} color="#555555"
     flash={[{ step: 1, color: "#ff0000", wave: false, from: "p", ids: ["c"] }]} />));
   expect(tree.filter(n => String(n.props.id).endsWith("/beam")).map(n => n.props.id)).toEqual(["t/c/beam"]);
-  expect(tree.find(n => n.props.id === "t/m")!.props.color).toBe(undefined);
+  expect(tree.find(n => n.props.id === "t/m")!.props.color).toBe("#555555");
   expect((tree.find(n => n.props.id === "t/c")!.props.color as { value: string }[]).map(k => k.value)).toEqual(["#555555", "#ff0000"]);
   const keys = flat(expandScene(<Keys id="k" keys={["A", "B"]} next={["B", "C"]} />));
   const recycled = keys.find(n => n.props.id === "k/A")!.props.position as { value: number[] }[];
