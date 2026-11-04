@@ -24,7 +24,7 @@ export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
   stations: Record<number, Station>; ids: string[]; declared: string[]; declaredSlots: boolean[]; fixedSlots: boolean[];
-  visible: string[]; retiredVisible: string[];
+  visible: string[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
   cameraDelta?: number[]; entering?: boolean;
@@ -33,7 +33,7 @@ export type TrackFrame = {
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], retiredVisible: [], from: [], sources: [], retired: {}, values: [] };
+    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], from: [], sources: [], retired: {}, values: [] };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -204,9 +204,9 @@ function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame): TrackFrame 
     const id = frame.ids[slot];
     if (restoreRetired(frame.values, worldHeaderSize + slot * worldInstanceSize, id, frame.retired[id])) visible.push(id);
   }
-  const same = visible.length === previous.retiredVisible.length && visible.every((id, i) => id === previous.retiredVisible[i]);
-  frame.retiredVisible = same ? previous.retiredVisible : visible;
-  frame.visible = same && frame.declared === previous.declared ? previous.visible : [...frame.declared, ...visible];
+  const same = frame.declared === previous.declared && frame.declared.length + visible.length === previous.visible.length &&
+    visible.every((id, i) => id === previous.visible[frame.declared.length + i]);
+  frame.visible = same ? previous.visible : [...frame.declared, ...visible];
   return frame;
 }
 
@@ -265,7 +265,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const moveDuration = options.steps?.[playback.stepIndex]?.duration ?? duration;
   const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), "cubic")) : 0;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output: previous.output,
-    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, retiredVisible: previous.retiredVisible, from, sources, retired, values, cameraDelta, entering };
+    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering };
   for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[7] = camera.roll;
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
