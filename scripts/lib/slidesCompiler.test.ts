@@ -105,6 +105,11 @@ test("packaged compiler signs as a helper bundle and compiles local worklets and
     expect(result.code).toContain("__workletHash");
     expect(result.code).toContain('require("react/compiler-runtime")');
     expect(result.uniwindCode).toContain("stylesheet");
+    const cached = Bun.spawn([path.join(compiler, "run"), deck, "--timings"], { cwd: temp, env: { ...process.env, LEGEND_SLIDES_RUNTIME: runtimes[0] }, stdout: "pipe", stderr: "pipe" });
+    const [cachedOut, cachedErr, cachedStatus] = await Promise.all([new Response(cached.stdout).text(), new Response(cached.stderr).text(), cached.exited]);
+    expect(cachedStatus).toBe(0);
+    expect(JSON.parse(gunzipSync(Buffer.from(JSON.parse(cachedOut).data, "base64")).toString())).toEqual(result);
+    expect(JSON.parse(cachedErr).timings.transformCacheRead).toBeGreaterThan(0);
     // Release builds never look for packs in a source checkout.
     expect(fs.readFileSync(path.join(compiler, "runtime/compiler/dist/bin/compiler.mjs"), "utf8")).not.toContain("slides-effects/packs");
     // Both real export fixtures run with only the packaged helper and copied decks available.
