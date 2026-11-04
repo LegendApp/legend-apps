@@ -1,6 +1,7 @@
 import React, { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
+import { colorVector } from "./scene";
 import { Box, Card, Custom, DOF, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
@@ -385,8 +386,9 @@ export function placeTree(nodes: TreeNode[], { width, levelHeight = 1.65 }: { wi
   }
   return placed;
 }
-/** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units. */
-export function speedTrails(length = 250) {
+/** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units.
+ * At peak travel speed each streak is `stretch` times longer and `boost` times brighter. Every other streak is `accent` (default red). */
+export function speedTrails(length = 250, { stretch = 3, boost = 1.6, accent }: { stretch?: number; boost?: number; accent?: string } = {}) {
   const count = 26, f32 = (n: number) => n.toFixed(8), trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
     l: 6 + 10 * hash(i * 7 + 3), ph: hash(i * 11 + 3), sp: .6 + .8 * hash(i * 13 + 3), gain: 2.2 * (.4 + .6 * hash(i * 17 + 3)) }));
   return <Custom id="trails" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`
@@ -398,10 +400,10 @@ fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
  let sgn=select(-1.,1.,face%2u==0u); let axis=face/2u; var p=vec3f(q.x,q.y,sgn); var n=vec3f(0.,0.,sgn);
  if(axis==0u) { p=vec3f(sgn,q.x,q.y); n=vec3f(sgn,0.,0.); }
  if(axis==1u) { p=vec3f(q.x,sgn,q.y); n=vec3f(0.,sgn,0.); }
- return ShapeVertex(vec3f(d.x,d.y,z)+p*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5),n);
+ return ShapeVertex(vec3f(d.x,d.y,z)+p*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5*(1.+travelSpeed()*${f32(stretch - 1)})),n);
 }
 fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
- return Material(vec3f(0.),select(vec3f(1.),vec3f(1.,.04231141,.01161225),id%2u==0u)*E[id].y,1.,0.);
+ return Material(vec3f(0.),select(vec3f(1.),${accent ? `vec3f(${colorVector(accent).map(f32).join(",")})` : "vec3f(1.,.04231141,.01161225)"},id%2u==0u)*E[id].y*(1.+travelSpeed()*${f32(boost - 1)}),1.,0.);
 }`} />;
 }
 /** A repeating beat, in seconds. */

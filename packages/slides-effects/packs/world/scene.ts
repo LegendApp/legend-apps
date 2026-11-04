@@ -358,6 +358,8 @@ export function sdfInstance(options: SDFOptions): Instance {
 export const worldHeaderSize = 128;
 /** Reserved header slots for the projected World clock used by custom WGSL contexts. */
 export const worldClockOffset = 24;
+/** Header slot holding the camera's travel speed between track stations, 0 at rest to 1 at the move's peak; the next slot holds its radial blur. */
+export const travelSpeedSlot = 126;
 /**
  * One mesh instance's 32 floats, shared by the TS writer and the WGSL `instanceAt` loader. Labels and Text3D glyphs
  * pack their own fields into `detail`, `endpoint`, `curve`, `extra` and `thickness`.

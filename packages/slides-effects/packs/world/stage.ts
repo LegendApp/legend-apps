@@ -14,6 +14,26 @@ export type PillarOptions = {
   emissive?: number; capEmissive?: number; material?: PrimitiveOptions["material"];
 };
 
+/** One lamp: a color, or a color and glow, either of which can animate; glow 0 is off. */
+export type StoplightLamp = Animated<string> | { color?: Animated<string>; glow?: Animated<number> };
+/** A housing of lamps in a row facing +z, left to right. `size` is the lamp diameter in world units. */
+export type StoplightOptions = { id?: string; position?: Vec3; size?: number; lights?: StoplightLamp[]; glow?: number; housing?: string };
+
+const stoplightDefaults = ["#ff2d2d", "#ff2d2d", "#ffb020", "#2dff7a", "#2dff7a"];
+/** A housing, one hood and one glowing lens per lamp. */
+export function stoplightInstances({ id = "stoplight", position = [0, 0, 0], size = 0.5, lights = stoplightDefaults, glow = 6, housing = "#121318" }: StoplightOptions = {}): Instance[] {
+  if (!(size > 0) || !lights.length) throw new Error("Stoplight needs a positive size and at least one light");
+  const spacing = size * 1.3, [x, y, z] = position, body = { albedo: housing, roughness: 0.45, metal: 0.6, rim: 0 };
+  const instances = [primitive("box", { id: `${id}:housing`, position, size: 0.5, scale: [lights.length * spacing + size * 0.3, size * 1.5, size * 0.8], color: housing, emissive: 0, material: body })];
+  lights.forEach((lamp, index) => {
+    const { color = "#ff2d2d", glow: lit = glow } = typeof lamp === "object" && ("color" in lamp || "glow" in lamp) ? lamp : { color: lamp as Animated<string> };
+    const lx = x + (index - (lights.length - 1) / 2) * spacing;
+    instances.push(primitive("sphere", { id: `${id}:lamp:${index}`, position: [lx, y, z + size * 0.4], size: size * 0.42, color, emissive: lit, material: { albedo: "#1a1b20", roughness: 0.2, metal: 0, rim: 0 } }),
+      primitive("box", { id: `${id}:hood:${index}`, position: [lx, y + size * 0.56, z + size * 0.62], size: 0.5, scale: [size * 1.02, size * 0.07, size * 0.5], color: housing, emissive: 0, material: body }));
+  });
+  return instances;
+}
+
 /** Rounded solid geometry, instanced with the same material/rim controls as World cards. */
 export function roundedBoxInstances({ radius = 0.1, edge = 0.6, ...options }: RoundedBoxOptions): Instance[] {
   if (!Number.isFinite(radius) || radius < 0 || !Number.isFinite(edge) || edge < 0) throw new Error("RoundedBox needs a nonnegative radius and edge");

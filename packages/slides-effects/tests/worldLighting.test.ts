@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { tunnelInstances } from "../packs/world/lighting";
+import { floorMarkingsCode, tunnelInstances } from "../packs/world/lighting";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
 import { orbInstances, prepareWorldScene, primitive, sampleWorldUniforms, type WorldScene } from "../packs/world/scene";
 
@@ -75,4 +75,16 @@ test("Text3D glyphs cast key-light shadows and receive the key light and environ
   expect(scene.reads).toEqual(["text3d-0", "shadow"]);
   expect(scene.code).toContain("@binding(4) var shadowMap");
   expect(scene.code).toContain("environmentLight(normal");
+});
+
+test("tunnels add one streaking light-rig draw and track floors a start grid, both optional", () => {
+  const rigs = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -40], spacing: 8 }).filter(part => part.id === "tunnel:lights");
+  expect(rigs.length).toBe(1);
+  expect(rigs[0].custom!.vertexCount).toBe(3 * 8 * 36);
+  expect(rigs[0].custom!.wgsl).toContain("travelSpeed()");
+  expect(tunnelInstances({ lights: false }).some(part => part.id === "tunnel:lights")).toBe(false);
+  expect(floorMarkingsCode({ kerbs: [{ x: 9 }] })).toContain("checker");
+  expect(floorMarkingsCode({ kerbs: [{ x: 9 }], start: false })).not.toContain("checker");
+  expect(floorMarkingsCode({})).not.toContain("checker");
+  expect(worldGraphTopology(prepareWorldScene({ instances: tunnelInstances({ to: [0, 0, -40] }) })).customs!.length).toBe(1);
 });
