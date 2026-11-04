@@ -25,12 +25,12 @@ test("compatible declarations and retained outgoing parts use one graph without 
   const occupied = new Set(copies.flatMap(([, count, target]) => Array.from({ length: count / worldInstanceSize }, (_, i) => target + i * worldInstanceSize)));
   for (let slot = worldHeaderSize; slot < plan.size; slot += worldInstanceSize) if (!occupied.has(slot)) expect(output[slot + 23]).toBe(0);
 });
-test("different post-processing layouts keep distinct graphs", () => {
-  const a = prepareWorldScene({ instances: [], floor: { mirror: true } }), b = prepareWorldScene({ instances: [] });
+test("different floor layouts keep distinct graphs", () => {
+  const a = prepareWorldScene({ instances: [], floor: {} }), b = prepareWorldScene({ instances: [] });
   const plans = prepareWorldPlans([a, b]);
   expect(plans.get(a)).not.toBe(plans.get(b));
-  expect(plans.get(a)!.topology.mirror).toBe(true);
-  expect(plans.get(b)!.topology.mirror).toBe(false);
+  expect(plans.get(a)!.topology.floor).toBe(true);
+  expect(plans.get(b)!.topology.floor).toBe(false);
 });
 
 test("pooled station uniforms match baked scenes by part id through omission, steps and reverse", () => {

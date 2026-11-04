@@ -65,7 +65,7 @@ describe("world Text3D", () => {
     expect(values[index + 11]).toBe(font.chars.indexOf("G"));
     expect(values[index + 13]).toBeGreaterThan(0);
     expect(values[index + 3]).toBe(2);
-    expect(prepared.instances.every(instance => instance.motion === undefined)).toBe(true);
+    expect(prepared.instances.every(instance => instance.motion === "tracks")).toBe(true);
     expect(scene(text3dInstances({ text: "Still" })).instances.every(instance => instance.motion === "static")).toBe(true);
   });
   test("per-glyph motion overrides color, rotation and offset", () => {

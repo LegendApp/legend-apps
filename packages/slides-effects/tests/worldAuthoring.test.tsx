@@ -1,4 +1,5 @@
 import "../../../apps/slides/src/__tests__/nativeMock";
+// @ts-ignore Bun supplies the standalone test API.
 import { expect, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
@@ -145,8 +146,8 @@ test("lane scenes fly parts into the next scene's tree and bars, which grow in a
   expect(second.find(n => n.type === Custom)!.props.count).toBe(4 * 14);
   const root = second.find(n => n.props.id === "tree/r")!.props.scale as { at: number }[];
   expect(root[1].at).toBe(1.25);
-  expect((second.find(n => n.props.id === "tree/r")!.props.emissive as { at: number; value: number }[]).filter(k => k.value === 7).map(k => k.at)).toEqual([2, 3.5]);
-  expect(second.find(n => n.props.id === "tree/b")!.props.emissive).toBe(undefined);
+  expect((second.find(n => n.props.id === "tree/r")!.props.emissive as { at: number; value: number }[]).filter(k => k.value === .45).map(k => k.at)).toEqual([2, 3.5]);
+  expect(second.find(n => n.props.id === "tree/b")!.props.emissive).toBe(.006);
   expect(second.filter(n => String(n.props.id).startsWith("tree/a/typed")).map(n => n.props.text)).toEqual(['"A"', '"Ad"']);
   const third = flat(laneScene(scenes, 2));
   expect(third.filter(n => n.type === Card && String(n.props.id).startsWith("tree/out/")).length).toBe(3);

@@ -6,9 +6,9 @@ import { act, create } from "react-test-renderer";
 import { observable } from "@legendapp/state";
 import { BackgroundHost, GPUShaderProvider, PresentationObservableProvider } from "@legend-apps/presentation";
 import { frames, flushUI } from "../../../apps/slides/src/__tests__/uiClockMock";
-import { Box, Card, Sphere, Tube, World, WorldSlide } from "../packs/world/World";
+import { Box, Card, Sphere, Tube, World, WorldSlide, prepareWorldSlides } from "../packs/world/World";
 import { Scene } from "../packs/world/Authoring";
-import { worldHeaderSize } from "../packs/world/scene";
+import { worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 
 test("per-slide components retain one World, including reverse travel, independent previews and a world reset", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -223,5 +223,32 @@ test.each([true, false])("rapid navigation retains long geometry (first slide re
     await go(4, 11000); tick(14000);
     await go(5, 14000); tick(17000);
     expect(hasTube()).toBe(false);
+  } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test("pooled rapid navigation rebakes overflow without losing live declarations", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0, slideCount: 3, stepCount: 1,
+    startedAt: 0, stepStartedAt: 0, isActive: true, isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide" });
+  const slides = prepareWorldSlides([0, 1, 2].map(index => ({ id: "overflow", track: { duration: 2 },
+    children: <Box id={`part${index}`} position={[index + 1, 2, -100]} /> })));
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = index => <GPUShaderProvider renderer={Renderer}><PresentationObservableProvider value={runtime$}>
+    <World {...slides[index]} />
+  </PresentationObservableProvider></GPUShaderProvider>;
+  let renderer;
+  const tick = time => { flushUI(); frames.forEach(frame => frame.tick(time)); };
+  try {
+    await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
+    for (const [index, time] of [[1, 3000], [2, 3100]]) {
+      await act(() => { runtime$.assign({ currentSlide: index, slideIndex: index, startedAt: time, stepStartedAt: time }); renderer.update(content(index)); });
+      tick(time); tick(time + 50);
+    }
+    await act(() => renderer.update(content(2))); tick(3200);
+    const values = renderer.root.findByType("gpu").props.frameData.value;
+    const xs = [];
+    for (let at = worldHeaderSize; at < values.length; at += worldInstanceSize) xs.push(values[at]);
+    expect(xs.sort()).toEqual([1, 2, 3]);
+    expect(values[worldHeaderSize + 2 * worldInstanceSize + 23]).toBe(1);
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });

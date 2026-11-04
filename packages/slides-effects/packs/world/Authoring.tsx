@@ -916,7 +916,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       return <Fragment key={n.id}>
         <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
           key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>
-          <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={[width,height,.5]} color={color ?? idle} emissive={emissive}
+          <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={delay === undefined ? [width,height,.5] : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: delay + i * .07, value: [width,height,.5], duration: .45, ease: "spring" }]} color={color ?? idle} emissive={emissive}
             material={{ albedo: "#101115", metal: .85, roughness: .3, rim: 0 }} />
           <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
             material={{ albedo: "#000000", metal: 0, roughness: 1 }} />

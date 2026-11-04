@@ -59,12 +59,12 @@ test("selected background worlds restart slide time while preserving camera cont
     expect(graph().clockState.value.slideTime).toBe(1);
     expect(values()[worldHeaderSize]).toBeCloseTo(2);
     tick(11500);
-    expect(values().slice(0, 3)).toEqual([8, 5, 20]);
+    expect(Array.from(values().slice(0, 3))).toEqual([8, 5, 20]);
     tick(13350);
     expect(values()[2]).toBeGreaterThan(20);
     expect(values()[2]).toBeLessThan(34);
     tick(17800);
-    expect(values().slice(0, 3)).toEqual([0, 7, 34]);
+    expect(Array.from(values().slice(0, 3))).toEqual([0, 7, 34]);
 
     await act(() => second$.assign({ currentStep: 0, stepIndex: 0, stepStartedAt: 17800 }));
     flushUI(); tick(17800);

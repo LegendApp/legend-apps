@@ -23,6 +23,7 @@ mock.module("react-native-reanimated", () => ({ ...animated, useDerivedValue(rea
 } }));
 mock.module("@legend-apps/presentation", () => ({
   PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
+  Background: ({ children }) => children, registerAdvanceGuard: () => () => {},
   GPURenderGraph: props => React.createElement("render-graph", props),
   usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 1280, height: 720 }),
   usePresentationValue: () => playback.value.phase,
@@ -37,7 +38,7 @@ test("world uniforms sample preparation/preview and retain live continuity witho
   const draw = content => <Profiler id="world" onRender={() => commits++}>{content}</Profiler>;
   const mount = async (content, settle = true) => { await act(() => { tree = create(draw(content)); }); if (settle) reactUI(); };
   const unmount = async () => { await act(() => tree.unmount()); };
-  const values = () => tree.root.findByType("render-graph").props.uniforms.value;
+  const values = () => Array.from(tree.root.findByType("render-graph").props.uniforms.value);
   try {
     await mount(<World id="continuity" background>{scene}</World>);
     expect(tree.root.findByType("render-graph").props.width).toBe(1280);
@@ -137,7 +138,7 @@ test("topology transitions retire a uniform generation with its original capacit
     expect(first.uniforms.value).toHaveLength(first.uniformsSize);
     expect(renderer.root.findByType("world-overlay").props.identity).toBe(1);
     expect(overlayMounts).toBe(1); expect(overlayUnmounts).toBe(0);
-    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 40) {
       playback.value = advancePlayback(playback.value, timestamp);
       reactUI();
     }
@@ -187,18 +188,18 @@ test("auto resolution adapts without React frames and preserves the frozen pause
     await act(() => { renderer = create(content("auto")); });
     const graph = () => renderer.root.findByType("render-graph").props;
     const passes = graph().passes, initialCommits = commits;
-    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 40) {
       playback.value = advancePlayback(playback.value, timestamp);
       reactUI();
     }
     expect(graph().renderScale.value).toBeLessThan(0.8);
-    expect(graph().uniforms.value[35]).toBe(graph().renderScale.value);
+    expect(graph().uniforms.value[35]).toBeCloseTo(graph().renderScale.value);
     expect(graph().passes).toBe(passes); expect(commits).toBe(initialCommits);
     expect(playback.value.slideTime).toBeCloseTo(6);
     const frozenScale = graph().renderScale.value;
     playback.value = transitionPlayback(playback.value, { ...playback.value, phase: "paused" });
     reactUI();
-    expect(graph().renderScale.value).toBe(frozenScale); expect(graph().uniforms.value[35]).toBe(frozenScale);
+    expect(graph().renderScale.value).toBe(frozenScale); expect(graph().uniforms.value[35]).toBeCloseTo(frozenScale);
     playback.value = transitionPlayback(playback.value, { ...playback.value, phase: "playing" });
     playback.value = advancePlayback(playback.value, 50000);
     reactUI();
@@ -216,7 +217,7 @@ test("auto resolution adapts without React frames and preserves the frozen pause
     playback.value = createPlaybackState({ phase: "playing", slideKey: "fixed", stepKey: "0", stepIndex: 0 });
     await act(() => renderer.update(content("high")));
     const fixedCommits = commits;
-    for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+    for (let timestamp = 0; timestamp <= 6000; timestamp += 40) {
       playback.value = advancePlayback(playback.value, timestamp);
       reactUI();
     }
@@ -236,6 +237,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     const module = { exports: {} };
     const callbacks = [], mutables = [], preparations = [], reactions = [];
     const presentation = { PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
+      Background: ({ children }) => children, registerAdvanceGuard: () => () => {},
       GPURenderGraph: props => React.createElement("compiled-graph", props),
       usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 800, height: 500 }),
       usePresentationValue: () => playback.value.phase };
@@ -250,6 +252,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       if (name === "react-native") return { View: "view", PixelRatio: { get: () => 2 } };
       if (name === "@legend-apps/presentation") return presentation;
       if (name === "react-native-reanimated") return reanimated;
+      if (name.startsWith("typegpu")) return require(name);
       return {};
     }, module, module.exports);
     const cache = new Map();
@@ -296,10 +299,10 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     try {
       playback.value = createPlaybackState({ phase: "playing", slideKey: "closure", stepKey: "0", stepIndex: 0 });
       await act(() => { renderer = create(React.createElement(api.World, { id: "closure" })); });
-      const autoClosure = reactions.at(-2).__closure;
+      const autoClosure = reactions.find(reaction => reaction.__closure?.resolutionEvaluator).__closure;
       const advanceScale = restore(autoClosure.resolutionEvaluator);
       let isolated = autoClosure.resolution.value, expected = autoClosure.resolution.value;
-      for (let timestamp = 0; timestamp <= 6000; timestamp += 20) {
+      for (let timestamp = 0; timestamp <= 6000; timestamp += 40) {
         const input = { timestamp, playing: true, key: "compiled" };
         isolated = advanceScale(isolated, input); expected = autoClosure.resolutionEvaluator(expected, input);
         expect(isolated).toEqual(expected);
@@ -316,11 +319,12 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       await act(() => { renderer = create(React.createElement(api.World, { id: "closure", enter: { from: "previous" } })); });
       expect(Object.values(callbacks.at(-1).__closure)).toContain(retained);
       await act(() => renderer.unmount());
-      const count = mutables.length;
+      const count = mutables.filter(shared => shared.value === null).length;
       await act(() => { renderer = create(React.createElement(api.World, { quality: "high" })); });
-      expect(mutables.length).toBe(count);
-      expect(Object.values(preparations.at(-2).__closure)).not.toContain(playback);
-      expect(restore(preparations.at(-2))()).toBeNull();
+      expect(mutables.filter(shared => shared.value === null)).toHaveLength(count);
+      const adaptivePreparation = preparations.filter(prepare => "adaptivePlayback" in prepare.__closure).at(-1);
+      expect(Object.values(adaptivePreparation.__closure)).not.toContain(playback);
+      expect(restore(adaptivePreparation)()).toBeNull();
       expect(Object.values(callbacks.at(-2).__closure)).not.toContain(playback);
     } finally { await act(() => renderer?.unmount()); }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }

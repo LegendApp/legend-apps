@@ -275,7 +275,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
   // Planned station scenes are immutable; each surface keeps its own sampled output and track state.
   const shareScene = !!pool && !!track;
-  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable(prepared), [prepared, shareScene]);
+  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable({ ...prepared }), [prepared, shareScene]);
   const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
   const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [pool]);
