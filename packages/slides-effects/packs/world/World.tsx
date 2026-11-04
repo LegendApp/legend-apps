@@ -85,6 +85,12 @@ export { tunnelInstances } from "./lighting";
 export type { EnvironmentOptions, FloorKerb, FloorLine, FloorMarkings, KeyLightOptions, TunnelOptions } from "./lighting";
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
+const scenes = new WeakMap<PreparedWorldScene, SharedValue<PreparedWorldScene>>();
+function sharedScene(prepared: PreparedWorldScene) {
+  let scene = scenes.get(prepared);
+  if (!scene) { scene = makeMutable(prepared); scenes.set(prepared, scene); }
+  return scene;
+}
 function retainedPose(id: string) {
   let pose = poses.get(id);
   if (!pose) { pose = makeMutable<CameraPose | null>(null); poses.set(id, pose); }
@@ -247,11 +253,12 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   }
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
-  // One UI copy of the baked scene shared by both worklets; capturing it in each closure copied it twice.
-  const scene = useMemo(() => makeMutable(prepared), [prepared]);
+  // Planned station scenes are immutable; each surface keeps its own sampled output and track state.
+  const shareScene = !!pool && !!track;
+  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable(prepared), [prepared, shareScene]);
   const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
-  const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [prepared, pool]);
+  const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [pool]);
   const planSampler = sampleWorldPlan;
   const playback = usePlayback();
   if (buildDuration !== undefined && (!Number.isFinite(buildDuration) || buildDuration < 0)) throw new Error("World buildDuration must be nonnegative");
