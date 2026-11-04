@@ -10,16 +10,18 @@ export type WorldTrack = {
   spacing?: number; duration?: number;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
   frame?: "station" | "world"; carry?: WorldCarry;
+  /** Peak rail banking in degrees. Signed values choose the lean; stations always hold level. */
+  bank?: number;
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
 };
 /** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds. */
 export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number };
-type Station = { offset: number; track: WorldTrack };
+type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
-  stations: Record<number, Station>; ids: string[]; declared: string[];
+  stations: Record<number, Station>; ids: string[]; declared: string[]; declaredSlots: boolean[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
   cameraDelta?: number[]; entering?: boolean;
@@ -28,7 +30,7 @@ export type TrackFrame = {
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], from: [], sources: [], retired: {}, values: [] };
+    stations: {}, ids: [], declared: [], declaredSlots: [], from: [], sources: [], retired: {}, values: [] };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -59,19 +61,6 @@ function worldPoint(point: Vec3, offset: number): Vec3 {
   "worklet";
   return [point[0], point[1], point[2] - offset];
 }
-/** The rail is sampled by station coordinate, so reversing retraces the same curve. */
-function sampleTrackCamera(stations: Record<number, Station>, cursor: number, spacing: number): CameraPose {
-  "worklet";
-  const endIndex = Math.max(1, Math.ceil(cursor)), t = cursor - (endIndex - 1);
-  const start = stationAt(stations, endIndex - 1, spacing), end = stationAt(stations, endIndex, spacing);
-  const position = quadratic(worldPoint(start.track.position ?? [0, 3.6, 14], start.offset),
-    worldPoint(end.track.via ?? [2.5, 5.5, (end.offset - start.offset) * 0.6875], end.offset),
-    worldPoint(end.track.position ?? [0, 3.6, 14], end.offset), t);
-  const target = quadratic(worldPoint(start.track.target ?? [0, 0, 0], start.offset),
-    worldPoint(end.track.viaTarget ?? [0, 0, (end.offset - start.offset) * 0.3125], end.offset),
-    worldPoint(end.track.target ?? [0, 0, 0], end.offset), t);
-  return { position, target, fov: 40, roll: 0 };
-}
 function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): CameraPose {
   "worklet";
   if (!step) return pose;
@@ -80,6 +69,33 @@ function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): Camera
   const target: Vec3 = [pose.target[0] + shift[0], pose.target[1] + shift[1], pose.target[2] + shift[2]];
   return { position: [target[0] + (dx * Math.cos(angle) + dz * Math.sin(angle)) * scale, target[1] + dy * scale, target[2] + (dz * Math.cos(angle) - dx * Math.sin(angle)) * scale],
     target, fov: step.fov ?? pose.fov, roll: pose.roll };
+}
+
+
+/** The rail is sampled by station coordinate, so reversing retraces the same curve. */
+function sampleTrackCamera(stations: Record<number, Station>, cursor: number, spacing: number): CameraPose {
+  "worklet";
+  const endIndex = Math.max(1, Math.ceil(cursor)), t = cursor - (endIndex - 1);
+  const start = stationAt(stations, endIndex - 1, spacing), end = stationAt(stations, endIndex, spacing);
+  const a = { position: worldPoint(start.track.position ?? [0, 3.6, 14], start.offset), target: worldPoint(start.track.target ?? [0, 0, 0], start.offset), fov: 40, roll: 0 };
+  const b = { position: worldPoint(end.track.position ?? [0, 3.6, 14], end.offset), target: worldPoint(end.track.target ?? [0, 0, 0], end.offset), fov: 40, roll: 0 };
+  const position = quadratic(a.position,
+    worldPoint(end.track.via ?? [2.5, 5.5, (end.offset - start.offset) * 0.6875], end.offset),
+    b.position, t);
+  const target = quadratic(a.target,
+    worldPoint(end.track.viaTarget ?? [0, 0, (end.offset - start.offset) * 0.3125], end.offset),
+    b.target, t);
+  const from = stepCamera(a, start.step), to = stepCamera(b, end.step);
+  // A held step pose belongs to the station, so Previous follows the same unwind in reverse.
+  const leave = 1 - easeProgress(t / .125, "cubic"), arrive = 1 - easeProgress((1 - t) / .125, "cubic");
+  for (let axis = 0; axis < 3; axis++) {
+    // Depth keeps the rail's progress; unwinding it early could pull backward at takeoff.
+    const u = axis === 2 ? 1 - t : leave, v = axis === 2 ? t : arrive;
+    position[axis] += (from.position[axis] - a.position[axis]) * u + (to.position[axis] - b.position[axis]) * v;
+    target[axis] += (from.target[axis] - a.target[axis]) * u + (to.target[axis] - b.target[axis]) * v;
+  }
+  return { position, target, fov: 40 + (from.fov - 40) * leave + (to.fov - 40) * arrive,
+    roll: (end.track.bank ?? 0) * Math.PI / 180 * Math.sin(2 * Math.PI * t) };
 }
 
 function hidden(values: ArrayLike<number>, at: number) {
@@ -139,6 +155,7 @@ function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: bool
   if (changed) {
     frame.moving = []; frame.seeds = [];
     if (elapsed < 1) for (let slot = 0; slot < ids.length; slot++) {
+      if (!frame.declaredSlots[slot]) continue;
       const source = sources[slot];
       if (source < 0) continue;
       const at = worldHeaderSize + slot * worldInstanceSize, old = worldHeaderSize + source * worldInstanceSize;
@@ -161,6 +178,20 @@ function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: bool
   return frame;
 }
 
+/** Retired parts stay at their last world pose until their bounds are entirely behind the camera. */
+function restoreRetired(values: Float32Array | number[], at: number, id: string, saved: number[] | undefined) {
+  "worklet";
+  if (saved) {
+    for (let field = 0; field < worldInstanceSize; field++) values[at + field] = saved[field];
+    const dx = saved[0] - values[0], dy = saved[1] - values[1], dz = saved[2] - values[2];
+    const depth = dx * (values[4] - values[0]) + dy * (values[5] - values[1]) + dz * (values[6] - values[2]);
+    let radius = Math.abs(saved[3]) * (id.startsWith("label:") ? Math.hypot(1, saved[8]) : Math.hypot(saved[8], saved[9], saved[10]));
+    if (id.startsWith("tube:")) radius += Math.hypot(saved[12] - saved[0], saved[13] - saved[1], saved[14] - saved[2]) *
+      (1 + Math.abs(saved[15])) * Math.max(Math.abs(saved[8]), Math.abs(saved[9]), Math.abs(saved[10]));
+    if (depth < -radius * values[32]) values[at + 23] = 0;
+  } else values[at + 23] = 0;
+}
+
 /** UI-thread sampling. The caller supplies a fresh uniform buffer, keeping the scene cache untouched. */
 export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: string[], playback: PlaybackState,
   options: WorldTrack, declared = ids): TrackFrame {
@@ -174,22 +205,25 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const world = options.frame === "world";
   const index = preview && !world ? 0 : Number(playback.slideKey.split(":")[0]);
   const spacing = options.spacing ?? 32;
-  const stations = first ? {} : slideChanged ? { ...previous.stations } : previous.stations;
+  const stations = first ? {} : changed ? { ...previous.stations } : previous.stations;
   if (first || slideChanged && !stations[index]) stations[index] = { offset: index * spacing, track: options };
+  if (changed) stations[index] = { ...stations[index], step: options.steps?.[playback.stepIndex] };
   const origin = first ? index : slideChanged ? previous.cursor : previous.origin;
   const duration = options.duration ?? 1.7;
   const travelDuration = Math.max(1, Math.abs(index - origin)) * (stations[Math.max(index, Math.ceil(origin))]?.track.duration ?? duration);
   const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, "cubic");
   const cursor = origin + (index - origin) * travel;
-  const camera = stepCamera(sampleTrackCamera(stations, cursor, spacing), options.steps?.[playback.stepIndex]);
+  const camera = sampleTrackCamera(stations, cursor, spacing);
   const station = world ? 0 : stations[index].offset;
   const reversed = changed ? slideChanged ? index < origin : playback.stepIndex < previous.stepIndex : previous.reversed;
   // Travel back keeps the carry of the segment being retraced.
   const carry = changed ? (slideChanged ? stations[Math.max(index, Math.ceil(origin))]?.track.carry : options.carry) ?? options.carry : previous.carry;
   const retired = changed ? { ...previous.retired } : previous.retired;
   const from = changed ? previous.values.slice() : previous.from;
-  // A world-frame scene is one retained declaration, so slots and ids never change between stations.
-  const same = world && previous.ids.length === ids.length;
+  // Reuse draw slots only while their ids keep the same order.
+  const same = world && previous.ids.length === ids.length && (previous.ids === ids || ids.every((id, slot) => id === previous.ids[slot]));
+  const declaredSet = changed || ids !== previous.ids || declared !== previous.declared ? new Set(declared) : null;
+  const declaredSlots = declaredSet ? ids.map(id => declaredSet.has(id)) : previous.declaredSlots;
   if (changed && !same) for (let slot = 0; slot < previous.ids.length; slot++) {
     const id = previous.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
     if (previous.declared.includes(id) && !declared.includes(id)) retired[id] = previous.values.slice(at, at + worldInstanceSize);
@@ -208,28 +242,25 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const moveDuration = options.steps?.[playback.stepIndex]?.duration ?? duration;
   const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), "cubic")) : 0;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output: previous.output,
-    stations, ids, declared, from, sources, retired, values, cameraDelta, entering };
+    stations, ids, declared, declaredSlots, from, sources, retired, values, cameraDelta, entering };
   for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[7] = camera.roll;
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
-  if (world) return sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
+  if (world) {
+    sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
+    if (declared.length < ids.length) for (let slot = 0; slot < ids.length; slot++) if (!declaredSlots[slot]) {
+      restoreRetired(frame.values, worldHeaderSize + slot * worldInstanceSize, ids[slot], retired[ids[slot]]);
+    }
+    return frame;
+  }
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
   values[114] -= station;
   values[122] -= station;
   for (let slot = 0; slot < ids.length; slot++) {
     const at = worldHeaderSize + slot * worldInstanceSize, id = ids[slot];
-    if (!declared.includes(id)) {
-      const saved = retired[id];
-      if (saved) {
-        for (let field = 0; field < worldInstanceSize; field++) values[at + field] = saved[field];
-        const dx = saved[0] - camera.position[0], dy = saved[1] - camera.position[1], dz = saved[2] - camera.position[2];
-        const depth = dx * (camera.target[0] - camera.position[0]) + dy * (camera.target[1] - camera.position[1]) + dz * (camera.target[2] - camera.position[2]);
-        let radius = Math.abs(saved[3]) * (id.startsWith("label:") ? Math.hypot(1, saved[8]) : Math.hypot(saved[8], saved[9], saved[10]));
-        if (id.startsWith("tube:")) radius += Math.hypot(saved[12] - saved[0], saved[13] - saved[1], saved[14] - saved[2]) *
-          (1 + Math.abs(saved[15])) * Math.max(Math.abs(saved[8]), Math.abs(saved[9]), Math.abs(saved[10]));
-        if (depth < -radius * values[32]) values[at + 23] = 0;
-      } else values[at + 23] = 0;
+    if (!declaredSlots[slot]) {
+      restoreRetired(values, at, id, retired[id]);
       continue;
     }
     values[at + 2] -= station;
@@ -240,6 +271,10 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     const source = sources[slot] ?? -1;
     if (progress < 1 && source >= 0) {
       const old = worldHeaderSize + source * worldInstanceSize;
+      if (carry) {
+        carrySlot(values, at, from, old, elapsed, carry, id, seedOf(id), reversed);
+        continue;
+      }
       for (let field = 0; field < (label ? 8 : 11); field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * progress;
       if (!label) for (let field = 24; field < 27; field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * progress;
       if (id.startsWith("tube:")) for (let field = 12; field < 15; field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * progress;

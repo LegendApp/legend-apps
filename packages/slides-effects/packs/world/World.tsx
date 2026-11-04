@@ -201,11 +201,14 @@ function WorldSurface(props: WorldProps) {
   const { prepared, overlay } = useMemo(() => worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
   // Retention depends on committed scene history, including objects absent from the new declaration.
-  const [retained, setRetained] = useState({ input: prepared, scene: prepared });
+  const slide = usePresentationValue("slideIndex");
+  const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared });
   let trackScene = retained.scene;
-  if (props.track && retained.input !== prepared) {
-    trackScene = retainTrackScene(prepared, retained.scene, retained.input);
-    setRetained({ input: prepared, scene: trackScene });
+  if (props.track && (retained.slide !== slide || retained.input !== prepared)) {
+    const previous = retained.slide === slide ? retained.previous : retained.scene;
+    const previousInput = retained.slide === slide ? retained.previousInput : retained.input;
+    trackScene = retainTrackScene(prepared, previous, previousInput);
+    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput });
   }
   const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
