@@ -3,7 +3,7 @@ import { useDeckContent, usePresentationValue } from "@legend-apps/presentation"
 import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { ambientEffects, authoringError, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Card, Custom, DOF, Fog, Orbs, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
+import { Box, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -384,7 +384,8 @@ export function Scene(scene: SceneProps) {
     stepOffset={plan.slideBeats[slide]} buildDuration={(plan.starts[beat + 1] ?? plan.end) - plan.starts[beat]}>{plan.elements}</WorldSlide>;
 }
 
-export type TreeNode = { id: string; label?: string; x?: number; y?: number; d?: number; p?: number; width?: number; height?: number; color?: string; [key: string]: unknown };
+/** A `quiet` node sits out its tree's beat; a `typed` node shows one more character of that text under its label on each beat. */
+export type TreeNode = { id: string; label?: string; x?: number; y?: number; d?: number; p?: number; width?: number; height?: number; color?: string; quiet?: boolean; typed?: string; [key: string]: unknown };
 /** Parents precede children; children fan out around their parent, and explicit coordinates override the automatic layout. */
 /** With `width`, each subtree gets a share of it in proportion to its leaves, so cousins never overlap. `levelHeight` spaces the depths. */
 export function placeTree(nodes: TreeNode[], { width, levelHeight = 1.65 }: { width?: number; levelHeight?: number } = {}) {
@@ -404,23 +405,53 @@ export function placeTree(nodes: TreeNode[], { width, levelHeight = 1.65 }: { wi
   }
   return placed;
 }
+/** Unit box mesh for instanced Custom shapes: 6 vertices per face. */
+const boxWgsl = `
+fn boxVertex(vid:u32)->ShapeVertex {
+ let face=vid/6u; let q=array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.))[vid%6u];
+ let sgn=select(-1.,1.,face%2u==0u); let axis=face/2u;
+ if(axis==0u) { return ShapeVertex(vec3f(sgn,q.x,q.y),vec3f(sgn,0.,0.)); }
+ if(axis==1u) { return ShapeVertex(vec3f(q.x,sgn,q.y),vec3f(0.,sgn,0.)); }
+ return ShapeVertex(vec3f(q.x,q.y,sgn),vec3f(0.,0.,sgn));
+}`;
+const f32 = (n: number) => n.toFixed(8);
 /** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units. */
 export function speedTrails(length = 250) {
-  const count = 26, f32 = (n: number) => n.toFixed(8), trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
+  const count = 26, trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
     l: 6 + 10 * hash(i * 7 + 3), ph: hash(i * 11 + 3), sp: .6 + .8 * hash(i * 13 + 3), gain: 2.2 * (.4 + .6 * hash(i * 17 + 3)) }));
-  return <Custom id="trails" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`
+  return <Custom id="trails" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`${boxWgsl}
 const D=array<vec4f,${count}>(${trails.map(d => `vec4f(${f32(d.x)},${f32(d.y)},${f32(d.l)},${f32(d.ph)})`).join(",")});
 const E=array<vec2f,${count}>(${trails.map(d => `vec2f(${f32(d.sp)},${f32(d.gain)})`).join(",")});
 fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
  let d=D[id]; let z=20.-fract(continuousTime()*18.*E[id].x/${f32(length)}+d.w)*${f32(length)};
- let face=vid/6u; let q=array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.))[vid%6u];
- let sgn=select(-1.,1.,face%2u==0u); let axis=face/2u; var p=vec3f(q.x,q.y,sgn); var n=vec3f(0.,0.,sgn);
- if(axis==0u) { p=vec3f(sgn,q.x,q.y); n=vec3f(sgn,0.,0.); }
- if(axis==1u) { p=vec3f(q.x,sgn,q.y); n=vec3f(0.,sgn,0.); }
- return ShapeVertex(vec3f(d.x,d.y,z)+p*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5),n);
+ let mesh=boxVertex(vid);
+ return ShapeVertex(vec3f(d.x,d.y,z)+mesh.position*vec3f(select(.02,.035,d.y<.3),.015,d.z*.5),mesh.normal);
 }
 fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
  return Material(vec3f(0.),select(vec3f(1.),vec3f(1.,.04231141,.01161225),id%2u==0u)*E[id].y,1.,0.);
+}`} />;
+}
+/** Fourteen streaks burst from each landing point `p` at slide time `t`, arc down under gravity and fade within .7 s. */
+export function sparks(landings: { p: V3; t: number }[]) {
+  if (!landings.length) return null;
+  const per = 14, count = landings.length * per;
+  return <Custom id="sparks" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`${boxWgsl}
+const L=array<vec4f,${landings.length}>(${landings.map(l => `vec4f(${l.p.map(f32).join(",")},${f32(l.t)})`).join(",")});
+const H=array<vec2f,${count}>(${Array.from({ length: count }, (_, i) => `vec2f(${f32(hash(i))},${f32(hash(i + 99))})`).join(",")});
+fn sparkAge(id:u32,ctx:ShapeContext)->f32 { return ctx.slideTime-L[id/${per}u].w; }
+fn sparkRotate(p:vec3f,a:f32)->vec3f {
+ let z=vec3f(p.x*cos(.6)-p.y*sin(.6),p.x*sin(.6)+p.y*cos(.6),p.z);
+ return vec3f(z.x*cos(a)-z.z*sin(a),z.y,z.x*sin(a)+z.z*cos(a));
+}
+fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
+ let age=sparkAge(id,ctx); let h=H[id]; let a=h.x*6.283185307; let v=2.5+3.*h.y;
+ let p=L[id/${per}u].xyz+vec3f(cos(a)*v*age,(2.2+2.*h.x)*age-4.9*age*age,sin(a)*v*age*.6+.3);
+ let mesh=boxVertex(vid); let half=vec3f(select(0.,.16*(1.-age/.7)+.02,age>0.&&age<.7),.018,.018)*.5;
+ return ShapeVertex(p+sparkRotate(mesh.position*half,a),sparkRotate(mesh.normal,a));
+}
+fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
+ let c=select(vec3f(1.,.36130678,.01370208),vec3f(1.),(id%${per}u)%3u==0u);
+ return Material(vec3f(0.),c*6.*(1.-clamp(sparkAge(id,ctx)/.7,0.,1.)),1.,0.);
 }`} />;
 }
 /** A repeating beat, in seconds. */
@@ -448,8 +479,78 @@ function ambientElement(ambient: Ambient, ink: Ink, background: unknown) {
   if (effect === "fog") return <Fog key={effect} density={density ?? .022} color={tint ?? (typeof background === "string" ? background : "#050506")} />;
   throw Error(`Unknown ambient effect: ${effect as string}. Known: ${ambientEffects.join(", ")}`);
 }
+/** A scene on a lane: its named layout and its parts. */
+export type LaneScene = { layout: string; parts: ReactNode };
+export type LaneOptions = { spacing?: number; fov?: number; handheld?: number };
+/** Scene `index` of a lane whose scenes stand `spacing` apart down -z, as one slide's World children. The camera flies in from the previous
+ * scene along its layout's `via`. That scene's parts leave as the slide starts: a part with `into` sends its glyphs or tree nodes on arcs into
+ * the nodes or bars of that part, which grow in as they land, with sparks; the others rail off to the right. `handheld` is a drift in world units. */
+export function laneScene(scenes: LaneScene[], index: number, { spacing = 32, fov, handheld = 0 }: LaneOptions = {}): ReactNode[] {
+  const INK = inkOf(defaultColors);
+  const station = (i: number): V3 => [0, 0, -spacing * i], scene = scenes[index], before = scenes[index - 1];
+  const shot = (i: number) => { const camera = findLayout(scenes[i].layout, false)?.camera ?? {}, at = (p: unknown) => add(p as V3, station(i));
+    return { position: at(camera.position), target: at(camera.target), via: camera.via ? [at(camera.via)] : undefined }; };
+  const idle = handheld ? { position: [handheld, handheld, handheld] as V3, speed: .37 } : undefined, here = shot(index);
+  const shots = before ? [{ at: 0, ...shot(index - 1), via: undefined, fov, duration: 0 }, { at: .25, ...here, fov, duration: 1.7, ease: "cubic" as const, idle }]
+    : [{ at: 0, ...here, via: undefined, fov, duration: 0, idle }];
+  const parts = laneParts(scene), landings: { p: V3; t: number }[] = [], arrivals = new Map<string, number>(), sent = new Map<string, number>();
+  const leaving = before ? laneParts(before).map(({ node, kind, props }) => {
+    const into = props.into as string | undefined, id = `${props.id}/out`, at = add((props.at ?? [0, 3.2, 0]) as V3, station(index - 1));
+    if (into === undefined) return <Stage key={id} id={`${props.id}/exit`} position={[{ at: 0, value: station(index - 1), duration: 0 }, { at: .1, value: add(station(index - 1), [14, 0, 0]), duration: .8, ease: "cubic" }]}>
+      {expandParts(node, () => ({ ...props, id, enter: undefined, delay: kind === "tree" ? undefined : -9, ...props.beat ? { beat: undefined, value: (props.beat as Beat).count * Number(props.per ?? 1) } : {} }), { ink: INK, scene: `lane${index - 1}` })}</Stage>;
+    const target = parts.find(p => p.props.id === into);
+    if (!target || (target.kind !== "tree" && target.kind !== "bars")) throw Error(`Scene part ${props.id} flies into ${into}, which must be a tree or bars on the next scene.`);
+    const ends = target.kind === "tree" ? placeTree(target.props.nodes as TreeNode[], target.props as { width?: number; levelHeight?: number }).map(n => [n.x, n.y, 0] as V3)
+      : (target.props.items as unknown[]).map((_, i, all) => [(i - (all.length - 1) / 2) * 3.4, 0, 0] as V3);
+    const first = sent.get(into) ?? 0, end = (g: number) => add(add(add((target.props.at ?? [0, 3.2, 0]) as V3, station(index)), ends[g % ends.length]),
+      target.kind === "bars" ? [0, .25 + Math.floor(g / ends.length) % 3 * .55, 0] : [0, 0, 0]);
+    // Cubic arcs sampled into linear keyframes: up and back off the start, in from above and in front of the end.
+    const arc = (from: V3, to: V3, lift: V3, lead: V3, t0: number, duration: number, value: (p: V3, u: number) => unknown) =>
+      Array.from({ length: 13 }, (_, k) => { const u = k / 12; return { at: k ? t0 + (k - 1) / 12 * duration : 0, value: value(bez3(from, add(from, lift), add(to, lead), to, ease.io(u)), u), duration: k ? duration / 12 : 0 }; });
+    const land = (g: number, t: number) => { landings.push({ p: end(g), t }); arrivals.set(into, Math.min(arrivals.get(into) ?? Infinity, t)); };
+    if (kind === "headline" || kind === "quote") {
+      const text = codeSource(props.children as ReactNode), count = [...text].filter(ch => ch.trim()).length;
+      sent.set(into, first + count);
+      const leaves = (g: number) => g % 7 * .07 + Math.floor(g / 7) * .05;
+      for (let g = first; g < first + count; g++) land(g, leaves(g) + 1.25);
+      const { children: _, at: __, ...style } = props;
+      return <Fragment key={id}>{textLine(kind, { ...style, id, position: at, text, enter: undefined, glyphs: (i: number, _: string, home: V3): GlyphMotion => {
+        const g = first + i, rest = add(at, home), side = rest[0] < 0 ? -1 : 1;
+        const path = (value: (p: V3, u: number) => unknown) => arc(rest, end(g), [side * 3, 4.5 + g % 3 * .8, -9], [0, 2.2, 5], leaves(g), 1.25, value);
+        return { offset: path(p => sub(p, rest)) as GlyphMotion["offset"], rotation: path((_, u) => deg([Math.sin(u * Math.PI) * .5, Math.sin(u * Math.PI) * side * .7, 0])) as GlyphMotion["rotation"],
+          scale: path((_, u) => 1 - ramp(u, .82, .18) * .999) as GlyphMotion["scale"] };
+      } }, INK)}</Fragment>;
+    }
+    if (kind !== "tree") throw Error(`Scene part ${props.id} cannot fly: only headlines, quotes and trees can.`);
+    const nodes = placeTree(props.nodes as TreeNode[], props as { width?: number; levelHeight?: number }), idle = String(props.color ?? "#22d3ee");
+    sent.set(into, first + nodes.length);
+    return <Fragment key={id}>{nodes.map((n, j) => {
+      const g = first + j, rest = add(at, [n.x, n.y, 0]), w = Number(n.width ?? props.nodeWidth ?? (n.d < 2 ? 3 : 2.3)), h = Number(n.height ?? .82), parent = n.p === undefined ? undefined : nodes[n.p];
+      land(g, j * .06 + 1.3);
+      return <Fragment key={n.id}>
+        <Card id={`${id}/${n.id}`} color={n.color ?? idle} emissive={1.5} position={arc(rest, end(g), [0, 2.2, -4], [0, 3, 3], j * .06, 1.3, p => p) as Animated<V3>}
+          scale={arc(rest, end(g), [0, 0, 0], [0, 0, 0], j * .06, 1.3, (_, u) => u < 1 ? [w * (1 - .45 * u), h * (1 - .8 * ramp(u, .7, .3)), .5] : [1e-4, 1e-4, 1e-4]) as Animated<V3>} />
+        <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={props.font as Text3DOptions["font"]} size={(Number(props.labelSize ?? 0) || (n.d < 2 ? .21 : .17)) * TYPE}
+          position={add(rest, [0, n.typed && props.beat ? .12 : 0, .27])} opacity={[{ at: 0, value: 1, duration: 0 }, { at: j * .06, value: 0, duration: .2 }]} />
+        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color} draw={[{ at: 0, value: 1, duration: 0 }, { at: 0, value: 0, duration: .3 }]}
+          path={[add(at, [parent.x, parent.y - .41, 0]), add(at, [parent.x, n.y + .41, 0]), add(at, [n.x, n.y + .41, 0])]} />}
+      </Fragment>; })}</Fragment>;
+  }) : [];
+  const place = slotPlacer(findLayout(scene.layout, false));
+  return [<Camera key="camera" shots={shots} />, ...leaving,
+    <Stage key="station" id={`station${index}`} position={station(index)}>{expandParts(scene.parts, (kind, props) => {
+      const placed = place(kind, props) as PartProps;
+      return arrivals.has(placed.id) && placed.delay === undefined ? { ...placed, delay: arrivals.get(placed.id) } : placed;
+    }, { ink: INK, scene: `lane${index}` })}</Stage>, sparks(landings)];
+}
+/** A scene's parts with their layout placement, in order, beside the elements they came from. */
+function laneParts(scene: LaneScene) {
+  const place = slotPlacer(findLayout(scene.layout, false)), parts: { node: ReactElement; kind: string; props: PartProps }[] = [];
+  collect(scene.parts, node => { const kind = (node.type as { worldPart?: string }).worldPart; if (kind) parts.push({ node, kind, props: place(kind, node.props) as PartProps }); });
+  return parts;
+}
 /** World only reads its own element types, so this returns a Text3D rather than being a component. Sizes are nominal: `size * TYPE` is the em. */
-function textLine(kind: string, { size: nominal, depth, track, delay, duration, lineHeight, emissive, slot: _, enter, ...text }: Record<string, unknown>, ink: Ink) {
+function textLine(kind: string, { size: nominal, depth, track, delay, duration, lineHeight, emissive, slot: _, into: __, enter, ...text }: Record<string, unknown>, ink: Ink) {
   const size = Number(nominal ?? (kind === "quote" ? .42 : .8) / TYPE) * TYPE, mono = !!text.mono;
   const { delay: at = delay, from: offset, ...motion } = (enter ?? {}) as { delay?: number; from?: V3 };
   return <Text3D uppercase={!mono} side={mono ? "#1c1d22" : "#24262b"} metal={.85} roughness={.28}
@@ -740,13 +841,13 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     count={Number(props.count ?? 9)} spacing={Number(props.spacing ?? .62)} width={Number(props.width ?? 5.4)} /></Stage>;
   if (kind === "counter") {
     const size = Number(props.size ?? .52) * TYPE, beat = props.beat as Beat | undefined, per = Number(props.per ?? 1);
-    const digits = { mono: true, size, depth: .12 / size, align: "left", color: paint(props.color, INK.colors) as string, emissive: 1, side: "#1c1d22" } as const;
+    const font = props.font as Text3DOptions["font"], digits = { mono: true, font, size, depth: .12 / size, align: "left", color: paint(props.color, INK.colors) as string, emissive: 1, side: "#1c1d22" } as const;
     return <Stage id={id} position={position}>
       {beat ? Array.from({ length: beat.count + 1 }, (_, k) => <Text3D {...digits} key={k} id={`${id}/value${k}`} text={String(k * per)}
         opacity={[{ at: 0, value: k ? 0 : 1, duration: 0 }, ...k ? [{ at: beat.start + (k - 1) * beat.every, value: 1, duration: 0 }] : [],
           ...k < beat.count ? [{ at: beat.start + k * beat.every, value: 0, duration: 0 }] : []]} />)
         : <Text3D {...digits} id={`${id}/value`} text={String(props.value ?? 0)} />}
-      <Text3D id={`${id}/label`} text={String(props.label ?? "")} mono size={.14 * TYPE} depth={.02 / (.14 * TYPE)} tracking={.2 / TYPE} align="left" color={INK.muted} emissive={.8} position={[.02,.6,0]} />
+      <Text3D id={`${id}/label`} text={String(props.label ?? "")} mono font={font} size={.14 * TYPE} depth={.02 / (.14 * TYPE)} tracking={.2 / TYPE} align="left" color={INK.muted} emissive={.8} position={[.02,.6,0]} />
     </Stage>;
   }
   if (kind === "rule") { const delay = Number(props.delay ?? 0), width = Number(props.width ?? 6);
@@ -781,19 +882,28 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const nodes = placeTree(props.nodes as TreeNode[], { width: props.width as number | undefined, levelHeight: props.levelHeight as number | undefined });
     const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
-    const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id);
+    const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
+    // With `delay`, nodes grow in one after another from then and the edges draw once they are all in.
+    const delay = props.delay as number | undefined, grown = (j: number) => delay! + j * .07, drawn = delay === undefined ? undefined : grown(nodes.length) + .3;
+    const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
     return <Stage id={id} position={position}>{nodes.map(n => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
       const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
       const emissive = own.length ? [{ step: 0, value: 1.5 }, ...own.flatMap(f => f.flash === false ? [key(f.step, f.glow ?? .4, arrives(f, n), .4)]
-        : [key(f.step, 7, arrives(f, n), .06), key(f.step, f.glow ?? 2, arrives(f, n) + .1, .6)])] : undefined;
-      const pulses = [...beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })) : [],
+        : [key(f.step, 7, arrives(f, n), .06), key(f.step, f.glow ?? 2, arrives(f, n) + .1, .6)])]
+        : beats(n).length ? [{ at: 0, value: 1.5, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: 7, duration: .06 }, { at: t + .1, value: 1.5, duration: .6 }])] : undefined;
+      const pulses = [...beats(n).map(t => ({ at: t - HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })),
         ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
       const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
+      const size: V3 = [Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)),Number(n.height ?? .82),.5], j = nodes.indexOf(n);
+      const typed = n.typed && beat ? Array.from({ length: beat.count }, (_, k) => ({ text: `"${n.typed!.slice(0, k + 1)}"`, from: beat.start + k * beat.every + n.d * HOP, to: k + 1 < beat.count ? beat.start + (k + 1) * beat.every + n.d * HOP : undefined })) : [];
+      const appear = delay === undefined ? 1 : [{ at: 0, value: 0, duration: 0 }, { at: grown(j) + .3, value: 1, duration: .15 }];
       return <Fragment key={n.id}>
-        <Card id={`${id}/${n.id}`} position={[n.x,n.y,0]} scale={[Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)),Number(n.height ?? .82),.5]} color={color} emissive={emissive} />
-        <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[n.x,n.y,.27]} />
-        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color}
+        <Card id={`${id}/${n.id}`} position={[n.x,n.y,0]} scale={delay === undefined ? size : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: grown(j), value: size, duration: .45, ease: "spring" }]} color={color} emissive={emissive} />
+        <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={font} size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[n.x,n.y + (typed.length ? .12 : 0),.27]} opacity={appear} />
+        {typed.map((v, k) => <Text3D key={k} id={`${id}/${n.id}/typed${k}`} text={v.text} mono font={font} size={.14 * TYPE} position={[n.x,n.y - .17,.27]} color={n.color} emissive={.9}
+          opacity={[{ at: 0, value: 0, duration: 0 }, { at: v.from, value: 1, duration: 0 }, ...v.to === undefined ? [] : [{ at: v.to, value: 0, duration: 0 }]]} />)}
+        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color} draw={drawn === undefined ? undefined : [{ at: 0, value: 0, duration: 0 }, { at: drawn, value: 1, duration: .55 }]}
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
         {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
