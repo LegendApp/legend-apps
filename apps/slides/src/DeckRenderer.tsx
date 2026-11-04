@@ -3,6 +3,7 @@ import { useResolveClassNames } from "uniwind";
 import { useValue } from "@legendapp/state/react";
 import {
   GPUShaderProvider,
+  DeckContentContext,
   useRuntimeProjection,
   usePresentationValue,
   Background,
@@ -124,18 +125,20 @@ function Deck({ children, configJson }: CompiledDeckProps) {
   const Template = resolvedTemplate.component;
   const content = renderMdxChildren(resolveSteps(selected.props.children, [markdownComponents.ul, markdownComponents.ol]).content);
   return (
-    <PresentationObservableProvider key={targetIndex ?? "current"} value={runtime$}>
-      <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
-        {background !== undefined && <Background>
-          {background !== false && <Image source={{ uri: background }} resizeMode="cover" style={StyleSheet.absoluteFill} />}
-        </Background>}
-        {resolvedTemplate.reference && !Template
-          ? <MissingSlideTemplate reference={resolvedTemplate.reference} />
-          : Template
-          ? <Template deck={config} slide={selectedMetadata}>{content}</Template>
-          : <View style={styles.slideContent}>{content}</View>}
-      </SlideErrorBoundary>
-    </PresentationObservableProvider>
+    <DeckContentContext.Provider value={elements.map(element => element.props.children)}>
+      <PresentationObservableProvider key={targetIndex ?? "current"} value={runtime$}>
+        <SlideErrorBoundary index={selectedIndex} isPreview={isPreview}>
+          {background !== undefined && <Background>
+            {background !== false && <Image source={{ uri: background }} resizeMode="cover" style={StyleSheet.absoluteFill} />}
+          </Background>}
+          {resolvedTemplate.reference && !Template
+            ? <MissingSlideTemplate reference={resolvedTemplate.reference} />
+            : Template
+            ? <Template deck={config} slide={selectedMetadata}>{content}</Template>
+            : <View style={styles.slideContent}>{content}</View>}
+        </SlideErrorBoundary>
+      </PresentationObservableProvider>
+    </DeckContentContext.Provider>
   );
 }
 

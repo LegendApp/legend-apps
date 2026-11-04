@@ -2,6 +2,6 @@
   "id": "world",
   "version": "1.0.0",
   "hostApiVersion": 2,
-  "exports": { "World": "./World.tsx" },
+  "exports": { "World": "./World.tsx", "Authoring": "./Authoring.tsx" },
   "capabilities": ["webgpu", "webgpu-multipass", "reanimated"]
 }

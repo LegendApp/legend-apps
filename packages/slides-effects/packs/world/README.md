@@ -779,3 +779,49 @@ The source examples `world-steps.mdx`, `world-effects.mdx`, `assembly.mdx` and
 lighting. When copying an example, keep its local TSX/assets and effect pack pins.
 
 `<World msaaSamples={1}>` disables MSAA without changing render or post-effect scales; `msaaSamples={4}` forces 4× MSAA. FXAA remains enabled. Omitting `msaaSamples` preserves the quality preset.
+
+## MDX scene authoring
+
+`slides:world/Authoring` exports `Scene`, `Headline`, `Quote`, `CodePanel`, `List`,
+`Tree`, `Counter`, and `Editor`. Each slide declares its own composition. `at` is
+local to its station. Raw World geometry and nested `Stage` groups work alongside
+these parts, so rows, columns and free placement use the same coordinate system.
+Repeat an id in the next scene to carry its geometry along the shared World track.
+
+```mdx
+import { Scene, Headline, CodePanel } from "slides:world/Authoring"
+import { Card } from "slides:world/World"
+
+<Scene id="source" world="journey">
+  <Headline id="title" at={[-4,5,0]}>A small example</Headline>
+  <CodePanel id="example" at={[-4,3,0]}>
+
+~~~tsx
+const value = 42;
+~~~
+
+  </CodePanel>
+</Scene>
+
+---
+
+<Scene id="column" world="journey">
+  <Headline id="title" at={[0,6,0]}>The same object</Headline>
+  <Card id="example/card" position={[0,2,0]} scale={[1,4,1]} />
+</Scene>
+```
+
+`camera` accepts the normal World track options. `durations` gives build lengths
+in seconds, one per step. `Tree nodes` uses stable `id`, optional `label`, and a
+parent index `p`; omit `x`, `y`, and `d` for an automatic tree, or specify them for
+an authored arrangement. `List items` supplies row data. `Counter label` and
+`value` supply its text. `Editor` takes `name`, `email`, and a `labels` array.
+
+For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
+function receiving every scene declaration without mounting future slides. It
+returns one immutable World descriptor array, running step offsets, build
+boundaries and cameras. This allows pre-baked glyph motion and shared topology
+across navigation, while keeping all layout and choreography in the MDX.
+`createTimeline` samples and thins numeric, vector and color trajectories at
+preparation time; playback still runs on the shared UI clock. `createTypography`
+accepts a font-metrics map for decks that need individual glyph positions.

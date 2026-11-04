@@ -9,7 +9,7 @@ import React from "react";
 import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
-import { GPURenderGraph, usePresentation } from "@legend-apps/presentation";
+import { GPURenderGraph, useDeckContent, usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const titleSpeed$ = state.observable(1);
@@ -512,6 +512,43 @@ test("selected backgrounds retain the GPU renderer through registration, selecti
     expect(getSlidesState().runtimeErrors).toEqual([]);
   } finally {
     if (renderer) await act(() => renderer.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test("deck content includes unmounted slides and follows document replacement in previews", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState(), DeckRenderer = compiledRenderer();
+  let futureMounts = 0;
+  function Future() { futureMounts++; return null; }
+  function Probe() { return <declarations value={useDeckContent()} />; }
+  function document(label) {
+    return function Document({ components: { Deck, Slide } }) {
+      return <Deck configJson="{}">
+        <Slide metadataJson="{}" notes=""><Probe /></Slide>
+        <Slide metadataJson="{}" notes=""><Future label={label} /></Slide>
+      </Deck>;
+    };
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: document("later"), currentSlide: 0, currentStep: 0, slides: [], config: {} });
+    await act(() => { tree = create(<DeckRenderer targetIndex={0} />); });
+    const declarations = tree.root.findByType("declarations").props.value;
+    expect(declarations).toHaveLength(2);
+    expect(declarations[1].props.label).toBe("later");
+    expect(futureMounts).toBe(0);
+    await act(() => setCurrentSlide(1));
+    expect(tree.root.findByType("declarations").props.value).toBe(declarations);
+    expect(futureMounts).toBe(0);
+    await act(() => setSlidesState({ component: document("edited") }));
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={0} />));
+    expect(tree.root.findByType("declarations").props.value[1].props.label).toBe("edited");
+    expect(futureMounts).toBe(0);
+  } finally {
+    if (tree) await act(() => tree.unmount());
     setSlidesState(initial);
     log.mockRestore();
   }

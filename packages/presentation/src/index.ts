@@ -1,3 +1,4 @@
+export { DeckContentContext, useDeckContent } from "./deckContent";
 export { useRuntimeProjection } from "./useRuntimeProjection";
 export { useDeferredDispose } from "./useDeferredDispose";
 export { PresentationCanvas, PresentationCanvasScaleContext } from "./PresentationCanvas";
