@@ -129,7 +129,14 @@ function WorldSlideClock({ children }: { children: ReactNode }) {
   const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), playbackScope: "slide" }), [sourceRuntime$]);
   return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
-function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaSamples: WorldScene["msaaSamples"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"], toneMapping: WorldScene["toneMapping"], outputColorSpace: WorldScene["outputColorSpace"], emissiveScale: Animated<number>) {
+type WorldContent = { prepared: PreparedWorldScene; overlay: ReactNode[] };
+const worldContents = new WeakMap<object, { options: unknown[]; content: WorldContent }>();
+function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaSamples: WorldScene["msaaSamples"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: WorldScene["postOrder"], toneMapping: WorldScene["toneMapping"], outputColorSpace: WorldScene["outputColorSpace"], emissiveScale: Animated<number>): WorldContent {
+  // Prepared scene declarations are shared by presenter, audience and neighbor surfaces.
+  const key = children !== null && typeof children === "object" ? children : undefined;
+  const options = [quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale];
+  const cached = key && worldContents.get(key);
+  if (cached && options.every((value, i) => Object.is(value, cached.options[i]))) return cached.content;
   const scene: WorldScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], effects: [], quality, msaaSamples, exposure, backgroundColor, postOrder, toneMapping, outputColorSpace, emissiveScale,
     scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
@@ -192,7 +199,9 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
     });
   }
   collect(children);
-  return { prepared: prepareWorldScene(scene), overlay };
+  const content = { prepared: prepareWorldScene(scene), overlay };
+  if (key) worldContents.set(key, { options, content });
+  return content;
 }
 /** Bake declarations and one compatible GPU layout before navigation starts. */
 export function prepareWorldSlides(slides: WorldProps[]): WorldProps[] {
@@ -247,8 +256,8 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   }
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
-  // One UI copy of the baked scene shared by both worklets; capturing it in each closure copied it twice.
-  const scene = useMemo(() => makeMutable(prepared), [prepared]);
+  // Share the bake's serialized children; a separate root keeps each surface's uniform cache independent.
+  const scene = useMemo(() => makeMutable({ ...prepared }), [prepared]);
   const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
   const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [prepared, pool]);
