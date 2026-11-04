@@ -145,7 +145,7 @@ const qualityGraphs = () => ["low", "medium", "high", "auto"].flatMap(quality =>
     ...customInstances({ wgsl: "fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex { return ShapeVertex(vec3f(f32(vid)),vec3f(0.,0.,1.)); }\nfn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material { return Material(vec3f(.5),vec3f(0.),.5,0.); }", vertexCount: 3 }),
     sdfInstance({ wgsl: "fn sdf(p:vec3f)->f32 { return length(p)-1.; }", bounds: [[-2, -2, -2], [2, 2, 2]] }),
     ...cardInstances({ id: "card", title: "Ada", subtitle: "Lovelace", meta: "key 1" })],
-  floor: { mirror: true }, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }, { kind: "spot" }], fog: { density: .02 },
+  floor: {}, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }, { kind: "spot" }], fog: { density: .02 },
   bloom: { intensity: 1 }, chromatic: .2, rim: { intensity: 1 }, passes: [{ id: "lines", wgsl: "fn customPass(uv:vec2f,color:vec4f,ctx:PassContext)->vec4f { return color; }" }],
   effects: [{ use: shaderTint({ gain: { 0: 0, 1: 1 } }), after: "dof" }, { use: shaderTint(), after: "tonemap" }],
 })).passes.map(pass => ({ ...pass, label: `quality-${quality}-${pass.id}` })));

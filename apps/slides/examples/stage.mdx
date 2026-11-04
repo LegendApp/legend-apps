@@ -24,7 +24,7 @@ export const network = tree("Workspace", [["Model", ["Store", "Cache"]], ["View"
     flashes={[undefined, undefined, { nodes: "all", type: "render" }, { nodes: ["Model", "Store", "View", "Canvas"], type: "update" }]} />
   <Label text="SIGNALS THROUGH A SCENE" position={[0, 4.05, 0]} align="center" size={0.42} weight="bold" color="#e8eef6" emissive={0.8} />
   <Label text="Advance to draw the routes, then send two kinds of signal" mono position={[0, -3.2, 0]} align="center" size={0.2} color="#8b9bb1" emissive={0.7} />
-  <Floor mirror y={-4.2} size={45} roughness={0.18} reflectivity={0.24} color="#101827" />
+  <Floor y={-4.2} size={45} roughness={0.18} color="#101827" />
   <PointLight position={[-5, 7, 6]} intensity={160} color="#b6d8ff" />
   <RimLight intensity={0.25} color="#63cfff" />
   <Bloom intensity={0.45} threshold={1.5} radius={0.6} /><Fog density={0.009} color="#05060a" />
@@ -41,7 +41,7 @@ export const network = tree("Workspace", [["Model", ["Store", "Cache"]], ["View"
   <Pillar id="first" label="Batch A" position={[-4, -3.6, 0]} value={2400} maximum={3000} height={6} width={1.4} depth={1} step={1} duration={1.6} color="#22d3ee" />
   <Pillar id="second" label="Batch B" position={[0, -3.6, 0]} value={1600} maximum={3000} height={6} width={1.4} depth={1} step={1} duration={1.6} color="#a78bfa" />
   <Pillar id="third" label="Batch C" position={[4, -3.6, 0]} value={800} maximum={3000} height={6} width={1.4} depth={1} step={1} duration={1.6} color="#ffb547" />
-  <Floor mirror y={-4.2} size={45} roughness={0.18} reflectivity={0.24} color="#101827" />
+  <Floor y={-4.2} size={45} roughness={0.18} color="#101827" />
   <PointLight position={[-5, 7, 6]} intensity={160} color="#b6d8ff" />
   <Bloom intensity={0.45} threshold={1.5} radius={0.6} /><Fog density={0.009} color="#05060a" />
 </World></Background>}</Steps>

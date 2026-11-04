@@ -158,7 +158,7 @@ export function text3dBuffer(name: string, id: string) {
 const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
 /** Glyph instance fields: 0 center, 3 size, 4 face color, 7 face emissive, 8 scale, 11 glyph, 12 rotation (degrees), 15 pivot y,
  * 16 depth, 17 bevel, 18 bevel width, 19 pivot x (em), 23 opacity, 24 side albedo, 27 roughness, metal, rim, activation. */
-export function text3dCode(prefix: string, slot: string, segments: number, reflection: boolean) {
+export function text3dCode(prefix: string, slot: string, segments: number) {
   const rings = segments > 0 ? `
 fn profile(ring:u32,width:f32,bevel:f32,depth:f32)->vec4f {
  let back=ring>${segments}u; let k=select(ring,${2 * segments + 1}u-ring,back);
@@ -218,7 +218,6 @@ fn studio(direction:vec3f)->vec3f {
 @fragment fn glyphFragment(in:GlyphVertex)->@location(0) vec4f {
  let base=slot(in.instance); let opacity=uniforms[base+23u];
  if(opacity<=.001) { discard; }
- ${reflection ? "if(in.world.y<uniforms[36]+.001) { discard; }" : ""}
  var normal=normalize(in.normal); let view=normalize(eye()-in.world);
  if(dot(normal,view)<0.) { normal=-normal; }
  let color=vector(base+4u); let glow=uniforms[base+7u];

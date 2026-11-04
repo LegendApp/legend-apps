@@ -78,10 +78,10 @@ describe("world Text3D", () => {
   });
   test("draws every glyph of one font in one instanced pass with its outline buffer", () => {
     const glyphs = [...text3dInstances({ text: "ONE DRAW" }), primitive("sphere"), ...text3dInstances({ text: "TWO", position: [0, -2, 0] })];
-    const graph = buildWorldGraph(prepareWorldScene({ instances: glyphs, floor: { mirror: true } }));
+    const graph = buildWorldGraph(prepareWorldScene({ instances: glyphs, floor: {} }));
     const passes = graph.passes.filter(pass => pass.id.includes("glyphs"));
-    expect(passes.map(pass => pass.id)).toEqual(["reflection-glyphs-0", "scene-glyphs-0"]);
-    const pass = passes[1] as Extract<typeof passes[number], { kind: "render" }>;
+    expect(passes.map(pass => pass.id)).toEqual(["scene-glyphs-0"]);
+    const pass = passes[0] as Extract<typeof passes[number], { kind: "render" }>;
     expect(pass.instanceCount).toBe(10);
     expect(pass.vertexCount).toBe(Math.max(..."ONEDRAWTWO".split("").map(char => glyphVertexCount(font, font.chars.indexOf(char), 2))));
     expect(pass.reads).toEqual(["text3d-0"]);
