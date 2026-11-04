@@ -270,3 +270,11 @@ test("a world-frame preview frames its own station, as the audience does when it
   expect(preview.cursor).toBe(2);
   expect(preview.values.slice(0, worldHeaderSize)).toEqual(landed.values.slice(0, worldHeaderSize));
 });
+
+test("retained parts do not pile up across slides: only the previous slide's omitted parts stay", () => {
+  const slide = (id: string) => prepareWorldScene({ instances: [primitive("box", { id })] });
+  const a = slide("a"), b = slide("b"), c = slide("c");
+  const second = retainTrackScene(b, a);
+  expect(second.instances.map(part => part.id)).toEqual(["b", "a"]);
+  expect(retainTrackScene(c, second, b).instances.map(part => part.id)).toEqual(["c", "b"]);
+});

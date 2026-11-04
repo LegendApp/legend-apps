@@ -30,10 +30,11 @@ export function trackIds(scene: PreparedWorldScene): string[] {
   return scene.instances.map(part => `${part.label ? "label" : part.card ? "card" : part.glyph ? "glyph" : part.kind}:${part.id ?? ""}`);
 }
 
-/** Keep draw descriptors so an omitted object can remain visible, then return on reverse. */
-export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene): PreparedWorldScene {
-  const ids = trackIds(scene), oldIds = trackIds(previous);
-  const omitted = previous.instances.filter((part, index) => part.id && !ids.includes(oldIds[index]));
+/** Keep draw descriptors so an omitted object can remain visible, then return on reverse.
+ * Only parts `declared` by the previous slide are kept, so retained parts don't pile up slide after slide. */
+export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene, declared = previous): PreparedWorldScene {
+  const ids = new Set(trackIds(scene)), oldIds = trackIds(previous), last = new Set(trackIds(declared));
+  const omitted = previous.instances.filter((part, index) => part.id && !ids.has(oldIds[index]) && last.has(oldIds[index]));
   return omitted.length ? prepareWorldScene({ ...scene, instances: [...scene.instances, ...omitted] }) : scene;
 }
 

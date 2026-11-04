@@ -204,7 +204,7 @@ function WorldSurface(props: WorldProps) {
   const [retained, setRetained] = useState({ input: prepared, scene: prepared });
   let trackScene = retained.scene;
   if (props.track && retained.input !== prepared) {
-    trackScene = retainTrackScene(prepared, retained.scene);
+    trackScene = retainTrackScene(prepared, retained.scene, retained.input);
     setRetained({ input: prepared, scene: trackScene });
   }
   const renderScene = props.track ? trackScene : prepared;
