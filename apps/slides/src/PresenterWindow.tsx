@@ -16,7 +16,7 @@ import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { DeferredPresenterPreview } from "./DeferredPresenterPreview";
+import { DeferredPresenterPreview, useAudienceSettled } from "./DeferredPresenterPreview";
 import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
@@ -99,9 +99,10 @@ function SlideCounter({ index }: {
       </Text>
     </View>);
 }
-function Preview({ index, current = false, animate = false, stepIndex, weight = 1 }: {
+function Preview({ index, current, animate = false, stepIndex, weight = 1 }: {
     index: number;
-    current?: boolean;
+    /** The live slide number, on the preview that counts slides. */
+    current?: number;
     animate?: boolean;
     stepIndex?: number;
     weight?: number;
@@ -109,7 +110,7 @@ function Preview({ index, current = false, animate = false, stepIndex, weight = 
     return (<View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
         <SlideCanvas targetIndex={index} isPreview={!animate} backgroundIsPreview><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
-        {current && <SlideCounter index={index}/>}
+        {current !== undefined && <SlideCounter index={current}/>}
       </View>
     </View>);
 }
@@ -193,10 +194,11 @@ function PresenterWorkspace({ currentIndex, currentStep, deckPath, nextIndex, ne
     }, [layout$]);
     const persistLayout = useCallback(() => rememberPresenterLayout(layout$.peek()), [layout$]);
     const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
-    const nextPreview = <Preview index={nextIndex} stepIndex={nextStep}/>;
+    const [shownIndex, shownStep, shownNextIndex, shownNextStep] = useAudienceSettled(`${currentIndex}:${currentStep}:${nextIndex}:${nextStep}`, audienceOpen).split(":").map(Number);
+    const nextPreview = <Preview index={shownNextIndex} stepIndex={shownNextStep}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={currentIndex} current animate={!audienceOpen} stepIndex={currentStep} weight={showNext ? layout.currentPreviewRatio : 1}/>
+        <Preview index={shownIndex} current={currentIndex} animate={!audienceOpen} stepIndex={shownStep} weight={showNext ? layout.currentPreviewRatio : 1}/>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
             <DeferredPresenterPreview weight={1 - layout.currentPreviewRatio}>

@@ -320,7 +320,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
-        return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock) as number[], ids, state, track, declared).values;
+        return trackSampler(createTrackFrame(), sampleUniforms(scene.value, clock, null, 1, 1, track.frame === "world") as number[], ids, state, track, declared).values;
       }
       return trackFrame.value.values;
     }

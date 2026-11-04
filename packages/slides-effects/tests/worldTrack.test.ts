@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
-import { cardInstances, prepareWorldScene, primitive, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { cardInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
@@ -208,6 +208,13 @@ function sampleCarried(previous: TrackFrame, slide: string, stepIndex: number, t
   const clock = { ...sampleWorldClock(playback, 4, "step", undefined, false, null, 0.3, stepIndex) };
   return sampleTrackFrame(previous, sampleWorldUniforms(carried, clock, null, 1, 1, true) as number[], trackIds(carried), playback, worldTrack);
 }
+test("a settled part is not rewritten on a step without keyframes, only on one with them", () => {
+  const settle = keyframeSpans([{ initial: 0, frames: [{ step: 1, value: 1, duration: 0.5 }, { step: 3, value: 2, duration: 0.5 }] }]);
+  const key = (stepIndex: number) => settledKey(settle, { slideTime: 100, stepTime: 50, stepIndex, stepOrigins: {} } as never);
+  expect(key(2)).toBe(key(1));
+  expect(key(3)).not.toBe(key(2));
+});
+
 const body = (frame: TrackFrame, id = "box:a/body") => Array.from(part(frame, id).slice(0, 24));
 
 test("a world-frame scene carries parts on a bowed path from a cached uniform source, and Previous retraces it", () => {

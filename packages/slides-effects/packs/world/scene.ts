@@ -678,10 +678,10 @@ export function keyframeSpans(tracks: Track<unknown>[]): NonNullable<Instance["s
   return { steps: order, first: order.map(step => steps.get(step)![0]), last: order.map(step => steps.get(step)![1]), at };
 }
 /** Cache key of a "tracks" instance: NaN while any keyframe can still be moving (mirrors sampleTrackFrames' frame selection),
- * else the step plus the number of finished spans, which changes whenever a settled value may have changed. */
+ * else the last step with keyframes plus the number of finished spans, which changes whenever a settled value may have changed. */
 export function settledKey(settle: NonNullable<Instance["settle"]>, clock: ClockSample) {
   "worklet";
-  let finished = 0;
+  let finished = 0, settledStep = 0;
   for (let k = 0; k < settle.at.length; k += 2) {
     if (clock.slideTime >= settle.at[k + 1]) finished++;
     else if (clock.slideTime >= settle.at[k]) return NaN;
@@ -689,13 +689,14 @@ export function settledKey(settle: NonNullable<Instance["settle"]>, clock: Clock
   for (let k = 0; k < settle.steps.length; k++) {
     const step = settle.steps[k];
     if (step > clock.stepIndex) break;
+    settledStep = step;
     const origin = clock.stepOrigins[step];
     if (origin === undefined && step < clock.stepIndex) { finished++; continue; }
     const elapsed = clock.slideTime - (origin ?? clock.slideTime - clock.stepTime);
     if (elapsed >= settle.last[k]) finished++;
     else if (elapsed >= settle.first[k]) return NaN;
   }
-  return clock.stepIndex * 4096 + finished;
+  return settledStep * 4096 + finished;
 }
 const I = instanceField;
 export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {

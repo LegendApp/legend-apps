@@ -1,5 +1,17 @@
-import { useDeferredValue, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+
+/** Previews sample whole scenes on the UI thread: while the audience watches, they trail navigation so that work misses the transition. */
+const AUDIENCE_TRANSITION_MS = 3000;
+export function useAudienceSettled<T>(value: T, audienceOpen: boolean, delay = AUDIENCE_TRANSITION_MS): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (!audienceOpen) return;
+    const timer = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, audienceOpen, delay]);
+  return audienceOpen ? settled : value;
+}
 
 export function DeferredPresenterPreview({ children, weight }: { children: ReactNode; weight: number }) {
   const preview = useDeferredValue(children, null);

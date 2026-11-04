@@ -8,7 +8,7 @@ mock.module("react-native", () => ({
   ActivityIndicator: "spinner",
   StyleSheet: { create: value => value, absoluteFillObject: {} },
 }));
-const { DeferredPresenterPreview } = await import("../DeferredPresenterPreview");
+const { DeferredPresenterPreview, useAudienceSettled } = await import("../DeferredPresenterPreview");
 
 async function harness(run) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,4 +88,19 @@ test("resizing the preview leaves stable slide content visible without another r
     if (renderer) await act(() => renderer.unmount());
     log.mockRestore();
   }
+});
+
+test("previews trail navigation only while the audience watches, and rapid navigation settles on the newest target", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let shown, renderer;
+  function Trailing({ value, open }) { shown = useAudienceSettled(value, open, 5); return null; }
+  await act(() => { renderer = create(<Trailing value={0} open />); });
+  await act(() => renderer.update(<Trailing value={1} open />));
+  await act(() => renderer.update(<Trailing value={2} open />));
+  expect(shown).toBe(0);
+  await act(() => new Promise(resolve => setTimeout(resolve, 20)));
+  expect(shown).toBe(2);
+  await act(() => renderer.update(<Trailing value={3} open={false} />));
+  expect(shown).toBe(3);
+  await act(() => renderer.unmount());
 });
