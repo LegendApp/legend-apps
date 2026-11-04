@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
-import { cardInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { cardInstances, customInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
@@ -352,6 +352,19 @@ test("travel speed peaks mid-move, and fixed track parts stay put while the came
   expect(z(arrived, "box:tunnel:post")).toBe(-4);
   expect(z(arrived, "box:panel")).toBe(-32);
   expect(z(at(at(rest, 0, "1", { ...options, fixed: [] }), 2, "1", { ...options, fixed: [] }), "box:tunnel:post")).toBe(-36);
+});
+
+test("fixed scenery nearer than the camera target clears out of the content's way; custom draws are left alone", () => {
+  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "tunnel:near", position: [-6, 4, 6] }), primitive("box", { id: "tunnel:plane", position: [-6, 4, 0] }),
+    primitive("box", { id: "tunnel:far", position: [-6, 4, -12] }), ...customInstances({ id: "tunnel:lights", vertexCount: 36, wgsl: "" }), primitive("box", { id: "panel", position: [0, 4, 6] })] });
+  const playback = { ...createPlaybackState({ phase: "playing", slideKey: "0", stepKey: "0", stepIndex: 0 }), slideTime: 3, stepTime: 3 };
+  const frame = sampleTrackFrame(createTrackFrame(), sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, options);
+  const opacity = (id: string) => part(frame, id)[23];
+  expect(opacity("box:tunnel:near")).toBe(0);
+  expect(opacity("box:tunnel:plane")).toBe(0);
+  expect(opacity("box:tunnel:far")).toBe(1);
+  expect(opacity("custom:tunnel:lights:0")).toBe(1);
+  expect(opacity("box:panel")).toBe(1);
 });
 
 const boxPose = (id: string, position: [number, number, number]) => primitive("box", { id, position });

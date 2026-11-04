@@ -1,4 +1,4 @@
-import type { Vec3 } from "./camera";
+import { contentClearance, type Vec3 } from "./camera";
 import { colorVector, primitive, type Animated, type Instance, type MaterialOptions } from "./scene";
 
 /** A directional key light. `position` and `target` set its direction; the shadow box is centred on `target`. */
@@ -113,7 +113,9 @@ fn shape(iid:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
  let sgn=select(-1.,1.,face%2u==0u); let axis=face/2u; var p=vec3f(q.x,q.y,sgn); var n=vec3f(0.,0.,sgn);
  if(axis==0u) { p=vec3f(sgn,q.x,q.y); n=vec3f(sgn,0.,0.); }
  if(axis==1u) { p=vec3f(q.x,sgn,q.y); n=vec3f(0.,sgn,0.); }
- let local=vec3f(side*${f(inner)},${f(height)}*(.22+.56*row/${f(Math.max(1, count - 1))}),0.)+p*vec3f(.04,.13,.13+travelSpeed()*${f(streak)});
+ let mount=rig.xyz+select(vec3f(side*${f(inner)},0.,0.),vec3f(0.,0.,side*${f(inner)}),rig.w>.5);
+ let view=vector(4u)-vector(0u); let keep=smoothstep(uniforms[32]+${f(contentClearance.near)},uniforms[32]+${f(contentClearance.far)},dot(mount-vector(0u),view)/length(view));
+ let local=vec3f(side*${f(inner)},${f(height)}*(.22+.56*row/${f(Math.max(1, count - 1))}),0.)+p*vec3f(.04,.13,.13+travelSpeed()*${f(streak)})*keep;
  let world=select(local,local.zyx,rig.w>.5); let normal=select(n,n.zyx,rig.w>.5);
  return ShapeVertex(rig.xyz+world,normal);
 }

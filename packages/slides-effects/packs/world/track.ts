@@ -1,5 +1,5 @@
 import type { PlaybackState } from "@legend-apps/presentation";
-import { easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
+import { contentClearance, easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
 import { prepareWorldScene, travelSpeedSlot, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
@@ -42,7 +42,7 @@ export function createTrackFrame(): TrackFrame {
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
 export function trackIds(scene: PreparedWorldScene): string[] {
-  return scene.instances.map(part => `${part.label ? "label" : part.card ? "card" : part.glyph ? "glyph" : part.kind}:${part.id ?? ""}`);
+  return scene.instances.map(part => `${part.label ? "label" : part.card ? "card" : part.glyph ? "glyph" : part.custom ? "custom" : part.kind}:${part.id ?? ""}`);
 }
 
 /** Keep draw descriptors so an omitted object can remain visible, then return on reverse.
@@ -115,6 +115,13 @@ function reveal(from: number, to: number, value: number) {
   "worklet";
   const u = Math.min(1, Math.max(0, (value - from) / (to - from)));
   return u * u * (3 - 2 * u);
+}
+/** Opacity of a fixed part by its depth past the camera target, so scenery never stands in front of the content. */
+function clearance(values: ArrayLike<number>, at: number) {
+  "worklet";
+  const distance = values[32], depth = ((values[at] - values[0]) * (values[4] - values[0]) + (values[at + 1] - values[1]) * (values[5] - values[1]) +
+    (values[at + 2] - values[2]) * (values[6] - values[2])) / distance;
+  return reveal(distance + contentClearance.near, distance + contentClearance.far, depth);
 }
 function blend(values: Float32Array | number[], at: number, from: ArrayLike<number>, old: number, start: number, end: number, amount: number) {
   "worklet";
@@ -304,7 +311,11 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   for (let slot = 0; slot < ids.length; slot++) {
     const at = worldHeaderSize + slot * worldInstanceSize, id = ids[slot];
     if (!declaredSlots[slot]) continue;
-    if (fixedSlots[slot]) continue;
+    if (fixedSlots[slot]) {
+      // Custom draws place their own geometry; their instance position says nothing about where it is.
+      if (!id.startsWith("custom:")) values[at + 23] *= clearance(values, at);
+      continue;
+    }
     values[at + 2] -= station;
     // Hidden titles must not expand to the height of their destination column.
     const label = id.startsWith("label:");
