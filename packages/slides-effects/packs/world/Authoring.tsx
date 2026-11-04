@@ -696,7 +696,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
         const pulses = [...beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })) : [],
           ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
         const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
-        const width = Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)), height = Number(n.height ?? .82), side = n.x < 0 ? -1 : 1, land = 1.65 + i / Math.max(1, nodes.length - 1) * .35;
+        const width = Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)), height = Number(n.height ?? .82), side = n.x < 0 ? -1 : 1, land = 1.35 + i / Math.max(1, nodes.length - 1) * .35;
         return <Fragment key={n.id}>
           <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
             key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>
@@ -708,7 +708,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
             <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[0,0,.27]}
               emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />
           </Stage>
-          <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land + .2} count={14} lifetime={.7} colors={["#ffa21f", "#ffffff"]} emissive={6} size={.04} speed={2.5} />
+          <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
           {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
             draw={[key(0, 0, 0, 0), key(0, 1, land - .15, .35)]}
             path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
