@@ -691,8 +691,8 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
       const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
       return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
         const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
-        const emissive = own.length ? [{ step: 0, value: .06 }, ...own.flatMap(f => f.flash === false ? [key(f.step, f.glow ?? .04, arrives(f, n), .4)]
-          : [key(f.step, 1.4, arrives(f, n), .06), key(f.step, f.glow ?? .12, arrives(f, n) + .1, .6)])] : .06;
+        const emissive = own.length ? [{ step: 0, value: .06 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
+          : [key(f.step, 1.4, arrives(f, n), .06), key(f.step, (f.glow ?? 1.2) * .1, arrives(f, n) + .1, .6)])] : .06;
         const pulses = [...beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })) : [],
           ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
         const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
