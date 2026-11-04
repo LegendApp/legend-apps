@@ -7,11 +7,12 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
   return GraphVertex(vec4f(p * 2.0 - 1.0, 0.0, 1.0), vec2f(p.x, 1.0 - p.y));
 }`;
 
-type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; descriptor?: GPURenderPassDescriptor };
+type CullRanges = { cull: { offset: number; stride: number; threshold: number }; ranges: Uint32Array; length: number; frame: number };
+type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; cull?: number; descriptor?: GPURenderPassDescriptor };
 export type RenderGraphResources = {
   targets: GPUTarget[]; views: Record<string, GPUTextureView>; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
-  width: number; height: number; scale: number;
+  width: number; height: number; scale: number; culls: CullRanges[]; frame: number;
 };
 
 function reference(value: string): [string, number] {
@@ -64,7 +65,8 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (![1, 4].includes(target.samples ?? 1) || ((target.samples ?? 1) > 1 && ((target.mips ?? 1) > 1 || target.format === "r32float"))) throw new Error("Invalid GPU target samples: " + target.id);
   }
   const r: RenderGraphResources = { targets, views: {}, textures: {}, buffers: {}, passes: [], clock, uniforms,
-    sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1 };
+    sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1, culls: [], frame: 0 };
+  const cullIndexes = new Map<string, number>();
   for (const buffer of buffers) {
     if (!Number.isInteger(buffer.size) || buffer.size <= 0 || buffer.size % 4 || (buffer.init && buffer.init.byteLength > buffer.size)) throw new Error("Invalid GPU buffer size: " + buffer.id);
     r.buffers[buffer.id] = device.createBuffer({ size: buffer.size, usage: 128 | 8 });
@@ -118,7 +120,18 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
         ...(pass.kind === "render" ? { multisample: { count: targetFor(targets, pass.color[0] ?? pass.depth!).samples ?? 1 } } : {}),
       });
     }
-    r.passes.push({ pass, pipeline, layout, resolves: [] });
+    let cullIndex: number | undefined;
+    if (pass.kind === "render" && pass.instanceCull) {
+      const cull = pass.instanceCull, instances = pass.instanceCount ?? 1;
+      const key = `${cull.offset}/${cull.stride}/${cull.threshold}/${instances}`;
+      cullIndex = cullIndexes.get(key);
+      if (cullIndex === undefined) {
+        cullIndex = r.culls.length;
+        cullIndexes.set(key, cullIndex);
+        r.culls.push({ cull, ranges: new Uint32Array(instances * 2), length: 0, frame: 0 });
+      }
+    }
+    r.passes.push({ pass, pipeline, layout, resolves: [], cull: cullIndex });
   }
   // A multisampled colour target resolves once, in the last render pass that writes it.
   const resolved = new Set<string>();
@@ -169,6 +182,7 @@ export function resizeRenderGraph(r: RenderGraphResources, device: GPUDevice, wi
 export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, encoder: GPUCommandEncoder, screen: GPUTexture, renderScale = 1, values?: ArrayLike<number>) {
   "worklet";
   resizeRenderGraph(r, device, screen.width, screen.height, renderScale);
+  const frame = ++r.frame;
   for (let index = 0; index < r.passes.length; index++) {
     const resource = r.passes[index], pass = resource.pass;
     if (pass.kind === "compute") {
@@ -207,16 +221,23 @@ export function encodeRenderGraph(r: RenderGraphResources, device: GPUDevice, en
         // An empty pass still clears its attachments.
         const vertices = drawPass.kind === "render" ? drawPass.vertexCount : 3, instances = drawPass.kind === "render" ? drawPass.instanceCount ?? 1 : 1;
         if (vertices > 0 && instances > 0) {
-          const cull = drawPass.kind === "render" ? drawPass.instanceCull : undefined;
-          if (cull && values) {
-            let first = 0;
-            while (first < instances) {
-              while (first < instances && values[cull.offset + first * cull.stride] <= cull.threshold) first++;
-              let end = first;
-              while (end < instances && !(values[cull.offset + end * cull.stride] <= cull.threshold)) end++;
-              if (end > first) command.draw(vertices, end - first, 0, first);
-              first = end;
+          const visible = draw.cull === undefined ? undefined : r.culls[draw.cull];
+          if (visible && values) {
+            // Shadow and scene draws use the same snapshot, but a frozen redraw may have new values.
+            if (visible.frame !== frame) {
+              const cull = visible.cull;
+              visible.length = 0;
+              let first = 0;
+              while (first < instances) {
+                while (first < instances && values[cull.offset + first * cull.stride] <= cull.threshold) first++;
+                let end = first;
+                while (end < instances && !(values[cull.offset + end * cull.stride] <= cull.threshold)) end++;
+                if (end > first) { visible.ranges[visible.length++] = first; visible.ranges[visible.length++] = end - first; }
+                first = end;
+              }
+              visible.frame = frame;
             }
+            for (let i = 0; i < visible.length; i += 2) command.draw(vertices, visible.ranges[i + 1], 0, visible.ranges[i]);
           } else command.draw(vertices, instances);
         }
       }

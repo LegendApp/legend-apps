@@ -134,6 +134,39 @@ test("instance culling retains draw order and shader indices as visibility chang
   expect(g.commands.filter(c => c[0] === "draw")).toEqual([["draw", 1200, 6]]);
 });
 
+test("shadow and scene share visibility scans within a frame and refresh ranges for every snapshot", async () => {
+  const g = gpu(), raw = [99, 0, 99, .5, 99, 1, 99, 0, 99, .0005, 99, 1, 99, NaN];
+  let reads = 0;
+  const values = new Proxy(raw, { get(target, key) { if (typeof key === "string" && /^\d+$/.test(key)) reads++; return Reflect.get(target, key); } });
+  const readsAt = {};
+  const begin = g.encoder.beginRenderPass;
+  g.encoder.beginRenderPass = descriptor => {
+    const command = begin(descriptor);
+    return { ...command, setPipeline(pipeline) { readsAt[pipeline.vertex.entryPoint] = reads; command.setPipeline(pipeline); } };
+  };
+  const draw = (id, vertices, instances = 7, threshold = .001, extra = {}) => ({ kind: "render", id, code: "", vertex: id, fragment: "fragment",
+    color: ["hdr"], depth: "depth", vertexCount: vertices, instanceCount: instances, clear: false,
+    instanceCull: { offset: 1, stride: 2, threshold }, ...extra });
+  const r = await prepareRenderGraph(g.device, { targets: definition.targets, passes: [
+    draw("shadow", 6, 7, .001, { color: [], clear: [0, 0, 0, 0] }), draw("scene", 36), draw("partial", 12, 3), draw("cutoff", 24, 7, .75),
+  ] }, "bgra8unorm", {}, {});
+  const screen = { width: 64, height: 64, createView: () => "screen" };
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.filter(c => c[0] === "draw")).toEqual([
+    ["draw", 6, 2, 0, 1], ["draw", 6, 2, 0, 5], ["draw", 36, 2, 0, 1], ["draw", 36, 2, 0, 5],
+    ["draw", 12, 2, 0, 1], ["draw", 24, 1, 0, 2], ["draw", 24, 2, 0, 5],
+  ]);
+  expect(readsAt.partial).toBe(readsAt.scene);
+  g.commands.length = 0;
+  raw.fill(0);
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.map(c => c[0])).toEqual(["render", "render"]);
+  g.commands.length = 0;
+  raw[1] = 1;
+  encodeRenderGraph(r, g.device, g.encoder, screen, 1, values);
+  expect(g.commands.filter(c => c[0] === "draw")).toEqual([6, 36, 12, 24].map(vertices => ["draw", vertices, 1, 0, 0]));
+});
+
 test("graph rejects invalid references and shader diagnostics before a frame can receive pipelines", async () => {
   const g = gpu();
   await expect(prepareRenderGraph(g.device, { ...definition, passes: [{ ...definition.passes[3], reads: ["bloom@3"] }] }, "bgra8unorm", {}, {})).rejects.toThrow("Invalid GPU mip");
