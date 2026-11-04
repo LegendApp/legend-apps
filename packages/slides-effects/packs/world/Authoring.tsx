@@ -691,8 +691,8 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
       const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
       return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
         const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
-        const emissive = own.length ? [{ step: 0, value: .06 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
-          : [key(f.step, 1.4, arrives(f, n), .06), key(f.step, (f.glow ?? 1.2) * .1, arrives(f, n) + .1, .6)])] : .06;
+        const emissive = own.length ? [{ step: 0, value: .006 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
+          : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? 0) * .1, arrives(f, n) + .1, .6)])] : .006;
         const pulses = [...beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })) : [],
           ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
         const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
@@ -704,7 +704,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
               material={{ albedo: "#101115", metal: .85, roughness: .3, rim: 0 }} />
             <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
               material={{ albedo: "#000000", metal: 0, roughness: 1 }} />
-            <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={.9} material={{ albedo: "#000000" }} />
+            <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={typeof emissive === "number" ? .9 : emissive.map(frame => ({ ...frame, value: .9 + frame.value * 2 }))} material={{ albedo: "#000000" }} />
             <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[0,0,.27]}
               emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />
           </Stage>
