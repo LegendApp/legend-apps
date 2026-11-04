@@ -338,18 +338,33 @@ function scenePlan(prepare: NonNullable<SceneProps["prepare"]>, slides: Authored
   if (cached?.key !== key) { cached = { key, plan: prepare(slides) }; plans.set(prepare, cached); }
   return cached.plan;
 }
-const slidePlans = new WeakMap<SceneProps, { declarations: SceneProps[]; slides: WorldProps[] }>();
+function sameSceneValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  // React owners differ between renderers; component types, keys and props define the declaration.
+  if (isValidElement(a) && isValidElement(b)) return a.type === b.type && a.key === b.key && sameSceneValue(a.props, b.props);
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!sameSceneValue(a[i], b[i])) return false;
+    return true;
+  }
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" ||
+    Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false;
+  const keys = Object.keys(a), other = Object.keys(b);
+  return keys.length === other.length && keys.every((key, i) => key === other[i] && sameSceneValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+// Each deck's pack retains one preparation per named world across equivalent renderer mounts.
+const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldProps[] }>();
 function plannedSlides(content: readonly ReactNode[], world: string) {
   const declarations: SceneProps[] = [];
   for (const children of content) collect(children, child => {
     if (child.type === Scene && !child.props.prepare && (child.props.world ?? "scene") === world) declarations.push(child.props as SceneProps);
   });
   if (!declarations.length) return [];
-  let cached = slidePlans.get(declarations[0]);
-  if (!cached || declarations.length !== cached.declarations.length || declarations.some((props, i) => props !== cached!.declarations[i])) {
+  let cached = slidePlans.get(world);
+  if (!cached || !sameSceneValue(declarations, cached.declarations)) {
     cached = { declarations, slides: prepareWorldSlides(declarations.map(({ children, layout, camera, ...props }) => ({ ...props,
       track: { spacing: 32, ...findLayout(layout, false)?.camera, ...camera }, children: expandScene(children, layout) }))) };
-    slidePlans.set(declarations[0], cached);
+    slidePlans.set(world, cached);
   }
   return cached.slides;
 }

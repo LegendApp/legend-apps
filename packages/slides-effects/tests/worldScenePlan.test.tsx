@@ -30,8 +30,10 @@ test("authored slides retain one GPU graph across different geometry, steps and 
   try {
     await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
     const initial = graph();
-    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node); });
+    const plan = renderer.root.findAllByType(WorldSlide)[0].props.scenePlan;
+    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node, {}, React.cloneElement(node.props.children)); });
     await act(() => { renderer.update(content(0)); }); tick(3000);
+    expect(renderer.root.findAllByType(WorldSlide)[0].props.scenePlan).toBe(plan);
     expect(graph()).toBe(initial);
     await act(() => {
       first$.assign({ currentSlide: 1, playbackPhase: "outgoing", isActive: false });
@@ -79,4 +81,30 @@ test("entering a plan from a raw World retains its outgoing geometry before join
       }
     }
   } finally { await act(() => renderer?.unmount()); flushUI(); }
+});
+
+test("equivalent scene plans still invalidate for changed geometry, appearance and camera", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime$ = observable({ stepIndex: 0, isPreview: true });
+  let declaration = <Scene id="one" world="edits"><Box id="part" /></Scene>;
+  const content = () => <DeckContentContext.Provider value={[declaration]}>
+    <PresentationObservableProvider value={runtime$}>{declaration}</PresentationObservableProvider>
+  </DeckContentContext.Provider>;
+  let renderer;
+  const plan = () => renderer.root.findByType(WorldSlide).props.scenePlan;
+  try {
+    await act(() => { renderer = create(content()); });
+    for (const update of [
+      node => React.cloneElement(node, {}, <Sphere id="part" />),
+      node => React.cloneElement(node, { exposure: 2 }),
+      node => React.cloneElement(node, { camera: { position: [2, 3, 14] } }),
+    ]) {
+      const previous = plan();
+      declaration = update(declaration);
+      await act(() => renderer.update(content()));
+      expect(plan()).not.toBe(previous);
+    }
+    expect(plan().content.prepared.instances[0].kind).toBe("sphere");
+    expect(renderer.root.findByType(WorldSlide).props.track.position).toEqual([2, 3, 14]);
+  } finally { await act(() => renderer?.unmount()); }
 });
