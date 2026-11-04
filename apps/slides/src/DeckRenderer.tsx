@@ -336,13 +336,13 @@ export function SlideBackgroundHost(props: ComponentProps<typeof BackgroundHost>
   return <GPUShaderProvider renderer={TypeGPUShader}><BackgroundHost {...props} boundary={BackgroundErrorBoundary} /></GPUShaderProvider>;
 }
 
-export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview }: { children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
+export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview, backgroundStill }: { backgroundStill?: ReactNode; children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
   const intensity = useBackgroundIntensitySetting();
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
-  return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview}>{content}</SlideBackgroundHost>;
+  return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview} replacement={backgroundStill}>{content}</SlideBackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {

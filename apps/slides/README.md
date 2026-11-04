@@ -325,6 +325,8 @@ elements still move between their layouts. A new navigation cancels the current 
 from the new source slide's layout; it does not preserve intermediate velocity.
 Presenter previews always show the final layout.
 
+While the audience window is open, a GPU background in a presenter preview is a still of that step's settled frame, so previews change with navigation and cost the audience nothing. Each deck renders its stills once, hidden, when it loads; a step without a still shows its live preview about 3 s after navigation.
+
 `FocusRegion` and `SharedElement` accept native `View` props, including `style`.
 They are available directly in MDX and can be imported from
 `@legend-apps/presentation` in local components. IDs must be unique within each

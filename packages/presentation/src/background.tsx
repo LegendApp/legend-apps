@@ -37,7 +37,7 @@ export function useHasBackground() { return useContext(HasBackgroundContext); }
 export function useBackgroundHost() { return useContext(RegistryContext) !== null; }
 
 /** One host per audience window or presenter preview, outside the scaled content. */
-export function BackgroundHost({ children, slideIndex, color, isPreview = false, intensity = 1, boundary = Fragment }: { boundary?: ComponentType<{ children?: ReactNode }>; children: ReactNode; slideIndex: number; color: string; isPreview?: boolean; intensity?: number }) {
+export function BackgroundHost({ children, slideIndex, color, isPreview = false, intensity = 1, boundary = Fragment, replacement }: { boundary?: ComponentType<{ children?: ReactNode }>; children: ReactNode; /** Shown instead of the declared background, which then never mounts. */ replacement?: ReactNode; slideIndex: number; color: string; isPreview?: boolean; intensity?: number }) {
   const [entries, setEntries] = useState<Record<string, Entry>>({});
   const [register] = useState<Registry>(() => (id: string, entry: Entry | undefined) => setEntries((current) => {
     if (entry === undefined) {
@@ -69,14 +69,14 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     <BrightnessScaleContext.Provider value={brightnessScale}>
     <IntensityContext.Provider value={intensity}>
       <RegistryContext.Provider value={register}>
-        <HasBackgroundContext.Provider value={Boolean(visible)}>
+        <HasBackgroundContext.Provider value={Boolean(replacement || visible)}>
           <View style={[styles.host, { backgroundColor: color }]} onLayout={(event) => {
             const { width, height } = event.nativeEvent.layout;
             setSize((previous) => previous.width === width && previous.height === height ? previous : { width, height });
           }}>
             <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
               <SizeContext.Provider value={size}>
-                {visible && <SelectedBackground entry={visible} retained={!selected} isPreview={isPreview} Boundary={boundary} />}
+                {replacement ?? (visible && <SelectedBackground entry={visible} retained={!selected} isPreview={isPreview} Boundary={boundary} />)}
               </SizeContext.Provider>
             </View>
             {children}

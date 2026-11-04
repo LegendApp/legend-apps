@@ -13,10 +13,11 @@ import { addAppListener } from "@legendapp/spark/app";
 import { onSystemEvent, preventSleep } from "@legendapp/spark/system";
 import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
 import { ownRegistration } from "@legend-apps/runtime-utils";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { DeferredPresenterPreview, useAudienceSettled } from "./DeferredPresenterPreview";
+import { PreviewStillStack, PreviewStillSweep, stillKey, usePreviewStills } from "./PreviewStills";
 import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
@@ -99,8 +100,10 @@ function SlideCounter({ index }: {
       </Text>
     </View>);
 }
-function Preview({ index, current, animate = false, stepIndex, weight = 1 }: {
+function Preview({ index, current, animate = false, stepIndex, still, weight = 1 }: {
     index: number;
+    /** Replaces the live GPU background. */
+    still?: ReactNode;
     /** The live slide number, on the preview that counts slides. */
     current?: number;
     animate?: boolean;
@@ -109,7 +112,7 @@ function Preview({ index, current, animate = false, stepIndex, weight = 1 }: {
 }) {
     return (<View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
-        <SlideCanvas targetIndex={index} isPreview={!animate} backgroundIsPreview><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
+        <SlideCanvas targetIndex={index} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
         {current !== undefined && <SlideCounter index={current}/>}
       </View>
     </View>);
@@ -157,6 +160,7 @@ function ResizeHandle({ direction, label, onResize, onResizeEnd }: ResizeHandleP
     </View>);
 }
 type PresenterWorkspaceProps = {
+    audienceAspect?: number;
     currentIndex: number;
     currentStep: number;
     deckPath: string;
@@ -170,7 +174,7 @@ type PresenterWorkspaceProps = {
     showNext: boolean;
     showNotes: boolean;
 };
-function PresenterWorkspace({ currentIndex, currentStep, deckPath, nextIndex, nextStep, notesEditable, notes, onNotesEditingChange, onSaveNotes, resetVersion, showNext, showNotes, }: PresenterWorkspaceProps) {
+function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPath, nextIndex, nextStep, notesEditable, notes, onNotesEditingChange, onSaveNotes, resetVersion, showNext, showNotes, }: PresenterWorkspaceProps) {
     const audienceOpen = useValue(slidesState$.audienceOpen);
     const layout$ = useObservable(() => getPresenterLayout());
     const layout = useValue(layout$);
@@ -194,14 +198,21 @@ function PresenterWorkspace({ currentIndex, currentStep, deckPath, nextIndex, ne
     }, [layout$]);
     const persistLayout = useCallback(() => rememberPresenterLayout(layout$.peek()), [layout$]);
     const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
-    const [shownIndex, shownStep, shownNextIndex, shownNextStep] = useAudienceSettled(`${currentIndex}:${currentStep}:${nextIndex}:${nextStep}`, audienceOpen).split(":").map(Number);
-    const nextPreview = <Preview index={shownNextIndex} stepIndex={shownNextStep}/>;
+    const navigation = `${currentIndex}:${currentStep}:${nextIndex}:${nextStep}`;
+    const settled = useAudienceSettled(navigation, audienceOpen);
+    const [settledIndex, settledStep, settledNextIndex, settledNextStep] = settled.split(":").map(Number);
+    const { stills, targets, sweep } = usePreviewStills(audienceAspect);
+    // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
+    const stillOf = (target: string) => audienceOpen && stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
+    const currentStill = stillOf(stillKey(currentIndex, currentStep)), nextStill = stillOf(stillKey(nextIndex, nextStep));
+    const nextPreview = <Preview index={nextStill ? nextIndex : settledNextIndex} stepIndex={nextStill ? nextStep : settledNextStep} still={nextStill}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <Preview index={shownIndex} current={currentIndex} animate={!audienceOpen} stepIndex={shownStep} weight={showNext ? layout.currentPreviewRatio : 1}/>
+        <PreviewStillSweep key={sweep.generation} {...sweep} paused={settled !== navigation}/>
+        <Preview index={currentStill ? currentIndex : settledIndex} current={currentIndex} animate={!audienceOpen} stepIndex={currentStill ? currentStep : settledStep} still={currentStill} weight={showNext ? layout.currentPreviewRatio : 1}/>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
-            <DeferredPresenterPreview weight={1 - layout.currentPreviewRatio}>
+            <DeferredPresenterPreview immediate={!!nextStill} weight={1 - layout.currentPreviewRatio}>
               {nextPreview}
             </DeferredPresenterPreview>
           </>)}
@@ -633,6 +644,10 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
         currentSlide, currentStep, slides: slidesState$.slides.get(),
     }).stepIndex);
     const nextTarget = { slideIndex: nextSlideIndex, stepIndex: nextStepIndex };
+    const audienceAspect = useValue(() => {
+        const display = presenter$.displays.get().find(display => display.id === presenter$.selectedDisplayId.get());
+        return display && display.size.width / display.size.height;
+    });
     const showNext = useValue(() => slidesState$.config.presenter.showNext.get() !== false);
     const showNotes = useValue(() => slidesState$.config.presenter.showNotes.get() !== false);
     useEffect(() => {
@@ -645,7 +660,7 @@ function PresenterDeckContent({ keyboardJump$, presenter$, onNotesEditingChange,
       {hasDeck ? (<View style={styles.presenter}>
           <KeyboardJump value$={keyboardJump$}/>
 
-          <PresenterWorkspace currentIndex={currentSlide} currentStep={currentStep} deckPath={deckPath ?? ""} nextIndex={nextTarget.slideIndex} nextStep={nextTarget.stepIndex} notesEditable={notesEditable} notes={currentNotes} onNotesEditingChange={onNotesEditingChange} onSaveNotes={onSaveNotes} resetVersion={resetVersion} showNext={showNext} showNotes={showNotes}/>
+          <PresenterWorkspace audienceAspect={audienceAspect} currentIndex={currentSlide} currentStep={currentStep} deckPath={deckPath ?? ""} nextIndex={nextTarget.slideIndex} nextStep={nextTarget.stepIndex} notesEditable={notesEditable} notes={currentNotes} onNotesEditingChange={onNotesEditingChange} onSaveNotes={onSaveNotes} resetVersion={resetVersion} showNext={showNext} showNotes={showNotes}/>
 
           <PresenterStatus />
         </View>) : (<EmptyPresenter />)}

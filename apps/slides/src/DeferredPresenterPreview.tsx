@@ -13,8 +13,9 @@ export function useAudienceSettled<T>(value: T, audienceOpen: boolean, delay = A
   return audienceOpen ? settled : value;
 }
 
-export function DeferredPresenterPreview({ children, weight }: { children: ReactNode; weight: number }) {
-  const preview = useDeferredValue(children, null);
+export function DeferredPresenterPreview({ children, immediate = false, weight }: { children: ReactNode; immediate?: boolean; weight: number }) {
+  const deferred = useDeferredValue(children, null);
+  const preview = immediate ? children : deferred;
   const pending = preview !== children;
   return (
     <View style={[styles.section, { flex: weight }]}>
