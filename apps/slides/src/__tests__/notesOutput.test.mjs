@@ -11,11 +11,11 @@ function setup() {
   const modules = {
     "@legendapp/state": { observable: values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { peek: () => value, set: next => { value = next; } }])) },
     "@legendapp/spark/windows": {
-      closeWindow: async id => { calls.push(["close", id]); return { closed: true }; },
       getDisplays: async () => [{ id: "main", primary: true, workArea: { x: 0, y: 0, width: 1440, height: 900 } }],
       WindowStyleMask: { Titled: 1, Closable: 2, Resizable: 4 },
       setWindowBounds: async () => {},
     },
+    "./closeWindow": { closeSlidesWindow: async id => { calls.push(["close", id]); return { closed: true }; } },
     "react-native": { AppRegistry: {} },
     "@legendapp/spark/windows/macos": {},
     "./slidesWindows": { slidesWindows: { open: async (id, options) => { calls.push(["open", id, options]); } } },

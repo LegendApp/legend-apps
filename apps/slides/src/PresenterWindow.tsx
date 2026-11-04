@@ -8,7 +8,8 @@ import { useObservable, useObserveEffect, useValue } from "@legendapp/state/reac
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { createHotkeyRouter, useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { registerDocumentOpenGuard } from "./documentOpen";
-import { beforeWindowClose, closeWindow, getDisplays, setWindowOptions, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
+import { beforeWindowClose, getDisplays, setWindowOptions, showWindow, type DisplayInfo } from "@legendapp/spark/windows";
+import { closeSlidesWindow } from "./closeWindow";
 import { addAppListener } from "@legendapp/spark/app";
 import { onSystemEvent, preventSleep } from "@legendapp/spark/system";
 import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
@@ -421,7 +422,7 @@ export function PresenterWindow() {
     const [audience] = useState(() => createAudienceSession({
         open: openSlidesAudienceWindow,
         async close() {
-            const result = await closeWindow("slides-audience");
+            const result = await closeSlidesWindow("slides-audience");
             if (!result.closed) throw new Error("Closing the audience window was vetoed.");
         },
         async focusPresenter() { await showWindow("slides-presenter"); },

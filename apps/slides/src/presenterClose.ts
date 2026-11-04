@@ -1,4 +1,4 @@
-import { closeWindow } from "@legendapp/spark/windows";
+import { closeSlidesWindow } from "./closeWindow";
 import { closeNotesOutput, resumeNotesOutput } from "./notesOutput";
 import { prepareSlidesExit } from "./slidesExit";
 import { getSlidesState } from "./slidesStore";
@@ -19,6 +19,6 @@ export async function preparePresenterSessionClose(closeAudience: () => Promise<
 
 export async function closePresenterSession(closeAudience: () => Promise<unknown>) {
  if (!await preparePresenterSessionClose(closeAudience)) return;
- const result = await closeWindow("slides-presenter");
+ const result = await closeSlidesWindow("slides-presenter");
  if (!result.closed) { resumeNotesOutput(); throw new Error("Closing the presenter window was vetoed."); }
 }

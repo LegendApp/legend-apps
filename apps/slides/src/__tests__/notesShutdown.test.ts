@@ -1,11 +1,13 @@
 // @ts-nocheck Native windows are supplied by this test.
 import { expect, mock, test } from "bun:test";
+import { SparkError } from "@legendapp/spark/contracts";
 mock.module("react-native", () => ({ Platform: { OS: "macos" }, AppRegistry: {}, TurboModuleRegistry: { get: () => null }, NativeEventEmitter: class {} }));
 const calls = [];
 let finishOpen;
 let failClose = false;
+let missingWindow = false;
 mock.module("@legendapp/spark/windows", () => ({
-  closeWindow: async () => { calls.push("close"); return { closed: !failClose }; },
+  closeWindow: async () => { calls.push("close"); if (missingWindow) throw new SparkError("E_NOT_FOUND", "Window does not exist"); return { closed: !failClose }; },
   getDisplays: async () => [], WindowProvider: () => null, openWindow: async () => {},
   setWindowBounds: async () => {},
 }));
@@ -15,6 +17,19 @@ mock.module("../slidesWindows", () => ({ slidesWindows: { open: async () => {
 mock.module("../slidesSettings", () => ({ displayRolesSetting: { get: () => ({}) } }));
 mock.module("@legendapp/spark/windows/macos", () => ({}));
 const { previewNotesOutput, closeNotesOutput, resumeNotesOutput, syncNotesOutput, notesOutput$ } = await import("../notesOutput");
+
+test("shutdown succeeds when the notes window was never opened or already closed", async () => {
+  missingWindow = true;
+  try {
+    await closeNotesOutput();
+    await closeNotesOutput();
+    expect(notesOutput$.preview.peek()).toBe(false);
+  } finally {
+    missingWindow = false;
+    resumeNotesOutput();
+    calls.length = 0;
+  }
+});
 
 test("shutdown waits for preview creation and retains state when native close fails", async () => {
   const opening = previewNotesOutput();

@@ -1,5 +1,6 @@
 import { observable } from "@legendapp/state";
-import { closeWindow, getDisplays, openWindow, setWindowBounds, type DisplayInfo } from "@legendapp/spark/windows";
+import { getDisplays, openWindow, setWindowBounds, type DisplayInfo } from "@legendapp/spark/windows";
+import { closeSlidesWindow } from "./closeWindow";
 import { AppRegistry } from "react-native";
 import { createElement } from "react";
 import { WindowProvider } from "@legendapp/spark/windows";
@@ -16,7 +17,7 @@ export function resumeNotesOutput() { shuttingDown = false; }
 async function closeNotesWindow() {
     if (!windowOpen)
         return;
-    const result = await closeWindow("slides-notes");
+    const result = await closeSlidesWindow("slides-notes");
     if (!result.closed) throw new Error("Closing the notes window was vetoed.");
     windowOpen = false;
     outputKey = null;
@@ -49,7 +50,7 @@ export function syncNotesOutput(displays: DisplayInfo[], presenting: boolean) {
 export function closeNotesOutput() {
     shuttingDown = true;
     queue = queue.catch(() => { }).then(async () => {
-        const result = await closeWindow("slides-notes");
+        const result = await closeSlidesWindow("slides-notes");
         if (!result.closed) throw new Error("Closing the notes window was vetoed.");
         notesOutputClosed();
     }).catch(error => { shuttingDown = false; throw error; });
@@ -92,6 +93,6 @@ export async function identifyDisplays(displays: DisplayInfo[]) {
         const { IdentifyWindow } = await import("./NotesWindow");
         if (!AppRegistry.getAppKeys().includes(identifier)) AppRegistry.registerComponent(identifier, () => props => createElement(WindowProvider, { id: identifier, children: createElement(IdentifyWindow, { number: props.number, name: props.name }) }));
         await openWindow({ id: identifier, component: identifier, props: { number: index + 1, name: display.name }, title: "Identify Display", appearance: "dark", size: { width: 300, height: 220 }, position: { displayId: display.id, x: (display.size.width - 300) / 2, y: (display.size.height - 220) / 2 } });
-        setTimeout(() => { void closeWindow(identifier).catch(console.error); }, 4000);
+        setTimeout(() => { void closeSlidesWindow(identifier).catch(console.error); }, 4000);
     }));
 }
