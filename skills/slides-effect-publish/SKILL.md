@@ -31,8 +31,9 @@ effect has states worth showing. Pack runtime code lives in `packages/slides-eff
    - Optionally set `LEGEND_APP_LOCK` to an app-lock executable. It holds the slides lock
      for the entire capture. The script stores the compiled recorder and local capture
      artifacts in the system temporary directory.
-   - It snapshots the validated local packs and passes `LEGEND_SLIDES_EFFECT_PACKS` to
-     both development and release builds, so captures cannot use older installed packs.
+   - It snapshots the validated local packs and passes `LEGEND_SLIDES_EFFECT_PACKS`, with
+     `LEGEND_SLIDES_NO_REPO_PACKS=1`, to both development and release builds, so captures use
+     only that snapshot rather than older installed packs or the checkout's working tree.
    - It launches the build with a blank lead-in before the example and confirms its fullscreen
      audience window. It starts example playback after the ScreenCaptureKit recorder is
      ready, trims the lead-in, and advances literal `<Step>` and `<Steps count={n}>` states

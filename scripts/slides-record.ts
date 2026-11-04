@@ -24,7 +24,7 @@ Video (MP4, 60 fps, ScreenCaptureKit):
 
   --port N           Metro port (default: the slides dev port); Metro is started and stopped if not running
   --app PATH         LegendSlides.app (default: the dev build from bun run slides build macos --dev)
-  --effect-packs DIR resolve slides: imports from DIR, e.g. packages/slides-effects/packs (default: installed packs)
+  --effect-packs DIR resolve slides: imports from DIR, e.g. a pack snapshot (default: this checkout's packs, then installed packs)
   --wait S           wait up to S seconds for another Legend Slides instance to quit (default 600)
   --reserve-bytes N  free-space floor for video capture (default 5000000000)
 
@@ -150,7 +150,7 @@ try {
   }
   // Launch the binary directly so its PID is ours and it inherits a PATH with bun for the deck compiler.
   app = spawn(binary, ["-ApplePersistenceIgnoreState", "YES", "-RCT_jsLocation", `127.0.0.1:${port}`], {
-    detached: true, stdio: "ignore", env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}`, ...effectPacks && { LEGEND_SLIDES_EFFECT_PACKS: effectPacks } } });
+    detached: true, stdio: "ignore", env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}`, ...effectPacks && { LEGEND_SLIDES_EFFECT_PACKS: effectPacks, LEGEND_SLIDES_NO_REPO_PACKS: "1" } } });
   console.log(`Launched ${binary} (pid ${app.pid})`);
   let control: Awaited<ReturnType<typeof connect>> | undefined;
   for (let i = 0; i < 120 && !control; i++, await sleep(1000)) {

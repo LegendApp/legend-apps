@@ -20,13 +20,22 @@ those pack directories. CSS scanning includes selected pack roots.
 Cross-pack imports must declare the exact installed dependency version in the
 importing manifest. A missing declaration or incompatible version fails compilation.
 
-Decks resolve verified source snapshots from
-`~/Library/Application Support/Legend Slides/effects/`, including in a source checkout.
-To compile against this `packs/` directory while developing effects, set
-`LEGEND_SLIDES_EFFECT_PACKS` or pass `--effect-packs <directory>` to the compiler.
-A pack at `<deck folder>/effects/<id>/pack.json` is used from source before installed
-packs, and edits recompile the deck. The lockfile records it as `{ "path": "effects/<id>" }`
-rather than a checksum; point that path elsewhere, as `apps/slides/examples/3d` does for `world`.
+Each `slides:<id>/...` import resolves from the first of:
+
+1. `<deck folder>/effects/<id>/pack.json` or the deck lockfile's `path` entry, from source.
+   Edits recompile the deck. The lockfile records it as `{ "path": "effects/<id>" }` rather
+   than a checksum; point that path elsewhere, as `apps/slides/examples/3d` does for `world`.
+2. This `packs/<id>` directory, when the compiler runs from a source checkout (development
+   builds and `scripts/compile-slides.ts`). No install or setup is needed, and it takes
+   precedence over a lockfile's pinned version without changing the lockfile. The packaged
+   helper in release builds omits this step.
+3. `LEGEND_SLIDES_EFFECT_PACKS`, or else verified source snapshots in
+   `~/Library/Application Support/Legend Slides/effects/`.
+4. The catalog, through the app's install offer.
+
+`--effect-packs <directory>` replaces steps 2 and 3. Set `LEGEND_SLIDES_NO_REPO_PACKS=1` to
+skip step 2 when `LEGEND_SLIDES_EFFECT_PACKS` must be authoritative for built-in pack ids,
+as gallery and deck recordings do, or to exercise the install flow from a source checkout.
 Source is trusted code with the same host API access as a local deck component.
 
 The native app and shipped compiler omit these implementations. The gallery at
