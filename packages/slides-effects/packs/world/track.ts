@@ -10,13 +10,19 @@ export type WorldTrack = {
   spacing?: number; duration?: number;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
   frame?: "station" | "world"; carry?: WorldCarry;
+  /** Camera moves within the station, by local step index. */
+  steps?: Record<number, WorldStepCamera>;
 };
+/** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds. */
+export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number };
 type Station = { offset: number; track: WorldTrack };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
   stations: Record<number, Station>; ids: string[]; declared: string[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
+  /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
+  cameraDelta?: number[]; entering?: boolean;
 };
 
 export function createTrackFrame(): TrackFrame {
@@ -65,6 +71,15 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, sp
     worldPoint(end.track.viaTarget ?? [0, 0, (end.offset - start.offset) * 0.3125], end.offset),
     worldPoint(end.track.target ?? [0, 0, 0], end.offset), t);
   return { position, target, fov: 40, roll: 0 };
+}
+function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): CameraPose {
+  "worklet";
+  if (!step) return pose;
+  const angle = (step.orbit ?? 0) * Math.PI / 180, scale = step.dolly ?? 1, shift = step.shift ?? [0, 0, 0];
+  const dx = pose.position[0] - pose.target[0], dy = pose.position[1] - pose.target[1], dz = pose.position[2] - pose.target[2];
+  const target: Vec3 = [pose.target[0] + shift[0], pose.target[1] + shift[1], pose.target[2] + shift[2]];
+  return { position: [target[0] + (dx * Math.cos(angle) + dz * Math.sin(angle)) * scale, target[1] + dy * scale, target[2] + (dz * Math.cos(angle) - dx * Math.sin(angle)) * scale],
+    target, fov: step.fov ?? pose.fov, roll: pose.roll };
 }
 
 function hidden(values: ArrayLike<number>, at: number) {
@@ -166,7 +181,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const travelDuration = Math.max(1, Math.abs(index - origin)) * (stations[Math.max(index, Math.ceil(origin))]?.track.duration ?? duration);
   const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, "cubic");
   const cursor = origin + (index - origin) * travel;
-  const camera = sampleTrackCamera(stations, cursor, spacing);
+  const camera = stepCamera(sampleTrackCamera(stations, cursor, spacing), options.steps?.[playback.stepIndex]);
   const station = world ? 0 : stations[index].offset;
   const reversed = changed ? slideChanged ? index < origin : playback.stepIndex < previous.stepIndex : previous.reversed;
   // Travel back keeps the carry of the segment being retraced.
@@ -186,12 +201,17 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const elapsed = first || from.length === 0 ? 1 : Math.min(1, playback.stepTime / morphDuration);
   const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, "cubic");
   const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previous.ids.indexOf(id) : -1) : previous.sources;
+  // A step camera eases from wherever the camera was when navigation began, including mid-move.
+  const posed = [camera.position[0], camera.position[1], camera.position[2], Math.tan(camera.fov * Math.PI / 360), camera.target[0], camera.target[1], camera.target[2]];
+  const cameraDelta = !changed ? previous.cameraDelta : !first && from.length > 7 && (options.steps || previous.cameraDelta) ? posed.map((value, i) => from[i] - value) : undefined;
+  const entering = changed ? slideChanged : previous.entering;
+  const moveDuration = options.steps?.[playback.stepIndex]?.duration ?? duration;
+  const settle = cameraDelta ? 1 - (entering ? travel : easeProgress(Math.min(1, playback.stepTime / moveDuration), "cubic")) : 0;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output: previous.output,
-    stations, ids, declared, from, sources, retired, values };
-  values[0] = camera.position[0]; values[1] = camera.position[1]; values[2] = camera.position[2];
-  values[3] = Math.tan(camera.fov * Math.PI / 360);
-  values[4] = camera.target[0]; values[5] = camera.target[1]; values[6] = camera.target[2]; values[7] = camera.roll;
-  values[32] = Math.hypot(camera.position[0] - camera.target[0], camera.position[1] - camera.target[1], camera.position[2] - camera.target[2]);
+    stations, ids, declared, from, sources, retired, values, cameraDelta, entering };
+  for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
+  values[7] = camera.roll;
+  values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   if (world) return sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;

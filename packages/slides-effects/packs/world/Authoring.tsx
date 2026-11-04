@@ -1,6 +1,7 @@
 import React, { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
-import { Box, Card, Custom, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
+import type { Ease } from "./camera";
+import { Box, Card, Custom, DOF, Pillar, Rows, RoutedTube, Stage, Text3D, WorldSlide, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -151,6 +152,13 @@ export const Editor = part("editor");
 export const Counter = part("counter");
 export const Rule = part("rule");
 export const Bars = part("bars");
+export const Keys = part("keys");
+export const Grid = part("grid");
+export const Form = part("form");
+export const CodeMorph = part("morph");
+export const CodeTrace = part("trace");
+export const Cloud = part("cloud");
+export const Layers = part("layers");
 
 /** Named placement for a scene: its camera and a slot per part. Parts take the free slots of their kind in order; `slot` names one, and explicit props win. */
 export type SceneLayout = { camera?: WorldTrack; slots: Record<string, { kind: string; [prop: string]: unknown }> };
@@ -194,6 +202,63 @@ export const sceneLayouts: Record<string, SceneLayout> = {
   "title-bars": { camera: { position: [-2.6,3.9,14], target: [0,3.2,0], via: [-3.5,6.5,22], viaTarget: [0,2,14] }, slots: {
     title: { ...heading, at: [-5.6,6.5,-2] }, bars: { kind: "bars", at: [0,0,0] },
     note: { kind: "headline", at: [3.4,-.25,1.6], size: .2, depth: .04, mono: true, track: .12, color: "#be91ff", emissive: .8, delay: 2.2 },
+  } },
+  /** One large centered line, with an optional kicker above and rule below. */
+  title: { camera: { position: [-.8,2.5,11.6], target: [0,2.3,0] }, slots: {
+    line: { kind: "headline", at: [0,2.6,0], size: 1.25, depth: .32, track: .02, delay: .15 },
+    kicker: { kind: "headline", at: [0,4.05,0], size: .2, depth: .04, mono: true, track: .25, color: "#ff3a1c", emissive: .6, delay: .9, duration: .7 },
+    rule: { kind: "rule", at: [0,1.55,0], width: 6.5, delay: 1.2 },
+  } },
+  /** `statement` from further back, for lines up to about 17 characters. */
+  "statement-wide": { camera: { position: [-.8,2.8,15], target: [0,2.6,0] }, slots: {
+    line1: { kind: "headline", at: [0,3.35,0], size: 1.25, depth: .32, track: .02, delay: .15 },
+    line2: { kind: "headline", at: [0,1.85,0], size: 1.25, depth: .32, track: .02, delay: .9 },
+    rule: { kind: "rule", at: [0,1.27,0], width: 8, delay: 1.6 },
+  } },
+  /** Heading top left over a keyed list; the camera orbits 30° to the right on step 2 to watch a container recycle behind it. */
+  keys: { camera: { position: [-1,4.2,14], target: [0,3.6,0], via: [-3.5,7,21], viaTarget: [0,2.5,12], steps: { 2: { orbit: 30, duration: 1.6 } } }, slots: {
+    title: { ...heading, at: [-7.4,7.3,0] }, keys: { kind: "keys", at: [0,6.2,0] },
+  } },
+  /** Heading top left over a large tree laid out by leaves, five levels deep. */
+  "tree-wide": { camera: { position: [-1.2,4.6,15.5], target: [0,4.2,0], via: [-3.5,7,22], viaTarget: [0,2.5,13] }, slots: {
+    title: { ...heading, at: [-8.2,8.6,0] }, subtitle: { ...caption, at: [-8.16,8.05,0] },
+    tree: { kind: "tree", at: [0,5,0], width: 16, levelHeight: 1.45, nodeWidth: 2.6, labelSize: .17 },
+  } },
+  /** Three captioned trees side by side and a legend row; each later step flies the camera to the next tree. */
+  "tree-tour": { camera: { position: [0,4.6,26], target: [0,4.2,0], via: [-4,8,34], viaTarget: [0,2.5,20],
+    steps: { 1: { shift: [-9.6,0,0], dolly: .55 }, 2: { dolly: .55 }, 3: { shift: [9.6,0,0], dolly: .55 } } }, slots: {
+    title: { ...heading, at: [-13.5,10,0], size: 1 },
+    ...Object.fromEntries([-9.6, 0, 9.6].flatMap((x, i) => [[`caption${i + 1}`, { kind: "headline", at: [x,8.5,0], size: .42, depth: .12, track: .02, delay: .4 + i * .15 }],
+      [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
+    ...Object.fromEntries([-6, 0, 6].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .2, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
+  } },
+  /** A code panel on the left and a grid of cells on the right. */
+  "code-grid": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
+    code: { ...code, at: [-7.9,6.6,0], size: .15, lineHeight: .34 }, grid: { kind: "grid", at: [4.3,4.8,0], cell: [1.1,.62] },
+  } },
+  /** One code panel centered in frame. */
+  "code-center": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
+    code: { ...code, at: [0,4.4,0], anchor: "center", size: .2, lineHeight: .36 },
+  } },
+  /** A tall morphing code panel centered in frame. */
+  morph: { camera: { position: [0,4.3,13.6], target: [0,4.2,0], via: [2.8,6,22], viaTarget: [0,3,10] }, slots: {
+    morph: { kind: "morph", at: [0,4.3,0], anchor: "center", size: .14, lineHeight: .28 },
+  } },
+  /** Panels of fields across the middle. */
+  form: { camera: { position: [-.8,4,13.5], target: [0,3.4,0], via: [-3.5,6.5,20], viaTarget: [0,2,14] }, slots: {
+    form: { kind: "form", at: [0,5.6,0] },
+  } },
+  /** Words at depth in front of the camera. */
+  cloud: { camera: { position: [0,4.2,13], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
+    cloud: { kind: "cloud", at: [0,0,0] },
+  } },
+  /** Heading top left over traced code on the left; its tree forms on the right. */
+  trace: { camera: { position: [0,4.3,15], target: [0,4,0], via: [2.8,6,22], viaTarget: [0,3,10] }, slots: {
+    title: { ...heading, at: [-8.2,8.4,0] }, trace: { kind: "trace", at: [-8.8,7.2,0] },
+  } },
+  /** Heading top left, a line of code on the left, stacked layers and a meter in the middle. */
+  layers: { camera: { position: [-1.4,4,14], target: [0,3.8,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
+    title: { ...heading, at: [-7.4,7.6,0] }, code: { ...code, at: [-7.6,4.6,0], size: .22, lineHeight: .4 }, layers: { kind: "layers", at: [-.4,4.2,0] },
   } },
 };
 /** Adds a layout, or replaces one of the same name, for this deck. */
@@ -252,7 +317,7 @@ export function readScenes(content: readonly ReactNode[], world?: string): Autho
       const text = kind === "code" ? source.replace(/\n$/, "") : source;
       parts.push({ ...place(kind, props), kind, order: parts.length, text } as AuthoredPart);
     });
-    for (const part of parts) if (part.kind === "tree") part.nodes = placeTree(part.nodes as TreeNode[]);
+    for (const part of parts) if (part.kind === "tree") part.nodes = placeTree(part.nodes as TreeNode[], part as { width?: number; levelHeight?: number });
     const ids = new Set<string>();
     for (const p of parts) {
       if (ids.has(p.id)) throw Error(`Duplicate scene part: ${p.id}`);
@@ -284,13 +349,21 @@ export function Scene({ id, world = "scene", prepare, layout, durations, camera,
 
 export type TreeNode = { id: string; label?: string; x?: number; y?: number; d?: number; p?: number; width?: number; height?: number; color?: string; [key: string]: unknown };
 /** Parents precede children; children fan out around their parent, and explicit coordinates override the automatic layout. */
-export function placeTree(nodes: TreeNode[]) {
-  const placed: (TreeNode & { d: number; x: number; y: number })[] = [];
+/** With `width`, each subtree gets a share of it in proportion to its leaves, so cousins never overlap. `levelHeight` spaces the depths. */
+export function placeTree(nodes: TreeNode[], { width, levelHeight = 1.65 }: { width?: number; levelHeight?: number } = {}) {
+  const placed: (TreeNode & { d: number; x: number; y: number })[] = [], spans: number[] = [];
+  const children = (i: number | undefined) => nodes.flatMap((node, j) => node.p === i ? [j] : []);
+  const leaves = (i: number): number => children(i).reduce((sum, j) => sum + leaves(j), 0) || 1;
+  if (width !== undefined) {
+    const total = children(undefined).reduce((sum, j) => sum + leaves(j), 0);
+    const share = (ids: number[], left: number, span: number) => { for (const j of ids) { spans[j] = left + span * leaves(j) / 2; share(children(j), left, span); left += span * leaves(j); } };
+    share(children(undefined), -width / 2, width / Math.max(1, total));
+  }
   for (const [i, n] of nodes.entries()) {
     if (n.p !== undefined && (!Number.isInteger(n.p) || n.p < 0 || n.p >= i)) throw Error(`Tree parent must precede child: ${n.id}`);
     const parent = n.p === undefined ? undefined : placed[n.p], d = n.d ?? (parent ? parent.d + 1 : 0);
-    const peers = nodes.flatMap((node, j) => node.p === n.p ? [j] : []), column = peers.indexOf(i);
-    placed.push({ ...n, d, x: n.x ?? (parent?.x ?? 0) + (column - (peers.length - 1) / 2) * (d < 2 ? 5.8 : 2.8), y: n.y ?? Math.round((2 - d * 1.65) * 100) / 100 });
+    const peers = children(n.p), column = peers.indexOf(i);
+    placed.push({ ...n, d, x: n.x ?? spans[i] ?? (parent?.x ?? 0) + (column - (peers.length - 1) / 2) * (d < 2 ? 5.8 : 2.8), y: n.y ?? Math.round((2 - d * levelHeight) * 100) / 100 });
   }
   return placed;
 }
@@ -328,6 +401,243 @@ function textLine(kind: string, { size: nominal, depth, track, delay, duration, 
     {...text as Partial<Text3DOptions>} text={String(text.text)} size={size} depth={Number(depth ?? (mono ? .04 : .2)) / size} tracking={Number(track ?? 0) / TYPE} emissive={.55 + Number(emissive ?? .32) * .5}
     lineHeight={lineHeight === undefined ? undefined : Number(lineHeight) / size} />;
 }
+/** Shared palette for the generic parts. */
+const INK = { white: "#eef0f3", muted: "#7d838c", idle: "#5b616b", red: "#ff3a1c", amber: "#ffa21f", purple: "#be91ff", blue: "#4aa8ff", green: "#39d98a" };
+/** JetBrains Mono advance, in em. */
+const MONO = .6;
+const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
+type CodeMark = { text: string; color?: string; step?: number; delay?: number };
+/** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
+type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; repeat?: number; every?: number };
+/** `anchor: "center"` centers a panel of this size on its position instead of hanging it from its top-left line. */
+function anchored(position: V3, anchor: unknown, width: number, height: number): V3 {
+  return anchor === "center" ? [position[0] - width / 2 + .3, position[1] + (height - .6) / 2, position[2]] : position;
+}
+/** A keyed column that splits into a changed copy, then recycles the removed key's container into the added key's slot. */
+function keyList(id: string, at: V3, props: Record<string, unknown>) {
+  const keys = props.keys as string[], next = (props.next ?? keys) as string[], diff = Number(props.diff ?? 1), recycle = Number(props.recycle ?? 2);
+  const row = Number(props.rowHeight ?? .95), width = Number(props.width ?? 3.4), gap = Number(props.gap ?? 7.6), caption = String(props.label ?? "key");
+  const removed = keys.filter(k => !next.includes(k)), added = next.filter(k => !keys.includes(k)), y = (i: number) => -i * row;
+  const container = (stage: string, position: unknown, color: unknown, emissive: unknown, opacity: unknown, labels: { text: string; opacity: unknown; color?: string }[]) =>
+    <Stage key={stage} id={stage} position={position as V3}>
+      <Card id={`${stage}/card`} scale={[width, row * .8, .3]} color={color as string} emissive={emissive as number} opacity={opacity as number} />
+      <Text3D id={`${stage}/caption`} text={caption} mono size={.15 * TYPE} align="left" color={INK.muted} emissive={.8} position={[-width / 2 + .35, 0, .17]} opacity={opacity as number} />
+      {labels.map((label, i) => <Text3D key={i} id={`${stage}/key${i}`} text={label.text} mono size={.34 * TYPE} align="left" color={label.color ?? INK.white}
+        position={[-width / 2 + 1.3, 0, .17]} opacity={label.opacity as number} />)}
+    </Stage>;
+  const left = keys.map((k, i) => {
+    const gone = removed.indexOf(k), reuse = gone >= 0 ? added[gone] : undefined, split: V3 = [-gap / 2, y(i), 0];
+    if (reuse === undefined) return container(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(diff, split, 0, .6), key(recycle, [0, y(next.includes(k) ? next.indexOf(k) : i), 0], 0, 1)],
+      INK.idle, [{ step: 0, value: .8 }, key(recycle, .3, 0, .6)], 1, [{ text: k, opacity: 1 }]);
+    const slot = y(next.indexOf(reuse));
+    // Behind the list, down past the others, then forward into the free slot.
+    return container(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(diff, split, 0, .6), key(recycle, [0, y(i), -2.2], 0, .6), key(recycle, [0, slot, -2.2], .7, 1),
+      key(recycle, [0, slot, 0], 1.8, .5)], [{ step: 0, value: INK.idle }, key(diff, INK.red, .5, .3), key(recycle, INK.amber, 2.2, .1)],
+      [{ step: 0, value: .8 }, key(diff, 2.4, .5, .3), key(recycle, .5, 0, .4), key(recycle, 9, 2.25, .06), key(recycle, 2.6, 2.4, .8)], 1,
+      [{ text: k, opacity: [{ step: 0, value: 1 }, key(recycle, 0, 2.05, .12)] }, { text: reuse, opacity: [{ step: 0, value: 0 }, key(recycle, 1, 2.2, .12)] }]);
+  });
+  const copy = [...keys, ...added].map(k => {
+    const from = keys.includes(k) ? keys.indexOf(k) : next.indexOf(k), to = next.includes(k) ? next.indexOf(k) : from, isNew = added.includes(k);
+    const shown = removed.includes(k) ? [{ step: 0, value: 0 }, key(diff, 1, 0, .05), key(diff, 0, .35, .3)]
+      : [{ step: 0, value: 0 }, key(diff, 1, isNew ? .65 : 0, isNew ? .3 : .05), key(recycle, 0, .35, .15)];
+    return container(`${id}/copy/${k}`, [{ step: 0, value: [0, y(from), -.02] }, key(diff, [gap / 2, y(to), 0], 0, .6), key(recycle, [gap / 2 + 3, y(to), -30], 0, .5)],
+      isNew ? INK.green : INK.idle, isNew ? 2.6 : .8, shown, [{ text: k, opacity: shown }]);
+  });
+  const links = keys.filter(k => next.includes(k)).map(k => {
+    const a: V3 = [-gap / 2 + width / 2, y(keys.indexOf(k)), 0], b: V3 = [gap / 2 - width / 2, y(next.indexOf(k)), 0];
+    return <RoutedTube key={`link/${k}`} id={`${id}/link/${k}`} path={[a, [a[0] + .9, a[1], 0], [b[0] - .9, b[1], 0], b]} thickness={.03} color={INK.blue} emissive={3.5}
+      draw={[{ step: 0, value: 0 }, key(diff, 1, .7, .45), key(recycle, 0, 0, .25)]} />;
+  });
+  return <Stage id={id} position={at}>{left}{copy}{links}</Stage>;
+}
+/** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */
+function grid(id: string, at: V3, props: Record<string, unknown>) {
+  const count = Number(props.count ?? 36), columns = Number(props.columns ?? 6), [cw, ch] = (props.cell ?? [1.2, .7]) as [number, number], label = String(props.label ?? "");
+  const rows = Math.ceil(count / columns), px = cw + .18, py = ch + .18, width = columns * px, height = rows * py;
+  const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string } | undefined, hot = flash?.color ?? INK.amber;
+  const start = flash?.delay ?? 0, length = flash?.duration ?? 10, beats = flash ? Array.from({ length: Math.round(length * (flash.rate ?? 8)) }, (_, k) => start + k / (flash.rate ?? 8)) : [];
+  const emissive = flash ? [{ step: 0, value: .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : .7;
+  const color = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
+  const drag = flash ? Array.from({ length: Math.ceil(length / .7) }, (_, k) => ({ at: start + k * .7, pull: k % 2 ? 0 : .9 })) : [];
+  const frame = (pull: number) => ({ position: [pull / 2, 0, -.2] as V3, scale: [width + .5 + pull, height + .5, .05] as V3, handle: [width / 2 + .3 + pull, -height / 2 - .3, .1] as V3 });
+  const track = (pick: (f: ReturnType<typeof frame>) => V3) => flash ? [{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash.step, pick(frame(d.pull)), d.at, .7, "smoothstep"))] : pick(frame(0));
+  return <Stage id={id} position={at}>
+    <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={.15} color={INK.idle} emissive={.5} />
+    <Box id={`${id}/handle`} size={.5} position={track(f => f.handle)} scale={[.3,.3,.3]} color={hot} emissive={flash ? [{ step: 0, value: 0 }, key(flash.step, 3, start, .3)] : 0} />
+    {Array.from({ length: count }, (_, i) => { const x = (i % columns - (columns - 1) / 2) * px, y = -(Math.floor(i / columns) - (rows - 1) / 2) * py; return <Fragment key={i}>
+      <Card id={`${id}/${i}`} position={[x, y, 0]} scale={[cw, ch, .2]} color={color} emissive={emissive} />
+      {label && <Text3D id={`${id}/${i}/label`} text={label} mono size={.16 * TYPE} position={[x, y, .12]} color={INK.white} emissive={.8} />}
+    </Fragment>; })}
+  </Stage>;
+}
+type FormField = { value: string; bind?: string; big?: boolean };
+/** Panels of fields with render-count badges. `typing` types `text` into the fields bound to `bind`, one keystroke every `interval` seconds; each keystroke flashes those fields and ticks their badges. */
+function form(id: string, at: V3, props: Record<string, unknown>) {
+  const panels = props.panels as { title: string; fields: FormField[] }[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number } | undefined;
+  const fw = Number(props.fieldWidth ?? 5.4), fh = 1, gap = .45, pw = fw + 1, spread = pw + 1.3, times: number[] = [];
+  let versions: string[] = [];
+  if (typing) {
+    const base = panels.flatMap(p => p.fields).find(f => f.bind === typing.bind)?.value ?? "";
+    if (!typing.text.startsWith(base)) throw Error(`Form typing must extend the bound value: ${typing.bind}`);
+    versions = Array.from({ length: typing.text.length - base.length + 1 }, (_, k) => typing.text.slice(0, base.length + k));
+    for (let k = 1; k < versions.length; k++) times.push((typing.delay ?? .6) + (k - 1) * (typing.interval ?? .45));
+  }
+  const swap = (k: number) => typing ? [{ step: 0, value: k ? 0 : 1 }, ...k ? [key(typing.step, 1, times[k - 1], 0)] : [], ...k < times.length ? [key(typing.step, 0, times[k], 0)] : []] : 1;
+  const flashes = (rest: number) => typing && times.length ? [{ step: 0, value: rest }, ...times.flatMap(t => [key(typing.step, 7, t, .05), key(typing.step, 1.8, t + .08, .5)])] : rest;
+  const lit = typing && times.length ? [{ step: 0, value: INK.idle }, key(typing.step, INK.amber, times[0], .1)] : INK.idle;
+  const badge = (stage: string, position: V3, bound: boolean) => <Stage key={stage} id={stage} position={position}>
+    <Card id={`${stage}/disc`} scale={[.66,.66,.2]} radius={.33} color={bound ? lit : INK.idle} emissive={bound ? flashes(.9) : .9} />
+    {(bound ? versions : [""]).map((_, k) => <Text3D key={k} id={`${stage}/n${k}`} text={String(k + 1)} mono size={.26 * TYPE} position={[0, 0, .13]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
+  </Stage>;
+  return <Stage id={id} position={at}>{panels.map((panel, p) => {
+    const stage = `${id}/${p}`, ph = .9 + panel.fields.length * (fh + gap) + .2;
+    return <Stage key={p} id={stage} position={[(p - (panels.length - 1) / 2) * spread, 0, 0]}>
+      <Card id={`${stage}/card`} position={[0, -ph / 2 + .6, -.2]} scale={[pw, ph, .2]} fill={.55} color={INK.idle} emissive={.6} />
+      <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, .22, .05]} color={INK.muted} emissive={.8} />
+      {badge(`${stage}/badge`, [pw / 2 - .1, .55, .1], false)}
+      {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`;
+        return <Fragment key={f}>
+          <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} color={bound ? lit : INK.idle} emissive={bound ? flashes(.8) : .8} />
+          {(bound ? versions : [field.value]).map((value, k) => <Text3D key={k} id={`${cell}/v${k}`} text={value} mono size={(field.big ? .34 : .26) * TYPE} align="left"
+            position={[-fw / 2 + .35, y, .18]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
+          {badge(`${cell}/badge`, [fw / 2 - .05, y + fh / 2 - .05, .2], bound)}
+        </Fragment>; })}
+    </Stage>; })}</Stage>;
+}
+type DiffLine = [" " | "-" | "+", string];
+/** Code that morphs by diff on each step from `step`: removed lines are struck through and collapse, the rest close up, and added lines grow in.
+ * Each `diff` fence starts from the previous result. */
+function codeMorph(id: string, at: V3, props: Record<string, unknown>, children: ReactNode) {
+  const diffs = Children.toArray(children).map(codeSource).filter(text => text.trim())
+    .map(text => text.replace(/\n$/, "").split("\n").map(line => [line[0] ?? " ", line.slice(1)] as DiffLine));
+  if (diffs.some(diff => diff.some(([mark]) => !" -+".includes(mark)))) throw Error(`Code morph ${id}: diff lines start with a space, - or +.`);
+  const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .55;
+  const lines: { text: string; rows: (number | undefined)[] }[] = [];
+  let state = diffs[0].filter(([mark]) => mark !== "+").map(([, text]) => lines.push({ text, rows: [] }) - 1);
+  const states = [state];
+  diffs.forEach((diff, t) => {
+    const before = diff.filter(([mark]) => mark !== "+");
+    if (before.length !== state.length || before.some(([, text], i) => lines[state[i]].text !== text)) throw Error(`Code morph ${id}: diff ${t} must start from the previous code.`);
+    let i = 0;
+    const next: number[] = [];
+    for (const [mark, text] of diff) {
+      if (mark === "+") next.push(lines.push({ text, rows: [] }) - 1);
+      else { const line = state[i++]; if (mark === " ") next.push(line); }
+    }
+    states.push(state = next);
+  });
+  states.forEach((rows, s) => rows.forEach((line, row) => { lines[line].rows[s] = row; }));
+  const width = Math.max(...lines.map(l => l.text.length)) * advance + .9, height = (n: number) => (n - 1) * lineHeight + em + .6;
+  const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
+  const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
+  return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
+    <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} fill={.75} />
+    {lines.map((line, n) => {
+      const shown = line.rows.flatMap((row, s) => row === undefined ? [] : [s]), enter = shown[0], exit = shown[shown.length - 1] + 1, y = (s: number) => -line.rows[s]! * lineHeight;
+      const addedAt = enter > 0 ? first + enter - 1 : undefined, removedAt = exit < states.length ? first + exit - 1 : undefined;
+      const indent = line.text.length - line.text.trimStart().length, strike = (line.text.trimEnd().length - indent) * advance + .1, x = indent * advance;
+      const glyphs = addedAt === undefined && removedAt === undefined ? undefined : (i: number): GlyphMotion => {
+        const start = addedAt === undefined ? 1 : 0, grow = settle + .45 + i * .006;
+        return {
+          opacity: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .2)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .3)]],
+          scale: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .35)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .35)]],
+          color: [{ step: 0, value: addedAt === undefined ? INK.white : INK.green }, ...addedAt === undefined ? [] : [key(addedAt, INK.white, 2.4, .8)], ...removedAt === undefined ? [] : [key(removedAt, INK.red, 0, .2)]],
+        };
+      };
+      return <Fragment key={n}>
+        <Text3D id={`${id}/${n}`} text={line.text} mono size={em} align="left" glyphs={glyphs}
+          position={[{ step: 0, value: [0, y(enter), 0] }, ...shown.slice(1).map(s => key(first + s - 1, [0, y(s), 0] as V3, settle, .5))]} />
+        {removedAt !== undefined && strike > .1 && <Box id={`${id}/${n}/strike`} size={.5} color={INK.red} emissive={3}
+          position={[{ step: 0, value: [x, y(exit - 1), .1] }, key(removedAt, [x + strike / 2, y(exit - 1), .1], 0, .35)]}
+          scale={[{ step: 0, value: [0, .035, .035] }, key(removedAt, [strike, .035, .035], 0, .35), key(removedAt, [strike, 0, 0], .5, .2)]} />}
+      </Fragment>;
+    })}
+  </Stage>;
+}
+/** Code that highlights where state is created (`source`), passed (`pass`) and read (`reads`) on `mark`, collapses everything else on `collapse`,
+ * and lifts the source and read lines into a tree of `nodes` labels on `extract`. */
+function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: string) {
+  const lines = source.replace(/\n$/, "").split("\n"), size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), em = size * TYPE, advance = em * MONO;
+  const origin = Number(props.source), reads = props.reads as number[], pass = (props.pass ?? []) as number[], labels = props.nodes as string[];
+  const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
+  const hot = [origin, ...reads].sort((a, b) => a - b), gap = lineHeight * 1.8;
+  const width = Math.max(...lines.map(l => l.length)) * advance + .9, full = (lines.length - 1) * lineHeight + em + .6, short = (hot.length - 1) * gap + em + .6;
+  const tone = (n: number) => n === origin ? INK.amber : reads.includes(n) ? INK.blue : pass.includes(n) ? INK.idle : INK.white;
+  const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
+  const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
+  return <Stage id={id} position={at}>
+    <Card id={`${id}/card`} fill={.75} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
+      position={[{ step: 0, value: [width / 2 - .3, -(full - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - .6) / 2, -.14], .45, .5)]}
+      scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
+    {lines.map((text, n) => {
+      const kept = hot.indexOf(n), color = [{ step: 0, value: INK.white }, key(mark, tone(n), 0, .4)];
+      if (kept < 0) return <Text3D key={n} id={`${id}/${n}`} text={text} mono size={em} align="left" position={[0, -n * lineHeight, 0]}
+        glyphs={() => ({ color, scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} />;
+      const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2, y0 = -n * lineHeight, y1 = -kept * gap;
+      const target = node(n === origin ? 0 : 1 + reads.indexOf(n));
+      return <Fragment key={n}>
+        <Text3D id={`${id}/${n}`} text={text} mono size={em} align="left" glyphs={() => ({ color, emissive: [{ step: 0, value: .75 }, key(mark, 1.8, 0, .4)], opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
+          position={[{ step: 0, value: [0, y0, 0] }, key(collapse, [0, y1, 0], .45, .5), key(extract, [0, y1, 1.4], 0, .45), key(extract, [target[0] - middle, target[1], 1.4], .55, .9)]} />
+        <Box id={`${id}/${n}/glow`} size={.5} color={tone(n)} emissive={1.2} position={[{ step: 0, value: [middle, y0, -.08] }, key(collapse, [middle, y1, -.08], .45, .5)]}
+          scale={[{ step: 0, value: [0, 0, 0] }, key(mark, [end - indent + .2, lineHeight * .9, .04], 0, .4), key(extract, [0, 0, 0], 0, .3)]} />
+      </Fragment>;
+    })}
+    {labels.map((label, k) => { const p = node(k), root = node(0), mid = (root[1] + p[1]) / 2; return <Fragment key={`node${k}`}>
+      <Card id={`${id}/node${k}`} position={p} scale={[3.3, .85, .4]} color={k ? INK.blue : INK.amber} opacity={show}
+        emissive={[{ step: 0, value: 0 }, key(extract, 7, 1.25, .1), key(extract, 1.8, 1.4, .6)]} />
+      <Text3D id={`${id}/node${k}/label`} text={label} mono size={.2 * TYPE} position={[p[0], p[1], .25]} opacity={show} />
+      {k > 0 && <RoutedTube id={`${id}/edge${k}`} thickness={.035} color={INK.amber} emissive={3} path={[[root[0], root[1] - .45, 0], [root[0], mid, 0], [p[0], mid, 0], [p[0], p[1] + .45, 0]]}
+        draw={[{ step: 0, value: 0 }, key(extract, 1, 1.6, .5)]} pulses={Array.from({ length: 6 }, (_, r) => ({ step: extract, delay: 2.2 + r * 1.1, duration: .5, color: INK.amber, size: .11, emissive: 10 }))} />}
+    </Fragment>; })}
+  </Stage>;
+}
+/** Words floating at depth. Each step brings its `focus` words to the front, sharp and glowing, while earlier ones recede; `zoom` also defocuses everything else. */
+function cloud(id: string, at: V3, props: Record<string, unknown>) {
+  const words = props.words as string[], focus = (props.focus as (string | string[])[]).map(f => typeof f === "string" ? [f] : f), zoom = props.zoom as number | undefined;
+  const size = Number(props.size ?? .42) * TYPE, steps = focus.map((_, s) => s);
+  const home = (i: number): V3 => [(hash(i * 3 + 1) * 2 - 1) * 6.5, 1.4 + hash(i * 5 + 2) * 5.2, -4 - hash(i * 7 + 3) * 10];
+  const front = (k: number, n: number): V3 => {
+    const columns = n <= 3 ? n : 3, rows = Math.ceil(n / columns), c = k % columns, r = Math.floor(k / columns);
+    return [(c - (columns - 1) / 2) * (n <= 3 ? 4.6 : 5), (n <= 3 ? 3.8 : 3.8 + (rows - 1) * .7) - r * 1.4, n <= 3 ? 2 : -2];
+  };
+  const pose = (i: number, s: number) => {
+    const word = words[i], current = focus[s].indexOf(word), seen = focus.slice(0, s).some(f => f.includes(word));
+    if (current >= 0) { const p = front(current, focus[s].length); return { p: s === zoom ? [p[0] * .85, p[1], p[2]] as V3 : p, color: "#ffffff", glow: 1.3 }; }
+    const h = home(i);
+    if (seen) return { p: [h[0] * .9, h[1], -2 - hash(i) * 1.5] as V3, color: "#a8aeb8", glow: s === zoom ? .08 : .9 };
+    return { p: h, color: INK.muted, glow: s === zoom ? .05 : .3 };
+  };
+  const anchor = (s: number): V3 => focus[s].length ? pose(words.indexOf(focus[s][0]), s).p : [0, 3.5, -6];
+  return <Stage id={id} position={at}>
+    <Stage id={`${id}/focus`} position={[{ step: 0, value: anchor(0) }, ...steps.slice(1).map(s => key(s, anchor(s), 0, 1, "cubic"))]} />
+    {words.map((word, i) => <Stage key={word} id={`${id}/${word}`} position={[{ step: 0, value: pose(i, 0).p }, ...steps.slice(1).map(s => key(s, pose(i, s).p, .05 * (i % 4), 1.1, "cubic"))]}>
+      <Text3D id={`${id}/${word}/text`} text={word} mono size={size} color={[{ step: 0, value: pose(i, 0).color }, ...steps.slice(1).map(s => key(s, pose(i, s).color, .2, .6))]}
+        emissive={[{ step: 0, value: pose(i, 0).glow }, ...steps.slice(1).map(s => key(s, pose(i, s).glow, .3, .7))]} />
+    </Stage>)}
+    <DOF focus={`stage:${id}/focus`} focusRange={zoom === undefined ? .9 : [{ step: 0, value: .9 }, key(zoom, .5, 0, .8), key(zoom + 1, .9, 0, .8)]}
+      aperture={zoom === undefined ? 3 : [{ step: 0, value: 3 }, key(zoom, 6, 0, .8), key(zoom + 1, 3, 0, .8)]} maxBlur={22} />
+  </Stage>;
+}
+/** `count` translucent layers stacked into depth, one more on each step from `step`, over a `meter` that fills to the given fraction on each step. */
+function layers(id: string, at: V3, props: Record<string, unknown>) {
+  const count = Number(props.count ?? 4), first = Number(props.step ?? 0), label = String(props.label ?? ""), meter = (props.meter ?? []) as number[], length = 9;
+  const color = String(props.color ?? INK.purple), value = props.value as string | undefined, caption = props.caption as string | undefined;
+  const layer = (k: number): V3 => [k * .9, 0, -k * 1.5], shown = (k: number) => k === 0 && first === 0 ? 1 : [{ step: 0, value: 0 }, key(first + k, 1, 0, .4)];
+  const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, -2.6, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
+  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), .2, .8))] : pick(fill(0));
+  return <Stage id={id} position={at}>
+    {Array.from({ length: count }, (_, k) => <Fragment key={k}>
+      <Card id={`${id}/${k}`} position={layer(k)} scale={[2.4, 3.4, .08]} fill={.18} color={color} emissive={1.4 - k * .25} opacity={shown(k)} />
+      {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.24 * TYPE} align="left" position={[layer(k)[0] - .9, -1.25, layer(k)[2] + .08]} color={color} emissive={1.2} opacity={shown(k)} />}
+    </Fragment>)}
+    {value && <Text3D id={`${id}/value`} text={value} mono size={.6 * TYPE} position={[layer(count - 1)[0] + 2.6, 0, layer(count - 1)[2] - 1]} color={INK.white} emissive={.5} opacity={.4} />}
+    {meter.length > 0 && <>
+      <Box id={`${id}/track`} size={.5} position={[0, -2.6, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
+      <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} color={color} emissive={2.6} />
+    </>}
+    {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, -3.2, 0]} color={INK.muted} emissive={.8} />}
+  </Stage>;
+}
 function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>): ReactNode {
   return Children.map(children, child => {
     if (!isValidElement<PartProps>(child)) return child;
@@ -361,22 +671,48 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>):
     }
     if (kind === "code") {
       const text = source.replace(/\n$/, ""), lines = text.split("\n"), size = Number(props.size ?? .165), lineHeight = Number(props.lineHeight ?? .3);
-      const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + .6, height = (lines.length - 1) * lineHeight + size + .6;
-      return <Stage id={id} position={position}>
+      const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + .6, height = (lines.length - 1) * lineHeight + size + .6, advance = size * TYPE * MONO;
+      const marks = (props.marks ?? []) as CodeMark[];
+      return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
         <Card id={`${id}/card`} position={[width / 2 - .3, -(height - .6) / 2, -.14]} scale={[width,height,.06]} fill={.75} />
         <Text3D id={`${id}/code`} text={text} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left" />
+        {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
+          const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
+          return <Box key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} size={.5} color={mark.color ?? INK.amber} emissive={1.4}
+            position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35)] : scale} />;
+        })))}
       </Stage>;
     }
     if (kind === "tree") {
-      const nodes = placeTree(props.nodes as TreeNode[]), beat = props.beat as Beat | undefined;
-      return <Stage id={id} position={position}>{nodes.map(n => { const parent = n.p === undefined ? undefined : nodes[n.p]; return <Fragment key={n.id}>
-        <Card id={`${id}/${n.id}`} position={[n.x,n.y,0]} scale={[Number(n.width ?? (n.d < 2 ? 3 : 2.3)),Number(n.height ?? .82),.5]} color={n.color} />
-        <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono size={(n.d < 2 ? .21 : .17) * TYPE} position={[n.x,n.y,.27]} />
-        {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color}
-          path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]}
-          pulses={beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: n.color, size: .11, emissive: 10 })) : undefined} />}
-      </Fragment>; })}</Stage>;
+      const nodes = placeTree(props.nodes as TreeNode[], { width: props.width as number | undefined, levelHeight: props.levelHeight as number | undefined });
+      const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
+      const idle = String(props.color ?? "#22d3ee"), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
+      const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id);
+      const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
+      return <Stage id={id} position={position}>{nodes.map(n => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
+        const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
+        const emissive = own.length ? [{ step: 0, value: 1.5 }, ...own.flatMap(f => f.flash === false ? [key(f.step, f.glow ?? .4, arrives(f, n), .4)]
+          : [key(f.step, 7, arrives(f, n), .06), key(f.step, f.glow ?? 2, arrives(f, n) + .1, .6)])] : undefined;
+        const pulses = [...beat ? Array.from({ length: beat.count }, (_, k) => ({ at: beat.start + k * beat.every + (n.d - 1) * HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })) : [],
+          ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
+        const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
+        return <Fragment key={n.id}>
+          <Card id={`${id}/${n.id}`} position={[n.x,n.y,0]} scale={[Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)),Number(n.height ?? .82),.5]} color={color} emissive={emissive} />
+          <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[n.x,n.y,.27]} />
+          {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color}
+            path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
+          {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
+            draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
+            pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, color: f.color, size: .12, emissive: 10 }))} />}
+        </Fragment>; })}</Stage>;
     }
+    if (kind === "keys") return keyList(id, position, props);
+    if (kind === "grid") return grid(id, position, props);
+    if (kind === "form") return form(id, position, props);
+    if (kind === "morph") return codeMorph(id, position, props, children);
+    if (kind === "trace") return codeTrace(id, position, props, source);
+    if (kind === "cloud") return cloud(id, position, props);
+    if (kind === "layers") return layers(id, position, props);
     if (kind === "editor") {
       const labels = props.labels as string[], values = [String(props.name ?? ""),String(props.email ?? "")];
       return <Stage id={id} position={position}>{[-1,1].map(side => <Stage key={side} id={`${id}/${side}`} position={[side * 3.35,0,0]}>

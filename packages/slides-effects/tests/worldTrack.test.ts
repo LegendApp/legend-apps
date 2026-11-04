@@ -271,6 +271,28 @@ test("a world-frame preview frames its own station, as the audience does when it
   expect(preview.values.slice(0, worldHeaderSize)).toEqual(landed.values.slice(0, worldHeaderSize));
 });
 
+test("step cameras orbit and dolly about the station target, easing from the live camera and back", () => {
+  const track: WorldTrack = { spacing: 32, duration: 2, position: [0, 4, 10], target: [0, 4, 0], steps: { 1: { orbit: 90, dolly: .5, fov: 50, duration: 1 } } };
+  const prepared = scene();
+  const at = (previous: TrackFrame, step: number, time: number) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: "0", stepKey: String(step), stepIndex: step }), slideTime: 10 + time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, track);
+  };
+  const start = at(createTrackFrame(), 0, 0);
+  expect(start.values.slice(0, 3)).toEqual([0, 4, 10]);
+  const begun = at(start, 1, 0);
+  expect(begun.values.slice(0, 7)).toEqual(start.values.slice(0, 7));
+  const orbited = at(begun, 1, 1);
+  [5, 4, 0].forEach((value, axis) => expect(orbited.values[axis]).toBeCloseTo(value));
+  expect(orbited.values[3]).toBeCloseTo(Math.tan(25 * Math.PI / 180));
+  expect(orbited.values[32]).toBeCloseTo(5);
+  const halfway = at(begun, 1, .5).values;
+  expect(halfway[0]).toBeGreaterThan(0);
+  expect(halfway[0]).toBeLessThan(5);
+  const back = at(at(orbited, 0, 0), 0, 2);
+  [0, 4, 10].forEach((value, axis) => expect(back.values[axis]).toBeCloseTo(value));
+});
+
 test("retained parts do not pile up across slides: only the previous slide's omitted parts stay", () => {
   const slide = (id: string) => prepareWorldScene({ instances: [primitive("box", { id })] });
   const a = slide("a"), b = slide("b"), c = slide("c");

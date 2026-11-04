@@ -18,7 +18,7 @@ import { burstInstances, choreographyInstances, type BurstOptions, type Choreogr
 import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
-export type { WorldCarry, WorldTrack } from "./track";
+export type { WorldCarry, WorldStepCamera, WorldTrack } from "./track";
 
 export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
 export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";

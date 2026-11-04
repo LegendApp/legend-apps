@@ -5,7 +5,7 @@ import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
-import { Bars, CodePanel, Counter, Headline, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
+import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
 import { Box, Card, Pillar, RoutedTube, Stage, Text3D } from "../packs/world/World";
 
 const fence = <pre><code className="language-tsx">{"function Example() {\n  return 42;\n}\n"}</code></pre>;
@@ -95,6 +95,25 @@ test("generic parts render from layouts without coordinates", () => {
   expect((parts.find(n => n.type === RoutedTube)!.props.pulses as { at: number }[]).map(p => p.at)).toEqual([2,3.5]);
   const bars = flat(expandScene(<Bars id="b" items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />, "title-bars"));
   expect(bars.filter(n => n.type === Pillar).map(n => [n.props.value, n.props.maximum])).toEqual([[10,10],[5,10]]);
+});
+
+test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", () => {
+  const nodes = placeTree([{ id: "r" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }, { id: "b1", p: 2 }], { width: 12, levelHeight: 1 });
+  expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2,1],[4,1],[-4,0],[0,0],[4,0]]);
+  const tree = flat(expandScene(<Tree id="t" nodes={[{ id: "p" }, { id: "m", p: 0 }, { id: "c", p: 1 }]} color="#555555"
+    flash={[{ step: 1, color: "#ff0000", wave: false, from: "p", ids: ["c"] }]} />));
+  expect(tree.filter(n => String(n.props.id).endsWith("/beam")).map(n => n.props.id)).toEqual(["t/c/beam"]);
+  expect(tree.find(n => n.props.id === "t/m")!.props.color).toBe(undefined);
+  expect((tree.find(n => n.props.id === "t/c")!.props.color as { value: string }[]).map(k => k.value)).toEqual(["#555555", "#ff0000"]);
+  const keys = flat(expandScene(<Keys id="k" keys={["A", "B"]} next={["B", "C"]} />));
+  const recycled = keys.find(n => n.props.id === "k/A")!.props.position as { value: number[] }[];
+  expect(recycled[recycled.length - 1].value).toEqual([0, -.95, 0]);
+  expect(keys.filter(n => String(n.props.id).startsWith("k/link/")).map(n => n.props.id)).toEqual(["k/link/B"]);
+  const diff = (lines: string[]) => <pre><code className="language-diff">{lines.join("\n") + "\n"}</code></pre>;
+  const morph = flat(expandScene(<CodeMorph id="m">{diff([" a", "-b", "+c"])}{diff([" a", " c", "+d"])}</CodeMorph>));
+  expect(morph.filter(n => n.type === Text3D).map(n => n.props.text)).toEqual(["a", "b", "c", "d"]);
+  expect(morph.filter(n => String(n.props.id).endsWith("/strike")).map(n => n.props.id)).toEqual(["m/1/strike"]);
+  expect(() => expandScene(<CodeMorph id="bad">{diff([" a"])}{diff([" z", "+d"])}</CodeMorph>)).toThrow("diff 1 must start from the previous code");
 });
 
 test("the real MDX compiler resolves scene parts, code fences and presenter notes", async () => {

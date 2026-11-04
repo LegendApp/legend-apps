@@ -783,7 +783,8 @@ lighting. When copying an example, keep its local TSX/assets and effect pack pin
 ## MDX scene authoring
 
 `slides:world/Authoring` exports `Scene`, `Headline`, `Quote`, `CodePanel`, `List`,
-`Tree`, `Counter`, `Rule`, `Bars`, and `Editor`. Each slide declares its own
+`Tree`, `Counter`, `Rule`, `Bars`, `Editor`, `Keys`, `Grid`, `Form`, `CodeMorph`,
+`CodeTrace`, `Cloud` and `Layers`. Each slide declares its own
 composition. Name a layout and the parts place themselves:
 
 ```mdx
@@ -805,6 +806,18 @@ composition. Name a layout and the parts place themselves:
 | `track-left-high` | as `track-left` | The same, flown into from high above |
 | `code-panels` | `left`, `topRight`, `bottomRight` | Three code panels |
 | `title-bars` | `title`, `note`, `bars` | A heading over a row of floor bars |
+| `title` | `line`, `kicker`, `rule` | One large centered line |
+| `statement-wide` | `line1`, `line2`, `rule` | `statement` from further back, for longer lines |
+| `keys` | `title`, `keys` | A keyed list; the camera orbits right on step 2 |
+| `tree-wide` | `title`, `subtitle`, `tree` | A five-level tree laid out by leaves |
+| `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees; steps 1–3 fly the camera to each |
+| `code-grid` | `code`, `grid` | Code on the left, a grid of cells on the right |
+| `code-center` | `code` | One centered code panel |
+| `morph` | `morph` | A tall centered morphing code panel |
+| `form` | `form` | Panels of fields |
+| `cloud` | `cloud` | Words at depth |
+| `trace` | `title`, `trace` | Traced code on the left; its tree forms on the right |
+| `layers` | `title`, `code`, `layers` | A line of code beside stacked layers and a meter |
 
 A part takes the next free slot of its kind. `slot="kicker"` picks one by name, and
 any explicit prop, including `at`, wins over the slot. A layout's camera is merged
@@ -849,6 +862,40 @@ and `d` override that. `List items` supplies row data. `Counter label` and `valu
 supply its text. `Bars items` takes `label`, `value` and `color`. `Editor` takes
 `name`, `email`, and a `labels` array. A `beat={{ start, every, count }}` ticks a
 `Counter` (by `per`) and sends a pulse down each `Tree` edge on that schedule.
+
+Every step keyframe in these parts addresses the scene's own steps, so give the
+`Scene` `clock="step"` and one duration per step:
+
+- `Tree width` lays children out in proportion to their leaves; `levelHeight`, `nodeWidth`
+  and `labelSize` size it. `flash={[{ step, color, ids }]}` lights `ids` (default all)
+  in a wave down the levels, `hop` seconds apart, with pulses on the edges. With
+  `wave: false` and `from`, they light at once from beams out of `from`. `flash: false`
+  recolors without a flash; `repeat` and `every` replay it.
+- `Keys keys next` shows a keyed column. On `diff` (step 1) a copy splits off showing
+  `next`, with shared keys linked and added and removed keys colored; on `recycle`
+  (step 2) the copy flies away and the removed key's container travels behind the
+  column into the added key's slot.
+- `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
+  second while a resize handle drags its frame.
+- `Form panels typing` shows panels of fields with render-count badges.
+  `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
+  and flashing them on each keystroke.
+- `CodeMorph` takes one ```` ```diff ```` fence per step after the first, each starting from
+  the previous result. Removed lines are struck through and collapse; added lines grow in.
+- `CodeTrace source reads pass nodes` marks where state is created, passed and read on
+  `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
+  tree of `nodes` labels on `extract`.
+- `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
+  the front under depth of field; `zoom` defocuses everything else on that step.
+- `Layers count label meter` stacks one more layer into depth per step and fills its
+  meter to the given fractions.
+- `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
+  `anchor: "center"` centers the panel on its position.
+
+A track's `steps` move the camera within a station, by step index:
+`camera={{ steps: { 2: { orbit: 30 }, 4: { dolly: .6, fov: 48 } } }}`. `orbit` turns the
+camera about its target in degrees, `dolly` scales its distance, `shift` moves both and
+`fov` sets the field of view, eased from wherever the camera is over `duration` seconds.
 
 For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
 function receiving every scene declaration without mounting future slides. It
