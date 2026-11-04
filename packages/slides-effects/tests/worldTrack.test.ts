@@ -271,6 +271,20 @@ test("a world-frame preview frames its own station, as the audience does when it
   expect(preview.values.slice(0, worldHeaderSize)).toEqual(landed.values.slice(0, worldHeaderSize));
 });
 
+test("a station's ease shapes its flight, and a step camera's ease its move", () => {
+  const prepared = scene();
+  const at = (previous: TrackFrame, slideKey: string, step: number, time: number, track: WorldTrack) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: String(step), stepIndex: step }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
+  };
+  const linear: WorldTrack = { ease: "linear" };
+  expect(at(at(at(createTrackFrame(), "0", 0, 0, {}), "1", 0, 0, linear), "1", 0, .425, linear).cursor).toBe(.25);
+  const step = (ease?: "linear") => { const track: WorldTrack = { position: [0, 4, 10], target: [0, 4, 0], steps: { 1: { orbit: 90, duration: 1, ease } } };
+    const start = at(createTrackFrame(), "0", 0, 0, track);
+    return at(at(start, "0", 1, 0, track), "0", 1, .25, track).values[0]; };
+  expect(step("linear")).toBeGreaterThan(step() + 1);
+});
+
 test("step cameras orbit and dolly about the station target, easing from the live camera and back", () => {
   const track: WorldTrack = { spacing: 32, duration: 2, position: [0, 4, 10], target: [0, 4, 0], steps: { 1: { orbit: 90, dolly: .5, fov: 50, duration: 1 } } };
   const prepared = scene();

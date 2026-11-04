@@ -1,0 +1,73 @@
+---
+title: Scene props
+width: 1920
+height: 1080
+transition: none
+theme:
+  backgroundColor: "#050506"
+  color: "#f8fafc"
+---
+
+import { Scene, Headline, Rule, CodePanel, Bars } from "slides:world/Authoring"
+
+export const look = { clock: "step", quality: "high", renderScale: .75, toneMapping: "neutral", backgroundColor: "#050506" }
+
+export const colors = { accent: "#ff5a36", highlight: "#9d8cff", hot: "#ffb020", link: "#4cc3ff", added: "#3ee08f" }
+
+<Scene {...look} id="open" layout="title" colors={colors} ambient={["dust", "fog"]} durations={[2]}
+  camera={{ duration: 2.2, ease: "smoothstep" }}>
+  <Headline id="open-title">Scene props</Headline>
+  <Headline id="open-kicker" slot="kicker" color="highlight">Authored in MDX</Headline>
+  <Rule id="open-rule" color="accent" />
+</Scene>
+
+<!--
+Colors, ambient effects and the camera's arrival come from the Scene's props.
+-->
+
+---
+steps: 3
+---
+
+<Scene {...look} id="code" layout="code-center" colors={colors} ambient="dust" durations={[1.6, 1.8, 2]}
+  camera={{ duration: 2, ease: "expo", via: [-4, 7, 20], viaTarget: [0, 2.5, 12],
+    carry: { lift: 3, spread: 2, spin: 30, stagger: .2 },
+    steps: { 1: { orbit: 18, duration: 1.4, ease: "smoothstep" }, 2: { dolly: .8, duration: 1, ease: "out" } } }}>
+  <Headline id="open-title" at={[0, 8, 0]} size={.5} exit={{ step: 1, duration: .6, to: [0, 6, -10] }}>Scene props</Headline>
+  <CodePanel id="sample-code" fill={.55} padding={.45} panelColor="idle" textColor="text"
+    marks={[{ text: "count", color: "hot", step: 1 }, { text: "render", color: "link", step: 2, delay: .3 }]}
+    enter={{ from: [0, -8, 0], duration: 1, ease: "out" }}>
+
+```tsx
+function Counter() {
+  const count = useCount();
+  return render(count);
+}
+```
+
+  </CodePanel>
+</Scene>
+
+<!--
+1. The title carries in from the first slide, then exits on the next step.
+2. The camera orbits; the first mark lights.
+3. The camera dollies in; the second mark lights.
+-->
+
+---
+steps: 2
+---
+
+<Scene {...look} id="chart" layout="title-bars" colors={colors} durations={[3, 2]}
+  ambient={[{ effect: "orbs", count: 18, color: "highlight" }, "trails", { effect: "fog", density: .03 }]}
+  camera={{ duration: 1.8, ease: "cubic" }}>
+  <Headline id="chart-title" carry={false} enter={{ delay: .3, stagger: .04, ease: "spring" }}>Frame time</Headline>
+  <Bars id="chart-bars" color="link" max={20} height={5} width={1.2} gap={2.6} delay={.6} stagger={.25} duration={1.2} ease="out" labelSize={.36}
+    items={[{ label: "Before", value: 16, color: "hot" }, { label: "After", value: 6, color: "added" }, { label: "Goal", value: 8 }]} />
+  <Headline id="chart-note" slot="note" color="muted" enter={{ step: 1 }}>Lower is better</Headline>
+</Scene>
+
+<!--
+1. Bars rise with the chart's own timing and colors.
+2. The note enters on the second step.
+-->
