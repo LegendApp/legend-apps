@@ -259,3 +259,14 @@ test("a world-frame scene carries parts on a bowed path from a cached uniform so
   body(forward).slice(0, 3).forEach((value, axis) => expect(body(reverse)[axis]).toBeCloseTo(value));
   expect(sampleCarried(reverse, "0", 0, 2).values[worldHeaderSize + 1 + worldInstanceSize * reverse.ids.indexOf("box:a/body")]).toBe(0);
 });
+
+test("a world-frame preview frames its own station, as the audience does when it lands there", () => {
+  const prepared = scene();
+  const frame = (phase: "playing" | "preview") => {
+    const playback = { ...createPlaybackState({ phase, slideKey: "2:0", stepKey: "0:0", stepIndex: 0 }), slideTime: 4, stepTime: 4 };
+    return sampleTrackFrame(createTrackFrame(), sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, worldTrack);
+  };
+  const preview = frame("preview"), landed = frame("playing");
+  expect(preview.cursor).toBe(2);
+  expect(preview.values.slice(0, worldHeaderSize)).toEqual(landed.values.slice(0, worldHeaderSize));
+});

@@ -90,7 +90,7 @@ freezes catch-up with the presentation clock.
 
 With `buildDuration`, Back starts at that endpoint by default. Set
 `replayOnBack` to replay from zero instead. Ambient motion can continue after
-the endpoint. Preparation still samples zero; thumbnails use `previewTime`.
+the endpoint. Preparation still samples zero; thumbnails use `previewTime`, which defaults to `buildDuration` so they show the settled frame.
 Without `buildDuration`, navigation keeps its existing immediate behavior.
 
 For step-local scenes, earlier step-triggered tracks are settled and the current

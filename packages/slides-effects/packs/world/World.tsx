@@ -223,7 +223,7 @@ function WorldSurface(props: WorldProps) {
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  previewTime = 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, buildDuration, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, declared, topology, continuity, origin, resolution, track, trackFrame }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; declared: string[]; topology: string; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame> }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");

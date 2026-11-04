@@ -154,9 +154,9 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const key = `${playback.slideKey}/${playback.stepKey}`;
   const changed = key !== previous.key, slideChanged = playback.slideKey !== previous.slideKey;
   const first = !previous.key || preview;
-  const world = options.frame === "world";
   // Activation epochs change on re-entry; the slide's numeric index is its stable station identity.
-  const index = preview ? 0 : Number(playback.slideKey.split(":")[0]);
+  const world = options.frame === "world";
+  const index = preview && !world ? 0 : Number(playback.slideKey.split(":")[0]);
   const spacing = options.spacing ?? 32;
   const stations = first ? {} : slideChanged ? { ...previous.stations } : previous.stations;
   if (first || slideChanged && !stations[index]) stations[index] = { offset: index * spacing, track: options };
