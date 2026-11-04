@@ -198,14 +198,18 @@ export function readScenes(content: readonly ReactNode[], world?: string): Autho
   return slides;
 }
 const plans = new WeakMap<NonNullable<SceneProps["prepare"]>, { key: string; plan: ScenePlan }>();
+// Outside Scene so the React Compiler can't memoize the cache read: a stale miss would replan, and a new plan rebakes every surface.
+function scenePlan(prepare: NonNullable<SceneProps["prepare"]>, slides: AuthoredSlide[]) {
+  const key = JSON.stringify(slides);
+  let cached = plans.get(prepare);
+  if (cached?.key !== key) { cached = { key, plan: prepare(slides) }; plans.set(prepare, cached); }
+  return cached.plan;
+}
 export function Scene({ id, world = "scene", prepare, layout, durations, camera, children, ...appearance }: SceneProps) {
   const content = useDeckContent(), step = usePresentationValue("stepIndex");
   if (!prepare) return <WorldSlide {...appearance} world={world} track={camera ?? { spacing: 32 }}
     buildDuration={durations?.[step]}>{expandScene(children)}</WorldSlide>;
-  const slides = readScenes(content, world), key = JSON.stringify(slides);
-  let cached = plans.get(prepare);
-  if (cached?.key !== key) { cached = { key, plan: prepare(slides) }; plans.set(prepare, cached); }
-  const plan = cached.plan, slide = slides.findIndex(s => s.id === id), beat = plan.slideBeats[slide] + step;
+  const slides = readScenes(content, world), plan = scenePlan(prepare, slides), slide = slides.findIndex(s => s.id === id), beat = plan.slideBeats[slide] + step;
   return <WorldSlide {...appearance} world={world} track={plan.tracks[slide] ?? { spacing: 32 }} clock="step"
     stepOffset={plan.slideBeats[slide]} buildDuration={(plan.starts[beat + 1] ?? plan.end) - plan.starts[beat]}>{plan.elements}</WorldSlide>;
 }

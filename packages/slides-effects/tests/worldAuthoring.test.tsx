@@ -71,3 +71,41 @@ test("the real MDX compiler resolves scene parts, code fences and presenter note
   } finally { if (renderer) await act(() => renderer!.unmount()); }
 
 }, 30000);
+
+test("re-rendering a compiled scene keeps its one plan, so every surface keeps one baked scene", async () => {
+  const source = [
+    'import { Scene } from "slides:world/Authoring"', '',
+    'export function prepareScene(slides) { globalThis.__scenePlans = (globalThis.__scenePlans ?? 0) + 1; return { elements: [], tracks: [], slideBeats: [0], starts: [0, 1], end: 2 }; }', '',
+    '<Scene id="one" world="example" prepare={prepareScene} durations={[1, 1]} />',
+  ].join("\n");
+  const root = path.resolve(import.meta.dirname, "../../..");
+  const result = await compileDeck(path.join(root, "apps/slides/examples/demo.mdx"), {
+    source, effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
+  });
+  if (!result.success) throw Error(result.errors.join("\n"));
+  const require = createRequire(import.meta.url), module = { exports: {} as { default: React.ComponentType<{ components: Record<string, unknown> }> } };
+  Function("require", "module", "exports", result.code)(require, module, module.exports);
+  const { DeckContentContext, PresentationObservableProvider } = require("@legend-apps/presentation");
+  const { observable } = require("@legendapp/state");
+  const runtime$ = observable({ stepIndex: 0 });
+  const globals = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean; __scenePlans?: number };
+  globals.IS_REACT_ACT_ENVIRONMENT = true;
+  globals.__scenePlans = 0;
+  let rerender: () => void = () => {};
+  function Deck({ children }: { children?: React.ReactNode }) {
+    const [, set] = React.useState(0);
+    rerender = () => set(value => value + 1);
+    // As the real deck does, each render publishes a new content array with the same declarations.
+    const slides = React.Children.toArray(children);
+    return <DeckContentContext.Provider value={slides}><PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider></DeckContentContext.Provider>;
+  }
+  const Document = module.exports.default;
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(() => { renderer = create(<Document components={{ Deck, Slide: ({ children }: { children?: React.ReactNode }) => children }} />); });
+    expect(globals.__scenePlans).toBe(1);
+    await act(() => { rerender(); });
+    await act(() => { runtime$.stepIndex.set(1); });
+    expect(globals.__scenePlans).toBe(1);
+  } finally { if (renderer) await act(() => renderer!.unmount()); }
+}, 30000);
