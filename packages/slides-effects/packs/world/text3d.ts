@@ -1,3 +1,4 @@
+import type { CodeToken } from "@legend-apps/presentation";
 import type { Ease, Vec3 } from "./camera";
 import { font as defaultFont } from "./text3d-font";
 import { font as monoFont } from "./text3d-mono";
@@ -14,14 +15,14 @@ export type Text3DEnter = { step?: number; at?: number; offset?: Vec3; rotation?
   duration?: number; ease?: Ease; order?: "forward" | "reverse" | "center" | "random"; seed?: number; fade?: number };
 export type Text3DOptions = {
   /** `mono` selects the bundled JetBrains Mono Bold; `font` takes any baked font. */
-  id?: string; text: string; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
+  id?: string; text: string; tokens?: readonly CodeToken[]; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
   /** Extrusion depth, bevel thickness and bevel width, in em. */
   depth?: number; bevel?: number; bevelWidth?: number; bevelSegments?: number;
   align?: "left" | "center" | "right"; lineHeight?: number; tracking?: number; uppercase?: boolean;
   /** Face color and glow; `side` colors the extruded sides and bevels, shaded by `metal` and `roughness` (or a `material`). */
   color?: Animated<string>; emissive?: Animated<number>; side?: Animated<string>; metal?: Animated<number>; roughness?: Animated<number>;
   material?: string | MaterialOptions; opacity?: Animated<number>;
-  enter?: Text3DEnter; glyphs?: GlyphMotion[] | ((index: number, char: string, home: Vec3) => GlyphMotion | undefined);
+  enter?: Text3DEnter; glyphs?: GlyphMotion[] | ((index: number, char: string, home: Vec3, color?: string) => GlyphMotion | undefined);
 };
 export type GlyphInstance = { font: string; index: number; segments: number; rotation: Track<Vec3>; opacity: Track<number>; offset: Track<Vec3>;
   home: Vec3; pivot: [number, number]; depth: number; bevel: number; bevelWidth: number };
@@ -48,17 +49,20 @@ export function glyphVertexCount(font: Text3DFont, index: number, segments: numb
 /** Lays text out in em: each glyph's index, center (pivot) and line, with kerning and tracking. Unsupported characters become '?'. */
 export function layoutText3D(font: Text3DFont, text: string, { align = "center", lineHeight = 1.15, tracking = 0 }: Pick<Text3DOptions, "align" | "lineHeight" | "tracking"> = {}) {
   const fallback = font.chars.indexOf("?");
-  const glyphs: { index: number; char: string; x: number; y: number; advance: number }[] = [];
+  const glyphs: { index: number; char: string; offset: number; x: number; y: number; advance: number }[] = [];
   const lines = text.split("\n");
+  let offset = 0;
   lines.forEach((line, row) => {
     const chars = [...line], start = glyphs.length;
     let pen = 0;
     chars.forEach((char, i) => {
       const found = font.chars.indexOf(char), index = found < 0 && char !== " " ? fallback : found;
       const advance = index < 0 ? font.space : font.glyphs[index][0];
-      if (index >= 0) glyphs.push({ index, char, x: pen + advance / 2, y: -row * lineHeight, advance });
+      if (index >= 0) glyphs.push({ index, char, offset, x: pen + advance / 2, y: -row * lineHeight, advance });
+      offset += char.length;
       pen += advance + (font.kerning[char + (chars[i + 1] ?? "")] ?? 0) + (i + 1 < chars.length ? tracking : 0);
     });
+    offset++;
     const shift = align === "left" ? 0 : align === "right" ? pen : pen / 2;
     for (let i = start; i < glyphs.length; i++) glyphs[i].x -= shift;
   });
@@ -88,7 +92,7 @@ function enterTrack<T>(enter: Text3DEnter, from: T, to: T, delay: number, durati
     : [{ at: 0, value: from, duration: 0 }, { at: enter.at + delay, value: to, duration, ease }];
 }
 
-/** One instance per visible glyph, drawn together in a single instanced pass per font. Glyph ids are `<id>:<index>`. */
+/** One instance per visible glyph, drawn together in a single instanced pass per font. Code glyph ids retain their token identity. */
 export function text3dInstances(options: Text3DOptions): Instance[] {
   const font = options.font ?? (options.mono ? monoFont : defaultFont);
   const name = registerText3DFont(font);
@@ -98,9 +102,14 @@ export function text3dInstances(options: Text3DOptions): Instance[] {
   const layout = layoutText3D(font, text, options);
   const enter = options.enter, ranks = enter ? enterOrder(enter.order, layout.length, enter.seed ?? 1) : [];
   const jitter = random(enter?.seed ?? 7);
+  let tokenIndex = 0;
   return layout.map((glyph, i) => {
+    const tokens = options.tokens;
+    while (tokens && tokenIndex + 1 < tokens.length && tokens[tokenIndex + 1].offset <= glyph.offset) tokenIndex++;
+    const candidate = tokens?.[tokenIndex];
+    const token = candidate && glyph.offset >= candidate.offset && glyph.offset < candidate.offset + candidate.content.length ? candidate : undefined;
     const home: Vec3 = [glyph.x * size, (glyph.y + font.capHeight / 2) * size, 0];
-    const custom = typeof options.glyphs === "function" ? options.glyphs(i, glyph.char, home) : options.glyphs?.[i];
+    const custom = typeof options.glyphs === "function" ? options.glyphs(i, glyph.char, home, token?.color) : options.glyphs?.[i];
     let offset: Animated<Vec3> = [0, 0, 0], rotation: Animated<Vec3> = [0, 0, 0], scale: Animated<number> = 1, opacity: Animated<number> = options.opacity ?? 1;
     if (enter) {
       const delay = ranks[i] * (enter.stagger ?? 0.06), duration = enter.duration ?? 0.9, spread = enter.spread ?? [0, 0, 0];
@@ -111,10 +120,10 @@ export function text3dInstances(options: Text3DOptions): Instance[] {
       scale = enterTrack(enter, enter.scale ?? 1, 1, delay, duration, enter.ease ?? "spring");
       opacity = enterTrack(enter, 0, 1, delay, duration * (enter.fade ?? 0.35), "cubic");
     }
-    const motion = { offset, rotation, scale, opacity, color: options.color ?? "#f2f4f8", emissive: options.emissive ?? 0.75, ...custom };
+    const motion = { offset, rotation, scale, opacity, color: token?.color ?? options.color ?? "#f2f4f8", emissive: options.emissive ?? 0.75, ...custom };
     const scaleTrack = compileTrack(motion.scale, (value: number): Vec3 => [value, value, value]);
     return {
-      ...primitive("box", { id: options.id ? `${options.id}:${i}` : undefined, position: options.position, size, color: motion.color, emissive: motion.emissive,
+      ...primitive("box", { id: options.id ? `${options.id}:${token ? `${token.id}:${glyph.offset - token.offset}` : i}` : undefined, position: options.position, size, color: motion.color, emissive: motion.emissive,
         material: options.material ?? { albedo: options.side ?? "#2a2c31", metal: options.metal ?? 0.85, roughness: options.roughness ?? 0.32, rim: 0.4 } }),
       scale: scaleTrack,
       glyph: { font: name, index: glyph.index, segments, rotation: compileTrack<Vec3>(motion.rotation), opacity: compileTrack(motion.opacity),

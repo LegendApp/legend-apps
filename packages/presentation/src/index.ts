@@ -68,3 +68,5 @@ export { createTransitionProgress, interpolateTransition, subtractTransition, di
 
 export { GPUShader, GPUShaderProvider, GPURenderGraph, type GPUShaderProps, type GPURenderGraphProps, type GPURenderGraphDefinition, type GPUPass, type GPUTarget, type GPUBufferTarget } from "./GPUShader";
 export { registerAdvanceGuard, deferPresentationAdvance } from "./advanceGuard";
+
+export type { CodeHighlight, CodeToken } from "./codeHighlight";
