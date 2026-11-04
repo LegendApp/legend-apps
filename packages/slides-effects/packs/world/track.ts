@@ -102,7 +102,9 @@ function carrySlot(values: Float32Array | number[], at: number, from: ArrayLike<
   const spin = Math.sin(p * Math.PI) * (carry.spin ?? 0) * reach;
   const glyph = id.startsWith("glyph:"), tube = id.startsWith("tube:");
   if (glyph || tube) blend(values, at, from, old, 12, 15, p);
-  if (glyph) { values[at + 12] += spin * 0.6; values[at + 13] += spin * side; }
+  // A grouped glyph is lettering on a part: it tilts with it instead of tumbling on its own.
+  if (glyph && id.includes("/")) values[at + 14] += spin * side * 0.25;
+  else if (glyph) { values[at + 12] += spin * 0.6; values[at + 13] += spin * side; }
   else if (!tube) values[at + 22] += spin * side * 0.0044;
 }
 /** Ids sharing a prefix before `/` fly as one object. */

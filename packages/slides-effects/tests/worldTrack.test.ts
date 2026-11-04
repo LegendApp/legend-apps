@@ -215,6 +215,24 @@ test("a settled part is not rewritten on a step without keyframes, only on one w
   expect(key(3)).not.toBe(key(2));
 });
 
+test("a grouped glyph tilts with its part while a loose one tumbles", () => {
+  const ids = ["glyph:a/label:0", "glyph:loose:0", "box:still"], flight = { ...worldTrack, carry: { spin: 40 } };
+  const at = (previous: TrackFrame, slide: string, stepIndex: number, time: number) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: slide, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(carried, sampleWorldClock(playback, 4, "step", undefined, false, null, 0.3, stepIndex), null, 1, 1, true) as number[], ids, playback, flight);
+  };
+  const rest = at(createTrackFrame(), "0", 0, 3), still = (id: string) => [12, 13, 14].map(field => part(rest, id)[field]);
+  const resting = { [ids[0]]: still(ids[0]), [ids[1]]: still(ids[1]) };
+  const middle = at(at(rest, "1", 1, 0), "1", 1, 1);
+  const spun = (id: string) => [12, 13, 14].map((field, axis) => part(middle, id)[field] - resting[id][axis]);
+  const grouped = spun(ids[0]), loose = spun(ids[1]);
+  expect(grouped.slice(0, 2)).toEqual([0, 0]);
+  expect(Math.abs(grouped[2])).toBeCloseTo(10);
+  expect(loose[0]).toBeCloseTo(24);
+  expect(Math.abs(loose[1])).toBeCloseTo(40);
+  expect(loose[2]).toBe(0);
+});
+
 const body = (frame: TrackFrame, id = "box:a/body") => Array.from(part(frame, id).slice(0, 24));
 
 test("a world-frame scene carries parts on a bowed path from a cached uniform source, and Previous retraces it", () => {

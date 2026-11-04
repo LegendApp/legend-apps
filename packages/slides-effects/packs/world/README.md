@@ -221,7 +221,7 @@ export function Chapter({ slide }: { slide: number }) {
 | `spin` | Peak tumble, in degrees |
 | `stagger` | Share of the move spent waiting, varied per id |
 
-Ids that share a prefix before `/` (`node1/body`, `node1/label`) fly as one object. A part with zero scale or opacity on the next beat keeps its size and shrinks on landing, so parking it at a destination carries it there; a part hidden on the current beat appears on takeoff. Parts hidden or shown without moving swap at once. Previous mirrors each flight exactly in time.
+Ids that share a prefix before `/` (`node1/body`, `node1/label`) fly as one object: their glyphs tilt with the part instead of tumbling. A part with zero scale or opacity on the next beat keeps its size and shrinks on landing, so parking it at a destination carries it there; a part hidden on the current beat appears on takeoff. Parts hidden or shown without moving swap at once. Previous mirrors each flight exactly in time.
 
 Custom WGSL can read `continuousTime()`, which keeps running through navigation, for ambient motion that must not jump when a clock restarts.
 
