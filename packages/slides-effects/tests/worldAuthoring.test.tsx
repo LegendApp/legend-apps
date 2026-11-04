@@ -5,8 +5,8 @@ import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
-import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
-import { Box, Card, Pillar, RoutedTube, Stage, Text3D } from "../packs/world/World";
+import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, laneScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
+import { Box, Camera, Card, Custom, Pillar, RoutedTube, Stage, Text3D } from "../packs/world/World";
 
 const fence = <pre><code className="language-tsx">{"function Example() {\n  return 42;\n}\n"}</code></pre>;
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
@@ -114,6 +114,37 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
   expect(morph.filter(n => n.type === Text3D).map(n => n.props.text)).toEqual(["a", "b", "c", "d"]);
   expect(morph.filter(n => String(n.props.id).endsWith("/strike")).map(n => n.props.id)).toEqual(["m/1/strike"]);
   expect(() => expandScene(<CodeMorph id="bad">{diff([" a"])}{diff([" z", "+d"])}</CodeMorph>)).toThrow("diff 1 must start from the previous code");
+});
+
+test("lane scenes fly parts into the next scene's tree and bars, which grow in as they land", () => {
+  const beat = { start: 2, every: 1.5, count: 2 };
+  const scenes = [
+    { layout: "statement", parts: <><Headline id="we" into="tree">Hi yo</Headline><Rule id="rule" /></> },
+    { layout: "track-left", parts: <><Tree id="tree" into="bars" beat={beat} nodes={[{ id: "r" }, { id: "a", p: 0, typed: "Ada" }, { id: "b", p: 0, quiet: true }]} />
+      <Counter id="n" label="N" per={3} beat={beat} /></> },
+    { layout: "title-bars", parts: <Bars id="bars" items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} /> },
+  ];
+  const second = flat(laneScene(scenes, 1, { handheld: .02 }));
+  const shots = second.find(n => n.type === Camera)!.props.shots as { at: number; position: number[]; idle?: unknown }[];
+  expect(shots.map(s => [s.at, s.position[2]])).toEqual([[0, 11.6], [.25, 13 - 32]]);
+  expect(shots[1].idle).toEqual({ position: [.02, .02, .02], speed: .37 });
+  const flyer = second.find(n => n.props.id === "we/out")!;
+  const motion = (flyer.props.glyphs as (i: number, ch: string, home: number[]) => { offset: { value: number[] }[] })(0, "H", [-1, 0, 0]);
+  const at = sceneLayouts.statement.slots.line1.at as number[], node = sceneLayouts["track-left"].slots.tree.at as number[];
+  expect(motion.offset[motion.offset.length - 1].value.map(v => +v.toFixed(3))).toEqual([0 - (at[0] - 1), +(node[1] + 2 - at[1]).toFixed(3), -32]);
+  expect(second.find(n => n.props.id === "rule/out")!.type).toBe(Box);
+  expect(second.find(n => n.type === Custom)!.props.count).toBe(4 * 14);
+  const root = second.find(n => n.props.id === "tree/r")!.props.scale as { at: number }[];
+  expect(root[1].at).toBe(1.25);
+  expect((second.find(n => n.props.id === "tree/r")!.props.emissive as { at: number; value: number }[]).filter(k => k.value === 7).map(k => k.at)).toEqual([2, 3.5]);
+  expect(second.find(n => n.props.id === "tree/b")!.props.emissive).toBe(undefined);
+  expect(second.filter(n => String(n.props.id).startsWith("tree/a/typed")).map(n => n.props.text)).toEqual(['"A"', '"Ad"']);
+  const third = flat(laneScene(scenes, 2));
+  expect(third.filter(n => n.type === Card && String(n.props.id).startsWith("tree/out/")).length).toBe(3);
+  expect(third.find(n => n.props.id === "n/out")!.type).toBe(Stage);
+  expect(third.filter(n => String(n.props.id).startsWith("n/out/value")).map(n => n.props.text)).toEqual(["6"]);
+  expect(third.find(n => n.type === Pillar)!.props.at).toBe(1.3);
+  expect(() => laneScene([scenes[0], scenes[2]], 1)).toThrow("must be a tree or bars");
 });
 
 test("the real MDX compiler resolves scene parts, code fences and presenter notes", async () => {
