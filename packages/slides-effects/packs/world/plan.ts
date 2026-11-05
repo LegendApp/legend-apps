@@ -1,3 +1,4 @@
+import { worldEffect } from "./effects";
 import { trackIds } from "./track";
 import { worldGraphTopology, type WorldGraphTopology } from "./render";
 import { worldHeaderSize, worldInstanceSize, type Instance, type PreparedWorldScene } from "./scene";
@@ -7,16 +8,15 @@ function family(part: Instance): string {
   return part.label ? "label" : part.card ? "card" : part.glyph ? `glyph:${part.glyph.font}:${part.glyph.segments}`
     : part.custom ? `custom:${part.custom.wgsl}:${part.custom.vertexCount}` : part.sdf ? `sdf:${JSON.stringify(part.sdf)}` : part.kind;
 }
-export type WorldPlan = { topology: WorldGraphTopology; slots: Record<string, number>; size: number };
+export type WorldPlan = { topology: WorldGraphTopology; slots: Record<string, number>; instances: number; size: number };
 
 /** Reserve room for an incoming declaration and one outgoing declaration; compatible slides keep one GPU graph. */
 export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWorldScene, WorldPlan> {
   const groups = new Map<string, { scenes: PreparedWorldScene[]; topology: WorldGraphTopology }>();
   const topologies = scenes.map(worldGraphTopology);
   for (const [i, scene] of scenes.entries()) {
-    if (scene.effectUses.length) continue;
-    const { counts, customs, sdfs, glyphs, cards, labels, ...appearance } = topologies[i];
-    const key = JSON.stringify(appearance), group = groups.get(key);
+    const { counts, customs, sdfs, glyphs, cards, labels, effects, ...appearance } = topologies[i];
+    const key = JSON.stringify({ ...appearance, effects: effects?.map(({ base, ...effect }) => effect) }), group = groups.get(key);
     if (group) group.scenes.push(scene);
     else groups.set(key, { scenes: [scene], topology: topologies[i] });
   }
@@ -62,7 +62,13 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
     const cards = offset, cardCount = reserve("card"), labels = offset, labelCount = reserve("label");
     topology.cards = cardCount ? { offset: cards, count: cardCount } : undefined;
     topology.labels = labelCount ? { offset: labels, count: labelCount } : undefined;
-    const plan = { topology, slots, size: worldHeaderSize + offset * worldInstanceSize };
+    let size = worldHeaderSize + offset * worldInstanceSize;
+    topology.effects = topology.effects?.map(use => {
+      const base = size;
+      size += worldEffect(use.effect).size;
+      return { ...use, base };
+    });
+    const plan = { topology, slots, instances: offset, size };
     for (const scene of members) plans.set(scene, plan);
   }
   return plans;
@@ -71,7 +77,7 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
 /** Rapid navigation can retain more than the two declarations reserved by a pool. */
 export function worldPlanFits(scene: PreparedWorldScene, plan: WorldPlan): boolean {
   const entries = Object.entries(plan.slots), cursors = { ...plan.slots };
-  const limits = Object.fromEntries(entries.map(([key], i) => [key, entries[i + 1]?.[1] ?? (plan.size - worldHeaderSize) / worldInstanceSize]));
+  const limits = Object.fromEntries(entries.map(([key], i) => [key, entries[i + 1]?.[1] ?? plan.instances]));
   return scene.instances.every(part => { const key = family(part); return cursors[key] !== undefined && cursors[key]++ < limits[key]; });
 }
 
@@ -84,11 +90,13 @@ export function worldPlanCopies(scene: PreparedWorldScene, plan: WorldPlan): [nu
     if (last[0] + last[1] === source && last[2] + last[1] === target) last[1] += worldInstanceSize;
     else copies.push([source, worldInstanceSize, target]);
   });
+  const effects = worldHeaderSize + scene.instances.length * worldInstanceSize;
+  if (scene.uniformCount > effects) copies.push([effects, scene.uniformCount - effects, worldHeaderSize + plan.instances * worldInstanceSize]);
   return copies;
 }
 /** The shared graph's empty draw slots have no identity; omitted parts retain their old uniforms by id. */
 export function worldPlanIds(scene: PreparedWorldScene, plan: WorldPlan): string[] {
-  const ids = new Array<string>((plan.size - worldHeaderSize) / worldInstanceSize).fill("");
+  const ids = new Array<string>(plan.instances).fill("");
   const cursors = { ...plan.slots }, source = trackIds(scene);
   scene.instances.forEach((part, i) => { ids[cursors[family(part)]++] = source[i]; });
   return ids;

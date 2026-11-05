@@ -9,9 +9,9 @@ import { act, create } from "react-test-renderer";
 import * as Reanimated from "react-native-reanimated";
 import { Scene } from "../packs/world/Authoring";
 import { worldHeaderSize } from "../packs/world/scene";
-import { Box, Orbs, Sphere, Tube, WorldSlide } from "../packs/world/World";
+import { Box, Effect, haze, Orbs, Sphere, Tube, WorldSlide } from "../packs/world/World";
 
-test("authored slides retain one GPU graph across different geometry, steps and reverse navigation", async () => {
+test.each([false, true])("authored slides retain one GPU graph across geometry, steps and reverse (effects: %s)", async effects => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const mutables = spyOn(Reanimated, "makeMutable");
   const outputs = () => mutables.mock.calls.filter(([value]) => value instanceof Float32Array).length;
@@ -19,8 +19,8 @@ test("authored slides retain one GPU graph across different geometry, steps and 
     slideCount: 2, stepCount: 2, startedAt: 0, stepStartedAt: 0, isActive: index === 0,
     isPreview: false, isPreparing: index !== 0, playbackPhase: index ? "preparing" : "playing", playbackScope: "slide" });
   const first$ = runtime(0), second$ = runtime(1);
-  const declarations = [<Scene id="one" world="planned"><Box id="box" position={[0, 2, 0]} /></Scene>,
-    <Scene id="two" world="planned"><Sphere id="orb" position={[1, 3, 0]} /></Scene>];
+  const declarations = [<Scene id="one" world={`planned-${effects}`}><Box id="box" position={[0, 2, 0]} />{effects && <Effect use={haze({ amount: { 0: .2, 1: .8 } })} />}</Scene>,
+    <Scene id="two" world={`planned-${effects}`}><Sphere id="orb" position={[1, 3, 0]} />{effects && <Effect use={haze({ amount: { 0: .4, 1: .9 } })} />}</Scene>];
   function Renderer(props) { return <gpu {...props} />; }
   const content = index => <DeckContentContext.Provider value={[...declarations]}><GPUShaderProvider renderer={Renderer}>
     <BackgroundHost slideIndex={index} color="#05060a">
@@ -35,7 +35,7 @@ test("authored slides retain one GPU graph across different geometry, steps and 
     await act(() => { renderer = create(content(0)); }); tick(0); tick(3000);
     const initial = graph();
     const plan = renderer.root.findAllByType(WorldSlide)[0].props.scenePlan;
-    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node, {}, React.cloneElement(node.props.children)); });
+    declarations.forEach((node, i) => { declarations[i] = React.cloneElement(node, {}, node.props.children.map(child => React.isValidElement(child) ? React.cloneElement(child) : child)); });
     await act(() => { renderer.update(content(0)); }); tick(3000);
     expect(renderer.root.findAllByType(WorldSlide)[0].props.scenePlan).toBe(plan);
     expect(graph()).toBe(initial);
@@ -46,8 +46,10 @@ test("authored slides retain one GPU graph across different geometry, steps and 
     }); tick(3000); tick(6000);
     expect(graph()).toBe(initial);
     expect(outputs()).toBe(1);
-    await act(() => { second$.assign({ stepIndex: 1, currentStep: 1, stepStartedAt: 6000 }); }); tick(6000);
+    if (effects) expect(renderer.root.findByType("gpu").props.frameData.value[plan.pool.topology.effects[0].base]).toBeCloseTo(.4, 5);
+    await act(() => { second$.assign({ stepIndex: 1, currentStep: 1, stepStartedAt: 6000 }); }); tick(6000); tick(6017); tick(7000);
     expect(graph()).toBe(initial);
+    if (effects) expect(renderer.root.findByType("gpu").props.frameData.value[plan.pool.topology.effects[0].base]).toBeCloseTo(.9, 5);
     await act(() => {
       second$.assign({ currentSlide: 0, playbackPhase: "outgoing", isActive: false });
       first$.assign({ currentSlide: 0, playbackPhase: "playing", isActive: true, startedAt: 7000, stepStartedAt: 7000, direction: "backward" });
@@ -55,6 +57,7 @@ test("authored slides retain one GPU graph across different geometry, steps and 
     }); tick(7000); tick(10000);
     expect(graph()).toBe(initial);
     expect(renderer.root.findByType("gpu").props.frameData.value.some(value => !Number.isFinite(value))).toBe(false);
+    if (effects) expect(renderer.root.findByType("gpu").props.frameData.value[plan.pool.topology.effects[0].base]).toBeCloseTo(.2, 5);
   } finally { await act(() => renderer?.unmount()); flushUI(); mutables.mockRestore(); }
 });
 

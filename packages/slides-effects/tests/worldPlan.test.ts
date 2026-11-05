@@ -5,6 +5,8 @@ import { primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHe
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds } from "../packs/world/track";
 import { text3dInstances } from "../packs/world/text3d";
 import { createPlaybackState } from "../../presentation/src/playbackState";
+import { d } from "typegpu";
+import { defineWorldEffect } from "../packs/world/effects";
 import { buildWorldGraph } from "../packs/world/render";
 
 const clock = { slideTime: 3, stepTime: 3, stepIndex: 0, stepOrigins: [0] };
@@ -73,4 +75,43 @@ test("rapid navigation retains live departures beyond a pool capacity", () => {
   expect(worldPlanFits(second, plan)).toBe(true);
   expect(worldPlanFits(third, plan)).toBe(false);
   expect(trackIds(retainTrackScene(scenes[2], second, scenes[1], false, trackIds(scenes[0]))).sort()).toEqual(["box:a", "box:b", "box:c"]);
+});
+
+test("effects share a graph across geometry sizes and copy animated parameters after the draw slots", () => {
+  const effect = defineWorldEffect({ name: "pool-test", params: { gain: d.f32, tint: d.vec3f },
+    defaults: { gain: 1, tint: [1, 1, 1] }, build: ({ input, id }) => ({ passes: [{ id: id(), wgsl: "@fragment fn main()->@location(0) vec4f{return vec4f(1.);}", fragment: "main", reads: { source: input }, output: id("out") }] }) });
+  const scenes = [1, 3].map((count, index) => prepareWorldScene({
+    instances: Array.from({ length: count }, (_, slot) => primitive("box", { id: `part-${slot}` })),
+    effects: [{ use: effect({ gain: { 0: index + 1, 1: index + 4 }, tint: [index, .5, 1] }) }, { use: effect({ gain: 3 }) }],
+  }));
+  const plans = prepareWorldPlans(scenes), plan = plans.get(scenes[0])!;
+  expect(plan).toBeDefined();
+  expect(plans.get(scenes[1])).toBe(plan);
+  expect(buildWorldGraph(plan.topology).uniformsSize).toBe(plan.size);
+  for (const scene of scenes) {
+    expect(worldPlanFits(scene, plan)).toBe(true);
+    expect(worldPlanIds(scene, plan)).toHaveLength(6);
+    const retained = retainTrackScene(scene, scenes[1], scenes[1], true);
+    expect(worldPlanFits(retained, plan)).toBe(true);
+    for (const stepIndex of [0, 1, 0]) {
+      const sample = sampleWorldUniforms(scene, { ...clock, stepIndex }, null, 1, 1, true);
+      const pooled = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size));
+      const source = scene.effectUses[0].base, target = plan.topology.effects![0].base;
+      expect(Array.from(pooled.slice(target))).toEqual(Array.from(sample.slice(source)));
+      expect(target).toBe(worldHeaderSize + 6 * worldInstanceSize);
+    }
+  }
+});
+
+test("effect options and placement keep distinct pools while parameter values share them", () => {
+  const effect = defineWorldEffect({ name: "pool-options", params: { gain: d.f32 }, defaults: { gain: 1 }, build: ({ input, id }) => ({ passes: [{ id: id(), wgsl: "@fragment fn main()->@location(0) vec4f{return vec4f(1.);}", fragment: "main", reads: { source: input }, output: id("out") }] }) });
+  const scenes = [
+    { use: effect({ gain: 1 }, { mode: "a" }) }, { use: effect({ gain: 2 }, { mode: "a" }) },
+    { use: effect({ gain: 1 }, { mode: "b" }) }, { use: effect(), before: "tonemap" as const },
+  ].map(use => prepareWorldScene({ instances: [], effects: [use] }));
+  const plans = prepareWorldPlans(scenes);
+  expect(plans.get(scenes[0])).toBeDefined();
+  expect(plans.get(scenes[0])).toBe(plans.get(scenes[1]));
+  expect(plans.get(scenes[0])).not.toBe(plans.get(scenes[2]));
+  expect(plans.get(scenes[0])).not.toBe(plans.get(scenes[3]));
 });
