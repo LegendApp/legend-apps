@@ -32,7 +32,7 @@ export function NotesWindow() {
       <Text style={{ color: "#a1a1aa", fontSize: 18 }}>Slide {index + 1} · Step {step + 1}</Text>
     </View>
     <View style={{ height: height * ratio, marginHorizontal: 20 }}>
-      {blackout ? <View style={{ flex: 1, backgroundColor: "black" }} /> : <SlideCanvas targetIndex={index} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={index} targetStep={step} /></SlideCanvas>}
+      {blackout ? <View style={{ flex: 1, backgroundColor: "black" }} /> : <SlideCanvas targetIndex={index} targetStep={step} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={index} targetStep={step} /></SlideCanvas>}
     </View>
     <View accessibilityLabel="Resize notes preview" {...responder.panHandlers} style={{ height: 18, alignItems: "center", justifyContent: "center" }}>
       <View style={{ height: 3, width: 60, backgroundColor: "#52525b", borderRadius: 2 }} />

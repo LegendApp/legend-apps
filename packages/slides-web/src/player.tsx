@@ -5,12 +5,14 @@ const { default: Deck, __legendSlidesTemplates, __legendSlidesTransitions } = re
 const { default: preloadAssets } = require("virtual:preload");
 import { AudienceWindow } from "../../../apps/slides/src/AudienceWindow";
 import { getSlidesState, setSlidesState, slidesState$, nextSlide, previousSlide } from "../../../apps/slides/src/slidesStore";
+import { toggleSlideReferences } from "../../../apps/slides/src/slideReferences";
 import { acceptsShortcut, parsePosition } from "./navigation";
 import { readNotesVisibility, saveNotesVisibility, SpeakerNotes } from "./notes";
 import { startPreloading, type AssetPreloader } from "./preload";
 import { PreloadStatus } from "./preloadStatus";
 
-setSlidesState({ component: Deck, templates: __legendSlidesTemplates, transitions: __legendSlidesTransitions, status: "ready" });
+const renderReferences = new URLSearchParams(location.search).get("slide-references");
+setSlidesState({ ...(renderReferences !== null ? { slideReferences: renderReferences === "true" } : {}), component: Deck, templates: __legendSlidesTemplates, transitions: __legendSlidesTransitions, status: "ready" });
 function readPosition() {
   setSlidesState(parsePosition(location.hash, getSlidesState().slides.map(slide => slide.metadata.steps ?? 1)));
 }
@@ -67,6 +69,7 @@ function App() {
       if (event.key === "Home") goTo(0);
       if (event.key === "End") goTo(slides.length - 1);
       if (event.key.toLowerCase() === "n" && hasNotes) toggleNotes();
+      if (event.key.toLowerCase() === "i") toggleSlideReferences();
       if (event.key.toLowerCase() === "f") toggleFullscreen();
     };
     window.addEventListener("keydown", navigation);

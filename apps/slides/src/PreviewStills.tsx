@@ -60,7 +60,7 @@ export function PreviewStillSweep({ add, aspect, generation, paused, targets }: 
   const [slide, step] = target.split(":").map(Number);
   return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
     <SurfaceStillContext.Provider value={request}>
-      <SlideCanvas targetIndex={slide} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={slide} targetStep={step} /></SlideCanvas>
+      <SlideCanvas targetIndex={slide} targetStep={step} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={slide} targetStep={step} /></SlideCanvas>
     </SurfaceStillContext.Provider>
   </View>;
 }

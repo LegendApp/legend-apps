@@ -278,7 +278,7 @@ function AudienceSlide({ onPrepared, index, preparing, incoming, transitioning, 
     progress={progress} transitioning={transitioning}>
     <PreparationBoundary onReady={onPrepared}>
     <AudienceFocusSurface layoutKey={layoutKey} index={index} surfaces={surfaces} motion={retainedMotion}>
-      <SlideCanvas targetIndex={index}>
+      <SlideCanvas targetIndex={index} targetStep={targetStep}>
         <UserTransitionLayer definition={definition} reference={reference} progress={progress} incoming={incoming}
           preparing={preparing} settled={settled} reverse={reverse} hasBackground={hasBackground} shared={shared}>
           <AudienceDeckContent index={index} preparing={preparing && !outgoing} outgoing={outgoing}

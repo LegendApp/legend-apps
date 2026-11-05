@@ -21,11 +21,14 @@ export type DeckConfig = {
   template?: string;
   theme?: PresentationTheme;
   title?: string;
+  slideReferences?: boolean;
   transition?: SlideTransition;
   width?: number;
 };
 
 export type SlideConfig = {
+  id?: string;
+  referenceSlug?: string;
   background?: string | false;
   steps?: number;
   template?: string | false;

@@ -9,7 +9,7 @@ import React from "react";
 import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
-import { GPURenderGraph, useDeckContent, usePresentation } from "@legend-apps/presentation";
+import { FocusStage, GPURenderGraph, useDeckContent, usePresentation } from "@legend-apps/presentation";
 import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const titleSpeed$ = state.observable(1);
@@ -549,6 +549,48 @@ test("deck content includes unmounted slides and follows document replacement in
     expect(futureMounts).toBe(0);
   } finally {
     if (tree) await act(() => tree.unmount());
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test("slide references stay above the focus stage and update across steps and modes", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const previousDev = globalThis.__DEV__;
+  globalThis.__DEV__ = true;
+  const SlideCanvas = compiledRenderer("SlideCanvas");
+  const { toggleSlideReferences } = await import("../slideReferences");
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let renderer;
+  try {
+    setSlidesState({ slideReferences: undefined, deckLocked: false, currentSlide: 13, currentStep: 1,
+      config: {}, slides: Array.from({ length: 14 }, () => ({ metadata: { id: "proxy", referenceSlug: "world", steps: 3 }, notes: "" })) });
+    await act(() => { renderer = create(<SlideCanvas><scene /></SlideCanvas>); });
+    const reference = () => renderer.root.findAllByType("text").filter(node => String(node.props.children).includes("proxy"));
+    expect(reference()[0].props.children).toBe("14.2 proxy");
+    const focusStage = renderer.root.findByType(FocusStage);
+    expect(reference()[0].parent.props.pointerEvents).toBe("none");
+    expect(reference()[0].parent.props.style).toMatchObject({ position: "absolute", top: 12, left: 16 });
+    expect(reference()[0].props.style.fontFamily).toBe("Menlo");
+    expect(focusStage.findAllByType("text")).toHaveLength(0);
+    await act(() => setSlidesState({ currentStep: 2 }));
+    expect(reference()[0].props.children).toBe("14.3 proxy");
+    await act(() => setSlidesState({ deckLocked: true }));
+    expect(reference()).toHaveLength(0);
+    await act(() => toggleSlideReferences());
+    expect(reference()[0].props.children).toBe("14.3 proxy");
+    await act(() => toggleSlideReferences());
+    expect(reference()).toHaveLength(0);
+    await act(() => setSlidesState({ slideReferences: undefined, config: { slideReferences: true } }));
+    expect(reference()).toHaveLength(1);
+    await act(() => { renderer.update(<SlideCanvas targetIndex={0} targetStep={0} isPreview><scene /></SlideCanvas>); });
+    expect(reference()[0].props.children).toBe("1.1 proxy");
+    await act(() => setSlidesState({ slides: [{ metadata: { referenceSlug: "world" }, notes: "" }] }));
+    expect(renderer.root.findAllByType("text").map(node => node.props.children)).toContain("1.1 world");
+  } finally {
+    if (renderer) await act(() => renderer.unmount());
+    globalThis.__DEV__ = previousDev;
     setSlidesState(initial);
     log.mockRestore();
   }

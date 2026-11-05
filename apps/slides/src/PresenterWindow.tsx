@@ -1,3 +1,4 @@
+import { toggleSlideReferences } from "./slideReferences";
 import { speakerNotesDrafts } from "./speakerNotesDrafts";
 import { preparePresenterSessionClose } from "./presenterClose";
 import { assignDisplayRole, displayKey, rememberDisplayRoles, resolveDisplayRoles } from "./displayRoles";
@@ -42,6 +43,7 @@ const pageDefinitions = [
     { id: "previous", title: "Previous Slide", defaultBindings: ["PageUp"], allowExtraModifiers: true, repeat: true },
 ];
 const navigationDefinitions = [
+    { id: "references", title: "Toggle Slide References", defaultBindings: ["I"] },
     { id: "next", title: "Next Slide", defaultBindings: ["Right", "Down", "Space"], allowExtraModifiers: true, repeat: true },
     { id: "previous", title: "Previous Slide", defaultBindings: ["Left", "Up"], allowExtraModifiers: true, repeat: true },
     { id: "first", title: "First Slide", defaultBindings: ["Home"], allowExtraModifiers: true, repeat: true },
@@ -65,7 +67,7 @@ function PresenterKeyboard({ windowId, editingDeck, presenter$, keyboardJump$, a
     const handlers = { next: nextSlide, previous: previousSlide };
     useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: pageDefinitions, scope, enabled: !editingDeck, handlers, onError: console.error });
     useRoutedHotkeys({ router: presenterHotkeyRouter, definitions: navigationDefinitions, scope, enabled: !editingDeck && !notesEditing,
-        handlers: { ...handlers, first: () => setCurrentSlide(0), last: () => setCurrentSlide(Number.MAX_SAFE_INTEGER), digit: ({ event }) => {
+        handlers: { ...handlers, references: toggleSlideReferences, first: () => setCurrentSlide(0), last: () => setCurrentSlide(Number.MAX_SAFE_INTEGER), digit: ({ event }) => {
             keyboardJump$.set(`${keyboardJump$.peek()}${event.key}`.replace(/^0+/, "").slice(0, 4));
             clearTimeout(jumpTimeout.current);
             jumpTimeout.current = setTimeout(() => keyboardJump$.set(""), 2500);
@@ -113,7 +115,7 @@ function Preview({ index, current, animate = false, stepIndex, still, weight = 1
 }) {
     return (<View style={[styles.previewSection, { flex: weight }]}>
       <View style={styles.preview}>
-        <SlideCanvas targetIndex={index} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
+        <SlideCanvas targetIndex={index} targetStep={stepIndex} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
         {current !== undefined && <SlideCounter index={current}/>}
       </View>
     </View>);

@@ -41,6 +41,7 @@ import {
 import { normalizeStepCount, getSlidesState, nextSlide, previousSlide, reportSlideError, setCurrentSlide, setSlidesState, slidesState$ } from "./slidesStore";
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Layout, LayoutStage } from "./Layout";
+import { SlideReferenceLabel } from "./SlideReferenceLabel";
 import { SlideSurface } from "./SlideSurface";
 import { Step, Steps, countSteps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
@@ -336,16 +337,16 @@ export function SlideBackgroundHost(props: ComponentProps<typeof BackgroundHost>
   return <GPUShaderProvider renderer={TypeGPUShader}><BackgroundHost {...props} boundary={BackgroundErrorBoundary} /></GPUShaderProvider>;
 }
 
-export function SlideCanvas({ children, captureEnabled = true, targetIndex, isPreview = false, backgroundIsPreview = isPreview, backgroundStill }: { backgroundStill?: ReactNode; children: ReactNode; captureEnabled?: boolean; targetIndex?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
+export function SlideCanvas({ children, captureEnabled = true, targetIndex, targetStep, isPreview = false, backgroundIsPreview = isPreview, backgroundStill }: { backgroundStill?: ReactNode; children: ReactNode; captureEnabled?: boolean; targetIndex?: number; targetStep?: number; isPreview?: boolean; backgroundIsPreview?: boolean }) {
   const intensity = useBackgroundIntensitySetting();
   const hosted = useBackgroundHost();
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
-  const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview}>{children}</SlideCanvasContent>;
+  const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview} reference={<SlideReferenceLabel targetIndex={targetIndex} targetStep={targetStep} isPreview={isPreview} />}>{children}</SlideCanvasContent>;
   return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview} replacement={backgroundStill}>{content}</SlideBackgroundHost>;
 }
 
-function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean }) {
+function SlideCanvasContent({ children, captureEnabled, warnLayout, reference }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean; reference: ReactNode }) {
   const hasBackground = useHasBackground();
   const aspect = useValue(slidesState$.config.aspectRatio);
   const configuredWidth = useValue(slidesState$.config.width);
@@ -376,6 +377,7 @@ function SlideCanvasContent({ children, captureEnabled, warnLayout }: { children
         <SlideCaptureContext.Provider value={captureEnabled ? scale : 0}>
           <PresentationCanvasScaleContext.Provider value={scale}>
             <FocusStage scale={scale}><LayoutStage width={width} height={height} warn={warnLayout}>{children}</LayoutStage></FocusStage>
+            {reference}
           </PresentationCanvasScaleContext.Provider>
         </SlideCaptureContext.Provider>
       </ScaledView>

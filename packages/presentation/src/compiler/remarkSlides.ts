@@ -79,6 +79,9 @@ function validateConfig(config: Record<string, unknown>, label: string, deck = f
   if (config.steps !== undefined && (typeof config.steps !== "number" || !Number.isInteger(config.steps) || config.steps < 1)) {
     throw new Error(`${label} steps must be a positive integer.`);
   }
+  if (config.slideReferences !== undefined && typeof config.slideReferences !== "boolean") {
+    throw new Error(`${label} slideReferences must be a boolean.`);
+  }
   if (!deck) return;
   for (const field of ["width", "height"]) {
     const value = config[field];
@@ -140,6 +143,18 @@ function extractNotes(node: Node, notes: string[]): Node | undefined {
 function getEncodedAttribute(node: Node) {
   const encoded = node.attributes?.find((attribute) => attribute.name === "encoded")?.value;
   return typeof encoded === "string" ? encoded : undefined;
+}
+
+function referenceSlug(nodes: Node[]): string {
+  const elements = (items: Node[]): Node[] => items.flatMap(node => [node, ...elements(node.children ?? [])]);
+  const descendants = elements(nodes);
+  const candidates = descendants.filter(node => node.name && /^[A-Z]/.test(node.name));
+  const scene = candidates.find(node => node.name === "Scene");
+  const sceneName = scene?.attributes?.find(attribute => ["id", "name"].includes(attribute.name ?? "") && typeof attribute.value === "string")?.value;
+  const component = candidates.find(node => !["Background", "Layout", "View", "Text", "Step", "Steps", "FocusRegion", "SharedElement"].includes(node.name!));
+  const heading = descendants.find(node => node.type === "heading");
+  const name = sceneName ?? component?.name ?? heading?.children?.map(node => node.value ?? "").join("") ?? "slide";
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "slide";
 }
 
 function stringAttribute(name: string, value: string): Node {
@@ -241,7 +256,7 @@ export function remarkSlides(options: RemarkSlidesOptions = {}) {
         name: "Slide",
         attributes: [
           stringAttribute("index", String(index)),
-          stringAttribute("metadataJson", JSON.stringify(slide.metadata)),
+          stringAttribute("metadataJson", JSON.stringify({ ...slide.metadata, referenceSlug: referenceSlug(slide.nodes) })),
           stringAttribute("notes", slide.notes.join("\n\n")),
         ],
         children: slide.nodes,
