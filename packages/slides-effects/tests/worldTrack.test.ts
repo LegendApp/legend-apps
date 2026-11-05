@@ -224,6 +224,8 @@ test("omitted objects fade at their last pose, then return only when declared", 
   const stillVisible = at(start, retained, "1", 0.5, []);
   expect(part(stillVisible, "box:marker").slice(0, 11)).toEqual(part(first, "box:marker").slice(0, 11));
   expect(part(stillVisible, "box:marker")[23]).toBeCloseTo(0.9375);
+  // Still ahead of the camera, but too close to the lens to stay.
+  expect(part(at(start, retained, "1", .86, []), "box:marker")[23]).toBe(0);
   const passed = at(start, retained, "1", 2, []);
   expect(part(passed, "box:marker")[23]).toBe(0);
   expect(part(passed, "tube:rail")[23]).toBe(0);
@@ -331,6 +333,19 @@ test("a station's ease shapes its flight, and a step camera's ease its move", ()
   };
   const linear: WorldTrack = { ease: "linear", duration: 1.7 };
   expect(at(at(at(createTrackFrame(), "0", 0, 0, {}), "1", 0, 0, linear), "1", 0, .425, linear).cursor).toBe(.25);
+  // An ease-out flight starts fast, and parts carried into the station keep pace with the camera.
+  const out: WorldTrack = { ease: "out", duration: 1 };
+  const carried = (time: number) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: "1", stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    const column = scene(true), entry = sample(sample(createTrackFrame(), 0), 3);
+    const begin = sampleTrackFrame(entry, sampleWorldUniforms(column, { ...playback, slideTime: 0, stepTime: 0 }) as number[], trackIds(column), { ...playback, slideTime: 0, stepTime: 0 }, out);
+    return sampleTrackFrame(begin, sampleWorldUniforms(column, playback) as number[], trackIds(column), playback, out);
+  };
+  const quarter = carried(.25);
+  expect(quarter.cursor).toBeCloseTo(1 - .75 ** 3);
+  expect(part(quarter, "card:sample")[0]).toBeCloseTo(-3 + 6 * quarter.cursor);
+  expect(quarter.values[travelSpeedSlot]).toBeCloseTo(.5625);
+  expect(carried(.75).values[travelSpeedSlot]).toBeCloseTo(.0625);
   const step = (ease?: "linear") => { const track: WorldTrack = { position: [0, 4, 10], target: [0, 4, 0], steps: { 1: { orbit: 90, duration: 1, ease } } };
     const start = at(createTrackFrame(), "0", 0, 0, track);
     return at(at(start, "0", 1, 0, track), "0", 1, .25, track).values[0]; };

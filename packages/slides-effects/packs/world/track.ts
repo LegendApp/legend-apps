@@ -243,10 +243,10 @@ function blend(values: Float32Array | number[], at: number, from: ArrayLike<numb
   for (let field = start; field < end; field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * amount;
 }
 /** Carries one part along a bowed path. Reversed travel mirrors its delay, so Previous retraces the same flight. */
-function carrySlot(values: Float32Array | number[], at: number, from: ArrayLike<number>, old: number, time: number, carry: WorldCarry, id: string, seed: number, reversed: boolean) {
+function carrySlot(values: Float32Array | number[], at: number, from: ArrayLike<number>, old: number, time: number, carry: WorldCarry, id: string, seed: number, reversed: boolean, ease: Ease) {
   "worklet";
   const stagger = Math.min(0.9, carry.stagger ?? 0), delay = stagger * (reversed ? 1 - seed : seed);
-  const p = easeProgress(Math.min(1, Math.max(0, (time - delay) / (1 - stagger))), "cubic");
+  const p = easeProgress(Math.min(1, Math.max(0, (time - delay) / (1 - stagger))), ease);
   const dx = values[at] - from[old], dy = values[at + 1] - from[old + 1], dz = values[at + 2] - from[old + 2];
   // Short hops stay flat; the seed picks the side, so a group and both directions share one path.
   const reach = Math.min(1, Math.hypot(dx, dy, dz) / 8), side = seed < 0.5 ? -1 : 1, bow = 2 * p * (1 - p) * reach;
@@ -280,7 +280,7 @@ function seedOf(id: string) {
 }
 
 /** World-frame scenes keep their cached uniforms intact: only parts whose pose changes are written, into a separate output. */
-function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: boolean, elapsed: number) {
+function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: boolean, elapsed: number, ease: Ease) {
   "worklet";
   const { ids, from, sources, carry, reversed } = frame;
   if (changed) {
@@ -304,7 +304,7 @@ function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: bool
   if (elapsed >= 1) return frame;
   for (let i = 0; i < frame.moving.length; i++) {
     const slot = frame.moving[i];
-    carrySlot(output, worldHeaderSize + slot * worldInstanceSize, from, worldHeaderSize + sources[slot] * worldInstanceSize, elapsed, carry ?? {}, ids[slot], frame.seeds[i], reversed);
+    carrySlot(output, worldHeaderSize + slot * worldInstanceSize, from, worldHeaderSize + sources[slot] * worldInstanceSize, elapsed, carry ?? {}, ids[slot], frame.seeds[i], reversed, ease);
   }
   return frame;
 }
@@ -320,6 +320,8 @@ function restoreRetired(values: Float32Array | number[], at: number, id: string,
     if (id.startsWith("tube:")) radius += Math.hypot(saved[12] - saved[0], saved[13] - saved[1], saved[14] - saved[2]) *
       (1 + Math.abs(saved[15])) * Math.max(Math.abs(saved[8]), Math.abs(saved[9]), Math.abs(saved[10]));
     if (depth < -radius * values[32]) values[at + 23] = 0;
+    // The camera flies at full speed through the station it leaves, so departed parts fade out before they reach the lens.
+    else values[at + 23] *= reveal(0.25, 0.6, depth / (values[32] * values[32]));
   } else values[at + 23] = 0;
 }
 
@@ -412,13 +414,15 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   }
   const morphDuration = changed ? slideChanged ? travelDuration : duration : previous.morphDuration;
   const elapsed = first || from.length === 0 ? 1 : Math.min(1, playback.stepTime / morphDuration);
-  const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, "cubic");
+  const entering = changed ? slideChanged : previous.entering;
+  // Parts carried into a station follow the camera's ease, so a fast flight never overtakes them.
+  const morphEase = entering && course.ease[leg] || "cubic";
+  const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, morphEase);
   const previousSlots = changed && !same ? new Map(previous.ids.map((id, slot) => [id, slot])) : null;
   const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previousSlots!.get(id) ?? -1 : -1) : previous.sources;
   // A step camera eases from wherever the camera was when navigation began, including mid-move.
   const posed = [camera.position[0], camera.position[1], camera.position[2], Math.tan(camera.fov * Math.PI / 360), camera.target[0], camera.target[1], camera.target[2], camera.roll];
   const cameraDelta = !changed ? previous.cameraDelta : !first && from.length > 7 && (slideChanged || options.steps || previous.cameraDelta) ? posed.map((value, i) => from[i] - value) : undefined;
-  const entering = changed ? slideChanged : previous.entering;
   const move = options.steps?.[playback.stepIndex], moveDuration = move?.duration ?? duration;
   const settle = cameraDelta ? 1 - (entering ? travel : travelEase(playback.stepTime / moveDuration, move?.ease ?? options.ease)) : 0;
   // Sampling into a cached scene buffer requires a separate station output: transforms must never accumulate in the cache.
@@ -436,8 +440,10 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   // Travel speed as a share of the eased move's peak, for speed effects in WGSL (`travelSpeed()`).
   const u = Math.min(1, playback.slideTime / travelDuration);
-  values[travelSpeedSlot] = first || origin === index ? 0 : !course.ease[leg] ? 16 * u * u * (1 - u) * (1 - u)
-    : u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u);
+  const ease = course.ease[leg];
+  // An ease-out flight is fastest as it leaves; a short ramp keeps speed effects from popping on.
+  values[travelSpeedSlot] = first || origin === index ? 0 : !ease ? 16 * u * u * (1 - u) * (1 - u)
+    : ease === "out" ? Math.min(1, 8 * u) * (1 - u) * (1 - u) : u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u);
   values[travelSpeedSlot + 1] = values[travelSpeedSlot] * (options.blur ?? 1);
   const flying = Math.min(1, values[travelSpeedSlot] * 2), held = 1 - flying * flying * (3 - 2 * flying);
   values[heldBlurSlot] = (options.heldBlur ?? 0) * held;
@@ -451,7 +457,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     values[worldClockOffset + 3] = frame.scenery;
   }
   if (world) {
-    sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
+    sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed, morphEase);
     return bendTrack(visibleTrackFrame(frame, previous, progress), course, look);
   }
   // Lights travel with the station; floor markings stay in world space.
@@ -477,7 +483,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     if (progress < 1 && source >= 0) {
       const old = worldHeaderSize + source * worldInstanceSize;
       if (carry) {
-        carrySlot(values, at, from, old, elapsed, carry, id, seedOf(id), reversed);
+        carrySlot(values, at, from, old, elapsed, carry, id, seedOf(id), reversed, morphEase);
         continue;
       }
       for (let field = 0; field < (label ? 8 : 11); field++) values[at + field] = from[old + field] + (values[at + field] - from[old + field]) * progress;
