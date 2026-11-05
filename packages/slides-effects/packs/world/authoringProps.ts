@@ -3,7 +3,7 @@ import type { Ease } from "./camera";
 /** Scene theme colors. Color props of scene parts also take these names, such as `color="accent"`. */
 export const defaultColors = {
   text: "#eef0f3", muted: "#7d838c", idle: "#5b616b", accent: "#ff3a1c", hot: "#ffa21f",
-  link: "#4aa8ff", added: "#39d98a", removed: "#ff3a1c", highlight: "#be91ff", panel: "#121419",
+  link: "#4aa8ff", added: "#4aa8ff", removed: "#ff3a1c", highlight: "#be91ff", panel: "#121419",
 };
 export type SceneColors = typeof defaultColors;
 export type ColorName = keyof SceneColors;
