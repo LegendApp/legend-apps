@@ -589,9 +589,10 @@ type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; 
 function anchored(position: V3, anchor: unknown, width: number, height: number): V3 {
   return anchor === "center" ? [position[0] - width / 2 + .3, position[1] + (height - .6) / 2, position[2]] : position;
 }
-/** A keyed column that splits into a changed copy, then recycles the removed key's container into the added key's slot. */
+/** A keyed column: `scroll`, `diff` (clone), `remove`, `insert`, then `recycle` are local step numbers. */
 function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const keys = props.keys as string[], next = (props.next ?? keys) as string[], diff = Number(props.diff ?? 1), recycle = Number(props.recycle ?? 2);
+  const scroll = props.scroll as number | undefined, remove = Number(props.remove ?? diff), insert = Number(props.insert ?? diff);
   const row = Number(props.rowHeight ?? .95), width = Number(props.width ?? 3.4), gap = Number(props.gap ?? 7.6), caption = String(props.label ?? "key");
   const removed = keys.filter(k => !next.includes(k)), added = next.filter(k => !keys.includes(k)), y = (i: number) => -i * row;
   const container = (stage: string, position: unknown, color: unknown, emissive: unknown, opacity: unknown, labels: { text: string; opacity: unknown; color?: string }[]) =>
@@ -608,23 +609,34 @@ function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     const slot = y(next.indexOf(reuse));
     // Behind the list, down past the others, then forward into the free slot.
     return container(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(diff, split, 0, .6), key(recycle, [0, y(i), -2.2], 0, .6), key(recycle, [0, slot, -2.2], .7, 1),
-      key(recycle, [0, slot, 0], 1.8, .5)], [{ step: 0, value: INK.idle }, key(diff, INK.red, .5, .3), key(recycle, INK.amber, 2.2, .1)],
-      [{ step: 0, value: .8 }, key(diff, 2.4, .5, .3), key(recycle, .5, 0, .4), key(recycle, 9, 2.25, .06), key(recycle, 2.6, 2.4, .8)], 1,
+      key(recycle, [0, slot, 0], 1.8, .5)], [{ step: 0, value: INK.idle }, key(remove, INK.red, 0, .4), key(recycle, INK.amber, 2.2, .1)],
+      [{ step: 0, value: .8 }, key(remove, 2.4, 0, .4), key(recycle, .5, 0, .4), key(recycle, 9, 2.25, .06), key(recycle, 2.6, 2.4, .8)], 1,
       [{ text: k, opacity: [{ step: 0, value: 1 }, key(recycle, 0, 2.05, .12)] }, { text: reuse, opacity: [{ step: 0, value: 0 }, key(recycle, 1, 2.2, .12)] }]);
   });
   const copy = [...keys, ...added].map(k => {
-    const from = keys.includes(k) ? keys.indexOf(k) : next.indexOf(k), to = next.includes(k) ? next.indexOf(k) : from, isNew = added.includes(k);
-    const shown = removed.includes(k) ? [{ step: 0, value: 0 }, key(diff, 1, 0, .05), key(diff, 0, .35, .3)]
-      : [{ step: 0, value: 0 }, key(diff, 1, isNew ? .65 : 0, isNew ? .3 : .05), key(recycle, 0, .35, .15)];
-    return container(`${id}/copy/${k}`, [{ step: 0, value: [0, y(from), -.02] }, key(diff, [gap / 2, y(to), 0], 0, .6), key(recycle, [gap / 2 + 3, y(to), -30], 0, .5)],
-      isNew ? INK.green : INK.idle, isNew ? 2.6 : .8, shown, [{ text: k, opacity: shown }]);
+    const from = keys.includes(k) ? keys.indexOf(k) : keys.length + added.indexOf(k), to = next.includes(k) ? next.indexOf(k) : from, isNew = added.includes(k);
+    const insertionDelay = insert === diff ? .65 : 0;
+    const shown = [{ step: 0, value: 0 }, key(isNew ? insert : diff, 1, isNew ? insertionDelay : 0, isNew ? .4 : .05),
+      ...removed.includes(k) ? [key(insert, 0, insert === remove ? .6 : 0, .3)] : [], key(recycle, 0, .35, .15)];
+    return <Fragment key={k}>
+      {container(`${id}/copy/${k}`, [{ step: 0, value: [0, y(from), -.02] }, key(diff, [gap / 2, y(from), 0], 0, .6),
+        key(insert, [gap / 2, y(to), 0], insertionDelay, .7), key(recycle, [gap / 2 + 3, y(to), -30], 0, .5)],
+        isNew ? INK.green : removed.includes(k) ? [{ step: 0, value: INK.idle }, key(remove, INK.red, 0, .4)] : INK.idle,
+        isNew ? 2.6 : .8, shown, [{ text: k, opacity: shown }])}
+      {removed.includes(k) && <Box id={`${id}/copy/${k}/strike`} size={.5} color={INK.red} emissive={2}
+        position={[gap / 2, y(from) + .18, .3]}
+        scale={[{ step: 0, value: [0, .06, .06] }, key(remove, [width * .85, .06, .06], .1, .7),
+          key(insert, [width * .85, 0, 0], insert === remove ? .8 : 0, .3)]} />}
+    </Fragment>;
   });
   const links = keys.filter(k => next.includes(k)).map(k => {
     const a: V3 = [-gap / 2 + width / 2, y(keys.indexOf(k)), 0], b: V3 = [gap / 2 - width / 2, y(next.indexOf(k)), 0];
     return <RoutedTube key={`link/${k}`} id={`${id}/link/${k}`} path={[a, [a[0] + .9, a[1], 0], [b[0] - .9, b[1], 0], b]} thickness={.03} color={INK.blue} emissive={3.5}
-      draw={[{ step: 0, value: 0 }, key(diff, 1, .7, .45), key(recycle, 0, 0, .25)]} />;
+      draw={[{ step: 0, value: 0 }, key(insert, 1, .8, .6), key(recycle, 0, 0, .25)]} />;
   });
-  return <Stage id={id} position={at}>{left}{copy}{links}</Stage>;
+  return <Stage id={id} position={scroll === undefined ? at : [{ step: 0, value: at }, key(scroll, add(at, [0, row * .6, 0]), 0, .9)]}>
+    {left}{copy}{links}
+  </Stage>;
 }
 /** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */
 function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
