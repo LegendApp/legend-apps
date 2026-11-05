@@ -7,7 +7,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, laneScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
-import { Box, Burst, Camera, Card, Custom, Pillar, RoundedBox, RoutedTube, Stage, Text3D } from "../packs/world/World";
+import { Box, Burst, Camera, Card, Custom, Pillar, RoundedBox, RoutedTube, Stage, Text3D, WorldSlide } from "../packs/world/World";
 
 const fence = <pre><code className="language-tsx">{"function Example() {\n  return 42;\n}\n"}</code></pre>;
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
@@ -226,3 +226,19 @@ test("re-rendering a compiled scene keeps its one plan, so every surface keeps o
     expect(globals.__scenePlans).toBe(1);
   } finally { if (renderer) await act(() => renderer!.unmount()); }
 }, 30000);
+
+
+test("per-slide layout framing keeps the default rail gentle unless via controls are authored", async () => {
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(() => { renderer = create(<Scene id="gentle-layout" layout="keys" camera={{ turn: 0, rise: 0 }} />); });
+    const track = renderer!.root.findByType(WorldSlide).props.track;
+    expect(track.position).toEqual(sceneLayouts.keys.camera!.position);
+    expect(track.target).toEqual(sceneLayouts.keys.camera!.target);
+    expect(track.via).toBeUndefined();
+    expect(track.viaTarget).toBeUndefined();
+    const via: [number, number, number] = [1, 5, 20];
+    await act(() => renderer!.update(<Scene id="gentle-layout" layout="keys" camera={{ via }} />));
+    expect(renderer!.root.findByType(WorldSlide).props.track.via).toEqual(via);
+  } finally { await act(() => renderer?.unmount()); }
+});

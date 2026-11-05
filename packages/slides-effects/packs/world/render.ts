@@ -23,13 +23,13 @@ fn partRotation(base:u32)->mat3x3f {
   vec3f(s.x*s.y*c.z-c.x*s.z,s.x*s.y*s.z+c.x*c.z,s.x*c.y),
   vec3f(c.x*s.y*c.z+s.x*s.z,c.x*s.y*s.z-s.x*c.z,c.x*c.y));
 }
-// The track's centreline x at straight depth z: a smoothstep per curve in the header window (track.ts \`trackX\`).
+// The track's centreline x at straight depth z: a quintic smootherstep per curve in the header window (track.ts \`trackX\`).
 fn trackCurve(z:f32,at:u32)->f32 { return clamp((uniforms[at]-z)/(uniforms[at]-uniforms[at+1u]),0.,1.); }
 fn trackX(z:f32)->f32 {
- var x=uniforms[128]; for(var i=0u;i<u32(uniforms[129]);i++) { let u=trackCurve(z,130u+i*3u); x+=uniforms[132u+i*3u]*u*u*(3.-2.*u); } return x;
+ var x=uniforms[128]; for(var i=0u;i<u32(uniforms[129]);i++) { let u=trackCurve(z,130u+i*3u); x+=uniforms[132u+i*3u]*u*u*u*(10.+u*(-15.+6.*u)); } return x;
 }
 fn trackSlope(z:f32)->f32 {
- var s=0.; for(var i=0u;i<u32(uniforms[129]);i++) { let at=130u+i*3u; let u=trackCurve(z,at); s-=uniforms[at+2u]*6.*u*(1.-u)/(uniforms[at]-uniforms[at+1u]); } return s;
+ var s=0.; for(var i=0u;i<u32(uniforms[129]);i++) { let at=130u+i*3u; let u=trackCurve(z,at); s-=uniforms[at+2u]*30.*u*u*(1.-u)*(1.-u)/(uniforms[at]-uniforms[at+1u]); } return s;
 }
 // Parts are sampled on a straight track; bending shifts them sideways onto the curve.
 fn bend(p:vec3f)->vec3f { return vec3f(p.x+trackX(p.z),p.y,p.z); }

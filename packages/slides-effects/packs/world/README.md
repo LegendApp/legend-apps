@@ -220,16 +220,18 @@ The rail holds still at each station and always travels forward along one contin
 | `turn` | Peak heading in degrees the track swings through, −60 to 60: positive curves right, negative left |
 | `rise` | World units the camera lifts at mid-travel; negative dips (it stays above the floor) |
 | `spacing` | Leg length in world units |
-| `bank` | Peak lean into the curve, 0–45 degrees (default a fifth of `turn`) |
+| `bank` | Peak lean into the curve, 0–45 degrees (default 12% of `turn`) |
 | `duration`, `ease` | Flight time and easing |
 
-Unset fields vary by slide, deterministically, so an unannotated deck still curves left and right with different rises, lengths and pace (`frame: "world"` keeps a straight, level track). The bend happens between one station's content and the next station's camera, so settled slides stay square to the camera; the floor markings, tunnel and other fixed scenery follow it. A jump across more than one slide flies the whole way in at most 1.5 s.
+Unset fields use equal shares of gentle left curves, right curves and straights: two curves to one side, a straight, then two to the other side and a straight. Turns are 6–10°, spacing starts at 48 units and rises are at most 0.3 units (`frame: "world"` keeps a straight, level track). The bend happens between one station's content and the next station's camera, so settled slides stay square to the camera; the floor markings, tunnel and other fixed scenery follow it. The centreline and camera use quintic curves with continuous velocity and acceleration at joins; bank eases in and out over the whole leg. A jump across more than one slide flies the whole way in at most 1.5 s, with reduced heading lead, rise and bank to keep its gaze steady.
 
 ```mdx
-<Scene id="hooks" layout="cloud" camera={{ turn: -30, rise: 2, spacing: 44, duration: 2.1, bank: 8 }} durations={[2.4]}>
+<Scene id="hooks" layout="cloud" camera={{ turn: -8, rise: .15, spacing: 50, duration: 2.3, bank: 1 }} durations={[2.4]}>
 ```
 
-Held step orbits unwind near departure and return near arrival on the reverse trip.
+Layouts supply the resting framing. Their legacy via controls are used by lanes and prepared scenes; a per-slide track uses only explicitly authored `camera.via` / `camera.viaTarget`.
+
+Held step orbits unwind over the whole flight and return along the same eased motion on the reverse trip.
 
 With station-local content, `track.fixed` accepts raw part-id prefixes (for example `["environment/", "dust:"]`) that stay in world coordinates. This keeps the environment still while matching content ids carry between stations.
 

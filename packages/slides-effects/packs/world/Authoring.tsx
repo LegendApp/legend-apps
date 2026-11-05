@@ -373,6 +373,9 @@ function sameSceneValue(a: unknown, b: unknown): boolean {
 }
 // Each deck's pack retains one preparation per named world across equivalent renderer mounts.
 const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldProps[] }>();
+function sceneTrack(scene: SceneProps): WorldTrack {
+  return { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera };
+}
 function plannedSlides(content: readonly ReactNode[], world: string) {
   const declarations: SceneProps[] = [], indices: number[] = [];
   content.forEach((children, index) => collect(children, child => {
@@ -381,7 +384,7 @@ function plannedSlides(content: readonly ReactNode[], world: string) {
   if (!declarations.length) return [];
   let cached = slidePlans.get(world);
   if (!cached || !sameSceneValue(declarations, cached.declarations)) {
-    const tracks = declarations.map(scene => ({ ...findLayout(scene.layout, false, scene)?.camera, ...scene.camera }));
+    const tracks = declarations.map(sceneTrack);
     // Every station's leg, by slide index, so the whole deck shares one track.
     const course: WorldSegment[] = [];
     tracks.forEach(({ spacing, duration, ease, bank, turn, rise, position }, i) => { course[indices[i]] = { spacing, duration, ease, bank, turn, rise, position }; });
@@ -396,7 +399,7 @@ export function Scene(scene: SceneProps) {
   const content = useDeckContent(), step = usePresentationValue("stepIndex");
   if (!prepare) {
     const planned = plannedSlides(content, world).find(slide => slide.id === id);
-    return <WorldSlide {...appearance} {...planned} world={world} track={planned?.track ?? { spacing: 32, ...findLayout(layout, false, scene)?.camera, ...camera }}
+    return <WorldSlide {...appearance} {...planned} world={world} track={planned?.track ?? sceneTrack(scene)}
       buildDuration={durations?.[step]}>{planned?.children ?? expandScene(children, layout, scene)}</WorldSlide>;
   }
   const slides = readScenes(content, world), plan = scenePlan(prepare, slides), slide = slides.findIndex(s => s.id === id), beat = plan.slideBeats[slide] + step;
