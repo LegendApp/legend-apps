@@ -48,3 +48,14 @@ for (const ancestors of [false, true]) test(`form typing mirrors prefixes with a
   }
   check(0, 0);
 });
+
+test("form panel badges sit in the header row, clear of the field rows", () => {
+  const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
+  const nodes = flat(expandScene(<Form id="form" panels={[{ title: "Form", renders: true, fields: [{ value: "a" }] }]} />));
+  const at = (id: string) => nodes.find(node => node.props.id === id)!.props.position as number[];
+  const badge = at("form/0/badge"), title = at("form/0/title"), field = at("form/0/0"), fieldBadge = at("form/0/0/badge");
+  expect(badge[1]).toBe(title[1]);
+  expect(badge[0]).toBe(fieldBadge[0]);
+  expect(badge[1] - .33).toBeGreaterThan(field[1] + .5);
+});

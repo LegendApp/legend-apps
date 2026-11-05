@@ -806,7 +806,7 @@ type FormField = { value: string; bind?: string; big?: boolean };
 function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const parent = props.parent as FormNode | undefined;
   const panels = props.panels as (FormNode & { fields: FormField[] })[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number; repeat?: "infinite" } | undefined;
-  const fw = Number(props.fieldWidth ?? 5.4), fh = 1, gap = .45, pw = fw + 1, spread = pw + 1.3, times: number[] = [];
+  const fw = Number(props.fieldWidth ?? 5.4), fh = 1, gap = .45, pw = fw + 1, spread = pw + 1.3, header = .55, top = header + .5, times: number[] = [];
   let versions: string[] = [];
   if (typing) {
     const base = panels.flatMap(p => p.fields).find(f => f.bind === typing.bind)?.value ?? "";
@@ -824,20 +824,20 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     {(bound ? versions : [""]).map((_, k) => <Text3D key={k} id={`${stage}/n${k}`} text={String(k + 1)} mono size={.26 * TYPE} position={[0, 0, .13]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
   </Stage>;
   return <Stage id={id} position={at}>
-    {parent && <Stage id={`${id}/parent`} position={[0, 2, 0]}>
-      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.55} color={INK.idle} emissive={.6} />
+    {parent && <Stage id={`${id}/parent`} position={[0, top + 1.5, 0]}>
+      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} color={INK.idle} emissive={.6} />
       <Text3D id={`${id}/parent/title`} text={parent.title} mono size={.24 * TYPE} position={[-.4, 0, .15]} color={INK.white} />
       {badge(`${id}/parent/badge`, [1.2, 0, .15], !!parent.renders && !!typing)}
     </Stage>}
     {panels.map((panel, p) => {
-      const stage = `${id}/${p}`, ph = .9 + panel.fields.length * (fh + gap) + .2;
+      const stage = `${id}/${p}`, ph = top + panel.fields.length * (fh + gap) + .1;
       const x = (p - (panels.length - 1) / 2) * spread;
       return <Fragment key={p}>
-        {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, 1.5, -.1], [x, .65, -.1]]} thickness={.025} color={INK.idle} emissive={.8} />}
+        {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, top + 1, -.1], [x, top, -.1]]} thickness={.025} color={INK.idle} emissive={.8} />}
         <Stage id={stage} position={[x, 0, 0]}>
-          <Card id={`${stage}/card`} position={[0, -ph / 2 + .6, -.2]} scale={[pw, ph, .2]} fill={.55} color={INK.idle} emissive={.6} />
-          <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, .22, .05]} color={INK.muted} emissive={.8} />
-          {badge(`${stage}/badge`, [pw / 2 - .65, .22, .05], !!panel.renders && !!typing)}
+          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} color={INK.idle} emissive={.6} />
+          <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, header, .05]} color={INK.muted} emissive={.8} />
+          {badge(`${stage}/badge`, [fw / 2 - .55, header, .05], !!panel.renders && !!typing)}
           {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`;
             return <Fragment key={f}>
               <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} color={bound ? lit : INK.idle} emissive={bound ? flashes(.8) : .8} />
