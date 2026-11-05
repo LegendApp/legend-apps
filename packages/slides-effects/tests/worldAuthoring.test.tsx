@@ -108,6 +108,26 @@ test("generic parts render from layouts without coordinates", () => {
   expect(bars.filter(n => n.type === Pillar).map(n => [n.props.value, n.props.maximum])).toEqual([[10,10],[5,10]]);
 });
 
+test("bars grown from a sibling part carry its panel to their foot as a block and rise after it lands", () => {
+  const parts = flat(expandScene(<>
+    <CodePanel id="src" at={[-4, 4, 0]}>{fence}</CodePanel>
+    <Bars id="b" at={[3, 0, 0]} width={1} gap={2} from={{ part: "src", step: 2, delay: .1, duration: .6 }} items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />
+  </>));
+  const block = parts.find(n => n.type === RoundedBox && n.props.id === "b/from")!;
+  const path = block.props.position as { step?: number; delay?: number; value: number[] }[], scale = block.props.scale as { value: number[] }[];
+  const card = parts.find(n => n.props.id === "src/card")!.props;
+  expect(path[0].value[0]).toBeCloseTo(-4 + (card.position as number[])[0]);
+  expect(scale[1].value).toEqual(card.scale as number[]);
+  expect(scale.find(k => k.value.every(v => v === 1.1))).toBeDefined();
+  expect(path.at(-1)!.value).toEqual([3, .05, .5]);
+  expect(parts.find(n => n.props.id === "src/launch")!.props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 2, delay: .16, value: [0, -60, 0], duration: 0 }]);
+  expect(parts.find(n => n.type === Burst && n.props.id === "b/from/landing")!.props).toMatchObject({ step: 2, delay: .7 });
+  const rise = parts.filter(n => n.type === Pillar);
+  expect(rise.map(n => n.props.step)).toEqual([2, 2]);
+  rise.forEach((n, i) => expect(n.props.delay as number).toBeCloseTo(.8 + i * .1));
+  expect(() => expandScene(<Bars id="b" from={{ part: "nope" }} items={[{ label: "A", value: 1 }]} />)).toThrow("grows from nope");
+});
+
 test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", async () => {
   const nodes = placeTree([{ id: "r" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }, { id: "b1", p: 2 }], { width: 12, levelHeight: 1 });
   expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2,1],[4,1],[-4,0],[0,0],[4,0]]);

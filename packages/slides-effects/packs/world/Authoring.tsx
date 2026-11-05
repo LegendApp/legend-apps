@@ -1155,8 +1155,54 @@ function sequenced(id: string, part: ReactNode, sequence: Sequence | undefined) 
   if (out !== undefined) frames.push({ step: out, delay, value: [-distance, 0, 0], duration, ease });
   return <Stage key={id} id={`${id}/sequence`} position={frames}>{part}</Stage>;
 }
+/** A chart's `from`: sibling part `part` lifts off on `step` after `delay`, flies `duration` seconds to the chart's foot as a glowing block,
+ * squares up, lands with sparks and spreads into the plinth the chart grows out of. */
+type ChartFrom = { part: string; step?: number; delay?: number; duration?: number };
+const launchOf = ({ step = 0, delay = 0, duration = .75 }: ChartFrom) => ({ step, delay, duration, land: delay + duration });
+/** The value an animated prop holds as `step` begins. */
+function restAt<T>(value: Animated<T>, step: number): T {
+  if (Array.isArray(value) && typeof value[0] === "object") return (value as Keyframe<T>[]).filter((f, i) => !i || (f.step ?? 0) < step).at(-1)!.value;
+  if (!Array.isArray(value) && typeof value === "object" && value !== null) return (value as Record<number, T>)[Math.max(0, ...Object.keys(value).map(Number).filter(k => k < step))];
+  return value as T;
+}
+/** The center and size of an expanded part's `${id}/card` panel as `step` begins, summing the Stages around it. */
+function panelRect(node: ReactNode, id: string, step: number): { center: V3; size: V3 } | undefined {
+  let found: { center: V3; size: V3 } | undefined;
+  const walk = (n: ReactNode, offset: V3) => Children.forEach(n, child => {
+    if (found || !isValidElement<Record<string, unknown>>(child)) return;
+    const { props } = child;
+    if (child.type === Card && props.id === `${id}/card`) found = { center: add(offset, restAt(props.position as Animated<V3> ?? [0, 0, 0], step)), size: restAt(props.scale as Animated<V3>, step) };
+    else walk(props.children as ReactNode, child.type === Stage ? add(offset, restAt(props.position as Animated<V3> ?? [0, 0, 0], step)) : offset);
+  });
+  walk(node, [0, 0, 0]);
+  return found;
+}
+/** The block that carries a source panel at `rect` into bars `chart`: a panel-sized slab flashes, arcs to the chart's foot while it squares into a cube,
+ * lands with a squash and sparks, then spreads into a dark plinth under the bars. */
+function chartLaunch(chart: PartProps, from: ChartFrom, rect: { center: V3; size: V3 }, INK: Ink): ReactNode {
+  const { step, delay, duration, land } = launchOf(from), id = `${chart.id}/from`, foot = (chart.at ?? [0, 3.2, 0]) as V3;
+  const items = chart.items as { color?: string }[], { width = 1.5, gap = 3.4 } = chart as Record<string, number>, depth = Number(chart.depth ?? width);
+  const glow = String(paint(items[0]?.color ?? chart.color, INK.colors) ?? "#22d3ee"), cube = Math.min(1.4, width * 1.1);
+  const start = add(rect.center, [0, 0, .35]), landing = add(foot, [0, cube / 2, depth / 2]), plinth: V3 = [(items.length - 1) * gap + width + .5, .1, depth + .4];
+  const at = <T,>(t: number, value: T, d = 0, e?: Ease) => ({ step, delay: t, value, duration: d, ...e ? { ease: e } : {} });
+  const path = Array.from({ length: 12 }, (_, k) => { const u = (k + 1) / 12;
+    return at(delay + k / 12 * duration, bez3(start, add(start, [0, 2.4, -3]), add(landing, [0, 3.2, 2.5]), landing, ease.io(u)), duration / 12); });
+  const morph = Array.from({ length: 6 }, (_, k) => { const u = ramp((k + 1) / 6, 0, 1, "out");
+    return at(delay + .1 + k / 6 * (duration - .1), rect.size.map(v => v + (cube - v) * u) as V3, (duration - .1) / 6); });
+  return <Fragment key={id}>
+    <RoundedBox id={id} radius={.06} edge={.8} material={{ metal: .35, roughness: .22 }}
+      position={[{ step: 0, value: start }, at(delay, start), ...path, at(land + .08, add(foot, [0, plinth[1] / 2, depth / 2]), .3, "out")]}
+      scale={[{ step: 0, value: [1e-4, 1e-4, 1e-4] }, at(delay, rect.size), ...morph, at(land, [cube * 1.3, cube * .6, cube * 1.3], .08), at(land + .08, plinth, .3, "out")]}
+      color={[{ step: 0, value: INK.colors.panel }, at(delay, glow, duration * .6), at(land + .1, "#1c2027", .6)]}
+      emissive={[{ step: 0, value: 0 }, at(delay, 2.6, .1), at(delay + .1, .35, duration - .1), at(land, 2.4, .05), at(land + .1, .12, .7)]} />
+    <Burst id={`${id}/landing`} position={landing} step={step} delay={land} count={28} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.03} speed={3.2} />
+  </Fragment>;
+}
 function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }): ReactNode {
-  return Children.map(children, child => {
+  const charts: PartProps[] = [];
+  Children.forEach(children, child => { if (isValidElement<PartProps>(child) && (child.type as { worldPart?: string }).worldPart === "bars" && child.props.from) charts.push(place("bars", child.props) as PartProps); });
+  const sources = new Map(charts.map(chart => [(chart.from as ChartFrom).part, chart])), launched = new Set<string>();
+  const expanded = Children.map(children, child => {
     if (!isValidElement<PartProps>(child)) return child;
     const kind = (child.type as { worldPart?: string }).worldPart;
     if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place, scene));
@@ -1170,8 +1216,17 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
       const fade = leave && [{ step: 0, value: 1 }, { step: leave.step!, delay: leave.delay ?? exitDefaults.delay, value: 0, duration: leave.duration ?? exitDefaults.duration }];
       return sequenced(id, moved(id, textLine(kind, { ...props, ...fade ? { opacity: fade } : {}, enter, id, position, text: source, tokens: codeHighlight(children)?.tokens }, INK), undefined, leave), sequence as Sequence | undefined);
     }
-    return sequenced(id, moved(id, expandPart(kind, id, position, props, children, source, INK), enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
+    const part = sequenced(id, moved(id, expandPart(kind, id, position, props, children, source, INK), enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
+    const chart = sources.get(own);
+    if (!chart) return part;
+    launched.add(own);
+    // The source drops out of sight just after the block flashes over it.
+    const { step, delay } = launchOf(chart.from as ChartFrom), rect = panelRect(part, id, step) ?? { center: position, size: [2, 1.2, .06] as V3 };
+    return <Fragment key={id}><Stage id={`${id}/launch`} position={[{ step: 0, value: [0, 0, 0] }, { step, delay: delay + .06, value: [0, -60, 0], duration: 0 }]}>{part}</Stage>
+      {chartLaunch(chart, chart.from as ChartFrom, rect, INK)}</Fragment>;
   });
+  for (const [part, chart] of sources) if (!launched.has(part)) throw Error(`Bars ${chart.id} grows from ${part}, which must be a part beside it in the same scene.`);
+  return expanded;
 }
 function expandPart(kind: string, id: string, position: V3, props: Record<string, unknown>, children: ReactNode, source: string, INK: Ink): ReactNode {
   if (kind === "list") return <Stage id={id} position={position}><Rows {...props} id={`${id}/rows`} items={props.items as string[]}
@@ -1192,12 +1247,15 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       scale={[{ at: delay, value: [0,.09,.12], duration: 0 }, { at: delay, value: [width,.09,.12], duration: .7 }]} />; }
   if (kind === "bars") {
     const items = props.items as { label: string; value: number; color?: string }[], maximum = Number(props.max ?? Math.max(...items.map(b => b.value)));
-    const { height = 4.3, width = 1.5, depth = width, gap = 3.4, delay = 1, stagger = .35, duration = 1.6, ease = "out", labelSize = .44 } = props as Record<string, number> & { ease?: Ease };
+    // Bars grown `from` another part stay out of sight until its block lands, then rise out of the plinth quicker.
+    const launch = props.from ? launchOf(props.from as ChartFrom) : undefined;
+    const { height = 4.3, width = 1.5, depth = width, gap = 3.4, delay = launch ? launch.land + .1 : 1, stagger = launch ? .1 : .35, duration = launch ? .9 : 1.6, ease = "out", labelSize = .44 } = props as Record<string, number> & { ease?: Ease };
     const tint = props.color === undefined ? undefined : paint(props.color, INK.colors) as string;
-    return <Stage id={id} position={position}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
+    return <Stage id={id} position={launch ? [{ step: 0, value: add(position, [0, -60, 0]) }, { step: launch.step, delay: launch.land + .08, value: position, duration: 0 }] : position}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
       <Pillar id={`${id}/${i}`} value={b.value} maximum={maximum} height={height} width={width} depth={depth} color={b.color === undefined ? tint : paint(b.color, INK.colors) as string}
-        position={[x,0,0]} at={delay + i * stagger} duration={duration} ease={ease} />
-      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, position: [x,.45,depth + .1], size: labelSize, depth: .1, delay: delay + .2 + i * stagger * .12 / .35, duration: .7 }, INK)}
+        position={[x,0,0]} {...launch ? { step: launch.step, delay: delay + i * stagger } : { at: delay + i * stagger }} duration={duration} ease={ease} />
+      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, position: [x,.45,depth + .1], size: labelSize, depth: .1, delay: delay + .2 + i * stagger * .12 / .35, duration: .7,
+        ...launch ? { enter: { step: launch.step } } : {} }, INK)}
     </Fragment>; })}</Stage>;
   }
   if (kind === "code") {

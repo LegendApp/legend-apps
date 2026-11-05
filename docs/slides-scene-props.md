@@ -89,6 +89,7 @@ theme color names, and flashes glow on top.
 | `gap` | `3.4` | Distance between bar centers |
 | `color` | World's bar color | Color for items without their own |
 | `delay`, `stagger`, `duration`, `ease` | `1`, `.35`, `1.6`, `"out"` | Rise timing |
+| `from` | none | `{ part, step, delay, duration }`: on `step` (default 0), sibling part `part` lights up, arcs to the chart's foot over `duration` (default .75 s) while squaring into a block, lands with sparks and spreads into a plinth the bars rise from (rise defaults become `.1` stagger, `.9` s) |
 | `labelSize` | `.44` | Label text size |
 
 ## Ambient effects
