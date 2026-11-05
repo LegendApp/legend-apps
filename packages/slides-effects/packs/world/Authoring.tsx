@@ -1286,17 +1286,27 @@ function restAt<T>(value: Animated<T>, step: number): T {
   if (!Array.isArray(value) && typeof value === "object" && value !== null) return (value as Record<number, T>)[Math.max(0, ...Object.keys(value).map(Number).filter(k => k < step))];
   return value as T;
 }
-/** The center and size of an expanded part's `${id}/card` panel as `step` begins, summing the Stages around it. */
-function panelRect(node: ReactNode, id: string, step: number): { center: V3; size: V3 } | undefined {
-  let found: { center: V3; size: V3 } | undefined;
-  const walk = (n: ReactNode, offset: V3) => Children.forEach(n, child => {
-    if (found || !isValidElement<Record<string, unknown>>(child)) return;
-    const { props } = child;
-    if (child.type === Card && props.id === `${id}/card`) found = { center: add(offset, restAt(props.position as Animated<V3> ?? [0, 0, 0], step)), size: restAt(props.scale as Animated<V3>, step) };
-    else walk(props.children as ReactNode, child.type === Stage ? add(offset, restAt(props.position as Animated<V3> ?? [0, 0, 0], step)) : offset);
+type Placed = { element: ReactElement<Record<string, unknown>>; center: V3; size: V3 };
+/** Every element in an expanded part with its center and scale as `step` begins, summing the Stages around it. */
+function placedIn(node: ReactNode, step: number): Placed[] {
+  const found: Placed[] = [];
+  const walk = (n: ReactNode, offset: V3) => Children.forEach(n, element => {
+    if (!isValidElement<Record<string, unknown>>(element)) return;
+    const center = add(offset, restAt(element.props.position as Animated<V3> ?? [0, 0, 0], step));
+    found.push({ element, center, size: restAt(element.props.scale as Animated<V3> ?? [1, 1, 1], step) });
+    walk(element.props.children as ReactNode, element.type === Stage ? center : offset);
   });
   walk(node, [0, 0, 0]);
   return found;
+}
+/** The rect a chart's source part leaves from: its `${id}/card` panel, or else a thin panel just behind its boxes, which a fold carries along. */
+function foldSource(placed: Placed[], id: string): { rect?: { center: V3; size: V3 }; solids: Placed[] } {
+  const card = placed.find(p => p.element.type === Card && p.element.props.id === `${id}/card`);
+  if (card) return { rect: card, solids: [] };
+  const solids = placed.filter(p => p.element.type === RoundedBox || p.element.type === Box);
+  if (!solids.length) return { solids };
+  const low = [0, 1, 2].map(a => Math.min(...solids.map(p => p.center[a] - p.size[a] / 2))), high = [0, 1, 2].map(a => Math.max(...solids.map(p => p.center[a] + p.size[a] / 2)));
+  return { rect: { center: [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, low[2]], size: [high[0] - low[0], high[1] - low[1], .06] }, solids };
 }
 /** The block that carries a source panel at `rect` into bars `chart`: a panel-sized slab flashes, arcs to the chart's foot while it squares into a cube,
  * lands with a squash and sparks, then spreads into a dark plinth under the bars. */
@@ -1320,20 +1330,27 @@ function chartLaunch(chart: PartProps, from: ChartFrom, rect: { center: V3; size
   </Fragment>;
 }
 /** The base plate a folding source panel at `rect` becomes: it tips back about its x axis while sinking forward to the chart's foot,
- * then flashes and tints to the plate color. */
-function chartFold(chart: PartProps, from: ChartFrom, rect: { center: V3; size: V3 }, INK: Ink): ReactNode {
+ * then flashes and tints to the plate color. `solids` ride the panel rigidly as it tips and shrinks, then shrink away into the plate. */
+function chartFold(chart: PartProps, from: ChartFrom, rect: { center: V3; size: V3 }, INK: Ink, solids: Placed[] = []): ReactNode {
   const { step, delay, duration, land } = launchOf(from), id = `${chart.id}/from`, foot = (chart.at ?? [0, 3.2, 0]) as V3;
   const items = chart.items as unknown[], { width = 1.5, gap = 3.4 } = chart as Record<string, number>, depth = Number(chart.depth ?? width);
   const plate = paint(from.color ?? "link", INK.colors) as string, back = -depth / 2 - .35, front = depth + .45, thick = .16;
   // Plate scale is in the panel's own frame: once tipped back 90°, its height runs along z and its thickness along y.
   const size: V3 = [(items.length - 1) * gap + width + 1, front - back, thick], seat = add(foot, [0, -thick / 2, (back + front) / 2]);
-  const at = <T,>(t: number, value: T, d = 0, e: Ease = "inOut") => ({ step, delay: t, value, duration: d, ease: e });
-  return <RoundedBox key={id} id={id} radius={.07} edge={.5} material={{ metal: .55, roughness: .16 }}
-      position={[{ step: 0, value: add(rect.center, [0, 0, -.04]) }, at(delay, seat, duration)]}
+  const at = <T,>(t: number, value: T, d = 0, e: Ease = "inOut") => ({ step, delay: t, value, duration: d, ease: e }), start = add(rect.center, [0, 0, -.04]);
+  // A point at offset `o` from the panel's center, `u` of the way through the eased fold.
+  const ride = (o: V3, u: number): V3 => { const y = o[1] * (1 + (size[1] / rect.size[1] - 1) * u), a = -u * Math.PI / 2;
+    return add(lerp3(start, seat, u), [o[0] * (1 + (size[0] / rect.size[0] - 1) * u), y * Math.cos(a) - o[2] * Math.sin(a), y * Math.sin(a) + o[2] * Math.cos(a)]); };
+  return <Fragment key={id}>{solids.map(({ element, center, size: own }, i) => React.cloneElement(element, { key: i, id: `${id}/solid${i}`,
+    position: [{ step: 0, value: center }, ...Array.from({ length: 12 }, (_, k) => at(delay + k / 12 * duration, ride(sub(center, start), ease.io((k + 1) / 12)), duration / 12, "linear"))],
+    rotation: [{ step: 0, value: [0, 0, 0] }, at(delay, [-90, 0, 0], duration)],
+    scale: [{ step: 0, value: [1e-4, 1e-4, 1e-4] }, at(delay, own), at(land, [1e-4, 1e-4, 1e-4], .35)] }))}
+    <RoundedBox id={id} radius={.07} edge={.5} material={{ metal: .55, roughness: .16 }}
+      position={[{ step: 0, value: start }, at(delay, seat, duration)]}
       rotation={[{ step: 0, value: [0, 0, 0] }, at(delay, [-90, 0, 0], duration)]}
       scale={[{ step: 0, value: [1e-4, 1e-4, 1e-4] }, at(delay, rect.size), at(delay, size, duration)]}
       color={[{ step: 0, value: INK.colors.panel }, at(land, plate, .4, "out")]}
-      emissive={[{ step: 0, value: .08 }, at(land, 1.4, .12, "out"), at(land + .12, .25, .6, "out")]} />;
+      emissive={[{ step: 0, value: .08 }, at(land, 1.4, .12, "out"), at(land + .12, .25, .6, "out")]} /></Fragment>;
 }
 function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }): ReactNode {
   const charts: PartProps[] = [];
@@ -1360,11 +1377,12 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
     if (!chart) return part;
     launched.add(own);
     // The source drops out of sight just after the block flashes over it, or fades as its panel folds away.
-    const from = chart.from as ChartFrom, { step, delay, fold } = launchOf(from), rect = panelRect(part, id, step) ?? { center: position, size: [2, 1.2, .06] as V3 };
+    const from = chart.from as ChartFrom, { step, delay, fold } = launchOf(from), { rect = { center: position, size: [2, 1.2, .06] as V3 }, solids } = foldSource(placedIn(part, step), id);
     const gone = delay + (fold ? .4 : .06);
     return <Fragment key={id}><Stage id={`${id}/launch`} position={[{ step: 0, value: [0, 0, 0] }, { step, delay: gone, value: [0, -60, 0], duration: 0 }]}
       {...fold ? { opacity: [{ step: 0, value: 1 }, { step, delay, value: 0, duration: .35 }] } : {}}>{part}</Stage>
-      {(fold ? chartFold : chartLaunch)(chart, from, rect, INK)}</Fragment>;
+      {/* The plate leaves with its chart. */}
+      {moved(`${chart.id}/from`, fold ? chartFold(chart, from, rect, INK, solids) : chartLaunch(chart, from, rect, INK), undefined, chart.exit as PartMotion & { to?: V3 } | undefined)}</Fragment>;
   });
   for (const [part, chart] of sources) if (!launched.has(part)) throw Error(`Bars ${chart.id} grows from ${part}, which must be a part beside it in the same scene.`);
   return expanded;

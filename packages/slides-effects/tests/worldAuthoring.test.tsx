@@ -158,6 +158,31 @@ test("bars folding a sibling panel tip it back flat into their base plate, tint 
   expect(labels.every(n => (n.props.position as number[])[2] === 0)).toBe(true);
 });
 
+test("bars folding a tree tip its boxes back with a plate behind them, sink them onto the plate and leave with the chart", () => {
+  const parts = flat(expandScene(<>
+    <Tree id="t" at={[0, 2, 0]} nodes={[{ id: "a" }, { id: "b", p: 0 }]} />
+    <Bars id="c" at={[0, 0, 0]} width={1} gap={2} exit={{ step: 3, to: [0, -14, 0] }} from={{ part: "t", step: 2, duration: 1, fold: true }} items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />
+  </>));
+  const plate = parts.find(n => n.props.id === "c/from")!.props, boxes = parts.filter(n => n.type === RoundedBox && /^t\/[ab]$/.test(String(n.props.id)));
+  // The plate starts just behind the boxes, spanning them.
+  const [, start] = plate.scale as { value: number[] }[], [rest, seat] = plate.position as { value: number[] }[];
+  expect(start.value[0]).toBeCloseTo(3.02);
+  expect(rest.value[2]).toBeCloseTo(-.3);
+  const solids = parts.filter(n => /^c\/from\/solid\d+$/.test(String(n.props.id)));
+  expect(solids.length).toBe(boxes.length * 3);
+  for (const solid of solids) {
+    const position = solid.props.position as { value: number[] }[], rotation = solid.props.rotation as { value: number[] }[];
+    expect(rotation.at(-1)!.value).toEqual([-90, 0, 0]);
+    // Each box ends lying on the seated plate, then shrinks away into it.
+    expect(position.at(-1)!.value[1]).toBeGreaterThan(seat.value[1] - .1);
+    expect(position.at(-1)!.value[1]).toBeLessThan(seat.value[1] + .6);
+    expect((solid.props.scale as { delay?: number; value: number[] }[]).at(-1)).toMatchObject({ delay: 1, value: [1e-4, 1e-4, 1e-4] });
+  }
+  const leave = parts.find(n => n.type === Stage && n.props.id === "c/from/motion")!;
+  expect((leave.props.position as { step?: number; value: number[] }[]).at(-1)).toMatchObject({ step: 3, value: [0, -14, 0] });
+  expect(flat(leave.props.children as React.ReactNode).some(n => n.props.id === "c/from")).toBe(true);
+});
+
 test("bars with a step stay out of sight until it, then grow and label", () => {
   const scene = expandScene(<Bars id="b" step={3} delay={.2} stagger={.1} items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />), parts = flat(scene);
   expect(parts.find(n => n.type === Stage && n.props.id === "b")!.props.position).toEqual([{ step: 0, value: [0, 3.2 - 60, 0] }, { step: 3, value: [0, 3.2, 0], duration: 0 }]);
