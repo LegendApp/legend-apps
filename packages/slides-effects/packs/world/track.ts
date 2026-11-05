@@ -1,6 +1,6 @@
 import type { PlaybackState } from "@legend-apps/presentation";
 import { contentClearance, easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
-import { prepareWorldScene, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
+import { instanceField, prepareWorldScene, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
 export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
@@ -333,6 +333,7 @@ function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame, progress: nu
     const id = frame.ids[slot];
     const at = worldHeaderSize + slot * worldInstanceSize;
     restoreRetired(frame.values, at, id, frame.retired[id]);
+    frame.values[at + instanceField.sharp] = 0;
     frame.values[at + 23] *= 1 - progress;
     if (progress === 1) delete frame.retired[id];
     if (frame.values[at + 23] > .002) visible.push(id);
@@ -438,6 +439,18 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     scenery: previous.scenery, stamp: previous.stamp };
   for (let i = 0; i < 8; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
+  const destination = sampleTrackCamera(stations, index, course, 1);
+  const fx = destination.target[0] - destination.position[0], fy = destination.target[1] - destination.position[1], fz = destination.target[2] - destination.position[2];
+  const focusDistance = Math.hypot(fx, fy, fz);
+  for (let slot = 0; slot < ids.length; slot++) {
+    const at = worldHeaderSize + slot * worldInstanceSize;
+    if (!declaredSlots[slot] || fixedSlots[slot]) values[at + instanceField.sharp] = 0;
+    else if (values[at + instanceField.sharp] < 0) {
+      const depth = ((values[at] - destination.position[0]) * fx + (values[at + 1] - destination.position[1]) * fy +
+        (values[at + 2] - station - destination.position[2]) * fz) / focusDistance;
+      values[at + instanceField.sharp] = Math.abs(depth - focusDistance) <= Math.max(1, values[54]) ? 1 : 0;
+    }
+  }
   // Travel speed as a share of the eased move's peak, for speed effects in WGSL (`travelSpeed()`).
   const u = Math.min(1, playback.slideTime / travelDuration);
   const ease = course.ease[leg];

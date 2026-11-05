@@ -22,8 +22,9 @@ test("compatible declarations and retained outgoing parts use one graph without 
   expect(plan.topology.counts).toEqual({ box: 2, tube: 2, ring: 0, sphere: 0 });
   const graph = buildWorldGraph(plan.topology);
   expect(graph.uniformsSize).toBe(plan.size);
-  const occupied = new Set(copies.flatMap(([, count, target]) => Array.from({ length: count / worldInstanceSize }, (_, i) => target + i * worldInstanceSize)));
-  for (let slot = worldHeaderSize; slot < plan.size; slot += worldInstanceSize) if (!occupied.has(slot)) expect(output[slot + 23]).toBe(0);
+  for (let slot = worldHeaderSize; slot < plan.size; slot += worldInstanceSize) {
+    if (!copies.some(([, count, target]) => slot >= target && slot + worldInstanceSize <= target + count)) expect(output[slot + 23]).toBe(0);
+  }
 });
 test("different floor layouts keep distinct graphs", () => {
   const a = prepareWorldScene({ instances: [], floor: {} }), b = prepareWorldScene({ instances: [] });

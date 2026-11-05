@@ -997,3 +997,5 @@ across navigation, while keeping all layout and choreography in the MDX.
 `createTimeline` samples and thins numeric, vector and color trajectories at
 preparation time; playback still runs on the shared UI clock. `createTypography`
 accepts a font-metrics map for decks that need individual glyph positions.
+
+Scene parts use the current camera target to decide which content stays sharp during travel. Background and departing content retain blur and depth fading. Flight and Cloud use their step selections; `sharp={true}` or `sharp={false}` overrides the entire authored part, including its panel and labels.

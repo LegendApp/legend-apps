@@ -267,3 +267,15 @@ test("card fades reach cached GPU uniforms and multiply each attached label only
     expect(instanceOpacity(title, clock)).toBeCloseTo(expected * .4);
   }
 });
+
+
+test("sharp overrides apply to every code panel surface and glyph and validate booleans", async () => {
+  expect(() => checkPart("headline", { id: "title", sharp: "true" })).toThrow("sharp must be true or false");
+  for (const sharp of [true, false]) {
+    const children = expandScene(<CodePanel id="panel" sharp={sharp}>{await highlightedFence("const value = 1;")}</CodePanel>);
+    const scene = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+    expect(scene.instances.some(instance => instance.card)).toBe(true);
+    expect(scene.instances.some(instance => instance.glyph)).toBe(true);
+    for (const instance of scene.instances) expect(instance.sharp?.initial).toBe(Number(sharp));
+  }
+});

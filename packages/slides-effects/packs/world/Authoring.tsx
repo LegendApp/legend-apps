@@ -1003,7 +1003,7 @@ function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const anchor = (s: number): V3 => focus[s].length ? pose(words.indexOf(focus[s][0]), s).p : [0, 3.5, -6];
   return <Stage id={id} position={at}>
     <Stage id={`${id}/focus`} position={[{ step: 0, value: anchor(0) }, ...steps.slice(1).map(s => key(s, anchor(s), 0, 1, "cubic"))]} />
-    {words.map((word, i) => <Stage key={word} id={`${id}/${word}`} position={[{ step: 0, value: pose(i, 0).p }, ...steps.slice(1).map(s => key(s, pose(i, s).p, .05 * (i % 4), 1.1, "cubic"))]}>
+    {words.map((word, i) => <Stage key={word} id={`${id}/${word}`} sharp={steps.map(s => ({ step: s, value: focus[s].includes(word), duration: 0 }))} position={[{ step: 0, value: pose(i, 0).p }, ...steps.slice(1).map(s => key(s, pose(i, s).p, .05 * (i % 4), 1.1, "cubic"))]}>
       <Text3D id={`${id}/${word}/text`} text={word} mono size={size} color={[{ step: 0, value: pose(i, 0).color }, ...steps.slice(1).map(s => key(s, pose(i, s).color, .2, .6))]}
         emissive={[{ step: 0, value: pose(i, 0).glow }, ...steps.slice(1).map(s => key(s, pose(i, s).glow, .3, .7))]} />
     </Stage>)}
@@ -1032,7 +1032,7 @@ function flight(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     [{ step: 0, value: pick(look(k, 0)) }, ...Array.from({ length: first + stops.length }, (_, s) => key(s + 1, pick(look(k, s + 1)), 0, duration * .6))];
   return <Stage id={id} position={at}>{stops.map((words, k) => {
     const widths = words.map(w => w.length * MONO * size), gap = size * 1.5, total = widths.reduce((a, b) => a + b, 0) + gap * (words.length - 1);
-    return <Stage key={k} id={`${id}/${k}`} position={offsets[k]}>{words.map((word, j) => {
+    return <Stage key={k} id={`${id}/${k}`} sharp={Array.from({ length: first + stops.length + 1 }, (_, s) => ({ step: s, value: Math.min(s - first, stops.length - 1) === k, duration: 0 }))} position={offsets[k]}>{words.map((word, j) => {
       const x = -total / 2 + widths.slice(0, j).reduce((a, b) => a + b, 0) + gap * j + widths[j] / 2;
       return <Text3D key={word} id={`${id}/${k}/${word}`} text={word} mono size={size} position={[x, 0, 0]}
         color={track(k, l => l.color)} emissive={track(k, l => l.glow)} opacity={track(k, l => l.opacity)} />;
@@ -1216,7 +1216,9 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
       const fade = leave && [{ step: 0, value: 1 }, { step: leave.step!, delay: leave.delay ?? exitDefaults.delay, value: 0, duration: leave.duration ?? exitDefaults.duration }];
       return sequenced(id, moved(id, textLine(kind, { ...props, ...fade ? { opacity: fade } : {}, enter, id, position, text: source, tokens: codeHighlight(children)?.tokens }, INK), undefined, leave), sequence as Sequence | undefined);
     }
-    const part = sequenced(id, moved(id, expandPart(kind, id, position, props, children, source, INK), enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
+    const expandedPart = expandPart(kind, id, position, props, children, source, INK);
+    const focusedPart = props.sharp === undefined ? expandedPart : <Stage id={`${id}/sharp`} sharp={props.sharp as boolean}>{expandedPart}</Stage>;
+    const part = sequenced(id, moved(id, focusedPart, enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
     const chart = sources.get(own);
     if (!chart) return part;
     launched.add(own);

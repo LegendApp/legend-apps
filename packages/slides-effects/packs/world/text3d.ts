@@ -15,7 +15,7 @@ export type Text3DEnter = { step?: number; at?: number; delay?: number; offset?:
   duration?: number; ease?: Ease; order?: "forward" | "reverse" | "center" | "random"; seed?: number; fade?: number };
 export type Text3DOptions = {
   /** `mono` selects the bundled JetBrains Mono Bold; `font` takes any baked font. */
-  id?: string; text: string; tokens?: readonly CodeToken[]; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
+  id?: string; sharp?: Animated<boolean>; text: string; tokens?: readonly CodeToken[]; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
   /** Extrusion depth, bevel thickness and bevel width, in em. */
   depth?: number; bevel?: number; bevelWidth?: number; bevelSegments?: number;
   align?: "left" | "center" | "right"; lineHeight?: number; tracking?: number; uppercase?: boolean;
@@ -124,7 +124,7 @@ export function text3dInstances(options: Text3DOptions): Instance[] {
     const motion = { offset, rotation, scale, opacity, color: token?.color ?? options.color ?? "#f2f4f8", emissive: options.emissive ?? 0.75, ...custom };
     const scaleTrack = compileTrack(motion.scale, (value: number): Vec3 => [value, value, value]);
     return {
-      ...primitive("box", { id: options.id ? `${options.id}:${token ? `${token.id}:${glyph.offset - token.offset}` : i}` : undefined, position: options.position, size, color: motion.color, emissive: motion.emissive,
+      ...primitive("box", { id: options.id ? `${options.id}:${token ? `${token.id}:${glyph.offset - token.offset}` : i}` : undefined, position: options.position, sharp: options.sharp, size, color: motion.color, emissive: motion.emissive,
         material: options.material ?? { albedo: options.side ?? "#2a2c31", metal: options.metal ?? 0.85, roughness: options.roughness ?? 0.32, rim: 0.4 } }),
       scale: scaleTrack,
       glyph: { font: name, index: glyph.index, segments, rotation: compileTrack<Vec3>(motion.rotation), opacity: compileTrack(motion.opacity),

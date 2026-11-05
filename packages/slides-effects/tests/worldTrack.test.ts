@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
-import { cardInstances, customInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { cardInstances, customInstances, instanceField, keyframeSpans, labelInstance, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { buildCourse, createTrackFrame, heldBlurSlot, depthFadeSlot, retainTrackScene, sampleTrackFrame, trackBendSlot, trackIds, trackX, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
@@ -610,4 +610,38 @@ test("forward then back fades departed content and only the selected station rem
     const step = continuitySample(settled, backScene, "0:return", 0, options, trackIds(a), 1);
     expect(continuityPart(step, "b")[23]).toBe(0);
   }
+});
+
+test("focus routes incoming parts sharply and background parts through blur across steps and reverse", () => {
+  const scene = prepareWorldScene({ instances: [labelInstance({ id: "near", text: "Near" }),
+    labelInstance({ id: "far", text: "Far", position: [0, 0, -12] }),
+    ...cardInstances({ id: "panel", title: "Panel" }),
+    primitive("box", { id: "force-blur", sharp: false }),
+    primitive("sphere", { id: "force-sharp", position: [0, 0, -12], sharp: true })] });
+  const options = { position: [0, 0, 10] as [number, number, number], target: [0, 0, 0] as [number, number, number],
+    steps: { 1: { shift: [0, 0, -12] as [number, number, number] } } };
+  let frame = createTrackFrame();
+  for (const step of [0, 1, 0]) {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: "0", stepKey: String(step), stepIndex: step }), slideTime: 3, stepTime: 0 };
+    frame = sampleTrackFrame(frame, sampleWorldUniforms(scene, playback, null, 1, 1, true) as number[], trackIds(scene), playback, options);
+    expect(part(frame, "label:near")[instanceField.sharp]).toBe(step === 0 ? 1 : 0);
+    expect(part(frame, "label:far")[instanceField.sharp]).toBe(step === 1 ? 1 : 0);
+    expect(part(frame, "card:panel")[instanceField.sharp]).toBe(step === 0 ? 1 : 0);
+    expect(part(frame, "label:panel:title")[instanceField.sharp]).toBe(step === 0 ? 1 : 0);
+    expect(part(frame, "box:force-blur")[instanceField.sharp]).toBe(0);
+    expect(part(frame, "sphere:force-sharp")[instanceField.sharp]).toBe(1);
+  }
+});
+
+test("departing parts lose sharpness while incoming focus stays sharp during travel", () => {
+  const a = prepareWorldScene({ instances: [labelInstance({ id: "old", text: "Old" })] });
+  const b = prepareWorldScene({ instances: [labelInstance({ id: "new", text: "New" })] });
+  const playback = (slideKey: string, time: number) => ({ ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0" }), slideTime: time, stepTime: time });
+  const first = playback("0", 3);
+  let frame = sampleTrackFrame(createTrackFrame(), sampleWorldUniforms(a, first) as number[], trackIds(a), first, {});
+  expect(part(frame, "label:old")[instanceField.sharp]).toBe(1);
+  const retained = retainTrackScene(b, a), next = playback("1", .2);
+  frame = sampleTrackFrame(frame, sampleWorldUniforms(retained, next) as number[], trackIds(retained), next, {}, trackIds(b));
+  expect(part(frame, "label:old")[instanceField.sharp]).toBe(0);
+  expect(part(frame, "label:new")[instanceField.sharp]).toBe(1);
 });

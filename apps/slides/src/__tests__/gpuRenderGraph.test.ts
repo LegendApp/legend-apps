@@ -107,9 +107,11 @@ test("world sharp layer clears transparent color and loads scene depth after pos
     expect(sharp).toHaveLength(2);
     expect(sharp[0].colorAttachments[0]).toMatchObject({ loadOp: "clear", clearValue: [0, 0, 0, 0], storeOp: "store" });
     expect(sharp[0].depthStencilAttachment).toBeUndefined();
-    expect(sharp[1].colorAttachments[0].loadOp).toBe("load");
-    expect(sharp[1].depthStencilAttachment).toMatchObject({ view: draws[0].depthStencilAttachment.view, depthLoadOp: "load" });
-    if (msaaSamples === 4) expect(sharp[1].colorAttachments[0].resolveTarget).toBeDefined();
+    for (const draw of sharp.slice(1)) {
+      expect(draw.colorAttachments[0].loadOp).toBe("load");
+      expect(draw.depthStencilAttachment).toMatchObject({ view: draws[0].depthStencilAttachment.view, depthLoadOp: "load" });
+      if (msaaSamples === 4) expect(draw.colorAttachments[0].resolveTarget).toBeDefined();
+    }
   }
 });
 

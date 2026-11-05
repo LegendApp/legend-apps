@@ -82,7 +82,7 @@ const sceneFields: Fields = { id: text, layout: is(v => typeof v === "string", "
   colors: shape(Object.fromEntries(Object.keys(defaultColors).map(k => [k, is(hex, "#RGB or #RRGGBB")]))), ambient: either(ambientOne, list(ambientOne), "an ambient effect or a list of them") };
 
 const motion = { step, delay: number(0, " of seconds"), duration: positive(" of seconds"), ease };
-const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " of seconds"), duration: positive(" of seconds"), color: animated(color), carry: flag,
+const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " of seconds"), duration: positive(" of seconds"), color: animated(color), carry: flag, sharp: flag,
   enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]),
   sequence: shape({ in: step, out: step, distance: positive(), delay: motion.delay, duration: motion.duration, ease }) };
 const textFields: Fields = { size: positive(), depth: number(0), track: number(), lineHeight: positive(), emissive: animated(number(0)), mono: flag, align: oneOf("left", "center", "right") };

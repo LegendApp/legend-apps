@@ -21,14 +21,14 @@ export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>;
 /** Endless motion on the slide clock, each as `[amplitude, period in seconds]`: `bob` rises and falls, `orbit` circles in the ground plane,
  * `pulse` scales glow by 1 ± amplitude. `lag` delays all three by seconds. */
 export type StageWave = { bob?: [number, number]; orbit?: [number, number]; pulse?: [number, number]; lag?: number; step?: number; delay?: number };
-export type StageOptions = { id: string; position?: Animated<Vec3>; glow?: Animated<number>; wave?: StageWave };
-export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<number>; wave?: StageWave };
+export type StageOptions = { id: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; glow?: Animated<number>; wave?: StageWave };
+export type StageMotion = { id: string; sharp?: Track<number>; position: Track<Vec3>; glow: Track<number>; wave?: StageWave };
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
 export type PulseOptions = { id: string; path: (string | Vec3)[]; step?: number; duration?: number; color?: Animated<string>; size?: number; trail?: number; emissive?: Animated<number> };
 export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?: number; lifetime?: number; color?: string; size?: number; spread?: Vec3; velocity?: Vec3; seed?: number; step?: number };
 export type LabelWeight = "regular" | "medium" | "bold";
 export type LabelAlign = "left" | "center" | "right";
-export type LabelOptions = { id?: string; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
+export type LabelOptions = { id?: string; sharp?: Animated<boolean>; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
 /** Rounded card shape: corner `radius` and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it),
  * `fill` the body's opacity (0 to 1) under the rim and glow, for a translucent plate. */
@@ -50,12 +50,12 @@ export type SDFOptions = PrimitiveOptions & { wgsl: string; bounds: [Vec3, Vec3]
 export type PostOptions = { id?: string; wgsl: string; before?: string; after?: string; reads?: string[] };
 export type EffectOptions = { use: WorldEffectUse; before?: WorldEffectStage; after?: WorldEffectStage };
 export type PrimitiveOptions = {
-  id?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
+  id?: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; scale?: Animated<Vec3>; end?: Vec3; curve?: number; thickness?: number;
   material?: string | MaterialOptions;
 };
 export type Instance = {
-  id?: string; kind: PrimitiveKind; position: Track<Vec3>; size: Track<number>; color: Track<Vec3>;
+  id?: string; sharp?: Track<number>; kind: PrimitiveKind; position: Track<Vec3>; size: Track<number>; color: Track<Vec3>;
   emissive: Track<number>; scale: Track<Vec3>; end: Vec3; curve: number; thickness: number;
   drift?: number; seed?: number;
   choreography?: ChoreographyMotion; burst?: BurstMotion;
@@ -167,7 +167,7 @@ export function sampleTrack<T extends number | Vec3>(track: Track<T>, clock: Clo
   return count ? sampleTrackFrames(track, clock, count) : track.initial;
 }
 export function primitive(kind: PrimitiveKind, options: PrimitiveOptions = {}): Instance {
-  return { id: options.id, kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]), size: compileTrack(options.size ?? 0.5),
+  return { id: options.id, sharp: options.sharp === undefined ? undefined : compileTrack(options.sharp, Number), kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]), size: compileTrack(options.size ?? 0.5),
     color: compileTrack(options.color ?? "#22d3ee", colorVector), emissive: compileTrack(options.emissive ?? 1.5),
     scale: compileTrack<Vec3>(options.scale ?? [1, 1, 1]), end: options.end ?? [0, 2, 0], curve: options.curve ?? 0,
     thickness: options.thickness ?? (kind === "ring" ? 0.04 : 0.025), material: options.material };
@@ -262,7 +262,7 @@ export function cardInstances(options: CardOptions): Instance[] {
     ...meta ? [label("meta", meta, [width / 2 - height * 0.3, 0, z], height * 0.28, subtleColor, textEmissive * 0.55, { mono: true, align: "right" })] : []];
 }
 export function labelInstance(options: LabelOptions): Instance {
-  return { ...primitive("box", { id: options.id, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),
+  return { ...primitive("box", { id: options.id, sharp: options.sharp, size: options.size ?? 0.3, color: options.color ?? "#e6f6ff", emissive: options.emissive ?? 1.5 }),
     label: { text: options.text, align: options.align ?? "left", mono: options.mono ?? false, weight: options.weight ?? "medium", offset: compileTrack<Vec3>(options.position ?? [0, 0, 0]),
       opacity: compileTrack(options.opacity ?? 1), attach: options.attach } };
 }
@@ -374,7 +374,7 @@ export const travelSpeedSlot = 126;
 export const WorldInstance = d.struct({
   position: d.vec3f, radius: d.f32, color: d.vec3f, emissive: d.f32, scale: d.vec3f, detail: d.f32, endpoint: d.vec3f, curve: d.f32,
   extra: d.vec3f, thickness: d.f32, rotation: d.vec3f, opacity: d.f32, albedo: d.vec3f, roughness: d.f32, metal: d.f32, rim: d.f32,
-  activation: d.f32, geometry: d.f32,
+  activation: d.f32, geometry: d.f32, sharp: d.f32,
 }).$name("WorldInstance");
 const instanceLayout = floatLayout(WorldInstance.propTypes);
 /** Float offset of each WorldInstance field from the instance's base. */
@@ -978,6 +978,11 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       for (let axis = 0; axis < 3; axis++) values[index + 12 + axis] = rotation[axis];
     }
   }
+  for (let i = 0; i < count; i++) {
+    const instance = scene.instances[i];
+    const sharp = instance.sharp;
+    values[worldHeaderSize + i * worldInstanceSize + I.sharp] = sharp ? sampleTrack(sharp, clock) : -1;
+  }
   return values;
 }
 
@@ -1054,6 +1059,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     visiting.delete(instance); visited.add(instance);
   }
   instances.forEach(verifyAnchors);
+  for (const instance of instances) instance.sharp = instance.stages?.find(stage => stage.sharp)?.sharp ?? instance.sharp ?? instance.label?.parent?.sharp;
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
   const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.glyph ? `1g:${instance.glyph.font}:${instance.glyph.segments}` : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;

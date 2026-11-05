@@ -79,7 +79,7 @@ describe("world Text3D", () => {
   test("draws every glyph of one font in one instanced pass with its outline buffer", () => {
     const glyphs = [...text3dInstances({ text: "ONE DRAW" }), primitive("sphere"), ...text3dInstances({ text: "TWO", position: [0, -2, 0] })];
     const graph = buildWorldGraph(prepareWorldScene({ instances: glyphs, floor: {} }));
-    const passes = graph.passes.filter(pass => pass.id.includes("glyphs"));
+    const passes = graph.passes.filter(pass => pass.id.startsWith("scene-glyphs"));
     expect(passes.map(pass => pass.id)).toEqual(["scene-glyphs-0"]);
     const pass = passes[0] as Extract<typeof passes[number], { kind: "render" }>;
     expect(pass.instanceCount).toBe(10);
@@ -90,7 +90,7 @@ describe("world Text3D", () => {
   });
   test("each font gets its own pass and outline buffer", () => {
     const graph = buildWorldGraph(prepareWorldScene({ instances: [...text3dInstances({ text: "AB" }), ...text3dInstances({ text: "cd", mono: true }), ...text3dInstances({ text: "E" })] }));
-    expect(graph.passes.filter(pass => pass.id.includes("glyphs")).map(pass => [pass.id, (pass as { instanceCount?: number }).instanceCount, pass.reads])).toEqual([
+    expect(graph.passes.filter(pass => pass.id.startsWith("scene-glyphs")).map(pass => [pass.id, (pass as { instanceCount?: number }).instanceCount, pass.reads])).toEqual([
       ["scene-glyphs-0", 3, ["text3d-0"]], ["scene-glyphs-1", 2, ["text3d-1"]]]);
     expect(graph.buffers?.map(buffer => buffer.id)).toEqual(["text3d-0", "text3d-1"]);
   });

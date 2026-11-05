@@ -3,8 +3,10 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
-import { Flight, Scene, expandScene, flightStops, sceneLayouts } from "../packs/world/Authoring";
-import { Stage, Text3D, WorldSlide } from "../packs/world/World";
+import { Cloud, Flight, Scene, expandScene, flightStops, sceneLayouts } from "../packs/world/Authoring";
+import { prepareWorldSlides, Stage, Text3D, WorldSlide } from "../packs/world/World";
+
+import { sampleTrack } from "../packs/world/scene";
 
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
@@ -44,4 +46,25 @@ test("flight words stay put while the next stops wait dimmed and passed ones fad
   expect([0, 1, 2, 3].map(s => at(two.opacity, s))).toEqual([0, 1, 1, 0]);
   expect(at(two.emissive, 2)).toBe(1);
   expect(at(two.emissive, 1)).toBeLessThan(.5);
+});
+
+
+test("Flight and Cloud sharpen only their current step selection, with a whole-part override", () => {
+  for (const override of [undefined, true, false]) {
+    const children = expandScene(<>
+      <Flight id="flight" words={["one", "two"]} sharp={override} />
+      <Cloud id="cloud" words={["one", "two"]} focus={["one", "two"]} sharp={override} />
+    </>);
+    const scene = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+    for (const stepIndex of [0, 1, 2, 3, 1]) {
+      const clock = { slideTime: 10, stepTime: 0, stepIndex, stepOrigins: [0, 10, 10] };
+      for (const instance of scene.instances.filter(instance => instance.glyph)) {
+        const current = instance.id!.startsWith("flight/")
+          ? instance.id!.includes(`/${Math.min(stepIndex - 1, 1)}/`)
+          : instance.id!.includes(stepIndex === 0 ? "/one/" : "/two/");
+        expect(instance.sharp).toBeDefined();
+        expect(sampleTrack(instance.sharp!, clock)).toBe(Number(override ?? current));
+      }
+    }
+  }
 });

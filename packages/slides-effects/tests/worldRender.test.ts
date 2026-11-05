@@ -13,23 +13,29 @@ fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material { return Ma
 const scanlines = "fn customPass(uv:vec2f,color:vec4f,ctx:PassContext)->vec4f { return color*vec4f(vec3f(.9+.1*sin(uv.y*200.)),1.); }";
 const scene = (options: Partial<WorldScene> = {}) => prepareWorldScene({ instances: [primitive("sphere")], ...options });
 
-for (const msaaSamples of [1, 4] as const) test(`text, code and cards bypass focus and travel blur with ${msaaSamples} samples`, () => {
+for (const msaaSamples of [1, 4] as const) test(`focused parts bypass focus and travel blur with ${msaaSamples} samples`, () => {
   const graph = buildWorldGraph(scene({ msaaSamples, floor: {}, dof: {}, keyLight: {}, instances: [primitive("box"),
     ...text3dInstances({ text: "Sharp" }), labelInstance({ text: "const x = 1;", mono: true }), ...cardInstances({ id: "panel", title: "Code" })] }));
   const pass = (id: string) => graph.passes.find(pass => pass.id === id)!;
   const index = (id: string) => graph.passes.indexOf(pass(id));
-  const sharp = [pass("scene-glyphs-0"), pass("scene-cards"), pass("scene-labels")];
+  const sharp = [pass("sharp-glyphs-0"), pass("sharp-cards"), pass("sharp-labels"), pass("sharp-box")];
   expect(graph.targets.find(target => target.id === "sharp")).toMatchObject({ format: "rgba16float", scale: 1, samples: msaaSamples });
   expect(pass("sharp-clear")).toMatchObject({ kind: "render", color: ["sharp"], instanceCount: 0, clear: [0, 0, 0, 0] });
   expect(pass("sharp-clear")).not.toHaveProperty("depth");
   for (const draw of sharp) {
     expect(draw).toMatchObject({ kind: "render", color: ["sharp"], depth: "depth", blend: "over", clear: false });
+    expect(draw.code).toContain("if(partSharp(slot(in.instance))!=true) { discard; }");
+    const background = pass(draw.id.replace("sharp-", "scene-"));
+    expect(background).toMatchObject({ color: ["hdr"], depth: "depth" });
+    expect(background.code).toContain("if(partSharp(slot(in.instance))!=false) { discard; }");
+    expect(graph.passes.indexOf(background)).toBeLessThan(index("dof-gather"));
     expect(graph.passes.indexOf(draw)).toBeGreaterThan(index("dof-composite"));
     expect(graph.passes.indexOf(draw)).toBeGreaterThan(index("sharp-clear"));
     expect(graph.passes.indexOf(draw)).toBeLessThan(index("tonemap"));
   }
   expect(pass("scene-box")).toMatchObject({ color: ["hdr"] });
   expect(pass("floor")).toMatchObject({ color: ["hdr"] });
+  expect(pass("scene-cards").code).toContain("vec4f(color*depthFade(world),alpha)");
   for (const stage of ["dof-gather", "dof-composite", "bloom-threshold"]) expect(pass(stage).reads).not.toContain("sharp");
   const final = pass("tonemap");
   expect(final.reads).toEqual([expect.any(String), "bloom-up@0", "sharp", "depth"]);
@@ -56,7 +62,7 @@ for (const quality of ["low", "medium", "high"] as const) test(`all enabled post
   for (const id of ["scene-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
   // Bloom is the last HDR stage with nothing placed after it, so the tonemap adds it instead of a separate composite pass.
   expect(ids).not.toContain("bloom-composite");
-  expect(graph.passes.find(pass => pass.id === "tonemap")!.reads).toEqual([expect.any(String), "bloom-up@0"]);
+  expect(graph.passes.find(pass => pass.id === "tonemap")!.reads).toEqual([expect.any(String), "bloom-up@0", "sharp", "depth"]);
   const scale = quality === "low" ? .65 : quality === "medium" ? .85 : 1;
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
   expect(target("dof").scale).toBe(scale * .5);
@@ -84,7 +90,7 @@ test("opaque boxes drop back faces so a base resting on the floor cannot z-fight
 test("opaque floor clears the scene before translucent geometry loads its color and depth", () => {
   const graph = buildWorldGraph(scene({ floor: {}, instances: rowInstances({ id: "rows", count: 3 }) }));
   const draws = graph.passes.filter(pass => pass.kind === "render");
-  expect(draws.map(pass => pass.id)).toEqual(["floor", "scene-box"]);
+  expect(draws.map(pass => pass.id)).toEqual(["floor", "scene-box", "sharp-clear", "sharp-box"]);
   expect(draws[0].clear).not.toBe(false);
   expect(draws[1].clear).toBe(false);
   const empty = buildWorldGraph(scene({ floor: {}, instances: [] }));
@@ -101,7 +107,7 @@ test("custom draw groups keep marker-local instance ids and SDF ranges outside p
   expect(topology.customs?.map(draw => [draw.offset, draw.count])).toEqual([[1, 3], [4, 2]]);
   expect(topology.sdfs?.map(draw => [draw.offset, draw.count])).toEqual([[6, 1]]);
   const graph = buildWorldGraph(topology);
-  expect(graph.passes.filter(pass => pass.kind === "render").map(pass => pass.instanceCount)).toEqual([1, 3, 2, 1]);
+  expect(graph.passes.filter(pass => pass.kind === "render" && pass.id.startsWith("scene-")).map(pass => pass.instanceCount)).toEqual([1, 3, 2, 1]);
   expect(graph.uniformsSize).toBe(worldHeaderSize + 7 * worldInstanceSize);
 });
 
@@ -111,7 +117,7 @@ test("custom draw order compares WGSL by code unit rather than locale", () => {
     ...customInstances({ wgsl: upper, vertexCount: 3, count: 3 })] }));
   expect(topology.customs?.map(draw => [draw.wgsl, draw.offset, draw.count])).toEqual([[upper, 1, 3], [lower, 4, 2]]);
   const graph = buildWorldGraph(topology);
-  expect(graph.passes.filter(pass => pass.kind === "render").map(pass => [pass.vertexCount, pass.instanceCount])).toEqual([[expect.any(Number), 1], [3, 3], [6, 2]]);
+  expect(graph.passes.filter(pass => pass.kind === "render" && pass.id.startsWith("scene-")).map(pass => [pass.vertexCount, pass.instanceCount])).toEqual([[expect.any(Number), 1], [3, 3], [6, 2]]);
   expect(graph.uniformsSize).toBe(worldHeaderSize + 6 * worldInstanceSize);
 });
 
@@ -168,9 +174,9 @@ test("custom ids cannot shadow built-in passes or another custom pass", () => {
 test("auto quality drops MSAA only where the drawable already supersamples the slide", () => {
   const scene = prepareWorldScene({ quality: "auto", instances: [primitive("box")], floor: {} });
   const samples = (topology: object) => buildWorldGraph({ ...worldGraphTopology(scene), ...topology }).targets.filter(target => target.samples === 4).map(target => target.id);
-  expect(samples({})).toEqual(["hdr", "depth"]);
+  expect(samples({})).toEqual(["hdr", "depth", "sharp"]);
   expect(samples({ supersampled: true })).toEqual([]);
-  expect(samples({ supersampled: true, quality: "high" })).toHaveLength(2);
+  expect(samples({ supersampled: true, quality: "high" })).toHaveLength(3);
 });
 
 test("fog directly before focus folds into the focus passes unless shafts or hooks sit between them", () => {
@@ -204,7 +210,7 @@ test("text draws cull by their own opacity slots in scene and shadow", () => {
   const graph = buildWorldGraph(scene({ keyLight: {}, floor: {},
     instances: [primitive("sphere"), ...text3dInstances({ text: "Ab" })] }));
   const glyphs = graph.passes.filter(pass => pass.kind === "render" && pass.id.includes("glyphs"));
-  expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "scene-glyphs-0"]);
+  expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "scene-glyphs-0", "sharp-glyphs-0"]);
   for (const pass of glyphs) expect(pass).toMatchObject({ instanceCount: 2,
     instanceCull: { offset: worldHeaderSize + worldInstanceSize + 23, stride: worldInstanceSize, threshold: .001 } });
 });

@@ -36,6 +36,13 @@ fn trackSlope(z:f32)->f32 {
 fn bend(p:vec3f)->vec3f { return vec3f(p.x+trackX(p.z),p.y,p.z); }
 fn bendNormal(p:vec3f,n:vec3f)->vec3f { return vec3f(n.x,n.y,n.z-trackSlope(p.z)*n.x); }
 fn unbend(p:vec3f)->vec3f { return vec3f(p.x-trackX(p.z),p.y,p.z); }
+// An explicit mode wins; otherwise use the scene's current focus plane per part.
+fn partSharp(base:u32)->bool {
+ let mode=uniforms[base+${instanceField.sharp}u];
+ if(mode>=0.) { return mode>.5; }
+ let depth=dot(bend(vector(base))-vector(0u),cameraForward());
+ return abs(depth-uniforms[32])<=max(1.,uniforms[54]);
+}
 fn cameraForward()->vec3f { return normalize(vector(4u)-vector(0u)); }
 fn cameraRight()->vec3f {
  let forward=cameraForward();
@@ -213,7 +220,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
   let fog=vector(20u); let behind=mix(background,fog,far);
   color=(toScene(encode(aces(behind*exposure))*(1.-alpha)+layer.rgb*opacity)-fog*near)/max(1.-near,.01)-background*(1.-alpha);
  }
- return CardResult(vec4f(color,alpha),depth);
+ return CardResult(vec4f(color*depthFade(world),alpha),depth);
 }`;
 }
 const instanceLoader = loaderCode(WorldInstance, "fn instanceAt(base:u32)", key => `base+${instanceField[key as keyof typeof instanceField]}u`);
@@ -328,7 +335,7 @@ const glyphCount = glyphLast - glyphFirst + 1;
 const glyphMetricsSize = glyphMetrics.length * glyphCount * 6;
 const glyphPixelsStart = glyphMetricsSize + glyphMetrics.length * glyphCount * glyphCount;
 // Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
-// so text stays lit while its separate layer bypasses the scene blur passes.
+// with the same lighting and depth in either blur route.
 function labelCode(offset: number, lights: number, look: Look = {}) {
   const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
   return `${worldBindings}${triangleCorner}${lightingCode(lights, look)}
@@ -618,17 +625,23 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
   for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
   for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
-  const sharpPasses: GPUPass[] = [];
-  for (const [index, draw] of glyphDraws.entries()) sharpPasses.push({ kind: "render", id: `scene-glyphs-${index}`,
+  if (!draws && !topology.floor) add("empty", "box", 0, 0);
+  for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `scene-glyphs-${index}`,
     code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments),
-    vertex: "glyphVertex", fragment: "glyphFragment", color: ["sharp"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
+    vertex: "glyphVertex", fragment: "glyphFragment", color: ["hdr"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
     instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
     clear: false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });
-  if (cards) sharpPasses.push({ kind: "render", id: "scene-cards", code: cardCode(cards.offset, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
-    color: ["sharp"], depth: "depth", vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: false });
-  if (!draws && !topology.floor) add("empty", "box", 0, 0);
-  if (labels) sharpPasses.push({ kind: "render", id: "scene-labels", code: labelCode(labels.offset, lights, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
-    color: ["sharp"], depth: "depth", vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
+  if (cards) passes.push({ kind: "render", id: "scene-cards", code: cardCode(cards.offset, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
+    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: false });
+  if (labels) passes.push({ kind: "render", id: "scene-labels", code: labelCode(labels.offset, lights, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
+    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
+  const sharpPasses: GPUPass[] = [];
+  for (const pass of passes) if (pass.kind === "render" && pass.id.startsWith("scene-") && pass.instanceCount) {
+    const route = (sharp: boolean) => pass.code.replace(/(@fragment fn \w+\(in:\w+\)[^{]*\{)/,
+      `$1\n if(partSharp(slot(in.instance))!=${sharp}) { discard; }`);
+    sharpPasses.push({ ...pass, id: pass.id.replace("scene-", "sharp-"), code: route(true), color: ["sharp"], clear: false });
+    pass.code = route(false);
+  }
   if (topology.shafts) {
     targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .5) });
     passes.push({ kind: "fullscreen", id: "shafts", code: shaftCode(worldBindings, lights, topology.shaftSamples ?? samples), fragment: "shafts", reads: ["depth"], output: "shafts" });
