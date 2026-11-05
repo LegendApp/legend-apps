@@ -1007,6 +1007,11 @@ camera about its target in degrees, `dolly` scales its distance, `shift` moves b
 `fov` sets the field of view, eased from wherever the camera is over `duration` seconds. Layouts
 hold no step moves, so each slide declares its own.
 
+A step's `focus` pulls the DOF distance in world units with the camera's `duration`
+and `ease`, starting at the live focus after an interrupted move. Omit it to focus
+on `camera.focus`, or the camera target if unset. Use `sharp={false}` on a part for depth blur during the pull
+and `camera.blur=0` to disable motion streaks.
+
 For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
 function receiving every scene declaration without mounting future slides. It
 returns one immutable World descriptor array, running step offsets, build

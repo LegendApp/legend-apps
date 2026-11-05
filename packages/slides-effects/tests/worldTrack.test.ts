@@ -706,3 +706,32 @@ test.each(["station", "world"] as const)("inOut flights keep carried parts and d
   expect(landed.cursor).toBe(1);
   expect(continuityPart(landed, "old")[23]).toBe(0);
 });
+
+test("step focus pulls share camera easing, reverse and interrupted moves without a jump", () => {
+  const track: WorldTrack = { position: [0, 0, 13], target: [0, 0, 0], blur: 0, focus: 13,
+    steps: { 1: { shift: [0, 0, -10], focus: 16, duration: .6, ease: "linear" },
+      2: { shift: [0, 0, -20], focus: 9, duration: .6, ease: "linear" },
+      3: { shift: [0, 0, -30], duration: .6, ease: "out" } } };
+  const prepared = scene();
+  const at = (previous: TrackFrame, step: number, time: number, phase: "playing" | "preview" = "playing") => {
+    const playback = { ...createPlaybackState({ phase, slideKey: "0", stepKey: String(step), stepIndex: step }), slideTime: 10 + time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
+  };
+  const start = at(createTrackFrame(), 0, 0), begun = at(start, 1, 0), middle = at(begun, 1, .3);
+  expect(begun.values[32]).toBe(13);
+  expect(middle.values[32]).toBeCloseTo(14.5);
+  expect(middle.values[2]).toBeCloseTo(8);
+  expect(middle.values[travelSpeedSlot + 1]).toBe(0);
+  expect(at(begun, 1, .6).values[32]).toBe(16);
+  const interrupted = at(middle, 2, 0);
+  expect(interrupted.values[32]).toBeCloseTo(14.5);
+  expect(at(interrupted, 2, .3).values[32]).toBeCloseTo(11.75);
+  const reverse = at(at(interrupted, 2, .6), 1, 0);
+  expect(reverse.values[32]).toBe(9);
+  expect(at(reverse, 1, .6).values[32]).toBe(16);
+  expect(at(start, 2, 0, "preview").values[32]).toBe(9);
+  const automatic = at(at(interrupted, 2, .6), 3, 0);
+  expect(automatic.values[32]).toBe(9);
+  expect(at(automatic, 3, .3).values[32]).toBeCloseTo(12.5);
+  expect(at(automatic, 3, .6).values[32]).toBeCloseTo(13);
+});

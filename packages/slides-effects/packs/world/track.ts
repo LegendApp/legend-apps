@@ -15,6 +15,8 @@ export type WorldTrack = {
   fixed?: string[];
   /** Radial motion blur toward the frame's centre at peak travel speed (default 1; 0 turns it off). */
   blur?: number;
+  /** DOF focus distance in world units; defaults to the camera target and can be overridden per step. */
+  focus?: number;
   /** Share of full speed that `continuousTime()` scenery, such as trails and tunnel lights, keeps while the camera holds at a station (default 1). */
   heldMotion?: number;
   /** Extra DOF blur radius while the camera holds, as a share of `maxBlur` (default 0). Both ease back to full motion and base blur during flights. */
@@ -34,8 +36,8 @@ export type WorldTrack = {
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
 };
-/** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds with `ease`. */
-export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number; ease?: Ease };
+/** Orbits about the target, scales distance by `dolly`, moves both by `shift`, and pulls `focus` to a distance in world units over the same `duration` and `ease`. */
+export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; focus?: number; duration?: number; ease?: Ease };
 /** One slide's leg of the track, from the previous station into this one. */
 export type WorldSegment = Pick<WorldTrack, "spacing" | "duration" | "ease" | "bank" | "turn" | "rise" | "position">;
 type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera; stepIndex?: number; pose?: CameraPose };
@@ -165,7 +167,7 @@ function trackRoll(course: Course, cursor: number) {
   return -Math.sign(course.dx[k]) * course.bank[k] * Math.PI / 180 * 64 * u * u * u * (1 - u) * (1 - u) * (1 - u);
 }
 /** Content, lights and the camera are sampled on a straight track; this writes the bend window and moves the camera and lights onto the curve. */
-function bendTrack(frame: TrackFrame, course: Course, look: number) {
+function bendTrack(frame: TrackFrame, course: Course, look: number, focus?: number) {
   "worklet";
   const values = frame.values;
   frame.straight = values.slice(0, 7);
@@ -177,7 +179,7 @@ function bendTrack(frame: TrackFrame, course: Course, look: number) {
   }
   const bend = trackX(course, values[2]);
   values[0] += bend; values[4] += bend + (trackX(course, values[6]) - bend) * look;
-  values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
+  values[32] = focus ?? Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   for (let light = 0; light < 4; light++) values[64 + light * 12] += trackX(course, values[64 + light * 12 + 2]);
   values[112] += trackX(course, values[114]); values[120] += trackX(course, values[122]);
   return frame;
@@ -350,6 +352,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   "worklet";
   const preview = playback.phase === "preview" || playback.phase === "preparing";
   if (!preview && (playback.phase === "paused" || playback.phase === "outgoing")) return previous;
+  const prior = previous.values;
+  const pulled = prior.length > 7 && Math.abs(prior[32] - Math.hypot(prior[0] - prior[4], prior[1] - prior[5], prior[2] - prior[6])) > .0001;
   const key = `${playback.slideKey}/${playback.stepKey}`;
   const changed = key !== previous.key, slideChanged = playback.slideKey !== previous.slideKey;
   const first = !previous.key || preview;
@@ -446,13 +450,15 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const destination = sampleTrackCamera(stations, index, course, 1);
   const fx = destination.target[0] - destination.position[0], fy = destination.target[1] - destination.position[1], fz = destination.target[2] - destination.position[2];
   const focusDistance = Math.hypot(fx, fy, fz);
+  const focusTarget = Math.max(.05, move?.focus ?? options.focus ?? focusDistance);
+  const focus = move?.focus !== undefined || options.focus !== undefined || pulled ? focusTarget + (cameraDelta ? (from[32] - focusTarget) * settle : 0) : undefined;
   for (let slot = 0; slot < ids.length; slot++) {
     const at = worldHeaderSize + slot * worldInstanceSize;
     if (!declaredSlots[slot] || fixedSlots[slot]) values[at + instanceField.sharp] = 0;
     else if (values[at + instanceField.sharp] < 0) {
       const depth = ((values[at] - destination.position[0]) * fx + (values[at + 1] - destination.position[1]) * fy +
         (values[at + 2] - station - destination.position[2]) * fz) / focusDistance;
-      values[at + instanceField.sharp] = Math.abs(depth - focusDistance) <= Math.max(1, values[54]) ? 1 : 0;
+      values[at + instanceField.sharp] = Math.abs(depth - focusTarget) <= Math.max(1, values[54]) ? 1 : 0;
     }
   }
   // Travel speed as a share of the eased move's peak, for speed effects in WGSL (`travelSpeed()`).
@@ -475,7 +481,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   }
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed, morphEase);
-    return bendTrack(visibleTrackFrame(frame, previous, progress), course, look);
+    return bendTrack(visibleTrackFrame(frame, previous, progress), course, look, focus);
   }
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
@@ -509,5 +515,5 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       values[at + 23] = from[old + 23] + (values[at + 23] - from[old + 23]) * progress;
     } else if (!first && progress < 1) values[at + 23] *= progress;
   }
-  return bendTrack(visibleTrackFrame(frame, previous, progress), course, look);
+  return bendTrack(visibleTrackFrame(frame, previous, progress), course, look, focus);
 }
