@@ -965,6 +965,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   intact throughout. `highlight={{ source: "hot", reads: "link", pass: "idle", opacity: .12 }}`
   styles soft line backgrounds. The `trace` layout centers the code, then centers the tree
   on extraction; `anchor="center"` also enables this framing at an explicit `at` position.
+  Add a second syntax fence with one compact line per source/read (in source order) to morph
+  tokens on `collapse`. Matching tokens keep their identity, new tokens fade and scale in,
+  and the panel and row spacing tween before the same tokens lift into the tree.
 - `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
   the front under depth of field; `zoom` defocuses everything else on that step.
 - `Flight words` puts one stop per step from `step` (default 1) down into depth: a word, or a list of

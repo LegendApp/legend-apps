@@ -838,9 +838,8 @@ function lineTokens(tokens: CodeToken[] | undefined, offset: number, length: num
   });
 }
 type DiffLine = [" " | "-" | "+", string, CodeToken[] | undefined];
-/** Each diff starts from the previous result. Matching tokens retain their identity and only removed lines are struck through. */
-function codeMorph(id: string, at: V3, props: Record<string, unknown>, children: ReactNode, INK: Ink) {
-  const diffs = Children.toArray(children).filter(child => codeSource(child).trim()).map(child => {
+function codeDiffs(children: ReactNode) {
+  return Children.toArray(children).filter(child => codeSource(child).trim()).map(child => {
     const tokens = codeHighlight(child)?.tokens;
     let offset = 0;
     return codeSource(child).replace(/\n$/, "").split("\n").map(line => {
@@ -849,8 +848,12 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       return result;
     });
   });
+}
+/** Each diff starts from the previous result. Matching tokens retain their identity and only removed lines are struck through. */
+function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: DiffLine[][], INK: Ink, compactLineHeight?: number) {
   if (diffs.some(diff => diff.some(([mark]) => !" -+".includes(mark)))) throw Error(`Code morph ${id}: diff lines start with a space, - or +.`);
   const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .25;
+  const rowHeight = (s: number) => s ? compactLineHeight ?? lineHeight : lineHeight;
   const parts: { text: string; identity: string; tokens?: CodeToken[]; positions: (V3 | undefined)[] }[] = [];
   const lines: { text: string; parts: { id: number; column: number }[]; rows: (number | undefined)[]; removed?: number }[] = [];
   const newLine = (text: string, tokens?: CodeToken[]) => lines.push({ text, rows: [], parts: [...text.matchAll(/[\w$]+|[^\s\w$]/gu)].map(match => {
@@ -895,10 +898,11 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
   });
   states.forEach((rows, s) => rows.forEach((line, row) => {
     lines[line].rows[s] = row;
-    lines[line].parts.forEach(part => { parts[part.id].positions[s] = [part.column * advance, -row * lineHeight, 0]; });
+    lines[line].parts.forEach(part => { parts[part.id].positions[s] = [part.column * advance, -row * rowHeight(s), 0]; });
   }));
-  const width = Math.max(...lines.map(l => l.text.length)) * advance + .9, height = (n: number) => (n - 1) * lineHeight + em + .6;
-  const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - em - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
+  const widths = states.map(rows => Math.max(0, ...rows.map(n => lines[n].text.length)) * advance + .9);
+  const width = Math.max(...widths), height = (s: number) => (states[s].length - 1) * rowHeight(s) + em + .6;
+  const panel = (s: number) => ({ position: [widths[s] / 2 - .3, -(height(s) - em - .6) / 2, -.14] as V3, scale: [widths[s], height(s), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
   const highlight = props.highlight as { color?: string; opacity?: number; word?: { color?: string; opacity?: number } } | undefined;
   const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
@@ -915,14 +919,14 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
     });
     return runs.map(run => ({ ...run, t, step: band.step }));
   }));
-  return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
+  return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map((_, s) => height(s))))}>
     <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...panelStyle(props)} color={INK.colors.panel} />
     {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
-      position={[width / 2 - .3, -row * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
+      position={[widths[t + side] / 2 - .3, -row * rowHeight(t + side), -.07]} scale={[widths[t + side] - .2, rowHeight(t + side), .02]} color={highlightColor}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         key(band.step + 1, 0, 0, 0)]} />)))}
     {words.map(({ row, from, to, t, step }) => <Card flat fill={1} edge={0} glow={0} radius={.03} key={`${t}/${row}/${from}`} id={`${id}/word${t}/${row}/${from}`}
-      position={[(from + to) / 2 * advance, -row * lineHeight, -.06]} scale={[(to - from) * advance + .08, lineHeight * .84, .02]} color={wordColor}
+      position={[(from + to) / 2 * advance, -row * rowHeight(t + 1), -.06]} scale={[(to - from) * advance + .08, rowHeight(t + 1) * .84, .02]} color={wordColor}
       opacity={[{ step: 0, value: 0 }, key(step, wordOpacity, settle, .3), key(step + 1, 0, 0, 0)]} />)}
     {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
       const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];
@@ -937,7 +941,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       const addedAt = enter > 0 ? first + enter - 1 : undefined, removedAt = exit < states.length ? first + exit - 1 : undefined;
       const visibility = addedAt === undefined && removedAt === undefined ? 1 : [{ step: 0, value: enter ? 0 : 1 }, ...addedAt === undefined ? [] : [key(addedAt, 1, settle, .25)], ...removedAt === undefined ? [] : [key(removedAt, 0, 0, .25)]];
       return <Text3D key={n} id={`${id}/token${n}`} text={part.text} tokens={part.tokens} mono flat={props.flat !== false} size={em} align="left"
-        opacity={visibility} position={shown.every(s => part.positions[s]!.every((v, axis) => v === part.positions[enter]![axis])) ? part.positions[enter]! :
+        opacity={visibility} glyphs={addedAt === undefined ? undefined : () => ({ scale: [{ step: 0, value: .8 }, key(addedAt, 1, settle, .5)] })} position={shown.every(s => part.positions[s]!.every((v, axis) => v === part.positions[enter]![axis])) ? part.positions[enter]! :
           [{ step: 0, value: part.positions[enter]! }, ...shown.slice(1).filter(s => part.positions[s]!.some((v, axis) => v !== part.positions[s - 1]![axis]))
             .map(s => key(first + s - 1, part.positions[s]!, settle, .5))]} />;
     })}
@@ -953,7 +957,9 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
 }
 /** Code that highlights where state is created (`source`), passed (`pass`) and read (`reads`) on `mark`, collapses everything else on `collapse`,
  * and lifts the source and read lines into a tree of `nodes` labels on `extract`. */
-function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: string, INK: Ink, tokens?: CodeToken[]) {
+function codeTrace(id: string, at: V3, props: Record<string, unknown>, children: ReactNode, INK: Ink) {
+  const fences = Children.toArray(children).filter(child => codeSource(child).trim());
+  const source = codeSource(fences[0]), tokens = codeHighlight(fences[0])?.tokens;
   const lines = source.replace(/\n$/, "").split("\n"), size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), em = size * TYPE, advance = em * MONO;
   const origin = Number(props.source), reads = props.reads as number[], pass = (props.pass ?? []) as number[], labels = props.nodes as string[];
   const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
@@ -965,7 +971,39 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   const centered: V3 = [at[0] - width / 2 + .3, at[1] + (full - em - .6) / 2, at[2]];
   const position = props.anchor === "center" ? [{ step: 0, value: centered }, key(extract, [at[0] - tx, at[1] + (labels.length > 1 ? 1.8 : .4), at[2]] as V3, .55, .9)] : at;
+  let morph: ReactNode;
+  if (fences.length > 1) {
+    if (fences.length !== 2) throw Error(`Code trace ${id}: use one source fence and one compact target fence.`);
+    const target = codeSource(fences[1]).replace(/\n$/, "").split("\n"), targetTokens = codeHighlight(fences[1])?.tokens;
+    if (target.length !== hot.length) throw Error(`Code trace ${id}: compact target needs one line per source/read.`);
+    const diff = (rows: string[], syntax: CodeToken[] | undefined, mark: "-" | "+"): DiffLine[] => {
+      let offset = 0;
+      return rows.map(text => { const line: DiffLine = [mark, text, lineTokens(syntax, offset, text.length)]; offset += text.length + 1; return line; });
+    };
+    const tree = codeMorph(id, [0,0,0], { ...props, anchor: undefined, step: collapse, highlight: { color: highlight?.reads ?? "link", opacity: 0, word: { opacity: .18 } } },
+      [[...diff(lines, tokens, "-"), ...diff(target, targetTokens, "+")]], INK, gap);
+    morph = React.Children.map(tree.props.children, child => {
+      if (!isValidElement<Record<string, unknown>>(child)) return child;
+      if (child.props.id === `${id}/card`) return React.cloneElement(child, { opacity: [{ step: 0, value: 1 }, key(extract, 0, .9, .4)] });
+      if (child.type === Box) return null;
+      if (child.type !== Text3D) return child;
+      const opacity = compileTrack(child.props.opacity as Animated<number>);
+      if ((opacity.frames.at(-1)?.value ?? opacity.initial) === 0) return child;
+      const track = compileTrack(child.props.position as Animated<V3>), end = track.frames.at(-1)?.value ?? track.initial;
+      const row = Math.round(-end[1] / gap), n = hot[row], destination = node(n === origin ? 0 : 1 + reads.indexOf(n));
+      const middle = (target[row].length - target[row].trimStart().length + target[row].trimEnd().length) * advance / 2;
+      return React.cloneElement(child, {
+        position: [{ step: 0, value: track.initial }, ...track.frames, key(extract, [end[0], end[1], 1.4] as V3, 0, .45),
+          key(extract, [destination[0] - middle + end[0], destination[1], 1.4] as V3, .55, .9)],
+        opacity: [{ step: 0, value: opacity.initial }, ...opacity.frames, key(extract, 0, 1.25, .35)],
+      });
+    });
+  }
   return <Stage id={id} position={position}>
+    {morph && lines.map((_, n) => (hot.includes(n) || pass.includes(n)) && <Card key={`mark${n}`} id={`${id}/${n}/glow`} flat fill={1} edge={0} glow={0} radius={.02} color={tone(n)}
+      position={[width / 2 - .3, -n * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]}
+      opacity={[{ step: 0, value: 0 }, key(mark, highlight?.opacity ?? .12, 0, .4), key(collapse, 0, 0, .3)]} />)}
+    {morph ?? <>
     <Card id={`${id}/card`} {...panelStyle(props)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
@@ -986,6 +1024,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
         {band}
       </Fragment>;
     })}
+    </>}
     {labels.map((label, k) => { const p = node(k), root = node(0), mid = (root[1] + p[1]) / 2; return <Fragment key={`node${k}`}>
       <Card id={`${id}/node${k}`} position={p} scale={[3.3, .85, .4]} color={k ? INK.blue : INK.amber} opacity={show}
         emissive={[{ step: 0, value: 0 }, key(extract, 7, 1.25, .1), key(extract, 1.8, 1.4, .6)]} />
@@ -1337,8 +1376,8 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
   if (kind === "keys") return props.viewport === undefined ? keyList(id, position, props, INK) : viewportList(id, position, props, INK);
   if (kind === "grid") return grid(id, position, props, INK);
   if (kind === "form") return form(id, position, props, INK);
-  if (kind === "morph") return codeMorph(id, position, props, children, INK);
-  if (kind === "trace") return codeTrace(id, position, props, source, INK, codeHighlight(children)?.tokens);
+  if (kind === "morph") return codeMorph(id, position, props, codeDiffs(children), INK);
+  if (kind === "trace") return codeTrace(id, position, props, children, INK);
   if (kind === "cloud") return cloud(id, position, props, INK);
   if (kind === "flight") return flight(id, position, props, INK);
   if (kind === "layers") return layers(id, position, props, INK, source, codeHighlight(children)?.tokens);
