@@ -4,7 +4,7 @@ import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector, compileTrack, type Keyframe } from "./scene";
 import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, sequenceDefaults, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldTrack } from "./World";
+import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldStepCamera, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -235,10 +235,11 @@ export const sceneLayouts: Record<string, SceneLayout> = {
       [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
     ...Object.fromEntries([-4.5, 0, 4.5].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .24, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
   } },
-  /** Captioned trees stacked in the center of frame, one shown at a time; give each pair a `sequence`. Headlines fill the captions, centered over their trees, before the title. */
+  /** Captioned trees spaced 18 apart down the track, zigzagging 7 to each side, so one fills the frame; a camera step's `frame` flies to each.
+   * Headlines fill the captions, centered over their trees, before the title. */
   "tree-sequence": { camera: { position: [0,4.6,14.3], target: [0,4.2,0], via: [-3.5,7,22], viaTarget: [0,2.5,13] }, slots: {
-    ...Object.fromEntries([1, 2, 3, 4, 5].flatMap(i => [[`caption${i}`, { kind: "headline", at: [0,8.5,0], size: .42, depth: .12, track: .02, delay: .4 }],
-      [`tree${i}`, { kind: "tree", at: [0,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
+    ...Object.fromEntries([0, -7, 7, -7, 7].flatMap((x, i) => [[`caption${i + 1}`, { kind: "headline", at: [x,8.5,-18 * i], size: .42, depth: .12, track: .02, delay: .4 }],
+      [`tree${i + 1}`, { kind: "tree", at: [x,4.8,-18 * i], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
     title: { ...heading, at: [-8.2,9,0] },
   } },
   /** A code panel on the left and a grid of cells on the right. */
@@ -291,7 +292,7 @@ function slotPlacer(layout: SceneLayout | undefined) {
   };
 }
 export type SceneProps = Omit<WorldProps, "children" | "track" | "id"> & {
-  id: string; world?: string; layout?: string; durations?: number[]; camera?: WorldTrack;
+  id: string; world?: string; layout?: string; durations?: number[]; camera?: WorldTrack & { steps?: Record<number, WorldStepCamera & { frame?: string }> };
   /** Theme colors for the generic parts; their color props also take these names. */
   colors?: Partial<SceneColors>;
   /** Ambient effects added to the scene. */
@@ -390,7 +391,27 @@ function sameSceneValue(a: unknown, b: unknown): boolean {
 // Each deck's pack retains one preparation per named world across equivalent renderer mounts.
 const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldProps[] }>();
 function sceneTrack(scene: SceneProps): WorldTrack {
-  return flightCamera(scene, { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera });
+  return framedSteps(scene, flightCamera(scene, { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera }));
+}
+/** A camera step's `frame` names a part: the camera moves across the floor to stand before it as it stands before the station target, plus any `shift`. */
+function framedSteps(scene: SceneProps, track: WorldTrack): WorldTrack {
+  const steps = track.steps as NonNullable<SceneProps["camera"]>["steps"];
+  if (!steps || !Object.values(steps).some(s => s.frame)) return track;
+  const at = new Map<string, V3>(), place = slotPlacer(findLayout(scene.layout, false, scene)), target = track.target ?? [0, 0, 0];
+  const visit = (node: ReactNode) => Children.forEach(node, child => {
+    if (!isValidElement<PartProps>(child)) return;
+    const kind = (child.type as { worldPart?: string }).worldPart;
+    if (!kind) return visit(child.props.children);
+    const props = place(kind, child.props);
+    at.set(props.id as string, (props.at ?? [0, 3.2, 0]) as V3);
+  });
+  visit(scene.children);
+  return { ...track, steps: Object.fromEntries(Object.entries(steps).map(([k, { frame, ...step }]) => {
+    if (!frame) return [k, step];
+    const part = at.get(frame);
+    if (!part) throw authoringError(scene as Record<string, unknown>, "Scene", `camera.steps[${k}].frame: no part with id "${frame}". Known: ${[...at.keys()].join(", ")}`);
+    return [k, { ...step, shift: add([part[0] - target[0], 0, part[2] - target[2]], step.shift ?? [0, 0, 0]) }];
+  })) };
 }
 /** A scene's `Flight` adds a camera step per stop that shifts the camera onto it, and holds on the last stop through the remaining `durations`; from `gather` it
  * pulls back onto the row instead. Authored `steps` win per field. */

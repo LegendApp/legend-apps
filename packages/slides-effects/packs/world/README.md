@@ -870,7 +870,7 @@ composition. Name a layout and the parts place themselves:
 | `keys` | `title`, `keys` | A heading over a keyed list |
 | `tree-wide` | `title`, `subtitle`, `tree` | A five-level tree laid out by leaves |
 | `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees side by side, 9.6 apart |
-| `tree-sequence` | `caption1`–`5`, `tree1`–`5`, `title` | Trees stacked in the center, shown one at a time with part `sequence`; headlines fill the captions above the trees first |
+| `tree-sequence` | `caption1`–`5`, `tree1`–`5`, `title` | Trees 18 apart down the track, zigzagging 7 to each side, for camera steps to `frame` one at a time; headlines fill the captions above the trees first |
 | `code-grid` | `code`, `grid` | Code on the left, a grid of cells on the right |
 | `code-center` | `code` | One centered code panel |
 | `morph` | `morph` | A tall centered morphing code panel |
@@ -1005,7 +1005,8 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
 
 A track's `steps` move the camera within a station, by step index:
 `camera={{ steps: { 2: { orbit: 30 }, 4: { dolly: .6, fov: 48 } } }}`. `orbit` turns the
-camera about its target in degrees, `dolly` scales its distance, `shift` moves both and
+camera about its target in degrees, `dolly` scales its distance, `shift` moves both, `frame` names a
+part to stand before as the camera stands before the station target (moving across the floor, then by `shift`) and
 `fov` sets the field of view, eased from wherever the camera is over `duration` seconds. Layouts
 hold no step moves, so each slide declares its own.
 

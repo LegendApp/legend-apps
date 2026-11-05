@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, CodeTrace, Headline, Keys, Layers, Rule, Scene, Tree, expandScene, readScenes } from "../packs/world/Authoring";
 import { checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, sequenceDefaults } from "../packs/world/authoringProps";
-import { Box, Card, Fog, Orbs, Pillar, Stage, Text3D, prepareWorldSlides } from "../packs/world/World";
+import { Box, Card, Fog, Orbs, Pillar, Stage, Text3D, WorldSlide, prepareWorldSlides } from "../packs/world/World";
 import { cardInstances, instanceField, instanceOpacity, instancePosition, prepareWorldScene, sampleTrack, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { text3dInstances } from "../packs/world/text3d";
 
@@ -70,14 +70,31 @@ test("a sequence shows one part at a time: each waits right, slides to center on
     <Headline id="first" sequence={{ out: 1 }}>A</Headline>
     <Tree id="second" nodes={[{ id: "a" }]} sequence={{ in: 1, out: 2 }} />
     <Tree id="last" nodes={[{ id: "a" }]} sequence={{ in: 2, distance: 30 }} />
-  </>, "tree-sequence");
+  </>);
   expect(find(scene, Stage, "first/sequence").props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 1, ...move, value: [-d, 0, 0] }]);
   expect(find(scene, Stage, "second/sequence").props.position).toEqual([{ step: 0, value: [d, 0, 0] }, { step: 1, ...move, value: [0, 0, 0] }, { step: 2, ...move, value: [-d, 0, 0] }]);
   expect(find(scene, Stage, "last/sequence").props.position).toEqual([{ step: 0, value: [30, 0, 0] }, { step: 2, ...move, value: [0, 0, 0] }]);
-  // The layout stacks every tree in the center of frame, and a headline takes the centered caption above it, not the top-left title.
-  expect(find(scene, Stage, "second").props.position).toEqual(find(scene, Stage, "last").props.position);
-  expect(find(scene, Text3D, "first").props.position).toEqual([0, 8.5, 0]);
   expect(() => checkPart("tree", { id: "t", nodes: [{ id: "a" }], sequence: { in: 1.5 } })).toThrow("sequence.in must be a step number");
+});
+
+test("camera steps frame parts that stay put along the track, one tree at a time", async () => {
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(() => { renderer = create(<Scene id="trees" layout="tree-sequence" camera={{ steps: { 2: { frame: "second" }, 3: { frame: "last", shift: [0, 1, 0], duration: 2 } } }}>
+      <Headline id="first">A</Headline>
+      <Tree id="first-tree" nodes={[{ id: "a" }]} />
+      <Headline id="caption">B</Headline>
+      <Tree id="second" nodes={[{ id: "a" }]} />
+      <Tree id="last" nodes={[{ id: "a" }]} />
+    </Scene>); });
+    const slide = renderer!.root.findByType(WorldSlide).props, parts = flat(slide.children);
+    // The camera flies over the floor to stand before each tree as it stands before the first; the trees never move.
+    expect(slide.track.steps).toEqual({ 2: { shift: [-7, 0, -18] }, 3: { shift: [7, 1, -36], duration: 2 } });
+    expect(parts.find(n => n.type === Stage && n.props.id === "last")!.props.position).toEqual([7, 4.8, -36]);
+    expect(parts.some(n => String(n.props.id).endsWith("/motion"))).toBe(false);
+    // A headline takes the centered caption above its tree, not the top-left title.
+    expect(parts.find(n => n.type === Text3D && n.props.id === "caption")!.props.position).toEqual([-7, 8.5, -18]);
+  } finally { await act(() => renderer?.unmount()); }
 });
 
 test("scene colors theme the parts, and color props take theme names", () => {

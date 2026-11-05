@@ -70,7 +70,7 @@ const record = (rule: Rule, key: Rule): Rule => (value, path) => value === null 
   : Object.entries(value).map(([k, v]) => key(Number(k), `${path} key ${k}`) ?? rule(v, `${path}[${k}]`)).find(Boolean);
 
 const carry = shape({ lift: number(), spread: number(), spin: number(), stagger: is(v => finite(v) && v >= 0 && v <= .9, "a number from 0 to 0.9") });
-const stepCamera = shape({ orbit: number(-Infinity, " of degrees"), dolly: positive(), shift: vec3, fov: is(v => finite(v) && v > 0 && v < 180, "degrees between 0 and 180"),
+const stepCamera = shape({ orbit: number(-Infinity, " of degrees"), dolly: positive(), shift: vec3, frame: text, fov: is(v => finite(v) && v > 0 && v < 180, "degrees between 0 and 180"),
   duration: positive(" of seconds"), ease });
 export const cameraFields: Fields = { spacing: positive(), duration: positive(" of seconds"), ease, position: vec3, target: vec3, via: vec3, viaTarget: vec3,
   turn: is(v => finite(v) && Math.abs(v as number) <= 60, "degrees from -60 to 60"), rise: number(-Infinity, " of world units"),

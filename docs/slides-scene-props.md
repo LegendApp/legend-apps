@@ -27,9 +27,12 @@ module. Other props pass through to World unchanged.
 | `camera.via`, `camera.viaTarget` | a rise above the lane | Control points that bend the flight's curve |
 | `camera.position`, `camera.target` | the layout's | The station camera |
 | `camera.carry` | none | How shared parts fly: `lift`, `spread`, `spin`, `stagger` (0–0.9) |
-| `camera.steps` | none | Per step: `orbit` (degrees), `dolly`, `shift`, `fov`, `duration`, `ease` |
+| `camera.steps` | none | Per step: `orbit` (degrees), `dolly`, `shift`, `frame`, `fov`, `duration`, `ease` |
 
-A step move's `ease` falls back to `camera.ease`.
+A step move's `duration` and `ease` fall back to `camera.duration` and `camera.ease`. `frame` names a part: the
+camera moves across the floor to stand before it as it stands before the station target, so parts stay put and
+the camera travels between them. The `tree-sequence` layout spaces up to five captioned trees down the track for this:
+`camera={{ steps: { 2: { frame: "tree-b" }, 3: { frame: "tree-c" } } }}`.
 
 ## Parts: enter, exit and carry
 
@@ -41,8 +44,7 @@ A step move's `ease` falls back to `camera.ease`.
 | `sequence` | `{ in: 0, delay: 0, duration: .8, ease: "cubic", distance: 20 }` | Waits `distance` to the right, slides to its place on step `in` and off `distance` to the left on step `out` |
 
 Give each part of a one-at-a-time sequence its own `in` and `out` steps, so exactly one shows at a time and
-stepping back slides them the other way. The `tree-sequence` layout stacks up to five captions and trees in the
-center of frame for this.
+stepping back slides them the other way.
 
 Text parts (`Headline`, `Quote`) keep their glyph-by-glyph entrance: `enter` sets its `step`,
 `delay`, `duration`, `ease`, `stagger`, `scale` and start offset `from` (default `[-8,0,-2]`), and `exit`
