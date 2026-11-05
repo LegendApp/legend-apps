@@ -29,7 +29,7 @@ test("invalid props fail naming the MDX line, the element and the prop", async (
   expect(fails(() => checkPart("layers", { id: "l", colors: ["accent", "pink"] }))).toStartWith('<Layers id="l"> colors[1] must be #RGB, #RRGGBB or a theme color');
   const invalidWords = <Layers id="l" words={["user", "state"]}>{await highlightedFence("state.user")}</Layers>;
   expect(fails(() => expandScene(invalidWords, "layers"))).toBe('<Layers id="l"> words: "state" is not in the code line after column 10.');
-  expect(fails(() => checkScene({ ...at, id: "s", camera: { ease: "bounce" } }))).toBe('talk.mdx:12: <Scene id="s"> camera.ease must be one of "linear", "cubic", "out", "smoothstep", "expo", "spring" (got "bounce").');
+  expect(fails(() => checkScene({ ...at, id: "s", camera: { ease: "bounce" } }))).toBe('talk.mdx:12: <Scene id="s"> camera.ease must be one of "linear", "cubic", "inOut", "out", "smoothstep", "expo", "spring" (got "bounce").');
   expect(fails(() => checkScene({ id: "s", camera: { steps: { 2: { orbit: 30, durtion: 1 } } } }))).toBe('<Scene id="s"> Unknown prop camera.steps[2].durtion. Did you mean camera.steps[2].duration?');
   expect(fails(() => checkScene({ id: "s", colors: { accent: "accent" } }))).toBe('<Scene id="s"> colors.accent must be #RGB or #RRGGBB (got "accent").');
   expect(fails(() => checkScene({ id: "s", ambient: ["dust", "snow"] }))).toStartWith('<Scene id="s"> ambient must be an ambient effect or a list of them');
@@ -37,6 +37,11 @@ test("invalid props fail naming the MDX line, the element and the prop", async (
   // Props World passes through, and animated values, are not second-guessed.
   checkPart("headline", { id: "t", side: "#000", color: { 0: "#fff", 1: "accent" }, font: {}, glyphs: () => undefined });
   checkScene({ id: "s", clock: "step", quality: "high", camera: { fixed: ["dust:"], bank: 1.5, carry: { lift: 3 } } });
+});
+
+test("camera and step moves accept inOut easing", () => {
+  expect(() => checkScene({ id: "s", camera: { ease: "inOut", duration: 1.2,
+    steps: { 1: { orbit: 30, ease: "inOut" } } } })).not.toThrow();
 });
 
 test("parts keep their geometry without the new props, and enter, exit and carry take documented defaults", () => {

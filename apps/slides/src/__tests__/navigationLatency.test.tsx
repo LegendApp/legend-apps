@@ -103,7 +103,7 @@ test.each([false, true])("retained scene changes move the camera on the first pr
     handlers: { next: nextSlide }, scope: { kind: "window", windowId: "slides-presenter" },
   });
   const declarations = [0, 1].map(index => <Scene id={`latency-${index}`} world="latency-scenes" quality="high"
-    camera={{ steps: { 1: { shift: [2, 0, 0], duration: 1, ease: "out" } } }}>
+    camera={{ duration: 1.2, ease: "inOut", steps: { 1: { shift: [2, 0, 0], duration: 1 } } }}>
     <Box id="part" position={[index, 0, 0]} />
   </Scene>);
   function Renderer(props) { return <gpu {...props} />; }

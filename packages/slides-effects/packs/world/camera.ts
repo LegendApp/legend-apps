@@ -1,5 +1,5 @@
 export type Vec3 = [number, number, number];
-export type Ease = "linear" | "cubic" | "out" | "smoothstep" | "expo" | "spring";
+export type Ease = "linear" | "cubic" | "inOut" | "out" | "smoothstep" | "expo" | "spring";
 export type ClockSample = { entryTime?: number; time?: number; slideTime: number; stepTime: number; stepIndex: number; stepOrigins: Record<number, number> };
 export type CameraPose = { position: Vec3; target: Vec3; fov: number; roll: number };
 /** Fixed scenery keeps clear of the content: it is hidden nearer than the camera target plus `near` and fully shown past `far`, measured along the view. */

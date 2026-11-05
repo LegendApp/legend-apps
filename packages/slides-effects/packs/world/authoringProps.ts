@@ -16,7 +16,7 @@ export const ambientEffects = ["dust", "trails", "orbs", "fog"] as const;
 export type AmbientEffect = typeof ambientEffects[number];
 export type Ambient = AmbientEffect | { effect: AmbientEffect; count?: number; color?: string; density?: number; length?: number };
 
-const eases: Ease[] = ["linear", "cubic", "out", "smoothstep", "expo", "spring"];
+const eases: Ease[] = ["linear", "cubic", "inOut", "out", "smoothstep", "expo", "spring"];
 /** Returns a complaint about `value`, or nothing when it passes. */
 type Rule = (value: unknown, path: string) => string | undefined;
 const shown = (value: unknown) => { try { return JSON.stringify(value) ?? String(value); } catch { return String(value); } };

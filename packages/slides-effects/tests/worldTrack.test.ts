@@ -673,3 +673,36 @@ test.each([false, true])("forward re-entry ignores retired slots behind the came
   expect(continuityPart(frame, "returning")[23]).toBe(1);
   expect(continuityPart(frame, "returning")[2]).toBe(-64);
 });
+
+test.each(["station", "world"] as const)("inOut flights keep carried parts and departures clear of the lens (%s)", frame => {
+  const options: WorldTrack = { frame, spacing: 50, duration: 1.2, ease: "inOut", turn: 0, rise: 0 };
+  const a = prepareWorldScene({ instances: [boxPose("shared", [-3, 1, 0]), boxPose("old", [0, 1, 0])] });
+  const b = prepareWorldScene({ instances: [boxPose("shared", [3, 1, frame === "world" ? -50 : 0])] });
+  const retained = retainTrackScene(b, a), declared = trackIds(b);
+  const first = continuitySample(createTrackFrame(), a, "0", 3, options);
+  const entered = continuitySample(first, retained, "1", 0, options, declared);
+  expect(entered.values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+  const quarter = continuitySample(entered, retained, "1", .3, options, declared);
+  expect(quarter.cursor).toBeCloseTo(.0625);
+  expect(continuityPart(quarter, "shared")[0]).toBeCloseTo(-3 + 6 * .0625);
+  expect(continuityPart(quarter, "shared")[2]).toBeCloseTo(-50 * .0625);
+  expect(continuityPart(quarter, "old")[23]).toBeCloseTo(.9375);
+  expect(continuitySample(entered, retained, "1", 1 / 60, options, declared).cursor).toBeGreaterThan(0);
+  for (const carry of [undefined, { lift: 3, spread: 3, spin: 40, stagger: .2 }]) {
+    const track = { ...options, carry };
+    const start = continuitySample(first, retained, "1", 0, track, declared);
+    for (let i = 1; i <= 72; i++) {
+      const sample = continuitySample(start, retained, "1", i / 60, track, declared);
+      for (const id of ["shared", "old"]) {
+        const body = continuityPart(sample, id);
+        const view = [sample.values[4] - sample.values[0], sample.values[5] - sample.values[1], sample.values[6] - sample.values[2]];
+        const depth = view.reduce((sum, v, axis) => sum + v * (body[axis] - sample.values[axis]), 0);
+        if (body[23] > .002) expect(depth).toBeGreaterThan(0);
+        if (id === "old" && depth <= .25 * sample.values[32] ** 2) expect(body[23]).toBe(0);
+      }
+    }
+  }
+  const landed = continuitySample(entered, retained, "1", 1.2, options, declared);
+  expect(landed.cursor).toBe(1);
+  expect(continuityPart(landed, "old")[23]).toBe(0);
+});

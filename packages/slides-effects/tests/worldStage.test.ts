@@ -104,6 +104,20 @@ test("rounded boxes with the same geometry share one custom draw", () => {
   expect(worldGraphTopology(prepareWorldScene({ instances })).customs?.map(draw => draw.count)).toEqual([2]);
 });
 
+test("inOut ease starts gently, stays bounded and mirrors its finish", () => {
+  expect(easeProgress(-1, "inOut")).toBe(0);
+  expect(easeProgress(2, "inOut")).toBe(1);
+  expect(easeProgress(.25, "inOut")).toBe(.0625);
+  expect(easeProgress(.5, "inOut")).toBe(.5);
+  expect(easeProgress(.75, "inOut")).toBe(.9375);
+  expect(easeProgress(.01, "inOut")).toBeLessThan(.00001);
+  for (let i = 0; i <= 100; i++) {
+    const p = i / 100;
+    expect(easeProgress(p, "inOut")).toBe(easeProgress(p, "cubic"));
+    expect(easeProgress(p, "inOut") + easeProgress(1 - p, "inOut")).toBeCloseTo(1);
+  }
+});
+
 test("out ease decelerates into the target", () => {
   expect(easeProgress(.5, "out")).toBeCloseTo(.875);
 });
