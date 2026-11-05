@@ -159,7 +159,7 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
       else if (child.type === Stage) {
         const stageOptions = options as StageOptions;
         if (scene.stages!.some(item => item.stage.id === stageOptions.id)) throw new Error(`World stage id is duplicated: ${stageOptions.id}`);
-        const stage: StageMotion = { id: stageOptions.id, position: compileTrack(stageOptions.position ?? [0, 0, 0]), glow: compileTrack(stageOptions.glow ?? 1) };
+        const stage: StageMotion = { id: stageOptions.id, position: compileTrack(stageOptions.position ?? [0, 0, 0]), glow: compileTrack(stageOptions.glow ?? 1), wave: stageOptions.wave };
         scene.stages!.push({ stage, parents: stages });
         collect(options.children as ReactNode, [...stages, stage]);
       }

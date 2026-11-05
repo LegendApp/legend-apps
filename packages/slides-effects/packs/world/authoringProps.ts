@@ -44,6 +44,8 @@ const distance = (a: string, b: string) => {
   }
   return row[b.length];
 };
+const wave = is(v => finite(v) && v >= 0 || Array.isArray(v) && v.length === 2 && v.every(finite) && v[0] >= 0 && v[1] > 0,
+  "an amplitude ≥ 0 or [amplitude, period in seconds > 0]");
 type Fields = Record<string, Rule>;
 /** Props that parts and scenes pass on to World as they are; never mistaken for typos. */
 const passThrough = new Set(["mdxSource", "children", "side", "font", "metal", "roughness", "material", "uppercase", "bevel", "bevelWidth", "bevelSegments",
@@ -90,7 +92,8 @@ const kindFields: Record<string, Fields> = {
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive() },
   keys: { keys: list(text), next: list(text), scroll: step, diff: step, remove: step, insert: step, recycle: step },
-  layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true) },
+  layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true), colors: list(color),
+    bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds") },
 };
 const required: Record<string, string[]> = { bars: ["items"], tree: ["nodes"], keys: ["keys"] };
 

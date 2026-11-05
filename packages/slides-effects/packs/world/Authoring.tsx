@@ -868,25 +868,49 @@ function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
       aperture={zoom === undefined ? 3 : [{ step: 0, value: 3 }, key(zoom, 6, 0, .8), key(zoom + 1, 3, 0, .8)]} maxBlur={22} />
   </Stage>;
 }
-/** `count` translucent layers stacked into depth, one more on each step from `step`, over a `meter` that fills to the given fraction on each step. */
+/** `count` translucent layers nested around `value`, each wider and nearer than the last, one more on each step from `step`, over a `meter` that fills
+ * to the given fraction on each step. Layer k takes `colors[k]`. Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
+ * `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds. */
 function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const count = Number(props.count ?? 4), first = Number(props.step ?? 0), label = String(props.label ?? ""), meter = (props.meter ?? []) as number[], length = 9;
-  const color = String(paint(props.color ?? INK.purple, INK.colors)), value = props.value as string | undefined, caption = props.caption as string | undefined;
-  const layer = (k: number): V3 => [k * .9, 0, -k * 1.5], shown = (k: number) => [{ step: 0, value: 0 }, key(first + k, 1, 0, .4)];
-  const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, -2.6, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
-  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), .2, .8))] : pick(fill(0));
+  const colors = ((props.colors ?? (props.color ? [props.color] : [INK.blue, INK.purple, INK.amber, INK.accent])) as string[]).map(c => String(paint(c, INK.colors)));
+  const color = (k: number) => colors[Math.min(k, colors.length - 1)], value = props.value as string | undefined, caption = props.caption as string | undefined;
+  const wave = (name: string, amplitude: number, period: number): [number, number] => {
+    const v = props[name] as number | [number, number] | undefined;
+    return Array.isArray(v) ? v : [v ?? amplitude, period];
+  };
+  const bob = wave("bob", .1, 4.4), orbit = wave("orbit", .07, 7), pulse = wave("pulse", .18, 3.2), lag = Number(props.lag ?? .3);
+  const layer = (k: number): V3 => [0, 0, k * .5], size = (k: number): V3 => [2.3 + .65 * k, 2.6 + .55 * k, .08];
+  const shown = (k: number) => [{ step: 0, value: 0 }, key(first + k, 1, 0, .3)];
+  const land = .55, floor = -size(count - 1)[1] / 2 - .45;
+  const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, floor, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
+  // Each step's meter moves later and slower than the last: every layer adds drag.
+  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
   return <Stage id={id} position={at}>
-    {Array.from({ length: count }, (_, k) => <Stage key={k} id={`${id}/${k}/arrival`}
-      position={[{ step: 0, value: add(layer(k), [-.6, 0, 2]) }, key(first + k, layer(k), 0, .6, "cubic")]}>
-      <Card id={`${id}/${k}`} scale={[2.4, 3.4, .08]} fill={.18} color={color} emissive={1.4 - k * .25} opacity={shown(k)} />
-      {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.24 * TYPE} align="left" position={[-.9, -1.25, .08]} color={color} emissive={1.2} opacity={shown(k)} />}
-    </Stage>)}
-    {value && <Text3D id={`${id}/value`} text={value} mono size={.6 * TYPE} position={[layer(count - 1)[0] + 2.6, 0, layer(count - 1)[2] - 1]} color={INK.white} emissive={.5} opacity={.4} />}
+    {Array.from({ length: count }, (_, k) => {
+      const [w, h] = size(k), corner: V3 = [-w / 2, h / 2, layer(k)[2]];
+      return <Fragment key={k}>
+        <Stage id={`${id}/${k}/arrival`} position={[{ step: 0, value: add(layer(k), [0, .5, 7]) }, key(first + k, layer(k), 0, .8, "spring")]}
+          glow={[{ step: 0, value: 1 }, key(first + k, 3, land, .08), key(first + k, 1, land + .1, .8)]}>
+          <Stage id={`${id}/${k}/wave`} wave={{ bob, orbit, pulse, lag: (k + 1) * lag }}>
+            <Card id={`${id}/${k}`} scale={size(k)} fill={.12} edge={1.2} glow={.32} color={color(k)} emissive={1.4 - k * .12} opacity={shown(k)} />
+            {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.2 * TYPE} align="left" position={[-w / 2 + .18, h / 2 - .3, .08]} color={color(k)} emissive={1.4} opacity={shown(k)} />}
+          </Stage>
+        </Stage>
+        <Burst id={`${id}/${k}/landing`} position={add(corner, [0, 0, .1])} step={first + k} delay={land} count={14} lifetime={.7} colors={[color(k), color(k), "#ffffff"]} emissive={6} size={.025} speed={2.5} />
+        <Burst id={`${id}/${k}/landing2`} position={add(corner, [w, -h, .1])} step={first + k} delay={land} count={14} lifetime={.7} colors={[color(k), color(k), "#ffffff"]} emissive={6} size={.025} speed={2.5} seed={k + 7} />
+      </Fragment>;
+    })}
+    {value && <Stage id={`${id}/value`} wave={{ bob, orbit, pulse: [pulse[0] / 2, pulse[1]] }}>
+      <Text3D id={`${id}/value/text`} text={value} mono size={.6 * TYPE} position={[0, -.15, -.5]} color={INK.white}
+        emissive={[{ step: 0, value: 1.1 }, ...Array.from({ length: count }, (_, k) => key(first + k, 1.1 * .82 ** (k + 1), land, .6))]} />
+    </Stage>}
     {meter.length > 0 && <>
-      <Box id={`${id}/track`} size={.5} position={[0, -2.6, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
-      <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} color={color} emissive={2.6} />
+      <Box id={`${id}/track`} size={.5} position={[0, floor, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
+      <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} emissive={2.6}
+        color={[{ step: 0, value: color(0) }, ...meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
     </>}
-    {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, -3.2, 0]} color={INK.muted} emissive={.8} />}
+    {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, floor - .6, 0]} color={INK.muted} emissive={.8} />}
   </Stage>;
 }
 type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };

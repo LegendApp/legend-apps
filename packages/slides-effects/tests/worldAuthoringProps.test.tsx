@@ -24,6 +24,8 @@ test("invalid props fail naming the MDX line, the element and the prop", () => {
   expect(fails(() => checkPart("rule", { id: "r", color: "red" }))).toStartWith('<Rule id="r"> color must be #RGB, #RRGGBB or a theme color (text, muted');
   expect(fails(() => checkPart("bars", { id: "b", items: [{ label: "A" }] }))).toBe('<Bars id="b"> items[0].value is required.');
   expect(fails(() => checkPart("code", { id: "c", marks: [{ text: "x", step: 1.5 }] }))).toBe('<CodePanel id="c"> marks[0].step must be a step number (0, 1, 2…) (got 1.5).');
+  expect(fails(() => checkPart("layers", { id: "l", bob: [.1, 0] }))).toBe('<Layers id="l"> bob must be an amplitude ≥ 0 or [amplitude, period in seconds > 0] (got [0.1,0]).');
+  expect(fails(() => checkPart("layers", { id: "l", colors: ["accent", "pink"] }))).toStartWith('<Layers id="l"> colors[1] must be #RGB, #RRGGBB or a theme color');
   expect(fails(() => checkScene({ ...at, id: "s", camera: { ease: "bounce" } }))).toBe('talk.mdx:12: <Scene id="s"> camera.ease must be one of "linear", "cubic", "out", "smoothstep", "expo", "spring" (got "bounce").');
   expect(fails(() => checkScene({ id: "s", camera: { steps: { 2: { orbit: 30, durtion: 1 } } } }))).toBe('<Scene id="s"> Unknown prop camera.steps[2].durtion. Did you mean camera.steps[2].duration?');
   expect(fails(() => checkScene({ id: "s", colors: { accent: "accent" } }))).toBe('<Scene id="s"> colors.accent must be #RGB or #RRGGBB (got "accent").');
@@ -177,7 +179,7 @@ test("headline entrances belong to their authored step and stay settled on later
 });
 
 test("layer builds reveal one moving layer per step, preserve earlier layers, and reverse cleanly", () => {
-  const children = expandScene(<Layers id="stack" count={4} label="Layer" meter={[.14, .19, .22, .23]} />, "layers");
+  const children = expandScene(<Layers id="stack" count={4} label="Layer" meter={[.14, .19, .22, .23]} bob={0} orbit={0} />, "layers");
   const prepared = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
   const cards = Array.from({ length: 4 }, (_, k) => prepared.instances.find(instance => instance.id === `stack/${k}`)!);
   const fill = prepared.instances.find(instance => instance.id === "stack/fill")!;
@@ -190,6 +192,22 @@ test("layer builds reveal one moving layer per step, preserve earlier layers, an
     expect(sampleTrack(fill.scale, settled)[0]).toBeCloseTo([.14, .19, .22, .23][step] * 9);
     for (let k = 0; k < step; k++) expect(instancePosition(cards[k], before)).toEqual(instancePosition(cards[k], settled));
   }
+});
+
+test("landed layers keep moving out of phase in their own colors, and the value inside dims as each layer wraps it", () => {
+  const children = expandScene(<Layers id="stack" count={3} value="v" colors={["#ff0000", "link"]} meter={[.1, .2, .3]} />, "layers");
+  const prepared = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+  const cards = Array.from({ length: 3 }, (_, k) => prepared.instances.find(instance => instance.id === `stack/${k}`)!);
+  const sample = (stepIndex: number, time: number) => ({ slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } });
+  expect(cards.map(card => card.motion)).toEqual([undefined, undefined, undefined]);
+  expect(cards.map(card => sampleTrack(card.color, sample(2, 3)))).toEqual([[1, 0, 0], ...Array(2).fill(sampleTrack(cards[1].color, sample(2, 3)))]);
+  const drift = (card: typeof cards[number]) => instancePosition(card, sample(2, 3)).map((v, axis) => v - instancePosition(card, sample(2, 4))[axis]);
+  expect(Math.hypot(...drift(cards[0]))).toBeGreaterThan(.01);
+  expect(drift(cards[0])).not.toEqual(drift(cards[1]));
+  const glow = (time: number) => sampleWorldUniforms(prepared, sample(2, time))[worldHeaderSize + prepared.instances.indexOf(cards[0]) * worldInstanceSize + instanceField.emissive];
+  expect(glow(3)).not.toBeCloseTo(glow(3.8));
+  const value = prepared.instances.find(instance => instance.id?.startsWith("stack/value/text") && instance.glyph)!;
+  expect(sampleTrack(value.emissive, sample(2, 3))).toBeLessThan(sampleTrack(value.emissive, sample(0, 3)));
 });
 
 test("card fades reach cached GPU uniforms and multiply each attached label only once", () => {

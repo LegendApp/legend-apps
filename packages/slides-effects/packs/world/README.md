@@ -427,7 +427,10 @@ A `recycle` pool sends the slot leaving the top around to the bottom; `recycle.g
 Use `rows:row:4` to follow or focus logical row 4 while it is visible.
 `width`, `depth`, `start`, `flashDuration` and `position` configure the column.
 Stages offset nested primitives and multiply their glow. Stage positions and glow
-can be animated. Lights and the floor remain world-space settings even when
+can be animated. `wave={{ bob: [.1, 4], orbit: [.07, 7], pulse: [.2, 3], lag: .3 }}` keeps a
+Stage moving on the slide clock: each entry is `[amplitude, period in seconds]`; `bob` rises and falls,
+`orbit` circles in the ground plane, `pulse` scales glow by 1 ± amplitude, and `lag` delays all three.
+Lights and the floor remain world-space settings even when
 nested in a Stage. `flyTo` targets `stage:<id>` with a deterministic eased transition;
 use that explicit prefix when following a stage directly. An eased flight is the
 default; a positive `arc` adds vertical curvature to the transition.
@@ -936,8 +939,11 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   tree of `nodes` labels on `extract`.
 - `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
   the front under depth of field; `zoom` defocuses everything else on that step.
-- `Layers count label meter` stacks one more layer into depth per step and fills its
-  meter to the given fractions.
+- `Layers count label value meter` nests one more translucent layer around `value` per step,
+  each landing with a flash and sparks, dims the value under each layer and fills the meter to the
+  given fractions, later and slower on each step. Layer k takes `colors[k]` (default link, highlight,
+  hot, accent). Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
+  `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds.
 - `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
   `anchor: "center"` centers the panel on its position.
 

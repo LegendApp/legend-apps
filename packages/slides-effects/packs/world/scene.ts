@@ -18,8 +18,11 @@ export type PrimitiveKind = "sphere" | "box" | "tube" | "ring";
 export type Track<T> = { initial: T; frames: Keyframe<T>[]; steps?: number[] };
 export type MaterialOptions = { id?: string; albedo?: Animated<string>; emissive?: Animated<number>; roughness?: Animated<number>; metal?: Animated<number>; rim?: Animated<number> };
 export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>; range?: Animated<number>; angle?: Animated<number> };
-export type StageOptions = { id: string; position?: Animated<Vec3>; glow?: Animated<number> };
-export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<number> };
+/** Endless motion on the slide clock, each as `[amplitude, period in seconds]`: `bob` rises and falls, `orbit` circles in the ground plane,
+ * `pulse` scales glow by 1 ± amplitude. `lag` delays all three by seconds. */
+export type StageWave = { bob?: [number, number]; orbit?: [number, number]; pulse?: [number, number]; lag?: number };
+export type StageOptions = { id: string; position?: Animated<Vec3>; glow?: Animated<number>; wave?: StageWave };
+export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<number>; wave?: StageWave };
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
 export type PulseOptions = { id: string; path: (string | Vec3)[]; step?: number; duration?: number; color?: Animated<string>; size?: number; trail?: number; emissive?: Animated<number> };
 export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?: number; lifetime?: number; color?: string; size?: number; spread?: Vec3; velocity?: Vec3; seed?: number; step?: number };
@@ -398,8 +401,19 @@ function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec
   for (const stage of stages) {
     const position = sampleTrack(stage.position, clock);
     for (let axis = 0; axis < 3; axis++) offset[axis] += position[axis];
+    const wave = stage.wave;
+    if (wave) {
+      const t = clock.slideTime - (wave.lag ?? 0);
+      if (wave.bob) offset[1] += Math.sin(t * 2 * Math.PI / wave.bob[1]) * wave.bob[0];
+      if (wave.orbit) { const a = t * 2 * Math.PI / wave.orbit[1]; offset[0] += Math.cos(a) * wave.orbit[0]; offset[2] += Math.sin(a) * wave.orbit[0]; }
+    }
   }
   return offset;
+}
+function stageGlow(stage: StageMotion, clock: ClockSample) {
+  "worklet";
+  const glow = sampleTrack(stage.glow, clock), pulse = stage.wave?.pulse;
+  return pulse ? glow * (1 + Math.sin((clock.slideTime - (stage.wave!.lag ?? 0)) * 2 * Math.PI / pulse[1]) * pulse[0]) : glow;
 }
 function rowScroll(rows: NonNullable<Instance["rows"]>, clock: ClockSample) {
   "worklet";
@@ -857,7 +871,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       values[index] = position[0]; values[index + 1] = position[1]; values[index + 2] = position[2]; values[index + 3] = sampleTrack(instance.size, clock) * (part ? Math.max(part.scale[0], part.scale[1]) : 1);
       values[index + 4] = color[0]; values[index + 5] = color[1]; values[index + 6] = color[2];
       let emissive = sampleTrack(instance.emissive, clock) * (label.parent?.rows ? 1 - 0.6 * rowOutside(label.parent, clock) : 1);
-      for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
+      for (const stage of instance.stages ?? []) emissive *= stageGlow(stage, clock);
       values[index + 7] = emissive;
       values[index + 23] = instanceOpacity(instance, clock);
       const logical = label.row ? rowLabelLogical(instance, clock) : 0;
@@ -913,7 +927,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       color = mixVector(mixVector(color, [0, 0, 0], 0.55 * outside), instance.rows.recycleColor, glow);
       emissive = emissive * (1 - 0.6 * outside) + glow * (instance.rows.ghost ? 0.5 : 0.35) * (instance.rows.options.recycle?.glow ?? 1);
     }
-    for (const stage of instance.stages ?? []) emissive *= sampleTrack(stage.glow, clock);
+    for (const stage of instance.stages ?? []) emissive *= stageGlow(stage, clock);
     values[index + I.color] = dim[0] + (color[0] - dim[0]) * activation;
     values[index + I.color + 1] = dim[1] + (color[1] - dim[1]) * activation;
     values[index + I.color + 2] = dim[2] + (color[2] - dim[2]) * activation;
@@ -1041,14 +1055,14 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (!instance.card?.opacity || still(instance.card.opacity)) &&
-      (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
+      (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow) && !stage.wave) &&
       !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
       const collapses = !!instance.voxel?.options.collapse;
       if (!instance.drift) instance.motion = collapses ? "voxel" : "static";
       else if (!collapses) instance.motion = "drift";
     }
     else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
-      !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor) {
+      !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor && !instance.stages?.some(stage => stage.wave)) {
       instance.motion = "tracks";
       instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
         ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
