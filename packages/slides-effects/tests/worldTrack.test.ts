@@ -645,3 +645,31 @@ test("departing parts lose sharpness while incoming focus stays sharp during tra
   expect(part(frame, "label:old")[instanceField.sharp]).toBe(0);
   expect(part(frame, "label:new")[instanceField.sharp]).toBe(1);
 });
+
+test.each([false, true])("forward re-entry ignores retired slots behind the camera (rapid: %s)", (rapid: boolean) => {
+  const options: WorldTrack = { spacing: 32, duration: 2, turn: 0, rise: 0, ease: "out" };
+  const a = prepareWorldScene({ instances: [boxPose("returning", [0, 1, 0])] });
+  const b = prepareWorldScene({ instances: [boxPose("other", [3, 1, 0])] });
+  let scene = a, declared = a;
+  let frame = continuitySample(createTrackFrame(), scene, "0", 3, options);
+  const go = (target: typeof a, key: string, time: number) => {
+    const next = retainTrackScene(target, scene, declared, false, frame.visible);
+    frame = continuitySample(frame, next, key, 0, options, trackIds(target));
+    frame = continuitySample(frame, next, key, time, options, trackIds(target));
+    scene = next; declared = target;
+  };
+  go(b, "1", 2);
+  go(a, "2", 2);
+  go(b, "1:back", rapid ? .1 : 2);
+  go(a, "0:back", rapid ? .1 : 2);
+  go(b, "1:forward", rapid ? .1 : 2);
+  go(a, "2:forward", 0);
+  const entry = frame;
+  for (let i = 1; i <= 120; i++) {
+    frame = continuitySample(entry, scene, "2:forward", i / 60, options, trackIds(a));
+    const part = continuityPart(frame, "returning");
+    if (part[23] > .002) expect(part[2]).toBeLessThan(frame.values[2]);
+  }
+  expect(continuityPart(frame, "returning")[23]).toBe(1);
+  expect(continuityPart(frame, "returning")[2]).toBe(-64);
+});

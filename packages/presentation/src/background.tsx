@@ -90,8 +90,9 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
 }
 function SelectedBackground({ entry, retained, isPreview, Boundary }: { entry: Entry; retained: boolean; isPreview: boolean; Boundary: ComponentType<{ children?: ReactNode }> }) {
   const sourceRuntime$ = entry.runtime$;
+  // The registration gap ends in layout effects; pausing here would discard the retained UI timestamp.
   const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), isActive: !isPreview && !retained, isPreview, isPreparing: false,
-    playbackPhase: isPreview ? "preview" : retained ? "paused" : "playing", playbackScope: "background" }), [sourceRuntime$, isPreview, retained]);
+    playbackPhase: isPreview ? "preview" : "playing", playbackScope: "background" }), [sourceRuntime$, isPreview, retained]);
   return <PresentationObservableProvider value={runtime$}><Boundary>{entry.children}</Boundary></PresentationObservableProvider>;
 }
 

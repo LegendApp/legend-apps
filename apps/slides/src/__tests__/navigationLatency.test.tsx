@@ -6,8 +6,10 @@ import React from "react";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { act, create } from "react-test-renderer";
-import { GPUShaderProvider, PresentationObservableProvider, useRuntimeProjection } from "@legend-apps/presentation";
+import { BackgroundHost, DeckContentContext, GPUShaderProvider, PresentationObservableProvider, useRuntimeProjection } from "@legend-apps/presentation";
 import { Box, Camera, World } from "../../../../packages/slides-effects/packs/world/World";
+import { useValue } from "@legendapp/state/react";
+import { Scene } from "../../../../packages/slides-effects/packs/world/Authoring";
 import { worldHeaderSize } from "../../../../packages/slides-effects/packs/world/scene";
 import { getSlidesState, nextSlide, previousSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
@@ -87,6 +89,71 @@ test("Right publishes navigation synchronously and World moves on the next UI fr
     expect(values().slice(0, 3)).not.toEqual(camera);
     await act(() => { previousSlide(); press(); expect(getSlidesState().currentSlide).toBe(1); });
     console.info(JSON.stringify({ keyToStateMs: latency, firstMotionFrames: 1 }));
+  } finally {
+    await act(() => tree?.unmount()); flushUI();
+    await registration.remove(); setSlidesState(initial);
+  }
+});
+
+test.each([false, true])("retained scene changes move the camera on the first presented frame (cold: %s)", async cold => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState(), router = createHotkeyRouter();
+  const registration = await router.register({
+    definitions: [{ id: "next", title: "Next Slide", defaultBindings: ["Right"], repeat: true }],
+    handlers: { next: nextSlide }, scope: { kind: "window", windowId: "slides-presenter" },
+  });
+  const declarations = [0, 1].map(index => <Scene id={`latency-${index}`} world="latency-scenes" quality="high"
+    camera={{ steps: { 1: { shift: [2, 0, 0], duration: 1, ease: "out" } } }}>
+    <Box id="part" position={[index, 0, 0]} />
+  </Scene>);
+  function Renderer(props) { return <gpu {...props} />; }
+  function Slide({ index }) {
+    const runtime$ = useRuntimeProjection(() => {
+      const active = slidesState$.currentSlide.get() === index;
+      return {
+        currentSlide: slidesState$.currentSlide.get(), currentStep: slidesState$.currentStep.get(),
+        slideIndex: index, stepIndex: active ? slidesState$.currentStep.get() : 0,
+        startedAt: slidesState$.slideStartedAt.get(), stepStartedAt: slidesState$.stepStartedAt.get(),
+        direction: slidesState$.direction.get(), isActive: active, isPreview: false,
+        playbackPhase: active ? "playing" : "preparing",
+      };
+    }, [index]);
+    return <PresentationObservableProvider value={runtime$}>{declarations[index]}</PresentationObservableProvider>;
+  }
+  function Surface() {
+    const index = useValue(slidesState$.currentSlide);
+    return <DeckContentContext.Provider value={declarations}><BackgroundHost slideIndex={index} color="#000">
+      {declarations.map((_, i) => (!cold || index === i) && <Slide key={i} index={i} />)}
+    </BackgroundHost></DeckContentContext.Provider>;
+  }
+  let tree;
+  const camera = () => Array.from(tree.root.findByType("gpu").props.frameData.value.slice(0, 3));
+  const press = () => keyDown({ key: "\uf703", keyCode: 124, modifiers: 0, repeated: false,
+    windowId: "slides-presenter", consumed: true, captured: false });
+  const rows = [];
+  try {
+    setSlidesState({ currentSlide: 0, currentStep: 0, slides: [0, 1].map(() => ({ metadata: { steps: 2 }, notes: "" })) });
+    await act(() => { tree = create(<GPUShaderProvider renderer={Renderer}><Surface /></GPUShaderProvider>); });
+    flushUI(); tick(0); tick(1000);
+    for (const [kind, timestamp] of [["step", 1000], ["slide", 5000]]) {
+      const before = camera(), started = performance.now();
+      await act(() => { expect(press()).toBe(true); });
+      const dispatchMs = performance.now() - started;
+      flushUI();
+      camera().forEach((value, axis) => expect(value).toBeCloseTo(before[axis], 5));
+      let firstMotionFrame = 0, thresholdMotionFrame = 0;
+      for (let frame = 1; frame <= 30; frame++) {
+        tick(timestamp + frame * 1000 / 60);
+        const distance = Math.hypot(...camera().map((value, axis) => value - before[axis]));
+        if (!firstMotionFrame && distance > 1e-6) firstMotionFrame = frame;
+        if (!thresholdMotionFrame && distance > .01) thresholdMotionFrame = frame;
+      }
+      rows.push({ kind, dispatchMs, firstMotionFrame, thresholdMotionFrame });
+      tick(5000);
+    }
+    console.info(JSON.stringify({ cold, navigationMotion: rows }));
+    expect(rows.find(row => row.kind === "slide").firstMotionFrame).toBe(1);
+    expect(rows.find(row => row.kind === "step").firstMotionFrame).toBe(2);
   } finally {
     await act(() => tree?.unmount()); flushUI();
     await registration.remove(); setSlidesState(initial);

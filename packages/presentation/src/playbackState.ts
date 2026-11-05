@@ -46,7 +46,8 @@ export function transitionPlayback(state: PlaybackState, input: PlaybackInput): 
           [input.stepIndex]: state.slideTime } : state.stepOrigins,
     slideTime: restart ? 0 : state.slideTime,
     stepTime: restart || stepChanged ? 0 : state.stepTime,
-    lastTimestamp: restart || enteringPlayback || input.phase !== "playing" ? null : state.lastTimestamp,
+    // A retained playing surface already has a UI timestamp; use its next tick for motion.
+    lastTimestamp: enteringPlayback || input.phase !== "playing" ? null : state.lastTimestamp,
     // A step begins on its first rendered tick, while the slide clock keeps running.
     stepPending: !restart && input.phase === "playing" && (stepChanged || state.stepPending),
   };

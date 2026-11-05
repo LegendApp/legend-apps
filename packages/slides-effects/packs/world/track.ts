@@ -420,7 +420,11 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const morphEase = entering && course.ease[leg] || "cubic";
   const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, morphEase);
   const previousSlots = changed && !same ? new Map(previous.ids.map((id, slot) => [id, slot])) : null;
-  const sources = changed ? ids.map((id, slot) => id.slice(id.indexOf(":") + 1) ? same ? slot : previousSlots!.get(id) ?? -1 : -1) : previous.sources;
+  const sources = changed ? ids.map((id, slot) => {
+    const source = id.slice(id.indexOf(":") + 1) ? same ? slot : previousSlots!.get(id) ?? -1 : -1;
+    // A retired draw slot is storage, not a live pose to carry into the next station.
+    return source >= 0 && !previous.declaredSlots[source] && hidden(previous.values, worldHeaderSize + source * worldInstanceSize) ? -1 : source;
+  }) : previous.sources;
   // A step camera eases from wherever the camera was when navigation began, including mid-move.
   const posed = [camera.position[0], camera.position[1], camera.position[2], Math.tan(camera.fov * Math.PI / 360), camera.target[0], camera.target[1], camera.target[2], camera.roll];
   const cameraDelta = !changed ? previous.cameraDelta : !first && from.length > 7 && (slideChanged || options.steps || previous.cameraDelta) ? posed.map((value, i) => from[i] - value) : undefined;
