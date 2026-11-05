@@ -869,6 +869,7 @@
     "react-native-enriched-markdown",
   ],
   "patchedDependencies": {
+    "@legendapp/spark@0.0.2": "patches/@legendapp+spark@0.0.2.patch",
     "react-native-worklets@0.12.2": "patches/react-native-worklets@0.12.2.patch",
     "react-native-macos@0.83.0": "patches/react-native-macos@0.83.0.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
