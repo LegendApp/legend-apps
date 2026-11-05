@@ -928,22 +928,16 @@ function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
 }
 /** `count` translucent layers nested around `value`, each wider and nearer than the last, one more on each step from `step`, over a `meter` that fills
  * to the given fraction on each step. Layer k takes `colors[k]`. Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
- * `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds. */
-function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
+ * `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds. With `words`, the part's code line is shown at `size` instead,
+ * and layer k is a box around `words[k]`, which then moves with its box. */
+function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink, source: string, tokens?: CodeToken[]) {
+  const words = props.words as string[] | undefined;
+  if (words) return proxyLine(id, at, props, INK, source.replace(/\n$/, ""), words, tokens);
   const count = Number(props.count ?? 4), first = Number(props.step ?? 0), label = String(props.label ?? ""), meter = (props.meter ?? []) as number[], length = 9;
-  const colors = ((props.colors ?? (props.color ? [props.color] : [INK.blue, INK.purple, INK.amber, INK.accent])) as string[]).map(c => String(paint(c, INK.colors)));
-  const color = (k: number) => colors[Math.min(k, colors.length - 1)], value = props.value as string | undefined, caption = props.caption as string | undefined;
-  const wave = (name: string, amplitude: number, period: number): [number, number] => {
-    const v = props[name] as number | [number, number] | undefined;
-    return Array.isArray(v) ? v : [v ?? amplitude, period];
-  };
-  const bob = wave("bob", .1, 4.4), orbit = wave("orbit", .07, 7), pulse = wave("pulse", .18, 3.2), lag = Number(props.lag ?? .3);
+  const { color, bob, orbit, pulse, lag } = layerStyle(props, INK), value = props.value as string | undefined, caption = props.caption as string | undefined;
   const layer = (k: number): V3 => [0, 0, k * .5], size = (k: number): V3 => [2.3 + .65 * k, 2.6 + .55 * k, .08];
   const shown = (k: number) => [{ step: 0, value: 0 }, key(first + k, 1, 0, .3)];
-  const land = .55, floor = -size(count - 1)[1] / 2 - .45;
-  const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, floor, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
-  // Each step's meter moves later and slower than the last: every layer adds drag.
-  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
+  const floor = -size(count - 1)[1] / 2 - .45;
   return <Stage id={id} position={at}>
     {Array.from({ length: count }, (_, k) => {
       const [w, h] = size(k), corner: V3 = [-w / 2, h / 2, layer(k)[2]];
@@ -955,8 +949,7 @@ function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
             {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.2 * TYPE} align="left" position={[-w / 2 + .18, h / 2 - .3, .08]} color={color(k)} emissive={1.4} opacity={shown(k)} />}
           </Stage>
         </Stage>
-        <Burst id={`${id}/${k}/landing`} position={add(corner, [0, 0, .1])} step={first + k} delay={land} count={14} lifetime={.7} colors={[color(k), color(k), "#ffffff"]} emissive={6} size={.025} speed={2.5} />
-        <Burst id={`${id}/${k}/landing2`} position={add(corner, [w, -h, .1])} step={first + k} delay={land} count={14} lifetime={.7} colors={[color(k), color(k), "#ffffff"]} emissive={6} size={.025} speed={2.5} seed={k + 7} />
+        {landing(id, k, first, corner, [w, -h, 0], color(k))}
       </Fragment>;
     })}
     {value && <Stage id={`${id}/value`} wave={{ bob, orbit, pulse: [pulse[0] / 2, pulse[1]] }}>
@@ -967,12 +960,69 @@ function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
       <Box id={`${id}/track`} size={.5} position={[0, floor, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
       <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} emissive={2.6}
         color={[{ step: 0, value: color(0) }, ...meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
+    {taxMeter(id, meter, first, length, floor, color, INK, caption)}
+  </Stage>;
+}
+/** Seconds from a layer's step until it lands, flashes and sparks. */
+const land = .55;
+function layerStyle(props: Record<string, unknown>, INK: Ink) {
+  const colors = ((props.colors ?? (props.color ? [props.color] : [INK.blue, INK.purple, INK.amber, INK.accent])) as string[]).map(c => String(paint(c, INK.colors)));
+  const wave = (name: string, amplitude: number, period: number): [number, number] => {
+    const v = props[name] as number | [number, number] | undefined;
+    return Array.isArray(v) ? v : [v ?? amplitude, period];
+  };
+  return { color: (k: number) => colors[Math.min(k, colors.length - 1)], bob: wave("bob", .1, 4.4), orbit: wave("orbit", .07, 7), pulse: wave("pulse", .18, 3.2), lag: Number(props.lag ?? .3) };
+}
+/** Sparks from two opposite corners of layer k as it lands. */
+const landing = (id: string, k: number, first: number, corner: V3, across: V3, color: string) => [0, 1].map(n =>
+  <Burst key={n} id={`${id}/${k}/landing${n ? 2 : ""}`} position={add(n ? add(corner, across) : corner, [0, 0, .1])} step={first + k} delay={land} count={14} lifetime={.7}
+    colors={[color, color, "#ffffff"]} emissive={6} size={.025} speed={2.5} {...n ? { seed: k + 7 } : {}} />);
+/** A meter that fills to `meter[s]` on each step, later and slower each time: every layer adds drag. */
+function taxMeter(id: string, meter: number[], first: number, length: number, floor: number, color: (k: number) => string, INK: Ink, caption?: string) {
+  const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, floor, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
+  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
+  return <>
     </>}
     {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, floor - .6, 0]} color={INK.muted} emissive={.8} />}
   </Stage>;
 }
 type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };
 /** A part's `exit`, and a non-text part's `enter`, move it as one Stage; text also fades out and keeps its per-glyph entrance. */
+  </>;
+}
+/** A code line centered on `at`, wrapping one glowing box around each of `words` per step, left to right. Each box hugs its word, centered on
+ * its cap height, and the word moves with its box once it lands. */
+function proxyLine(id: string, at: V3, props: Record<string, unknown>, INK: Ink, line: string, words: string[], tokens?: CodeToken[]) {
+  const first = Number(props.step ?? 0), label = String(props.label ?? ""), meter = (props.meter ?? []) as number[], caption = props.caption as string | undefined;
+  const { color, bob, orbit, pulse, lag } = layerStyle(props, INK), em = Number(props.size ?? .6) * TYPE, advance = em * MONO, left = -line.length * advance / 2;
+  let from = 0;
+  const columns = words.map(word => {
+    const column = line.indexOf(word, from);
+    if (column < 0) throw authoringError({ ...props, id }, "Layers", `words: "${word}" is not in the code line after column ${from}.`);
+    from = column + word.length;
+    return column;
+  });
+  const text = (column: number, length: number) => <Text3D key={column} id={`${id}/text${column}`} text={line.slice(column, column + length)}
+    tokens={lineTokens(tokens, column, length)} mono size={em} align="left" position={[left + column * advance, 0, 0]} />;
+  const gaps = [...columns.map((c, k) => [k ? columns[k - 1] + words[k - 1].length : 0, c]), [from, line.length]].filter(([a, b]) => line.slice(a, b).trim());
+  const height = em * 1.3, floor = -height / 2 - .7;
+  return <Stage id={id} position={at}>
+    {gaps.map(([a, b]) => text(a, b - a))}
+    {words.map((word, k) => {
+      const w = word.length * advance + em * .35, center: V3 = [left + (columns[k] + word.length / 2) * advance, 0, 0], shown = [{ step: 0, value: 0 }, key(first + k, 1, 0, .3)];
+      return <Fragment key={k}>
+        <Stage id={`${id}/${k}/wave`} wave={{ bob, orbit, pulse, lag: k * lag, step: first + k, delay: land }}>
+          {text(columns[k], word.length)}
+          <Stage id={`${id}/${k}/arrival`} position={[{ step: 0, value: add(center, [0, .5, 7]) }, key(first + k, center, 0, .8, "spring")]}
+            glow={[{ step: 0, value: 1 }, key(first + k, 3, land, .08), key(first + k, 1, land + .1, .8)]}>
+            <Card id={`${id}/${k}`} scale={[w, height, .08]} fill={.12} edge={1.2} glow={.32} color={color(k)} emissive={1.4} opacity={shown} />
+            {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.2 * TYPE} align="left" position={[-w / 2, height / 2 + .2, 0]} color={color(k)} emissive={1.4} opacity={shown} />}
+          </Stage>
+        </Stage>
+        {landing(id, k, first, add(center, [-w / 2, height / 2, 0]), [w, -height, 0], color(k))}
+      </Fragment>;
+    })}
+    {taxMeter(id, meter, first, Math.max(4, line.length * advance), floor, color, INK, caption)}
 function moved(id: string, part: ReactNode, enter: PartMotion & { from?: V3 } | undefined, exit: PartMotion & { to?: V3 } | undefined) {
   const frames: { step: number; value: V3; delay?: number; duration?: number; ease?: Ease }[] = [];
   if (enter) { const e = { ...enterDefaults, ...enter }; frames.push({ step: 0, value: e.from }, { step: e.step, delay: e.delay, value: [0, 0, 0], duration: e.duration, ease: e.ease }); }
@@ -1084,7 +1134,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
   if (kind === "morph") return codeMorph(id, position, props, children, INK);
   if (kind === "trace") return codeTrace(id, position, props, source, INK, codeHighlight(children)?.tokens);
   if (kind === "cloud") return cloud(id, position, props, INK);
-  if (kind === "layers") return layers(id, position, props, INK);
+  if (kind === "layers") return layers(id, position, props, INK, source, codeHighlight(children)?.tokens);
   if (kind === "editor") {
     const labels = props.labels as string[], values = [String(props.name ?? ""),String(props.email ?? "")];
     return <Stage id={id} position={position}>{[-1,1].map(side => <Stage key={side} id={`${id}/${side}`} position={[side * 3.35,0,0]}>

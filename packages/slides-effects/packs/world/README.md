@@ -433,6 +433,7 @@ Stages offset nested primitives and multiply their glow. Stage positions and glo
 can be animated. `wave={{ bob: [.1, 4], orbit: [.07, 7], pulse: [.2, 3], lag: .3 }}` keeps a
 Stage moving on the slide clock: each entry is `[amplitude, period in seconds]`; `bob` rises and falls,
 `orbit` circles in the ground plane, `pulse` scales glow by 1 ± amplitude, and `lag` delays all three.
+With `step` (and `delay` seconds), the Stage holds still until then and the wave eases in over a second.
 Lights and the floor remain world-space settings even when
 nested in a Stage. `flyTo` targets `stage:<id>` with a deterministic eased transition;
 use that explicit prefix when following a stage directly. An eased flight is the
@@ -947,6 +948,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   given fractions, later and slower on each step. Layer k takes `colors[k]` (default link, highlight,
   hot, accent). Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
   `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds.
+  With `words`, Layers shows its fenced code line at `size` (default .6), syntax colored and centered,
+  and layer k is a box hugging the k-th of `words` left to right, labeled above; once its box lands
+  the word moves with it.
 - `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
   `anchor: "center"` centers the panel on its position.
 

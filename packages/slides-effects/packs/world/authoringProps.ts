@@ -94,7 +94,7 @@ const kindFields: Record<string, Fields> = {
   keys: { keys: list(text), next: list(text), scroll: step, diff: step, remove: step, insert: step, recycle: step,
     viewport: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), window: step },
   layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true), colors: list(color),
-    bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds") },
+    bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds"), words: list(text), size: positive() },
 };
 const required: Record<string, string[]> = { bars: ["items"], tree: ["nodes"], keys: ["keys"] };
 

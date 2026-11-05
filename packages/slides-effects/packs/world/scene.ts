@@ -20,7 +20,7 @@ export type MaterialOptions = { id?: string; albedo?: Animated<string>; emissive
 export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>; range?: Animated<number>; angle?: Animated<number> };
 /** Endless motion on the slide clock, each as `[amplitude, period in seconds]`: `bob` rises and falls, `orbit` circles in the ground plane,
  * `pulse` scales glow by 1 ± amplitude. `lag` delays all three by seconds. */
-export type StageWave = { bob?: [number, number]; orbit?: [number, number]; pulse?: [number, number]; lag?: number };
+export type StageWave = { bob?: [number, number]; orbit?: [number, number]; pulse?: [number, number]; lag?: number; step?: number; delay?: number };
 export type StageOptions = { id: string; position?: Animated<Vec3>; glow?: Animated<number>; wave?: StageWave };
 export type StageMotion = { id: string; position: Track<Vec3>; glow: Track<number>; wave?: StageWave };
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
@@ -393,6 +393,13 @@ export function voxelRemaining(instance: Instance, clock: ClockSample): number {
   const target = Math.round(voxel.count * (voxel.options.collapse?.to ?? 0.2));
   return voxel.count + (target - voxel.count) * collapseProgress(voxel.options.collapse, clock);
 }
+/** A wave with a `step` is still until that step, then eases in over a second after `delay`. */
+function waveRise(wave: StageWave, clock: ClockSample) {
+  "worklet";
+  if (wave.step === undefined) return 1;
+  const elapsed = triggerElapsed(wave.step, clock), u = Math.min(1, Math.max(0, elapsed - (wave.delay ?? 0)));
+  return elapsed < 0 ? 0 : u * u * (3 - 2 * u);
+}
 const noOffset: Vec3 = [0, 0, 0];
 function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec3 {
   "worklet";
@@ -403,9 +410,9 @@ function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec
     for (let axis = 0; axis < 3; axis++) offset[axis] += position[axis];
     const wave = stage.wave;
     if (wave) {
-      const t = clock.slideTime - (wave.lag ?? 0);
-      if (wave.bob) offset[1] += Math.sin(t * 2 * Math.PI / wave.bob[1]) * wave.bob[0];
-      if (wave.orbit) { const a = t * 2 * Math.PI / wave.orbit[1]; offset[0] += Math.cos(a) * wave.orbit[0]; offset[2] += Math.sin(a) * wave.orbit[0]; }
+      const t = clock.slideTime - (wave.lag ?? 0), k = waveRise(wave, clock);
+      if (wave.bob) offset[1] += Math.sin(t * 2 * Math.PI / wave.bob[1]) * wave.bob[0] * k;
+      if (wave.orbit) { const a = t * 2 * Math.PI / wave.orbit[1]; offset[0] += Math.cos(a) * wave.orbit[0] * k; offset[2] += Math.sin(a) * wave.orbit[0] * k; }
     }
   }
   return offset;
@@ -413,7 +420,7 @@ function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec
 function stageGlow(stage: StageMotion, clock: ClockSample) {
   "worklet";
   const glow = sampleTrack(stage.glow, clock), pulse = stage.wave?.pulse;
-  return pulse ? glow * (1 + Math.sin((clock.slideTime - (stage.wave!.lag ?? 0)) * 2 * Math.PI / pulse[1]) * pulse[0]) : glow;
+  return pulse ? glow * (1 + Math.sin((clock.slideTime - (stage.wave!.lag ?? 0)) * 2 * Math.PI / pulse[1]) * pulse[0] * waveRise(stage.wave!, clock)) : glow;
 }
 function rowScroll(rows: NonNullable<Instance["rows"]>, clock: ClockSample) {
   "worklet";

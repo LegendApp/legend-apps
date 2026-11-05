@@ -5,7 +5,7 @@ import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
-import { Bars, CodePanel, Headline, Keys, Layers, Rule, Scene, expandScene, readScenes } from "../packs/world/Authoring";
+import { Bars, CodeMorph, CodePanel, CodeTrace, Headline, Keys, Layers, Rule, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { checkPart, checkScene, defaultColors, enterDefaults, exitDefaults } from "../packs/world/authoringProps";
 import { Box, Card, Fog, Orbs, Pillar, Stage, Text3D, prepareWorldSlides } from "../packs/world/World";
 import { cardInstances, instanceField, instanceOpacity, instancePosition, prepareWorldScene, sampleTrack, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
@@ -26,6 +26,7 @@ test("invalid props fail naming the MDX line, the element and the prop", () => {
   expect(fails(() => checkPart("code", { id: "c", marks: [{ text: "x", step: 1.5 }] }))).toBe('<CodePanel id="c"> marks[0].step must be a step number (0, 1, 2…) (got 1.5).');
   expect(fails(() => checkPart("layers", { id: "l", bob: [.1, 0] }))).toBe('<Layers id="l"> bob must be an amplitude ≥ 0 or [amplitude, period in seconds > 0] (got [0.1,0]).');
   expect(fails(() => checkPart("layers", { id: "l", colors: ["accent", "pink"] }))).toStartWith('<Layers id="l"> colors[1] must be #RGB, #RRGGBB or a theme color');
+  expect(fails(() => expandScene(<Layers id="l" words={["user", "state"]}>{"state.user"}</Layers>, "layers"))).toBe('<Layers id="l"> words: "state" is not in the code line after column 10.');
   expect(fails(() => checkScene({ ...at, id: "s", camera: { ease: "bounce" } }))).toBe('talk.mdx:12: <Scene id="s"> camera.ease must be one of "linear", "cubic", "out", "smoothstep", "expo", "spring" (got "bounce").');
   expect(fails(() => checkScene({ id: "s", camera: { steps: { 2: { orbit: 30, durtion: 1 } } } }))).toBe('<Scene id="s"> Unknown prop camera.steps[2].durtion. Did you mean camera.steps[2].duration?');
   expect(fails(() => checkScene({ id: "s", colors: { accent: "accent" } }))).toBe('<Scene id="s"> colors.accent must be #RGB or #RRGGBB (got "accent").');
@@ -74,7 +75,11 @@ test("scene colors theme the parts, and color props take theme names", () => {
 test("code panels and bar charts take style props over the theme's panel defaults", () => {
   const fence = "const a = 1;\n";
   const plain = expandScene(<CodePanel id="code">{fence}</CodePanel>);
-  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .94, color: defaultColors.panel });
+  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .96, color: defaultColors.panel });
+  const diff = <pre><code className="language-diff">{" A\n-B\n+C\n"}</code></pre>;
+  for (const part of [<CodeMorph id="code">{diff}</CodeMorph>, <CodeTrace id="code" source={1} reads={[1]} nodes={["a", "b"]}>{fence}</CodeTrace>])
+    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .96, color: defaultColors.panel });
+  expect(find(expandScene(<CodeMorph id="code" fill={.5}>{diff}</CodeMorph>), Card, "code/card").props.fill).toBe(.5);
   const styled = expandScene(<CodePanel id="code" fill={.4} padding={.5} panelColor="idle" textColor="hot" marks={[{ text: "a", color: "link" }]}>{fence}</CodePanel>);
   const card = find(styled, Card, "code/card");
   expect(card.props).toMatchObject({ fill: .4, color: defaultColors.idle });
@@ -208,6 +213,26 @@ test("landed layers keep moving out of phase in their own colors, and the value 
   expect(glow(3)).not.toBeCloseTo(glow(3.8));
   const value = prepared.instances.find(instance => instance.id?.startsWith("stack/value/text") && instance.glyph)!;
   expect(sampleTrack(value.emissive, sample(2, 3))).toBeLessThan(sampleTrack(value.emissive, sample(0, 3)));
+});
+
+test("code line layers box one word per step, centered on it, and each word moves with its box once it lands", () => {
+  const children = expandScene(<Layers id="line" words={["state", "name"]} label="Proxy">{"state.user.name\n"}</Layers>, "layers");
+  const prepared = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+  const sample = (stepIndex: number, time: number) => ({ slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } });
+  const glyphs = (column: number) => prepared.instances.filter(instance => instance.id?.startsWith(`line/text${column}`) && instance.glyph);
+  expect([0, 5, 11].map(column => glyphs(column).length)).toEqual([5, 6, 4]);
+  for (const [k, column] of [[0, 0], [1, 11]]) {
+    const card = prepared.instances.find(instance => instance.id === `line/${k}`)!, word = glyphs(column);
+    for (const time of [3, 4.7]) {
+      const box = instancePosition(card, sample(1, time)), a = instancePosition(word[0], sample(1, time)), b = instancePosition(word[word.length - 1], sample(1, time));
+      expect(box[0]).toBeCloseTo((a[0] + b[0]) / 2, 5);
+      expect(box[1]).toBeCloseTo(a[1], 5);
+    }
+  }
+  const late = glyphs(11)[0], dot = glyphs(5)[0];
+  expect(instancePosition(late, sample(0, 3))).toEqual(instancePosition(late, sample(0, 4.7)));
+  expect(instancePosition(late, sample(1, 3))).not.toEqual(instancePosition(late, sample(1, 4.7)));
+  expect(instancePosition(dot, sample(1, 3))).toEqual(instancePosition(dot, sample(1, 4.7)));
 });
 
 test("card fades reach cached GPU uniforms and multiply each attached label only once", () => {
