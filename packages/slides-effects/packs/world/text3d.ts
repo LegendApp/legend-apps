@@ -109,7 +109,7 @@ export function text3dInstances(options: Text3DOptions): Instance[] {
     while (tokens && tokenIndex + 1 < tokens.length && tokens[tokenIndex + 1].offset <= glyph.offset) tokenIndex++;
     const candidate = tokens?.[tokenIndex];
     const token = candidate && glyph.offset >= candidate.offset && glyph.offset < candidate.offset + candidate.content.length ? candidate : undefined;
-    const home: Vec3 = [glyph.x * size, (glyph.y + font.capHeight / 2) * size, 0];
+    const home: Vec3 = [glyph.x * size, glyph.y * size, 0];
     const custom = typeof options.glyphs === "function" ? options.glyphs(i, glyph.char, home, token?.color) : options.glyphs?.[i];
     let offset: Animated<Vec3> = [0, 0, 0], rotation: Animated<Vec3> = [0, 0, 0], scale: Animated<number> = 1, opacity: Animated<number> = options.opacity ?? 1;
     if (enter) {

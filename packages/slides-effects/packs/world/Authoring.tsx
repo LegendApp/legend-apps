@@ -631,7 +631,7 @@ function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
         isNew ? INK.green : removed.includes(k) ? [{ step: 0, value: INK.idle }, key(remove, INK.red, 0, .4)] : INK.idle,
         isNew ? 2.6 : .8, shown, [{ text: k, opacity: shown }])}
       {removed.includes(k) && <Box id={`${id}/copy/${k}/strike`} size={.5} color={INK.red} emissive={2}
-        position={[gap / 2, y(from) + .18, .3]}
+        position={[gap / 2, y(from), .3]}
         scale={[{ step: 0, value: [0, .06, .06] }, key(remove, [width * .85, .06, .06], .1, .7),
           key(insert, [width * .85, 0, 0], insert === remove ? .8 : 0, .3)]} />}
     </Fragment>;
@@ -775,7 +775,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   return <Stage id={id} position={at}>
     <Card id={`${id}/card`} fill={.75} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
-      position={[{ step: 0, value: [width / 2 - .3, -(full - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - .6) / 2, -.14], .45, .5)]}
+      position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
       const kept = hot.indexOf(n), color = (initial = INK.white) => [{ step: 0, value: initial }, key(mark, tone(n), 0, .4)];
@@ -905,7 +905,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + 2 * pad, height = (lines.length - 1) * lineHeight + size + 2 * pad, advance = size * TYPE * MONO;
     const marks = (props.marks ?? []) as CodeMark[], panel = props.panelColor === undefined ? undefined : paint(props.panelColor, INK.colors) as string;
     return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
-      <Card id={`${id}/card`} position={[width / 2 - pad, -(height - 2 * pad) / 2, -.14]} scale={[width,height,.06]} fill={Number(props.fill ?? .75)} color={panel} />
+      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} fill={Number(props.fill ?? .75)} color={panel} />
       <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {

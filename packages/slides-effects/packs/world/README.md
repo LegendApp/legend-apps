@@ -511,6 +511,8 @@ units; `depth`, `bevel` (thickness) and `bevelWidth` are in em, and `bevelSegmen
 uses `color` and self-glow `emissive`, so type stays readable under the bloom threshold; the sides and bevel
 use `side`, `metal` and `roughness` (or a `material`) with soft studio lighting. `align`, `lineHeight`,
 `tracking` and `uppercase` shape the layout; `\n` breaks lines and unsupported characters become `?`.
+`position` is the cap-height center of the first line, so type sits optically centered on a box at the same
+point; each further line is `lineHeight` em lower.
 
 `enter` flies glyphs in from `offset`, `rotation` (Euler degrees) and `scale` on `step` or slide time `at`, one
 every `stagger` seconds in `forward`, `reverse`, `center` or `random` order, with `spread` adding seeded
