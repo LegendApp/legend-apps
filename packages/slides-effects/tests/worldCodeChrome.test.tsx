@@ -38,7 +38,7 @@ test("code panels take a border, and grids take mac window chrome and a vertical
 });
 
 test("a growing grid window opens up and down from its center and reveals extra rows as it clears them", () => {
-  const tree = expandScene(<Grid id="g" count={4} columns={2} label="MyText" chrome="mac" resize="height" grow={2} flash={{ step: 1, repeat: "infinite" }} />);
+  const tree = expandScene(<Grid id="g" count={4} columns={2} label="MyText" chrome="mac" resize="height" anchor="center" grow={2} flash={{ step: 1, repeat: "infinite" }} />);
   const at = (id: string, prop: string, t: number) => {
     const value = find(tree, id).props[prop];
     return typeof value === "number" ? value : sampleTrack(compileTrack(value as never), { slideTime: 1 + t, stepTime: t, stepIndex: 1, stepOrigins: { 0: 0, 1: 1 } }) as number[] | number;
@@ -50,4 +50,33 @@ test("a growing grid window opens up and down from its center and reveals extra 
   expect(flat(tree).filter(n => n.type === Card && /^g\/\d+$/.test(n.props.id as string))).toHaveLength(8);
   for (const id of ["g/0", "g/7", "g/0/label"]) expect([0, 1.5, 3, 3.4 + 1.5].map(t => at(id, "opacity", t))).toEqual([0, 1, 0, 1]);
   for (const id of ["g/2", "g/5"]) expect(find(tree, id).props.opacity).toBeUndefined();
+});
+
+for (const anchor of [undefined, "top"] as const) test(`height resize keeps its top fixed with anchor ${anchor ?? "default"} and adds rows below`, () => {
+  for (const grow of [0, 1, 2]) {
+    const tree = expandScene(<Grid id="g" count={4} columns={2} label="MyText" chrome="mac" resize="height" anchor={anchor} grow={grow} flash={{ step: 1, repeat: "infinite" }} />);
+    const at = (id: string, prop: string, t: number) => sampleTrack(compileTrack(find(tree, id).props[prop] as never),
+      { slideTime: 1 + t, stepTime: t, stepIndex: 1, stepOrigins: { 0: 0, 1: 1 } }) as number[];
+    const times = grow ? [0, .6, 1.2, 1.7, 2.3, 2.9, 3.4] : [0, .35, .7, 1.05, 1.4];
+    const top = (t: number) => at("g/frame", "position", t)[1] + at("g/frame", "scale", t)[1] / 2;
+    for (const t of times) {
+      expect(top(t)).toBeCloseTo(top(0));
+      for (const id of ["g/bar", "g/dot0", "g/dot1", "g/dot2"]) expect(at(id, "position", t)[1]).toBeCloseTo(at(id, "position", 0)[1]);
+      expect(at("g/frame", "scale", t)[0]).toBeCloseTo(at("g/frame", "scale", 0)[0]);
+      expect(at("g/handle", "position", t)[1] - (at("g/frame", "position", t)[1] - at("g/frame", "scale", t)[1] / 2)).toBeCloseTo(-.05);
+    }
+    const opened = grow ? 1.2 : .7;
+    expect(at("g/handle", "position", 0)[1] - at("g/handle", "position", opened)[1]).toBeCloseTo(grow ? grow * .88 : .9);
+    for (let i = 0; i < 4; i++) {
+      expect(find(tree, `g/${i}`).props.opacity).toBeUndefined();
+      expect((find(tree, `g/${i}`).props.position as number[])[1]).toBeCloseTo(i < 2 ? .44 : -.44);
+    }
+    for (let i = 4; i < 4 + grow * 2; i++) {
+      expect((find(tree, `g/${i}`).props.position as number[])[1]).toBeLessThan(-.44);
+      for (const id of [`g/${i}`, `g/${i}/label`]) {
+        const opacity = compileTrack(find(tree, id).props.opacity as never);
+        expect([0, 1.5, 3, 4.9].map(t => sampleTrack(opacity, { slideTime: 1 + t, stepTime: t, stepIndex: 1, stepOrigins: { 0: 0, 1: 1 } }))).toEqual([0, 1, 0, 1]);
+      }
+    }
+  }
 });
