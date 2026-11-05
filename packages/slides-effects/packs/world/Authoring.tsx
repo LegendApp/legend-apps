@@ -1005,15 +1005,18 @@ function layerStyle(props: Record<string, unknown>, INK: Ink) {
 const landing = (id: string, k: number, first: number, corner: V3, across: V3, color: string) => [0, 1].map(n =>
   <Burst key={n} id={`${id}/${k}/landing${n ? 2 : ""}`} position={add(n ? add(corner, across) : corner, [0, 0, .1])} step={first + k} delay={land} count={14} lifetime={.7}
     colors={[color, color, "#ffffff"]} emissive={6} size={.025} speed={2.5} {...n ? { seed: k + 7 } : {}} />);
-/** A meter that fills to `meter[s]` on each step, later and slower each time: every layer adds drag. */
-function taxMeter(id: string, meter: number[], first: number, length: number, floor: number, color: (k: number) => string, INK: Ink, caption?: string) {
+/** A meter that fills to `meter[s]` on each step, either on arrival or with increasing drag. */
+function taxMeter(id: string, meter: number[], first: number, length: number, floor: number, color: (k: number) => string, INK: Ink, caption?: string, arrival = false) {
   const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, floor, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
-  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
+  const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => {
+    if (arrival) return [{ step: 0, value: pick(fill(0)) }, ...meter.map((f, k) => key(first + k, pick(fill(f)), 0, 0))];
+    return meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
+  };
   return <>
     {meter.length > 0 && <>
       <Box id={`${id}/track`} size={.5} position={[0, floor, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
       <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} emissive={2.6}
-        color={[{ step: 0, value: color(0) }, ...meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
+        color={[{ step: 0, value: color(0) }, ...arrival ? meter.map((_, k) => key(first + k, color(k), 0, 0)) : meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
     </>}
     {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, floor - .6, 0]} color={INK.muted} emissive={.8} />}
   </>;
@@ -1050,7 +1053,7 @@ function proxyLine(id: string, at: V3, props: Record<string, unknown>, INK: Ink,
         {landing(id, k, first, add(center, [-w / 2, height / 2, 0]), [w, -height, 0], color(k))}
       </Fragment>;
     })}
-    {taxMeter(id, meter, first, Math.max(4, line.length * advance), floor, color, INK, caption)}
+    {taxMeter(id, meter, first, Math.max(4, line.length * advance), floor, color, INK, caption, true)}
   </Stage>;
 }
 type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };
