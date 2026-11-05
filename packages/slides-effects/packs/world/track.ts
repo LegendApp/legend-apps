@@ -331,7 +331,7 @@ function restoreRetired(values: Float32Array | number[], at: number, id: string,
 function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame, progress: number): TrackFrame {
   "worklet";
   const visible: string[] = [];
-  if (frame.declared.length < frame.ids.length) for (let slot = 0; slot < frame.ids.length; slot++) if (!frame.declaredSlots[slot]) {
+  if (frame.declared.length < frame.ids.length) for (let slot = 0; slot < frame.ids.length; slot++) if (frame.ids[slot] && !frame.declaredSlots[slot]) {
     const id = frame.ids[slot];
     const at = worldHeaderSize + slot * worldInstanceSize;
     restoreRetired(frame.values, at, id, frame.retired[id]);
@@ -409,10 +409,10 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   // Reuse draw slots only while their ids keep the same order.
   const same = world && previous.ids.length === ids.length && (previous.ids === ids || ids.every((id, slot) => id === previous.ids[slot]));
   const declaredSet = changed || ids !== previous.ids || declared !== previous.declared ? new Set(declared) : null;
-  const previousDeclared = changed ? new Set(previous.declared) : null;
   if (changed) for (let slot = 0; slot < previous.ids.length; slot++) {
     const id = previous.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
-    if (!declaredSet!.has(id) && (previousDeclared!.has(id) || retired[id])) retired[id] = previous.values.slice(at, at + worldInstanceSize);
+    if (!id) continue;
+    if (!declaredSet!.has(id) && (previous.declaredSlots[slot] || retired[id])) retired[id] = previous.values.slice(at, at + worldInstanceSize);
     if (declaredSet!.has(id)) delete retired[id];
     const saved = retired[id];
     if (saved) for (let field = 0; field < worldInstanceSize; field++) from[at + field] = saved[field];
