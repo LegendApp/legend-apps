@@ -11,7 +11,7 @@ export type Text3DFont = { name: string; chars: string; space: number; ascent: n
 export type GlyphMotion = { offset?: Animated<Vec3>; rotation?: Animated<Vec3>; scale?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number> };
 /** Glyphs start at `offset`/`rotation`/`scale` from home and settle on `step` (or slide time `at`), one every `stagger` seconds. */
-export type Text3DEnter = { step?: number; at?: number; offset?: Vec3; rotation?: Vec3; scale?: number; spread?: Vec3; stagger?: number;
+export type Text3DEnter = { step?: number; at?: number; delay?: number; offset?: Vec3; rotation?: Vec3; scale?: number; spread?: Vec3; stagger?: number;
   duration?: number; ease?: Ease; order?: "forward" | "reverse" | "center" | "random"; seed?: number; fade?: number };
 export type Text3DOptions = {
   /** `mono` selects the bundled JetBrains Mono Bold; `font` takes any baked font. */
@@ -86,6 +86,7 @@ function enterOrder(order: Text3DEnter["order"], count: number, seed: number) {
   return ranks;
 }
 function enterTrack<T>(enter: Text3DEnter, from: T, to: T, delay: number, duration: number, ease: Ease | undefined): Keyframe<T>[] {
+  delay += enter.delay ?? 0;
   const start = enter.at === undefined ? { step: enter.step ?? 0 } : { at: enter.at };
   return enter.at === undefined
     ? [{ ...start, value: from, duration: 0 }, { ...start, delay, value: to, duration, ease }]

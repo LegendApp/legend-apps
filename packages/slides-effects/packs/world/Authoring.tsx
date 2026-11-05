@@ -569,9 +569,9 @@ function laneParts(scene: LaneScene) {
 /** World only reads its own element types, so this returns a Text3D rather than being a component. Sizes are nominal: `size * TYPE` is the em. */
 function textLine(kind: string, { size: nominal, depth, track, delay, duration, lineHeight, emissive, slot: _, into: __, enter, ...text }: Record<string, unknown>, ink: Ink) {
   const size = Number(nominal ?? (kind === "quote" ? .42 : .8) / TYPE) * TYPE, mono = !!text.mono;
-  const { delay: at = delay, from: offset, ...motion } = (enter ?? {}) as { delay?: number; from?: V3 };
+  const { delay: start = delay, from: offset, ...motion } = (enter ?? {}) as { delay?: number; from?: V3 };
   return <Text3D uppercase={!mono} side={mono ? "#1c1d22" : "#24262b"} metal={.85} roughness={.28}
-    enter={{ at: at as number | undefined, offset: offset ?? [-8,0,-2], scale: 0, stagger: .025, duration: Number(duration ?? .8), ...motion }}
+    enter={{ step: 0, delay: start as number | undefined, offset: offset ?? [-8,0,-2], scale: 0, stagger: .025, duration: Number(duration ?? .8), ...motion }}
     {...text as Partial<Text3DOptions>} color={paint(text.color, ink.colors) as Text3DOptions["color"]} text={String(text.text)} size={size} depth={Number(depth ?? (mono ? .04 : .2)) / size} tracking={Number(track ?? 0) / TYPE} emissive={.55 + Number(emissive ?? .32) * .5}
     lineHeight={lineHeight === undefined ? undefined : Number(lineHeight) / size} />;
 }
@@ -812,14 +812,15 @@ function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
 function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const count = Number(props.count ?? 4), first = Number(props.step ?? 0), label = String(props.label ?? ""), meter = (props.meter ?? []) as number[], length = 9;
   const color = String(paint(props.color ?? INK.purple, INK.colors)), value = props.value as string | undefined, caption = props.caption as string | undefined;
-  const layer = (k: number): V3 => [k * .9, 0, -k * 1.5], shown = (k: number) => k === 0 && first === 0 ? 1 : [{ step: 0, value: 0 }, key(first + k, 1, 0, .4)];
+  const layer = (k: number): V3 => [k * .9, 0, -k * 1.5], shown = (k: number) => [{ step: 0, value: 0 }, key(first + k, 1, 0, .4)];
   const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, -2.6, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
   const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), .2, .8))] : pick(fill(0));
   return <Stage id={id} position={at}>
-    {Array.from({ length: count }, (_, k) => <Fragment key={k}>
-      <Card id={`${id}/${k}`} position={layer(k)} scale={[2.4, 3.4, .08]} fill={.18} color={color} emissive={1.4 - k * .25} opacity={shown(k)} />
-      {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.24 * TYPE} align="left" position={[layer(k)[0] - .9, -1.25, layer(k)[2] + .08]} color={color} emissive={1.2} opacity={shown(k)} />}
-    </Fragment>)}
+    {Array.from({ length: count }, (_, k) => <Stage key={k} id={`${id}/${k}/arrival`}
+      position={[{ step: 0, value: add(layer(k), [-.6, 0, 2]) }, key(first + k, layer(k), 0, .6, "cubic")]}>
+      <Card id={`${id}/${k}`} scale={[2.4, 3.4, .08]} fill={.18} color={color} emissive={1.4 - k * .25} opacity={shown(k)} />
+      {label && <Text3D id={`${id}/${k}/label`} text={label} mono size={.24 * TYPE} align="left" position={[-.9, -1.25, .08]} color={color} emissive={1.2} opacity={shown(k)} />}
+    </Stage>)}
     {value && <Text3D id={`${id}/value`} text={value} mono size={.6 * TYPE} position={[layer(count - 1)[0] + 2.6, 0, layer(count - 1)[2] - 1]} color={INK.white} emissive={.5} opacity={.4} />}
     {meter.length > 0 && <>
       <Box id={`${id}/track`} size={.5} position={[0, -2.6, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />

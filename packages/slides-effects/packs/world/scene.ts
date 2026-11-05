@@ -68,7 +68,7 @@ export type Instance = {
   label?: { text: string; align: LabelAlign; mono: boolean; weight: LabelWeight; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   glyph?: GlyphInstance;
-  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle>;
+  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle> & { opacity?: Track<number> };
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
   anchor?: boolean;
@@ -241,11 +241,11 @@ export function cardInstances(options: CardOptions): Instance[] {
   const { title, subtitle, meta, mono = false, textColor = "#e8f4ff", subtleColor = "#7f9bb3", textEmissive = 1, opacity, titleOpacity } = options;
   const style = cardStyle({ avatar: title ? 0.62 : 0, ...options });
   if (!options.id && (title || subtitle || meta)) throw new Error("A World card with text needs an id");
-  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: style };
+  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: { ...style, opacity: compileTrack(opacity ?? 1) } };
   const [width, height, depth] = largestScale(options.scale ?? [4, 0.62, 0.18]).map(value => value * (typeof options.size === "number" ? options.size : 0.5) * 2) as Vec3;
   const z = depth / 2 + 0.01, left = -width / 2 + (style.avatar > 0 ? height * (0.5 + style.avatar * 0.5) + height * 0.22 : height * 0.3);
   const label = (key: string, text: string, position: Vec3, size: number, color: string, emissive: number, extra: Partial<LabelOptions> = {}) =>
-    labelInstance({ id: `${options.id}:${key}`, attach: options.id, text, position, size, color, emissive, opacity: opacity ?? 1, ...extra });
+    labelInstance({ id: `${options.id}:${key}`, attach: options.id, text, position, size, color, emissive, ...extra });
   const initials = options.initials ?? title?.[0]?.toUpperCase();
   return [card,
     ...style.avatar > 0 && initials ? [label("initials", initials, [-width / 2 + height / 2, 0, z], height * style.avatar * 0.62, "#060d1a", textEmissive * 1.2, { align: "center", weight: "bold" })] : [],
@@ -627,7 +627,7 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
     const lit = source?.graph ? activationAt(source.graph.node, source.graph.nodes, source.graph.activate, clock) : 1;
     return Math.sin(phase * Math.PI) * lit;
   }
-  return 1;
+  return instance.card?.opacity ? sampleTrack(instance.card.opacity, clock) : 1;
 }
 export function resolveAnchor(scene: WorldScene, id: string, clock: ClockSample): Vec3 | undefined {
   "worklet";
@@ -712,6 +712,7 @@ function prepareUniformInputs(scene: PreparedWorldScene): UniformInputs {
     copy(instance.material ? material.albedo : instance.color, at + I.albedo);
     copy(material.roughness, at + I.roughness); copy(material.metal, at + I.metal); copy(material.rim, at + I.rim);
     if (glyph) { copy(glyph.opacity, at + I.opacity); copy(glyph.rotation, at + 12); }
+    else if (instance.card?.opacity) copy(instance.card.opacity, at + I.opacity);
   });
   return plan;
 }
@@ -1038,6 +1039,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
+      (!instance.card?.opacity || still(instance.card.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow)) &&
       !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
       const collapses = !!instance.voxel?.options.collapse;
@@ -1049,6 +1051,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       instance.motion = "tracks";
       instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
         ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
+        ...instance.card?.opacity ? [instance.card.opacity] : [],
         ...(instance.stages ?? []).flatMap(stage => [stage.position, stage.glow])]);
     }
   }

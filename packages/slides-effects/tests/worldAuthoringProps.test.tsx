@@ -5,9 +5,11 @@ import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
-import { Bars, CodePanel, Headline, Keys, Rule, Scene, expandScene, readScenes } from "../packs/world/Authoring";
+import { Bars, CodePanel, Headline, Keys, Layers, Rule, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { checkPart, checkScene, defaultColors, enterDefaults, exitDefaults } from "../packs/world/authoringProps";
 import { Box, Card, Fog, Orbs, Pillar, Stage, Text3D, prepareWorldSlides } from "../packs/world/World";
+import { cardInstances, instanceField, instanceOpacity, instancePosition, prepareWorldScene, sampleTrack, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { text3dInstances } from "../packs/world/text3d";
 
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
@@ -35,7 +37,7 @@ test("invalid props fail naming the MDX line, the element and the prop", () => {
 test("parts keep their geometry without the new props, and enter, exit and carry take documented defaults", () => {
   const plain = expandScene(<><Rule id="rule" /><Headline id="title">Hi</Headline></>);
   expect(flat(plain).some(n => n.type === Stage && String(n.props.id).endsWith("/motion"))).toBe(false);
-  expect(find(plain, Text3D, "title").props.enter).toEqual({ at: undefined, offset: [-8, 0, -2], scale: 0, stagger: .025, duration: .8 });
+  expect(find(plain, Text3D, "title").props.enter).toEqual({ step: 0, delay: undefined, offset: [-8, 0, -2], scale: 0, stagger: .025, duration: .8 });
   expect(find(plain, Text3D, "title").props.color).toBeUndefined();
 
   const moving = expandScene(<>
@@ -46,7 +48,7 @@ test("parts keep their geometry without the new props, and enter, exit and carry
   expect(find(moving, Stage, "rule/motion").props.position).toEqual([{ step: 0, value: enterDefaults.from },
     { step: 1, delay: 0, value: [0, 0, 0], duration: enterDefaults.duration, ease: "cubic" }, { step: 2, delay: 0, value: [0, 9, 0], duration: exitDefaults.duration, ease: "cubic" }]);
   const title = find(moving, Text3D, "title");
-  expect(title.props.enter).toEqual({ at: .4, offset: [0, -3, 0], scale: 0, stagger: .025, duration: .8, ease: "expo" });
+  expect(title.props.enter).toEqual({ step: 0, delay: .4, offset: [0, -3, 0], scale: 0, stagger: .025, duration: .8, ease: "expo" });
   expect(title.props.opacity).toEqual([{ step: 0, value: 1 }, { step: 1, delay: 0, value: 0, duration: exitDefaults.duration }]);
   expect(find(moving, Stage, "title/motion").props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 1, delay: 0, value: exitDefaults.to, duration: .8, ease: "cubic" }]);
   expect(find(moving, Text3D, "fresh@slide2")).toBeDefined();
@@ -152,3 +154,56 @@ test("the sample deck uses every scene prop, compiles, validates and plans", asy
     expect(slides).toHaveLength(3);
   } finally { if (renderer) await act(() => renderer!.unmount()); }
 }, 30000);
+
+test("headline entrances belong to their authored step and stay settled on later local clocks", () => {
+  const glyph = (props: Record<string, unknown>) => {
+    const text = find(expandScene(<Headline id="title" {...props}>A</Headline>), Text3D, "title");
+    return prepareWorldScene({ instances: text3dInstances(text.props as never) }).instances[0];
+  };
+  const sample = (stepIndex: number, time: number) => ({ slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } });
+  const initial = glyph({ delay: .6 });
+  expect(instanceOpacity(initial, sample(0, .3))).toBe(0);
+  expect(instanceOpacity(initial, sample(0, 2))).toBe(1);
+  for (const step of [1, 2, 3]) {
+    expect(instanceOpacity(initial, sample(step, 0))).toBe(1);
+    expect(instancePosition(initial, sample(step, 0))).toEqual(instancePosition(initial, sample(0, 2)));
+  }
+  const delayed = glyph({ enter: { step: 2, delay: .4, duration: .8 } });
+  expect(instanceOpacity(delayed, sample(1, 4))).toBe(0);
+  expect(instanceOpacity(delayed, sample(2, .3))).toBe(0);
+  expect(instanceOpacity(delayed, sample(2, .5))).toBeGreaterThan(0);
+  expect(instanceOpacity(delayed, sample(3, 0))).toBe(1);
+  expect(instanceOpacity(delayed, sample(1, 0))).toBe(0);
+});
+
+test("layer builds reveal one moving layer per step, preserve earlier layers, and reverse cleanly", () => {
+  const children = expandScene(<Layers id="stack" count={4} label="Layer" meter={[.14, .19, .22, .23]} />, "layers");
+  const prepared = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+  const cards = Array.from({ length: 4 }, (_, k) => prepared.instances.find(instance => instance.id === `stack/${k}`)!);
+  const fill = prepared.instances.find(instance => instance.id === "stack/fill")!;
+  const sample = (stepIndex: number, time: number) => ({ slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } });
+  for (const step of [0, 1, 2, 3, 2, 1, 0]) {
+    const settled = sample(step, 2), before = sample(step, 0);
+    expect(cards.map(card => instanceOpacity(card, settled))).toEqual(cards.map((_, k) => k <= step ? 1 : 0));
+    expect(instanceOpacity(cards[step], before)).toBe(0);
+    expect(instancePosition(cards[step], sample(step, .2))).not.toEqual(instancePosition(cards[step], settled));
+    expect(sampleTrack(fill.scale, settled)[0]).toBeCloseTo([.14, .19, .22, .23][step] * 9);
+    for (let k = 0; k < step; k++) expect(instancePosition(cards[k], before)).toEqual(instancePosition(cards[k], settled));
+  }
+});
+
+test("card fades reach cached GPU uniforms and multiply each attached label only once", () => {
+  const scene = prepareWorldScene({ instances: cardInstances({ id: "card", title: "Title", subtitle: "Subtitle", titleOpacity: .4,
+    opacity: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 1, ease: "linear" }] }) });
+  const card = scene.instances.find(instance => instance.id === "card")!;
+  const title = scene.instances.find(instance => instance.id === "card:title")!;
+  const subtitle = scene.instances.find(instance => instance.id === "card:subtitle")!;
+  const index = worldHeaderSize + scene.instances.indexOf(card) * worldInstanceSize + instanceField.opacity;
+  expect(card.motion).toBe("tracks");
+  for (const [stepIndex, time, expected] of [[0, 2, 0], [1, .5, .5], [2, 0, 1], [0, 0, 0]]) {
+    const clock = { slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } };
+    expect(sampleWorldUniforms(scene, clock, null, 1, 1, true)[index]).toBeCloseTo(expected);
+    expect(instanceOpacity(subtitle, clock)).toBeCloseTo(expected);
+    expect(instanceOpacity(title, clock)).toBeCloseTo(expected * .4);
+  }
+});
