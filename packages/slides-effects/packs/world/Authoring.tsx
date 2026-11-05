@@ -181,7 +181,7 @@ export const sceneLayouts: Record<string, SceneLayout> = {
     line1: { kind: "headline", at: [0,3.35,0], size: 1.25, depth: .32, track: .02, delay: .15 },
     line2: { kind: "headline", at: [0,1.85,0], size: 1.25, depth: .32, track: .02, delay: .9 },
     kicker: { kind: "headline", at: [0,4.9,0], size: .2, depth: .04, mono: true, track: .25, color: "accent", emissive: .6, delay: .9, duration: .7 },
-    rule: { kind: "rule", at: [0,1.27,0], width: 6.5, delay: 1.6 },
+    rule: { kind: "rule", at: [0,.95,0], width: 6.5, delay: 1.6 },
   } },
   /** A centered title over a scrolling list, then a quote in its place on the next step. */
   "title-list": { camera: { position: [-.6,3.9,12.6], target: [0,3.9,0], via: [-3.6,2.2,12], viaTarget: [0,3.5,0] }, slots: {
@@ -210,13 +210,13 @@ export const sceneLayouts: Record<string, SceneLayout> = {
   title: { camera: { position: [-.8,2.5,11.6], target: [0,2.3,0] }, slots: {
     line: { kind: "headline", at: [0,2.6,0], size: 1.25, depth: .32, track: .02, delay: .15 },
     kicker: { kind: "headline", at: [0,4.05,0], size: .2, depth: .04, mono: true, track: .25, color: "accent", emissive: .6, delay: .9, duration: .7 },
-    rule: { kind: "rule", at: [0,1.55,0], width: 6.5, delay: 1.2 },
+    rule: { kind: "rule", at: [0,1.3,0], width: 6.5, delay: 1.2 },
   } },
   /** `statement` from further back, for lines up to about 17 characters. */
   "statement-wide": { camera: { position: [-.8,2.8,15], target: [0,2.6,0] }, slots: {
     line1: { kind: "headline", at: [0,3.35,0], size: 1.25, depth: .32, track: .02, delay: .15 },
     line2: { kind: "headline", at: [0,1.85,0], size: 1.25, depth: .32, track: .02, delay: .9 },
-    rule: { kind: "rule", at: [0,1.27,0], width: 8, delay: 1.6 },
+    rule: { kind: "rule", at: [0,.95,0], width: 8, delay: 1.6 },
   } },
   /** Heading top left over a keyed list. */
   keys: { camera: { position: [-1,4.2,14], target: [0,3.6,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
@@ -232,11 +232,11 @@ export const sceneLayouts: Record<string, SceneLayout> = {
     title: { ...heading, at: [-13.5,10,0], size: 1 },
     ...Object.fromEntries([-9.6, 0, 9.6].flatMap((x, i) => [[`caption${i + 1}`, { kind: "headline", at: [x,8.5,0], size: .42, depth: .12, track: .02, delay: .4 + i * .15 }],
       [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
-    ...Object.fromEntries([-6, 0, 6].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .2, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
+    ...Object.fromEntries([-4.5, 0, 4.5].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .24, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
   } },
   /** A code panel on the left and a grid of cells on the right. */
   "code-grid": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
-    code: { ...code, at: [-7.9,6.6,0], size: .15, lineHeight: .34 }, grid: { kind: "grid", at: [4.3,4.8,0], cell: [1.1,.62] },
+    code: { ...code, at: [-7.2,6.5,0], size: .13, lineHeight: .32 }, grid: { kind: "grid", at: [4,4.8,0], cell: [.95,.54] },
   } },
   /** One code panel centered in frame. */
   "code-center": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
@@ -586,6 +586,8 @@ function textLine(kind: string, { size: nominal, depth, track, delay, duration, 
 const inkOf = (colors: SceneColors) => ({ colors, white: colors.text, muted: colors.muted, idle: colors.idle, red: colors.removed, amber: colors.hot,
   purple: colors.highlight, blue: colors.link, green: colors.added, accent: colors.accent });
 type Ink = ReturnType<typeof inkOf>;
+/** Code panels: a near-opaque plate in the theme's `panel` color with a quiet rim, so scenery never shows through the code. */
+const PANEL = { fill: .94, edge: .3, glow: .05 };
 /** JetBrains Mono advance, in em. */
 const MONO = .6;
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
@@ -689,13 +691,13 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     return <Stage key={p} id={stage} position={[(p - (panels.length - 1) / 2) * spread, 0, 0]}>
       <Card id={`${stage}/card`} position={[0, -ph / 2 + .6, -.2]} scale={[pw, ph, .2]} fill={.55} color={INK.idle} emissive={.6} />
       <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, .22, .05]} color={INK.muted} emissive={.8} />
-      {badge(`${stage}/badge`, [pw / 2 - .1, .55, .1], false)}
+      {badge(`${stage}/badge`, [pw / 2 - .65, .22, .05], false)}
       {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`;
         return <Fragment key={f}>
           <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} color={bound ? lit : INK.idle} emissive={bound ? flashes(.8) : .8} />
           {(bound ? versions : [field.value]).map((value, k) => <Text3D key={k} id={`${cell}/v${k}`} text={value} mono size={(field.big ? .34 : .26) * TYPE} align="left"
             position={[-fw / 2 + .35, y, .18]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
-          {badge(`${cell}/badge`, [fw / 2 - .05, y + fh / 2 - .05, .2], bound)}
+          {badge(`${cell}/badge`, [fw / 2 - .55, y, .2], bound)}
         </Fragment>; })}
     </Stage>; })}</Stage>;
 }
@@ -815,7 +817,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   return <Stage id={id} position={at}>
-    <Card id={`${id}/card`} fill={.75} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
+    <Card id={`${id}/card`} {...PANEL} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
@@ -845,14 +847,14 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
 function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const words = props.words as string[], focus = (props.focus as (string | string[])[]).map(f => typeof f === "string" ? [f] : f), zoom = props.zoom as number | undefined;
   const size = Number(props.size ?? .42) * TYPE, steps = focus.map((_, s) => s);
-  const home = (i: number): V3 => [(hash(i * 3 + 1) * 2 - 1) * 6.5, 1.4 + hash(i * 5 + 2) * 5.2, -4 - hash(i * 7 + 3) * 10];
+  const home = (i: number): V3 => [(i % 4 - 1.5) * 3.8 + (hash(i * 3 + 1) - .5) * 1.4, 1.6 + Math.floor(i / 4) % 3 * 1.9 + hash(i * 5 + 2) * .7, -4 - hash(i * 7 + 3) * 10];
   const front = (k: number, n: number): V3 => {
-    const columns = n <= 3 ? n : 3, rows = Math.ceil(n / columns), c = k % columns, r = Math.floor(k / columns);
-    return [(c - (columns - 1) / 2) * (n <= 3 ? 4.6 : 5), (n <= 3 ? 3.8 : 3.8 + (rows - 1) * .7) - r * 1.4, n <= 3 ? 2 : -2];
+    const columns = n <= 3 ? n : 3, rows = Math.ceil(n / columns), c = k % columns, r = Math.floor(k / columns), across = Math.min(columns, n - r * columns);
+    return [(c - (across - 1) / 2) * (n <= 3 ? 4.6 : 5), (n <= 3 ? 3.8 : 3.8 + (rows - 1) * .7) - r * 1.4, n <= 3 ? 2 : -2];
   };
   const pose = (i: number, s: number) => {
     const word = words[i], current = focus[s].indexOf(word), seen = focus.slice(0, s).some(f => f.includes(word));
-    if (current >= 0) { const p = front(current, focus[s].length); return { p: s === zoom ? [p[0] * .85, p[1], p[2]] as V3 : p, color: "#ffffff", glow: 1.3 }; }
+    if (current >= 0) { const p = front(current, focus[s].length); return { p: s === zoom ? [p[0] * .85, p[1], p[2]] as V3 : p, color: "#ffffff", glow: 1 }; }
     const h = home(i);
     if (seen) return { p: [h[0] * .9, h[1], -2 - hash(i) * 1.5] as V3, color: "#a8aeb8", glow: s === zoom ? .08 : .9 };
     return { p: h, color: INK.muted, glow: s === zoom ? .05 : .3 };
@@ -970,7 +972,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + 2 * pad, height = (lines.length - 1) * lineHeight + size + 2 * pad, advance = size * TYPE * MONO;
     const marks = (props.marks ?? []) as CodeMark[], panel = props.panelColor === undefined ? undefined : paint(props.panelColor, INK.colors) as string;
     return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
-      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} fill={Number(props.fill ?? .75)} color={panel} />
+      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={panel ?? INK.colors.panel} />
       <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
@@ -991,7 +993,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
       const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
       const emissive = own.length ? [{ step: 0, value: .006 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
-        : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? 0) * .1, arrives(f, n) + .1, .6)])]
+        : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? .6) * .1, arrives(f, n) + .1, .6)])]
         : beats(n).length ? [{ at: 0, value: .006, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: .45, duration: .06 }, { at: t + .1, value: .006, duration: .6 }])] : .006;
       const pulses = [...beats(n).map(t => ({ at: t - HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })),
         ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];

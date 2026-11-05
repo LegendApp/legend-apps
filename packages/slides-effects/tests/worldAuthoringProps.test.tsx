@@ -71,10 +71,10 @@ test("scene colors theme the parts, and color props take theme names", () => {
   expect(slide.parts[1].color).toBe("#111111");
 });
 
-test("code panels and bar charts take style props with the old look as defaults", () => {
+test("code panels and bar charts take style props over the theme's panel defaults", () => {
   const fence = "const a = 1;\n";
   const plain = expandScene(<CodePanel id="code">{fence}</CodePanel>);
-  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .75, color: undefined });
+  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .94, color: defaultColors.panel });
   const styled = expandScene(<CodePanel id="code" fill={.4} padding={.5} panelColor="idle" textColor="hot" marks={[{ text: "a", color: "link" }]}>{fence}</CodePanel>);
   const card = find(styled, Card, "code/card");
   expect(card.props).toMatchObject({ fill: .4, color: defaultColors.idle });
