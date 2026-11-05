@@ -920,6 +920,7 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   `next`, with shared keys linked and added and removed keys colored; on `recycle`
   (step 2) the copy flies away and the removed key's container travels behind the
   column into the added key's slot.
+- `Keys keys viewport` frames the first `viewport` keys and dims the rest. On `scroll` the keys move up a row; on `window` the column steps left and a second frame comes out holding only the keys then in view, linked to their originals; on `recycle` the key that left the top travels behind the column into the entering slot and takes its key.
 - `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
   second while a resize handle drags its frame.
 - `Form panels typing` shows panels of fields with render-count badges.
