@@ -594,7 +594,9 @@ const inkOf = (colors: SceneColors) => ({ colors, white: colors.text, muted: col
   purple: colors.highlight, blue: colors.link, green: colors.added, accent: colors.accent });
 type Ink = ReturnType<typeof inkOf>;
 /** Code panels: a near-opaque plate in the theme's `panel` color with a quiet rim, so scenery never shows through the code. */
-const PANEL = { fill: .96, edge: .3, glow: .05 };
+/** Code panels are mostly opaque glass with a visible rim: only a hint of the scenery shows through. */
+const PANEL = { fill: .9, edge: .9, glow: .05 };
+const panelStyle = (props: Record<string, unknown>) => ({ ...PANEL, fill: Number(props.fill ?? PANEL.fill), edge: Number(props.border ?? PANEL.edge) });
 /** JetBrains Mono advance, in em. */
 const MONO = .6;
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
@@ -866,14 +868,30 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
   const width = Math.max(...lines.map(l => l.text.length)) * advance + .9, height = (n: number) => (n - 1) * lineHeight + em + .6;
   const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - em - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
-  const highlight = props.highlight as { color?: string; opacity?: number } | undefined;
+  const highlight = props.highlight as { color?: string; opacity?: number; word?: { color?: string; opacity?: number } } | undefined;
   const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
+  const wordColor = paint(highlight?.word?.color, INK.colors) as string ?? highlightColor, wordOpacity = highlight?.word?.opacity ?? highlightOpacity * 1.5;
+  // On a changed line that keeps some tokens, each run of new tokens gets its own band over the line band.
+  const words = bands.flatMap((band, t) => band.after.flatMap(row => {
+    const line = lines[states[t + 1][row]], fresh = line.parts.map(part => parts[part.id].positions[t] === undefined);
+    if (fresh.every(Boolean)) return [];
+    const runs: { row: number; from: number; to: number }[] = [];
+    line.parts.forEach((part, k) => {
+      const end = part.column + parts[part.id].text.length;
+      if (!fresh[k]) return;
+      if (fresh[k - 1]) runs[runs.length - 1].to = end; else runs.push({ row, from: part.column, to: end });
+    });
+    return runs.map(run => ({ ...run, t, step: band.step }));
+  }));
   return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
-    <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={INK.colors.panel} />
+    <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...panelStyle(props)} color={INK.colors.panel} />
     {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
       position={[width / 2 - .3, -row * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         ...t + 1 < bands.length ? [key(first + t + 1, 0, 0, .3)] : []]} />)))}
+    {words.map(({ row, from, to, t, step }) => <Card flat fill={1} edge={0} glow={0} radius={.03} key={`${t}/${row}/${from}`} id={`${id}/word${t}/${row}/${from}`}
+      position={[(from + to) / 2 * advance, -row * lineHeight, -.06]} scale={[(to - from) * advance + .08, lineHeight * .84, .02]} color={wordColor}
+      opacity={[{ step: 0, value: 0 }, key(step, wordOpacity, settle, .3), ...t + 1 < bands.length ? [key(step + 1, 0, 0, .3)] : []]} />)}
     {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
       const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
       return states[shownAt].flatMap((line, row) => [...lines[line].text.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found =>
@@ -913,7 +931,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   return <Stage id={id} position={at}>
-    <Card id={`${id}/card`} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
+    <Card id={`${id}/card`} {...panelStyle(props)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
@@ -1131,7 +1149,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + 2 * pad, height = (lines.length - 1) * lineHeight + size + 2 * pad, advance = size * TYPE * MONO;
     const marks = (props.marks ?? []) as CodeMark[], panel = props.panelColor === undefined ? undefined : paint(props.panelColor, INK.colors) as string;
     return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
-      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} edge={Number(props.border ?? PANEL.edge)} color={panel ?? INK.colors.panel} />
+      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...panelStyle(props)} color={panel ?? INK.colors.panel} />
       <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {

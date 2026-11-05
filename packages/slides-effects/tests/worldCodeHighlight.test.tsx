@@ -138,3 +138,16 @@ test("morphs carry unchanged tokens through edits, insertions and reverse seeks 
   }
   expect(bands.some(node => sampleTrack(compileTrack(node.props.opacity as never), clock(1, 4)) === .08)).toBe(true);
 });
+
+test("morphs band each run of new tokens on a changed line, but not wholly new lines", async () => {
+  const source = '-import { a } from "react"\n+import { b, c } from "x/react"\n+const z = 1';
+  const tree = flat(expandScene(<CodeMorph id="m" highlight={{ color: "#abcdef", word: { color: "#123456", opacity: .3 } }}>{fence(source, await highlightCode(source, "diff-tsx"))}</CodeMorph>));
+  const words = tree.filter(node => String(node.props.id).includes("/word"));
+  expect(words.map(node => node.props.id)).toEqual(["m/word0/0/9", "m/word0/0/22"]);
+  expect(words.every(node => node.props.color === "#123456")).toBe(true);
+  const advance = (words[0].props.scale as number[])[0] - .08;
+  expect((words[1].props.scale as number[])[0] - .08).toBeCloseTo(advance * 2 / 4);
+  const clock = (stepIndex: number, stepTime: number) => ({ slideTime: stepIndex + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 1 } });
+  expect(sampleTrack(compileTrack(words[0].props.opacity as never), clock(0, 4))).toBe(0);
+  expect(sampleTrack(compileTrack(words[0].props.opacity as never), clock(1, 4))).toBeCloseTo(.3);
+});

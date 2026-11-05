@@ -90,11 +90,11 @@ test("scene colors theme the parts, and color props take theme names", () => {
 test("code panels and bar charts take style props over the theme's panel defaults", () => {
   const fence = "const a = 1;\n";
   const plain = expandScene(<CodePanel id="code">{fence}</CodePanel>);
-  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .96, color: defaultColors.panel });
+  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .9, edge: .9, color: defaultColors.panel });
   const diff = <pre><code className="language-diff">{" A\n-B\n+C\n"}</code></pre>;
   for (const part of [<CodeMorph id="code">{diff}</CodeMorph>, <CodeTrace id="code" source={1} reads={[1]} nodes={["a", "b"]}>{fence}</CodeTrace>])
-    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .96, color: defaultColors.panel });
-  expect(find(expandScene(<CodeMorph id="code" fill={.5}>{diff}</CodeMorph>), Card, "code/card").props.fill).toBe(.5);
+    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .9, edge: .9, color: defaultColors.panel });
+  expect(find(expandScene(<CodeMorph id="code" fill={.5} border={1.2}>{diff}</CodeMorph>), Card, "code/card").props).toMatchObject({ fill: .5, edge: 1.2 });
   const styled = expandScene(<CodePanel id="code" fill={.4} padding={.5} panelColor="idle" textColor="hot" marks={[{ text: "a", color: "link" }]}>{fence}</CodePanel>);
   const card = find(styled, Card, "code/card");
   expect(card.props).toMatchObject({ fill: .4, color: defaultColors.idle });

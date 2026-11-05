@@ -90,7 +90,7 @@ const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
   code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), border: number(0), marks: codeMarks },
   grid: { chrome: oneOf("mac"), fill: fraction, border: number(0), resize: oneOf("width", "height"), grow: number(0) },
-  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), highlight: shape({ color, opacity: fraction }), marks: codeMarks },
+  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), highlight: shape({ color, opacity: fraction, word: shape({ color, opacity: fraction }) }), marks: codeMarks },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive(), boxColor: color, borderColor: color },

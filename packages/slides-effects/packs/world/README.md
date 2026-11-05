@@ -949,7 +949,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
   Matching tokens carry over with their syntax colors; changed tokens fade out and in.
   Only deleted lines are struck through. `highlight={{ color: "#be91ff", opacity: .12 }}`
-  sets the soft background bands on changed lines.
+  sets the soft background bands on changed lines. On a changed line that keeps some tokens, each
+  run of new tokens also gets a word band; `highlight.word={{ color, opacity }}` styles it
+  (default: the band color at 1.5 times its opacity). Put changes that should land together in one fence.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
   tree of `nodes` labels on `extract`, with continuously repeating edge pulses.
@@ -965,7 +967,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   the word moves with it.
 - `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
   `anchor: "center"` centers the panel on its position.
-- `CodePanel border` sets the panel's rim strength (default .3). Code parts color from the
+- `CodePanel`, `CodeMorph` and `CodeTrace` are glass panels: `fill` (0 to 1, default .9) is the
+  panel's opacity over the scenery behind it and `border` its rim strength (default .9).
+  Code parts color from the
   compiler's syntax tokens, so their child must be a fenced block; a string child is an authoring error.
 
 A track's `steps` move the camera within a station, by step index:
