@@ -839,7 +839,7 @@ lighting. When copying an example, keep its local TSX/assets and effect pack pin
 
 `slides:world/Authoring` exports `Scene`, `Headline`, `Quote`, `CodePanel`, `List`,
 `Tree`, `Counter`, `Rule`, `Bars`, `Editor`, `Keys`, `Grid`, `Form`, `CodeMorph`,
-`CodeTrace`, `Cloud` and `Layers`. Each slide declares its own
+`CodeTrace`, `Cloud`, `Layers` and `Flight`. Each slide declares its own
 composition. Name a layout and the parts place themselves:
 
 ```mdx
@@ -957,6 +957,12 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   tree of `nodes` labels on `extract`, with continuously repeating edge pulses.
 - `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
   the front under depth of field; `zoom` defocuses everything else on that step.
+- `Flight words` puts one stop per step from `step` (default 1) down into depth: a word, or a list of
+  words side by side. Stops sit `gap` (default 10) deeper each, zigzagging up to `drift` (default 2.4)
+  sideways, or at `path[k]`. The scene camera shifts onto each stop over `duration` (default .8 s) with
+  `ease` (default `out`); the text never moves. The next `ahead` (default 2) stops wait dimmed, passed
+  ones fade out, and steps after the last stop hold the camera there and bring them all back. The
+  scene's own `camera.steps` override these moves field by field.
 - `Layers count label value meter` nests one more translucent layer around `value` per step,
   each landing with a flash and sparks, dims the value under each layer and fills the meter to the
   given fractions, later and slower on each step. Layer k takes `colors[k]` (default link, highlight,

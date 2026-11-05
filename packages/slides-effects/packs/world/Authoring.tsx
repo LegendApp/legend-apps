@@ -162,6 +162,7 @@ export const CodeMorph = part("morph");
 export const CodeTrace = part("trace");
 export const Cloud = part("cloud");
 export const Layers = part("layers");
+export const Flight = part("flight");
 
 /** Named placement for a scene: its camera and a slot per part. Parts take the free slots of their kind in order; `slot` names one, and explicit props win. */
 export type SceneLayout = { camera?: WorldTrack; slots: Record<string, { kind: string; [prop: string]: unknown }> };
@@ -381,7 +382,19 @@ function sameSceneValue(a: unknown, b: unknown): boolean {
 // Each deck's pack retains one preparation per named world across equivalent renderer mounts.
 const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldProps[] }>();
 function sceneTrack(scene: SceneProps): WorldTrack {
-  return { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera };
+  return flightCamera(scene, { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera });
+}
+/** A scene's `Flight` adds a camera step per stop that shifts the camera onto it, and holds on the last stop through the remaining `durations`; authored `steps` win per field. */
+function flightCamera(scene: SceneProps, track: WorldTrack): WorldTrack {
+  let props: Record<string, unknown> | undefined;
+  collect(scene.children, child => { if (child.type === Flight) props ??= child.props; });
+  if (!props) return track;
+  const stops = flightStops(props), first = Number(props.step ?? 1), at = (props.at ?? [0, 3.2, 0]) as V3, target = track.target ?? at;
+  const duration = Number(props.duration ?? .8), ease = (props.ease ?? "out") as Ease, steps = { ...track.steps };
+  for (let c = 0; c < Math.max(stops.length, (scene.durations?.length ?? 0) - first); c++) {
+    steps[first + c] = { shift: sub(add(at, stops[Math.min(c, stops.length - 1)]), target), duration, ease, ...track.steps?.[first + c] };
+  }
+  return { ...track, steps };
 }
 function plannedSlides(content: readonly ReactNode[], world: string) {
   const declarations: SceneProps[] = [], indices: number[] = [];
@@ -984,6 +997,34 @@ function cloud(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
       aperture={zoom === undefined ? 3 : [{ step: 0, value: 3 }, key(zoom, 6, 0, .8), key(zoom + 1, 3, 0, .8)]} maxBlur={22} />
   </Stage>;
 }
+/** Stop k's offset: `gap` deeper per stop, zigzagging up to `drift` sideways and half that up or down, unless `path[k]` sets it. */
+export function flightStops(props: Record<string, unknown>): V3[] {
+  const path = props.path as V3[] | undefined, gap = Number(props.gap ?? 10), drift = Number(props.drift ?? 2.4);
+  return (props.words as unknown[]).map((_, k) => path?.[k] ?? [(k % 2 ? -1 : 1) * drift * (.5 + .5 * hash(k * 3 + 1)), drift * (hash(k * 5 + 2) - .5), -gap * (k + 1)]);
+}
+/** Words at stops down into depth, one stop (a word or a row of words) per step from `step`; the scene camera flies to each, over `duration` with `ease`.
+ * The next `ahead` stops wait dimmed in the distance, passed ones fade out, and steps after the last stop bring them all back. */
+function flight(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
+  const stops = (props.words as (string | string[])[]).map(w => typeof w === "string" ? [w] : w), offsets = flightStops(props), first = Number(props.step ?? 1);
+  const size = Number(props.size ?? .5) * TYPE, ahead = Number(props.ahead ?? 2), duration = Number(props.duration ?? .8), passed = "#a8aeb8";
+  const look = (k: number, s: number) => {
+    const c = s - first;
+    if (c === k) return { color: INK.white, glow: 1, opacity: 1 };
+    if (c >= stops.length) return { color: passed, glow: .5, opacity: 1 };
+    if (k < c) return { color: passed, glow: .3, opacity: 0 };
+    return { color: INK.muted, glow: .25, opacity: k - c <= ahead ? 1 : 0 };
+  };
+  const track = <T,>(k: number, pick: (l: ReturnType<typeof look>) => T) =>
+    [{ step: 0, value: pick(look(k, 0)) }, ...Array.from({ length: first + stops.length }, (_, s) => key(s + 1, pick(look(k, s + 1)), 0, duration * .6))];
+  return <Stage id={id} position={at}>{stops.map((words, k) => {
+    const widths = words.map(w => w.length * MONO * size), gap = size * 1.5, total = widths.reduce((a, b) => a + b, 0) + gap * (words.length - 1);
+    return <Stage key={k} id={`${id}/${k}`} position={offsets[k]}>{words.map((word, j) => {
+      const x = -total / 2 + widths.slice(0, j).reduce((a, b) => a + b, 0) + gap * j + widths[j] / 2;
+      return <Text3D key={word} id={`${id}/${k}/${word}`} text={word} mono size={size} position={[x, 0, 0]}
+        color={track(k, l => l.color)} emissive={track(k, l => l.glow)} opacity={track(k, l => l.opacity)} />;
+    })}</Stage>;
+  })}</Stage>;
+}
 /** `count` translucent layers nested around `value`, each wider and nearer than the last, one more on each step from `step`, over a `meter` that fills
  * to the given fraction on each step. Layer k takes `colors[k]`. Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
  * `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds. With `words`, the part's code line is shown at `size` instead,
@@ -1213,6 +1254,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
   if (kind === "morph") return codeMorph(id, position, props, children, INK);
   if (kind === "trace") return codeTrace(id, position, props, source, INK, codeHighlight(children)?.tokens);
   if (kind === "cloud") return cloud(id, position, props, INK);
+  if (kind === "flight") return flight(id, position, props, INK);
   if (kind === "layers") return layers(id, position, props, INK, source, codeHighlight(children)?.tokens);
   if (kind === "editor") {
     const labels = props.labels as string[], values = [String(props.name ?? ""),String(props.email ?? "")];
