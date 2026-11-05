@@ -927,19 +927,21 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   and `labelSize` size it. `flash={[{ step, color, ids }]}` lights `ids` (default all)
   in a wave down the levels, `hop` seconds apart, with pulses on the edges. With
   `wave: false` and `from`, they light at once from beams out of `from`. `flash: false`
-  recolors without a flash; `repeat` and `every` replay it.
+  recolors without a flash; `repeat` and `every` replay it. Set `repeat: "infinite"`
+  to keep node flashes and travelling pulses looping while playback is active.
 - `Keys keys next` shows a keyed column. On `diff` (step 1) a copy splits off showing
   `next`, with shared keys linked and added and removed keys colored; on `recycle`
   (step 2) the copy flies away and the removed key's container travels behind the
   column into the added key's slot.
 - `Keys keys viewport` frames the first `viewport` keys and dims the rest. On `scroll` the keys move up a row; on `window` the column steps left and a second frame comes out holding only the keys then in view, linked to their originals; on `recycle` the key that left the top travels behind the column into the entering slot and takes its key. With both, `recycle` follows `window`: the second frame flies away and the column recenters first.
 - `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
-  second while a resize handle drags its frame. `resize: "height"` drags the bottom edge instead of the right.
+  second while a resize handle drags its frame. `flash.repeat: "infinite"` loops both. `resize: "height"` drags the bottom edge instead of the right.
   `chrome: "mac"` adds a title bar with the three window buttons; `fill` (default .15) is the window body's
   opacity and `border` its rim strength.
 - `Form panels typing` shows panels of fields with render-count badges.
   `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
-  and flashing them on each keystroke.
+  and flashing them on each keystroke. `typing.repeat: "infinite"` repeats the typing
+  sequence after a short hold, resetting the bound values and badges together.
 - `CodeMorph` takes one ```` ```diff-tsx ```` fence per step after the first, each starting from
   the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
   Matching tokens carry over with their syntax colors; changed tokens fade out and in.
@@ -947,7 +949,7 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   sets the soft background bands on changed lines.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
-  tree of `nodes` labels on `extract`.
+  tree of `nodes` labels on `extract`, with continuously repeating edge pulses.
 - `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
   the front under depth of field; `zoom` defocuses everything else on that step.
 - `Layers count label value meter` nests one more translucent layer around `value` per step,

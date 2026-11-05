@@ -12,7 +12,8 @@ export function tubePulseProgress(pulse: TubePulse, clock: ClockSample) {
   "worklet";
   if (pulse.at === undefined && clock.stepIndex < (pulse.step ?? 0)) return -1;
   if (pulse.at === undefined && clock.stepIndex > (pulse.step ?? 0) && clock.stepOrigins[pulse.step ?? 0] === undefined) return 2;
-  return (clock.slideTime - shotOrigin(pulse, clock) - (pulse.delay ?? 0)) / (pulse.duration ?? 0.5);
+  const elapsed = clock.slideTime - shotOrigin(pulse, clock) - (pulse.delay ?? 0);
+  return (pulse.every && elapsed >= 0 ? elapsed % pulse.every : elapsed) / (pulse.duration ?? 0.5);
 }
 // Clockwise from the top, with the middle segment last.
 export const digitSegments = [63, 6, 91, 79, 102, 109, 125, 7, 127, 111];

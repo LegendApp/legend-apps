@@ -230,7 +230,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
   try {
     const { compileDeck } = await import("../../presentation/src/compiler");
     const deck = path.join(directory, "world.mdx");
-    fs.writeFileSync(deck, 'export { World, sampleWorldUniforms, prepareWorldScene, graphInstances, pulseInstances, sprayInstances, rowInstances, voxelInstances, flyTo, tree, wave } from "slides:world/World"\n\n# World');
+    fs.writeFileSync(deck, 'export { World, sampleWorldUniforms, prepareWorldScene, primitive, routedTubeInstances, graphInstances, pulseInstances, sprayInstances, rowInstances, voxelInstances, flyTo, tree, wave } from "slides:world/World"\n\n# World');
     const compiled = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const require = createRequire(import.meta.url);
@@ -275,6 +275,8 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
     const stage = { id: "zone", position: { initial: [5, 0, 0], frames: [] }, glow: { initial: 0.5, frames: [] } };
     const scene = api.prepareWorldScene({
       instances: [
+        api.primitive("box", { emissive: [{ step: 0, value: .1, loop: { every: 2, frames: [{ at: 0, value: 1, duration: .1 }, { at: .2, value: .1, duration: .6 }] } }] }),
+        ...api.routedTubeInstances({ id: "loop-edge", path: [[0, 0, 0], [1, 0, 0]], pulses: [{ step: 1, delay: .5, every: 2, duration: .25 }] }),
         ...api.graphInstances({ data: api.tree("root", [["a", ["a1", "a2"]]]), activate: [api.wave({ from: "root", step: 1 })] }).map(instance => ({ ...instance, stages: [stage] })),
         ...api.pulseInstances({ id: "pulse", path: ["root", "a", "a1"], step: 1, duration: 4 }),
         ...api.sprayInstances({ id: "mist", under: "leaves:lit", rate: 4, lifetime: 2 }),
@@ -291,6 +293,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       { slideTime: 3, stepTime: 1, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 3.99, stepTime: 1.99, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 4.01, stepTime: 2.01, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
+      { slideTime: 2002.6, stepTime: 2000.6, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 1, stepTime: 1, stepIndex: 2, stepOrigins: { 2: 0 } },
       { slideTime: 0.5, stepTime: 0.5, stepIndex: 3, stepOrigins: { 3: 0 } },
     ]) expect(sample(scene, clock)).toEqual(api.sampleWorldUniforms(scene, clock));

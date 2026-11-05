@@ -2,7 +2,7 @@ import React, { Children, Fragment, isValidElement, type ReactElement, type Reac
 import { useDeckContent, usePresentationValue } from "@legend-apps/presentation";
 import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
-import { colorVector } from "./scene";
+import { colorVector, compileTrack, type Keyframe } from "./scene";
 import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
 import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldTrack } from "./World";
 
@@ -592,9 +592,12 @@ const PANEL = { fill: .94, edge: .3, glow: .05 };
 /** JetBrains Mono advance, in em. */
 const MONO = .6;
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
+const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay = 0): Keyframe<T>[] => [frames[0], {
+  step, delay, value: frames[0].value, duration: 0, loop: { every, frames: frames.slice(1).map(f => ({ ...f, at: (f.delay ?? 0) - delay, step: undefined, delay: undefined })) },
+}];
 type CodeMark = { text: string; color?: string; step?: number; delay?: number };
 /** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
-type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; repeat?: number; every?: number };
+type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; repeat?: number | "infinite"; every?: number };
 /** `anchor: "center"` centers a panel of this size on its position instead of hanging it from its top-left line. */
 function anchored(position: V3, anchor: unknown, width: number, height: number): V3 {
   return anchor === "center" ? [position[0] - width / 2 + .3, position[1] + (height - .6) / 2, position[2]] : position;
@@ -712,18 +715,22 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
 function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const count = Number(props.count ?? 36), columns = Number(props.columns ?? 6), [cw, ch] = (props.cell ?? [1.2, .7]) as [number, number], label = String(props.label ?? "");
   const rows = Math.ceil(count / columns), px = cw + .18, py = ch + .18, width = columns * px, height = rows * py;
-  const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string } | undefined, hot = flash?.color ?? INK.amber;
-  const start = flash?.delay ?? 0, length = flash?.duration ?? 10, beats = flash ? Array.from({ length: Math.round(length * (flash.rate ?? 8)) }, (_, k) => start + k / (flash.rate ?? 8)) : [];
-  const emissive = flash ? [{ step: 0, value: .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : .7;
+  const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string; repeat?: "infinite" } | undefined, hot = flash?.color ?? INK.amber;
+  const start = flash?.delay ?? 0, length = flash?.repeat === "infinite" ? 1 / (flash.rate ?? 8) : flash?.duration ?? 10, beats = flash ? Array.from({ length: Math.round(length * (flash.rate ?? 8)) }, (_, k) => start + k / (flash.rate ?? 8)) : [];
+  const emission = flash ? [{ step: 0, value: flash.repeat === "infinite" ? 1 : .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : [];
+  const emissive = flash?.repeat === "infinite" ? loopTrack(emission, flash.step, length, start) : flash ? emission : .7;
   const color = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
-  const drag = flash ? Array.from({ length: Math.ceil(length / .7) }, (_, k) => ({ at: start + k * .7, pull: k % 2 ? 0 : .9 })) : [];
+  const drag = flash ? Array.from({ length: flash.repeat === "infinite" ? 2 : Math.ceil(length / .7) }, (_, k) => ({ at: start + k * .7, pull: k % 2 ? 0 : .9 })) : [];
   const mac = props.chrome === "mac", bar = mac ? .42 : 0, w = width + .5, h = height + .5;
   const frame = (pull: number) => {
     const [x, y] = props.resize === "height" ? [0, pull] : [pull, 0];
     return { position: [x / 2, (bar - y) / 2, -.2] as V3, scale: [w + x, h + bar + y, .05] as V3, handle: [width / 2 + .3 + x, -height / 2 - .3 - y, .1] as V3,
       bar: [x / 2, (h + bar) / 2, -.17] as V3, barScale: [w + x, bar, .04] as V3 };
   };
-  const track = (pick: (f: ReturnType<typeof frame>) => V3) => flash ? [{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash.step, pick(frame(d.pull)), d.at, .7, "smoothstep"))] : pick(frame(0));
+  const track = (pick: (f: ReturnType<typeof frame>) => V3) => {
+    const frames = [{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash!.step, pick(frame(d.pull)), d.at, .7, "smoothstep"))];
+    return flash?.repeat === "infinite" ? loopTrack(frames, flash.step, 1.4, start) : flash ? frames : pick(frame(0));
+  };
   return <Stage id={id} position={at}>
     <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={Number(props.fill ?? .15)} edge={props.border as number | undefined} color={INK.idle} emissive={.5} />
     {mac && <>
@@ -741,7 +748,7 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
 type FormField = { value: string; bind?: string; big?: boolean };
 /** Panels of fields with render-count badges. `typing` types `text` into the fields bound to `bind`, one keystroke every `interval` seconds; each keystroke flashes those fields and ticks their badges. */
 function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
-  const panels = props.panels as { title: string; fields: FormField[] }[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number } | undefined;
+  const panels = props.panels as { title: string; fields: FormField[] }[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number; repeat?: "infinite" } | undefined;
   const fw = Number(props.fieldWidth ?? 5.4), fh = 1, gap = .45, pw = fw + 1, spread = pw + 1.3, times: number[] = [];
   let versions: string[] = [];
   if (typing) {
@@ -750,8 +757,10 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     versions = Array.from({ length: typing.text.length - base.length + 1 }, (_, k) => typing.text.slice(0, base.length + k));
     for (let k = 1; k < versions.length; k++) times.push((typing.delay ?? .6) + (k - 1) * (typing.interval ?? .45));
   }
-  const swap = (k: number) => typing ? [{ step: 0, value: k ? 0 : 1 }, ...k ? [key(typing.step, 1, times[k - 1], 0)] : [], ...k < times.length ? [key(typing.step, 0, times[k], 0)] : []] : 1;
-  const flashes = (rest: number) => typing && times.length ? [{ step: 0, value: rest }, ...times.flatMap(t => [key(typing.step, 7, t, .05), key(typing.step, 1.8, t + .08, .5)])] : rest;
+  const period = (times.at(-1) ?? 0) + 1.5;
+  const repeat = (frames: Keyframe<number>[]) => typing?.repeat === "infinite" ? loopTrack(frames, typing.step, period) : frames;
+  const swap = (k: number) => typing ? repeat([{ step: 0, value: k ? 0 : 1 }, ...k ? [key(typing.step, 1, times[k - 1], 0)] : [], ...k < times.length ? [key(typing.step, 0, times[k], 0)] : [], ...typing.repeat === "infinite" ? [key(typing.step, k ? 0 : 1, period - .1, 0)] : []]) : 1;
+  const flashes = (rest: number) => typing && times.length ? repeat([{ step: 0, value: typing.repeat === "infinite" ? 1.8 : rest }, ...times.flatMap(t => [key(typing.step, 7, t, .05), key(typing.step, 1.8, t + .08, .5)])]) : rest;
   const lit = typing && times.length ? [{ step: 0, value: INK.idle }, key(typing.step, INK.amber, times[0], .1)] : INK.idle;
   const badge = (stage: string, position: V3, bound: boolean) => <Stage key={stage} id={stage} position={position}>
     <Card id={`${stage}/disc`} scale={[.66,.66,.2]} radius={.33} color={bound ? lit : INK.idle} emissive={bound ? flashes(.9) : .9} />
@@ -910,7 +919,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
         emissive={[{ step: 0, value: 0 }, key(extract, 7, 1.25, .1), key(extract, 1.8, 1.4, .6)]} />
       <Text3D id={`${id}/node${k}/label`} text={label} mono size={.2 * TYPE} position={[p[0], p[1], .25]} opacity={show} />
       {k > 0 && <RoutedTube id={`${id}/edge${k}`} thickness={.035} color={INK.amber} emissive={3} path={[[root[0], root[1] - .45, 0], [root[0], mid, 0], [p[0], mid, 0], [p[0], p[1] + .45, 0]]}
-        draw={[{ step: 0, value: 0 }, key(extract, 1, 1.6, .5)]} pulses={Array.from({ length: 6 }, (_, r) => ({ step: extract, delay: 2.2 + r * 1.1, duration: .5, color: INK.amber, size: .11, emissive: 10 }))} />}
+        draw={[{ step: 0, value: 0 }, key(extract, 1, 1.6, .5)]} pulses={[{ step: extract, delay: 2.2, every: 1.1, duration: .5, color: INK.amber, size: .11, emissive: 10 }]} />}
     </Fragment>; })}
   </Stage>;
 }
@@ -1105,7 +1114,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
   }
   if (kind === "tree") {
     const nodes = placeTree(props.nodes as TreeNode[], { width: props.width as number | undefined, levelHeight: props.levelHeight as number | undefined });
-    const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
+    const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat === "infinite" ? 1 : f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
     const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
     const delay = props.delay as number | undefined;
@@ -1114,10 +1123,12 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
       const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
       const emissive = own.length ? [{ step: 0, value: .006 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
-        : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? .6) * .1, arrives(f, n) + .1, .6)])]
+        : f.repeat === "infinite" ? [{ ...key(f.step, (f.glow ?? .6) * .1, arrives(f, n), 0), loop: { every: f.every ?? 1.5, frames: [
+          { at: 0, value: .45, duration: .06 }, { at: .1, value: (f.glow ?? .6) * .1, duration: .6 },
+        ] } }] : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? .6) * .1, arrives(f, n) + .1, .6)])]
         : beats(n).length ? [{ at: 0, value: .006, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: .45, duration: .06 }, { at: t + .1, value: .006, duration: .6 }])] : .006;
       const pulses = [...beats(n).map(t => ({ at: t - HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })),
-        ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, color: f.color, size: .11, emissive: 10 }))];
+        ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, every: f.repeat === "infinite" ? f.every ?? 1.5 : undefined, color: f.color, size: .11, emissive: 10 }))];
       const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
       const width = Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)), height = Number(n.height ?? .82), side = n.x < 0 ? -1 : 1, land = delay === undefined ? 1.35 + i / Math.max(1, nodes.length - 1) * .35 : delay + i * .07 + .3;
       const typed = n.typed && beat ? Array.from({ length: beat.count }, (_, k) => ({ text: `"${n.typed!.slice(0, k + 1)}"`, from: beat.start + k * beat.every + n.d * HOP, to: k + 1 < beat.count ? beat.start + (k + 1) * beat.every + n.d * HOP : undefined })) : [];
@@ -1128,7 +1139,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
             material={{ albedo: "#101115", metal: .85, roughness: .3, rim: 0 }} />
           <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
             material={{ albedo: "#000000", metal: 0, roughness: 1 }} />
-          <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={typeof emissive === "number" ? .9 : emissive.map(frame => ({ ...frame, value: .9 + frame.value * 2 }))} material={{ albedo: "#000000" }} />
+          <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={typeof emissive === "number" ? .9 : compileTrack(emissive, value => .9 + value * 2).frames} material={{ albedo: "#000000" }} />
           <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={font} size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[0,typed.length ? .12 : 0,.27]}
             emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />
           {typed.map((v, k) => <Text3D key={k} id={`${id}/${n.id}/typed${k}`} text={v.text} mono font={font} size={.14 * TYPE} position={[0,-.17,.27]} color={n.color} emissive={.9}
@@ -1140,7 +1151,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
         {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
-          pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, color: f.color, size: .12, emissive: 10 }))} />}
+          pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, every: f.repeat === "infinite" ? f.every ?? 1.5 : undefined, color: f.color, size: .12, emissive: 10 }))} />}
       </Fragment>; })}</Stage>;
   }
   if (kind === "keys") return props.viewport === undefined ? keyList(id, position, props, INK) : viewportList(id, position, props, INK);

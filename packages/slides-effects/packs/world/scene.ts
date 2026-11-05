@@ -10,8 +10,8 @@ import { worldEffect, type WorldEffectStage, type WorldEffectUse } from "./effec
 import { d } from "typegpu";
 import { floatLayout } from "./layout";
 
-/** `delay` postpones a step keyframe by seconds after its step starts, for staggered reveals. */
-export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number };
+/** `delay` staggers a step keyframe. `loop` repeats local `at` frames every N seconds, starting from `value`. */
+export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number; loop?: { every: number; frames: Keyframe<T>[] } };
 export type Animated<T> = T | Record<number, T> | Keyframe<T>[];
 export type PrimitiveKind = "sphere" | "box" | "tube" | "ring";
 /** `steps` (set when every frame is a step keyframe in ascending step order) lets sampling skip frames of later steps by binary search. */
@@ -124,7 +124,10 @@ export function compileTrack<T, U = T>(value: Animated<T>, transform: (value: T)
   if (frames.length === 0) throw new Error("World keyframes must not be empty");
   const steps = frames.map(frame => frame.step ?? 0);
   const ordered = frames.every((frame, index) => frame.at === undefined && (index === 0 || steps[index - 1] <= steps[index]));
-  return { initial: transform(frames[0].value), frames: frames.map(frame => ({ ...frame, value: transform(frame.value) })), steps: ordered ? steps : undefined };
+  return { initial: transform(frames[0].value), frames: frames.map(frame => {
+    if (frame.loop && (!Number.isFinite(frame.loop.every) || frame.loop.every <= 0)) throw new Error("World loop period must be positive");
+    return { ...frame, value: transform(frame.value), loop: frame.loop ? { every: frame.loop.every, frames: compileTrack(frame.loop.frames, transform).frames } : undefined };
+  }), steps: ordered ? steps : undefined };
 }
 function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: ClockSample, count: number): T {
   "worklet";
@@ -148,6 +151,8 @@ function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: Cloc
   const origin = frame.at ?? (clock.stepOrigins[frame.step ?? 0] ?? clock.slideTime - clock.stepTime) + (frame.delay ?? 0);
   const elapsed = Math.max(0, clock.slideTime - origin);
   const completed = frame.at === undefined && (frame.step ?? 0) < clock.stepIndex && clock.stepOrigins[frame.step ?? 0] === undefined;
+  if (frame.loop) return completed ? frame.value : sampleTrackFrames({ initial: frame.value, frames: frame.loop.frames },
+    clockAtTime(clock, elapsed % frame.loop.every), frame.loop.frames.length);
   const progress = completed || (frame.duration ?? 0.65) <= 0 ? 1 : elapsed / (frame.duration ?? 0.65);
   // A finished frame holds its value. Skipping its start value keeps dense back-to-back keyframes linear instead of
   // recursing through every earlier frame; the tolerance absorbs float drift where one frame ends as the next begins.
