@@ -127,7 +127,7 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
   const marked = flat(expandScene(<CodeMorph id="mk" step={2} marks={[{ text: "b", step: 1 }, { text: "c", step: 3 }]}>{diff([" ab", " b"])}{diff([" ab", "-b", "+c"])}</CodeMorph>));
   const marks = marked.filter(n => String(n.props.id).startsWith("mk/mark"));
   expect(marks.map(n => n.props.id)).toEqual(["mk/mark0/0/1", "mk/mark0/1/0", "mk/mark1/1/0"]);
-  expect((marks[0].props.scale as { step: number }[]).map(k => k.step)).toEqual([0, 1]);
+  expect((marks[0].props.scale as { step: number }[]).map(k => k.step)).toEqual([0, 1, 2]);
 });
 
 test("lane scenes fly parts into the next scene's tree and bars, which grow in as they land", () => {

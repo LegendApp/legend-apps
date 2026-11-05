@@ -151,3 +151,26 @@ test("morphs band each run of new tokens on a changed line, but not wholly new l
   expect(sampleTrack(compileTrack(words[0].props.opacity as never), clock(0, 4))).toBe(0);
   expect(sampleTrack(compileTrack(words[0].props.opacity as never), clock(1, 4))).toBeCloseTo(.3);
 });
+
+test("morph highlights clear on the next step and restore on reverse seeks", async () => {
+  const source = "-const value = first()\n+const value = second()";
+  const second = "-const value = second()\n+const value = third()";
+  const tree = flat(expandScene(<CodeMorph id="m" marks={[{ text: "value", step: 1 }, { text: "third", step: 2 }]}>
+    {fence(source, await highlightCode(source, "diff-tsx"))}
+    {fence(second, await highlightCode(second, "diff-tsx"))}
+  </CodeMorph>));
+  const highlights = tree.filter(node => /\/(band|word|mark)/.test(String(node.props.id)));
+  const scene = prepareWorldScene({ instances: highlights.flatMap(node => cardInstances(node.props as never)) });
+  for (const stepIndex of [1, 2, 3, 2, 1, 3]) for (const stepTime of [0, .1, 1]) {
+    const clock = { slideTime: stepIndex + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 1, 2: 2, 3: 3 } };
+    const uniforms = sampleWorldUniforms(scene, clock, null, 1, 1, true);
+    highlights.forEach((node, index) => {
+      const id = String(node.props.id), active = /\/(band|word|mark)0\//.test(id) ? 1 : 2;
+      const visible = id.includes("/mark") ? (sampleTrack(compileTrack(node.props.scale as never), clock) as number[])[0]
+        : uniforms[worldHeaderSize + index * worldInstanceSize + instanceField.opacity];
+      if (stepIndex > active) expect(visible).toBe(0);
+      if (stepIndex === active && stepTime === 1 && !id.includes("/band0/0/") && !id.includes("/band1/0/"))
+        expect(visible).toBeGreaterThan(0);
+    });
+  }
+});

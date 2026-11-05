@@ -952,6 +952,7 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   sets the soft background bands on changed lines. On a changed line that keeps some tokens, each
   run of new tokens also gets a word band; `highlight.word={{ color, opacity }}` styles it
   (default: the band color at 1.5 times its opacity). Put changes that should land together in one fence.
+  Line and word bands, and marks with a `step`, clear when the next step begins.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
   tree of `nodes` labels on `extract`, with continuously repeating edge pulses.
