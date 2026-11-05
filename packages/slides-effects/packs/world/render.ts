@@ -145,10 +145,22 @@ struct WorldVertex { @builtin(position) position:vec4f, @location(0) world:vec3f
  @location(2) color:vec3f, @location(3) emissive:f32, @location(4) material:vec4f, @location(5) albedo:vec3f,
  @location(6) opacity:f32, @location(7) @interpolate(flat) instance:u32 }
 `;
+// Display-space colors (as a 2D layer would draw them) mapped back through the tonemap, so cards and flat glyphs read the same at any exposure.
+// The ceiling keeps the brightest colors under the bloom threshold.
+const displayCode = `
+fn aces(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }
+fn encode(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
+fn toScene(display:vec3f)->vec3f {
+ let y=clamp(select(display/12.92,pow((display+.055)/1.055,vec3f(2.4)),display>vec3f(.04045)),vec3f(0.),vec3f(.9));
+ let a=2.51-2.43*y; let b=.03-.59*y;
+ return (-b+sqrt(b*b+.56*y*a))/(2.*a)/max(uniforms[8]*frame.brightness,.0001);
+}
+`;
 // Cards are one quad in the card's front plane. The fragment shades a 2D rounded-rect distance field: coverage is antialiased over one
 // device pixel, and the outer glow, glass gradient, inner glow, rim and avatar layer like a 2D canvas in display space, so edges
 // stay crisp at any resolution without MSAA. Emissive from .03 to .09 blends a resting slate card into one lit in its color.
-// Shape fields: 11 corner radius, 16 glow blur width, 17 rim strength, 18 avatar radius / half height, 19 fill opacity (cards have no thickness).
+// Shape fields: 11 corner radius, 15 border width in device pixels (0 scales the rim with the glow), 16 glow blur width, 17 rim strength (a border's is 22% white per 1),
+// 18 avatar radius / half height, 19 fill opacity (cards have no thickness).
 function cardCode(offset: number, background: Vec3) {
   return `${worldBindings}${triangleCorner}${lightingCode(0)}
 struct CardVertex { @builtin(position) position:vec4f, @location(0) local:vec2f, @location(1) @interpolate(flat) instance:u32 }
@@ -165,15 +177,7 @@ fn roundRect(p:vec2f,half:vec2f,radius:f32)->f32 { let q=abs(p)-half+radius; ret
  return result;
 }
 struct CardResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
-// Display-space colors (as a 2D layer would draw them) mapped back through the tonemap, so the card reads the same at any exposure.
-// The ceiling keeps the brightest card colors under the bloom threshold.
-fn aces(x:vec3f)->vec3f { return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),vec3f(0.),vec3f(1.)); }
-fn encode(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
-fn toScene(display:vec3f)->vec3f {
- let y=clamp(select(display/12.92,pow((display+.055)/1.055,vec3f(2.4)),display>vec3f(.04045)),vec3f(0.),vec3f(.9));
- let a=2.51-2.43*y; let b=.03-.59*y;
- return (-b+sqrt(b*b+.56*y*a))/(2.*a)/max(uniforms[8]*frame.brightness,.0001);
-}
+${displayCode}
 fn over(dst:vec4f,color:vec3f,alpha:f32)->vec4f { return vec4f(color*alpha+dst.rgb*(1.-alpha),alpha+dst.a*(1.-alpha)); }
 // Gaussian blur of a stroke of the given width centred on the edge.
 fn blurredStroke(d:f32,width:f32,sigma:f32)->f32 { return width/(2.5066*sigma)*exp(-d*d/(2.*sigma*sigma)); }
@@ -192,10 +196,10 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let fill=select(mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v),accent,uniforms[base+31u]>.5);
  layer=over(layer,fill,coverage*uniforms[base+19u]);
  layer=over(layer,accent,.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
- let line=1.4*unit;
+ let border=uniforms[base+15u]>0.; let line=select(1.4*unit,uniforms[base+15u]*pixel,border);
  // Box-filter the stroke so a subpixel rim keeps its coverage as it crosses pixel centers.
  let rim=clamp((line+pixel)*.5-abs(d),0.,min(line,pixel))/pixel;
- layer=over(layer,mix(vec3f(.2,.29,.4),accent,h),rim*(.8+.2*h)*edge*mix(1.,.45,v));
+ layer=over(layer,select(mix(vec3f(.2,.29,.4),accent,h),vec3f(1.),border),rim*select((.8+.2*h)*edge*mix(1.,.45,v),min(1.,.22*uniforms[base+17u]),border));
  let avatar=uniforms[base+18u]*half.y;
  if(avatar>0.) {
   let q=p-vec2f(-half.x+half.y,0.); let disc=1.-smoothstep(-pixel*.5,pixel*.5,length(q)-avatar);
@@ -516,7 +520,8 @@ const fxaaCode = `${worldBindings}
 fn fetch(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb; }
 fn luma(color:vec3f)->f32 { return dot(color,vec3f(.299,.587,.114)); }
 @fragment fn fxaa(@location(0) uv:vec2f)->@location(0) vec4f {
- let texel=1./vec2f(textureDimensions(source)); let center=fetch(uv); let m=luma(center);
+ let texel=1./vec2f(textureDimensions(source)); let source4=textureSampleLevel(source,linearSampler,uv,0.); let center=source4.rgb; let m=luma(center);
+ if(source4.a<.5) { return vec4f(center,1.); }
  let nw=luma(fetch(uv+vec2f(-1.,-1.)*texel)); let ne=luma(fetch(uv+vec2f(1.,-1.)*texel));
  let sw=luma(fetch(uv+vec2f(-1.,1.)*texel)); let se=luma(fetch(uv+vec2f(1.,1.)*texel));
  let lumaMin=min(m,min(min(nw,ne),min(sw,se))); let lumaMax=max(m,max(max(nw,ne),max(sw,se)));
@@ -607,7 +612,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) cast(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) cast(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `shadow-glyphs-${index}`,
-      code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(0, { key: true, shadowCaster: true })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments)
+      code: text3dCode(`${worldBindings}${triangleCorner}${displayCode}${lightingCode(0, { key: true, shadowCaster: true })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments)
         + "\n@fragment fn shadowFragment(in:GlyphVertex) {}",
       vertex: "glyphVertex", fragment: "shadowFragment", color: [], depth: "shadow", vertexCount: draw.vertexCount, instanceCount: draw.count,
       instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
@@ -627,7 +632,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
   if (!draws && !topology.floor) add("empty", "box", 0, 0);
   for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `scene-glyphs-${index}`,
-    code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments),
+    code: text3dCode(`${worldBindings}${triangleCorner}${displayCode}${lightingCode(lights, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments),
     vertex: "glyphVertex", fragment: "glyphFragment", color: ["hdr"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
     instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
     clear: false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });

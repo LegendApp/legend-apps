@@ -31,8 +31,8 @@ export type LabelAlign = "left" | "center" | "right";
 export type LabelOptions = { id?: string; sharp?: Animated<boolean>; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
 /** Rounded card shape: corner `radius` and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it),
- * `fill` the body's opacity (0 to 1) under the rim and glow, for a translucent plate. */
-export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?: number; fill?: number };
+ * `fill` the body's opacity (0 to 1) under the rim and glow, for a translucent plate. A `line` width in device pixels draws the rim as a light border, 22% white per unit of `edge`. */
+export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?: number; fill?: number; line?: number };
 /** A rounded card with an optional avatar (initials default to the title's first letter), a title, a second line and a right-aligned meta tag.
  * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */
 export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & CardStyle & {
@@ -238,8 +238,8 @@ export function rowInstances(options: RowsOptions): Instance[] {
   }));
   return [...slots, ...ghosts, ...labels];
 }
-function cardStyle({ radius = 0.12, glow = 0.14, edge = 0.6, avatar = 0, fill = 1 }: CardStyle): Required<CardStyle> {
-  return { radius, glow, edge, avatar, fill };
+function cardStyle({ radius = 0.12, glow = 0.14, edge = 0.6, avatar = 0, fill = 1, line = 0 }: CardStyle): Required<CardStyle> {
+  return { radius, glow, edge, avatar, fill, line };
 }
 function largestScale(scale: Animated<Vec3> | undefined): Vec3 {
   const track = compileTrack<Vec3>(scale ?? [1, 1, 1]);
@@ -955,7 +955,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
     }
     values[index + I.curve] = curve; values[index + I.thickness] = instance.thickness;
-    if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; values[index + I.thickness] = instance.card.fill; }
+    if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; values[index + I.thickness] = instance.card.fill; values[index + 15] = instance.card.line; }
     values[index + I.opacity] = instanceOpacity(instance, clock);
     const material = instance.materialTracks!;
     if (instance.material) {

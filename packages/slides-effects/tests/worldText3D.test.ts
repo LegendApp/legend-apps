@@ -95,3 +95,16 @@ describe("world Text3D", () => {
     expect(graph.buffers?.map(buffer => buffer.id)).toEqual(["text3d-0", "text3d-1"]);
   });
 });
+
+test("flat text draws only an unlit front face that FXAA and grain leave crisp", () => {
+  const [glyph] = text3dInstances({ text: "a", flat: true, depth: .4, bevel: .05 });
+  expect(glyph.glyph).toMatchObject({ depth: 0, bevel: 0, bevelWidth: 0, segments: 0 });
+  const values = sampleWorldUniforms(scene([glyph]), clock(0));
+  expect(values[worldHeaderSize + 16]).toBe(0);
+  const graph = buildWorldGraph(scene([glyph]));
+  const code = (id: string) => graph.passes.find(pass => pass.id === id)!.code;
+  expect(code("sharp-glyphs-0")).toContain("if(uniforms[base+16u]<=0.) { return vec4f(toScene(encode(color))*opacity,opacity); }");
+  expect(code("sharp-glyphs-0")).toContain("if(depth<=0. && vid>=capVertices)");
+  expect(code("tonemap")).toContain("vec4f(clamp(color,vec3f(0.),vec3f(1.)),1.-layer.a)");
+  expect(code("screen")).toContain("if(source4.a<.5) { return vec4f(center,1.); }");
+});

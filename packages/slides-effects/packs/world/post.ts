@@ -187,13 +187,13 @@ fn digit(p:vec2f,value:u32)->f32 {
  if(blur>.002) { let stride=(uv-.5)*blur*.012; for(var i=1;i<10;i++) { color+=sceneAt(uv-stride*f32(i)); } color*=.1; }
  ${sharp ? `var layer=textureSampleLevel(sharp,linearSampler,uv,0.);
  layer=vec4f(fogged(layer.rgb/max(layer.a,.0001),uv,depthAt(uv))*layer.a,layer.a);
- color=color*(1.-layer.a)+layer.rgb;` : ""}
+ color=color*(1.-layer.a)+layer.rgb;` : "let layer=vec4f(0.);"}
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(uniforms[${worldClockOffset}]*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
  color*=1.-uniforms[15]*smoothstep(.1,.8,length(uv-.5)); color*=1.-uniforms[17]*.65;
- color+=noise*uniforms[16];` : `color*=1.-uniforms[15]*smoothstep(.25,.85,length((uv-.5)*vec2f(1.1,1.)));
- color=max(vec3f(0.),color+noise*uniforms[16]*(.3+color));
+ color+=noise*uniforms[16]*(1.-layer.a);` : `color*=1.-uniforms[15]*smoothstep(.25,.85,length((uv-.5)*vec2f(1.1,1.)));
+ color=max(vec3f(0.),color+noise*uniforms[16]*(.3+color)*(1.-layer.a));
  color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}
  color*=1.-uniforms[17]*.65;`}
@@ -205,6 +205,7 @@ fn digit(p:vec2f,value:u32)->f32 {
   for(var i=0u;i<6u;i++) { if(f32(i)<digits) { let divisor=pow(10.,digits-f32(i)-1.); let n=u32(floor(value/divisor))%10u; amount=max(amount,digit(p-vec2f(f32(i)*1.15,0.),n)); } }
   color=mix(color,${outputColorSpace === "srgb" ? "srgb(vector(60u))" : "vector(60u)"},amount);
  }
- return vec4f(clamp(color,vec3f(0.),vec3f(1.)),1.);
+ // Alpha marks the sharp layer's coverage so FXAA leaves its pixels alone.
+ return vec4f(clamp(color,vec3f(0.),vec3f(1.)),1.-layer.a);
 }`;
 }

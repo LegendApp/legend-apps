@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { text3dInstances } from "../packs/world/text3d";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
-import { cardInstances, customInstances, labelInstance, prepareWorldScene, primitive, rowInstances, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
+import { cardInstances, customInstances, labelInstance, prepareWorldScene, primitive, rowInstances, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
 
 const quad = `
 fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
@@ -213,4 +213,14 @@ test("text draws cull by their own opacity slots in scene and shadow", () => {
   expect(glyphs.map(pass => pass.id)).toEqual(["shadow-glyphs-0", "scene-glyphs-0", "sharp-glyphs-0"]);
   for (const pass of glyphs) expect(pass).toMatchObject({ instanceCount: 2,
     instanceCull: { offset: worldHeaderSize + worldInstanceSize + 23, stride: worldInstanceSize, threshold: .001 } });
+});
+
+test("a card's pixel line draws its rim as a light border at that width", () => {
+  const prepared = scene({ instances: [...cardInstances({ id: "panel", line: 1.5, edge: 1 }), ...cardInstances({ id: "plain" })] });
+  const values = sampleWorldUniforms(prepared, { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } });
+  const slot = (id: string) => worldHeaderSize + prepared.instances.findIndex(instance => instance.id === id) * worldInstanceSize + 15;
+  expect([values[slot("panel")], values[slot("plain")]]).toEqual([1.5, 0]);
+  const code = buildWorldGraph(prepared).passes.find(pass => pass.id === "sharp-cards")!.code;
+  expect(code).toContain("let line=select(1.4*unit,uniforms[base+15u]*pixel,border);");
+  expect(code).toContain("min(1.,.22*uniforms[base+17u]),border)");
 });

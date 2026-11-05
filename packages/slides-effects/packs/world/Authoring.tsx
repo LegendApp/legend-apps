@@ -614,9 +614,8 @@ function textLine(kind: string, { size: nominal, depth, track, delay, duration, 
 const inkOf = (colors: SceneColors) => ({ colors, white: colors.text, muted: colors.muted, idle: colors.idle, red: colors.removed, amber: colors.hot,
   purple: colors.highlight, blue: colors.link, green: colors.added, accent: colors.accent });
 type Ink = ReturnType<typeof inkOf>;
-/** Code panels: a near-opaque plate in the theme's `panel` color with a quiet rim, so scenery never shows through the code. */
-/** Code panels are mostly opaque glass with a visible rim: only a hint of the scenery shows through. */
-const PANEL = { fill: .9, edge: .9, glow: .05 };
+/** Code panels are mostly opaque glass with a 1.5px light border: only a hint of the scenery shows through. Their code is flat, unlit text unless `flat={false}`. */
+const PANEL = { fill: .9, edge: 1, line: 1.5, glow: .05 };
 const panelStyle = (props: Record<string, unknown>) => ({ ...PANEL, fill: Number(props.fill ?? PANEL.fill), edge: Number(props.border ?? PANEL.edge) });
 /** JetBrains Mono advance, in em. */
 const MONO = .6;
@@ -937,7 +936,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       const enter = shown[0], exit = shown[shown.length - 1] + 1;
       const addedAt = enter > 0 ? first + enter - 1 : undefined, removedAt = exit < states.length ? first + exit - 1 : undefined;
       const visibility = addedAt === undefined && removedAt === undefined ? 1 : [{ step: 0, value: enter ? 0 : 1 }, ...addedAt === undefined ? [] : [key(addedAt, 1, settle, .25)], ...removedAt === undefined ? [] : [key(removedAt, 0, 0, .25)]];
-      return <Text3D key={n} id={`${id}/token${n}`} text={part.text} tokens={part.tokens} mono size={em} align="left"
+      return <Text3D key={n} id={`${id}/token${n}`} text={part.text} tokens={part.tokens} mono flat={props.flat !== false} size={em} align="left"
         opacity={visibility} position={shown.every(s => part.positions[s]!.every((v, axis) => v === part.positions[enter]![axis])) ? part.positions[enter]! :
           [{ step: 0, value: part.positions[enter]! }, ...shown.slice(1).filter(s => part.positions[s]!.some((v, axis) => v !== part.positions[s - 1]![axis]))
             .map(s => key(first + s - 1, part.positions[s]!, settle, .5))]} />;
@@ -977,12 +976,12 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
         position={[{ step: 0, value: [width / 2 - .3, y0, -.07] }, key(collapse, [width / 2 - .3, kept < 0 ? y0 : y1, -.07], .45, .5)]}
         scale={[width - .2, lineHeight, .02]}
         opacity={[{ step: 0, value: 0 }, key(mark, highlight?.opacity ?? .12, 0, .4), key(kept < 0 ? collapse : extract, 0, 0, .3)]} /> : null;
-      if (kept < 0) return <Fragment key={n}>{band}<Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" position={[0, y0, 0]}
+      if (kept < 0) return <Fragment key={n}>{band}<Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono flat={props.flat !== false} size={em} align="left" position={[0, y0, 0]}
         glyphs={() => ({ scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} /></Fragment>;
       const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2;
       const target = node(n === origin ? 0 : 1 + reads.indexOf(n));
       return <Fragment key={n}>
-        <Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" glyphs={() => ({ opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
+        <Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono flat={props.flat !== false} size={em} align="left" glyphs={() => ({ opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
           position={[{ step: 0, value: [0, y0, 0] }, key(collapse, [0, y1, 0], .45, .5), key(extract, [0, y1, 1.4], 0, .45), key(extract, [target[0] - middle, target[1], 1.4], .55, .9)]} />
         {band}
       </Fragment>;
@@ -1278,7 +1277,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const marks = (props.marks ?? []) as CodeMark[], panel = props.panelColor === undefined ? undefined : paint(props.panelColor, INK.colors) as string;
     return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
       <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...panelStyle(props)} color={panel ?? INK.colors.panel} />
-      <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
+      <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono flat={props.flat !== false} size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
         const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];

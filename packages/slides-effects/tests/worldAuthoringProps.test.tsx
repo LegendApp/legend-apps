@@ -97,16 +97,18 @@ test("scene colors theme the parts, and color props take theme names", () => {
 test("code panels and bar charts take style props over the theme's panel defaults", async () => {
   const fence = await highlightedFence("const a = 1;");
   const plain = expandScene(<CodePanel id="code">{fence}</CodePanel>);
-  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .9, edge: .9, color: defaultColors.panel });
+  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .9, edge: 1, line: 1.5, color: defaultColors.panel });
   const diff = await highlightedFence(" A\n-B\n+C", "diff");
   for (const part of [<CodeMorph id="code">{diff}</CodeMorph>, <CodeTrace id="code" source={1} reads={[1]} nodes={["a", "b"]}>{fence}</CodeTrace>])
-    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .9, edge: .9, color: defaultColors.panel });
+    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .9, edge: 1, line: 1.5, color: defaultColors.panel });
   expect(find(expandScene(<CodeMorph id="code" fill={.5} border={1.2}>{diff}</CodeMorph>), Card, "code/card").props).toMatchObject({ fill: .5, edge: 1.2 });
   const styled = expandScene(<CodePanel id="code" fill={.4} padding={.5} panelColor="idle" textColor="hot" marks={[{ text: "a", color: "link" }]}>{fence}</CodePanel>);
   const card = find(styled, Card, "code/card");
   expect(card.props).toMatchObject({ fill: .4, color: defaultColors.idle });
   expect((card.props.scale as number[])[0] - (find(plain, Card, "code/card").props.scale as number[])[0]).toBeCloseTo(.4);
   expect(find(styled, Text3D, "code/code").props.color).toBe(defaultColors.hot);
+  expect(find(plain, Text3D, "code/code").props.flat).toBe(true);
+  expect(find(expandScene(<CodePanel id="code" flat={false}>{fence}</CodePanel>), Text3D, "code/code").props.flat).toBe(false);
   expect(flat(styled).find(n => String(n.props.id).startsWith("code/mark0/"))!.props.color).toBe(defaultColors.link);
 
   const items = [{ label: "A", value: 2 }, { label: "B", value: 4, color: "added" }];

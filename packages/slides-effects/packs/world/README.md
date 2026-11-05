@@ -457,7 +457,8 @@ import { Card } from "slides:world/World";
 A Card is a flat rounded glass panel facing the camera: `scale` is its full width,
 height and depth (the panel sits on the front face). `radius` rounds its corners,
 `edge` scales its thin rim and glow, and `glow` is the blur width of the soft outer
-glow. `fill` (0 to 1, default 1) is the body's opacity under the rim and glow, so
+glow. `line` draws the rim instead as a light border that many device pixels wide, 22% white per unit
+of `edge`. `fill` (0 to 1, default 1) is the body's opacity under the rim and glow, so
 a translucent plate can back text without hiding the scene. At rest (`emissive` up to 0.03) a card is dark slate glass with a dim slate rim
 and avatar; an `emissive` of 0.09 or more lights it in `color`: tinted fill, rim,
 avatar and a faint glow. Card colors are display colors, as a 2D layer would draw
@@ -521,7 +522,8 @@ Extruded, beveled type. Each visible glyph is its own instance (`<id>:<index>`),
 and glows on its own, yet every glyph of one font draws in a single instanced pass. `size` is the em in world
 units; `depth`, `bevel` (thickness) and `bevelWidth` are in em, and `bevelSegments` rounds the bevel. The face
 uses `color` and self-glow `emissive`, so type stays readable under the bloom threshold; the sides and bevel
-use `side`, `metal` and `roughness` (or a `material`) with soft studio lighting. `align`, `lineHeight`,
+use `side`, `metal` and `roughness` (or a `material`) with soft studio lighting. `flat` drops the extrusion and
+lighting and draws only the face in its exact display color, like 2D text, still moving with its glyph tracks. `align`, `lineHeight`,
 `tracking` and `uppercase` shape the layout; `\n` breaks lines and unsupported characters become `?`.
 `position` is the cap-height center of the first line, so type sits optically centered on a box at the same
 point; each further line is `lineHeight` em lower.
@@ -983,7 +985,8 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   bands behind each occurrence of `text` (default opacity .12), keeping syntax colors.
   For `CodePanel`, `anchor: "center"` centers the panel on its position.
 - `CodePanel`, `CodeMorph` and `CodeTrace` are glass panels: `fill` (0 to 1, default .9) is the
-  panel's opacity over the scenery behind it and `border` its rim strength (default .9).
+  panel's opacity over the scenery behind it and `border` the strength of its 1.5px light border (default 1, 22% white).
+  Their code is flat, unlit text that stays crisp in focus; `flat={false}` restores extruded, lit glyphs.
   Code parts color from the
   compiler's syntax tokens, so their child must be a fenced block; a string child is an authoring error.
 

@@ -16,8 +16,8 @@ export type Text3DEnter = { step?: number; at?: number; delay?: number; offset?:
 export type Text3DOptions = {
   /** `mono` selects the bundled JetBrains Mono Bold; `font` takes any baked font. */
   id?: string; sharp?: Animated<boolean>; text: string; tokens?: readonly CodeToken[]; font?: Text3DFont; mono?: boolean; position?: Animated<Vec3>; size?: number;
-  /** Extrusion depth, bevel thickness and bevel width, in em. */
-  depth?: number; bevel?: number; bevelWidth?: number; bevelSegments?: number;
+  /** Extrusion depth, bevel thickness and bevel width, in em. `flat` draws only the front face, unlit in its exact color, like 2D text. */
+  flat?: boolean; depth?: number; bevel?: number; bevelWidth?: number; bevelSegments?: number;
   align?: "left" | "center" | "right"; lineHeight?: number; tracking?: number; uppercase?: boolean;
   /** Face color and glow; `side` colors the extruded sides and bevels, shaded by `metal` and `roughness` (or a `material`). */
   color?: Animated<string>; emissive?: Animated<number>; side?: Animated<string>; metal?: Animated<number>; roughness?: Animated<number>;
@@ -97,7 +97,7 @@ function enterTrack<T>(enter: Text3DEnter, from: T, to: T, delay: number, durati
 export function text3dInstances(options: Text3DOptions): Instance[] {
   const font = options.font ?? (options.mono ? monoFont : defaultFont);
   const name = registerText3DFont(font);
-  const size = options.size ?? 1, depth = options.depth ?? 0.25, bevel = Math.min(options.bevel ?? 0.03, depth / 2), bevelWidth = options.bevelWidth ?? 0.014;
+  const size = options.size ?? 1, depth = options.flat ? 0 : options.depth ?? 0.25, bevel = Math.min(options.bevel ?? 0.03, depth / 2), bevelWidth = options.flat ? 0 : options.bevelWidth ?? 0.014;
   const segments = Math.max(0, Math.min(6, Math.round(options.bevelSegments ?? (bevel > 0 ? 2 : 0))));
   const text = options.uppercase ? options.text.toUpperCase() : options.text;
   const layout = layoutText3D(font, text, options);
@@ -167,7 +167,7 @@ export function text3dBuffer(name: string, id: string) {
 
 const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
 /** Glyph instance fields: 0 center, 3 size, 4 face color, 7 face emissive, 8 scale, 11 glyph, 12 rotation (degrees), 15 pivot y,
- * 16 depth, 17 bevel, 18 bevel width, 19 pivot x (em), 23 opacity, 24 side albedo, 27 roughness, metal, rim, activation. */
+ * 16 depth (0 draws only an unlit front face), 17 bevel, 18 bevel width, 19 pivot x (em), 23 opacity, 24 side albedo, 27 roughness, metal, rim, activation. */
 export function text3dCode(prefix: string, slot: string, segments: number) {
   const rings = segments > 0 ? `
 fn profile(ring:u32,width:f32,bevel:f32,depth:f32)->vec4f {
@@ -196,6 +196,7 @@ fn rotate(v:vec3f,degrees:vec3f)->vec3f {
  let triangles=glyphData[header+4u]; let capVertices=glyphData[header+5u]*3u;
  let depth=uniforms[base+16u]; let bevel=uniforms[base+17u]; let width=uniforms[base+18u];
  var result:GlyphVertex; result.instance=iid;
+ if(depth<=0. && vid>=capVertices) { result.position=vec4f(2.,2.,0.,1.); return result; }
  var local=vec3f(0.); var normal=vec3f(0.,0.,1.);
  if(vid<capVertices*2u) {
   let back=vid>=capVertices; let k=vid%capVertices; let corner=select(k%3u,2u-k%3u,back);
@@ -231,6 +232,7 @@ fn studio(direction:vec3f)->vec3f {
  var normal=normalize(in.normal); let view=normalize(eye()-in.world);
  if(dot(normal,view)<0.) { normal=-normal; }
  let color=vector(base+4u); let glow=uniforms[base+7u];
+ if(uniforms[base+16u]<=0.) { return vec4f(toScene(encode(color))*opacity,opacity); }
  if(in.face>.5) {
   let lit=illuminate(in.world,normal,Material(color*.12,color*glow,.45,0.),color,0.,0.);
   return vec4f(lit*opacity,opacity);
