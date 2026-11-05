@@ -202,7 +202,8 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     const persistLayout = useCallback(() => rememberPresenterLayout(layout$.peek()), [layout$]);
     const previewWeight = showNotes ? 1 - layout.notesRatio : 1;
     const navigation = `${currentIndex}:${currentStep}:${nextIndex}:${nextStep}`;
-    const settled = useAudienceSettled(navigation, audienceOpen);
+    const settledNavigation = useAudienceSettled(navigation, true);
+    const settled = audienceOpen ? settledNavigation : navigation;
     const [settledIndex, settledStep, settledNextIndex, settledNextStep] = settled.split(":").map(Number);
     const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep));
     // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
@@ -211,7 +212,7 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     const nextPreview = <Preview index={nextStill ? nextIndex : settledNextIndex} stepIndex={nextStill ? nextStep : settledNextStep} still={nextStill}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settled !== navigation}/>
+        <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
         <Preview index={currentStill ? currentIndex : settledIndex} current={currentIndex} animate={!audienceOpen} stepIndex={currentStill ? currentStep : settledStep} still={currentStill} weight={showNext ? layout.currentPreviewRatio : 1}/>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
