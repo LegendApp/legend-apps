@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { text3dInstances } from "../packs/world/text3d";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
-import { customInstances, prepareWorldScene, primitive, rowInstances, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
+import { cardInstances, customInstances, labelInstance, prepareWorldScene, primitive, rowInstances, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
 
 const quad = `
 fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
@@ -12,6 +12,43 @@ fn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material { return Ma
 `;
 const scanlines = "fn customPass(uv:vec2f,color:vec4f,ctx:PassContext)->vec4f { return color*vec4f(vec3f(.9+.1*sin(uv.y*200.)),1.); }";
 const scene = (options: Partial<WorldScene> = {}) => prepareWorldScene({ instances: [primitive("sphere")], ...options });
+
+for (const msaaSamples of [1, 4] as const) test(`text, code and cards bypass focus and travel blur with ${msaaSamples} samples`, () => {
+  const graph = buildWorldGraph(scene({ msaaSamples, floor: {}, dof: {}, keyLight: {}, instances: [primitive("box"),
+    ...text3dInstances({ text: "Sharp" }), labelInstance({ text: "const x = 1;", mono: true }), ...cardInstances({ id: "panel", title: "Code" })] }));
+  const pass = (id: string) => graph.passes.find(pass => pass.id === id)!;
+  const index = (id: string) => graph.passes.indexOf(pass(id));
+  const sharp = [pass("scene-glyphs-0"), pass("scene-cards"), pass("scene-labels")];
+  expect(graph.targets.find(target => target.id === "sharp")).toMatchObject({ format: "rgba16float", scale: 1, samples: msaaSamples });
+  expect(pass("sharp-clear")).toMatchObject({ kind: "render", color: ["sharp"], instanceCount: 0, clear: [0, 0, 0, 0] });
+  expect(pass("sharp-clear")).not.toHaveProperty("depth");
+  for (const draw of sharp) {
+    expect(draw).toMatchObject({ kind: "render", color: ["sharp"], depth: "depth", blend: "over", clear: false });
+    expect(graph.passes.indexOf(draw)).toBeGreaterThan(index("dof-composite"));
+    expect(graph.passes.indexOf(draw)).toBeGreaterThan(index("sharp-clear"));
+    expect(graph.passes.indexOf(draw)).toBeLessThan(index("tonemap"));
+  }
+  expect(pass("scene-box")).toMatchObject({ color: ["hdr"] });
+  expect(pass("floor")).toMatchObject({ color: ["hdr"] });
+  for (const stage of ["dof-gather", "dof-composite", "bloom-threshold"]) expect(pass(stage).reads).not.toContain("sharp");
+  const final = pass("tonemap");
+  expect(final.reads).toEqual([expect.any(String), "bloom-up@0", "sharp", "depth"]);
+  expect(final.code).toContain("color+=sceneAt(uv-stride*f32(i))");
+  const composite = final.code.indexOf("color=color*(1.-layer.a)+layer.rgb");
+  expect(composite).toBeGreaterThan(final.code.indexOf("color*=.1;"));
+  expect(composite).toBeLessThan(final.code.indexOf("color=toneMap("));
+  expect(final.code.indexOf("color=mix(color,")).toBeGreaterThan(composite);
+  expect(final.code).toContain(msaaSamples === 4 ? "texture_depth_multisampled_2d" : "texture_depth_2d");
+});
+
+test("text-only scenes clear background depth and bind sharp color without fused bloom", () => {
+  const graph = buildWorldGraph(scene({ backgroundColor: "#000000", instances: [labelInstance({ text: "Only text" })], postOrder: ["bloom", "dof", "fog"] }));
+  expect(graph.passes.find(pass => pass.id === "scene-empty")).toMatchObject({ color: ["hdr"], depth: "depth", instanceCount: 0, clear: [0, 0, 0, 1] });
+  const final = graph.passes.find(pass => pass.id === "tonemap")!;
+  expect(final.reads).toEqual([expect.any(String), "sharp", "depth"]);
+  expect(final.code).toContain("@binding(4) var sharp:texture_2d<f32>");
+  expect(final.code).toContain("@binding(5) var depth:texture_depth_multisampled_2d");
+});
 
 for (const quality of ["low", "medium", "high"] as const) test(`all enabled post effects remain present at ${quality} quality`, () => {
   const graph = buildWorldGraph(scene({ quality, floor: {}, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));

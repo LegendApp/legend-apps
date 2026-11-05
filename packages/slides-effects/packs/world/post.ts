@@ -156,11 +156,14 @@ fn toneMap(input:vec3f)->vec3f {
 }
 
 /** `bloomGain` is the WGSL gain of a fused additive effect bound as `bloom`. */
-export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", bloomGain?: string) {
+export function finalCode(bindings: string, toneMapping: WorldScene["toneMapping"] = "aces", outputColorSpace: WorldScene["outputColorSpace"] = "srgb", bloomGain?: string, sharp = false) {
   return `${bindings}
 @group(0) @binding(3) var source:texture_2d<f32>;
 ${bloomGain ? "@group(0) @binding(4) var bloom:texture_2d<f32>;" : ""}
 fn sceneAt(uv:vec2f)->vec3f { return textureSampleLevel(source,linearSampler,uv,0.).rgb${bloomGain ? `+textureSampleLevel(bloom,linearSampler,uv,0.).rgb*${bloomGain}` : ""}; }
+${sharp ? `@group(0) @binding(${bloomGain ? 5 : 4}) var sharp:texture_2d<f32>;
+@group(0) @binding(${bloomGain ? 6 : 5}) var depth:texture_depth_2d;
+${depthCode()}${heightFog}` : ""}
 ${toneMappingCode(toneMapping)}
 fn srgb(x:vec3f)->vec3f { return select(x*12.92,1.055*pow(x,vec3f(1./2.4))-.055,x>vec3f(.0031308)); }
 fn rectangle(p:vec2f,center:vec2f,halfSize:vec2f)->f32 { let q=abs(p-center)-halfSize; return length(max(q,vec2f(0.)))+min(max(q.x,q.y),0.); }
@@ -182,6 +185,9 @@ fn digit(p:vec2f,value:u32)->f32 {
  if(uniforms[44]!=0.) { color=vec3f(sceneAt(uv+shift).r,color.g,sceneAt(uv-shift).b); }
  let blur=uniforms[${travelSpeedSlot + 1}];
  if(blur>.002) { let stride=(uv-.5)*blur*.012; for(var i=1;i<10;i++) { color+=sceneAt(uv-stride*f32(i)); } color*=.1; }
+ ${sharp ? `var layer=textureSampleLevel(sharp,linearSampler,uv,0.);
+ layer=vec4f(fogged(layer.rgb/max(layer.a,.0001),uv,depthAt(uv))*layer.a,layer.a);
+ color=color*(1.-layer.a)+layer.rgb;` : ""}
  let noise=fract(sin(dot(pixel.xy,vec2f(12.9898,78.233))+floor(uniforms[${worldClockOffset}]*24.))*43758.5453)-.5;
  ${toneMapping === "aces" ? `color=toneMap(color*uniforms[8]*frame.brightness);
  ${outputColorSpace === "srgb" ? "color=srgb(color);" : ""}

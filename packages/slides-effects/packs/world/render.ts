@@ -328,7 +328,7 @@ const glyphCount = glyphLast - glyphFirst + 1;
 const glyphMetricsSize = glyphMetrics.length * glyphCount * 6;
 const glyphPixelsStart = glyphMetricsSize + glyphMetrics.length * glyphCount * glyphCount;
 // Labels draw one quad per string in the card plane; the fragment finds its character and reads the baked distance atlas,
-// so text is lit, focused and bloomed with the rest of the scene.
+// so text stays lit while its separate layer bypasses the scene blur passes.
 function labelCode(offset: number, lights: number, look: Look = {}) {
   const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
   return `${worldBindings}${triangleCorner}${lightingCode(lights, look)}
@@ -618,16 +618,17 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
   for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
   for (const [index, draw] of sdfDraws.entries()) add(`sdf-${index}`, "box", draw.count, draw.offset, undefined, draw);
-  for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `scene-glyphs-${index}`,
+  const sharpPasses: GPUPass[] = [];
+  for (const [index, draw] of glyphDraws.entries()) sharpPasses.push({ kind: "render", id: `scene-glyphs-${index}`,
     code: text3dCode(`${worldBindings}${triangleCorner}${lightingCode(lights, { ...look, shadowBinding: shadowMap ? 4 : undefined })}`, `fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${draw.offset}u)*${worldInstanceSize}u; }`, draw.segments),
-    vertex: "glyphVertex", fragment: "glyphFragment", color: ["hdr"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
+    vertex: "glyphVertex", fragment: "glyphFragment", color: ["sharp"], depth: "depth", vertexCount: draw.vertexCount, instanceCount: draw.count, blend: "over",
     instanceCull: { offset: worldHeaderSize + draw.offset * worldInstanceSize + instanceField.opacity, stride: worldInstanceSize, threshold: .001 },
-    clear: draws++ === 0 && !topology.floor ? clear : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });
-  if (cards) passes.push({ kind: "render", id: "scene-cards", code: cardCode(cards.offset, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
-    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: draws++ === 0 && !topology.floor ? clear : false });
+    clear: false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`, ...shadowMap ? ["shadow"] : []] });
+  if (cards) sharpPasses.push({ kind: "render", id: "scene-cards", code: cardCode(cards.offset, topology.backgroundVector), vertex: "cardVertex", fragment: "cardFragment",
+    color: ["sharp"], depth: "depth", vertexCount: 6, instanceCount: cards.count, blend: "over", depthCompare: "less-equal", clear: false });
   if (!draws && !topology.floor) add("empty", "box", 0, 0);
-  if (labels) passes.push({ kind: "render", id: "scene-labels", code: labelCode(labels.offset, lights, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
-    color: ["hdr"], depth: "depth", vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
+  if (labels) sharpPasses.push({ kind: "render", id: "scene-labels", code: labelCode(labels.offset, lights, { ...look, shadowBinding: undefined }), vertex: "labelVertex", fragment: "labelFragment",
+    color: ["sharp"], depth: "depth", vertexCount: 6, instanceCount: labels.count, blend: "over", clear: false, reads: ["glyphs"] });
   if (topology.shafts) {
     targets.push({ id: "shafts", format: "rgba16float", scale: scale * (topology.shaftScale ?? .5) });
     passes.push({ kind: "fullscreen", id: "shafts", code: shaftCode(worldBindings, lights, topology.shaftSamples ?? samples), fragment: "shafts", reads: ["depth"], output: "shafts" });
@@ -703,7 +704,14 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
     custom(stage, false);
   }
   custom("tonemap", true);
-  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace, fused?.gain), "tonemap", fused ? [color, fused.source] : [color], "tonemapped");
+  if (sharpPasses.length) {
+    targets.push({ id: "sharp", format: "rgba16float", scale, samples: msaa });
+    // Clear only color; the sharp draws load the scene depth to retain occlusion.
+    passes.push({ kind: "render", id: "sharp-clear", code: geometryCode("box", 0, 0), vertex: "worldVertex", fragment: "worldFragment",
+      color: ["sharp"], vertexCount: mesh.box.count, instanceCount: 0, clear: [0, 0, 0, 0] }, ...sharpPasses);
+  }
+  fullscreen("tonemap", finalCode(worldBindings, topology.toneMapping, topology.outputColorSpace, fused?.gain, !!sharpPasses.length), "tonemap",
+    [color, ...fused ? [fused.source] : [], ...sharpPasses.length ? ["sharp", "depth"] : []], "tonemapped");
   custom("tonemap", false);
   fullscreen("screen", fxaaCode, "fxaa", [color], "screen");
   if (msaa > 1) for (const pass of passes) if (pass.reads?.includes("depth")) pass.code = pass.code.replace("texture_depth_2d", "texture_depth_multisampled_2d");

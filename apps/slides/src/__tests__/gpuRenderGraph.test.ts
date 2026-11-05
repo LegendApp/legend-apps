@@ -5,6 +5,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "@babel/core";
 import { prepareRenderGraph, encodeRenderGraph } from "../gpuRenderGraph";
+import { buildWorldGraph } from "../../../../packages/slides-effects/packs/world/render";
+import { labelInstance, prepareWorldScene, primitive } from "../../../../packages/slides-effects/packs/world/scene";
 
 function gpu() {
   const textures = [], views = [], pipelines = [], groups = [], commands = [], writes = [];
@@ -91,6 +93,24 @@ test("empty draws and dispatches still run their passes without a zero-count GPU
   encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
   expect(g.commands.map(c => c[0])).toEqual(["render"]);
   expect(g.commands[0][1].colorAttachments[0].loadOp).toBe("clear");
+});
+
+test("world sharp layer clears transparent color and loads scene depth after post effects", async () => {
+  for (const msaaSamples of [1, 4]) {
+    const g = gpu();
+    const graph = buildWorldGraph(prepareWorldScene({ msaaSamples, dof: {}, instances: [primitive("box"), labelInstance({ text: "Sharp" })] }));
+    const r = await prepareRenderGraph(g.device, graph, "bgra8unorm", {}, {});
+    encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
+    const draws = g.commands.filter(c => c[0] === "render").map(c => c[1]);
+    const sharpTexture = r.textures[msaaSamples === 4 ? "sharp#ms" : "sharp"];
+    const sharp = draws.filter(d => d.colorAttachments[0].view.texture === sharpTexture);
+    expect(sharp).toHaveLength(2);
+    expect(sharp[0].colorAttachments[0]).toMatchObject({ loadOp: "clear", clearValue: [0, 0, 0, 0], storeOp: "store" });
+    expect(sharp[0].depthStencilAttachment).toBeUndefined();
+    expect(sharp[1].colorAttachments[0].loadOp).toBe("load");
+    expect(sharp[1].depthStencilAttachment).toMatchObject({ view: draws[0].depthStencilAttachment.view, depthLoadOp: "load" });
+    if (msaaSamples === 4) expect(sharp[1].colorAttachments[0].resolveTarget).toBeDefined();
+  }
 });
 
 test("consecutive draws into the same multisampled attachments share one pass; the last pass writing them resolves", async () => {
