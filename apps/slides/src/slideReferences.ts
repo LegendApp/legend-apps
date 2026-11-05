@@ -1,9 +1,10 @@
 import { slidesState$, setSlidesState } from "./slidesStore";
 
 export function slideReferencesVisible(dev: boolean) {
-  return slidesState$.slideReferences.get() ?? slidesState$.config.slideReferences.get() ?? (dev && !slidesState$.deckLocked.get());
+  return dev && (slidesState$.slideReferences.get() ?? slidesState$.config.slideReferences.get() ?? !slidesState$.deckLocked.get());
 }
 
 export function toggleSlideReferences() {
-  setSlidesState({ slideReferences: !slideReferencesVisible(typeof __DEV__ !== "undefined" && __DEV__) });
+  if (typeof __DEV__ === "undefined" || !__DEV__) return;
+  setSlidesState({ slideReferences: !slideReferencesVisible(__DEV__) });
 }
