@@ -244,3 +244,41 @@ test("attribute strings after a comparison stay literal", () => {
   expect(comments.map((comment) => source.slice(comment.start, comment.end))).toEqual(["<!-- note -->"]);
   expect(slides).toHaveLength(2);
 });
+
+test("text quotes in JSX children keep later slides and notes separate", () => {
+  const blocks = [
+    "Robin's notes",
+    'He said "hello',
+    "<Text>Robin's notes</Text>",
+    '<Text>He said "hello</Text>',
+    "<Steps>{step => <Text>Robin's notes</Text>}</Steps>",
+    '<Steps>{step => <Text>He said "hello</Text>}</Steps>',
+    "<Steps>{step => <><Text>Robin's notes</Text><Text>{step}</Text></>}</Steps>",
+    "<View render={() => <Text>Robin's notes</Text>} />",
+    "{true && <Text>Robin's notes</Text>}",
+    "{true && <Text>Robin's notes: {true ? <Text>It's ready</Text> : null}</Text>}",
+  ];
+  for (const block of blocks) {
+    const source = `${block}\n\n<!-- first -->\n\n---\n\n# Two\n\n<!-- second -->`;
+    const { slides, comments } = getDeckSourceStructure(source);
+    expect(slides).toHaveLength(2);
+    expect(comments.map(comment => source.slice(comment.contentStart, comment.contentEnd).trim())).toEqual(["first", "second"]);
+    expect(updateSlideSpeakerNotes(source, 1, "changed")).toBe(source.replace("<!-- second -->", "<!-- changed -->"));
+  }
+});
+
+test("JS strings and nested templates in JSX expressions protect literal separators", () => {
+  const blocks = [
+    `<Text>{"} <!-- literal -->" + '} <!-- literal -->'}</Text>`,
+    '<Text>{`\n---\n${"}"} ${`nested ${"}"}`}\n---\n`}</Text>',
+    '<View label={`\n---\n${`nested ${"}"}`}\n---\n`} />',
+    '{`\n---\n${true ? <Text>Robin\'s notes</Text> : "}"}\n---\n`}',
+  ];
+  for (const block of blocks) {
+    const source = `${block}\n\n<!-- actual -->\n\n---\n\n# Two`;
+    const { slides, comments } = getDeckSourceStructure(source);
+    expect(slides).toHaveLength(2);
+    expect(source.slice(slides[0].contentStart, slides[0].end).trim()).toBe(`${block}\n\n<!-- actual -->`);
+    expect(comments.map(comment => source.slice(comment.contentStart, comment.contentEnd).trim())).toEqual(["actual"]);
+  }
+});

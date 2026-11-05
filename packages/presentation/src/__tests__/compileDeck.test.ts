@@ -70,6 +70,24 @@ describe("compileDeck", () => {
       expect(result.code.match(/index: "[0-9]+"/g)).toHaveLength(2);
     }
   });
+  test("compiles text quotes in JSX callbacks without merging later slides", async () => {
+    const blocks = [
+      "Robin's notes",
+      'He said "hello',
+      "<Text>Robin's notes</Text>",
+      '<Steps>{step => <><Text>Robin\'s notes say "hello</Text><Text>{step}</Text></>}</Steps>',
+      '<Text>{"} <!-- literal -->" + \'} <!-- literal -->\'}</Text>',
+      '<Text>{`\n---\n${`nested ${"}"}`}\n---\n`}</Text>',
+    ];
+    const source = 'import { Text } from "react-native"\nimport { Steps } from "@legend-apps/presentation"\n\n'
+      + [...blocks, "# Last"].join("\n\n<!-- slide note -->\n\n---\n\n");
+    const result = await compileDeck(createDeck({ "deck.mdx": source }));
+    expect(result).toMatchObject({ success: true });
+    if (!result.success) return;
+    expect(result.noteTargets).toHaveLength(blocks.length + 1);
+    expect(result.noteTargets.at(-1)).toBe("# Last");
+    expect(result.code.match(/index: "[0-9]+"/g)).toHaveLength(blocks.length + 1);
+  });
   test("allows double-dot-prefixed names within the deck directory", async () => {
     const result = await compileDeck(createDeck({
       "deck.mdx": '---\ntransition: {source: "./..local/fade.ts"}\n---\nimport Demo from "./..local/Demo"\n\n<Demo />\n\n<Webview component="./..local/Web.tsx" />',

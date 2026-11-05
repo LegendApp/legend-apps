@@ -95,6 +95,12 @@ function scanSource(lines: readonly SourceLine[], source: string) {
         if (ch === '"' || ch === "'" || ch === "`") { quote = ch; continue; }
       }
       if (ch === "\\") { at++; continue; }
+      if (ch === "{" && !moduleCode) {
+        skipUntil = expressionEnd(source, at);
+        literals.push({ start: at, end: skipUntil });
+        at = skipUntil - 1;
+        continue;
+      }
       if (!depth && ch === "<" && /^<\/?[A-Za-z]/.test(source.slice(at, at + 3))) tag = true;
       if (!depth && ch === ">") tag = false;
       if (ch === "{") { depth++; continue; }
@@ -132,14 +138,18 @@ function expressionEnd(content: string, start: number) {
   for (let at = start; at < content.length; at++) {
     const ch = content[at];
     if (ch === '"' || ch === "'" || ch === "`") {
-      for (at++; at < content.length && content[at] !== ch; at++) if (content[at] === "\\") at++;
+      for (at++; at < content.length && content[at] !== ch; at++) {
+        if (content[at] === "\\") at++;
+        else if (ch === "`" && content[at] === "$" && content[at + 1] === "{") at = expressionEnd(content, at + 1) - 1;
+      }
     } else if (ch === "/" && content[at + 1] === "*") {
       at = content.indexOf("*/", at + 2) + 1;
       if (at <= 0) break;
     } else if (ch === "/" && content[at + 1] === "/") {
       at = content.indexOf("\n", at);
       if (at < 0) break;
-    } else if (ch === "{") depth++;
+    } else if (ch === "<" && tagAt(content, at)) at = jsxEnd(content, at) - 1;
+    else if (ch === "{") depth++;
     else if (ch === "}" && --depth === 0) return at + 1;
   }
   return content.length;
@@ -169,6 +179,23 @@ function tagAt(content: string, start: number) {
   return undefined;
 }
 
+/** JSX children are text; only tags and brace expressions change context. */
+function jsxEnd(content: string, start: number) {
+  let depth = 0;
+  for (let at = start; at < content.length; at++) {
+    if (content[at] === "{") at = expressionEnd(content, at) - 1;
+    else if (content[at] === "<") {
+      const tag = tagAt(content, at);
+      if (tag) {
+        if (!tag.selfClosing) depth += tag.closing ? -1 : 1;
+        if (depth === 0) return tag.end;
+        at = tag.end - 1;
+      }
+    }
+  }
+  return content.length;
+}
+
 function jsxDepths(
   source: string,
   lines: readonly SourceLine[],
@@ -192,11 +219,9 @@ function jsxDepths(
 
   const tags: Array<{ closing: boolean; end: number; selfClosing: boolean; start: number }> = [];
   const content = masked.join("");
-  // Expressions are skipped whole: tags inside them balance there, and their lines
-  // are already excluded by expressionDepths.
+  // Expressions are masked above; any tags inside them balance there.
   for (let at = 0; at < content.length; at++) {
     if (content[at] === "\\") at++;
-    else if (content[at] === "{") at = expressionEnd(content, at) - 1;
     else if (content[at] === "<") {
       const tag = tagAt(content, at);
       if (tag) {
@@ -226,59 +251,6 @@ function jsxDepths(
   return depths;
 }
 
-function expressionDepths(lines: readonly SourceLine[], fenced: ReadonlySet<number>) {
-  const depths: number[] = [];
-  let blockComment = false;
-  let depth = 0;
-  let quote: "'" | '"' | "`" | undefined;
-
-  lines.forEach((line, lineIndex) => {
-    depths.push(depth);
-    if (fenced.has(lineIndex)) {
-      return;
-    }
-
-    for (let index = 0; index < line.content.length; index += 1) {
-      const character = line.content[index];
-      const next = line.content[index + 1];
-      if (blockComment) {
-        if (character === "*" && next === "/") {
-          blockComment = false;
-          index += 1;
-        }
-        continue;
-      }
-      if (quote) {
-        if (character === "\\") {
-          index += 1;
-        } else if (character === quote) {
-          quote = undefined;
-        }
-        continue;
-      }
-      if (depth > 0 && character === "/" && next === "/") {
-        break;
-      }
-      if (depth > 0 && character === "/" && next === "*") {
-        blockComment = true;
-        index += 1;
-        continue;
-      }
-      if (depth > 0 && (character === "'" || character === '"' || character === "`")) {
-        quote = character;
-        continue;
-      }
-      if (character === "{" && line.content[index - 1] !== "\\") {
-        depth += 1;
-      } else if (character === "}" && depth > 0 && line.content[index - 1] !== "\\") {
-        depth -= 1;
-      }
-    }
-  });
-
-  return depths;
-}
-
 function isYamlObject(source: string) {
   try {
     const parsed = parseYaml(source);
@@ -293,24 +265,10 @@ function sourceStructure(source: string) {
   const { fenced, comments, literals } = scanSource(lines, source);
   const protectedRanges = [...comments, ...literals].sort((a, b) => a.start - b.start);
   const depths = jsxDepths(source, lines, fenced, protectedRanges);
-  // Ranges and lines are ordered; visit each overlap once instead of scanning
-  // every comment for every UTF-16 code unit in the deck.
-  let rangeIndex = 0;
-  const expressionLines = lines.map(line => {
-    while (rangeIndex < protectedRanges.length && protectedRanges[rangeIndex].end <= line.start) rangeIndex++;
-    let content = line.content;
-    for (let i = rangeIndex; i < protectedRanges.length && protectedRanges[i].start < line.end; i++) {
-      const start = Math.max(0, protectedRanges[i].start - line.start);
-      const end = Math.min(content.length, protectedRanges[i].end - line.start);
-      if (end > start) content = content.slice(0, start) + " ".repeat(end - start) + content.slice(end);
-    }
-    return content === line.content ? line : { ...line, content };
-  });
-  const expressions = expressionDepths(expressionLines, fenced);
   const delimiters = lines
     .map((line, index) => ({ index, line }))
     .filter(({ index, line }) =>
-      !fenced.has(index) && depths[index] === 0 && expressions[index] === 0
+      !fenced.has(index) && depths[index] === 0
       && /^[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line.content)
       && !protectedRanges.some((range) => range.start <= line.start && range.end >= line.end));
   const firstContentLine = lines.findIndex((line) => line.content.trim().length > 0);
