@@ -364,23 +364,23 @@ test("reused uniforms keep one buffer and match fresh sampling while static, col
   }
 });
 
-test("moving posed slots rewrite only their pose once written", () => {
+test("baked tracks leave constant fields alone while updating pose and color", () => {
   const scene = prepareWorldScene({ instances: [
     primitive("box", { id: "posed", position: [{ step: 0, value: [0, 0, 0] }, { step: 1, value: [2, 0, 0], duration: 1 }], scale: [{ step: 0, value: [1, 1, 1] }, { step: 1, value: [2, 2, 2], duration: 1 }] }),
     primitive("box", { id: "tinted", color: [{ step: 0, value: "#ffffff" }, { step: 1, value: "#ff0000", duration: 1 }] }),
   ] });
   const [posed, tinted] = ["posed", "tinted"].map(id => scene.instances.findIndex(instance => instance.id === id));
-  expect(scene.instances[posed].posed).toBe(true);
-  expect(scene.instances[tinted].posed).toBe(false);
+  expect(scene.uniformInputs.live).toEqual([]);
   const at = (i: number) => worldHeaderSize + i * worldInstanceSize;
   const reused = sampleWorldUniforms(scene, clock(0), undefined, 1, 1, true);
-  // A marked non-pose field survives a moving posed slot; a slot with other animated fields is rewritten whole.
+  // Constant fields stay baked even when another field on the slot animates.
   reused[at(posed) + instanceField.emissive] = -7; reused[at(tinted) + instanceField.emissive] = -7;
   const sample = clock(1.5, 1, { 0: 0, 1: 1 });
   sampleWorldUniforms(scene, sample, undefined, 1, 1, true);
   const fresh = sampleWorldUniforms(scene, sample);
   expect(reused[at(posed) + instanceField.emissive]).toBe(-7);
-  expect(reused[at(tinted) + instanceField.emissive]).toBe(fresh[at(tinted) + instanceField.emissive]);
+  expect(reused[at(tinted) + instanceField.emissive]).toBe(-7);
+  expect(reused[at(tinted) + instanceField.color]).toBeCloseTo(fresh[at(tinted) + instanceField.color], 5);
   for (const field of [instanceField.position, instanceField.position + 1, instanceField.scale, instanceField.scale + 1, instanceField.opacity])
     expect(reused[at(posed) + field]).toBeCloseTo(fresh[at(posed) + field], 5);
   expect(reused[at(posed) + instanceField.position]).toBeCloseTo(1, 5);

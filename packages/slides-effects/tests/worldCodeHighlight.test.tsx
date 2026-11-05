@@ -6,7 +6,7 @@ import type { CodeHighlight } from "@legend-apps/presentation";
 import { highlightCode } from "../../presentation/src/compiler/remarkCodeHighlight";
 import { CodePanel, CodeMorph, CodeTrace, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { Text3D } from "../packs/world/World";
-import { colorVector, prepareWorldScene, sampleWorldUniforms, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { colorVector, compileTrack, prepareWorldScene, sampleWorldUniforms, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { layoutText3D, text3dInstances } from "../packs/world/text3d";
 import { font } from "../packs/world/text3d-mono";
 import { createPlaybackState } from "../../presentation/src/playbackState";
@@ -69,4 +69,30 @@ test("diff and trace animation start with syntax colors and diff additions settl
   const trace = flat(expandScene(<CodeTrace id="trace" source={0} reads={[1]} nodes={["Owner","Reader"]}>{fence(code,tokens)}</CodeTrace>)).filter(node=>node.type===Text3D && node.props.tokens);
   expect(trace).toHaveLength(2);
   expect(trace.every(node => text3dInstances(node.props as never).length > 0)).toBe(true);
+});
+
+test("baked glyph tracks share samples and preserve staged color, glow and pose through seeks", () => {
+  const glyphs = text3dInstances({ id: "letters", text: "Shared samples", position: { 0: [1, 2, 3], 1: [4, 5, 6] },
+    color: { 0: "#123456", 1: "#abcdef" }, emissive: { 0: 0.4, 1: 1.2 }, opacity: { 0: 0, 1: 1 },
+    enter: { step: 1, duration: 0.9, stagger: 0.03 },
+    material: { albedo: { 0: "#234567", 1: "#fedcba" }, roughness: { 0: 0.2, 1: 0.8 }, metal: { 0: 0.4, 1: 0.7 }, rim: { 0: 0.6, 1: 0.3 } } });
+  const stages = [
+    { id: "fixed", position: compileTrack<[number, number, number]>([3.123456789, 2, -4]), glow: compileTrack(0.7) },
+    { id: "moving", position: compileTrack<[number, number, number]>({ 0: [0, 0, 0], 1: [2, -3, 1] }), glow: compileTrack({ 0: 0.5, 1: 1.5 }) },
+  ];
+  const scene = prepareWorldScene({ instances: glyphs.map(instance => ({ ...instance, stages })) });
+  const countTracks = scene.instances.reduce((sum, instance) => sum + [instance.position, instance.color, instance.emissive, instance.scale,
+    instance.glyph!.offset, instance.glyph!.rotation, instance.glyph!.opacity].filter(track => track.frames.length).length, 0);
+  expect(scene.uniformInputs.tracks.length).toBeLessThan(countTracks);
+  expect(scene.uniformInputs.live).toEqual([]);
+  const buffer = sampleWorldUniforms(scene, { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } }, null, 1, 1, true);
+  const samples: [number, number, Record<number, number>][] = [
+    [0, 0, { 0: 0 }], [1, 1, { 0: 0, 1: 1 }], [1, 1.23, { 0: 0, 1: 1 }], [1, 1.7, { 0: 0, 1: 1 }],
+    [1, 5, { 0: 0, 1: 1 }], [0, 0.1, { 0: 0 }], [1, 0.3, { 1: 0 }], [3, 0, { 3: 0 }],
+  ];
+  for (const [step, time, origins] of samples) {
+    const clock = { slideTime: time, stepTime: time - (origins[step] ?? 0), stepIndex: step, stepOrigins: origins };
+    expect(sampleWorldUniforms(scene, clock, null, 1, 1, true)).toBe(buffer);
+    expect(buffer).toEqual(Float32Array.from(sampleWorldUniforms(scene, clock)));
+  }
 });

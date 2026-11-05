@@ -77,8 +77,6 @@ export type Instance = {
   motion?: "static" | "voxel" | "tracks" | "drift";
   /** Keyframe spans of a "tracks" instance: per step (ascending), the earliest start and latest end delay; plus slide-time `at` spans. */
   settle?: { steps: number[]; first: number[]; last: number[]; at: number[] };
-  /** Set on "tracks" instances whose only animated fields are position, scale, opacity and glyph rotation: once written, a moving slot rewrites just those. */
-  posed?: boolean;
 };
 export type GraphOptions = {
   data: TreeNode; layout?: "cone"; radius?: number; levelHeight?: number; position?: Vec3;
@@ -665,8 +663,59 @@ export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camer
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
 }
-type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array; written: Uint8Array };
-/** With reuse, every call for the same prepared scene returns one buffer and rewrites only slots whose inputs changed. */
+type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array;
+  inputs: Float64Array; trackKeys: Float64Array; changed: Uint8Array };
+type UniformInputs = { initial: Float32Array<ArrayBuffer>; inputs: number[];
+  tracks: { track: Track<number | Vec3>; at: number; span: NonNullable<Instance["settle"]> }[];
+  copies: { from: number; to: number; size: number }[];
+  positions: { to: number; position: number; home?: Vec3; offset?: number; stages: number[]; end?: Vec3 }[];
+  glows: { to: number; sources: number[] }[];
+  drifts: { to: number; position: Vec3; drift: number; seed: number }[]; live: number[] };
+
+function prepareUniformInputs(scene: PreparedWorldScene): UniformInputs {
+  const initial = Float32Array.from(sampleWorldUniforms(scene, { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } }));
+  const plan: UniformInputs = { initial, inputs: [], tracks: [], copies: [], positions: [], glows: [], drifts: [], live: [] };
+  const sources = new Map<string, number>();
+  function source(track: Track<number | Vec3>) {
+    const key = JSON.stringify(track);
+    let at = sources.get(key);
+    if (at === undefined) {
+      at = plan.inputs.length;
+      sources.set(key, at);
+      plan.inputs.push(...typeof track.initial === "number" ? [track.initial] : track.initial);
+      if (track.frames.length) plan.tracks.push({ track, at, span: keyframeSpans([track]) });
+    }
+    return at;
+  }
+  function copy(track: Track<number | Vec3>, to: number) {
+    if (track.frames.length) plan.copies.push({ from: source(track), to, size: typeof track.initial === "number" ? 1 : 3 });
+  }
+  scene.instances.forEach((instance, slot) => {
+    if (instance.motion === "static") return;
+    if (instance.motion === "drift") {
+      plan.drifts.push({ to: worldHeaderSize + slot * worldInstanceSize, position: instancePosition({ ...instance, drift: 0 },
+        { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } }), drift: instance.drift!, seed: instance.seed ?? 0 });
+      return;
+    }
+    if (instance.motion !== "tracks" || instance.label) { plan.live.push(slot); return; }
+    const at = worldHeaderSize + slot * worldInstanceSize, glyph = instance.glyph, stages = instance.stages ?? [];
+    if ([instance.position, ...glyph ? [glyph.offset] : [], ...stages.map(stage => stage.position)].some(track => track.frames.length)) {
+      plan.positions.push({ to: at, position: source(instance.position), home: glyph?.home, offset: glyph ? source(glyph.offset) : undefined,
+        stages: stages.map(stage => source(stage.position)), end: glyph ? undefined : instance.end });
+    }
+    copy(instance.size, at + I.radius); copy(instance.scale, at + I.scale);
+    copy(instance.color, at + I.color);
+    if ([instance.emissive, ...stages.map(stage => stage.glow)].some(track => track.frames.length)) {
+      plan.glows.push({ to: at + I.emissive, sources: [source(instance.emissive), ...stages.map(stage => source(stage.glow))] });
+    }
+    const material = instance.materialTracks!;
+    copy(instance.material ? material.albedo : instance.color, at + I.albedo);
+    copy(material.roughness, at + I.roughness); copy(material.metal, at + I.metal); copy(material.rim, at + I.rim);
+    if (glyph) { copy(glyph.opacity, at + I.opacity); copy(glyph.rotation, at + 12); }
+  });
+  return plan;
+}
+
 /** Per-step keyframe spans of a set of tracks, for skipping instances whose tracks have all settled. */
 export function keyframeSpans(tracks: Track<unknown>[]): NonNullable<Instance["settle"]> {
   const steps = new Map<number, [number, number]>(), at: number[] = [];
@@ -701,6 +750,46 @@ export function settledKey(settle: NonNullable<Instance["settle"]>, clock: Clock
   return settledStep * 4096 + finished;
 }
 const I = instanceField;
+function sampleUniformInputs(plan: UniformInputs, cache: UniformCache, clock: ClockSample) {
+  "worklet";
+  const inputs = cache.inputs, values = cache.values, changed = cache.changed;
+  for (const { to, position, drift, seed } of plan.drifts) {
+    values[to] = position[0] + Math.sin(clock.slideTime * 0.27 + seed) * drift;
+    values[to + 1] = position[1] + Math.cos(clock.slideTime * 0.31 + seed * 2) * drift;
+    values[to + 2] = position[2] + Math.sin(clock.slideTime * 0.19 + seed * 3) * drift;
+  }
+  changed.fill(0);
+  for (let i = 0; i < plan.tracks.length; i++) {
+    const { track, at, span } = plan.tracks[i], key = settledKey(span, clock);
+    if (cache.trackKeys[i] === key) continue;
+    cache.trackKeys[i] = key;
+    const value = sampleTrack(track, clock);
+    if (typeof value === "number") { changed[at] = Number(inputs[at] !== value); inputs[at] = value; }
+    else for (let axis = 0; axis < 3; axis++) { changed[at] |= Number(inputs[at + axis] !== value[axis]); inputs[at + axis] = value[axis]; }
+  }
+  for (const { from, to, size } of plan.copies) if (changed[from]) for (let axis = 0; axis < size; axis++) values[to + axis] = inputs[from + axis];
+  for (const { to, position, home, offset, stages, end } of plan.positions) {
+    let moving = !!changed[position] || (offset !== undefined && !!changed[offset]);
+    for (let i = 0; i < stages.length; i++) moving ||= !!changed[stages[i]];
+    if (!moving) continue;
+    for (let axis = 0; axis < 3; axis++) {
+      let stage = 0;
+      for (let i = 0; i < stages.length; i++) stage += inputs[stages[i] + axis];
+      let value = inputs[position + axis];
+      if (home) value = value + home[axis] + inputs[offset! + axis];
+      values[to + axis] = value + stage;
+      if (end) values[to + I.endpoint + axis] = end[axis] + stage;
+    }
+  }
+  for (const { to, sources } of plan.glows) {
+    let moving = false;
+    for (let i = 0; i < sources.length; i++) moving ||= !!changed[sources[i]];
+    if (!moving) continue;
+    let value = inputs[sources[0]];
+    for (let i = 1; i < sources.length; i++) value *= inputs[sources[i]];
+    values[to] = value;
+  }
+}
 export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
@@ -709,11 +798,13 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
     cache = caches.get(scene);
     if (!cache) {
-      cache = { values: new Float32Array(scene.uniformCount), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN), written: new Uint8Array(count) };
+      cache = { values: new Float32Array(scene.uniformInputs.initial), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN),
+        inputs: Float64Array.from(scene.uniformInputs.inputs), trackKeys: new Float64Array(scene.uniformInputs.tracks.length).fill(NaN), changed: new Uint8Array(scene.uniformInputs.inputs.length) };
       caches.set(scene, cache);
     }
   }
   const values = cache?.values ?? new Array<number>(scene.uniformCount).fill(0);
+  if (cache) sampleUniformInputs(scene.uniformInputs, cache, clock);
   const objects: Record<string, Vec3> = {};
   for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance, clock);
   values[worldClockOffset] = clock.slideTime; values[worldClockOffset + 1] = clock.stepTime; values[worldClockOffset + 2] = clock.stepIndex; values[worldClockOffset + 3] = clock.time ?? clock.slideTime;
@@ -745,30 +836,17 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     values[57] = scene.counter.position?.[0] ?? 0.8; values[58] = scene.counter.position?.[1] ?? 0.12; values[59] = scene.counter.size ?? 0.07;
     const color = scene.counterColor!; values[60] = color[0]; values[61] = color[1]; values[62] = color[2];
   }
-  for (let i = 0; i < count; i++) {
+  const live = cache ? scene.uniformInputs.live : undefined;
+  for (let slot = 0; slot < (live?.length ?? count); slot++) {
+    const i = live ? live[slot] : slot;
     const instance = scene.instances[i];
     if (cache) {
-      const key = instance.motion === "static" || instance.motion === "drift" ? 0 : instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
+      const key = instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
         : instance.motion === "tracks" ? settledKey(instance.settle!, clock)
         // Shaders discard transparent instances, so a hidden live instance (an idle tube pulse bead) is written once, then skipped.
         : instanceOpacity(instance, clock) === 0 ? -1 : NaN;
-      if (cache.keys[i] === key) {
-        if (instance.motion === "drift") {
-          const position = instancePosition(instance, clock), at = worldHeaderSize + i * worldInstanceSize + I.position;
-          values[at] = position[0]; values[at + 1] = position[1]; values[at + 2] = position[2];
-        }
-        continue;
-      }
+      if (cache.keys[i] === key) continue;
       cache.keys[i] = key;
-      if (instance.posed && cache.written[i]) {
-        const at = worldHeaderSize + i * worldInstanceSize, position = instancePosition(instance, clock), scale = sampleTrack(instance.scale, clock);
-        values[at + I.position] = position[0]; values[at + I.position + 1] = position[1]; values[at + I.position + 2] = position[2];
-        values[at + I.scale] = scale[0]; values[at + I.scale + 1] = scale[1]; values[at + I.scale + 2] = scale[2];
-        values[at + I.opacity] = instanceOpacity(instance, clock);
-        if (instance.glyph) { const rotation = sampleTrack(instance.glyph.rotation, clock); values[at + 12] = rotation[0]; values[at + 13] = rotation[1]; values[at + 14] = rotation[2]; }
-        continue;
-      }
-      cache.written[i] = 1;
     }
     const index = worldHeaderSize + i * worldInstanceSize;
     const part = instance.choreography ? samplePartMotion(instance.choreography, clock) : undefined;
@@ -876,6 +954,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
 }
 
 export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fogTrack: Track<Vec3>; backgroundVector: Vec3;
+  uniformInputs: UniformInputs;
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
   focusTrack?: Track<number | string>; counterColor?: Vec3; counterIndex?: number;
   /** Each effect's params occupy `size` floats from `base`, after the instances; `uniformCount` covers them. */
@@ -968,7 +1047,6 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
       !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor) {
       instance.motion = "tracks";
-      instance.posed = [instance.size, instance.color, instance.emissive, material.albedo, material.roughness, material.metal, material.rim].every(still) && !instance.label && !instance.stages?.length;
       instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
         ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
         ...(instance.stages ?? []).flatMap(stage => [stage.position, stage.glow])]);
@@ -992,7 +1070,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     uniformCount += effect.size;
     return { ...use, before, after, base };
   });
-  return { ...scene, instances, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
+  const prepared = { ...scene, instances, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
     backgroundVector: colorVector(scene.backgroundColor ?? "#05060a"), postTracks: fields.map(([index, value]) => ({ index, track: compileTrack(value) })),
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
     colorTracks, effectUses, uniformCount,
@@ -1001,5 +1079,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     lightTracks: (scene.lights ?? []).map(light => ({ position: compileTrack<Vec3>(light.position ?? [0, 8, 0]), target: compileTrack<Vec3>(light.target ?? [0, 0, 0]),
       color: compileTrack(light.color ?? "#ffffff", colorVector), intensity: compileTrack(light.intensity ?? 4), range: compileTrack(light.range ?? 25),
       angle: compileTrack(light.angle ?? 0.45), spot: light.kind === "spot" })),
-  };
+  } as PreparedWorldScene;
+  prepared.uniformInputs = prepareUniformInputs(prepared);
+  return prepared;
 }
