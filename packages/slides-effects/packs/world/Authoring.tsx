@@ -768,14 +768,14 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
     lines[line].parts.forEach(part => { parts[part.id].positions[s] = [part.column * advance, -row * lineHeight, 0]; });
   }));
   const width = Math.max(...lines.map(l => l.text.length)) * advance + .9, height = (n: number) => (n - 1) * lineHeight + em + .6;
-  const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
+  const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - em - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
   const highlight = props.highlight as { color?: string; opacity?: number } | undefined;
   const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
   return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
     <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} fill={.75} />
     {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
-      position={[width / 2 - .3, -row * lineHeight + em * .3, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
+      position={[width / 2 - .3, -row * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         ...t + 1 < bands.length ? [key(first + t + 1, 0, 0, .3)] : []]} />)))}
     {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
