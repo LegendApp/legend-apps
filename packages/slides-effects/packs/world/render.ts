@@ -174,8 +174,8 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
 @fragment fn cardFragment(in:CardVertex)->CardResult {
  let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=bend(vector(base))+rotation*vec3f(p,half.z);
  if(dot(rotation[2],eye()-world)<0.) { discard; }
- let pixel=max(length(fwidth(p))*.7071,.00001);
  let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
+ let pixel=max(fwidth(d),.00001);
  let accent=encode(vector(base+4u)); let shown=presence(half); let edge=uniforms[base+17u]/.6;
  let sigma=max(uniforms[base+16u],.001)*.78; let unit=sigma/14.;
  let h=clamp((uniforms[base+7u]-.03)/.06,0.,1.); let v=clamp(.5-p.y/half.y*.5,0.,1.);
@@ -185,8 +185,9 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let fill=select(mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v),accent,uniforms[base+31u]>.5);
  layer=over(layer,fill,coverage*uniforms[base+19u]);
  layer=over(layer,accent,.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
- let line=max(1.4*unit,pixel);
- let rim=(1.-smoothstep(line*.5-pixel*.5,line*.5+pixel*.5,abs(d)))*min(1.,1.4*unit/pixel);
+ let line=1.4*unit;
+ // Box-filter the stroke so a subpixel rim keeps its coverage as it crosses pixel centers.
+ let rim=clamp((line+pixel)*.5-abs(d),0.,min(line,pixel))/pixel;
  layer=over(layer,mix(vec3f(.2,.29,.4),accent,h),rim*(.8+.2*h)*edge*mix(1.,.45,v));
  let avatar=uniforms[base+18u]*half.y;
  if(avatar>0.) {
@@ -198,12 +199,13 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  if(layer.a*opacity<.003) { discard; }
  // Translucent pixels blend in display space over the background, as a 2D layer would, then map back to scene light.
  let alpha=layer.a*opacity; let exposure=uniforms[8]*frame.brightness; let background=vec3f(${background.join(",")});
- // The glow sits a little behind the plane, so a neighbour's body covers it. Its depth is quantized so that
- // overlapping glows from cards in one plane land on exactly equal depth and blend instead of z-fighting.
- let at=select(world+normalize(world-eye())*.3,world,coverage>.5);
+ // Keep the whole filtered rim on the face so its outer half isn't clipped by a parent panel.
+ // Only the glow sits behind the plane, at equal quantized depth to avoid z-fighting.
+ let onFace=d<=(line+pixel)*.5;
+ let at=select(world+normalize(world-eye())*.3,world,onFace);
  let clip=projected(at); var depth=clamp(clip.z/clip.w,0.,1.);
  var color=toScene(encode(aces(background*exposure))*(1.-alpha)+layer.rgb*opacity)-background*(1.-alpha);
- if(coverage<=.5) {
+ if(!onFace) {
   depth=min(1.,ceil(depth*8192.)/8192.);
   // The fog pass fogs the glow by the card's depth, but the open background around it by the far plane: blend over the
   // fogged background and undo the card-depth fog, so the glow reads as an overlay without a darker halo.
