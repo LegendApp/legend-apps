@@ -381,6 +381,9 @@ On a station track, ids starting with a `fixed` prefix (default `["tunnel:", "tr
 coordinates, so the camera flies past them between stations; `fixed: []` carries every part with its station.
 `blur` (default 1, 0 off) sets a radial motion blur toward the frame's centre at peak travel speed. Custom WGSL
 reads that speed, 0 at rest to 1 at the move's peak, as `travelSpeed()`.
+To calm the scenery while a slide holds, `heldMotion` (0–1) slows `continuousTime()`, which drives trails and
+tunnel lights, to that share of full speed, and `heldBlur` widens the DOF blur radius by that share of `maxBlur`.
+Both ease back to full motion and base blur with travel speed, so only camera flights run at full speed.
 
 ```tsx
 import { Stoplight } from "slides:world/World";

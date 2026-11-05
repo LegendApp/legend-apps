@@ -1,6 +1,6 @@
 import type { PlaybackState } from "@legend-apps/presentation";
 import { contentClearance, easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
-import { prepareWorldScene, travelSpeedSlot, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
+import { prepareWorldScene, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
 export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
@@ -15,6 +15,10 @@ export type WorldTrack = {
   fixed?: string[];
   /** Radial motion blur toward the frame's centre at peak travel speed (default 1; 0 turns it off). */
   blur?: number;
+  /** Share of full speed that `continuousTime()` scenery, such as trails and tunnel lights, keeps while the camera holds at a station (default 1). */
+  heldMotion?: number;
+  /** Extra DOF blur radius while the camera holds, as a share of `maxBlur` (default 0). Both ease back to full motion and base blur during flights. */
+  heldBlur?: number;
   /** Peak rail banking in degrees, leaning into the curve; stations hold level (default 12% of `turn`). */
   bank?: number;
   /** Peak heading in degrees the track swings through between the previous station and this one: positive curves right, negative left. */
@@ -44,12 +48,14 @@ export type TrackFrame = {
   cameraDelta?: number[]; entering?: boolean;
   /** The camera before the track bend, so later moves start from the same unbent coordinates. */
   straight?: number[]; course?: Course;
+  /** The scenery clock written to `continuousTime()` under `heldMotion`, and the timestamp it was last advanced at. */
+  scenery: number; stamp: number;
 };
 
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], from: [], sources: [], retired: {}, values: [] };
+    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], from: [], sources: [], retired: {}, values: [], scenery: NaN, stamp: NaN };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -98,6 +104,8 @@ function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): Camera
 type Course = { offset: number[]; from: number[]; to: number[]; dx: number[]; x: number[]; bank: number[]; rise: number[]; duration: number[]; ease: (Ease | undefined)[]; tracks: WorldSegment[] };
 /** Header slots for WGSL `trackX`: the centreline's x before the window, the curve count, then from/to/dx per curve. */
 export const trackBendSlot = 128, trackBendCurves = 8;
+/** Header slot after the bend window holding the held DOF blur, as a share of `maxBlur`. */
+export const heldBlurSlot = trackBendSlot + 2 + trackBendCurves * 3;
 /** How far content may reach past its station before the next curve begins. */
 const contentDepth = 4;
 function hash(index: number, salt: number) {
@@ -413,7 +421,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const fixed = options.fixed ?? defaultFixed;
   const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
-    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, course };
+    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, course,
+    scenery: previous.scenery, stamp: previous.stamp };
   for (let i = 0; i < 8; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   // Travel speed as a share of the eased move's peak, for speed effects in WGSL (`travelSpeed()`).
@@ -421,6 +430,15 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[travelSpeedSlot] = first || origin === index ? 0 : !course.ease[leg] ? 16 * u * u * (1 - u) * (1 - u)
     : u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u);
   values[travelSpeedSlot + 1] = values[travelSpeedSlot] * (options.blur ?? 1);
+  const flying = Math.min(1, values[travelSpeedSlot] * 2), held = 1 - flying * flying * (3 - 2 * flying);
+  values[heldBlurSlot] = (options.heldBlur ?? 0) * held;
+  if (options.heldMotion !== undefined) {
+    const stamp = playback.lastTimestamp ?? NaN, step = Math.min(0.1, Math.max(0, (stamp - previous.stamp) / 1000));
+    frame.scenery = first || !(step >= 0) || !Number.isFinite(previous.scenery) ? values[worldClockOffset + 3]
+      : (previous.scenery + step * (1 + (options.heldMotion - 1) * held)) % 3600;
+    frame.stamp = stamp;
+    values[worldClockOffset + 3] = frame.scenery;
+  }
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
     return bendTrack(visibleTrackFrame(frame, previous), course, look);

@@ -1,5 +1,6 @@
 import { travelSpeedSlot, worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
+import { heldBlurSlot } from "./track";
 import { d } from "typegpu";
 import { defineWorldEffect, type WorldEffectGraph } from "./effects";
 
@@ -71,18 +72,18 @@ ${depthCode()}${heightFog}
 }`;
 }
 /** Header slots the scene writes DOF values to; animated focus resolves object ids before sampling. */
-export const dofSlots = { focus: 32, aperture: 33, maxBlur: 34, renderScale: 35, focusRange: 54 };
+export const dofSlots = { focus: 32, aperture: 33, maxBlur: 34, renderScale: 35, focusRange: 54, held: heldBlurSlot };
 /** Half-resolution focus gather and a depth-aware composite. Option `fog` applies height fog to each tap instead of a separate full-resolution fog pass. */
-export const dofEffect = defineWorldEffect<{ focus: d.F32; aperture: d.F32; maxBlur: d.F32; renderScale: d.F32; focusRange: d.F32 }, { samples?: number; scale?: number; fog?: boolean }>({
-  name: "dof", params: { focus: d.f32, aperture: d.f32, maxBlur: d.f32, renderScale: d.f32, focusRange: d.f32 },
-  defaults: { focus: 16, aperture: .6, maxBlur: 12, renderScale: 1, focusRange: 0 },
+export const dofEffect = defineWorldEffect<{ focus: d.F32; aperture: d.F32; maxBlur: d.F32; renderScale: d.F32; focusRange: d.F32; held: d.F32 }, { samples?: number; scale?: number; fog?: boolean }>({
+  name: "dof", params: { focus: d.f32, aperture: d.f32, maxBlur: d.f32, renderScale: d.f32, focusRange: d.f32, held: d.f32 },
+  defaults: { focus: 16, aperture: .6, maxBlur: 12, renderScale: 1, focusRange: 0, held: 0 },
   build({ input, options, scale, samples, id }): WorldEffectGraph {
     const common = `${options.fog ? heightFog : "\nfn fogged(color:vec3f,uv:vec2f,distance:f32)->vec3f { return color; }"}
 fn coc(z:f32)->f32 { let p=params(); return clamp(max(0.,abs(z-p.focus)-max(0.,p.focusRange))/max(z,.05)*p.aperture,0.,1.); }
 `;
     return { targets: [{ id: id(), scale: scale * (options.scale ?? .5) }], passes: [{ id: id("gather"), fragment: "gather", reads: { source: input, depth: "depth" }, output: id(), wgsl: `${common}
 @fragment fn gather(@location(0) uv:vec2f)->@location(0) vec4f {
- let centerDepth=depthAt(uv); let radius=coc(centerDepth)*params().maxBlur*params().renderScale;
+ let centerDepth=depthAt(uv); let radius=coc(centerDepth)*params().maxBlur*(1.+params().held)*params().renderScale;
  let pixel=1./vec2f(textureDimensions(depth)); var color=vec3f(0.); var weight=0.;
  // Every zero-radius tap is identical; retain the sum order to preserve rounding.
  if(radius==0.) {
