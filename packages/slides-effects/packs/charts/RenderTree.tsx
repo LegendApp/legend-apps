@@ -17,7 +17,7 @@ function pulse(time: number) {
 }
 
 function usePulse(playback: SharedValue<any>, delay: number, active: boolean) {
-  return useDerivedValue(() => active ? pulse(samplePlayback(playback.value, 0.4 + delay, "step") - delay) : 0, [delay, active]);
+  return useDerivedValue(() => active ? pulse(samplePlayback(playback.value, 0.4 + delay, "step") - delay) : 0);
 }
 
 function Node({ x, y, width, height, label, count, active, delay, color, playback }: {

@@ -227,7 +227,8 @@ function WorldSurface(props: WorldProps) {
   const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
   const requestedPool = props.scenePlan?.pool;
-  const liveIds = useSharedValue<string[]>([]);
+  const liveIds = useRef<string[]>([]);
+  const retainLiveIds = useCallback((ids: string[]) => { liveIds.current = ids; }, []);
   const slide = usePresentationValue("slideIndex");
   // Repeated declarations reuse the same departure; older live parts survive rapid navigation.
   const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared,
@@ -236,7 +237,7 @@ function WorldSurface(props: WorldProps) {
   if (props.track && (retained.slide !== slide || retained.input !== prepared)) {
     const previous = retained.slide === slide ? retained.previous : retained.scene;
     const previousInput = retained.slide === slide ? retained.previousInput : retained.input;
-    const live = retained.slide === slide ? retained.live : liveIds.value;
+    const live = retained.slide === slide ? retained.live : liveIds.current;
     pool = JSON.stringify(retained.sourcePool?.topology) === JSON.stringify(requestedPool?.topology) ? retained.pool ?? requestedPool : undefined;
     trackScene = retainTrackScene(prepared, previous, previousInput, !!pool, live);
     if (pool && !worldPlanFits(trackScene, pool)) {
@@ -256,14 +257,14 @@ function WorldSurface(props: WorldProps) {
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
     <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={pool ? prepared : renderScene} retained={renderScene} declared={declared} topology={topology}
-      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} liveIds={liveIds} />
+      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} retainLiveIds={retainLiveIds} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame, liveIds }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
   WorldProps & { width: number; height: number; prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[]; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
-    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; liveIds: SharedValue<string[]> }) {
+    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[]) => void }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error("World track values must be positive and finite");
@@ -321,7 +322,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     "worklet";
     const state = playback.value, pending = catchUp.value;
     return pending && (pending.key !== `${state.slideKey}/${state.stepKey}` || state.slideTime - pending.start >= advanceDuration) ? pending.request : null;
-  }, (request, previous) => { "worklet"; if (request !== null && request !== previous) runOnJS(finish)(request); }, [playback, catchUp, advanceDuration, finish]);
+  }, (request, previous) => { "worklet"; if (request !== null && request !== previous) runOnJS(finish)(request); });
   const cameraEvaluator = sampleWorldCamera;
   const sampleUniforms = sampleWorldUniforms;
   const resolutionEvaluator = advanceResolution;
@@ -333,12 +334,12 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (!state) return;
     resolution.value = resolutionEvaluator(resolution.value, { timestamp: state.lastTimestamp,
       playing: active && state.phase === "playing", key: `${state.slideKey}:${scaleKey}` });
-  }, [adaptivePlayback, active, scaleKey]);
+  });
   const effectiveScale = useDerivedValue(() => {
     "worklet";
     const phase = adaptivePlayback?.value.phase;
     return renderScale * (phase && phase !== "preview" && phase !== "preparing" ? resolution.value.scale : 1);
-  }, [renderScale, adaptivePlayback]);
+  });
   const trackSampler = sampleTrackFrame;
   useAnimatedReaction(() => track && active ? { state: playback.value, scene: scene.value, scale: effectiveScale.value } : null, input => {
     "worklet";
@@ -348,10 +349,11 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const sampled = sampleUniforms(scene, clock, null, 1, 1, true);
     const values = (pool ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
     values[35] = scale;
-    const next = trackSampler(trackFrame.value, values, ids, state, track, declared);
+    const previous = trackFrame.value;
+    const next = trackSampler(previous, values, ids, state, track, declared);
     trackFrame.value = next;
-    if (liveIds.value !== next.visible) liveIds.value = next.visible;
-  }, [playback, scene, effectiveScale, track, active, ids, declared, previewTime, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, liveIds, pool, planSampler, copies, pooledOutput]);
+    if (previous.visible !== next.visible) runOnJS(retainLiveIds)(next.visible);
+  });
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
   const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
@@ -361,7 +363,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (origin.value.key !== state.slideKey) origin.value = { key: state.slideKey, pose: continuePrevious ? continuity.value : null };
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     continuity.value = cameraEvaluator(scene.value, clock, origin.value.pose, enterDuration);
-  }, [scene, playback, continuePrevious, enterDuration, previewTime, active, clockMode, buildDuration, settledBack, catchUp, advanceDuration, track]);
+  });
   const uniforms = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
@@ -378,7 +380,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
       values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
     }
     return pool && !track ? planSampler(values, copies, pooledOutput.value) : values;
-  }, [scene, playback, previewTime, enterDuration, entryPose, effectiveScale, clockMode, buildDuration, settledBack, catchUp, advanceDuration, stepOffset, track, trackFrame, ids, declared, copies, pooledOutput, pool]);
+  });
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}
       borderRadius={borderRadius} previewTime={previewTime} clock="slide" active={active} renderScale={effectiveScale} />

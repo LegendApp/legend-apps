@@ -57,7 +57,7 @@ export function useStepStyle(target: ViewStyle, duration: number) {
     const progress = duration <= 0 ? 1 : Math.max(0, Math.min(1, (next.pending ? 0 : clock.slideTime - next.start) * 1000 / duration));
     const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
     motion.value = { ...next, settled: progress === 1, last: progress === 1 ? target : interpolateStepStyle(next.from, target, eased) };
-  }, [target, key, duration]);
+  });
   return useAnimatedStyle(() => playback.value.phase === "preview" || playback.value.phase === "preparing"
-    ? target : motion.value.last, [target]);
+    ? target : motion.value.last);
 }

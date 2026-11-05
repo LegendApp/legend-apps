@@ -15,6 +15,21 @@ function sources(directory) {
 }
 const files = [...sources(path.join(root, "apps/slides")), ...sources(path.join(root, "packages/presentation/src")),
   ...sources(path.join(root, "packages/slides-effects/packs"))];
+test("Reanimated worklet hooks infer dependencies from their compiled closures", () => {
+  const violations = [];
+  for (const filename of files) {
+    transformSync(readFileSync(filename, "utf8"), { filename, babelrc: false, configFile: false, code: false,
+      parserOpts: { plugins: ["typescript", "jsx"] },
+      plugins: [() => ({ visitor: { CallExpression({ node }) {
+        const name = node.callee.name;
+        if (!/^use(?:Animated(?:Style|Props|Reaction|ScrollHandler|GestureHandler)|DerivedValue|Handler)$/.test(name)) return;
+        const index = name === "useAnimatedReaction" ? 2 : 1;
+        if (node.arguments[index]) violations.push(`${path.relative(root, filename)}:${node.loc.start.line} ${name}`);
+      } } })],
+    });
+  }
+  expect(violations).toEqual([]);
+});
 test("Slides, optional packs, decks and examples never use React Native Animated or JS animation schedulers", () => {
   for (const file of files) {
     const source = readFileSync(file, "utf8");
@@ -28,7 +43,7 @@ test("gallery frame callbacks and transition worklets compile with the shipped c
   const candidates = files;
   for (const filename of candidates) {
     const source = readFileSync(filename, "utf8");
-    if (!source.includes('"worklet"') && !source.includes("useEffectTime") && !/useAnimated(?:Style|Props|Reaction)/.test(source)) continue;
+    if (!source.includes('"worklet"') && !source.includes("useEffectTime") && !/use(?:Animated(?:Style|Props|Reaction)|DerivedValue)/.test(source)) continue;
     const result = transformSync(source, { filename, babelrc: false, configFile: false,
       presets: [require.resolve("@react-native/babel-preset")],
       plugins: [[require.resolve("babel-plugin-react-compiler"), {panicThreshold: /\/(decks|examples)\//.test(filename) ? "all_errors" : "none", target: "19"}], require.resolve("react-native-worklets/plugin")],

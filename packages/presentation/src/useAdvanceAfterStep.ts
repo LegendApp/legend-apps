@@ -24,5 +24,5 @@ export function useAdvanceAfterStep(step: number, seconds: number) {
   useAnimatedReaction(() => {
     const state = playback.value;
     return state.phase === "playing" && state.stepIndex === step && state.stepTime >= seconds ? state.slideKey + ":" + state.stepKey : null;
-  }, (key, previous) => { if (key && key !== previous) runOnJS(advance)(key); }, [step, seconds, slide, runtime$]);
+  }, (key, previous) => { if (key && key !== previous) runOnJS(advance)(key); });
 }

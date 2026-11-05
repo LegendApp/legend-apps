@@ -48,7 +48,7 @@ export function PlaybackProvider({ runtime$, children }: { runtime$: Observable<
 export function usePlayback() {
   const scope = useContext(PlaybackContext);
   if (!scope) throw new Error("Animation must be inside a presentation surface and outside the Skia Canvas renderer.");
-  return useDerivedValue(() => transitionPlayback(scope.clock.value, scope.input), [scope]);
+  return useDerivedValue(() => transitionPlayback(scope.clock.value, scope.input));
 }
 
 /** Preview sampling never mutates the running clock. */

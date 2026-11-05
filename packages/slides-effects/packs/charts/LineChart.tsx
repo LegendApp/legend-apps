@@ -34,7 +34,7 @@ export function LineChart({ series, maximum, width = 1500, height = 560, duratio
     const area = builder.lineTo(left + plotWidth, 12 + plotHeight).lineTo(left, 12 + plotHeight).close().detach();
     const last = count - 1;
     return { line, area, end: { x: left + plotWidth, y: 12 + (1 - motion.value[`${i}:${last}`]) * plotHeight } };
-  }), [counts.join(","), plotWidth, plotHeight]);
+  }));
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   const referenceY = reference ? 12 + (1 - Math.min(1, reference.value / top)) * plotHeight : 0;
   const grid = useMemo(() => {

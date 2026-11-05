@@ -49,7 +49,7 @@ export function usePlaybackTween<T extends Values>(target: T, duration = 650, in
     const elapsed = (next.pending ? 0 : clock.slideTime - next.start) - delay / 1000;
     motion.value = { ...next, settled: elapsed * 1000 >= duration,
       last: interpolate(next.from, next.to, elapsed, duration, easing) as T };
-  }, [target, from, entrance, duration, easing, delay]);
+  });
   return useDerivedValue(() => playback.value.phase === "preview" ? target
-    : playback.value.phase === "preparing" ? from : motion.value.last, [target, from]);
+    : playback.value.phase === "preparing" ? from : motion.value.last);
 }

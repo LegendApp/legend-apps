@@ -37,8 +37,8 @@ export function AnimatedNumber({ value, from, duration = 1100, delay = 0, fontSi
   const metrics = font.getMetrics();
   const height = Math.ceil(metrics.descent - metrics.ascent);
   const motion = usePlaybackTween({ value }, duration, from === undefined ? undefined : { value: from }, "smoothstep", delay);
-  const text = useDerivedValue(() => formatNumber(motion.value.value, format), [format]);
-  const x = useDerivedValue(() => align === "left" ? 0 : (canvasWidth - font.measureText(text.value).width) * (align === "center" ? 0.5 : 1), [align, canvasWidth, font]);
+  const text = useDerivedValue(() => formatNumber(motion.value.value, format));
+  const x = useDerivedValue(() => align === "left" ? 0 : (canvasWidth - font.measureText(text.value).width) * (align === "center" ? 0.5 : 1));
   return <View accessible accessibilityLabel={formatNumber(value, format)} style={[{ width: canvasWidth, height }, style]}>
     <Canvas style={{ width: canvasWidth, height }} accessible={false}>
       <SkiaText x={x} y={-metrics.ascent} text={text} font={font} color={color} />

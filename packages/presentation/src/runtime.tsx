@@ -65,6 +65,6 @@ export function useStep(at: number) {
   const elapsed = useDerivedValue(() => {
     const state = playback.value;
     return state.phase === "preview" ? 0 : samplePlayback(state, 0, at);
-  }, [at]);
+  });
   return { reached, isCurrent, elapsed, startedAt: epoch, direction: direction ?? "forward" };
 }

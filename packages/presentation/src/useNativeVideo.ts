@@ -112,8 +112,8 @@ function useMacNativeVideo(source: string | null, playing: boolean, position?: S
 
 // Other platforms retain Skia's platform-specific texture and loading handling.
 function useStandardNativeVideo(source: string | null, playing: boolean, position?: SharedValue<number>, looping = true) {
-  const paused = useDerivedValue(() => !playing, [playing]);
-  const repeat = useDerivedValue(() => looping, [looping]);
+  const paused = useDerivedValue(() => !playing);
+  const repeat = useDerivedValue(() => looping);
   const seek = useSharedValue<number | null>(null);
   const video = useVideo(source, { paused, looping: repeat, volume: 0, seek });
   useEffect(() => {
@@ -123,7 +123,7 @@ function useStandardNativeVideo(source: string | null, playing: boolean, positio
   useAnimatedReaction(() => video.currentTime.value, time => {
     "worklet";
     if (position && time > 0) position.value = time;
-  }, [video.currentTime, position]);
+  });
   return { ...video, error: null };
 }
 export const useNativeVideo = Platform.OS === "macos" ? useMacNativeVideo : useStandardNativeVideo;

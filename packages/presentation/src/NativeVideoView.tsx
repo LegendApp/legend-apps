@@ -10,7 +10,7 @@ export function NativeVideoView({ source, poster, playing, position, looping = t
 }) {
   const video = useNativeVideo(source, playing, position, looping);
   const preview = useImage(poster);
-  const image = useDerivedValue(() => video.currentFrame.value ?? preview, [preview]);
+  const image = useDerivedValue(() => video.currentFrame.value ?? preview);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;

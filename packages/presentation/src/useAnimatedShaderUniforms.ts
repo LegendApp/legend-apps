@@ -38,7 +38,7 @@ function useShaderPlayback(active: boolean, delay: number, playback: SharedValue
     } else if (clock.slideTime >= old.until) {
       activity.value = { ...old, active: false };
     }
-  }, [active, delay, playback, activation, phase, selectedClock, maxTime]);
+  });
   return useDerivedValue(() => {
     const old = activity.value;
     if (!active && (phase === "preview" || phase === "preparing" ||
@@ -53,7 +53,7 @@ function useShaderPlayback(active: boolean, delay: number, playback: SharedValue
     const slideTime = current ? Math.min(current.slideTime, until) : until;
     return { ...old.retained, phase: current?.phase ?? "paused",
       slideTime, stepTime: old.retained.stepTime + Math.max(0, slideTime - old.retained.slideTime) };
-  }, [active, playback, activation, phase, delay]);
+  });
 }
 
 /** All shader uniforms sample the surface controller in one UI-thread evaluation. */
@@ -106,7 +106,7 @@ export function useAnimatedShaderUniforms(
     };
     motion.value = { time: old.time + dt * rate + boost * (area(end) - area(start)),
       raw: clock.slideTime, burst: end, slideIndex: index, owner:clock.slideKey };
-  }, [integrates, rate, boost, duration, slideIndex, persistent, motion]);
+  });
   return useDerivedValue(() => {
     // A frozen card must not subscribe to the live clock. Sample its stable
     // preview pose until it approaches the visible carousel region.
@@ -127,7 +127,7 @@ export function useAnimatedShaderUniforms(
       stepTime: samplePlayback(state, previewTime, "step"),
       stepIndex: state.stepIndex,
     };
-  }, [shaderPlayback, uniforms, clocks, adjusted, persistent, previewTime, clock, brightnessScale]);
+  });
 }
 
 /** Interaction geometry rides on the persistent background, never its slide clock
@@ -145,5 +145,5 @@ export function useBackgroundInteractionUniforms(
       drops: feed?.drops ?? background.drops,
       backgroundTime: background.time,
     };
-  }, [base, interaction]);
+  });
 }

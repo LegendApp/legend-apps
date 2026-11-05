@@ -12,6 +12,6 @@ export function useNativeTransitionReady(progress: TransitionProgress, transitio
   }, [progress]);
   useAnimatedReaction(() => transitioning && progress.value > 0, (ready, previous) => {
     if (ready && !previous) runOnJS(markStarted)();
-  }, [progress, transitioning]);
+  });
   return !transitioning || started === progress;
 }

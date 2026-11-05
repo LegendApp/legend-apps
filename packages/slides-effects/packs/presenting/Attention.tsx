@@ -63,7 +63,7 @@ export function Spotlight({ target, darkness = 0.78, padding = 18 }: { target?: 
   const inner = useDerivedValue(() => {
     const box = target ? targets.value[target] : undefined;
     return { rect: { x: (box?.x ?? 0) - padding, y: (box?.y ?? 0) - padding, width: Math.max(1, (box?.width ?? width) + padding * 2), height: Math.max(1, (box?.height ?? height) + padding * 2) }, rx: 24, ry: 24 };
-  }, [target, padding, width, height]);
+  });
   return <FrameView pointerEvents="none" frameStyle={() => { "worklet"; return [StyleSheet.absoluteFill, { opacity: target && targets.value[target] ? 1 : 0 }]; }}>
     <Canvas style={StyleSheet.absoluteFill}>
       <DiffRect outer={rrect(rect(0, 0, width, height), 0, 0)} inner={inner} color={`rgba(2,6,23,${Math.max(0, Math.min(1, darkness))})`} />
@@ -77,7 +77,7 @@ export function Callout({ target, children, side = "above", width: requestedWidt
   const label = useDerivedValue(() => {
     const box = targets.value[target];
     return box ? calloutBounds(box, { width, height }, Math.min(requestedWidth, width - 24), labelHeight, side) : undefined;
-  }, [target, width, height, requestedWidth, labelHeight, side]);
+  });
   const arrow = useDerivedValue(() => {
     const box = targets.value[target], position = label.value;
     if (!box || !position) return "";
@@ -86,7 +86,7 @@ export function Callout({ target, children, side = "above", width: requestedWidt
     const angle = Math.atan2(cy - y, cx - x);
     const ex = cx - Math.cos(angle) * Math.min(box.width, box.height) * 0.42, ey = cy - Math.sin(angle) * Math.min(box.width, box.height) * 0.42;
     return `M ${x} ${y} L ${ex} ${ey} M ${ex - Math.cos(angle - 0.5) * 16} ${ey - Math.sin(angle - 0.5) * 16} L ${ex} ${ey} L ${ex - Math.cos(angle + 0.5) * 16} ${ey - Math.sin(angle + 0.5) * 16}`;
-  }, [target]);
+  });
   return <View pointerEvents="none" style={StyleSheet.absoluteFill}>
     <Canvas style={StyleSheet.absoluteFill}><Path path={arrow} color="#67e8f9" style="stroke" strokeWidth={3} /></Canvas>
     <FrameView onLayout={({ nativeEvent: { layout } }) => setLabelHeight(layout.height)} frameStyle={() => { "worklet"; const box = label.value; return [styles.callout, { opacity: box ? 1 : 0, left: box?.x ?? 0, top: box?.y ?? 0, width: box?.width ?? requestedWidth }]; }}>

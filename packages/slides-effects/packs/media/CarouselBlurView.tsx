@@ -67,7 +67,7 @@ export function CarouselBlurView({ children, progress, index, enabled, cacheKey,
     "worklet";
     const distance = enabled ? Math.min(1, Math.abs(index - progress.value.position)) : 0;
     return distance * distance * (3 - 2 * distance);
-  }, [enabled, index]);
+  });
   const blur = useDerivedValue(() => { "worklet"; return 10 * focus.value; });
   const width = useDerivedValue(() => { "worklet"; return size.value.width; });
   const height = useDerivedValue(() => { "worklet"; return size.value.height; });

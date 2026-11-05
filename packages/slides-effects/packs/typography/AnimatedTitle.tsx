@@ -17,7 +17,7 @@ function TitleSlot({ text, index, count, lineIndex, lineCount, effect, time, tex
         { rotate: `${frame.rotate}deg` }, { rotateX: `${frame.rotateX}deg` },
         { scaleX: frame.scaleX }, { scaleY: frame.scaleY }],
     };
-  }, [effect, index, count, lineIndex, lineCount, time]);
+  });
   const title = <Animated.View style={motion}><Text accessible={false} style={textStyle}>{text}</Text></Animated.View>;
   return effect === "word-lift" ? <View style={{ overflow: "hidden" }}>{title}</View> : title;
 }
@@ -30,12 +30,12 @@ function MaskedTitle({ children, width, textStyle, effect, time }: MotionProps &
     "worklet";
     const frame = sampleTitleEntrance(effect, time.value);
     return { width: width * frame.reveal, left: effect === "curtain" ? width * (1 - frame.reveal) / 2 : 0, opacity: frame.opacity };
-  }, [effect, width, time]);
+  });
   const offset = useAnimatedStyle(() => {
     "worklet";
     const frame = sampleTitleEntrance(effect, time.value);
     return { transform: [{ translateX: effect === "curtain" ? -width * (1 - frame.reveal) / 2 : 0 }] };
-  }, [effect, width, time]);
+  });
   return <View style={{ width, height }}>
     <Text accessible={false} onLayout={event => setHeight(event.nativeEvent.layout.height)}
       style={[textStyle, { width, opacity: 0 }]}>{children}</Text>
@@ -53,7 +53,7 @@ function GlitchLayer({ children, layer, time, textStyle, width }: Omit<MotionPro
     const frame = sampleTitleEntrance("chromatic-glitch", time.value);
     return { opacity: layer === 0 ? frame.opacity : frame.ghost,
       transform: [{ translateX: frame.x + layer * frame.ghost * 30 }, { translateY: layer * frame.ghost * 6 }] };
-  }, [layer, time]);
+  });
   return <Animated.Text accessible={false} style={[textStyle, { position: "absolute", top: 0, width,
     color: layer === -1 ? "#67e8f9" : layer === 1 ? "#fb7185" : textStyle.color }, motion]}>{children}</Animated.Text>;
 }
@@ -86,7 +86,7 @@ export function AnimatedTitle({ children, effect = "soft-rise", fontSize = 104, 
     const key = clock === "step" ? `${state.slideKey}:${state.stepKey}` : state.slideKey;
     const time = Math.min(duration, sampleClock(state, duration / speed, clock) * speed);
     if (sampled.value.key !== key || sampled.value.time !== time) sampled.value = { key, time };
-  }, [clock, speed, duration]);
+  });
   const time = useDerivedValue(() => {
     "worklet";
     const state = playback.value;
@@ -94,7 +94,7 @@ export function AnimatedTitle({ children, effect = "soft-rise", fontSize = 104, 
     if (state.phase === "preparing") return 0;
     const key = clock === "step" ? `${state.slideKey}:${state.stepKey}` : state.slideKey;
     return sampled.value.key === key ? sampled.value.time : 0;
-  }, [clock]);
+  });
   const preset = titleEntranceEffects.find(preset => preset.id === effect)!;
   const textStyle: TextStyle = { fontFamily: "Helvetica Neue", fontSize, lineHeight: Math.ceil(fontSize * 1.24),
     fontWeight: "700", color, textAlign: "center", ...titleStyle };

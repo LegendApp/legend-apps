@@ -1,10 +1,27 @@
 // @ts-nocheck Controlled UI-thread transactions; no JS animation scheduler.
 import { mock } from "bun:test";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 export const frames = [];
 export const transactions = [];
 const reactions = [];
 export const reactUI = () => reactions.forEach(reaction => reaction.current());
+function assertOutsideRender() {
+  if (React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE?.A?.getOwner?.()) {
+    throw new Error("Shared values must not be read during React render");
+  }
+}
+function sharedValue(initial) {
+  let value = initial;
+  return {
+    get value() {
+      assertOutsideRender();
+      return value;
+    },
+    set value(next) { value = next; },
+    get() { return this.value; },
+    set(next) { this.value = typeof next === "function" ? next(this.value) : next; },
+  };
+}
 mock.module("react-native-reanimated", () => ({
   __esModule: true,
   createWorkletRuntime: () => ({}),
@@ -15,8 +32,8 @@ mock.module("react-native-reanimated", () => ({
   default: { View: "animated-view" },
   useAnimatedStyle: (read) => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
   runOnUI: (callback) => (...args) => transactions.push(() => callback(...args)),
-  useSharedValue: (value) => useRef({ value, set(next) { this.value = typeof next === "function" ? next(this.value) : next; } }).current,
-  useDerivedValue: (read) => ({ _isReanimatedSharedValue: true, get value() { return read(); } }),
+  useSharedValue: (value) => useRef(sharedValue(value)).current,
+  useDerivedValue: (read) => ({ _isReanimatedSharedValue: true, get value() { assertOutsideRender(); return read(); }, get() { return this.value; } }),
   useAnimatedReaction: (prepare, react) => {
     const reaction = useRef(() => {});
     reaction.current = () => react(prepare());

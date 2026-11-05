@@ -28,7 +28,7 @@ export function PlaybackKeyframeView({ children, keyframes, delay = 0, repeatDur
       x: a.x + (b.x - a.x) * fraction,
       y: a.y + (b.y - a.y) * fraction,
     };
-  }, [keyframes, delay, repeatDuration, previewTime, clock, waiting, last]);
+  });
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: pose.value.opacity,
     transform: [{ translateX: pose.value.x }, { translateY: pose.value.y }],

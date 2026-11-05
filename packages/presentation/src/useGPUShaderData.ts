@@ -15,5 +15,5 @@ export function useGPUShaderData(uniforms: { readonly value: Record<string, numb
       }
     }
     return data;
-  }, [uniforms, fields]);
+  });
 }

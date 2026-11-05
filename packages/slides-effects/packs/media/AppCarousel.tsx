@@ -45,7 +45,7 @@ export function AppCarousel<T extends string>({ items, position, mode = "filmstr
     const clock = playback.value;
     return !window.settled && (clock.phase === "preview" || clock.phase === "preparing" ||
       clock.phase === "playing" && clock.stepTime >= 0.65 && Math.abs(progress.value.position - selected) < 0.001);
-  }, ready => { "worklet"; if (ready) runOnJS(settle)(); }, [window, selected]);
+  }, ready => { "worklet"; if (ready) runOnJS(settle)(); });
   const visible = items.flatMap((id, index) => mode === "filmstrip" && (index < window.first || index > window.last) ? [] : [{ id, index }]);
   return <SnapshotCaptureBoundary suspended={phase === "playing" && !window.settled}><ProgressivePreparation>{visible.map(({ id, index }) => {
 

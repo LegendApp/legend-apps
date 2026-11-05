@@ -17,8 +17,8 @@ export function FreezeFrame({ paused, children, annotation, previewTime = 1.5 }:
     const reset = old.key !== clock.slideKey;
     held.value = { key: clock.slideKey, last: clock.slideTime, paused,
       seconds: reset ? 0 : old.seconds + (paused || old.paused ? 0 : Math.max(0, clock.slideTime - old.last)) };
-  }, [paused]);
-  const seconds = useDerivedValue(() => playback.value.phase === "preview" ? previewTime : playback.value.phase === "preparing" ? 0 : held.value.seconds, [previewTime]);
+  });
+  const seconds = useDerivedValue(() => playback.value.phase === "preview" ? previewTime : playback.value.phase === "preparing" ? 0 : held.value.seconds);
   return <View style={styles.frame}>
     {children(seconds)}
     <FrameView pointerEvents={paused ? "auto" : "none"} accessibilityElementsHidden={!paused}

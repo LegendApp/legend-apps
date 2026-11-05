@@ -42,5 +42,5 @@ export function resolveTransitionStyle(value: unknown): any {
   return result;
 }
 export function useTransitionStyle(style: TransitionStyle | undefined) {
-  return useAnimatedStyle(() => resolveTransitionStyle(style ?? {}) as ViewStyle, [style]);
+  return useAnimatedStyle(() => resolveTransitionStyle(style ?? {}) as ViewStyle);
 }
