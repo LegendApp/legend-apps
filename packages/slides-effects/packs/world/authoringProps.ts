@@ -91,7 +91,8 @@ const kindFields: Record<string, Fields> = {
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive() },
-  keys: { keys: list(text), next: list(text), scroll: step, diff: step, remove: step, insert: step, recycle: step },
+  keys: { keys: list(text), next: list(text), scroll: step, diff: step, remove: step, insert: step, recycle: step,
+    viewport: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), window: step },
   layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true), colors: list(color),
     bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds") },
 };

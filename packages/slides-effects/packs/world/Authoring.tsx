@@ -598,19 +598,22 @@ type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; 
 function anchored(position: V3, anchor: unknown, width: number, height: number): V3 {
   return anchor === "center" ? [position[0] - width / 2 + .3, position[1] + (height - .6) / 2, position[2]] : position;
 }
-/** A keyed column: `scroll`, `diff` (clone), `remove`, `insert`, then `recycle` are local step numbers. */
-function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
-  const keys = props.keys as string[], next = (props.next ?? keys) as string[], diff = Number(props.diff ?? 1), recycle = Number(props.recycle ?? 2);
-  const scroll = props.scroll as number | undefined, remove = Number(props.remove ?? diff), insert = Number(props.insert ?? diff);
-  const row = Number(props.rowHeight ?? .95), width = Number(props.width ?? 3.4), gap = Number(props.gap ?? 7.6), caption = String(props.label ?? "key");
-  const removed = keys.filter(k => !next.includes(k)), added = next.filter(k => !keys.includes(k)), y = (i: number) => -i * row;
-  const container = (stage: string, position: unknown, color: unknown, emissive: unknown, opacity: unknown, labels: { text: string; opacity: unknown; color?: string }[]) =>
+/** Key cards `width` wide in rows `row` apart: a caption and labels that can crossfade. */
+const keyCards = (width: number, row: number, caption: string, INK: Ink) =>
+  (stage: string, position: unknown, color: unknown, emissive: unknown, opacity: unknown, labels: { text: string; opacity: unknown; color?: string }[]) =>
     <Stage key={stage} id={stage} position={position as V3}>
       <Card id={`${stage}/card`} scale={[width, row * .8, .3]} color={color as string} emissive={emissive as number} opacity={opacity as number} />
       <Text3D id={`${stage}/caption`} text={caption} mono size={.15 * TYPE} align="left" color={INK.muted} emissive={.8} position={[-width / 2 + .35, 0, .17]} opacity={opacity as number} />
       {labels.map((label, i) => <Text3D key={i} id={`${stage}/key${i}`} text={label.text} mono size={.34 * TYPE} align="left" color={label.color ?? INK.white}
         position={[-width / 2 + 1.3, 0, .17]} opacity={label.opacity as number} />)}
     </Stage>;
+/** A keyed column: `scroll`, `diff` (clone), `remove`, `insert`, then `recycle` are local step numbers. */
+function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
+  const keys = props.keys as string[], next = (props.next ?? keys) as string[], diff = Number(props.diff ?? 1), recycle = Number(props.recycle ?? 2);
+  const scroll = props.scroll as number | undefined, remove = Number(props.remove ?? diff), insert = Number(props.insert ?? diff);
+  const row = Number(props.rowHeight ?? .95), width = Number(props.width ?? 3.4), gap = Number(props.gap ?? 7.6), caption = String(props.label ?? "key");
+  const removed = keys.filter(k => !next.includes(k)), added = next.filter(k => !keys.includes(k)), y = (i: number) => -i * row;
+  const container = keyCards(width, row, caption, INK);
   const left = keys.map((k, i) => {
     const gone = removed.indexOf(k), reuse = gone >= 0 ? added[gone] : undefined, split: V3 = [-gap / 2, y(i), 0];
     if (reuse === undefined) return container(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(diff, split, 0, .6), key(recycle, [0, y(next.includes(k) ? next.indexOf(k) : i), 0], 0, 1)],
@@ -645,6 +648,59 @@ function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   });
   return <Stage id={id} position={scroll === undefined ? at : [{ step: 0, value: at }, key(scroll, add(at, [0, row * .6, 0]), 0, .9)]}>
     {left}{copy}{links}
+  </Stage>;
+}
+/** A virtualized column whose first `viewport` keys sit in a frame, with the keys outside it dimmed. On `scroll` the keys move up one row.
+ * On `window` the column steps aside and a second frame comes out holding copies of only the keys then in view, linked to their originals.
+ * On `recycle` the keys stay put while the one that left the top travels behind the column into the slot entering at the bottom and takes its key. */
+function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
+  const keys = props.keys as string[], shown = Number(props.viewport), scroll = props.scroll as number | undefined;
+  const windowed = props.window as number | undefined, recycle = props.recycle as number | undefined, [viewLabel, windowLabel] = (props.labels ?? ["viewport", "rendered"]) as string[];
+  const row = Number(props.rowHeight ?? .8), width = Number(props.width ?? 3), gap = Number(props.gap ?? 8.4), y = (i: number) => -i * row, by = scroll === undefined ? 0 : 1;
+  const card = keyCards(width, row, String(props.label ?? "item"), INK), DIM = .22, cross = .25;
+  const inView = (i: number, offset: number) => i - offset >= 0 && i - offset < shown;
+  const frame = (fid: string, position: unknown, draw: unknown, label: string) => {
+    const w = width / 2 + .28, top = row * .4 + .2, bottom = y(shown - 1) - row * .4 - .2;
+    return <Stage id={fid} position={position as V3}>
+      <RoutedTube id={`${fid}/edge`} path={[[-w, top, 0], [w, top, 0], [w, bottom, 0], [-w, bottom, 0], [-w, top, 0]]} thickness={.04} color={INK.accent} emissive={3} draw={draw as number} />
+      <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.accent} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />
+    </Stage>;
+  };
+  const leaving = keys.slice(0, by), entering = keys.slice(shown, shown + by);
+  const rows = keys.map((k, i) => {
+    const before = inView(i, 0) ? 1 : DIM, after = inView(i, by) && !(recycle !== undefined && entering.includes(k)) ? 1 : DIM;
+    const opacity = [{ step: 0, value: before }, ...scroll !== undefined && after !== before ? [key(scroll, after, cross, .35)] : []];
+    const into = leaving.indexOf(k);
+    if (recycle === undefined || into < 0) return card(`${id}/${k}`, [0, y(i), 0], INK.idle, .8,
+      recycle !== undefined && entering.includes(k) ? [...opacity, key(recycle, 0, 2, .3)] : opacity, [{ text: k, opacity }]);
+    const reuse = entering[into], slot = y(shown + into), lit = [...opacity, key(recycle, 1, 0, .3)];
+    // Back behind the column, down past the keys that stay, then forward into the slot.
+    return <Fragment key={k}>
+      {card(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(recycle, [0, y(i), -2], .3, .6), key(recycle, [0, slot, -2], .9, 1.1), key(recycle, [0, slot, 0], 2, .5)],
+        [{ step: 0, value: INK.idle }, key(recycle, INK.amber, 0, .3), key(recycle, INK.idle, 2.9, .7)],
+        [{ step: 0, value: .8 }, key(recycle, 2.4, 0, .3), key(recycle, 7, 2.45, .06), key(recycle, .8, 2.6, .9)], lit,
+        [{ text: k, opacity: [...lit, key(recycle, 0, 2.15, .15)] }, { text: reuse, opacity: [{ step: 0, value: 0 }, key(recycle, 1, 2.2, .15)] }])}
+      <Burst id={`${id}/${k}/landing`} position={[0, slot, .3]} step={recycle} delay={2.45} count={16} lifetime={.7} colors={[INK.amber, INK.amber, "#ffffff"]} emissive={6} size={.025} speed={2.5} />
+    </Fragment>;
+  });
+  const visible = keys.map((k, i) => ({ k, i })).filter(({ i }) => inView(i, by));
+  const copies = windowed === undefined ? null : <>
+    {visible.map(({ k, i }, j) => {
+      const yy = y(i) + row * by, opacity = [{ step: 0, value: 0 }, key(windowed, 1, j * .05, .25)];
+      return <Fragment key={k}>
+        {card(`${id}/copy/${k}`, [{ step: 0, value: [0, yy, -.05] }, key(windowed, [gap / 2, yy, 0], j * .05, .8)], INK.idle, .8, opacity, [{ text: k, opacity }])}
+        <RoutedTube id={`${id}/link/${k}`} path={[[-gap / 2 + width / 2, yy, 0], [gap / 2 - width / 2, yy, 0]]} thickness={.03} color={INK.blue} emissive={3.5}
+          draw={[{ step: 0, value: 0 }, key(windowed, 1, 1 + j * .07, .4)]} />
+      </Fragment>;
+    })}
+    {frame(`${id}/window`, [gap / 2, 0, 0], [{ step: 0, value: 0 }, key(windowed, 1, .35, .8)], windowLabel)}
+  </>;
+  return <Stage id={id} position={at}>
+    <Stage id={`${id}/column`} position={(windowed === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(windowed, [-gap / 2, 0, 0], 0, .8)]) as V3}>
+      {frame(`${id}/viewport`, [0, 0, 0], 1, viewLabel)}
+      <Stage id={`${id}/keys`} position={(scroll === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(scroll, [0, row, 0], 0, .9)]) as V3}>{rows}</Stage>
+    </Stage>
+    {copies}
   </Stage>;
 }
 /** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */
@@ -1022,7 +1078,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
           pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, color: f.color, size: .12, emissive: 10 }))} />}
       </Fragment>; })}</Stage>;
   }
-  if (kind === "keys") return keyList(id, position, props, INK);
+  if (kind === "keys") return props.viewport === undefined ? keyList(id, position, props, INK) : viewportList(id, position, props, INK);
   if (kind === "grid") return grid(id, position, props, INK);
   if (kind === "form") return form(id, position, props, INK);
   if (kind === "morph") return codeMorph(id, position, props, children, INK);

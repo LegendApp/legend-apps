@@ -67,3 +67,30 @@ test("prepared GPU uniforms keep unchanged keys visible through insertion", () =
     }
   }
 });
+
+test("a viewport column scrolls, then shows only the keys in view or recycles the key that left", () => {
+  const keys = ["A", "B", "C", "D"], at = (step: number) => ({ slideTime: step * 4 + 3.9, stepTime: 3.9, stepIndex: step,
+    stepOrigins: Object.fromEntries(Array.from({ length: step + 1 }, (_, i) => [i, i * 4])) });
+  const read = (nodes: React.ReactElement<Record<string, unknown>>[]) => <T extends number | Vec3>(id: string, prop: string, step: number): T =>
+    sampleTrack(compileTrack(nodes.find(node => node.props.id === id)!.props[prop] as Animated<T>), at(step));
+  const windowed = flat(expandScene(<Keys id="w" at={[0, 0, 0]} keys={keys} viewport={2} scroll={1} window={2} />)), w = read(windowed);
+  expect(w<number>("w/A/card", "opacity", 0)).toBe(1);
+  expect(w<number>("w/C/card", "opacity", 0)).toBeLessThan(.5);
+  expect(w<Vec3>("w/keys", "position", 1)[1]).toBeCloseTo(.8);
+  expect(w<number>("w/A/card", "opacity", 1)).toBeLessThan(.5);
+  expect(w<number>("w/C/card", "opacity", 1)).toBe(1);
+  expect(windowed.filter(n => String(n.props.id).match(/^w\/copy\/[A-Z]$/)).map(n => n.props.id)).toEqual(["w/copy/B", "w/copy/C"]);
+  expect(w<number>("w/copy/B/card", "opacity", 1)).toBe(0);
+  expect(w<number>("w/copy/B/card", "opacity", 2)).toBe(1);
+  expect(w<number>("w/link/C", "draw", 2)).toBe(1);
+  expect(w<Vec3>("w/column", "position", 2)[0]).toBeCloseTo(-4.2);
+  const pooled = flat(expandScene(<Keys id="p" at={[0, 0, 0]} keys={keys} viewport={2} scroll={1} recycle={2} />)), p = read(pooled);
+  expect(p<number>("p/C/card", "opacity", 1)).toBeLessThan(.5);
+  expect(p<Vec3>("p/A", "position", 2)).toEqual([0, -1.6, 0]);
+  expect(p<number>("p/A/key0", "opacity", 2)).toBe(0);
+  expect(p<number>("p/A/key1", "opacity", 2)).toBe(1);
+  expect(pooled.find(n => n.props.id === "p/A/key1")!.props.text).toBe("C");
+  expect(p<number>("p/C/card", "opacity", 2)).toBe(0);
+  expect(p<Vec3>("p/B", "position", 2)).toEqual([0, -.8, 0]);
+  expect(p<number>("p/A/card", "opacity", 0)).toBe(1);
+});
