@@ -1327,7 +1327,10 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       <Pillar id={`${id}/${i}`} value={b.value} maximum={maximum} height={height} width={width} depth={depth} color={b.color === undefined ? tint : paint(b.color, INK.colors) as string}
         radius={Math.min(width, depth) * .12} gradient={.45} counter={false}
         position={[x,0,0]} {...launch ? { step: launch.step, delay: delay + i * stagger } : { at: delay + i * stagger }} duration={duration} ease={ease} />
-      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, position: [x,.3,depth / 2 + .3], size: labelSize, flat: true, delay: delay + .2 + i * stagger * .12 / .35, duration: .7,
+      {/* A folded plate's labels sit above their bars once grown, clear of the bars and the plate. */}
+      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, size: labelSize, flat: true, duration: .7,
+        ...launch?.fold ? { position: [x, b.value / maximum * height + labelSize * TYPE * .8, 0], delay: delay + i * stagger + duration * .6 }
+          : { position: [x,.3,depth / 2 + .3], delay: delay + .2 + i * stagger * .12 / .35 },
         ...launch ? { enter: { step: launch.step } } : {} }, INK)}
     </Fragment>; })}</Stage>;
   }

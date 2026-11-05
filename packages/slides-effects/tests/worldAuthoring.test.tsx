@@ -152,6 +152,10 @@ test("bars folding a sibling panel tip it back flat into their base plate, tint 
   const rise = parts.filter(n => n.type === Pillar);
   expect(rise.map(n => [n.props.step, n.props.ease])).toEqual([[2, "spring"], [2, "spring"]]);
   rise.forEach((n, i) => expect(n.props.delay as number).toBeCloseTo(1.5 + i * .14));
+  // Labels wait above their grown bars, not over their feet.
+  const labels = parts.filter(n => n.type === Text3D && /^b\/\d\/label$/.test(String(n.props.id)));
+  expect(labels.map(n => (n.props.position as number[])[1] > [4.3, 2.15][labels.indexOf(n)])).toEqual([true, true]);
+  expect(labels.every(n => (n.props.position as number[])[2] === 0)).toBe(true);
 });
 
 test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", async () => {
