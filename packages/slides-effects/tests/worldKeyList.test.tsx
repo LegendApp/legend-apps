@@ -93,4 +93,13 @@ test("a viewport column scrolls, then shows only the keys in view or recycles th
   expect(p<number>("p/C/card", "opacity", 2)).toBe(0);
   expect(p<Vec3>("p/B", "position", 2)).toEqual([0, -.8, 0]);
   expect(p<number>("p/A/card", "opacity", 0)).toBe(1);
+  const both = flat(expandScene(<Keys id="b" at={[0, 0, 0]} keys={keys} viewport={2} scroll={1} window={1} recycle={2} />)), b = read(both);
+  expect(b<number>("b/C/card", "opacity", 1)).toBe(1);
+  expect(b<Vec3>("b/column", "position", 1)[0]).toBeCloseTo(-4.2);
+  expect(b<Vec3>("b/rendered", "position", 1)).toEqual([0, 0, 0]);
+  expect(b<Vec3>("b/column", "position", 2)).toEqual([0, 0, 0]);
+  expect(b<Vec3>("b/rendered", "position", 2)[2]).toBeCloseTo(-30);
+  expect(b<Vec3>("b/A", "position", 2)).toEqual([0, -1.6, 0]);
+  expect(b<number>("b/A/key1", "opacity", 2)).toBe(1);
+  expect(b<number>("b/C/card", "opacity", 2)).toBe(0);
 });

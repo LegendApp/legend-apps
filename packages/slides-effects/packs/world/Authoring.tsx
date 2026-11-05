@@ -652,7 +652,8 @@ function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
 }
 /** A virtualized column whose first `viewport` keys sit in a frame, with the keys outside it dimmed. On `scroll` the keys move up one row.
  * On `window` the column steps aside and a second frame comes out holding copies of only the keys then in view, linked to their originals.
- * On `recycle` the keys stay put while the one that left the top travels behind the column into the slot entering at the bottom and takes its key. */
+ * On `recycle` the keys stay put while the one that left the top travels behind the column into the slot entering at the bottom and takes its key.
+ * With both, `recycle` follows `window`: the second frame flies away and the column recenters first. */
 function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const keys = props.keys as string[], shown = Number(props.viewport), scroll = props.scroll as number | undefined;
   const windowed = props.window as number | undefined, recycle = props.recycle as number | undefined, [viewLabel, windowLabel] = (props.labels ?? ["viewport", "rendered"]) as string[];
@@ -668,11 +669,13 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
   };
   const leaving = keys.slice(0, by), entering = keys.slice(shown, shown + by);
   const rows = keys.map((k, i) => {
-    const before = inView(i, 0) ? 1 : DIM, after = inView(i, by) && !(recycle !== undefined && entering.includes(k)) ? 1 : DIM;
-    const opacity = [{ step: 0, value: before }, ...scroll !== undefined && after !== before ? [key(scroll, after, cross, .35)] : []];
+    // A pooled list's entering slot stays empty until the recycled key lands; a windowed one renders it, then empties it for the pool.
+    const pooled = recycle !== undefined && entering.includes(k), before = inView(i, 0) ? 1 : DIM, after = inView(i, by) && !(pooled && windowed === undefined) ? 1 : DIM;
+    const opacity = [{ step: 0, value: before }, ...scroll !== undefined && after !== before ? [key(scroll, after, cross, .35)] : [],
+      ...pooled && windowed !== undefined ? [key(recycle!, DIM, 0, .3)] : []];
     const into = leaving.indexOf(k);
     if (recycle === undefined || into < 0) return card(`${id}/${k}`, [0, y(i), 0], INK.idle, .8,
-      recycle !== undefined && entering.includes(k) ? [...opacity, key(recycle, 0, 2, .3)] : opacity, [{ text: k, opacity }]);
+      pooled ? [...opacity, key(recycle!, 0, 2, .3)] : opacity, [{ text: k, opacity }]);
     const reuse = entering[into], slot = y(shown + into), lit = [...opacity, key(recycle, 1, 0, .3)];
     // Back behind the column, down past the keys that stay, then forward into the slot.
     return <Fragment key={k}>
@@ -684,7 +687,7 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
     </Fragment>;
   });
   const visible = keys.map((k, i) => ({ k, i })).filter(({ i }) => inView(i, by));
-  const copies = windowed === undefined ? null : <>
+  const copies = windowed === undefined ? null : <Stage id={`${id}/rendered`} position={(recycle === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(recycle, [3, 0, -30], 0, .5)]) as V3}>
     {visible.map(({ k, i }, j) => {
       const yy = y(i) + row * by, opacity = [{ step: 0, value: 0 }, key(windowed, 1, j * .05, .25)];
       return <Fragment key={k}>
@@ -694,9 +697,10 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
       </Fragment>;
     })}
     {frame(`${id}/window`, [gap / 2, 0, 0], [{ step: 0, value: 0 }, key(windowed, 1, .35, .8)], windowLabel)}
-  </>;
+  </Stage>;
   return <Stage id={id} position={at}>
-    <Stage id={`${id}/column`} position={(windowed === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(windowed, [-gap / 2, 0, 0], 0, .8)]) as V3}>
+    <Stage id={`${id}/column`} position={(windowed === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(windowed, [-gap / 2, 0, 0], 0, .8),
+      ...recycle === undefined ? [] : [key(recycle, [0, 0, 0], 0, .8)]]) as V3}>
       {frame(`${id}/viewport`, [0, 0, 0], 1, viewLabel)}
       <Stage id={`${id}/keys`} position={(scroll === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(scroll, [0, row, 0], 0, .9)]) as V3}>{rows}</Stage>
     </Stage>
