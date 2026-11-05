@@ -1,7 +1,8 @@
 import type { Ease, Vec3 } from "./camera";
 import { compileTrack, labelInstance, primitive, type Animated, type Instance, type PrimitiveOptions } from "./scene";
 
-export type RoundedBoxOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & { radius?: number; edge?: number };
+/** `gradient` (0 to 1) darkens the box toward its bottom by that fraction. */
+export type RoundedBoxOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & { radius?: number; edge?: number; gradient?: number };
 /** `beads` (default 7) spheres trail the head, `spacing` (default 0.025) apart in path progress, tapering from `trailSize` (default `size`). */
 export type TubePulse = { every?: number; step?: number; at?: number; delay?: number; duration?: number; color?: string; size?: number; emissive?: number; trailEmissive?: number; trailSize?: number; beads?: number; spacing?: number };
 export type RoutedTubeOptions = {
@@ -12,6 +13,8 @@ export type PillarOptions = {
   step?: number; at?: number; delay?: number; duration?: number; ease?: Ease; color?: string; label?: string; counterSize?: number;
   /** Body glow and independent cap glow (default 5). */
   emissive?: number; capEmissive?: number; material?: PrimitiveOptions["material"];
+  /** A corner `radius` rounds the body, without a cap, and `gradient` darkens it toward its foot, as on RoundedBox. `counter: false` hides the digits. */
+  radius?: number; gradient?: number; counter?: boolean;
 };
 
 /** One lamp: a color, or a color and glow, either of which can animate; glow 0 is off. */
@@ -35,16 +38,16 @@ export function stoplightInstances({ id = "stoplight", position = [0, 0, 0], siz
 }
 
 /** Rounded solid geometry, instanced with the same material/rim controls as World cards. */
-export function roundedBoxInstances({ radius = 0.1, edge = 0.6, ...options }: RoundedBoxOptions): Instance[] {
-  if (!Number.isFinite(radius) || radius < 0 || !Number.isFinite(edge) || edge < 0) throw new Error("RoundedBox needs a nonnegative radius and edge");
+export function roundedBoxInstances({ radius = 0.1, edge = 0.6, gradient = 0, ...options }: RoundedBoxOptions): Instance[] {
+  if (![radius, edge, gradient].every(v => Number.isFinite(v) && v >= 0) || gradient > 1) throw new Error("RoundedBox needs a nonnegative radius and edge, and a gradient from 0 to 1");
   return [{ ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [2, 0.7, 0.35], emissive: options.emissive ?? 0.08,
-  }), custom: roundedBoxGeometry(radius, edge) }];
+  }), custom: roundedBoxGeometry(radius, edge, gradient) }];
 }
 
 // One geometry object per shape so equal boxes batch into a single custom draw (draws group by geometry identity).
 const roundedBoxGeometries = new Map<string, { vertexCount: number; wgsl: string }>();
-function roundedBoxGeometry(radius: number, edge: number) {
-  const key = `${radius}:${edge}`;
+function roundedBoxGeometry(radius: number, edge: number, gradient = 0) {
+  const key = `${radius}:${edge}:${gradient}`;
   let geometry = roundedBoxGeometries.get(key);
   if (!geometry) roundedBoxGeometries.set(key, geometry = { vertexCount: 6 * 8 * 8 * 6, wgsl: `
 fn bevelCoordinate(v:f32,half:f32,radius:f32)->f32 {
@@ -67,8 +70,9 @@ fn shape(iid:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
  return ShapeVertex((q+n*radius)/half,n*half);
 }
 fn shade(iid:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
- let base=slot(iid); let color=vector(base+4u); let edge=pow(1.-abs(normal.z),.6)*${edge.toFixed(6)};
- return Material(vector(base+24u),color*(uniforms[base+7u]+edge*.3),uniforms[base+27u],uniforms[base+28u]);
+ let base=slot(iid); let half=max(vector(base+8u)*uniforms[base+3u],vec3f(.0001)); let rise=clamp((world.y-vector(base).y)/half.y*.5+.5,0.,1.);
+ let color=vector(base+4u)*(1.-${gradient.toFixed(6)}*(1.-rise)); let edge=pow(1.-abs(normal.z),.6)*${edge.toFixed(6)};
+ return Material(vector(base+24u)*(1.-${gradient.toFixed(6)}*(1.-rise)),color*(uniforms[base+7u]+edge*.3),uniforms[base+27u],uniforms[base+28u]);
 }` });
   return geometry;
 }
@@ -103,13 +107,17 @@ export function pillarInstances(options: PillarOptions): Instance[] {
   const pillar = { value: track, maximum, height };
   const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: options.material ?? { metal: 0.35, roughness: 0.22 } });
   body.pillar = { ...pillar, role: "body" };
-  const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: options.capEmissive ?? 5 });
-  cap.pillar = { ...pillar, role: "top" };
-  const instances = [body, cap];
+  const instances = [body];
+  if (options.radius !== undefined) body.custom = roundedBoxGeometry(options.radius, 0.6, options.gradient);
+  else {
+    const cap = primitive("box", { id: `${id}:cap`, position, scale: [width + 0.05, 0.045, depth + 0.05], color, emissive: options.capEmissive ?? 5 });
+    cap.pillar = { ...pillar, role: "top" };
+    instances.push(cap);
+  }
   const digits = String(Math.round(Math.max(from, value))).length, advance = counterSize * 0.68;
   // Seven-segment digits are real lit meshes, with a stable fixed-width pool as values tick.
   const segments = [[0, 0.45, 0.43, 0.09], [0.23, 0.23, 0.09, 0.38], [0.23, -0.23, 0.09, 0.38], [0, -0.45, 0.43, 0.09], [-0.23, -0.23, 0.09, 0.38], [-0.23, 0.23, 0.09, 0.38], [0, 0, 0.43, 0.09]];
-  for (let digit = 0; digit < digits; digit++) for (let segment = 0; segment < 7; segment++) {
+  for (let digit = 0; digit < (options.counter === false ? 0 : digits); digit++) for (let segment = 0; segment < 7; segment++) {
     const [x, y, w, h] = segments[segment];
     const instance = primitive("box", { id: `${id}:digit:${digit}:${segment}`, position: [position[0] + ((digits - 1) / 2 - digit) * advance + x * counterSize,
       position[1] + counterSize * (0.8 + y), position[2]], scale: [w * counterSize, h * counterSize, counterSize * 0.15], color: "#e8eef6", emissive: 0.8 });

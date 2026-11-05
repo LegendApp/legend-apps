@@ -117,7 +117,7 @@ dolly is the distance from the target. Easing is `linear`, `cubic`, `smoothstep`
 live camera pose. Preparation and previews never overwrite retained live poses.
 
 `Sphere`, `Box`, `Tube` and `Ring` accept `position`, `size`, `scale`, `color`,
-`emissive` and `id`. Tube adds `end`, `curve` and `thickness`; ring adds `radius`
+`emissive`, `rotation` (Euler XYZ degrees about the center, animatable) and `id`. Tube adds `end`, `curve` and `thickness`; ring adds `radius`
 and `thickness`. `Orbs` accepts `count`, `colors`, `radius`, `spread`, `position`,
 `seed`, `drift`, `emissive` and an `id` prefix (default `orb`). Use distinct prefixes
 for multiple orb fields; all scene instance ids must be unique. Its seeded
@@ -434,8 +434,8 @@ the other rows dim; recycled slots do not inherit a previous row's highlight.
 A `recycle` pool sends the slot leaving the top around to the bottom; `recycle.glow` scales its accent.
 Use `rows:row:4` to follow or focus logical row 4 while it is visible.
 `width`, `depth`, `start`, `flashDuration` and `position` configure the column.
-Stages offset nested primitives and multiply their glow. Stage positions and glow
-can be animated. `wave={{ bob: [.1, 4], orbit: [.07, 7], pulse: [.2, 3], lag: .3 }}` keeps a
+Stages offset nested primitives and multiply their glow and `opacity`. Stage positions, glow
+and opacity can be animated. `wave={{ bob: [.1, 4], orbit: [.07, 7], pulse: [.2, 3], lag: .3 }}` keeps a
 Stage moving on the slide clock: each entry is `[amplitude, period in seconds]`; `bob` rises and falls,
 `orbit` circles in the ground plane, `pulse` scales glow by 1 ± amplitude, and `lag` delays all three.
 With `step` (and `delay` seconds), the Stage holds still until then and the wave eases in over a second.
@@ -753,7 +753,8 @@ drift. Amplitudes are world units, speed is radians per second. These effects
 use the shot's existing `step` or slide-clock `at`; reverse navigation resamples
 without accumulating motion.
 
-`RoundedBox` takes the usual primitive props plus `radius` and `edge`. Its full
+`RoundedBox` takes the usual primitive props plus `radius`, `edge` and `gradient`, which darkens it
+toward its bottom by that fraction (0 to 1). Its full
 size defaults to `[2, 0.7, 0.35]` through `scale`. The front, back and rounded
 sides are lit solid geometry; `edge` adds the familiar card rim highlight.
 
@@ -807,7 +808,8 @@ mirrors about .6, matching UnrealBloomPass without adding render passes.
 shadows, fog and bloom, for painted or luminous surfaces. It also follows
 `World.emissiveScale`.
 
-Pillar accepts `material` for its body and `capEmissive` (default 5). Routed-tube
+Pillar accepts `material` for its body and `capEmissive` (default 5); a `radius` rounds the body
+and drops the cap, `gradient` darkens it toward its foot, as on RoundedBox, and `counter={false}` hides the digits. Eases that overshoot, like `spring`, overshoot the height. Routed-tube
 pulses accept head `emissive` (default 5) and `trailEmissive` (defaults to the head). Burst accepts
 `emissive` (default 12) and a repeating `colors` palette. Tunnel `strips` and
 `edges` accept a `material`; a black albedo removes their diffuse lighting while

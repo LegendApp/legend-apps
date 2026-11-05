@@ -21,8 +21,9 @@ export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>;
 /** Endless motion on the slide clock, each as `[amplitude, period in seconds]`: `bob` rises and falls, `orbit` circles in the ground plane,
  * `pulse` scales glow by 1 ± amplitude. `lag` delays all three by seconds. */
 export type StageWave = { bob?: [number, number]; orbit?: [number, number]; pulse?: [number, number]; lag?: number; step?: number; delay?: number };
-export type StageOptions = { id: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; glow?: Animated<number>; wave?: StageWave };
-export type StageMotion = { id: string; sharp?: Track<number>; position: Track<Vec3>; glow: Track<number>; wave?: StageWave };
+/** `opacity` multiplies every instance inside the stage. */
+export type StageOptions = { id: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; glow?: Animated<number>; opacity?: Animated<number>; wave?: StageWave };
+export type StageMotion = { id: string; sharp?: Track<number>; position: Track<Vec3>; glow: Track<number>; opacity?: Track<number>; wave?: StageWave };
 export type Collapse = { step: number; to?: number; duration?: number; ease?: Ease };
 export type PulseOptions = { id: string; path: (string | Vec3)[]; step?: number; duration?: number; color?: Animated<string>; size?: number; trail?: number; emissive?: Animated<number> };
 export type SprayOptions = { id?: string; under?: string; position?: Vec3; rate?: number; lifetime?: number; color?: string; size?: number; spread?: Vec3; velocity?: Vec3; seed?: number; step?: number };
@@ -49,14 +50,15 @@ export type CustomOptions = PrimitiveOptions & { wgsl: string; count?: number; v
 export type SDFOptions = PrimitiveOptions & { wgsl: string; bounds: [Vec3, Vec3]; steps?: number };
 export type PostOptions = { id?: string; wgsl: string; before?: string; after?: string; reads?: string[] };
 export type EffectOptions = { use: WorldEffectUse; before?: WorldEffectStage; after?: WorldEffectStage };
+/** `rotation` is Euler XYZ in degrees about the instance's center. */
 export type PrimitiveOptions = {
   id?: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
-  emissive?: Animated<number>; scale?: Animated<Vec3>; end?: Vec3; curve?: number; thickness?: number;
+  emissive?: Animated<number>; scale?: Animated<Vec3>; rotation?: Animated<Vec3>; end?: Vec3; curve?: number; thickness?: number;
   material?: string | MaterialOptions;
 };
 export type Instance = {
   id?: string; sharp?: Track<number>; kind: PrimitiveKind; position: Track<Vec3>; size: Track<number>; color: Track<Vec3>;
-  emissive: Track<number>; scale: Track<Vec3>; end: Vec3; curve: number; thickness: number;
+  emissive: Track<number>; scale: Track<Vec3>; rotation?: Track<Vec3>; end: Vec3; curve: number; thickness: number;
   drift?: number; seed?: number;
   choreography?: ChoreographyMotion; burst?: BurstMotion;
   route?: { points: Vec3[]; lengths: number[]; draw: Track<number>; segment?: number; pulse?: TubePulse; bead?: number };
@@ -169,7 +171,7 @@ export function sampleTrack<T extends number | Vec3>(track: Track<T>, clock: Clo
 export function primitive(kind: PrimitiveKind, options: PrimitiveOptions = {}): Instance {
   return { id: options.id, sharp: options.sharp === undefined ? undefined : compileTrack(options.sharp, Number), kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]), size: compileTrack(options.size ?? 0.5),
     color: compileTrack(options.color ?? "#22d3ee", colorVector), emissive: compileTrack(options.emissive ?? 1.5),
-    scale: compileTrack<Vec3>(options.scale ?? [1, 1, 1]), end: options.end ?? [0, 2, 0], curve: options.curve ?? 0,
+    scale: compileTrack<Vec3>(options.scale ?? [1, 1, 1]), rotation: options.rotation === undefined ? undefined : compileTrack<Vec3>(options.rotation, r => r.map(d => d * Math.PI / 180) as Vec3), end: options.end ?? [0, 2, 0], curve: options.curve ?? 0,
     thickness: options.thickness ?? (kind === "ring" ? 0.04 : 0.025), material: options.material };
 }
 export function graphInstances(options: GraphOptions): Instance[] {
@@ -422,6 +424,12 @@ function stageOffset(stages: StageMotion[] | undefined, clock: ClockSample): Vec
   }
   return offset;
 }
+function stageOpacity(stages: StageMotion[] | undefined, clock: ClockSample) {
+  "worklet";
+  let opacity = 1;
+  for (const stage of stages ?? []) if (stage.opacity) opacity *= sampleTrack(stage.opacity, clock);
+  return opacity;
+}
 function stageGlow(stage: StageMotion, clock: ClockSample) {
   "worklet";
   const glow = sampleTrack(stage.glow, clock), pulse = stage.wave?.pulse;
@@ -537,7 +545,7 @@ export function instancePosition(instance: Instance, clock: ClockSample): Vec3 {
     position = routePoint(route.points, route.lengths, progress * route.lengths[route.lengths.length - 1]);
   }
   if (instance.pillar) {
-    const pillar = instance.pillar, height = pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum));
+    const pillar = instance.pillar, height = pillar.height * Math.max(0, sampleTrack(pillar.value, clock) / pillar.maximum);
     position = [position[0], position[1] + (pillar.role === "body" ? height / 2 : height), position[2]];
   }
   if (instance.pulse) {
@@ -731,6 +739,7 @@ function prepareUniformInputs(scene: PreparedWorldScene): UniformInputs {
         stages: stages.map(stage => source(stage.position)), end: glyph ? undefined : instance.end });
     }
     copy(instance.size, at + I.radius); copy(instance.scale, at + I.scale);
+    if (instance.rotation) copy(instance.rotation, at + I.rotation);
     copy(instance.color, at + I.color);
     if ([instance.emissive, ...stages.map(stage => stage.glow)].some(track => track.frames.length)) {
       plan.glows.push({ to: at + I.emissive, sources: [source(instance.emissive), ...stages.map(stage => source(stage.glow))] });
@@ -872,7 +881,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       const key = instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
         : instance.motion === "tracks" ? settledKey(instance.settle!, clock)
         // Shaders discard transparent instances, so a hidden live instance (an idle tube pulse bead) is written once, then skipped.
-        : instanceOpacity(instance, clock) === 0 ? -1 : NaN;
+        : instanceOpacity(instance, clock) * stageOpacity(instance.stages, clock) === 0 ? -1 : NaN;
       if (cache.keys[i] === key) continue;
       cache.keys[i] = key;
     }
@@ -885,7 +894,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       let emissive = sampleTrack(instance.emissive, clock) * (label.parent?.rows ? 1 - 0.6 * rowOutside(label.parent, clock) : 1);
       for (const stage of instance.stages ?? []) emissive *= stageGlow(stage, clock);
       values[index + 7] = emissive;
-      values[index + 23] = instanceOpacity(instance, clock);
+      values[index + 23] = instanceOpacity(instance, clock) * stageOpacity(instance.stages, clock);
       const logical = label.row ? rowLabelLogical(instance, clock) : 0;
       if (!cache || cache.labels[i] !== logical) {
         if (cache) cache.labels[i] = logical;
@@ -912,7 +921,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     if (instance.pillar?.role === "body") {
       // A constant track returns the scene's own array; write a copy so the frozen scene stays shared.
       const pillar = instance.pillar;
-      scale = [scale[0], Math.max(0.0001, pillar.height * Math.max(0, Math.min(1, sampleTrack(pillar.value, clock) / pillar.maximum))), scale[2]];
+      scale = [scale[0], Math.max(0.0001, pillar.height * Math.max(0, sampleTrack(pillar.value, clock) / pillar.maximum)), scale[2]];
     }
     if (part) {
       for (let axis = 0; axis < 3; axis++) values[index + I.rotation + axis] = part.rotation[axis];
@@ -920,6 +929,9 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       endpoint = [position[0] + end[0], position[1] + end[1], position[2] + end[2]];
     } else if (instance.burst) {
       const rotation = sampleBurst(instance.burst, clock).rotation;
+      for (let axis = 0; axis < 3; axis++) values[index + I.rotation + axis] = rotation[axis];
+    } else if (instance.rotation) {
+      const rotation = sampleTrack(instance.rotation, clock);
       for (let axis = 0; axis < 3; axis++) values[index + I.rotation + axis] = rotation[axis];
     }
     let color = part?.color ?? sampleTrack(instance.color, clock);
@@ -956,7 +968,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
     }
     values[index + I.curve] = curve; values[index + I.thickness] = instance.thickness;
     if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; values[index + I.thickness] = instance.card.fill; values[index + 15] = instance.card.line; }
-    values[index + I.opacity] = instanceOpacity(instance, clock);
+    values[index + I.opacity] = instanceOpacity(instance, clock) * stageOpacity(instance.stages, clock);
     const material = instance.materialTracks!;
     if (instance.material) {
       const sampledAlbedo = part?.color && !("glyph" in instance) ? part.color : sampleTrack(material.albedo, clock);
@@ -1069,20 +1081,20 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   for (const instance of instances) {
     if (instance.id && anchorIds.has(instance.id)) instance.anchor = true;
     const material = instance.materialTracks!;
-    if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim].every(still) &&
+    if ([instance.position, instance.size, instance.color, instance.emissive, instance.scale, ...instance.rotation ? [instance.rotation] : [], material.albedo, material.roughness, material.metal, material.rim].every(still) &&
       (!instance.label || still(instance.label.offset) && still(instance.label.opacity) && !instance.label.parent) &&
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (!instance.card?.opacity || still(instance.card.opacity)) &&
-      (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow) && !stage.wave) &&
+      (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow) && !stage.opacity && !stage.wave) &&
       !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
       const collapses = !!instance.voxel?.options.collapse;
       if (!instance.drift) instance.motion = collapses ? "voxel" : "static";
       else if (!collapses) instance.motion = "drift";
     }
     else if (!instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.drift && !instance.pulse && !instance.spray && !instance.rows && !instance.graph &&
-      !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor && !instance.stages?.some(stage => stage.wave)) {
+      !instance.endpoints && !instance.voxel && !instance.label?.parent && !instance.label?.attach && !instance.anchor && !instance.stages?.some(stage => stage.wave || stage.opacity)) {
       instance.motion = "tracks";
-      instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, material.albedo, material.roughness, material.metal, material.rim,
+      instance.settle = keyframeSpans([instance.position, instance.size, instance.color, instance.emissive, instance.scale, ...instance.rotation ? [instance.rotation] : [], material.albedo, material.roughness, material.metal, material.rim,
         ...instance.label ? [instance.label.offset, instance.label.opacity] : [], ...instance.glyph ? [instance.glyph.offset, instance.glyph.rotation, instance.glyph.opacity] : [],
         ...instance.card?.opacity ? [instance.card.opacity] : [],
         ...(instance.stages ?? []).flatMap(stage => [stage.position, stage.glow])]);

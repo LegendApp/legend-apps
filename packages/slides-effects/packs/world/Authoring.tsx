@@ -1206,9 +1206,10 @@ function sequenced(id: string, part: ReactNode, sequence: Sequence | undefined) 
   return <Stage key={id} id={`${id}/sequence`} position={frames}>{part}</Stage>;
 }
 /** A chart's `from`: sibling part `part` lifts off on `step` after `delay`, flies `duration` seconds to the chart's foot as a glowing block,
- * squares up, lands with sparks and spreads into the plinth the chart grows out of. */
-type ChartFrom = { part: string; step?: number; delay?: number; duration?: number };
-const launchOf = ({ step = 0, delay = 0, duration = .75 }: ChartFrom) => ({ step, delay, duration, land: delay + duration });
+ * squares up, lands with sparks and spreads into the plinth the chart grows out of. With `fold`, the part's panel instead tips back flat as its
+ * contents fade, sinks into the chart's base plate and tints to `color`. */
+type ChartFrom = { part: string; step?: number; delay?: number; duration?: number; fold?: boolean; color?: string };
+const launchOf = ({ step = 0, delay = 0, fold = false, duration = fold ? 1.1 : .75 }: ChartFrom) => ({ step, delay, duration, fold, land: delay + duration });
 /** The value an animated prop holds as `step` begins. */
 function restAt<T>(value: Animated<T>, step: number): T {
   if (Array.isArray(value) && typeof value[0] === "object") return (value as Keyframe<T>[]).filter((f, i) => !i || (f.step ?? 0) < step).at(-1)!.value;
@@ -1248,6 +1249,22 @@ function chartLaunch(chart: PartProps, from: ChartFrom, rect: { center: V3; size
     <Burst id={`${id}/landing`} position={landing} step={step} delay={land} count={28} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.03} speed={3.2} />
   </Fragment>;
 }
+/** The base plate a folding source panel at `rect` becomes: it tips back about its x axis while sinking forward to the chart's foot,
+ * then flashes and tints to the plate color. */
+function chartFold(chart: PartProps, from: ChartFrom, rect: { center: V3; size: V3 }, INK: Ink): ReactNode {
+  const { step, delay, duration, land } = launchOf(from), id = `${chart.id}/from`, foot = (chart.at ?? [0, 3.2, 0]) as V3;
+  const items = chart.items as unknown[], { width = 1.5, gap = 3.4 } = chart as Record<string, number>, depth = Number(chart.depth ?? width);
+  const plate = paint(from.color ?? "link", INK.colors) as string, back = -depth / 2 - .35, front = depth + .45, thick = .16;
+  // Plate scale is in the panel's own frame: once tipped back 90°, its height runs along z and its thickness along y.
+  const size: V3 = [(items.length - 1) * gap + width + 1, front - back, thick], seat = add(foot, [0, -thick / 2, (back + front) / 2]);
+  const at = <T,>(t: number, value: T, d = 0, e: Ease = "inOut") => ({ step, delay: t, value, duration: d, ease: e });
+  return <RoundedBox key={id} id={id} radius={.07} edge={.5} material={{ metal: .55, roughness: .16 }}
+      position={[{ step: 0, value: add(rect.center, [0, 0, -.04]) }, at(delay, seat, duration)]}
+      rotation={[{ step: 0, value: [0, 0, 0] }, at(delay, [-90, 0, 0], duration)]}
+      scale={[{ step: 0, value: [1e-4, 1e-4, 1e-4] }, at(delay, rect.size), at(delay, size, duration)]}
+      color={[{ step: 0, value: INK.colors.panel }, at(land, plate, .4, "out")]}
+      emissive={[{ step: 0, value: .08 }, at(land, 1.4, .12, "out"), at(land + .12, .25, .6, "out")]} />;
+}
 function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }): ReactNode {
   const charts: PartProps[] = [];
   Children.forEach(children, child => { if (isValidElement<PartProps>(child) && (child.type as { worldPart?: string }).worldPart === "bars" && child.props.from) charts.push(place("bars", child.props) as PartProps); });
@@ -1272,10 +1289,12 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
     const chart = sources.get(own);
     if (!chart) return part;
     launched.add(own);
-    // The source drops out of sight just after the block flashes over it.
-    const { step, delay } = launchOf(chart.from as ChartFrom), rect = panelRect(part, id, step) ?? { center: position, size: [2, 1.2, .06] as V3 };
-    return <Fragment key={id}><Stage id={`${id}/launch`} position={[{ step: 0, value: [0, 0, 0] }, { step, delay: delay + .06, value: [0, -60, 0], duration: 0 }]}>{part}</Stage>
-      {chartLaunch(chart, chart.from as ChartFrom, rect, INK)}</Fragment>;
+    // The source drops out of sight just after the block flashes over it, or fades as its panel folds away.
+    const from = chart.from as ChartFrom, { step, delay, fold } = launchOf(from), rect = panelRect(part, id, step) ?? { center: position, size: [2, 1.2, .06] as V3 };
+    const gone = delay + (fold ? .4 : .06);
+    return <Fragment key={id}><Stage id={`${id}/launch`} position={[{ step: 0, value: [0, 0, 0] }, { step, delay: gone, value: [0, -60, 0], duration: 0 }]}
+      {...fold ? { opacity: [{ step: 0, value: 1 }, { step, delay, value: 0, duration: .35 }] } : {}}>{part}</Stage>
+      {(fold ? chartFold : chartLaunch)(chart, from, rect, INK)}</Fragment>;
   });
   for (const [part, chart] of sources) if (!launched.has(part)) throw Error(`Bars ${chart.id} grows from ${part}, which must be a part beside it in the same scene.`);
   return expanded;
@@ -1299,14 +1318,16 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       scale={[{ at: delay, value: [0,.09,.12], duration: 0 }, { at: delay, value: [width,.09,.12], duration: .7 }]} />; }
   if (kind === "bars") {
     const items = props.items as { label: string; value: number; color?: string }[], maximum = Number(props.max ?? Math.max(...items.map(b => b.value)));
-    // Bars grown `from` another part stay out of sight until its block lands, then rise out of the plinth quicker.
+    // Bars grown `from` another part stay out of sight until its block lands, then rise out of the plinth quicker; out of a folded plate once it has tinted, with a spring.
     const launch = props.from ? launchOf(props.from as ChartFrom) : undefined;
-    const { height = 4.3, width = 1.5, depth = width, gap = 3.4, delay = launch ? launch.land + .1 : 1, stagger = launch ? .1 : .35, duration = launch ? .9 : 1.6, ease = "out", labelSize = .44 } = props as Record<string, number> & { ease?: Ease };
+    const { height = 4.3, width = 1.5, depth = width, gap = 3.4, delay = launch ? launch.land + (launch.fold ? .4 : .1) : 1, stagger = launch ? launch.fold ? .14 : .1 : .35,
+      duration = launch ? launch.fold ? 1.1 : .9 : 1.6, ease = launch?.fold ? "spring" : "out", labelSize = .44 } = props as Record<string, number> & { ease?: Ease };
     const tint = props.color === undefined ? undefined : paint(props.color, INK.colors) as string;
-    return <Stage id={id} position={launch ? [{ step: 0, value: add(position, [0, -60, 0]) }, { step: launch.step, delay: launch.land + .08, value: position, duration: 0 }] : position}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
+    return <Stage id={id} position={launch ? [{ step: 0, value: add(position, [0, -60, 0]) }, { step: launch.step, delay: launch.land + (launch.fold ? 0 : .08), value: position, duration: 0 }] : position}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
       <Pillar id={`${id}/${i}`} value={b.value} maximum={maximum} height={height} width={width} depth={depth} color={b.color === undefined ? tint : paint(b.color, INK.colors) as string}
+        radius={Math.min(width, depth) * .12} gradient={.45} counter={false}
         position={[x,0,0]} {...launch ? { step: launch.step, delay: delay + i * stagger } : { at: delay + i * stagger }} duration={duration} ease={ease} />
-      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, position: [x,.45,depth + .1], size: labelSize, depth: .1, delay: delay + .2 + i * stagger * .12 / .35, duration: .7,
+      {textLine("headline", { id: `${id}/${i}/label`, text: b.label, position: [x,.3,depth / 2 + .3], size: labelSize, flat: true, delay: delay + .2 + i * stagger * .12 / .35, duration: .7,
         ...launch ? { enter: { step: launch.step } } : {} }, INK)}
     </Fragment>; })}</Stage>;
   }

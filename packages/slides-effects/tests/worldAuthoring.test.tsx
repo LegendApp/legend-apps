@@ -128,6 +128,32 @@ test("bars grown from a sibling part carry its panel to their foot as a block an
   expect(() => expandScene(<Bars id="b" from={{ part: "nope" }} items={[{ label: "A", value: 1 }]} />)).toThrow("grows from nope");
 });
 
+test("bars folding a sibling panel tip it back flat into their base plate, tint it and spring up out of it", () => {
+  const parts = flat(expandScene(<>
+    <CodePanel id="src" at={[-4, 4, 0]}>{fence}</CodePanel>
+    <Bars id="b" at={[3, 0, 0]} width={1} gap={2} from={{ part: "src", step: 2, delay: .1, duration: 1, fold: true, color: "#3b82f6" }} items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />
+  </>));
+  const plate = parts.find(n => n.type === RoundedBox && n.props.id === "b/from")!.props, card = parts.find(n => n.props.id === "src/card")!.props;
+  const [rest, fold] = plate.position as { step?: number; delay?: number; value: number[] }[];
+  expect(rest.value[0]).toBeCloseTo(-4 + (card.position as number[])[0]);
+  // Forward and down only: the plate settles below and in front of the panel.
+  expect(fold).toMatchObject({ step: 2, delay: .1, duration: 1 });
+  expect(fold.value[1]).toBeLessThan(rest.value[1]);
+  expect(fold.value[2]).toBeGreaterThan(rest.value[2]);
+  expect(fold.value[1] + .08).toBeCloseTo(0);
+  expect((plate.rotation as { value: number[] }[]).at(-1)!.value).toEqual([-90, 0, 0]);
+  expect((plate.scale as { value: number[] }[])[1].value).toEqual(card.scale as number[]);
+  expect((plate.scale as { value: number[] }[]).at(-1)!.value).toEqual([4, 2.3, .16]);
+  expect((plate.color as { delay?: number; value: string }[]).at(-1)).toMatchObject({ delay: 1.1, value: "#3b82f6" });
+  const source = parts.find(n => n.props.id === "src/launch")!.props;
+  expect(source.opacity).toEqual([{ step: 0, value: 1 }, { step: 2, delay: .1, value: 0, duration: .35 }]);
+  expect((source.position as { delay?: number }[])[1].delay).toBeCloseTo(.5);
+  expect(parts.some(n => n.type === Burst)).toBe(false);
+  const rise = parts.filter(n => n.type === Pillar);
+  expect(rise.map(n => [n.props.step, n.props.ease])).toEqual([[2, "spring"], [2, "spring"]]);
+  rise.forEach((n, i) => expect(n.props.delay as number).toBeCloseTo(1.5 + i * .14));
+});
+
 test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", async () => {
   const nodes = placeTree([{ id: "r" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }, { id: "b1", p: 2 }], { width: 12, levelHeight: 1 });
   expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2,1],[4,1],[-4,0],[0,0],[4,0]]);

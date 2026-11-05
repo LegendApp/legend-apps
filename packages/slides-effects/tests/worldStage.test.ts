@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { cameraPathPoint, easeProgress, evaluateCamera, type ClockSample } from "../packs/world/camera";
 import { tree } from "../packs/world/graph";
 import { renderTreeInstances } from "../packs/world/renderTree";
-import { prepareWorldScene, sampleWorldUniforms, instancePosition, instanceOpacity, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { compileTrack, prepareWorldScene, sampleWorldUniforms, instancePosition, instanceOpacity, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { roundedBoxInstances, routedTubeInstances, pillarInstances, stoplightInstances } from "../packs/world/stage";
 import { routePoint } from "../packs/world/stageMotion";
 import { worldGraphTopology } from "../packs/world/render";
@@ -97,6 +97,31 @@ test("reused uniform buffers keep route and pillar motion live across samples an
   const pulse = scene.instances.find(i => i.id === "edge:pulse:0:0")!;
   expect(instanceOpacity(pulse, jumped)).toBe(0);
   expect(instancePosition(scene.instances.find(i => i.id === "value:cap")!, jumped)[1]).toBe(0);
+});
+
+test("rotation keyframes and stage opacity reach instance uniforms, live and cached", () => {
+  const turn = [{ step: 0, value: [0, 0, 0] as [number, number, number] }, { step: 1, value: [-90, 0, 0] as [number, number, number], duration: 1, ease: "linear" as const }];
+  const [slab] = roundedBoxInstances({ id: "slab", rotation: turn }), [lone] = roundedBoxInstances({ id: "lone", rotation: turn, position: [3, 0, 0] });
+  slab.stages = [{ id: "fade", position: compileTrack<[number, number, number]>([0, 0, 0]), glow: compileTrack(1), opacity: compileTrack([{ step: 0, value: 1 }, { step: 1, value: 0, duration: 1, ease: "linear" }]) }];
+  const scene = prepareWorldScene({ instances: [slab, lone] }), field = (values: ArrayLike<number>, id: string, offset: number) =>
+    values[worldHeaderSize + scene.instances.findIndex(i => i.id === id) * worldInstanceSize + offset];
+  const mid = sampleWorldUniforms(scene, clock(2.5));
+  expect(field(mid, "slab", 20)).toBeCloseTo(-Math.PI / 4);
+  expect(field(mid, "slab", 23)).toBeCloseTo(.5);
+  expect(field(mid, "lone", 23)).toBe(1);
+  sampleWorldUniforms(scene, clock(2.5), undefined, 1, 1, true);
+  const done = sampleWorldUniforms(scene, clock(4), undefined, 1, 1, true);
+  expect(field(done, "slab", 20)).toBeCloseTo(-Math.PI / 2);
+  expect(field(done, "slab", 23)).toBe(0);
+});
+
+test("rounded pillars use a gradient geometry and may overshoot their height while springing", () => {
+  const instances = pillarInstances({ id: "v", value: 100, maximum: 100, height: 4, step: 1, duration: 1, ease: "spring", radius: .1, gradient: .4, counter: false });
+  expect(instances.map(i => i.id)).toEqual(["v"]);
+  expect(instances[0].custom!.wgsl).toContain("1.-0.400000*(1.-rise)");
+  const scene = prepareWorldScene({ instances }), body = worldHeaderSize + scene.instances.findIndex(i => i.id === "v") * worldInstanceSize;
+  expect(sampleWorldUniforms(scene, clock(2.32))[body + 9]).toBeGreaterThan(4.2);
+  expect(sampleWorldUniforms(scene, clock(4))[body + 9]).toBeCloseTo(4);
 });
 
 test("rounded boxes with the same geometry share one custom draw", () => {
