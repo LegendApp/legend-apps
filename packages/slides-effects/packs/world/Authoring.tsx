@@ -751,11 +751,12 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const count = Number(props.count ?? 36), columns = Number(props.columns ?? 6), [cw, ch] = (props.cell ?? [1.2, .7]) as [number, number], label = String(props.label ?? "");
   const tall = props.resize === "height", top = tall && props.anchor !== "center", grow = tall ? Number(props.grow ?? 0) : 0;
   const rows = Math.ceil(count / columns), total = rows + grow, px = cw + .18, py = ch + .18, width = columns * px, height = rows * py;
-  const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string; repeat?: "infinite" } | undefined, hot = flash?.color ?? INK.amber;
+  const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string; repeat?: "infinite"; while?: "resizing" } | undefined, hot = flash?.color ?? INK.amber;
   const start = flash?.delay ?? 0, length = flash?.repeat === "infinite" ? 1 / (flash.rate ?? 8) : flash?.duration ?? 10, beats = flash ? Array.from({ length: Math.round(length * (flash.rate ?? 8)) }, (_, k) => start + k / (flash.rate ?? 8)) : [];
   const emission = flash ? [{ step: 0, value: flash.repeat === "infinite" ? 1 : .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : [];
-  const emissive = flash?.repeat === "infinite" ? loopTrack(emission, flash.step, length, start) : flash ? emission : .7;
-  const color = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
+  let emissive = flash?.repeat === "infinite" ? loopTrack(emission, flash.step, length, start) : flash ? emission : .7;
+  let color: Animated<string> = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
+  let textEmissive: Animated<number> = .8;
   // Growing windows drag slower and hold at each end so the revealed rows read.
   const move = grow ? 1.2 : .7, beat = move + (grow ? .5 : 0), reach = grow ? grow * py : .9;
   const drag = flash ? Array.from({ length: flash.repeat === "infinite" ? 2 : Math.ceil(length / beat) }, (_, k) => ({ at: start + k * beat, pull: k % 2 ? 0 : reach })) : [];
@@ -766,6 +767,17 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
       bar: [x / 2, (h + bar + y) / 2 - offset, -.17] as V3, barScale: [w + x, bar, .04] as V3 };
   };
   const loop = <T,>(frames: Keyframe<T>[]) => flash?.repeat === "infinite" ? loopTrack(frames, flash.step, 2 * beat, start) : frames;
+  if (flash?.while === "resizing") {
+    const period = 1 / (flash.rate ?? 8);
+    const pulse = <T,>(rest: T, peak: T) => loop([{ step: 0, value: rest }, ...drag.flatMap(d =>
+      Array.from({ length: Math.ceil(move / period) }, (_, k) => {
+        const at = d.at + k * period, duration = Math.min(period * .8, move - k * period);
+        return [key(flash.step, peak, at, duration * .15), key(flash.step, rest, at + duration * .25, duration * .75)];
+      }).flat())]);
+    emissive = pulse(.7, 5);
+    color = pulse(INK.idle, hot);
+    textEmissive = pulse(.8, 2.4);
+  }
   const track = (pick: (f: ReturnType<typeof frame>) => V3) => flash ? loop([{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash.step, pick(frame(d.pull)), d.at, move, "smoothstep"))]) : pick(frame(0));
   // A row beyond the starting window appears once the dragged frame clears it and leaves as it closes back over it.
   const reveal = (y: number) => {
@@ -784,7 +796,7 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     <Box id={`${id}/handle`} size={.5} position={track(f => f.handle)} scale={[.3,.3,.3]} color={hot} emissive={flash ? [{ step: 0, value: 0 }, key(flash.step, 3, start, .3)] : 0} />
     {Array.from({ length: count + grow * columns }, (_, i) => { const x = (i % columns - (columns - 1) / 2) * px, y = -(Math.floor(i / columns) - ((top ? rows : total) - 1) / 2) * py, opacity = reveal(y); return <Fragment key={i}>
       <Card id={`${id}/${i}`} position={[x, y, 0]} scale={[cw, ch, .2]} color={color} emissive={emissive} opacity={opacity} />
-      {label && <Text3D id={`${id}/${i}/label`} text={label} mono size={.16 * TYPE} position={[x, y, .12]} color={INK.white} emissive={.8} opacity={opacity} />}
+      {label && <Text3D id={`${id}/${i}/label`} text={label} mono size={.16 * TYPE} position={[x, y, .12]} color={INK.white} emissive={textEmissive} opacity={opacity} />}
     </Fragment>; })}
   </Stage>;
 }

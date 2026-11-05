@@ -945,6 +945,8 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   On `recycle` the key that left the top travels behind the column into the entering slot, emptied on `scroll`, and takes its key.
 - `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
   second while a resize handle drags its frame. `flash.repeat: "infinite"` loops both.
+  `flash.while: "resizing"` pulses every cell and label at `rate` Hz during each drag,
+  returning their color and brightness to rest during the holds. Revealed rows share the same pulse.
   `resize: "height"` keeps the top edge fixed and drags the bottom edge; `anchor: "top"`
   is the default, while `anchor: "center"` moves both edges equally. `grow` adds that many
   rows of cells below the starting rows (around them for a centered anchor), revealed as the
