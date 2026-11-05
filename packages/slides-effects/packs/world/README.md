@@ -870,7 +870,7 @@ composition. Name a layout and the parts place themselves:
 | `keys` | `title`, `keys` | A heading over a keyed list |
 | `tree-wide` | `title`, `subtitle`, `tree` | A five-level tree laid out by leaves |
 | `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees side by side, 9.6 apart |
-| `tree-sequence` | `title`, `caption1`–`5`, `tree1`–`5` | Trees stacked in the center, shown one at a time with part `sequence` |
+| `tree-sequence` | `caption1`–`5`, `tree1`–`5`, `title` | Trees stacked in the center, shown one at a time with part `sequence`; headlines fill the captions above the trees first |
 | `code-grid` | `code`, `grid` | Code on the left, a grid of cells on the right |
 | `code-center` | `code` | One centered code panel |
 | `morph` | `morph` | A tall centered morphing code panel |

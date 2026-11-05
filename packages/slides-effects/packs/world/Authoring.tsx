@@ -235,11 +235,11 @@ export const sceneLayouts: Record<string, SceneLayout> = {
       [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
     ...Object.fromEntries([-4.5, 0, 4.5].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .24, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
   } },
-  /** Captioned trees stacked in the center of frame, one shown at a time; give each pair a `sequence`. */
+  /** Captioned trees stacked in the center of frame, one shown at a time; give each pair a `sequence`. Headlines fill the captions, centered over their trees, before the title. */
   "tree-sequence": { camera: { position: [0,4.6,14.3], target: [0,4.2,0], via: [-3.5,7,22], viaTarget: [0,2.5,13] }, slots: {
-    title: { ...heading, at: [-8.2,9,0] },
     ...Object.fromEntries([1, 2, 3, 4, 5].flatMap(i => [[`caption${i}`, { kind: "headline", at: [0,8.5,0], size: .42, depth: .12, track: .02, delay: .4 }],
       [`tree${i}`, { kind: "tree", at: [0,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
+    title: { ...heading, at: [-8.2,9,0] },
   } },
   /** A code panel on the left and a grid of cells on the right. */
   "code-grid": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {

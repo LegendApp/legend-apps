@@ -74,8 +74,9 @@ test("a sequence shows one part at a time: each waits right, slides to center on
   expect(find(scene, Stage, "first/sequence").props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 1, ...move, value: [-d, 0, 0] }]);
   expect(find(scene, Stage, "second/sequence").props.position).toEqual([{ step: 0, value: [d, 0, 0] }, { step: 1, ...move, value: [0, 0, 0] }, { step: 2, ...move, value: [-d, 0, 0] }]);
   expect(find(scene, Stage, "last/sequence").props.position).toEqual([{ step: 0, value: [30, 0, 0] }, { step: 2, ...move, value: [0, 0, 0] }]);
-  // The layout stacks every tree in the center of frame.
+  // The layout stacks every tree in the center of frame, and a headline takes the centered caption above it, not the top-left title.
   expect(find(scene, Stage, "second").props.position).toEqual(find(scene, Stage, "last").props.position);
+  expect(find(scene, Text3D, "first").props.position).toEqual([0, 8.5, 0]);
   expect(() => checkPart("tree", { id: "t", nodes: [{ id: "a" }], sequence: { in: 1.5 } })).toThrow("sequence.in must be a step number");
 });
 
