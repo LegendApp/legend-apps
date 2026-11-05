@@ -86,13 +86,13 @@ const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " 
   enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]),
   sequence: shape({ in: step, out: step, distance: positive(), delay: motion.delay, duration: motion.duration, ease }) };
 const textFields: Fields = { size: positive(), depth: number(0), track: number(), lineHeight: positive(), emissive: animated(number(0)), mono: flag, align: oneOf("left", "center", "right") };
-const codeMarks = list(shape({ text, color, opacity: fraction, step, delay: number(0, " of seconds") }, ["text"]), true);
+const codeMarks = list(shape({ text, opacity: fraction, step, delay: number(0, " of seconds") }, ["text"]), true);
 const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
   code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), border: number(0), flat: flag, marks: codeMarks },
   grid: { chrome: oneOf("mac"), fill: fraction, border: number(0), resize: oneOf("width", "height"), anchor: oneOf("top", "center"), grow: number(0) },
-  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ color, opacity: fraction, word: shape({ color, opacity: fraction }) }), marks: codeMarks },
-  trace: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ source: color, reads: color, pass: color, opacity: fraction }) },
+  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ opacity: fraction, word: shape({ opacity: fraction }) }), marks: codeMarks },
+  trace: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ opacity: fraction }) },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive(),
     from: shape({ part: text, step, delay: number(0, " of seconds"), duration: positive(" of seconds"), fold: flag, color }, ["part"]) },

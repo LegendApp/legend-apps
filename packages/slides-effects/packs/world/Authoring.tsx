@@ -623,7 +623,9 @@ const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) 
 const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay = 0): Keyframe<T>[] => [frames[0], {
   step, delay, value: frames[0].value, duration: 0, loop: { every, frames: frames.slice(1).map(f => ({ ...f, at: (f.delay ?? 0) - delay, step: undefined, delay: undefined })) },
 }];
-type CodeMark = { text: string; color?: string; opacity?: number; step?: number; delay?: number };
+type CodeMark = { text: string; opacity?: number; step?: number; delay?: number };
+/** The one code highlight: a cool blue band, a 1px lighter outline (22% white per unit of `edge` sets its alpha) and 4px corners. `opacity` fades it. */
+const HIGHLIGHT = { flat: true, color: "#5a96ff", material: { albedo: "#8cb9ff" }, fill: .3, line: 1, edge: .55 / .22, glow: 0, radius: -4 } as const;
 /** Tree box face and edge albedo: lighter than night scenery so idle boxes read; flashes glow on top. */
 const TREE_BOX = { fill: "#2a303a", border: "#8a94a3" };
 /** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
@@ -904,9 +906,8 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
   const width = Math.max(...widths), height = (s: number) => (states[s].length - 1) * rowHeight(s) + em + .6;
   const panel = (s: number) => ({ position: [widths[s] / 2 - .3, -(height(s) - em - .6) / 2, -.14] as V3, scale: [widths[s], height(s), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
-  const highlight = props.highlight as { color?: string; opacity?: number; word?: { color?: string; opacity?: number } } | undefined;
-  const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
-  const wordColor = paint(highlight?.word?.color, INK.colors) as string ?? highlightColor, wordOpacity = highlight?.word?.opacity ?? highlightOpacity * 1.5;
+  const highlight = props.highlight as { opacity?: number; word?: { opacity?: number } } | undefined;
+  const highlightOpacity = highlight?.opacity ?? 1, wordOpacity = highlight?.word?.opacity ?? highlightOpacity;
   // On a changed line that keeps some tokens, each run of new tokens gets its own band over the line band.
   const words = bands.flatMap((band, t) => band.after.flatMap(row => {
     const line = lines[states[t + 1][row]], fresh = line.parts.map(part => parts[part.id].positions[t] === undefined);
@@ -921,17 +922,17 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
   }));
   return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map((_, s) => height(s))))}>
     <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...panelStyle(props)} color={INK.colors.panel} />
-    {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
-      position={[widths[t + side] / 2 - .3, -row * rowHeight(t + side), -.07]} scale={[widths[t + side] - .2, rowHeight(t + side), .02]} color={highlightColor}
+    {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card {...HIGHLIGHT} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
+      position={[widths[t + side] / 2 - .3, -row * rowHeight(t + side), -.07]} scale={[widths[t + side] - .2, rowHeight(t + side), .02]}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         key(band.step + 1, 0, 0, 0)]} />)))}
-    {words.map(({ row, from, to, t, step }) => <Card flat fill={1} edge={0} glow={0} radius={.03} key={`${t}/${row}/${from}`} id={`${id}/word${t}/${row}/${from}`}
-      position={[(from + to) / 2 * advance, -row * rowHeight(t + 1), -.06]} scale={[(to - from) * advance + .08, rowHeight(t + 1) * .84, .02]} color={wordColor}
+    {words.map(({ row, from, to, t, step }) => <Card {...HIGHLIGHT} key={`${t}/${row}/${from}`} id={`${id}/word${t}/${row}/${from}`}
+      position={[(from + to) / 2 * advance, -row * rowHeight(t + 1), -.06]} scale={[(to - from) * advance + .08, rowHeight(t + 1) * .84, .02]}
       opacity={[{ step: 0, value: 0 }, key(step, wordOpacity, settle, .3), key(step + 1, 0, 0, 0)]} />)}
     {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
       const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];
       return states[shownAt].flatMap((line, row) => [...lines[line].text.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found =>
-        <Card flat fill={1} edge={0} glow={0} radius={.02} opacity={mark.opacity ?? .12} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} color={paint(mark.color, INK.colors) as string ?? INK.amber}
+        <Card {...HIGHLIGHT} opacity={mark.opacity ?? 1} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`}
           position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35), key(mark.step + 1, [0,0,0] as V3, 0, 0)] : scale} />));
     })}
     {parts.map((part, n) => {
@@ -949,7 +950,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
       if (line.removed === undefined || !line.text.trim()) return null;
       const row = line.rows[line.rows.length - 1]!, indent = line.text.length - line.text.trimStart().length;
       const strike = (line.text.trimEnd().length - indent) * advance + .1, x = indent * advance;
-      return <Box key={n} id={`${id}/${n}/strike`} size={.5} color={highlightColor}
+      return <Box key={n} id={`${id}/${n}/strike`} size={.5} color={HIGHLIGHT.color}
         position={[{ step: 0, value: [x, -row * lineHeight, .1] }, key(line.removed, [x + strike / 2, -row * lineHeight, .1], 0, .25)]}
         scale={[{ step: 0, value: [0, .025, .025] }, key(line.removed, [strike, .025, .025], 0, .2), key(line.removed, [strike, 0, 0], .25, .15)]} />;
     })}
@@ -965,8 +966,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
   const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
   const hot = [origin, ...reads].sort((a, b) => a - b), gap = lineHeight * 1.8;
   const width = Math.max(...lines.map(l => l.length)) * advance + .9, full = (lines.length - 1) * lineHeight + em + .6, short = (hot.length - 1) * gap + em + .6;
-  const highlight = props.highlight as { source?: string; reads?: string; pass?: string; opacity?: number } | undefined;
-  const tone = (n: number) => paint(n === origin ? highlight?.source ?? "hot" : reads.includes(n) ? highlight?.reads ?? "link" : highlight?.pass ?? "idle", INK.colors) as string;
+  const bandOpacity = (props.highlight as { opacity?: number } | undefined)?.opacity ?? 1;
   const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   const centered: V3 = [at[0] - width / 2 + .3, at[1] + (full - em - .6) / 2, at[2]];
@@ -980,7 +980,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
       let offset = 0;
       return rows.map(text => { const line: DiffLine = [mark, text, lineTokens(syntax, offset, text.length)]; offset += text.length + 1; return line; });
     };
-    const tree = codeMorph(id, [0,0,0], { ...props, anchor: undefined, step: collapse, highlight: { color: highlight?.reads ?? "link", opacity: 0, word: { opacity: .18 } } },
+    const tree = codeMorph(id, [0,0,0], { ...props, anchor: undefined, step: collapse, highlight: { opacity: 0, word: { opacity: bandOpacity } } },
       [[...diff(lines, tokens, "-"), ...diff(target, targetTokens, "+")]], INK, gap);
     morph = React.Children.map(tree.props.children, child => {
       if (!isValidElement<Record<string, unknown>>(child)) return child;
@@ -1000,9 +1000,9 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
     });
   }
   return <Stage id={id} position={position}>
-    {morph && lines.map((_, n) => (hot.includes(n) || pass.includes(n)) && <Card key={`mark${n}`} id={`${id}/${n}/glow`} flat fill={1} edge={0} glow={0} radius={.02} color={tone(n)}
+    {morph && lines.map((_, n) => (hot.includes(n) || pass.includes(n)) && <Card key={`mark${n}`} id={`${id}/${n}/glow`} {...HIGHLIGHT}
       position={[width / 2 - .3, -n * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]}
-      opacity={[{ step: 0, value: 0 }, key(mark, highlight?.opacity ?? .12, 0, .4), key(collapse, 0, 0, .3)]} />)}
+      opacity={[{ step: 0, value: 0 }, key(mark, bandOpacity, 0, .4), key(collapse, 0, 0, .3)]} />)}
     {morph ?? <>
     <Card id={`${id}/card`} {...panelStyle(props)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
@@ -1010,10 +1010,10 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
     {lines.map((text, n) => {
       const kept = hot.indexOf(n), y0 = -n * lineHeight, y1 = -kept * gap;
       const syntax = lineTokens(tokens, lines.slice(0, n).reduce((sum, line) => sum + line.length + 1, 0), text.length);
-      const band = kept >= 0 || pass.includes(n) ? <Card id={`${id}/${n}/glow`} flat fill={1} edge={0} glow={0} radius={.02} color={tone(n)}
+      const band = kept >= 0 || pass.includes(n) ? <Card id={`${id}/${n}/glow`} {...HIGHLIGHT}
         position={[{ step: 0, value: [width / 2 - .3, y0, -.07] }, key(collapse, [width / 2 - .3, kept < 0 ? y0 : y1, -.07], .45, .5)]}
         scale={[width - .2, lineHeight, .02]}
-        opacity={[{ step: 0, value: 0 }, key(mark, highlight?.opacity ?? .12, 0, .4), key(kept < 0 ? collapse : extract, 0, 0, .3)]} /> : null;
+        opacity={[{ step: 0, value: 0 }, key(mark, bandOpacity, 0, .4), key(kept < 0 ? collapse : extract, 0, 0, .3)]} /> : null;
       if (kept < 0) return <Fragment key={n}>{band}<Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono flat={props.flat !== false} size={em} align="left" position={[0, y0, 0]}
         glyphs={() => ({ scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} /></Fragment>;
       const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2;
@@ -1341,7 +1341,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
         const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];
-        return <Card flat fill={1} edge={0} glow={0} radius={.02} opacity={mark.opacity ?? .12} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} color={paint(mark.color, INK.colors) as string ?? INK.amber}
+        return <Card {...HIGHLIGHT} opacity={mark.opacity ?? 1} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`}
           position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35)] : scale} />;
       })))}
     </Stage>;

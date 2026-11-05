@@ -31,8 +31,8 @@ export type LabelWeight = "regular" | "medium" | "bold";
 export type LabelAlign = "left" | "center" | "right";
 export type LabelOptions = { id?: string; sharp?: Animated<boolean>; text: string; attach?: string; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; opacity?: Animated<number>; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
-/** Rounded card shape: corner `radius` and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it),
- * `fill` the body's opacity (0 to 1) under the rim and glow, for a translucent plate. A `line` width in device pixels draws the rim as a light border, 22% white per unit of `edge`. */
+/** Rounded card shape: corner `radius` (negative for device pixels) and outer `glow` width in world units, `edge` rim strength, `avatar` disc radius as a fraction of half the height (0 hides it),
+ * `fill` the body's opacity (0 to 1) under the rim and glow, for a translucent plate. A `line` width in device pixels draws the rim as a light border, 22% white per unit of `edge` (a `flat` card's border is its material albedo). */
 export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?: number; fill?: number; line?: number };
 /** A rounded card with an optional avatar (initials default to the title's first letter), a title, a second line and a right-aligned meta tag.
  * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */

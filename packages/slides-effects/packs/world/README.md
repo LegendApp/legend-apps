@@ -956,16 +956,14 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
 - `CodeMorph` takes one ```` ```diff-tsx ```` fence per step after the first, each starting from
   the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
   Matching tokens carry over with their syntax colors; changed tokens fade out and in.
-  Only deleted lines are struck through. `highlight={{ color: "#be91ff", opacity: .12 }}`
-  sets the soft background bands on changed lines. On a changed line that keeps some tokens, each
-  run of new tokens also gets a word band; `highlight.word={{ color, opacity }}` styles it
-  (default: the band color at 1.5 times its opacity). Put changes that should land together in one fence.
+  Only deleted lines are struck through. Changed lines get the standard code highlight band
+  (`highlight={{ opacity }}` fades it; 0 hides it). On a changed line that keeps some tokens, each
+  run of new tokens also gets a word band; `highlight.word={{ opacity }}` fades it separately. Put changes that should land together in one fence.
   Line and word bands, and marks with a `step`, clear when the next step begins.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
   tree of `nodes` labels on `extract`, with continuously repeating edge pulses. Syntax colors stay
-  intact throughout. `highlight={{ source: "hot", reads: "link", pass: "idle", opacity: .12 }}`
-  styles soft line backgrounds. The `trace` layout centers the code, then centers the tree
+  intact throughout. Those lines get the standard code highlight; `highlight={{ opacity }}` fades it. The `trace` layout centers the code, then centers the tree
   on extraction; `anchor="center"` also enables this framing at an explicit `at` position.
   Add a second syntax fence with one compact line per source/read (in source order) to morph
   tokens on `collapse`. Matching tokens keep their identity, new tokens fade and scale in,
@@ -986,8 +984,10 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   With `words`, Layers shows its fenced code line at `size` (default .6), syntax colored and centered,
   and layer k is a box hugging the k-th of `words` left to right, labeled above; once its box lands
   the word moves with it.
-- `CodePanel` and `CodeMorph` take `marks={[{ text, step, color, opacity }]}` for soft background
-  bands behind each occurrence of `text` (default opacity .12), keeping syntax colors.
+- `CodePanel` and `CodeMorph` take `marks={[{ text, step, opacity }]}` for the standard code highlight
+  behind each occurrence of `text`, keeping syntax colors.
+- Every code highlight is one style: a cool blue band, rgba(90,150,255,.3), with a 1px
+  rgba(140,185,255,.55) outline and 4px corners. Slides cannot recolor it; `opacity` only fades it.
   For `CodePanel`, `anchor: "center"` centers the panel on its position.
 - `CodePanel`, `CodeMorph` and `CodeTrace` are glass panels: `fill` (0 to 1, default .9) is the
   panel's opacity over the scenery behind it and `border` the strength of its 1.5px light border (default 1, 22% white).

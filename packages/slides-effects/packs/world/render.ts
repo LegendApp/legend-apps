@@ -159,7 +159,7 @@ fn toScene(display:vec3f)->vec3f {
 // Cards are one quad in the card's front plane. The fragment shades a 2D rounded-rect distance field: coverage is antialiased over one
 // device pixel, and the outer glow, glass gradient, inner glow, rim and avatar layer like a 2D canvas in display space, so edges
 // stay crisp at any resolution without MSAA. Emissive from .03 to .09 blends a resting slate card into one lit in its color.
-// Shape fields: 11 corner radius, 15 border width in device pixels (0 scales the rim with the glow), 16 glow blur width, 17 rim strength (a border's is 22% white per 1),
+// Shape fields: 11 corner radius (negative: device pixels), 15 border width in device pixels (0 scales the rim with the glow), 16 glow blur width, 17 rim strength (a border's is 22% white per 1; a flat card's border takes its material albedo),
 // 18 avatar radius / half height, 19 fill opacity (cards have no thickness).
 function cardCode(offset: number, background: Vec3) {
   return `${worldBindings}${triangleCorner}${lightingCode(0)}
@@ -185,7 +185,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
 @fragment fn cardFragment(in:CardVertex)->CardResult {
  let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=bend(vector(base))+rotation*vec3f(p,half.z);
  if(dot(rotation[2],eye()-world)<0.) { discard; }
- let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
+ let corner=uniforms[base+11u]; let radius=clamp(select(corner,-corner*max(fwidth(p.x),fwidth(p.y)),corner<0.),0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
  let pixel=max(fwidth(d),.00001);
  let accent=encode(vector(base+4u)); let shown=presence(half); let edge=uniforms[base+17u]/.6;
  let sigma=max(uniforms[base+16u],.001)*.78; let unit=sigma/14.;
@@ -199,7 +199,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let border=uniforms[base+15u]>0.; let line=select(1.4*unit,uniforms[base+15u]*pixel,border);
  // Box-filter the stroke so a subpixel rim keeps its coverage as it crosses pixel centers.
  let rim=clamp((line+pixel)*.5-abs(d),0.,min(line,pixel))/pixel;
- layer=over(layer,select(mix(vec3f(.2,.29,.4),accent,h),vec3f(1.),border),rim*select((.8+.2*h)*edge*mix(1.,.45,v),min(1.,.22*uniforms[base+17u]),border));
+ layer=over(layer,select(mix(vec3f(.2,.29,.4),accent,h),select(vec3f(1.),encode(vector(base+${instanceField.albedo}u)),uniforms[base+31u]>.5),border),rim*select((.8+.2*h)*edge*mix(1.,.45,v),min(1.,.22*uniforms[base+17u]),border));
  let avatar=uniforms[base+18u]*half.y;
  if(avatar>0.) {
   let q=p-vec2f(-half.x+half.y,0.); let disc=1.-smoothstep(-pixel*.5,pixel*.5,length(q)-avatar);

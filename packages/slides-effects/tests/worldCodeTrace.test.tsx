@@ -35,16 +35,16 @@ test("trace keeps every syntax color during marking, collapse, extraction and re
   expect(colors.size).toBeGreaterThan(4);
 });
 
-test("trace bands are soft, configurable backgrounds and disappear with the corresponding lines", async () => {
+test("trace bands are the standard highlight and disappear with the corresponding lines", async () => {
   const parts = flat(expandScene(<CodeTrace id="trace" source={1} reads={[3]} pass={[2]} nodes={["Owner", "Reader"]}
-    highlight={{ source: "#ff9900", reads: "#3399ff", pass: "#aaaaaa", opacity: .16 }}>
+    highlight={{ opacity: .16 }}>
     {await highlightedFence(source)}
   </CodeTrace>));
   const bands = parts.filter(node => String(node.props.id).endsWith("/glow"));
-  expect(bands.map(node => node.props.color)).toEqual(["#ff9900", "#aaaaaa", "#3399ff"]);
+  expect(bands.map(node => node.props.color)).toEqual(["#5a96ff", "#5a96ff", "#5a96ff"]);
   for (const band of bands) {
     expect(band.type).toBe(Card);
-    expect(band.props).toMatchObject({ flat: true, fill: 1, edge: 0, glow: 0 });
+    expect(band.props).toMatchObject({ flat: true, fill: .3, line: 1, glow: 0, radius: -4 });
     expect(value<number>(band.props.opacity, 0)).toBe(0);
     expect(value<number>(band.props.opacity, 1)).toBe(.16);
     expect(value<[number, number, number]>(band.props.position, 1)[2]).toBeLessThan(0);
@@ -85,14 +85,14 @@ test("actual scene expansion rejects unhighlighted code, including later morph f
   }
 });
 
-test("panel and morph marks are configurable soft bands behind the syntax", async () => {
-  for (const part of [<CodePanel id="c" marks={[{ text: "value", color: "#abcdef", opacity: .18 }]}>{await highlightedFence("const value = 1")}</CodePanel>,
-    <CodeMorph id="c" marks={[{ text: "value", color: "#abcdef", opacity: .18 }]}>{await highlightedFence(" const value = 1", "diff")}</CodeMorph>]) {
+test("panel and morph marks are the standard highlight behind the syntax", async () => {
+  for (const part of [<CodePanel id="c" marks={[{ text: "value", opacity: .18 }]}>{await highlightedFence("const value = 1")}</CodePanel>,
+    <CodeMorph id="c" marks={[{ text: "value", opacity: .18 }]}>{await highlightedFence(" const value = 1", "diff")}</CodeMorph>]) {
     const marks = flat(expandScene(part)).filter(node => String(node.props.id).includes("/mark"));
     expect(marks.length).toBeGreaterThan(0);
     for (const mark of marks) {
       expect(mark.type).toBe(Card);
-      expect(mark.props).toMatchObject({ flat: true, fill: 1, edge: 0, glow: 0, color: "#abcdef", opacity: .18 });
+      expect(mark.props).toMatchObject({ flat: true, fill: .3, line: 1, glow: 0, radius: -4, color: "#5a96ff", material: { albedo: "#8cb9ff" }, opacity: .18 });
       expect((mark.props.position as number[])[2]).toBeLessThan(0);
     }
   }

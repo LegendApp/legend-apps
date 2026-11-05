@@ -58,8 +58,8 @@ test("insertions fade and scale in, removals fade out, and changed words receive
   expect(sampleTrack(added.glyph!.opacity, clock(1, 4))).toBe(0);
   const words = tree.filter(node => String(node.props.id).includes("/word"));
   expect(words).toHaveLength(1);
-  expect(words[0].props).toMatchObject({ flat: true, fill: 1, edge: 0, glow: 0 });
-  expect(value<number>(words[0].props.opacity, 2, 1)).toBeCloseTo(.18);
+  expect(words[0].props).toMatchObject({ flat: true, fill: .3, line: 1, glow: 0, radius: -4, color: "#5a96ff" });
+  expect(value<number>(words[0].props.opacity, 2, 1)).toBe(1);
   expect(value<number>(words[0].props.opacity, 3, 0)).toBe(0);
 });
 

@@ -98,7 +98,7 @@ test("baked glyph tracks share samples and preserve staged color, glow and pose 
 test("morphs carry unchanged tokens through edits, insertions and reverse seeks with background bands only", async () => {
   const source = ' function Example() {\n-  const state = useState(0)\n+  const state = useObservable(0)\n+  const value = useValue(state)\n   return state\n-  obsolete()\n }';
   const second = ' function Example() {\n   const state = useObservable(0)\n   const value = useValue(state)\n-  return state\n+  return value\n }';
-  const tree = flat(expandScene(<CodeMorph id="morph" highlight={{ color: "#abcdef", opacity: .08 }}>{fence(source, await highlightCode(source, "diff-tsx"))}{fence(second, await highlightCode(second, "diff-tsx"))}</CodeMorph>));
+  const tree = flat(expandScene(<CodeMorph id="morph" highlight={{ opacity: .08 }}>{fence(source, await highlightCode(source, "diff-tsx"))}{fence(second, await highlightCode(second, "diff-tsx"))}</CodeMorph>));
   const text = tree.filter(node => node.type === Text3D);
   const named = (value: string) => text.filter(node => node.props.text === value);
   expect(named("useState")).toHaveLength(1);
@@ -126,25 +126,29 @@ test("morphs carry unchanged tokens through edits, insertions and reverse seeks 
   expect(sampleTrack(compileTrack(strikes[0].props.position as never), clock(1, 4))[1]).toBeCloseTo(-3 * .27);
   const bands = tree.filter(node => String(node.props.id).includes("/band"));
   expect(bands.length).toBeGreaterThan(0);
-  expect(bands.every(node => node.props.color === "#abcdef")).toBe(true);
-  expect(bands.every(node => node.props.flat && node.props.edge === 0 && node.props.glow === 0)).toBe(true);
+  expect(bands.every(node => node.props.color === "#5a96ff" && node.props.fill === .3 && node.props.line === 1 && node.props.radius === -4)).toBe(true);
+  expect(bands.every(node => node.props.flat && node.props.glow === 0)).toBe(true);
   const prepared = prepareWorldScene({ instances: bands.flatMap(node => cardInstances(node.props as never)) });
   const uniforms = sampleWorldUniforms(prepared, clock(1, 4), null, 1, 1, true);
   for (let i = 0; i < prepared.instances.length; i++) {
     const base = worldHeaderSize + i * worldInstanceSize;
     expect(uniforms[base + instanceField.geometry]).toBe(1);
     expect(uniforms[base + instanceField.opacity]).toBeCloseTo(sampleTrack(prepared.instances[i].card!.opacity!, clock(1, 4)));
-    expect(uniforms[base + 4]).toBeCloseTo(colorVector("#abcdef")[0]);
+    expect(uniforms[base + 4]).toBeCloseTo(colorVector("#5a96ff")[0]);
+    expect(uniforms[base + instanceField.albedo]).toBeCloseTo(colorVector("#8cb9ff")[0]);
+    expect(uniforms[base + 11]).toBe(-4);
+    expect(uniforms[base + 15]).toBe(1);
+    expect(uniforms[base + 17] * .22).toBeCloseTo(.55);
   }
   expect(bands.some(node => sampleTrack(compileTrack(node.props.opacity as never), clock(1, 4)) === .08)).toBe(true);
 });
 
 test("morphs band each run of new tokens on a changed line, but not wholly new lines", async () => {
   const source = '-import { a } from "react"\n+import { b, c } from "x/react"\n+const z = 1';
-  const tree = flat(expandScene(<CodeMorph id="m" highlight={{ color: "#abcdef", word: { color: "#123456", opacity: .3 } }}>{fence(source, await highlightCode(source, "diff-tsx"))}</CodeMorph>));
+  const tree = flat(expandScene(<CodeMorph id="m" highlight={{ word: { opacity: .3 } }}>{fence(source, await highlightCode(source, "diff-tsx"))}</CodeMorph>));
   const words = tree.filter(node => String(node.props.id).includes("/word"));
   expect(words.map(node => node.props.id)).toEqual(["m/word0/0/9", "m/word0/0/22"]);
-  expect(words.every(node => node.props.color === "#123456")).toBe(true);
+  expect(words.every(node => node.props.color === "#5a96ff")).toBe(true);
   const advance = (words[0].props.scale as number[])[0] - .08;
   expect((words[1].props.scale as number[])[0] - .08).toBeCloseTo(advance * 2 / 4);
   const clock = (stepIndex: number, stepTime: number) => ({ slideTime: stepIndex + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 1 } });

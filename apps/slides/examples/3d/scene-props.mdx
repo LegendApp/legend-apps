@@ -35,7 +35,7 @@ steps: 3
     steps: { 1: { orbit: 18, duration: 1.4, ease: "smoothstep" }, 2: { dolly: .8, duration: 1, ease: "out" } } }}>
   <Headline id="open-title" at={[0, 8, 0]} size={.5} exit={{ step: 1, duration: .6, to: [0, 6, -10] }}>Scene props</Headline>
   <CodePanel id="sample-code" fill={.55} padding={.45} panelColor="idle" textColor="text"
-    marks={[{ text: "count", color: "hot", step: 1 }, { text: "render", color: "link", step: 2, delay: .3 }]}
+    marks={[{ text: "count", step: 1 }, { text: "render", step: 2, delay: .3 }]}
     enter={{ from: [0, -8, 0], duration: 1, ease: "out" }}>
 
 ```tsx
