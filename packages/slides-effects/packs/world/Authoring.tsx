@@ -261,9 +261,9 @@ export const sceneLayouts: Record<string, SceneLayout> = {
   cloud: { camera: { position: [0,4.2,13], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
     cloud: { kind: "cloud", at: [0,0,0] },
   } },
-  /** Heading top left over traced code on the left; its tree forms on the right. */
+  /** Heading top left over centered code; the extracted tree moves into the center. */
   trace: { camera: { position: [0,4.3,15], target: [0,4,0], via: [2.8,6,22], viaTarget: [0,3,10] }, slots: {
-    title: { ...heading, at: [-8.2,8.4,0] }, trace: { kind: "trace", at: [-8.8,7.2,0] },
+    title: { ...heading, at: [-8.2,8.4,0] }, trace: { kind: "trace", at: [0,4.3,0], anchor: "center" },
   } },
   /** Heading top left, a line of code on the left, stacked layers and a meter in the middle. */
   layers: { camera: { position: [-1.4,4,14], target: [0,3.8,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
@@ -326,6 +326,14 @@ function codeHighlight(node: ReactNode): CodeHighlight | undefined {
   });
   return highlighted;
 }
+function checkCodeChildren(kind: string, props: Record<string, unknown>, children: ReactNode) {
+  Children.forEach(children, child => {
+    if (isValidElement<{ highlighted?: CodeHighlight; children?: ReactNode }>(child)) {
+      if (child.props.highlighted) checkHighlighted(kind, props, codeSource(child), child.props.highlighted);
+      else checkCodeChildren(kind, props, child.props.children);
+    } else checkHighlighted(kind, props, codeSource(child), undefined);
+  });
+}
 export function readScenes(content: readonly ReactNode[], world?: string): AuthoredSlide[] {
   const slides: AuthoredSlide[] = [];
   for (const children of content) collect(children, child => {
@@ -341,7 +349,7 @@ export function readScenes(content: readonly ReactNode[], world?: string): Autho
       const { children, mdxSource: _, ...part } = place(kind, node.props);
       const source = codeSource(children as ReactNode);
       const text = kind === "code" ? source.replace(/\n$/, "") : source;
-      checkHighlighted(kind, node.props, source, codeHighlight(children as ReactNode));
+      checkCodeChildren(kind, node.props, children as ReactNode);
       parts.push({ ...part, ...part.color === undefined ? {} : { color: paint(part.color, colors) }, kind, order: parts.length, text, tokens: codeHighlight(children as ReactNode)?.tokens } as AuthoredPart);
     });
     for (const part of parts) if (part.kind === "tree") part.nodes = placeTree(part.nodes as TreeNode[], part as { width?: number; levelHeight?: number });
@@ -616,7 +624,7 @@ const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) 
 const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay = 0): Keyframe<T>[] => [frames[0], {
   step, delay, value: frames[0].value, duration: 0, loop: { every, frames: frames.slice(1).map(f => ({ ...f, at: (f.delay ?? 0) - delay, step: undefined, delay: undefined })) },
 }];
-type CodeMark = { text: string; color?: string; step?: number; delay?: number };
+type CodeMark = { text: string; color?: string; opacity?: number; step?: number; delay?: number };
 /** Tree box face and edge albedo: lighter than night scenery so idle boxes read; flashes glow on top. */
 const TREE_BOX = { fill: "#2a303a", border: "#8a94a3" };
 /** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
@@ -906,9 +914,9 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       position={[(from + to) / 2 * advance, -row * lineHeight, -.06]} scale={[(to - from) * advance + .08, lineHeight * .84, .02]} color={wordColor}
       opacity={[{ step: 0, value: 0 }, key(step, wordOpacity, settle, .3), key(step + 1, 0, 0, 0)]} />)}
     {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
-      const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
+      const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];
       return states[shownAt].flatMap((line, row) => [...lines[line].text.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found =>
-        <Box key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} size={.5} color={paint(mark.color, INK.colors) as string ?? INK.amber} emissive={1.4}
+        <Card flat fill={1} edge={0} glow={0} radius={.02} opacity={mark.opacity ?? .12} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} color={paint(mark.color, INK.colors) as string ?? INK.amber}
           position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35), key(mark.step + 1, [0,0,0] as V3, 0, 0)] : scale} />));
     })}
     {parts.map((part, n) => {
@@ -940,25 +948,31 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
   const hot = [origin, ...reads].sort((a, b) => a - b), gap = lineHeight * 1.8;
   const width = Math.max(...lines.map(l => l.length)) * advance + .9, full = (lines.length - 1) * lineHeight + em + .6, short = (hot.length - 1) * gap + em + .6;
-  const tone = (n: number) => n === origin ? INK.amber : reads.includes(n) ? INK.blue : pass.includes(n) ? INK.idle : INK.white;
+  const highlight = props.highlight as { source?: string; reads?: string; pass?: string; opacity?: number } | undefined;
+  const tone = (n: number) => paint(n === origin ? highlight?.source ?? "hot" : reads.includes(n) ? highlight?.reads ?? "link" : highlight?.pass ?? "idle", INK.colors) as string;
   const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
-  return <Stage id={id} position={at}>
+  const centered: V3 = [at[0] - width / 2 + .3, at[1] + (full - em - .6) / 2, at[2]];
+  const position = props.anchor === "center" ? [{ step: 0, value: centered }, key(extract, [at[0] - tx, at[1] + (labels.length > 1 ? 1.8 : .4), at[2]] as V3, .55, .9)] : at;
+  return <Stage id={id} position={position}>
     <Card id={`${id}/card`} {...panelStyle(props)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
-      const kept = hot.indexOf(n), color = (initial = INK.white) => [{ step: 0, value: initial }, key(mark, tone(n), 0, .4)];
+      const kept = hot.indexOf(n), y0 = -n * lineHeight, y1 = -kept * gap;
       const syntax = lineTokens(tokens, lines.slice(0, n).reduce((sum, line) => sum + line.length + 1, 0), text.length);
-      if (kept < 0) return <Text3D key={n} id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" position={[0, -n * lineHeight, 0]}
-        glyphs={(_i, _char, _home, initial) => ({ color: color(initial), scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} />;
-      const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2, y0 = -n * lineHeight, y1 = -kept * gap;
+      const band = kept >= 0 || pass.includes(n) ? <Card id={`${id}/${n}/glow`} flat fill={1} edge={0} glow={0} radius={.02} color={tone(n)}
+        position={[{ step: 0, value: [width / 2 - .3, y0, -.07] }, key(collapse, [width / 2 - .3, kept < 0 ? y0 : y1, -.07], .45, .5)]}
+        scale={[width - .2, lineHeight, .02]}
+        opacity={[{ step: 0, value: 0 }, key(mark, highlight?.opacity ?? .12, 0, .4), key(kept < 0 ? collapse : extract, 0, 0, .3)]} /> : null;
+      if (kept < 0) return <Fragment key={n}>{band}<Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" position={[0, y0, 0]}
+        glyphs={() => ({ scale: [{ step: 0, value: 1 }, key(collapse, 0, .05 + n * .015, .35)], opacity: [{ step: 0, value: 1 }, key(collapse, 0, .1 + n * .015, .3)] })} /></Fragment>;
+      const indent = (text.length - text.trimStart().length) * advance, end = text.trimEnd().length * advance, middle = (indent + end) / 2;
       const target = node(n === origin ? 0 : 1 + reads.indexOf(n));
       return <Fragment key={n}>
-        <Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" glyphs={(_i, _char, _home, initial) => ({ color: color(initial), emissive: [{ step: 0, value: .75 }, key(mark, 1.8, 0, .4)], opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
+        <Text3D id={`${id}/${n}`} text={text} tokens={syntax} mono size={em} align="left" glyphs={() => ({ opacity: [{ step: 0, value: 1 }, key(extract, 0, 1.25, .35)] })}
           position={[{ step: 0, value: [0, y0, 0] }, key(collapse, [0, y1, 0], .45, .5), key(extract, [0, y1, 1.4], 0, .45), key(extract, [target[0] - middle, target[1], 1.4], .55, .9)]} />
-        <Box id={`${id}/${n}/glow`} size={.5} color={tone(n)} emissive={1.2} position={[{ step: 0, value: [middle, y0, -.08] }, key(collapse, [middle, y1, -.08], .45, .5)]}
-          scale={[{ step: 0, value: [0, 0, 0] }, key(mark, [end - indent + .2, lineHeight * .9, .04], 0, .4), key(extract, [0, 0, 0], 0, .3)]} />
+        {band}
       </Fragment>;
     })}
     {labels.map((label, k) => { const p = node(k), root = node(0), mid = (root[1] + p[1]) / 2; return <Fragment key={`node${k}`}>
@@ -1147,6 +1161,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
     const kind = (child.type as { worldPart?: string }).worldPart;
     if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place, scene));
     checkPart(kind, child.props);
+    checkCodeChildren(kind, child.props, child.props.children);
     const { children, id: own, at = [0, 3.2, 0], mdxSource: _, carry, enter, exit, sequence, ...props } = place(kind, child.props) as PartProps;
     // A part that doesn't carry gets ids of its own, so no part of the previous slide flies into it.
     const id = carry === false ? `${own}@${scene.scene}` : own, INK = scene.ink;
@@ -1194,8 +1209,8 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {
-        const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
-        return <Box key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} size={.5} color={paint(mark.color, INK.colors) as string ?? INK.amber} emissive={1.4}
+        const scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .02];
+        return <Card flat fill={1} edge={0} glow={0} radius={.02} opacity={mark.opacity ?? .12} key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} color={paint(mark.color, INK.colors) as string ?? INK.amber}
           position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35)] : scale} />;
       })))}
     </Stage>;

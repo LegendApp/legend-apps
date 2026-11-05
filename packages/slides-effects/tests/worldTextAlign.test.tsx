@@ -2,6 +2,7 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 // @ts-ignore Bun supplies the standalone test API.
 import { describe, expect, test } from "bun:test";
 import React from "react";
+import { highlightedFence } from "./highlightedFence";
 import { CodeMorph, CodePanel, CodeTrace, Keys, expandScene } from "../packs/world/Authoring";
 import { compileTrack, sampleTrack, type Animated } from "../packs/world/scene";
 import { text3dBuffer, text3dInstances, type Text3DOptions } from "../packs/world/text3d";
@@ -39,8 +40,8 @@ describe("world text alignment at 1280 wide", () => {
       near(box.y, 2);
     }
   });
-  test("code marks and panels center on their lines", () => {
-    const parts = flat(expandScene(<CodePanel id="code" at={[0, 0, 0]} marks={[{ text: "Name", step: 0 }]}>{"const a = 1\nreturn <Name />\n"}</CodePanel>));
+  test("code marks and panels center on their lines", async () => {
+    const parts = flat(expandScene(<CodePanel id="code" at={[0, 0, 0]} marks={[{ text: "Name", step: 0 }]}>{await highlightedFence("const a = 1\nreturn <Name />")}</CodePanel>));
     const code = parts.find(p => p.props.id === "code/code")!.props as Text3DOptions, card = parts.find(p => p.props.id === "code/card")!.props;
     const mark = parts.find(p => String(p.props.id).startsWith("code/mark0/1/"))!.props;
     const step = Number(code.lineHeight) * Number(code.size), [, y] = card.position as Vec3;
@@ -48,15 +49,15 @@ describe("world text alignment at 1280 wide", () => {
     near(value<Vec3>(mark.position)[1], last.y);
     near(y, (first.y + last.y) / 2);
   });
-  test("traced lines' glow bands and panel center on their text", () => {
-    const parts = flat(expandScene(<CodeTrace id="t" at={[0, 0, 0]} source={0} reads={[2]} nodes={["a", "b"]}>{"const [a] = useState(0)\nfoo()\nreturn a\n"}</CodeTrace>));
+  test("traced lines' glow bands and panel center on their text", async () => {
+    const parts = flat(expandScene(<CodeTrace id="t" at={[0, 0, 0]} source={0} reads={[2]} nodes={["a", "b"]}>{await highlightedFence("const [a] = useState(0)\nfoo()\nreturn a")}</CodeTrace>));
     const text = (n: number) => parts.find(p => p.props.id === `t/${n}`)!.props as Text3DOptions;
     const glow = parts.find(p => p.props.id === "t/2/glow")!.props, card = parts.find(p => p.props.id === "t/card")!.props;
     near(value<Vec3>(glow.position)[1], ink({ ...text(2), position: value<Vec3>(text(2).position) }).y);
     near(value<Vec3>(card.position)[1], (ink({ ...text(0), position: value<Vec3>(text(0).position) }).y + ink({ ...text(2), position: value<Vec3>(text(2).position) }).y) / 2);
   });
-  test("code morph bands and panel center on their lines", () => {
-    const parts = flat(expandScene(<CodeMorph id="m">{<pre><code className="language-diff">{" A\n-B\n+C\n"}</code></pre>}</CodeMorph>));
+  test("code morph bands and panel center on their lines", async () => {
+    const parts = flat(expandScene(<CodeMorph id="m">{await highlightedFence(" A\n-B\n+C", "diff")}</CodeMorph>));
     const token = (text: string) => parts.find(p => p.props.text === text)!.props as Text3DOptions;
     const line = (text: string) => ink({ ...token(text), position: value<Vec3>(token(text).position, 1) }).y;
     near(value<Vec3>(parts.find(p => p.props.id === "m/band0/1/1")!.props.position)[1], line("C"));

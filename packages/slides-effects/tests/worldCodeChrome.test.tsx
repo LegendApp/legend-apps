@@ -2,6 +2,7 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 // @ts-ignore Bun supplies the standalone test API.
 import { expect, test } from "bun:test";
 import React from "react";
+import { highlightedFence } from "./highlightedFence";
 import { highlightCode } from "../../presentation/src/compiler/remarkCodeHighlight";
 import { CodeMorph, CodePanel, CodeTrace, Grid, Layers, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { Card, Text3D } from "../packs/world/World";
@@ -20,8 +21,8 @@ test("every code part in a scene must carry compiler highlighting", async () => 
     expect(() => readScenes([<Scene id="s">{part}</Scene>])).toThrow("must be a fenced block");
 });
 
-test("code panels take a border, and grids take mac window chrome and a vertical resize", () => {
-  expect(find(expandScene(<CodePanel id="code" border={1.4}>{"x"}</CodePanel>), "code/card").props.edge).toBe(1.4);
+test("code panels take a border, and grids take mac window chrome and a vertical resize", async () => {
+  expect(find(expandScene(<CodePanel id="code" border={1.4}>{await highlightedFence("x")}</CodePanel>), "code/card").props.edge).toBe(1.4);
   const flash = { step: 1, repeat: "infinite" as const };
   const tree = expandScene(<Grid id="g" count={4} columns={2} label="MyText" chrome="mac" fill={.95} border={1.2} resize="height" flash={flash} />);
   expect(find(tree, "g/frame").props).toMatchObject({ fill: .95, edge: 1.2 });

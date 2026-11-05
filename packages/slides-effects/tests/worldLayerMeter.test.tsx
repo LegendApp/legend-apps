@@ -1,13 +1,14 @@
 import "../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import React from "react";
+import { highlightedFence } from "./highlightedFence";
 import { Layers, expandScene } from "../packs/world/Authoring";
 import { prepareWorldSlides } from "../packs/world/World";
 import { instanceOpacity, sampleTrack } from "../packs/world/scene";
 
-for (const first of [0, 2]) test(`word layer meter jumps on each reveal and resets on replay, starting at step ${first}`, () => {
+for (const first of [0, 2]) test(`word layer meter jumps on each reveal and resets on replay, starting at step ${first}`, async () => {
   const children = expandScene(<Layers id="line" words={["state", "user", "name", "get()"]} step={first}
-    meter={[.25, .5, .75, 1]}>{"state.user.name.get()"}</Layers>, "layers");
+    meter={[.25, .5, .75, 1]}>{await highlightedFence("state.user.name.get()")}</Layers>, "layers");
   const prepared = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
   const cards = Array.from({ length: 4 }, (_, k) => prepared.instances.find(i => i.id === `line/${k}`)!);
   const fill = prepared.instances.find(i => i.id === "line/fill")!;

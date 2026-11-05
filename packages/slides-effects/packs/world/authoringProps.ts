@@ -1,3 +1,4 @@
+import type { CodeHighlight } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 
 /** Scene theme colors. Color props of scene parts also take these names, such as `color="accent"`. */
@@ -85,12 +86,13 @@ const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " 
   enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]),
   sequence: shape({ in: step, out: step, distance: positive(), delay: motion.delay, duration: motion.duration, ease }) };
 const textFields: Fields = { size: positive(), depth: number(0), track: number(), lineHeight: positive(), emissive: animated(number(0)), mono: flag, align: oneOf("left", "center", "right") };
-const codeMarks = list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true);
+const codeMarks = list(shape({ text, color, opacity: fraction, step, delay: number(0, " of seconds") }, ["text"]), true);
 const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
   code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), border: number(0), marks: codeMarks },
   grid: { chrome: oneOf("mac"), fill: fraction, border: number(0), resize: oneOf("width", "height"), grow: number(0) },
   morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), highlight: shape({ color, opacity: fraction, word: shape({ color, opacity: fraction }) }), marks: codeMarks },
+  trace: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), highlight: shape({ source: color, reads: color, pass: color, opacity: fraction }) },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive(), boxColor: color, borderColor: color },
@@ -119,8 +121,8 @@ export function checkPart(kind: string, props: Record<string, unknown>) {
 }
 const highlightedKinds = new Set(["code", "morph", "trace", "layers"]);
 /** Code parts take their colors from the compiler's Shiki tokens, which only fenced blocks carry; a string child would render uncolored. */
-export function checkHighlighted(kind: string, props: Record<string, unknown>, source: string, highlighted: unknown) {
-  if (highlightedKinds.has(kind) && source.trim() && !highlighted)
+export function checkHighlighted(kind: string, props: Record<string, unknown>, source: string, highlighted: CodeHighlight | undefined) {
+  if (highlightedKinds.has(kind) && source.trim() && !highlighted?.tokens.length)
     throw authoringError(props, parts[kind], "code must be a fenced block (```tsx) so it is syntax highlighted, not a string.");
 }
 /** Theme color names resolve against the scene's colors; anything else passes through. */

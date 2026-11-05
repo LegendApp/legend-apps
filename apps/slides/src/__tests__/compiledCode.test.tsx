@@ -23,3 +23,8 @@ test("2D code renders compiled colors and keeps blank lines, indentation and tra
   expect(text(renderer.toJSON())).toBe("\u200b");
   await act(() => renderer.unmount());
 });
+
+test("2D code refuses nonempty code without compiler highlighting", () => {
+  expect(() => CodeBlock({ source: "const value = 1;" })).toThrow("require compiler syntax highlighting");
+  expect(() => CodeBlock({ source: "x", highlighted: { ...highlighted, tokens: [] } })).toThrow("require compiler syntax highlighting");
+});

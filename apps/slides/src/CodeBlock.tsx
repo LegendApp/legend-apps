@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 type CodeBlockProps = { language?: string; source: string; highlighted?: CodeHighlight };
 
 export function CodeBlock({ language, source, highlighted }: CodeBlockProps) {
+  if (source.trim() && !highlighted?.tokens.length) throw Error("Code blocks require compiler syntax highlighting. Use a fenced block with a language.");
   const last = highlighted?.tokens.at(-1);
   return (
     <View style={[styles.container, { backgroundColor: highlighted?.background ?? "#0d1117" }]}>

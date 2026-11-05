@@ -2,6 +2,7 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 // @ts-ignore Bun supplies the standalone test API.
 import { expect, test } from "bun:test";
 import React from "react";
+import { highlightedFence } from "./highlightedFence";
 import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -9,7 +10,7 @@ import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, laneScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
 import { Box, Burst, Camera, Card, Custom, Pillar, RoundedBox, RoutedTube, Stage, Text3D, WorldSlide } from "../packs/world/World";
 
-const fence = <pre>{React.createElement("code", { className: "language-tsx", highlighted: { tokens: [] }, children: "function Example() {\n  return 42;\n}\n" })}</pre>;
+const fence = await highlightedFence("function Example() {\n  return 42;\n}");
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
 
@@ -107,7 +108,7 @@ test("generic parts render from layouts without coordinates", () => {
   expect(bars.filter(n => n.type === Pillar).map(n => [n.props.value, n.props.maximum])).toEqual([[10,10],[5,10]]);
 });
 
-test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", () => {
+test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", async () => {
   const nodes = placeTree([{ id: "r" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }, { id: "b1", p: 2 }], { width: 12, levelHeight: 1 });
   expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2,1],[4,1],[-4,0],[0,0],[4,0]]);
   const tree = flat(expandScene(<Tree id="t" nodes={[{ id: "p" }, { id: "m", p: 0 }, { id: "c", p: 1 }]} color="#555555"
@@ -119,12 +120,13 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
   const recycled = keys.find(n => n.props.id === "k/A")!.props.position as { value: number[] }[];
   expect(recycled[recycled.length - 1].value).toEqual([0, -.95, 0]);
   expect(keys.filter(n => String(n.props.id).startsWith("k/link/")).map(n => n.props.id)).toEqual(["k/link/B"]);
-  const diff = (lines: string[]) => <pre><code className="language-diff">{lines.join("\n") + "\n"}</code></pre>;
-  const morph = flat(expandScene(<CodeMorph id="m">{diff([" a", "-b", "+c"])}{diff([" a", " c", "+d"])}</CodeMorph>));
+  const diff = (lines: string[]) => highlightedFence(lines.join("\n"), "diff");
+  const morph = flat(expandScene(<CodeMorph id="m">{await diff([" a", "-b", "+c"])}{await diff([" a", " c", "+d"])}</CodeMorph>));
   expect(morph.filter(n => n.type === Text3D).map(n => n.props.text)).toEqual(["a", "b", "c", "d"]);
   expect(morph.filter(n => String(n.props.id).endsWith("/strike"))).toEqual([]);
-  expect(() => expandScene(<CodeMorph id="bad">{diff([" a"])}{diff([" z", "+d"])}</CodeMorph>)).toThrow("diff 1 must start from the previous code");
-  const marked = flat(expandScene(<CodeMorph id="mk" step={2} marks={[{ text: "b", step: 1 }, { text: "c", step: 3 }]}>{diff([" ab", " b"])}{diff([" ab", "-b", "+c"])}</CodeMorph>));
+  const bad = <CodeMorph id="bad">{await diff([" a"])}{await diff([" z", "+d"])}</CodeMorph>;
+  expect(() => expandScene(bad)).toThrow("diff 1 must start from the previous code");
+  const marked = flat(expandScene(<CodeMorph id="mk" step={2} marks={[{ text: "b", step: 1 }, { text: "c", step: 3 }]}>{await diff([" ab", " b"])}{await diff([" ab", "-b", "+c"])}</CodeMorph>));
   const marks = marked.filter(n => String(n.props.id).startsWith("mk/mark"));
   expect(marks.map(n => n.props.id)).toEqual(["mk/mark0/0/1", "mk/mark0/1/0", "mk/mark1/1/0"]);
   expect((marks[0].props.scale as { step: number }[]).map(k => k.step)).toEqual([0, 1, 2]);

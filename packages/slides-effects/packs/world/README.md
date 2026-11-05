@@ -955,7 +955,10 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   Line and word bands, and marks with a `step`, clear when the next step begins.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
-  tree of `nodes` labels on `extract`, with continuously repeating edge pulses.
+  tree of `nodes` labels on `extract`, with continuously repeating edge pulses. Syntax colors stay
+  intact throughout. `highlight={{ source: "hot", reads: "link", pass: "idle", opacity: .12 }}`
+  styles soft line backgrounds. The `trace` layout centers the code, then centers the tree
+  on extraction; `anchor="center"` also enables this framing at an explicit `at` position.
 - `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
   the front under depth of field; `zoom` defocuses everything else on that step.
 - `Flight words` puts one stop per step from `step` (default 1) down into depth: a word, or a list of
@@ -972,8 +975,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   With `words`, Layers shows its fenced code line at `size` (default .6), syntax colored and centered,
   and layer k is a box hugging the k-th of `words` left to right, labeled above; once its box lands
   the word moves with it.
-- `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
-  `anchor: "center"` centers the panel on its position.
+- `CodePanel` and `CodeMorph` take `marks={[{ text, step, color, opacity }]}` for soft background
+  bands behind each occurrence of `text` (default opacity .12), keeping syntax colors.
+  For `CodePanel`, `anchor: "center"` centers the panel on its position.
 - `CodePanel`, `CodeMorph` and `CodeTrace` are glass panels: `fill` (0 to 1, default .9) is the
   panel's opacity over the scenery behind it and `border` its rim strength (default .9).
   Code parts color from the
