@@ -114,7 +114,7 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
     flash={[{ step: 1, color: "#ff0000", wave: false, from: "p", ids: ["c"] }]} />));
   expect(tree.filter(n => String(n.props.id).endsWith("/beam")).map(n => n.props.id)).toEqual(["t/c/beam"]);
   expect(tree.find(n => n.props.id === "t/m")!.props.color).toBe("#555555");
-  expect((tree.find(n => n.props.id === "t/c")!.props.color as { value: string }[]).map(k => k.value)).toEqual(["#555555", "#ff0000"]);
+  expect((tree.find(n => n.props.id === "t/c")!.props.color as { value: string }[]).map(k => k.value)).toEqual(["#555555", "#ff0000", "#555555"]);
   const keys = flat(expandScene(<Keys id="k" keys={["A", "B"]} next={["B", "C"]} />));
   const recycled = keys.find(n => n.props.id === "k/A")!.props.position as { value: number[] }[];
   expect(recycled[recycled.length - 1].value).toEqual([0, -.95, 0]);

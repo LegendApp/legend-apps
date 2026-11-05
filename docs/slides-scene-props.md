@@ -61,6 +61,14 @@ color or one of those names, as in `<Rule color="accent" />`.
 | `anchor` | top left | `"center"` centers the panel on `at` |
 | `marks` | none | `[{ text, color, step, delay }]` highlights each match of `text` |
 
+## Trees
+
+`Tree flash={[{ step: 1, color: "#ffa21f", pulseDuration: .4 }]}` pulses each box as
+the light arrives, then fades its color and brightness back to rest. `pulseDuration`
+is the full rise and fade time in seconds (default `.4`). `repeat: "infinite"` with
+`every` repeats the pulse on the shared playback clock. `flash: false` keeps a
+persistent recolor, with `glow` setting its brightness.
+
 ## Charts
 
 `Bars` takes `items={[{ label, value, color }]}` and these style props:

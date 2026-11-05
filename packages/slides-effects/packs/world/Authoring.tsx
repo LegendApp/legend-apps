@@ -597,7 +597,7 @@ const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay
 }];
 type CodeMark = { text: string; color?: string; step?: number; delay?: number };
 /** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
-type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; repeat?: number | "infinite"; every?: number };
+type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; pulseDuration?: number; repeat?: number | "infinite"; every?: number };
 /** `anchor: "center"` centers a panel of this size on its position instead of hanging it from its top-left line. */
 function anchored(position: V3, anchor: unknown, width: number, height: number): V3 {
   return anchor === "center" ? [position[0] - width / 2 + .3, position[1] + (height - .6) / 2, position[2]] : position;
@@ -1120,12 +1120,17 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const delay = props.delay as number | undefined;
     const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
+    const pulseFrames = <T,>(f: TreeFlash, n: { d: number }, rest: T, peak: T): Keyframe<T>[] => {
+      const start = arrives(f, n), duration = f.pulseDuration ?? .4;
+      const frames = [{ at: 0, value: peak, duration: duration * .15 }, { at: duration * .25, value: rest, duration: duration * .75 }];
+      return f.repeat === "infinite" ? [{ ...key(f.step, rest, start, 0), loop: { every: f.every ?? 1.5, frames } }]
+        : frames.map(({ at, ...frame }) => ({ ...frame, step: f.step, delay: start + at }));
+    };
     return <Stage id={id} position={position}>{nodes.map((n, i) => { const parent = n.p === undefined ? undefined : nodes[n.p], own = flashes.filter(f => lit(f, n));
-      const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.map(f => key(f.step, f.color, arrives(f, n), .12))] : n.color;
+      const color = own.length ? [{ step: 0, value: n.color ?? idle }, ...own.flatMap(f => f.flash === false ? [key(f.step, f.color, arrives(f, n), .12)]
+        : pulseFrames(f, n, n.color ?? idle, f.color))] : n.color;
       const emissive = own.length ? [{ step: 0, value: .006 }, ...own.flatMap(f => f.flash === false ? [key(f.step, (f.glow ?? .4) * .1, arrives(f, n), .4)]
-        : f.repeat === "infinite" ? [{ ...key(f.step, (f.glow ?? .6) * .1, arrives(f, n), 0), loop: { every: f.every ?? 1.5, frames: [
-          { at: 0, value: .45, duration: .06 }, { at: .1, value: (f.glow ?? .6) * .1, duration: .6 },
-        ] } }] : [key(f.step, .45, arrives(f, n), .06), key(f.step, (f.glow ?? .6) * .1, arrives(f, n) + .1, .6)])]
+        : pulseFrames(f, n, .006, .45))]
         : beats(n).length ? [{ at: 0, value: .006, duration: 0 }, ...beats(n).flatMap(t => [{ at: t, value: .45, duration: .06 }, { at: t + .1, value: .006, duration: .6 }])] : .006;
       const pulses = [...beats(n).map(t => ({ at: t - HOP, duration: HOP, color: typeof n.color === "string" ? n.color : idle, size: .11, emissive: 10 })),
         ...own.filter(f => f.wave !== false).map(f => ({ step: f.step, delay: arrives(f, n) - (f.hop ?? .25), duration: f.hop ?? .25, every: f.repeat === "infinite" ? f.every ?? 1.5 : undefined, color: f.color, size: .11, emissive: 10 }))];
