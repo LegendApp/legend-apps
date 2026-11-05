@@ -748,7 +748,7 @@ function prepareUniformInputs(scene: PreparedWorldScene): UniformInputs {
 export function keyframeSpans(tracks: Track<unknown>[]): NonNullable<Instance["settle"]> {
   const steps = new Map<number, [number, number]>(), at: number[] = [];
   for (const track of tracks) for (const frame of track.frames) {
-    const duration = frame.duration ?? 0.65;
+    const duration = frame.loop ? Infinity : frame.duration ?? 0.65;
     if (frame.at !== undefined) { at.push(frame.at, frame.at + duration); continue; }
     const step = frame.step ?? 0, start = frame.delay ?? 0, span = steps.get(step);
     steps.set(step, span ? [Math.min(span[0], start), Math.max(span[1], start + duration)] : [start, start + duration]);
