@@ -3,7 +3,7 @@ import { useDeckContent, usePresentationValue } from "@legend-apps/presentation"
 import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector, compileTrack, type Keyframe } from "./scene";
-import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
+import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, sequenceDefaults, type Ambient, type SceneColors } from "./authoringProps";
 import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
@@ -233,6 +233,12 @@ export const sceneLayouts: Record<string, SceneLayout> = {
     ...Object.fromEntries([-9.6, 0, 9.6].flatMap((x, i) => [[`caption${i + 1}`, { kind: "headline", at: [x,8.5,0], size: .42, depth: .12, track: .02, delay: .4 + i * .15 }],
       [`tree${i + 1}`, { kind: "tree", at: [x,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
     ...Object.fromEntries([-4.5, 0, 4.5].map((x, i) => [`legend${i + 1}`, { kind: "headline", at: [x,.9,1], size: .24, depth: .04, mono: true, track: .12, emissive: .8, delay: 1 }])),
+  } },
+  /** Captioned trees stacked in the center of frame, one shown at a time; give each pair a `sequence`. */
+  "tree-sequence": { camera: { position: [0,4.6,14.3], target: [0,4.2,0], via: [-3.5,7,22], viaTarget: [0,2.5,13] }, slots: {
+    title: { ...heading, at: [-8.2,9,0] },
+    ...Object.fromEntries([1, 2, 3, 4, 5].flatMap(i => [[`caption${i}`, { kind: "headline", at: [0,8.5,0], size: .42, depth: .12, track: .02, delay: .4 }],
+      [`tree${i}`, { kind: "tree", at: [0,4.8,0], width: 8.4, levelHeight: 1.6, nodeWidth: 1.95, labelSize: .13 }]])),
   } },
   /** A code panel on the left and a grid of cells on the right. */
   "code-grid": { camera: { position: [-.6,4.2,14], target: [0,4,0], via: [-3.5,7,21], viaTarget: [0,2.5,12] }, slots: {
@@ -1057,6 +1063,7 @@ function proxyLine(id: string, at: V3, props: Record<string, unknown>, INK: Ink,
   </Stage>;
 }
 type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };
+type Sequence = Omit<PartMotion, "step"> & { in?: number; out?: number; distance?: number };
 /** A part's `exit`, and a non-text part's `enter`, move it as one Stage; text also fades out and keeps its per-glyph entrance. */
 function moved(id: string, part: ReactNode, enter: PartMotion & { from?: V3 } | undefined, exit: PartMotion & { to?: V3 } | undefined) {
   const frames: { step: number; value: V3; delay?: number; duration?: number; ease?: Ease }[] = [];
@@ -1064,21 +1071,30 @@ function moved(id: string, part: ReactNode, enter: PartMotion & { from?: V3 } | 
   if (exit) { const e = { ...exitDefaults, ...exit }; if (!frames.length) frames.push({ step: 0, value: [0, 0, 0] }); frames.push({ step: e.step!, delay: e.delay, value: e.to, duration: e.duration, ease: e.ease }); }
   return frames.length ? <Stage key={id} id={`${id}/motion`} position={frames}>{part}</Stage> : part;
 }
+/** A part with a `sequence` waits off to the right, slides into place on `in` and off to the left on `out`. */
+function sequenced(id: string, part: ReactNode, sequence: Sequence | undefined) {
+  if (!sequence) return part;
+  const { in: shown = 0, out, distance, delay, duration, ease } = { ...sequenceDefaults, ...sequence };
+  const frames: { step: number; value: V3; delay?: number; duration?: number; ease?: Ease }[] = [{ step: 0, value: [shown ? distance : 0, 0, 0] }];
+  if (shown) frames.push({ step: shown, delay, value: [0, 0, 0], duration, ease });
+  if (out !== undefined) frames.push({ step: out, delay, value: [-distance, 0, 0], duration, ease });
+  return <Stage key={id} id={`${id}/sequence`} position={frames}>{part}</Stage>;
+}
 function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }): ReactNode {
   return Children.map(children, child => {
     if (!isValidElement<PartProps>(child)) return child;
     const kind = (child.type as { worldPart?: string }).worldPart;
     if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place, scene));
     checkPart(kind, child.props);
-    const { children, id: own, at = [0, 3.2, 0], mdxSource: _, carry, enter, exit, ...props } = place(kind, child.props) as PartProps;
+    const { children, id: own, at = [0, 3.2, 0], mdxSource: _, carry, enter, exit, sequence, ...props } = place(kind, child.props) as PartProps;
     // A part that doesn't carry gets ids of its own, so no part of the previous slide flies into it.
     const id = carry === false ? `${own}@${scene.scene}` : own, INK = scene.ink;
     const source = codeSource(children), position = at as V3, leave = exit as PartMotion & { to?: V3 } | undefined;
     if (kind === "headline" || kind === "quote") {
       const fade = leave && [{ step: 0, value: 1 }, { step: leave.step!, delay: leave.delay ?? exitDefaults.delay, value: 0, duration: leave.duration ?? exitDefaults.duration }];
-      return moved(id, textLine(kind, { ...props, ...fade ? { opacity: fade } : {}, enter, id, position, text: source, tokens: codeHighlight(children)?.tokens }, INK), undefined, leave);
+      return sequenced(id, moved(id, textLine(kind, { ...props, ...fade ? { opacity: fade } : {}, enter, id, position, text: source, tokens: codeHighlight(children)?.tokens }, INK), undefined, leave), sequence as Sequence | undefined);
     }
-    return moved(id, expandPart(kind, id, position, props, children, source, INK), enter as PartMotion & { from?: V3 } | undefined, leave);
+    return sequenced(id, moved(id, expandPart(kind, id, position, props, children, source, INK), enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
   });
 }
 function expandPart(kind: string, id: string, position: V3, props: Record<string, unknown>, children: ReactNode, source: string, INK: Ink): ReactNode {

@@ -10,6 +10,7 @@ export type ColorName = keyof SceneColors;
 /** A part's `enter` and `exit` default to these; `step` is the scene's local step. */
 export const enterDefaults = { step: 0, delay: 0, duration: .8, ease: "cubic" as Ease, from: [0, -6, 0] as [number, number, number] };
 export const exitDefaults = { delay: 0, duration: .8, ease: "cubic" as Ease, to: [0, 0, -40] as [number, number, number] };
+export const sequenceDefaults = { delay: 0, duration: .8, ease: "cubic" as Ease, distance: 20 };
 export const ambientEffects = ["dust", "trails", "orbs", "fog"] as const;
 export type AmbientEffect = typeof ambientEffects[number];
 export type Ambient = AmbientEffect | { effect: AmbientEffect; count?: number; color?: string; density?: number; length?: number };
@@ -81,7 +82,8 @@ const sceneFields: Fields = { id: text, layout: is(v => typeof v === "string", "
 
 const motion = { step, delay: number(0, " of seconds"), duration: positive(" of seconds"), ease };
 const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " of seconds"), duration: positive(" of seconds"), color: animated(color), carry: flag,
-  enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]) };
+  enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]),
+  sequence: shape({ in: step, out: step, distance: positive(), delay: motion.delay, duration: motion.duration, ease }) };
 const textFields: Fields = { size: positive(), depth: number(0), track: number(), lineHeight: positive(), emissive: animated(number(0)), mono: flag, align: oneOf("left", "center", "right") };
 const codeMarks = list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true);
 const kindFields: Record<string, Fields> = {

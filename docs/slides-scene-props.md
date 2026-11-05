@@ -38,6 +38,11 @@ A step move's `ease` falls back to `camera.ease`.
 | `enter` | `{ step: 0, delay: 0, duration: .8, ease: "cubic", from: [0,-6,0] }` | Moves the part in from the offset `from` |
 | `exit` | `{ delay: 0, duration: .8, ease: "cubic", to: [0,0,-40] }`; `step` is required | Moves the part away by `to` on `step` |
 | `carry` | `true` | `false` stops a same-id part from the previous slide flying into this one |
+| `sequence` | `{ in: 0, delay: 0, duration: .8, ease: "cubic", distance: 20 }` | Waits `distance` to the right, slides to its place on step `in` and off `distance` to the left on step `out` |
+
+Give each part of a one-at-a-time sequence its own `in` and `out` steps, so exactly one shows at a time and
+stepping back slides them the other way. The `tree-sequence` layout stacks up to five captions and trees in the
+center of frame for this.
 
 Text parts (`Headline`, `Quote`) keep their glyph-by-glyph entrance: `enter` sets its `step`,
 `delay`, `duration`, `ease`, `stagger`, `scale` and start offset `from` (default `[-8,0,-2]`), and `exit`

@@ -5,8 +5,8 @@ import { act, create } from "react-test-renderer";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
-import { Bars, CodeMorph, CodePanel, CodeTrace, Headline, Keys, Layers, Rule, Scene, expandScene, readScenes } from "../packs/world/Authoring";
-import { checkPart, checkScene, defaultColors, enterDefaults, exitDefaults } from "../packs/world/authoringProps";
+import { Bars, CodeMorph, CodePanel, CodeTrace, Headline, Keys, Layers, Rule, Scene, Tree, expandScene, readScenes } from "../packs/world/Authoring";
+import { checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, sequenceDefaults } from "../packs/world/authoringProps";
 import { Box, Card, Fog, Orbs, Pillar, Stage, Text3D, prepareWorldSlides } from "../packs/world/World";
 import { cardInstances, instanceField, instanceOpacity, instancePosition, prepareWorldScene, sampleTrack, sampleWorldUniforms, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { text3dInstances } from "../packs/world/text3d";
@@ -55,6 +55,21 @@ test("parts keep their geometry without the new props, and enter, exit and carry
   expect(title.props.opacity).toEqual([{ step: 0, value: 1 }, { step: 1, delay: 0, value: 0, duration: exitDefaults.duration }]);
   expect(find(moving, Stage, "title/motion").props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 1, delay: 0, value: exitDefaults.to, duration: .8, ease: "cubic" }]);
   expect(find(moving, Text3D, "fresh@slide2")).toBeDefined();
+});
+
+test("a sequence shows one part at a time: each waits right, slides to center on in, and off left on out", () => {
+  const d = sequenceDefaults.distance, move = { delay: 0, duration: sequenceDefaults.duration, ease: "cubic" };
+  const scene = expandScene(<>
+    <Headline id="first" sequence={{ out: 1 }}>A</Headline>
+    <Tree id="second" nodes={[{ id: "a" }]} sequence={{ in: 1, out: 2 }} />
+    <Tree id="last" nodes={[{ id: "a" }]} sequence={{ in: 2, distance: 30 }} />
+  </>, "tree-sequence");
+  expect(find(scene, Stage, "first/sequence").props.position).toEqual([{ step: 0, value: [0, 0, 0] }, { step: 1, ...move, value: [-d, 0, 0] }]);
+  expect(find(scene, Stage, "second/sequence").props.position).toEqual([{ step: 0, value: [d, 0, 0] }, { step: 1, ...move, value: [0, 0, 0] }, { step: 2, ...move, value: [-d, 0, 0] }]);
+  expect(find(scene, Stage, "last/sequence").props.position).toEqual([{ step: 0, value: [30, 0, 0] }, { step: 2, ...move, value: [0, 0, 0] }]);
+  // The layout stacks every tree in the center of frame.
+  expect(find(scene, Stage, "second").props.position).toEqual(find(scene, Stage, "last").props.position);
+  expect(() => checkPart("tree", { id: "t", nodes: [{ id: "a" }], sequence: { in: 1.5 } })).toThrow("sequence.in must be a step number");
 });
 
 test("scene colors theme the parts, and color props take theme names", () => {
