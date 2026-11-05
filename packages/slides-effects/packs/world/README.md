@@ -938,7 +938,11 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   `next`, with shared keys linked and added and removed keys colored; on `recycle`
   (step 2) the copy flies away and the removed key's container travels behind the
   column into the added key's slot.
-- `Keys keys viewport` frames the first `viewport` keys and dims the rest. On `scroll` the keys move up a row; on `window` the column steps left and a second frame comes out holding only the keys then in view, linked to their originals; on `recycle` the key that left the top travels behind the column into the entering slot and takes its key. With both, `recycle` follows `window`: the second frame flies away and the column recenters first.
+- `Keys keys viewport` frames the first `viewport` keys. On `scroll` the keys move up a row; keys outside the frame stay
+  fully visible. On `window` the column steps left and two frames come out: the keys in view before the scroll and those
+  in view after it. On `links` (default `window`) lines join the keys both frames hold, the key that left turns the
+  `removed` color and the one that entered `added`. `labels` names the column, before and after frames (default none).
+  On `recycle` the key that left the top travels behind the column into the entering slot, emptied on `scroll`, and takes its key.
 - `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
   second while a resize handle drags its frame. `flash.repeat: "infinite"` loops both.
   `resize: "height"` keeps the top edge fixed and drags the bottom edge; `anchor: "top"`

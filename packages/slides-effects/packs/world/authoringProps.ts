@@ -98,7 +98,7 @@ const kindFields: Record<string, Fields> = {
     from: shape({ part: text, step, delay: number(0, " of seconds"), duration: positive(" of seconds"), fold: flag, color }, ["part"]) },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive(), boxColor: color, borderColor: color },
   keys: { keys: list(text), next: list(text), scroll: step, diff: step, remove: step, insert: step, recycle: step,
-    viewport: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), window: step },
+    viewport: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), window: step, links: step },
   layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true), colors: list(color),
     bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds"), words: list(text), size: positive() },
   flight: { words: list(either(text, list(text), "a word or a list of words")), path: list(vec3), gap: positive(), drift: number(0), size: positive(), ahead: number(0), ease },

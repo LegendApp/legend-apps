@@ -686,61 +686,64 @@ function keyList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     {left}{copy}{links}
   </Stage>;
 }
-/** A virtualized column whose first `viewport` keys sit in a frame, with the keys outside it dimmed. On `scroll` the keys move up one row.
- * On `window` the column steps aside and a second frame comes out holding copies of only the keys then in view, linked to their originals.
- * On `recycle` the keys stay put while the one that left the top travels behind the column into the slot entering at the bottom and takes its key.
- * With both, `recycle` follows `window`: the second frame flies away and the column recenters first. */
+/** A virtualized column whose first `viewport` keys sit in a frame. On `scroll` the keys move up one row.
+ * On `window` the column steps aside and two frames come out: the keys in view before the scroll and those in view after it.
+ * On `links` (default `window`) lines join the keys both hold, the key that left turns `removed` and the one that entered `added`.
+ * On `recycle` the keys stay put while the one that left the top travels behind the column into the slot entering at the bottom, which emptied on `scroll`, and takes its key.
+ * `labels` names the column, before and after frames; empty strings draw none. */
 function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const keys = props.keys as string[], shown = Number(props.viewport), scroll = props.scroll as number | undefined;
-  const windowed = props.window as number | undefined, recycle = props.recycle as number | undefined, [viewLabel, windowLabel] = (props.labels ?? ["viewport", "rendered"]) as string[];
-  const row = Number(props.rowHeight ?? .8), width = Number(props.width ?? 3), gap = Number(props.gap ?? 8.4), y = (i: number) => -i * row, by = scroll === undefined ? 0 : 1;
-  const card = keyCards(width, row, String(props.label ?? "item"), INK), DIM = .22, cross = .25;
+  const windowed = props.window as number | undefined, links = Number(props.links ?? windowed), recycle = props.recycle as number | undefined;
+  const [viewLabel = "", beforeLabel = "", afterLabel = ""] = (props.labels ?? []) as string[];
+  const row = Number(props.rowHeight ?? .8), width = Number(props.width ?? 3), gap = Number(props.gap ?? 5.6), y = (i: number) => -i * row, by = scroll === undefined ? 0 : 1;
+  const card = keyCards(width, row, String(props.label ?? "item"), INK), cross = .25;
   const inView = (i: number, offset: number) => i - offset >= 0 && i - offset < shown;
   const frame = (fid: string, position: unknown, draw: unknown, label: string) => {
     const w = width / 2 + .28, top = row * .4 + .2, bottom = y(shown - 1) - row * .4 - .2;
     return <Stage id={fid} position={position as V3}>
       <RoutedTube id={`${fid}/edge`} path={[[-w, top, 0], [w, top, 0], [w, bottom, 0], [-w, bottom, 0], [-w, top, 0]]} thickness={.04} color={INK.accent} emissive={3} draw={draw as number} />
-      <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.accent} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />
+      {label && <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.accent} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />}
     </Stage>;
   };
   const leaving = keys.slice(0, by), entering = keys.slice(shown, shown + by);
   const rows = keys.map((k, i) => {
-    // A pooled list's entering slot stays empty until the recycled key lands; a windowed one renders it, then empties it for the pool.
-    const pooled = recycle !== undefined && entering.includes(k), before = inView(i, 0) ? 1 : DIM, after = inView(i, by) && !(pooled && windowed === undefined) ? 1 : DIM;
-    const opacity = [{ step: 0, value: before }, ...scroll !== undefined && after !== before ? [key(scroll, after, cross, .35)] : [],
-      ...pooled && windowed !== undefined ? [key(recycle!, DIM, 0, .3)] : []];
+    // A pooled list renders no key in the slot entering the frame until a recycled container lands there.
+    const opacity = recycle !== undefined && scroll !== undefined && entering.includes(k) ? [{ step: 0, value: 1 }, key(scroll, 0, cross, .35)] : 1;
     const into = leaving.indexOf(k);
-    if (recycle === undefined || into < 0) return card(`${id}/${k}`, [0, y(i), 0], INK.idle, .8,
-      pooled ? [...opacity, key(recycle!, 0, 2, .3)] : opacity, [{ text: k, opacity }]);
-    const reuse = entering[into], slot = y(shown + into), lit = [...opacity, key(recycle, 1, 0, .3)];
+    if (recycle === undefined || into < 0) return card(`${id}/${k}`, [0, y(i), 0], INK.idle, .8, opacity, [{ text: k, opacity }]);
+    const reuse = entering[into], slot = y(shown + into);
     // Back behind the column, down past the keys that stay, then forward into the slot.
     return <Fragment key={k}>
       {card(`${id}/${k}`, [{ step: 0, value: [0, y(i), 0] }, key(recycle, [0, y(i), -2], .3, .6), key(recycle, [0, slot, -2], .9, 1.1), key(recycle, [0, slot, 0], 2, .5)],
         [{ step: 0, value: INK.idle }, key(recycle, INK.amber, 0, .3), key(recycle, INK.idle, 2.9, .7)],
-        [{ step: 0, value: .8 }, key(recycle, 2.4, 0, .3), key(recycle, 7, 2.45, .06), key(recycle, .8, 2.6, .9)], lit,
-        [{ text: k, opacity: [...lit, key(recycle, 0, 2.15, .15)] }, { text: reuse, opacity: [{ step: 0, value: 0 }, key(recycle, 1, 2.2, .15)] }])}
+        [{ step: 0, value: .8 }, key(recycle, 2.4, 0, .3), key(recycle, 7, 2.45, .06), key(recycle, .8, 2.6, .9)], 1,
+        [{ text: k, opacity: [{ step: 0, value: 1 }, key(recycle, 0, 2.15, .15)] }, { text: reuse, opacity: [{ step: 0, value: 0 }, key(recycle, 1, 2.2, .15)] }])}
       <Burst id={`${id}/${k}/landing`} position={[0, slot, .3]} step={recycle} delay={2.45} count={16} lifetime={.7} colors={[INK.amber, INK.amber, "#ffffff"]} emissive={6} size={.025} speed={2.5} />
     </Fragment>;
   });
-  const visible = keys.map((k, i) => ({ k, i })).filter(({ i }) => inView(i, by));
-  const copies = windowed === undefined ? null : <Stage id={`${id}/rendered`} position={(recycle === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(recycle, [3, 0, -30], 0, .5)]) as V3}>
-    {visible.map(({ k, i }, j) => {
-      const yy = y(i) + row * by, opacity = [{ step: 0, value: 0 }, key(windowed, 1, j * .05, .25)];
-      return <Fragment key={k}>
-        {card(`${id}/copy/${k}`, [{ step: 0, value: [0, yy, -.05] }, key(windowed, [gap / 2, yy, 0], j * .05, .8)], INK.idle, .8, opacity, [{ text: k, opacity }])}
-        <RoutedTube id={`${id}/link/${k}`} path={[[-gap / 2 + width / 2, yy, 0], [gap / 2 - width / 2, yy, 0]]} thickness={.03} color={INK.blue} emissive={3.5}
-          draw={[{ step: 0, value: 0 }, key(windowed, 1, 1 + j * .07, .4)]} />
-      </Fragment>;
+  const before = keys.filter((_, i) => inView(i, 0)), after = keys.filter((_, i) => inView(i, by));
+  const snapshot = (name: string, list: string[], x: number, other: string[], mark: string, label: string) => windowed === undefined ? null : <Fragment key={name}>
+    {list.map((k, j) => {
+      // Each copy rises from just behind its own slot once the column has stepped clear.
+      const delay = .45 + (x ? .25 : 0) + j * .05, opacity = [{ step: 0, value: 0 }, key(windowed, 1, delay, .4)], odd = !other.includes(k);
+      return card(`${id}/${name}/${k}`, [{ step: 0, value: [x - .8, y(j), -1.5] }, key(windowed, [x, y(j), 0], delay, .7)],
+        odd ? [{ step: 0, value: INK.idle }, key(links, mark, 0, .4)] : INK.idle, odd ? [{ step: 0, value: .8 }, key(links, 2.6, 0, .4)] : .8, opacity, [{ text: k, opacity }]);
     })}
-    {frame(`${id}/window`, [gap / 2, 0, 0], [{ step: 0, value: 0 }, key(windowed, 1, .35, .8)], windowLabel)}
-  </Stage>;
+    {frame(`${id}/${name}`, [x, 0, 0], [{ step: 0, value: 0 }, key(windowed, 1, .4 + (x ? .25 : 0), .8)], label)}
+  </Fragment>;
+  const lines = windowed === undefined ? null : before.filter(k => after.includes(k)).map((k, j) => {
+    const a: V3 = [width / 2, y(before.indexOf(k)), 0], b: V3 = [gap - width / 2, y(after.indexOf(k)), 0];
+    return <RoutedTube key={`link/${k}`} id={`${id}/link/${k}`} path={[a, b]} thickness={.03} color={INK.blue} emissive={3.5}
+      draw={[{ step: 0, value: 0 }, key(links, 1, .3 + j * .07, .4)]} />;
+  });
   return <Stage id={id} position={at}>
-    <Stage id={`${id}/column`} position={(windowed === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(windowed, [-gap / 2, 0, 0], 0, .8),
-      ...recycle === undefined ? [] : [key(recycle, [0, 0, 0], 0, .8)]]) as V3}>
+    <Stage id={`${id}/column`} position={(windowed === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(windowed, [-gap, 0, 0], 0, .9)]) as V3}>
       {frame(`${id}/viewport`, [0, 0, 0], 1, viewLabel)}
       <Stage id={`${id}/keys`} position={(scroll === undefined ? [0, 0, 0] : [{ step: 0, value: [0, 0, 0] }, key(scroll, [0, row, 0], 0, .9)]) as V3}>{rows}</Stage>
     </Stage>
-    {copies}
+    {snapshot("before", before, 0, after, INK.red, beforeLabel)}
+    {snapshot("after", after, gap, before, INK.green, afterLabel)}
+    {lines}
   </Stage>;
 }
 /** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */
