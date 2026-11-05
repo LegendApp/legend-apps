@@ -33,7 +33,7 @@ export function webEffectSupport(found: { id: string; capabilities?: unknown }[]
 
 /** Export stages in order; `onProgress` reports the index of the stage that is starting. */
 export const exportSteps = ["Compiling deck", "Copying assets", "Bundling player", "Compiling styles", "Writing files"] as const;
-export type ExportOptions = { canvasKitURL?: string; transitionDirectory?: string; effectPacksDirectory?: string; onProgress?(step: number): void };
+export type ExportOptions = { offscreen?: boolean; canvasKitURL?: string; transitionDirectory?: string; effectPacksDirectory?: string; onProgress?(step: number): void };
 
 export class ExportError extends Error {
   constructor(message: string, readonly missingEffectPacks: string[] = []) { super(message); }
@@ -88,13 +88,16 @@ export function usesSkia(code: string) {
 }
 
 /** Shared with helper packaging so only the actual browser input closure is shipped. */
-export async function buildBrowserPlayer(deckCode: string, preload: unknown[], skia: boolean, font: string, outfile: string, canvasKitURL?: string, write = true) {
+export async function buildBrowserPlayer(deckCode: string, preload: unknown[], skia: boolean, font: string, outfile: string, canvasKitURL?: string, write = true, offscreen = false) {
   const aliases: Record<string, string> = {
     "react-native": path.join(src, "native.tsx"),
     "@shopify/react-native-skia": path.join(src, "skia.tsx"),
     "@legend-apps/scaled-view": path.join(src, "scaled.tsx"),
     "lottie-react-native": path.join(src, "lottie.tsx"),
   };
+  if (offscreen) {
+    aliases["react-native-reanimated"] = path.join(src, "renderReanimated.ts");
+  }
   // The helper also keeps browser-component dependencies under .compiler; use one React/state instance.
   for (const name of ["react", "react/compiler-runtime", "react/jsx-runtime", "react/jsx-dev-runtime", "react-dom", "react-dom/client", "@legendapp/state", "@legendapp/state/react", "@legendapp/state/sync"]) {
     aliases[name] = webRequire.resolve(name);
@@ -113,6 +116,9 @@ export async function buildBrowserPlayer(deckCode: string, preload: unknown[], s
       api.onResolve({ filter: /^virtual:preload$/ }, () => ({ path: "preload", namespace: "compiled" }));
       api.onLoad({ filter: /.*/, namespace: "compiled" }, args => ({ contents: args.path === "preload" ? `export default ${JSON.stringify(preload)};` : deckCode, loader: "js", resolveDir: src }));
       api.onResolve({ filter: /.*/ }, args => {
+        if (offscreen && args.path === "react-native-reanimated" && args.importer === path.join(src, "renderReanimated.ts")) {
+          return { path: webRequire.resolve("react-native-reanimated") };
+        }
         if (aliases[args.path]) return { path: aliases[args.path] };
         if (args.path.startsWith(".")) {
           const target = path.basename(args.path);
@@ -142,7 +148,7 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
   const deckRoot = path.dirname(deckPath);
   const out = path.resolve(output);
   options.onProgress?.(0);
-  const result = await compileDeck(deckPath, { transitionDirectory: options.transitionDirectory, effectPacksDirectory: options.effectPacksDirectory });
+  const result = await compileDeck(deckPath, { source: options.offscreen ? await fs.readFile(deckPath, "utf8") : undefined, transitionDirectory: options.transitionDirectory, effectPacksDirectory: options.effectPacksDirectory });
   if (!result.success) throw new ExportError(result.errors.join("\n"), result.missingEffectPacks);
   const packs = await Promise.all(result.dependencies.filter(file => path.basename(file) === "pack.json").map(async file => JSON.parse(await fs.readFile(file, "utf8"))));
   const { effects, unsupported } = webEffectSupport(packs);
@@ -169,7 +175,7 @@ async function buildWebsite(deck: string, output: string, options: ExportOptions
     asset.version = createHash("sha256").update(await fs.readFile(path.join(out, decodeURIComponent(asset.source)))).digest("hex");
   }
   options.onProgress?.(2);
-  const bundle = await buildBrowserPlayer(deckCode, preload, skia, font, path.join(out, "player.js"), options.canvasKitURL, false);
+  const bundle = await buildBrowserPlayer(deckCode, preload, skia, font, path.join(out, "player.js"), options.canvasKitURL, false, options.offscreen);
   for (const file of bundle.outputFiles!) {
     if (!file.path.endsWith(".map")) await fs.writeFile(file.path, file.contents);
   }
@@ -259,9 +265,11 @@ export async function exportWebsite(deck: string, output: string, options: Expor
       try { await fs.rm(previous, { recursive: true, force: true }); }
       finally { activeStaging.delete(previous); }
     }
-    const debug = exportDebugDirectory(out);
-    await fs.mkdir(debug, { recursive: true });
-    await fs.writeFile(path.join(debug, "player.js.map"), sourceMap);
+    if (!options.offscreen) {
+      const debug = exportDebugDirectory(out);
+      await fs.mkdir(debug, { recursive: true });
+      await fs.writeFile(path.join(debug, "player.js.map"), sourceMap);
+    }
     return out;
   } finally {
     await fs.rm(staging, { recursive: true, force: true });

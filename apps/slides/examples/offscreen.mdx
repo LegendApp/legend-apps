@@ -1,0 +1,26 @@
+---
+title: Offscreen sample
+width: 960
+height: 540
+transition: none
+theme:
+  backgroundColor: "#05060a"
+---
+
+import { Background } from "@legend-apps/presentation"
+
+import { World, Camera, Box, Label, Bloom } from "slides:world/World"
+
+<Background><World background quality="high">
+  <Camera shots={[{ at: 0, position: [0, 2, 14], target: [0, 0, 0], fov: 42 }]} />
+  <Box id="box" color="#22d3ee" size={1.5} position={[{ at: 0, value: [-2, 0, 0] }, { step: 1, value: [2, 0, 0], duration: 0.5 }]} />
+  <Label text="OFFSCREEN" position={[0, 3, 0]} size={0.5} />
+  <Bloom intensity={0.6} />
+</World></Background>
+<Steps count={2}>{() => null}</Steps>
+
+---
+
+# Render anywhere
+
+<Steps count={2}>{(step) => step ? "One fixed clock" : "One shared renderer"}</Steps>

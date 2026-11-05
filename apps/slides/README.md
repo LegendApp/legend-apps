@@ -910,3 +910,48 @@ The check compiles the installed source under `shell/.legend/spark/node_modules`
 it does not apply the patch. To check another candidate, pass its exact
 `AnimationFrameQueue.mm` path and set `SPARK_NODE_MODULES` to the matching native
 dependencies. This display-dependent check is separate from hosted CI.
+
+## Render offscreen from the CLI
+
+From the repository root, with Bun on `PATH`:
+
+```sh
+export PATH="$HOME/.bun/bin:$PATH"
+bun run slides render deck.mdx --slide 14 --steps all --out rendered/
+bun run slides render deck.mdx --slides 10-14 --video output.mp4 --fps 60
+bun run slides render apps/slides/examples/offscreen.mdx --slides 1-2 --video sample.mp4 --step-seconds 3
+bun run slides render --help
+```
+
+Requires a WebGPU-capable Chromium (Google Chrome on macOS by default; override
+with `--chrome PATH` or `CHROME_PATH`). MP4 export also requires `ffmpeg`, or
+`--ffmpeg PATH`. The renderer starts its own headless browser with a temporary
+profile and closes it on completion. It opens no app window, uses no Metro or
+screen capture, and needs neither Screen Recording permission nor the native
+app's resource slot. Temporary player assets and browser data are removed.
+The source deck and its effect lock are read-only.
+
+Slides and steps are **one-based**; step 1 is the initial state. Select comma
+lists or inclusive ranges with `--slides` and `--steps`, or `all` (the default).
+Each state lasts `--step-seconds` (default 3), rounded to a whole number of
+`--fps` frames (default 60). PNGs capture the last frame of each selected state,
+named `slide-14-step-1.png`. Earlier steps are simulated before a selected later
+step, so reveals and World motion have their history. Selected slides run in
+deck order; gaps jump directly between the selected slides. Existing output
+files are never overwritten.
+
+MP4s contain H.264 video without audio. `--width` and `--height` set output
+pixels; defaults follow the deck canvas, or 1920 × 1080. MP4 dimensions must be
+even. Rendering advances an explicit clock at `frame / fps`, waits for GPU
+completion, and streams frames to the encoder with backpressure. Render speed
+does not change playback speed. JSON output reports frame counts, dimensions,
+wall time, throughput, and browser/GPU diagnostics.
+
+The CLI reuses the web export's native slide tree, World scene sampling, WGSL,
+and GPU pass encoder. World geometry, shading, text atlas, and post effects use
+the app's implementation. The existing web adapters still apply: browser text
+and native fonts can differ, native shader slide transitions become cuts, and
+native-only capabilities are rejected. Embedded pages with their own clocks,
+remote resources, and arbitrary external side effects are not guaranteed to
+replay deterministically. Use local assets and the shared playback clock for
+repeatable output. See the [web export limitations](../../packages/slides-web/README.md).

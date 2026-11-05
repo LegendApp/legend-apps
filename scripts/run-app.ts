@@ -60,6 +60,14 @@ async function main() {
     return;
   }
 
+  if (args[0] === "slides" && args[1] === "render") {
+    const { renderSlides } = await import("./slides-render");
+    const { renderUsage } = await import("./lib/slidesRender");
+    if (args.includes("--help")) console.log(renderUsage);
+    else await renderSlides(args.slice(2));
+    return;
+  }
+
   const command = parseAppCommand(args);
 
   if (command.all) {
