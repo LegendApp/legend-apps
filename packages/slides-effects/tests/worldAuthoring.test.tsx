@@ -9,7 +9,7 @@ import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, laneScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
 import { Box, Burst, Camera, Card, Custom, Pillar, RoundedBox, RoutedTube, Stage, Text3D, WorldSlide } from "../packs/world/World";
 
-const fence = <pre><code className="language-tsx">{"function Example() {\n  return 42;\n}\n"}</code></pre>;
+const fence = <pre>{React.createElement("code", { className: "language-tsx", highlighted: { tokens: [] }, children: "function Example() {\n  return 42;\n}\n" })}</pre>;
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
 

@@ -86,7 +86,8 @@ const textFields: Fields = { size: positive(), depth: number(0), track: number()
 const codeMarks = list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true);
 const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
-  code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), marks: codeMarks },
+  code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), border: number(0), marks: codeMarks },
+  grid: { chrome: oneOf("mac"), fill: fraction, border: number(0), resize: oneOf("width", "height") },
   morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), highlight: shape({ color, opacity: fraction }), marks: codeMarks },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
@@ -112,6 +113,12 @@ export function checkScene(props: Record<string, unknown>) {
 export function checkPart(kind: string, props: Record<string, unknown>) {
   const error = fields(props, { ...partFields, ...kindFields[kind] }, "", ["id", ...required[kind] ?? []]);
   if (error) throw authoringError(props, parts[kind] ?? kind, error);
+}
+const highlightedKinds = new Set(["code", "morph", "trace", "layers"]);
+/** Code parts take their colors from the compiler's Shiki tokens, which only fenced blocks carry; a string child would render uncolored. */
+export function checkHighlighted(kind: string, props: Record<string, unknown>, source: string, highlighted: unknown) {
+  if (highlightedKinds.has(kind) && source.trim() && !highlighted)
+    throw authoringError(props, parts[kind], "code must be a fenced block (```tsx) so it is syntax highlighted, not a string.");
 }
 /** Theme color names resolve against the scene's colors; anything else passes through. */
 export function paint<T>(value: T, colors: SceneColors): T | string {

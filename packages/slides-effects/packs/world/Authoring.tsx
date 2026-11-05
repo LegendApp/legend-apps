@@ -3,7 +3,7 @@ import { useDeckContent, usePresentationValue } from "@legend-apps/presentation"
 import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector } from "./scene";
-import { ambientEffects, authoringError, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
+import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
 import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
@@ -334,6 +334,7 @@ export function readScenes(content: readonly ReactNode[], world?: string): Autho
       const { children, mdxSource: _, ...part } = place(kind, node.props);
       const source = codeSource(children as ReactNode);
       const text = kind === "code" ? source.replace(/\n$/, "") : source;
+      checkHighlighted(kind, node.props, source, codeHighlight(children as ReactNode));
       parts.push({ ...part, ...part.color === undefined ? {} : { color: paint(part.color, colors) }, kind, order: parts.length, text, tokens: codeHighlight(children as ReactNode)?.tokens } as AuthoredPart);
     });
     for (const part of parts) if (part.kind === "tree") part.nodes = placeTree(part.nodes as TreeNode[], part as { width?: number; levelHeight?: number });
@@ -716,10 +717,20 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const emissive = flash ? [{ step: 0, value: .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : .7;
   const color = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
   const drag = flash ? Array.from({ length: Math.ceil(length / .7) }, (_, k) => ({ at: start + k * .7, pull: k % 2 ? 0 : .9 })) : [];
-  const frame = (pull: number) => ({ position: [pull / 2, 0, -.2] as V3, scale: [width + .5 + pull, height + .5, .05] as V3, handle: [width / 2 + .3 + pull, -height / 2 - .3, .1] as V3 });
+  const mac = props.chrome === "mac", bar = mac ? .42 : 0, w = width + .5, h = height + .5;
+  const frame = (pull: number) => {
+    const [x, y] = props.resize === "height" ? [0, pull] : [pull, 0];
+    return { position: [x / 2, (bar - y) / 2, -.2] as V3, scale: [w + x, h + bar + y, .05] as V3, handle: [width / 2 + .3 + x, -height / 2 - .3 - y, .1] as V3,
+      bar: [x / 2, (h + bar) / 2, -.17] as V3, barScale: [w + x, bar, .04] as V3 };
+  };
   const track = (pick: (f: ReturnType<typeof frame>) => V3) => flash ? [{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash.step, pick(frame(d.pull)), d.at, .7, "smoothstep"))] : pick(frame(0));
   return <Stage id={id} position={at}>
-    <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={.15} color={INK.idle} emissive={.5} />
+    <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={Number(props.fill ?? .15)} edge={props.border as number | undefined} color={INK.idle} emissive={.5} />
+    {mac && <>
+      <Card id={`${id}/bar`} flat fill={1} edge={0} glow={0} position={track(f => f.bar)} scale={track(f => f.barScale)} color="#2b2e35" />
+      {["#ff5f57", "#febc2e", "#28c840"].map((dot, k) => <Card key={dot} id={`${id}/dot${k}`} flat fill={1} edge={0} glow={0} radius={.075}
+        position={[-w / 2 + .3 + k * .24, (h + bar) / 2, -.14]} scale={[.15, .15, .02]} color={dot} />)}
+    </>}
     <Box id={`${id}/handle`} size={.5} position={track(f => f.handle)} scale={[.3,.3,.3]} color={hot} emissive={flash ? [{ step: 0, value: 0 }, key(flash.step, 3, start, .3)] : 0} />
     {Array.from({ length: count }, (_, i) => { const x = (i % columns - (columns - 1) / 2) * px, y = -(Math.floor(i / columns) - (rows - 1) / 2) * py; return <Fragment key={i}>
       <Card id={`${id}/${i}`} position={[x, y, 0]} scale={[cw, ch, .2]} color={color} emissive={emissive} />
@@ -1082,7 +1093,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const width = Math.max(1, ...lines.map(l => l.length)) * size * .84 + 2 * pad, height = (lines.length - 1) * lineHeight + size + 2 * pad, advance = size * TYPE * MONO;
     const marks = (props.marks ?? []) as CodeMark[], panel = props.panelColor === undefined ? undefined : paint(props.panelColor, INK.colors) as string;
     return <Stage id={id} position={anchored(position, props.anchor, width, height)}>
-      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={panel ?? INK.colors.panel} />
+      <Card id={`${id}/card`} position={[width / 2 - pad, -(lines.length - 1) * lineHeight / 2, -.14]} scale={[width,height,.06]} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} edge={Number(props.border ?? PANEL.edge)} color={panel ?? INK.colors.panel} />
       <Text3D id={`${id}/code`} text={text} tokens={codeHighlight(children)?.tokens} mono size={size * TYPE} lineHeight={lineHeight / (size * TYPE)} align="left"
         color={props.textColor === undefined ? undefined : paint(props.textColor, INK.colors) as string} />
       {marks.flatMap((mark, m) => lines.flatMap((line, row) => [...line.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found => {

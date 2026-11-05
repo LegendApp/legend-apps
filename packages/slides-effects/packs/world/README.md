@@ -933,7 +933,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   column into the added key's slot.
 - `Keys keys viewport` frames the first `viewport` keys and dims the rest. On `scroll` the keys move up a row; on `window` the column steps left and a second frame comes out holding only the keys then in view, linked to their originals; on `recycle` the key that left the top travels behind the column into the entering slot and takes its key. With both, `recycle` follows `window`: the second frame flies away and the column recenters first.
 - `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
-  second while a resize handle drags its frame.
+  second while a resize handle drags its frame. `resize: "height"` drags the bottom edge instead of the right.
+  `chrome: "mac"` adds a title bar with the three window buttons; `fill` (default .15) is the window body's
+  opacity and `border` its rim strength.
 - `Form panels typing` shows panels of fields with render-count badges.
   `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
   and flashing them on each keystroke.
@@ -957,6 +959,8 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   the word moves with it.
 - `CodePanel marks={[{ text, step }]}` highlights each occurrence of `text`, and
   `anchor: "center"` centers the panel on its position.
+- `CodePanel border` sets the panel's rim strength (default .3). Code parts color from the
+  compiler's syntax tokens, so their child must be a fenced block; a string child is an authoring error.
 
 A track's `steps` move the camera within a station, by step index:
 `camera={{ steps: { 2: { orbit: 30 }, 4: { dolly: .6, fov: 48 } } }}`. `orbit` turns the
