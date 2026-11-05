@@ -1323,15 +1323,18 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const { height = 4.3, width = 1.5, depth = width, gap = 3.4, delay = launch ? launch.land + (launch.fold ? .4 : .1) : 1, stagger = launch ? launch.fold ? .14 : .1 : .35,
       duration = launch ? launch.fold ? 1.1 : .9 : 1.6, ease = launch?.fold ? "spring" : "out", labelSize = .44 } = props as Record<string, number> & { ease?: Ease };
     const tint = props.color === undefined ? undefined : paint(props.color, INK.colors) as string;
-    return <Stage id={id} position={launch ? [{ step: 0, value: add(position, [0, -60, 0]) }, { step: launch.step, delay: launch.land + (launch.fold ? 0 : .08), value: position, duration: 0 }] : position}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
+    // With a `step`, bars stay out of sight until that step, then grow `delay` seconds into it.
+    const step = launch?.step ?? (props.step === undefined ? undefined : Number(props.step));
+    return <Stage id={id} position={launch ? [{ step: 0, value: add(position, [0, -60, 0]) }, { step: launch.step, delay: launch.land + (launch.fold ? 0 : .08), value: position, duration: 0 }]
+      : step === undefined ? position : [{ step: 0, value: add(position, [0, -60, 0]) }, { step, value: position, duration: 0 }]}>{items.map((b, i) => { const x = (i - (items.length - 1) / 2) * gap; return <Fragment key={b.label}>
       <Pillar id={`${id}/${i}`} value={b.value} maximum={maximum} height={height} width={width} depth={depth} color={b.color === undefined ? tint : paint(b.color, INK.colors) as string}
         radius={Math.min(width, depth) * .12} gradient={.45} counter={false}
-        position={[x,0,0]} {...launch ? { step: launch.step, delay: delay + i * stagger } : { at: delay + i * stagger }} duration={duration} ease={ease} />
+        position={[x,0,0]} {...step === undefined ? { at: delay + i * stagger } : { step, delay: delay + i * stagger }} duration={duration} ease={ease} />
       {/* A folded plate's labels sit above their bars once grown, clear of the bars and the plate. */}
       {textLine("headline", { id: `${id}/${i}/label`, text: b.label, size: labelSize, flat: true, duration: .7,
         ...launch?.fold ? { position: [x, b.value / maximum * height + labelSize * TYPE * .8, 0], delay: delay + i * stagger + duration * .6 }
           : { position: [x,.3,depth / 2 + .3], delay: delay + .2 + i * stagger * .12 / .35 },
-        ...launch ? { enter: { step: launch.step } } : {} }, INK)}
+        ...step === undefined ? {} : { enter: { step } } }, INK)}
     </Fragment>; })}</Stage>;
   }
   if (kind === "code") {

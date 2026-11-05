@@ -158,6 +158,15 @@ test("bars folding a sibling panel tip it back flat into their base plate, tint 
   expect(labels.every(n => (n.props.position as number[])[2] === 0)).toBe(true);
 });
 
+test("bars with a step stay out of sight until it, then grow and label", () => {
+  const scene = expandScene(<Bars id="b" step={3} delay={.2} stagger={.1} items={[{ label: "A", value: 10 }, { label: "B", value: 5 }]} />), parts = flat(scene);
+  expect(parts.find(n => n.type === Stage && n.props.id === "b")!.props.position).toEqual([{ step: 0, value: [0, 3.2 - 60, 0] }, { step: 3, value: [0, 3.2, 0], duration: 0 }]);
+  const rise = parts.filter(n => n.type === Pillar);
+  expect(rise.map(n => [n.props.step, n.props.at])).toEqual([[3, undefined], [3, undefined]]);
+  rise.forEach((n, i) => expect(n.props.delay as number).toBeCloseTo(.2 + i * .1));
+  expect(parts.filter(n => n.type === Text3D).every(n => (n.props.enter as { step: number }).step === 3)).toBe(true);
+});
+
 test("leaf layout, tree flashes, key recycling and diff morphs come from props alone", async () => {
   const nodes = placeTree([{ id: "r" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }, { id: "b1", p: 2 }], { width: 12, levelHeight: 1 });
   expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2,1],[4,1],[-4,0],[0,0],[4,0]]);
