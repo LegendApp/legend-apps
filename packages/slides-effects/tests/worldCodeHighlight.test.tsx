@@ -6,7 +6,7 @@ import type { CodeHighlight } from "@legend-apps/presentation";
 import { highlightCode } from "../../presentation/src/compiler/remarkCodeHighlight";
 import { CodePanel, CodeMorph, CodeTrace, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { Text3D } from "../packs/world/World";
-import { colorVector, compileTrack, prepareWorldScene, sampleWorldUniforms, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { cardInstances, instanceField, colorVector, compileTrack, prepareWorldScene, sampleWorldUniforms, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { layoutText3D, text3dInstances } from "../packs/world/text3d";
 import { font } from "../packs/world/text3d-mono";
 import { createPlaybackState } from "../../presentation/src/playbackState";
@@ -50,19 +50,16 @@ test("same-text/color tokens carry across an inserted line and changed colors ge
   expect(trackIds(changed).some(id=>oldIds.includes(id))).toBe(false);
 });
 
-test("diff and trace animation start with syntax colors and diff additions settle back to them", async () => {
+test("diff and trace animation retain syntax colors", async () => {
   const source = ' const a = 1;\n+const b = 2;';
   const highlighted = await highlightCode(source, "diff");
   const nodes = flat(expandScene(<CodeMorph id="change">{fence(source, highlighted)}</CodeMorph>)).filter(node => node.type === Text3D);
-  for (const node of nodes) expect(node.props.tokens).toBeDefined();
-  const addedNode = nodes.find(node => node.props.text === "const b = 2;")!;
-  const added = text3dInstances(addedNode.props as never);
-  const syntax = (addedNode.props.tokens as CodeHighlight["tokens"])[0].color;
-  const initial = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0, 1: 1 } };
-  const settled = { ...initial, slideTime: 10, stepTime: 9, stepIndex: 1 };
-  for (const instance of added) {
-    expect(sampleTrack(instance.color, initial)).toEqual(colorVector("#39d98a"));
-    expect(sampleTrack(instance.color, settled)).toEqual(colorVector(syntax));
+  for (const node of nodes) {
+    expect(node.props.tokens).toBeDefined();
+    const glyphs = text3dInstances(node.props as never);
+    const syntax = (node.props.tokens as CodeHighlight["tokens"])[0].color;
+    for (const stepIndex of [0, 1]) for (const stepTime of [0, .2, .7, 4]) for (const glyph of glyphs)
+      expect(sampleTrack(glyph.color, { slideTime: stepTime + stepIndex, stepTime, stepIndex, stepOrigins: { 0: 0, 1: 1 } })).toEqual(colorVector(syntax));
   }
   const code = "const a = 1;\nuse(a);";
   const tokens = await highlightCode(code, "ts");
@@ -95,4 +92,49 @@ test("baked glyph tracks share samples and preserve staged color, glow and pose 
     expect(sampleWorldUniforms(scene, clock, null, 1, 1, true)).toBe(buffer);
     expect(buffer).toEqual(Float32Array.from(sampleWorldUniforms(scene, clock)));
   }
+});
+
+
+test("morphs carry unchanged tokens through edits, insertions and reverse seeks with background bands only", async () => {
+  const source = ' function Example() {\n-  const state = useState(0)\n+  const state = useObservable(0)\n+  const value = useValue(state)\n   return state\n-  obsolete()\n }';
+  const second = ' function Example() {\n   const state = useObservable(0)\n   const value = useValue(state)\n-  return state\n+  return value\n }';
+  const tree = flat(expandScene(<CodeMorph id="morph" highlight={{ color: "#abcdef", opacity: .08 }}>{fence(source, await highlightCode(source, "diff-tsx"))}{fence(second, await highlightCode(second, "diff-tsx"))}</CodeMorph>));
+  const text = tree.filter(node => node.type === Text3D);
+  const named = (value: string) => text.filter(node => node.props.text === value);
+  expect(named("useState")).toHaveLength(1);
+  expect(named("useObservable")).toHaveLength(1);
+  expect(named("return")).toHaveLength(1);
+  const clock = (stepIndex: number, stepTime: number) => ({ slideTime: stepIndex + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 1, 2: 2 } });
+  const returning = text3dInstances(named("return")[0].props as never)[0];
+  expect(sampleTrack(returning.position, clock(0, 0))).not.toEqual(sampleTrack(returning.position, clock(1, 4)));
+  for (const t of [0, .15, .5, 1, 4]) {
+    expect(sampleTrack(returning.glyph!.opacity, clock(1, t))).toBe(1);
+    expect(sampleTrack(returning.glyph!.opacity, clock(2, t))).toBe(1);
+  }
+  const unchanged = text3dInstances(named("Example")[0].props as never)[0];
+  expect(unchanged.position.frames).toEqual([]);
+  expect(unchanged.glyph!.opacity.frames).toEqual([]);
+  const old = text3dInstances(named("useState")[0].props as never)[0], next = text3dInstances(named("useObservable")[0].props as never)[0];
+  expect(sampleTrack(old.glyph!.opacity, clock(0, 4))).toBe(1);
+  expect(sampleTrack(old.glyph!.opacity, clock(1, 4))).toBe(0);
+  expect(sampleTrack(next.glyph!.opacity, clock(0, 4))).toBe(0);
+  expect(sampleTrack(next.glyph!.opacity, clock(1, 4))).toBe(1);
+  expect(sampleTrack(old.glyph!.opacity, clock(0, 0))).toBe(1);
+  expect(sampleTrack(next.glyph!.opacity, clock(0, 0))).toBe(0);
+  const strikes = tree.filter(node => String(node.props.id).endsWith("/strike"));
+  expect(strikes).toHaveLength(1);
+  expect(sampleTrack(compileTrack(strikes[0].props.position as never), clock(1, 4))[1]).toBeCloseTo(-3 * .27);
+  const bands = tree.filter(node => String(node.props.id).includes("/band"));
+  expect(bands.length).toBeGreaterThan(0);
+  expect(bands.every(node => node.props.color === "#abcdef")).toBe(true);
+  expect(bands.every(node => node.props.flat && node.props.edge === 0 && node.props.glow === 0)).toBe(true);
+  const prepared = prepareWorldScene({ instances: bands.flatMap(node => cardInstances(node.props as never)) });
+  const uniforms = sampleWorldUniforms(prepared, clock(1, 4), null, 1, 1, true);
+  for (let i = 0; i < prepared.instances.length; i++) {
+    const base = worldHeaderSize + i * worldInstanceSize;
+    expect(uniforms[base + instanceField.geometry]).toBe(1);
+    expect(uniforms[base + instanceField.opacity]).toBeCloseTo(sampleTrack(prepared.instances[i].card!.opacity!, clock(1, 4)));
+    expect(uniforms[base + 4]).toBeCloseTo(colorVector("#abcdef")[0]);
+  }
+  expect(bands.some(node => sampleTrack(compileTrack(node.props.opacity as never), clock(1, 4)) === .08)).toBe(true);
 });

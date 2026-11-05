@@ -73,3 +73,28 @@ test("versioned token cache survives compiler restart without calling Shiki; dam
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test("diff fences highlight both complete code versions and preserve original offsets", async () => {
+  const source = ' function Example() {\n-  const state = useState("hello")\n+  const state = useObservable("hello")\n+  const value = useValue(state)\n   return <span>{state}</span>\n }';
+  for (const language of ["diff", "diff-tsx"]) {
+    const result = await highlightCode(source, language);
+    expect(new Set(result.tokens.map(token => token.color)).size).toBeGreaterThan(3);
+    for (const token of result.tokens) expect(source.slice(token.offset, token.offset + token.content.length)).toBe(token.content);
+    for (const exclude of ["+", "-"]) {
+      const lines = source.split("\n").filter(line => line[0] !== exclude);
+      const expected = await highlightCode(lines.map(line => line.slice(1)).join("\n"), "tsx");
+      let offset = 0;
+      for (const line of source.split("\n")) {
+        if (line[0] !== exclude) {
+          const sideOffset = lines.slice(0, lines.indexOf(line)).reduce((sum, line) => sum + line.length, 0);
+          for (const token of result.tokens.filter(token => token.offset >= offset + 1 && token.offset < offset + line.length)) {
+            const original = expected.tokens.find(other => sideOffset + token.offset - offset - 1 >= other.offset && sideOffset + token.offset - offset - 1 < other.offset + other.content.length);
+            expect(token.color).toBe(original?.color);
+          }
+        }
+        offset += line.length + 1;
+      }
+    }
+  }
+});

@@ -7,7 +7,7 @@ import shikiPackage from "shiki/package.json";
 import type { CodeHighlight } from "../codeHighlight";
 
 const theme = "github-dark-default";
-export const codeHighlightVersion = `shiki@${shikiPackage.version}/${theme}/1`;
+export const codeHighlightVersion = `shiki@${shikiPackage.version}/${theme}/2`;
 let highlighter: ReturnType<typeof createHighlighter> | undefined;
 
 export async function highlightCode(source: string, language = "text"): Promise<CodeHighlight> {
@@ -22,13 +22,35 @@ export async function highlightCode(source: string, language = "text"): Promise<
     } catch { /* Missing or damaged entries are rebuilt. */ }
   }
   const shiki = await (highlighter ??= createHighlighter({ themes: [theme], langs: [] }));
-  const lang = Object.hasOwn(bundledLanguages, language.toLowerCase()) ? language.toLowerCase() as BundledLanguage : "text";
+  const diffLanguage = language.match(/^diff(?:-(.+))?$/i);
+  const syntax = diffLanguage ? diffLanguage[1] ?? "tsx" : language;
+  const lang = Object.hasOwn(bundledLanguages, syntax.toLowerCase()) ? syntax.toLowerCase() as BundledLanguage : "text";
   if (lang !== "text") await shiki.loadLanguage(lang);
-  const result = shiki.codeToTokens(source, { lang, theme });
+  let tokenLines: ReturnType<typeof shiki.codeToTokens>["tokens"];
+  if (diffLanguage) {
+    const lines = source.split("\n");
+    const sides = ["+", "-"].map(exclude => shiki.codeToTokens(lines.filter(line => line[0] !== exclude)
+      .map(line => line.slice(1)).join("\n"), { lang, theme }).tokens);
+    const rows = [0, 0];
+    let offset = 0;
+    tokenLines = lines.map(line => {
+      const side = line[0] === "+" ? 1 : 0;
+      let column = offset + 1;
+      const tokens = (sides[side][rows[side]] ?? []).map(token => {
+        const mapped = { ...token, offset: column };
+        column += token.content.length;
+        return mapped;
+      });
+      if (line[0] !== "+") rows[0]++;
+      if (line[0] !== "-") rows[1]++;
+      offset += line.length + 1;
+      return tokens;
+    });
+  } else tokenLines = shiki.codeToTokens(source, { lang, theme }).tokens;
   const { fg: foreground, bg: background } = shiki.getTheme(theme);
   const counts = new Map<string, number>();
   const highlighted: CodeHighlight = { version: codeHighlightVersion, foreground, background,
-    tokens: result.tokens.flatMap(line => line.map(token => {
+    tokens: tokenLines.flatMap(line => line.map(token => {
       const color = token.color ?? foreground, identity = JSON.stringify([token.content, color]);
       const occurrence = counts.get(identity) ?? 0;
       counts.set(identity, occurrence + 1);

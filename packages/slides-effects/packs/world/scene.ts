@@ -34,7 +34,7 @@ export type CardStyle = { radius?: number; glow?: number; edge?: number; avatar?
  * `scale` is the card's full width, height and depth. Text sizes follow the height; text opacities multiply `opacity`. */
 export type CardOptions = Omit<PrimitiveOptions, "end" | "curve" | "thickness"> & CardStyle & {
   title?: string; subtitle?: string; meta?: string; initials?: string; mono?: boolean; weight?: LabelWeight; textColor?: string; subtleColor?: string; textEmissive?: number;
-  opacity?: Animated<number>; titleOpacity?: Animated<number> };
+  opacity?: Animated<number>; titleOpacity?: Animated<number>; flat?: boolean };
 /** `text` substitutes `{item}` (items[index]), `{initial}` (its first letter), `{index}` (the logical row) and `{slot}` (the pooled container). */
 export type RowLabel = { text: string; offset?: Vec3; size?: number; color?: string; emissive?: number; align?: LabelAlign; mono?: boolean; weight?: LabelWeight };
 /** `glow` scales the travelling and docking accent (default 1). */
@@ -68,7 +68,7 @@ export type Instance = {
   label?: { text: string; align: LabelAlign; mono: boolean; weight: LabelWeight; offset: Track<Vec3>; opacity: Track<number>; attach?: string; parent?: Instance; row?: RowLabel };
   voxel?: { options: VoxelsOptions; index: number; count: number; target: Vec3 };
   glyph?: GlyphInstance;
-  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle> & { opacity?: Track<number> };
+  custom?: { wgsl: string; vertexCount: number }; sdf?: { wgsl: string; bounds: [Vec3, Vec3]; steps?: number }; card?: Required<CardStyle> & { opacity?: Track<number>; flat?: boolean };
   graph?: { node: LayoutNode; nodes: LayoutNode[]; activate: Activation[]; dim: Vec3 };
   /** Set by prepareWorldScene: an edge or pulse reads this instance's position by id. */
   anchor?: boolean;
@@ -241,7 +241,7 @@ export function cardInstances(options: CardOptions): Instance[] {
   const { title, subtitle, meta, mono = false, textColor = "#e8f4ff", subtleColor = "#7f9bb3", textEmissive = 1, opacity, titleOpacity } = options;
   const style = cardStyle({ avatar: title ? 0.62 : 0, ...options });
   if (!options.id && (title || subtitle || meta)) throw new Error("A World card with text needs an id");
-  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: { ...style, opacity: compileTrack(opacity ?? 1) } };
+  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: { ...style, opacity: compileTrack(opacity ?? 1), ...options.flat ? { flat: true } : {} } };
   const [width, height, depth] = largestScale(options.scale ?? [4, 0.62, 0.18]).map(value => value * (typeof options.size === "number" ? options.size : 0.5) * 2) as Vec3;
   const z = depth / 2 + 0.01, left = -width / 2 + (style.avatar > 0 ? height * (0.5 + style.avatar * 0.5) + height * 0.22 : height * 0.3);
   const label = (key: string, text: string, position: Vec3, size: number, color: string, emissive: number, extra: Partial<LabelOptions> = {}) =>
@@ -944,7 +944,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
       values[index + 11] = glyph.index; values[index + 12] = rotation[0]; values[index + 13] = rotation[1]; values[index + 14] = rotation[2];
       values[index + 15] = glyph.pivot[1]; values[index + 16] = glyph.depth; values[index + 17] = glyph.bevel; values[index + 18] = glyph.bevelWidth; values[index + 19] = glyph.pivot[0];
     }
-    values[index + I.geometry] = instance.choreography && instance.customIndex !== undefined ? instance.customIndex + 1 : 0;
+    values[index + I.geometry] = instance.card?.flat ? 1 : instance.choreography && instance.customIndex !== undefined ? instance.customIndex + 1 : 0;
     // Text3D's published instance layout stores its local Euler degrees in fields 12–14.
     // Keep this after shape-specific fields so the glyph and rigid pose compose once.
     if (part && "glyph" in instance) {

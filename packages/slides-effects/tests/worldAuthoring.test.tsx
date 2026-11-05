@@ -122,7 +122,7 @@ test("leaf layout, tree flashes, key recycling and diff morphs come from props a
   const diff = (lines: string[]) => <pre><code className="language-diff">{lines.join("\n") + "\n"}</code></pre>;
   const morph = flat(expandScene(<CodeMorph id="m">{diff([" a", "-b", "+c"])}{diff([" a", " c", "+d"])}</CodeMorph>));
   expect(morph.filter(n => n.type === Text3D).map(n => n.props.text)).toEqual(["a", "b", "c", "d"]);
-  expect(morph.filter(n => String(n.props.id).endsWith("/strike")).map(n => n.props.id)).toEqual(["m/1/strike"]);
+  expect(morph.filter(n => String(n.props.id).endsWith("/strike"))).toEqual([]);
   expect(() => expandScene(<CodeMorph id="bad">{diff([" a"])}{diff([" z", "+d"])}</CodeMorph>)).toThrow("diff 1 must start from the previous code");
 });
 

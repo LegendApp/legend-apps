@@ -706,8 +706,7 @@ function lineTokens(tokens: CodeToken[] | undefined, offset: number, length: num
   });
 }
 type DiffLine = [" " | "-" | "+", string, CodeToken[] | undefined];
-/** Code that morphs by diff on each step from `step`: removed lines are struck through and collapse, the rest close up, and added lines grow in.
- * Each `diff` fence starts from the previous result. */
+/** Each diff starts from the previous result. Matching tokens retain their identity and only removed lines are struck through. */
 function codeMorph(id: string, at: V3, props: Record<string, unknown>, children: ReactNode, INK: Ink) {
   const diffs = Children.toArray(children).filter(child => codeSource(child).trim()).map(child => {
     const tokens = codeHighlight(child)?.tokens;
@@ -719,46 +718,82 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
     });
   });
   if (diffs.some(diff => diff.some(([mark]) => !" -+".includes(mark)))) throw Error(`Code morph ${id}: diff lines start with a space, - or +.`);
-  const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .55;
-  const lines: { text: string; tokens?: CodeToken[]; rows: (number | undefined)[] }[] = [];
-  let state = diffs[0].filter(([mark]) => mark !== "+").map(([, text, tokens]) => lines.push({ text, tokens, rows: [] }) - 1);
-  const states = [state];
+  const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .25;
+  const parts: { text: string; identity: string; tokens?: CodeToken[]; positions: (V3 | undefined)[] }[] = [];
+  const lines: { text: string; parts: { id: number; column: number }[]; rows: (number | undefined)[]; removed?: number }[] = [];
+  const newLine = (text: string, tokens?: CodeToken[]) => lines.push({ text, rows: [], parts: [...text.matchAll(/[\w$]+|[^\s\w$]/gu)].map(match => {
+    const syntax = lineTokens(tokens, match.index!, match[0].length);
+    return { column: match.index!, id: parts.push({ text: match[0], tokens: syntax,
+      identity: JSON.stringify([match[0], syntax?.map(token => [token.content, token.color])]), positions: [] }) - 1 };
+  }) }) - 1;
+  let state = diffs[0].filter(([mark]) => mark !== "+").map(([, text, tokens]) => newLine(text, tokens));
+  const states = [state], bands: { step: number; before: number[]; after: number[] }[] = [];
   diffs.forEach((diff, t) => {
     const before = diff.filter(([mark]) => mark !== "+");
     if (before.length !== state.length || before.some(([, text], i) => lines[state[i]].text !== text)) throw Error(`Code morph ${id}: diff ${t} must start from the previous code.`);
-    let i = 0;
-    const next: number[] = [];
+    let i = 0, removed: number[] = [], added: number[] = [];
+    const next: number[] = [], changed = { step: first + t, before: [] as number[], after: [] as number[] };
+    const match = () => {
+      const old = removed.flatMap(n => lines[n].parts), fresh = added.flatMap(n => lines[n].parts);
+      const lengths = Array.from({ length: old.length + 1 }, () => new Uint32Array(fresh.length + 1));
+      for (let a = old.length - 1; a >= 0; a--) for (let b = fresh.length - 1; b >= 0; b--)
+        lengths[a][b] = parts[old[a].id].identity === parts[fresh[b].id].identity ? 1 + lengths[a + 1][b + 1] : Math.max(lengths[a + 1][b], lengths[a][b + 1]);
+      const carried = new Set<number>();
+      let a = 0, b = 0;
+      while (a < old.length && b < fresh.length) {
+        if (parts[old[a].id].identity === parts[fresh[b].id].identity) {
+          carried.add(old[a].id); fresh[b].id = old[a].id; a++; b++;
+        } else if (lengths[a + 1][b] >= lengths[a][b + 1]) a++;
+        else b++;
+      }
+      const unmatched = removed.filter(n => !lines[n].parts.some(part => carried.has(part.id) && /\w/.test(parts[part.id].text)));
+      const replacements = Math.max(0, added.length - (removed.length - unmatched.length));
+      for (const n of unmatched.slice(replacements)) lines[n].removed = first + t;
+      removed = []; added = [];
+    };
     for (const [mark, text, tokens] of diff) {
-      if (mark === "+") next.push(lines.push({ text, tokens, rows: [] }) - 1);
-      else { const line = state[i++]; if (mark === " ") next.push(line); }
+      if (mark === "+") { changed.after.push(next.length); const line = newLine(text, tokens); next.push(line); added.push(line); }
+      else {
+        if (mark === " ") { match(); next.push(state[i]); }
+        else { changed.before.push(i); removed.push(state[i]); }
+        i++;
+      }
     }
-    states.push(state = next);
+    match(); bands.push(changed); states.push(state = next);
   });
-  states.forEach((rows, s) => rows.forEach((line, row) => { lines[line].rows[s] = row; }));
+  states.forEach((rows, s) => rows.forEach((line, row) => {
+    lines[line].rows[s] = row;
+    lines[line].parts.forEach(part => { parts[part.id].positions[s] = [part.column * advance, -row * lineHeight, 0]; });
+  }));
   const width = Math.max(...lines.map(l => l.text.length)) * advance + .9, height = (n: number) => (n - 1) * lineHeight + em + .6;
   const panel = (s: number) => ({ position: [width / 2 - .3, -(height(states[s].length) - .6) / 2, -.14] as V3, scale: [width, height(states[s].length), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
+  const highlight = props.highlight as { color?: string; opacity?: number } | undefined;
+  const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
   return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
     <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} fill={.75} />
-    {lines.map((line, n) => {
-      const shown = line.rows.flatMap((row, s) => row === undefined ? [] : [s]), enter = shown[0], exit = shown[shown.length - 1] + 1, y = (s: number) => -line.rows[s]! * lineHeight;
+    {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
+      position={[width / 2 - .3, -row * lineHeight + em * .3, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
+      opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
+        ...t + 1 < bands.length ? [key(first + t + 1, 0, 0, .3)] : []]} />)))}
+    {parts.map((part, n) => {
+      const shown = part.positions.flatMap((position, s) => position === undefined ? [] : [s]);
+      if (!shown.length) return null;
+      const enter = shown[0], exit = shown[shown.length - 1] + 1;
       const addedAt = enter > 0 ? first + enter - 1 : undefined, removedAt = exit < states.length ? first + exit - 1 : undefined;
-      const indent = line.text.length - line.text.trimStart().length, strike = (line.text.trimEnd().length - indent) * advance + .1, x = indent * advance;
-      const glyphs = addedAt === undefined && removedAt === undefined ? undefined : (i: number, _char: string, _home: V3, color = INK.white): GlyphMotion => {
-        const start = addedAt === undefined ? 1 : 0, grow = settle + .45 + i * .006;
-        return {
-          opacity: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .2)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .3)]],
-          scale: [{ step: 0, value: start }, ...addedAt === undefined ? [] : [key(addedAt, 1, grow, .35)], ...removedAt === undefined ? [] : [key(removedAt, 0, .45, .35)]],
-          color: [{ step: 0, value: addedAt === undefined ? color : INK.green }, ...addedAt === undefined ? [] : [key(addedAt, color, 2.4, .8)], ...removedAt === undefined ? [] : [key(removedAt, INK.red, 0, .2)]],
-        };
-      };
-      return <Fragment key={n}>
-        <Text3D id={`${id}/${n}`} text={line.text} tokens={line.tokens} mono size={em} align="left" glyphs={glyphs}
-          position={[{ step: 0, value: [0, y(enter), 0] }, ...shown.slice(1).map(s => key(first + s - 1, [0, y(s), 0] as V3, settle, .5))]} />
-        {removedAt !== undefined && strike > .1 && <Box id={`${id}/${n}/strike`} size={.5} color={INK.red} emissive={3}
-          position={[{ step: 0, value: [x, y(exit - 1), .1] }, key(removedAt, [x + strike / 2, y(exit - 1), .1], 0, .35)]}
-          scale={[{ step: 0, value: [0, .035, .035] }, key(removedAt, [strike, .035, .035], 0, .35), key(removedAt, [strike, 0, 0], .5, .2)]} />}
-      </Fragment>;
+      const visibility = addedAt === undefined && removedAt === undefined ? 1 : [{ step: 0, value: enter ? 0 : 1 }, ...addedAt === undefined ? [] : [key(addedAt, 1, settle, .25)], ...removedAt === undefined ? [] : [key(removedAt, 0, 0, .25)]];
+      return <Text3D key={n} id={`${id}/token${n}`} text={part.text} tokens={part.tokens} mono size={em} align="left"
+        opacity={visibility} position={shown.every(s => part.positions[s]!.every((v, axis) => v === part.positions[enter]![axis])) ? part.positions[enter]! :
+          [{ step: 0, value: part.positions[enter]! }, ...shown.slice(1).filter(s => part.positions[s]!.some((v, axis) => v !== part.positions[s - 1]![axis]))
+            .map(s => key(first + s - 1, part.positions[s]!, settle, .5))]} />;
+    })}
+    {lines.map((line, n) => {
+      if (line.removed === undefined || !line.text.trim()) return null;
+      const row = line.rows[line.rows.length - 1]!, indent = line.text.length - line.text.trimStart().length;
+      const strike = (line.text.trimEnd().length - indent) * advance + .1, x = indent * advance;
+      return <Box key={n} id={`${id}/${n}/strike`} size={.5} color={highlightColor}
+        position={[{ step: 0, value: [x, -row * lineHeight, .1] }, key(line.removed, [x + strike / 2, -row * lineHeight, .1], 0, .25)]}
+        scale={[{ step: 0, value: [0, .025, .025] }, key(line.removed, [strike, .025, .025], 0, .2), key(line.removed, [strike, 0, 0], .25, .15)]} />;
     })}
   </Stage>;
 }

@@ -176,7 +176,7 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let coverage=1.-smoothstep(-pixel*.5,pixel*.5,d);
  var layer=vec4f(0.);
  layer=over(layer,accent,.45*h*edge*shown*blurredStroke(d,5.*unit,sigma));
- let fill=mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v);
+ let fill=select(mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v),accent,uniforms[base+31u]>.5);
  layer=over(layer,fill,coverage*uniforms[base+19u]);
  layer=over(layer,accent,.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
  let line=max(1.4*unit,pixel);

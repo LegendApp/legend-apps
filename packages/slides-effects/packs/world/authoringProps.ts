@@ -85,6 +85,7 @@ const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
   code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0),
     marks: list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true) },
+  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), highlight: shape({ color, opacity: fraction }) },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive() },

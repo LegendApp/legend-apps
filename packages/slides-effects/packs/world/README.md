@@ -925,8 +925,11 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
 - `Form panels typing` shows panels of fields with render-count badges.
   `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
   and flashing them on each keystroke.
-- `CodeMorph` takes one ```` ```diff ```` fence per step after the first, each starting from
-  the previous result. Removed lines are struck through and collapse; added lines grow in.
+- `CodeMorph` takes one ```` ```diff-tsx ```` fence per step after the first, each starting from
+  the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
+  Matching tokens carry over with their syntax colors; changed tokens fade out and in.
+  Only deleted lines are struck through. `highlight={{ color: "#be91ff", opacity: .12 }}`
+  sets the soft background bands on changed lines.
 - `CodeTrace source reads pass nodes` marks where state is created, passed and read on
   `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
   tree of `nodes` labels on `extract`.
