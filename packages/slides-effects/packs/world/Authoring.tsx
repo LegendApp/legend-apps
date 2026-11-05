@@ -776,6 +776,12 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
       position={[width / 2 - .3, -row * lineHeight + em * .3, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         ...t + 1 < bands.length ? [key(first + t + 1, 0, 0, .3)] : []]} />)))}
+    {((props.marks ?? []) as CodeMark[]).flatMap((mark, m) => {
+      const shownAt = Math.min(states.length - 1, Math.max(0, (mark.step ?? 0) - first + 1)), scale: V3 = [mark.text.length * advance + .12, lineHeight * .9, .04];
+      return states[shownAt].flatMap((line, row) => [...lines[line].text.matchAll(new RegExp(mark.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))].map(found =>
+        <Box key={`${m}/${row}/${found.index}`} id={`${id}/mark${m}/${row}/${found.index}`} size={.5} color={paint(mark.color, INK.colors) as string ?? INK.amber} emissive={1.4}
+          position={[(found.index! + mark.text.length / 2) * advance, -row * lineHeight, -.08]} scale={mark.step ? [{ step: 0, value: [0,0,0] }, key(mark.step, scale, mark.delay ?? 0, .35)] : scale} />));
+    })}
     {parts.map((part, n) => {
       const shown = part.positions.flatMap((position, s) => position === undefined ? [] : [s]);
       if (!shown.length) return null;

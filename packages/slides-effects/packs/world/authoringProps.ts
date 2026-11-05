@@ -81,11 +81,11 @@ const motion = { step, delay: number(0, " of seconds"), duration: positive(" of 
 const partFields: Fields = { id: text, slot: text, at: vec3, delay: number(0, " of seconds"), duration: positive(" of seconds"), color: animated(color), carry: flag,
   enter: shape({ ...motion, from: vec3, stagger: number(0, " of seconds"), scale: number(0) }), exit: shape({ ...motion, to: vec3 }, ["step"]) };
 const textFields: Fields = { size: positive(), depth: number(0), track: number(), lineHeight: positive(), emissive: animated(number(0)), mono: flag, align: oneOf("left", "center", "right") };
+const codeMarks = list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true);
 const kindFields: Record<string, Fields> = {
   headline: textFields, quote: textFields,
-  code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0),
-    marks: list(shape({ text, color, step, delay: number(0, " of seconds") }, ["text"]), true) },
-  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), highlight: shape({ color, opacity: fraction }) },
+  code: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, panelColor: color, textColor: color, padding: number(0), marks: codeMarks },
+  morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), highlight: shape({ color, opacity: fraction }), marks: codeMarks },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive() },
   tree: { nodes: list(shape({ id: text })), width: positive(), levelHeight: positive(), nodeWidth: positive(), labelSize: positive() },
