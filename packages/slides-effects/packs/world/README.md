@@ -656,6 +656,10 @@ to an effect, `glow(values, options)`, carries JSON options that select topology
 Param values accept constants, step maps or keyframes; they change no pipeline.
 See `apps/slides/examples/3d/world-effects.mdx`.
 
+The built-in `haze` effect fades the world behind the focus plane toward a
+charcoal `tint`, lighter toward `horizon` near the top, while sharp-layer content
+stays crisp: `<Effect use={haze({ tint: "#161616" })} />` runs after DOF.
+
 Custom instanced geometry supplies local positions/normals and a material. The
 pack handles camera projection, depth, lighting, fog and the post chain.
 

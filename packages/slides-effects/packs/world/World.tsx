@@ -76,6 +76,7 @@ export function Pass(_: PostOptions) { return null; }
 /** Adds a `defineWorldEffect` effect: `<Effect use={glow({ gain: { 0: 0, 1: 1 } })} after="bloom" />`. */
 export function Effect(_: EffectOptions) { return null; }
 export { defineWorldEffect } from "./effects";
+export { hazeEffect as haze } from "./post";
 export type { WorldEffect, WorldEffectContext, WorldEffectGraph, WorldEffectPass, WorldEffectStage, WorldEffectTarget, WorldEffectUse } from "./effects";
 export function Custom(_: CustomOptions) { return null; }
 export function SDF(_: SDFOptions) { return null; }

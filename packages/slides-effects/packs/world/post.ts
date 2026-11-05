@@ -109,6 +109,20 @@ fn coc(z:f32)->f32 { let p=params(); return clamp(max(0.,abs(z-p.focus)-max(0.,p
 }` }] };
   },
 });
+/**
+ * Fades the world past the focus plane toward `tint`, lighter toward `horizon` near the top. The sharp layer draws later, so
+ * content stays crisp; `start` is the distance past focus where haze begins and `rate` how fast it thickens.
+ */
+export const hazeEffect = defineWorldEffect<{ amount: d.F32; rate: d.F32; start: d.F32; tint: d.Vec3f; horizon: d.Vec3f }>({
+  name: "haze", params: { amount: d.f32, rate: d.f32, start: d.f32, tint: d.vec3f, horizon: d.vec3f },
+  defaults: { amount: .88, rate: .045, start: 1, tint: "#161616", horizon: "#2a2a29" }, after: "dof",
+  build: ({ input, id }): WorldEffectGraph => ({ passes: [{ id: id(), fragment: "haze", reads: { source: input, depth: "depth" }, output: id(), wgsl: `
+@fragment fn haze(@location(0) uv:vec2f)->@location(0) vec4f {
+ let p=params(); let color=textureSampleLevel(source,linearSampler,uv,0.).rgb;
+ let amount=(1.-exp(-max(0.,depthAt(uv)-uniforms[${dofSlots.focus}]-p.start)*p.rate))*p.amount;
+ return vec4f(mix(color,mix(p.tint,p.horizon,smoothstep(.85,.4,uv.y)),amount),1.);
+}` }] }),
+});
 export function customPostCode(bindings: string, wgsl: string) {
   return `${bindings}
 @group(0) @binding(3) var previous:texture_2d<f32>;
