@@ -210,7 +210,7 @@ test("matching follows ids across reordered draw slots; tube endpoints share sta
   expect(settled.values[66]).toBe(-28);
 });
 
-test("omitted objects stay at their last pose until fully behind the camera, then return in place", () => {
+test("omitted objects fade at their last pose, then return only when declared", () => {
   const initial = prepareWorldScene({ instances: [primitive("box", { id: "marker", position: [-5, 0, 0] }),
     primitive("tube", { id: "rail", position: [0, 0, 0], end: [0, 0, -64] })] });
   const empty = prepareWorldScene({ instances: [] });
@@ -223,17 +223,18 @@ test("omitted objects stay at their last pose until fully behind the camera, the
   const start = at(first, retained, "1", 0, []);
   const stillVisible = at(start, retained, "1", 0.5, []);
   expect(part(stillVisible, "box:marker").slice(0, 11)).toEqual(part(first, "box:marker").slice(0, 11));
-  expect(part(stillVisible, "box:marker")[23]).toBe(1);
+  expect(part(stillVisible, "box:marker")[23]).toBeCloseTo(0.9375);
   const passed = at(start, retained, "1", 2, []);
   expect(part(passed, "box:marker")[23]).toBe(0);
-  expect(part(passed, "tube:rail")[23]).toBe(1);
+  expect(part(passed, "tube:rail")[23]).toBe(0);
   const farther = at(passed, retained, "2", 0, []);
   const end = at(farther, retained, "2", 2, []);
   const reverse = at(end, retained, "0:again", 0, []);
   const restored = at(reverse, retained, "0:again", 4, []);
-  expect(part(restored, "box:marker").slice(0, worldInstanceSize)).toEqual(part(first, "box:marker").slice(0, worldInstanceSize));
+  expect(part(restored, "box:marker")[23]).toBe(0);
   expect(first.retired).toEqual({});
-  const declaredAgain = at(restored, initial, "0:new", 0, trackIds(initial));
+  const reenter = at(restored, initial, "0:new", 0, trackIds(initial));
+  const declaredAgain = at(reenter, initial, "0:new", 2, trackIds(initial));
   expect(part(declaredAgain, "box:marker")[23]).toBe(1);
   expect(retainTrackScene(initial, retained).instances).toHaveLength(2);
 });
@@ -445,7 +446,7 @@ const continuitySample = (previous: TrackFrame, scene: ReturnType<typeof prepare
   const state = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: String(stepIndex), stepIndex }), slideTime: time, stepTime: time };
   return sampleTrackFrame(previous, sampleWorldUniforms(scene, state) as number[], trackIds(scene), state, { duration: 2, ...options }, declared);
 };
-test("world-frame omitted parts retain their final pose until behind the camera", () => {
+test("world-frame omitted parts fade at their final pose", () => {
   const scene = prepareWorldScene({ instances: [boxPose("old", [0, 1, 0])] });
   const next = prepareWorldScene({ instances: [boxPose("next", [0, 1, -32])] });
   const retained = retainTrackScene(next, scene);
@@ -453,7 +454,7 @@ test("world-frame omitted parts retain their final pose until behind the camera"
   const start = continuitySample(first, retained, "1", 0, { frame: "world" }, trackIds(next));
   const early = continuitySample(start, retained, "1", .4, { frame: "world" }, trackIds(next));
   expect(continuityPart(early, "old").slice(0, 3)).toEqual(continuityPart(first, "old").slice(0, 3));
-  expect(continuityPart(early, "old")[23]).toBe(1);
+  expect(continuityPart(early, "old")[23]).toBeCloseTo(0.968);
   const passed = continuitySample(start, retained, "1", 2, { frame: "world" }, trackIds(next));
   expect(continuityPart(passed, "old")[23]).toBe(0);
 });
@@ -565,4 +566,33 @@ test("world-frame retirement follows declarations even when retained draw slots 
   const entered = continuitySample(first, retained, "1", 0, options, trackIds(next));
   expect(continuityPart(entered, "b")[23]).toBe(1);
   expect(continuityPart(continuitySample(entered, retained, "1", 2, options, trackIds(next)), "b")[23]).toBe(0);
+});
+
+test("forward then back fades departed content and only the selected station remains visible", () => {
+  for (const frame of ["station", "world"] as const) {
+    const options = { frame, duration: 2 };
+    const a = prepareWorldScene({ instances: [boxPose("a", [0, 1, 0])] });
+    const b = prepareWorldScene({ instances: [boxPose("b", [3, 1, frame === "world" ? -32 : 0])] });
+    const second = retainTrackScene(b, a);
+    const first = continuitySample(createTrackFrame(), a, "0", 3, options);
+    const forward = continuitySample(first, second, "1", 0, options, trackIds(b));
+    const moving = continuitySample(forward, second, "1", 1, options, trackIds(b));
+    const interruptedScene = retainTrackScene(a, second, b, false, moving.visible);
+    const returning = continuitySample(moving, interruptedScene, "0:interrupt", 0, options, trackIds(a));
+    expect(continuityPart(returning, "a")[23]).toBeCloseTo(continuityPart(moving, "a")[23]);
+    const landed = continuitySample(forward, second, "1", 2, options, trackIds(b));
+    const backScene = retainTrackScene(a, second, b, false, landed.visible);
+    const back = continuitySample(landed, backScene, "0:return", 0, options, trackIds(a));
+    expect(continuityPart(back, "b")[23]).toBe(1);
+    const halfway = continuitySample(back, backScene, "0:return", 1, options, trackIds(a));
+    expect(continuityPart(halfway, "b")[23]).toBeGreaterThan(0);
+    expect(continuityPart(halfway, "b")[23]).toBeLessThan(1);
+    const interrupted = continuitySample(halfway, backScene, "0:revisit", 0, options, trackIds(a));
+    expect(continuityPart(interrupted, "b")[23]).toBeCloseTo(continuityPart(halfway, "b")[23]);
+    const settled = continuitySample(halfway, backScene, "0:return", 2, options, trackIds(a));
+    expect(continuityPart(settled, "b")[23]).toBe(0);
+    expect(settled.visible).toEqual(trackIds(a));
+    const step = continuitySample(settled, backScene, "0:return", 0, options, trackIds(a), 1);
+    expect(continuityPart(step, "b")[23]).toBe(0);
+  }
 });

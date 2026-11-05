@@ -115,8 +115,10 @@ export type WorldProps = {
   clock?: WorldClock;
   /** Added to the step index with `clock="step"`, so slides sharing one scene can address its tracks by a running step number. */
   stepOffset?: number;
-  /** End time of this build, in seconds; enables early-advance settling and settled back steps. */
-  buildDuration?: number; advanceDuration?: number; replayOnBack?: boolean;
+  /** End time of this build, in seconds, for settled back steps and optional early-advance settling. */
+  buildDuration?: number;
+  /** Seconds to finish an early build before Next; zero (default) navigates immediately. */
+  advanceDuration?: number; replayOnBack?: boolean;
   enter?: { from: "previous"; duration?: number }; scrim?: boolean | number; fallback?: ReactNode; active?: boolean;
   children?: ReactNode; accessibilityLabel?: string;
   postOrder?: WorldScene["postOrder"];
@@ -254,16 +256,18 @@ function WorldSurface(props: WorldProps) {
   const origin = useSharedValue<{ key: string; pose: CameraPose | null }>({ key: "", pose: null });
   const resolution = useSharedValue(createResolutionState());
   const trackFrame = useSharedValue(createTrackFrame());
+  // React's dev prop tracing must not enumerate the prepared uniform buffers.
+  const content = useMemo(() => ({ prepared: pool ? prepared : renderScene, retained: renderScene, declared }), [pool, prepared, renderScene, declared]);
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
-    <WorldSceneRuntime key={topology} {...props} width={width} height={height} prepared={pool ? prepared : renderScene} retained={renderScene} declared={declared} topology={topology}
+    <WorldSceneRuntime key={topology} {...props} width={width} height={height} content={content} topology={topology}
       pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} retainLiveIds={retainLiveIds} />
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0.3, replayOnBack = false, enter, fallback, active = true, prepared, retained, declared, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
-  WorldProps & { width: number; height: number; prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[]; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
+  WorldProps & { width: number; height: number; content: { prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[] }; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[]) => void }) {
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
@@ -303,7 +307,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const sampleClock = sampleWorldClock;
   const settledBack = direction === "backward" && !replayOnBack;
   useEffect(() => {
-    if (!active || phase !== "playing" || buildDuration === undefined) return;
+    if (!active || phase !== "playing" || buildDuration === undefined || advanceDuration === 0) return;
     const remove = registerAdvanceGuard(() => new Promise<void>(resolve => {
       const request = ++requestId.current;
       completion.current = { request, resolve };

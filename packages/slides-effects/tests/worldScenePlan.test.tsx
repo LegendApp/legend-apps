@@ -9,7 +9,7 @@ import { act, create } from "react-test-renderer";
 import * as Reanimated from "react-native-reanimated";
 import { Scene } from "../packs/world/Authoring";
 import { worldHeaderSize } from "../packs/world/scene";
-import { Box, Sphere, Tube, WorldSlide } from "../packs/world/World";
+import { Box, Orbs, Sphere, Tube, WorldSlide } from "../packs/world/World";
 
 test("authored slides retain one GPU graph across different geometry, steps and reverse navigation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -141,4 +141,39 @@ test("planned surfaces reuse one immutable UI scene while keeping sampled output
     expect(still[worldHeaderSize]).not.toBe(values[worldHeaderSize]);
     expect(Array.from(values)).toEqual(before);
   } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); mutables.mockRestore(); }
+});
+
+
+test("dev prop tracing does not expand the prepared uniform buffers during navigation", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const runtime = index => observable({ currentSlide: 0, currentStep: 0, slideIndex: index, stepIndex: 0,
+    startedAt: 0, stepStartedAt: 0, isActive: index === 0, isPreview: false,
+    isPreparing: index !== 0, playbackPhase: index ? "preparing" : "playing", playbackScope: "slide" });
+  const first$ = runtime(0), second$ = runtime(1);
+  const declarations = [<Scene id="one" world="dev-trace"><Orbs count={512} /></Scene>,
+    <Scene id="two" world="dev-trace"><Orbs count={600} /></Scene>];
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = index => <DeckContentContext.Provider value={declarations}><GPUShaderProvider renderer={Renderer}>
+    <BackgroundHost slideIndex={index} color="#000">
+      <PresentationObservableProvider value={first$}>{declarations[0]}</PresentationObservableProvider>
+      <PresentationObservableProvider value={second$}>{declarations[1]}</PresentationObservableProvider>
+    </BackgroundHost>
+  </GPUShaderProvider></DeckContentContext.Provider>;
+  const measure = performance.measure.bind(performance), rows = [];
+  const trace = spyOn(performance, "measure").mockImplementation((name, options) => {
+    if (name.endsWith("WorldSceneRuntime")) rows.push(options.detail.devtools.properties.length);
+    return measure(name, options);
+  });
+  let renderer;
+  try {
+    await act(() => { renderer = create(content(0)); }); flushUI();
+    await act(() => {
+      first$.assign({ currentSlide: 1, isActive: false, playbackPhase: "outgoing" });
+      second$.assign({ currentSlide: 1, isActive: true, isPreparing: false, playbackPhase: "playing", startedAt: 1, stepStartedAt: 1 });
+      renderer.update(content(1));
+    }); flushUI();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(Math.max(...rows)).toBeLessThan(10000);
+    expect(renderer.root.findByType("gpu").props.frameData.value.every(Number.isFinite)).toBe(true);
+  } finally { await act(() => renderer?.unmount()); flushUI(); trace.mockRestore(); }
 });

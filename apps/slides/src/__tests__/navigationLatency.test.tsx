@@ -1,0 +1,94 @@
+// @ts-nocheck Native input delivery and UI scheduling are deterministic; navigation and World are real.
+import "./nativeMock";
+import { frames, flushUI } from "./uiClockMock";
+import { expect, test } from "bun:test";
+import React from "react";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { act, create } from "react-test-renderer";
+import { GPUShaderProvider, PresentationObservableProvider, useRuntimeProjection } from "@legend-apps/presentation";
+import { Box, Camera, World } from "../../../../packages/slides-effects/packs/world/World";
+import { worldHeaderSize } from "../../../../packages/slides-effects/packs/world/scene";
+import { getSlidesState, nextSlide, previousSlide, setSlidesState, slidesState$ } from "../slidesStore";
+
+const { buildSync } = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url))("esbuild");
+let keyDown;
+const keyboard = {
+  addKeyboardListener: async (type, listener) => {
+    if (type === "down") keyDown = listener;
+    return { remove: async () => {} };
+  },
+  createKeyboardConsumption: async () => ({ update: async () => {}, remove: async () => {} }),
+};
+const { outputFiles } = buildSync({
+  entryPoints: [fileURLToPath(import.meta.resolve("../../../../node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-commands/src/router.ts"))],
+  bundle: true, write: false, format: "cjs", platform: "node",
+  external: ["react-native", "@legendapp/spark-desktop-shortcuts/src/keyboard-manager"],
+});
+const module = { exports: {} };
+Function("require", "module", "exports", outputFiles[0].text)(
+  id => {
+    if (id === "react-native") return { Platform: { OS: "macos" } };
+    if (id === "@legendapp/spark-desktop-shortcuts/src/keyboard-manager") return keyboard;
+    throw new Error(`Unexpected router dependency: ${id}`);
+  }, module, module.exports);
+const { createHotkeyRouter } = module.exports;
+const tick = timestamp => frames.forEach(frame => frame.tick(timestamp));
+
+test("Right publishes navigation synchronously and World moves on the next UI frame", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const initial = getSlidesState();
+  const router = createHotkeyRouter();
+  const registration = await router.register({
+    definitions: [{ id: "next", title: "Next Slide", defaultBindings: ["Right"], repeat: true }],
+    handlers: { next: nextSlide }, scope: { kind: "window", windowId: "slides-presenter" },
+  });
+  function Renderer(props) { return <gpu {...props} />; }
+  function Surface() {
+    const runtime$ = useRuntimeProjection(() => ({
+      currentSlide: slidesState$.currentSlide.get(), currentStep: slidesState$.currentStep.get(),
+      slideIndex: slidesState$.currentSlide.get(), stepIndex: slidesState$.currentStep.get(),
+      startedAt: slidesState$.slideStartedAt.get(), stepStartedAt: slidesState$.stepStartedAt.get(),
+      direction: slidesState$.direction.get(), isActive: true, isPreview: false, playbackPhase: "playing",
+    }), []);
+    return <PresentationObservableProvider value={runtime$}>
+      <World buildDuration={10} clock="step" quality="high" track={{ duration: 1 }}>
+        <Camera shots={[{ at: 0, position: [0, 4, 18] }]} />
+        <Box id="part" position={{ 0: [0, 0, 0], 1: [4, 0, 0] }} />
+      </World>
+    </PresentationObservableProvider>;
+  }
+  let tree;
+  const press = () => keyDown({ key: "\uf703", keyCode: 124, modifiers: 0, repeated: false,
+    windowId: "slides-presenter", consumed: true, captured: false });
+  const values = () => Array.from(tree.root.findByType("gpu").props.frameData.value);
+  try {
+    setSlidesState({ currentSlide: 0, currentStep: 0, slides: [
+      { metadata: { steps: 2 }, notes: "" }, { metadata: { steps: 2 }, notes: "" },
+    ] });
+    await act(() => { tree = create(<GPUShaderProvider renderer={Renderer}><Surface /></GPUShaderProvider>); });
+    flushUI(); tick(0); tick(100);
+    let latency;
+    await act(() => {
+      const start = performance.now();
+      expect(press()).toBe(true);
+      latency = performance.now() - start;
+      expect(getSlidesState().currentStep).toBe(1);
+    });
+    expect(latency).toBeLessThan(16.7);
+    flushUI(); tick(101); // The navigation frame establishes time zero.
+    const start = values();
+    tick(101 + 1000 / 60);
+    expect(values()[worldHeaderSize]).toBeGreaterThan(start[worldHeaderSize]);
+    await act(() => { press(); expect(getSlidesState().currentSlide).toBe(1); });
+    flushUI(); tick(200);
+    const camera = values().slice(0, 3);
+    tick(200 + 1000 / 60);
+    expect(values().slice(0, 3)).not.toEqual(camera);
+    await act(() => { previousSlide(); press(); expect(getSlidesState().currentSlide).toBe(1); });
+    console.info(JSON.stringify({ keyToStateMs: latency, firstMotionFrames: 1 }));
+  } finally {
+    await act(() => tree?.unmount()); flushUI();
+    await registration.remove(); setSlidesState(initial);
+  }
+});

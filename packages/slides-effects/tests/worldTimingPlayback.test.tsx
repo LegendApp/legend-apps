@@ -21,7 +21,7 @@ test("World retains the current GPU scene during catch-up, then starts the next 
   function Renderer(props) { return <world-gpu {...props} />; }
   function Scene({ replay = false }) {
     const step = usePresentationValue("stepIndex");
-    return <World clock="step" buildDuration={2.5} replayOnBack={replay} quality="high">
+    return <World clock="step" buildDuration={2.5} advanceDuration={0.3} replayOnBack={replay} quality="high">
       <Camera shots={[{ at: 0, position: [0, 5, 18] }]} />
       <Box position={[{ at: 0, value: [step * 4, 0, 0] }, { at: 0.5, value: [(step + 1) * 4, 0, 0], duration: 2 }]} />
     </World>;

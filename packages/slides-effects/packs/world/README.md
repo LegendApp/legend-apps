@@ -81,10 +81,11 @@ when the World is inside a `Background`.
 ```
 
 `buildDuration` declares the settled endpoint in seconds on the chosen clock.
-Include delays and staggered arrivals in that duration. On early Next, the
-current build fast-forwards to that endpoint over `advanceDuration` seconds
-(default 0.3, smoothstep), then navigation starts the next build. Repeated Next
-presses during catch-up coalesce into one advance. Back or another navigation
+Include delays and staggered arrivals in that duration. Next navigates immediately
+by default (`advanceDuration={0}`). Set a positive `advanceDuration` to opt into
+finishing the current build first: it fast-forwards to the endpoint over that
+many seconds with smoothstep, then navigates. Repeated Next presses during
+catch-up coalesce into one advance. Back or another navigation
 cancels the queued advance. All frame sampling stays on the UI thread; pausing
 freezes catch-up with the presentation clock.
 
@@ -213,7 +214,7 @@ export function Chapter({ slide }: { slide: number }) {
 
 `stepOffset` adds to the step index, so tracks in the shared scene address a running beat with `{ step, delay, value }`. Give a part one pose per beat; the track samples the flight between them.
 
-The rail holds still at each station and always travels forward along one continuous track; Previous retraces the same curve and banking. Each slide's `camera` (its `track`) shapes the leg into its station:
+The rail holds still at each station and always travels forward along one continuous track; Previous retraces the same curve and banking. Departed parts hold their last pose and fade during the move; once it settles, only the selected slide's parts remain visible. Interrupted moves start from the live faded pose. Each slide's `camera` (its `track`) shapes the leg into its station:
 
 | Field | Effect |
 | --- | --- |

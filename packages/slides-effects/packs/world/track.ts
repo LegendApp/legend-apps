@@ -309,7 +309,7 @@ function sampleWorldFrame(frame: TrackFrame, values: Float32Array, changed: bool
   return frame;
 }
 
-/** Retired parts stay at their last world pose until their bounds are entirely behind the camera. */
+/** Retired parts keep their last world pose while the departure fades. */
 function restoreRetired(values: Float32Array | number[], at: number, id: string, saved: number[] | undefined) {
   "worklet";
   if (saved) {
@@ -321,16 +321,19 @@ function restoreRetired(values: Float32Array | number[], at: number, id: string,
       (1 + Math.abs(saved[15])) * Math.max(Math.abs(saved[8]), Math.abs(saved[9]), Math.abs(saved[10]));
     if (depth < -radius * values[32]) values[at + 23] = 0;
   } else values[at + 23] = 0;
-  return values[at + 23] > .002;
 }
 
 /** Publish only identity changes to JS; uniform buffers stay on the UI runtime. */
-function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame): TrackFrame {
+function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame, progress: number): TrackFrame {
   "worklet";
   const visible: string[] = [];
   if (frame.declared.length < frame.ids.length) for (let slot = 0; slot < frame.ids.length; slot++) if (!frame.declaredSlots[slot]) {
     const id = frame.ids[slot];
-    if (restoreRetired(frame.values, worldHeaderSize + slot * worldInstanceSize, id, frame.retired[id])) visible.push(id);
+    const at = worldHeaderSize + slot * worldInstanceSize;
+    restoreRetired(frame.values, at, id, frame.retired[id]);
+    frame.values[at + 23] *= 1 - progress;
+    if (progress === 1) delete frame.retired[id];
+    if (frame.values[at + 23] > .002) visible.push(id);
   }
   const same = frame.declared === previous.declared && frame.declared.length + visible.length === previous.visible.length &&
     visible.every((id, i) => id === previous.visible[frame.declared.length + i]);
@@ -402,8 +405,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const previousDeclared = changed ? new Set(previous.declared) : null;
   if (changed) for (let slot = 0; slot < previous.ids.length; slot++) {
     const id = previous.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
-    if (previousDeclared!.has(id) && !declaredSet!.has(id)) retired[id] = previous.values.slice(at, at + worldInstanceSize);
-    if (previousDeclared!.has(id) && declaredSet!.has(id)) delete retired[id];
+    if (!declaredSet!.has(id) && (previousDeclared!.has(id) || retired[id])) retired[id] = previous.values.slice(at, at + worldInstanceSize);
+    if (declaredSet!.has(id)) delete retired[id];
     const saved = retired[id];
     if (saved) for (let field = 0; field < worldInstanceSize; field++) from[at + field] = saved[field];
   }
@@ -449,7 +452,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   }
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
-    return bendTrack(visibleTrackFrame(frame, previous), course, look);
+    return bendTrack(visibleTrackFrame(frame, previous, progress), course, look);
   }
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
@@ -483,5 +486,5 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       values[at + 23] = from[old + 23] + (values[at + 23] - from[old + 23]) * progress;
     } else if (!first && progress < 1) values[at + 23] *= progress;
   }
-  return bendTrack(visibleTrackFrame(frame, previous), course, look);
+  return bendTrack(visibleTrackFrame(frame, previous, progress), course, look);
 }
