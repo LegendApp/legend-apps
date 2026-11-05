@@ -714,34 +714,42 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
 /** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */
 function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const count = Number(props.count ?? 36), columns = Number(props.columns ?? 6), [cw, ch] = (props.cell ?? [1.2, .7]) as [number, number], label = String(props.label ?? "");
-  const rows = Math.ceil(count / columns), px = cw + .18, py = ch + .18, width = columns * px, height = rows * py;
+  const tall = props.resize === "height", grow = tall ? Number(props.grow ?? 0) : 0;
+  const rows = Math.ceil(count / columns), total = rows + grow, px = cw + .18, py = ch + .18, width = columns * px, height = rows * py;
   const flash = props.flash as { step: number; rate?: number; duration?: number; delay?: number; color?: string; repeat?: "infinite" } | undefined, hot = flash?.color ?? INK.amber;
   const start = flash?.delay ?? 0, length = flash?.repeat === "infinite" ? 1 / (flash.rate ?? 8) : flash?.duration ?? 10, beats = flash ? Array.from({ length: Math.round(length * (flash.rate ?? 8)) }, (_, k) => start + k / (flash.rate ?? 8)) : [];
   const emission = flash ? [{ step: 0, value: flash.repeat === "infinite" ? 1 : .7 }, ...beats.flatMap(t => [key(flash.step, 5, t, .02), key(flash.step, 1, t + .04, .06)])] : [];
   const emissive = flash?.repeat === "infinite" ? loopTrack(emission, flash.step, length, start) : flash ? emission : .7;
   const color = flash ? [{ step: 0, value: INK.idle }, key(flash.step, hot, start, .2)] : INK.idle;
-  const drag = flash ? Array.from({ length: flash.repeat === "infinite" ? 2 : Math.ceil(length / .7) }, (_, k) => ({ at: start + k * .7, pull: k % 2 ? 0 : .9 })) : [];
+  // Growing windows drag slower and hold at each end so the revealed rows read.
+  const move = grow ? 1.2 : .7, beat = move + (grow ? .5 : 0), reach = grow ? grow * py : .9;
+  const drag = flash ? Array.from({ length: flash.repeat === "infinite" ? 2 : Math.ceil(length / beat) }, (_, k) => ({ at: start + k * beat, pull: k % 2 ? 0 : reach })) : [];
   const mac = props.chrome === "mac", bar = mac ? .42 : 0, w = width + .5, h = height + .5;
   const frame = (pull: number) => {
-    const [x, y] = props.resize === "height" ? [0, pull] : [pull, 0];
-    return { position: [x / 2, (bar - y) / 2, -.2] as V3, scale: [w + x, h + bar + y, .05] as V3, handle: [width / 2 + .3 + x, -height / 2 - .3 - y, .1] as V3,
-      bar: [x / 2, (h + bar) / 2, -.17] as V3, barScale: [w + x, bar, .04] as V3 };
+    const [x, y] = tall ? [0, pull] : [pull, 0];
+    return { position: [x / 2, bar / 2, -.2] as V3, scale: [w + x, h + bar + y, .05] as V3, handle: [width / 2 + .3 + x, -(height + y) / 2 - .3, .1] as V3,
+      bar: [x / 2, (h + bar + y) / 2, -.17] as V3, barScale: [w + x, bar, .04] as V3 };
   };
-  const track = (pick: (f: ReturnType<typeof frame>) => V3) => {
-    const frames = [{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash!.step, pick(frame(d.pull)), d.at, .7, "smoothstep"))];
-    return flash?.repeat === "infinite" ? loopTrack(frames, flash.step, 1.4, start) : flash ? frames : pick(frame(0));
+  const loop = <T,>(frames: Keyframe<T>[]) => flash?.repeat === "infinite" ? loopTrack(frames, flash.step, 2 * beat, start) : frames;
+  const track = (pick: (f: ReturnType<typeof frame>) => V3) => flash ? loop([{ step: 0, value: pick(frame(0)) }, ...drag.map(d => key(flash.step, pick(frame(d.pull)), d.at, move, "smoothstep"))]) : pick(frame(0));
+  // A row beyond the starting window appears once the dragged frame clears it and leaves as it closes back over it.
+  const reveal = (y: number) => {
+    const open = (2 * Math.abs(y) + ch - .5 - height) / reach;
+    if (open <= 0) return undefined;
+    const s = .5 - Math.sin(Math.asin(1 - 2 * Math.min(open, 1)) / 3);
+    return flash ? loop([{ step: 0, value: 0 }, ...drag.map(d => d.pull ? key(flash.step, 1, d.at + s * move, .12) : key(flash.step, 0, d.at + (1 - s) * move, .12))]) : 0;
   };
   return <Stage id={id} position={at}>
     <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={Number(props.fill ?? .15)} edge={props.border as number | undefined} color={INK.idle} emissive={.5} />
     {mac && <>
       <Card id={`${id}/bar`} flat fill={1} edge={0} glow={0} position={track(f => f.bar)} scale={track(f => f.barScale)} color="#2b2e35" />
       {["#ff5f57", "#febc2e", "#28c840"].map((dot, k) => <Card key={dot} id={`${id}/dot${k}`} flat fill={1} edge={0} glow={0} radius={.075}
-        position={[-w / 2 + .3 + k * .24, (h + bar) / 2, -.14]} scale={[.15, .15, .02]} color={dot} />)}
+        position={track(f => [-w / 2 + .3 + k * .24, f.bar[1], -.14])} scale={[.15, .15, .02]} color={dot} />)}
     </>}
     <Box id={`${id}/handle`} size={.5} position={track(f => f.handle)} scale={[.3,.3,.3]} color={hot} emissive={flash ? [{ step: 0, value: 0 }, key(flash.step, 3, start, .3)] : 0} />
-    {Array.from({ length: count }, (_, i) => { const x = (i % columns - (columns - 1) / 2) * px, y = -(Math.floor(i / columns) - (rows - 1) / 2) * py; return <Fragment key={i}>
-      <Card id={`${id}/${i}`} position={[x, y, 0]} scale={[cw, ch, .2]} color={color} emissive={emissive} />
-      {label && <Text3D id={`${id}/${i}/label`} text={label} mono size={.16 * TYPE} position={[x, y, .12]} color={INK.white} emissive={.8} />}
+    {Array.from({ length: count + grow * columns }, (_, i) => { const x = (i % columns - (columns - 1) / 2) * px, y = -(Math.floor(i / columns) - (total - 1) / 2) * py, opacity = reveal(y); return <Fragment key={i}>
+      <Card id={`${id}/${i}`} position={[x, y, 0]} scale={[cw, ch, .2]} color={color} emissive={emissive} opacity={opacity} />
+      {label && <Text3D id={`${id}/${i}/label`} text={label} mono size={.16 * TYPE} position={[x, y, .12]} color={INK.white} emissive={.8} opacity={opacity} />}
     </Fragment>; })}
   </Stage>;
 }
