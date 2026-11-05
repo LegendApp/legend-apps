@@ -3,7 +3,7 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import React from "react";
 import { act, create } from "react-test-renderer";
-import { Cloud, Flight, Scene, expandScene, flightStops, sceneLayouts } from "../packs/world/Authoring";
+import { Cloud, Flight, Scene, TYPE, expandScene, flightStops, sceneLayouts } from "../packs/world/Authoring";
 import { prepareWorldSlides, Stage, Text3D, WorldSlide } from "../packs/world/World";
 
 import { sampleTrack } from "../packs/world/scene";
@@ -67,4 +67,30 @@ test("Flight and Cloud sharpen only their current step selection, with a whole-p
       }
     }
   }
+});
+
+test("on gather every stop glides into one centered, evenly spaced row, lit and sharp, as the camera pulls back onto it", async () => {
+  const hooks = ["useState", "useContext", "useReducer"], row: [number, number, number] = [0, 1, -20];
+  const nodes = flat(expandScene(<Flight id="g" step={0} words={hooks} gather={2} row={row} />));
+  const at = (track: unknown, step: number) => (track as { step: number; value: unknown }[]).findLast(f => f.step <= step)!.value;
+  const stage = (k: number) => nodes.find(n => n.type === Stage && n.props.id === `g/${k}`)!.props;
+  const text = (k: number) => nodes.find(n => n.type === Text3D && n.props.id === `g/${k}/${hooks[k]}`)!.props;
+  expect(at(stage(0).position, 1)).toEqual(flightStops({ words: hooks })[0]);
+  const lined = [0, 1, 2].map(k => at(stage(k).position, 2) as number[]);
+  expect(lined.map(p => [p[1], p[2]])).toEqual([[1, -20], [1, -20], [1, -20]]);
+  const edge = (k: number, side: number) => lined[k][0] + side * hooks[k].length * .6 * .5 * TYPE / 2;
+  expect(edge(1, -1) - edge(0, 1)).toBeCloseTo(edge(2, -1) - edge(1, 1));
+  expect(edge(0, -1)).toBeCloseTo(-edge(2, 1));
+  expect([0, 1, 2].map(k => [at(text(k).opacity, 2), at(text(k).emissive, 2), at(stage(k).sharp, 2)])).toEqual([[1, 1, true], [1, 1, true], [1, 1, true]]);
+  expect(at(text(0).opacity, 1)).toBe(0);
+  let renderer: ReturnType<typeof create> | undefined;
+  try {
+    await act(() => { renderer = create(<Scene id="gather" layout="cloud" durations={[2, 1, 1, 1]}>
+      <Flight id="g" step={0} at={[0, 4, 0]} words={hooks} gather={2} row={row} />
+    </Scene>); });
+    const steps = renderer!.root.findByType(WorldSlide).props.track.steps, target = sceneLayouts.cloud.camera!.target!;
+    expect(steps[1].dolly).toBeUndefined();
+    expect(steps[2]).toMatchObject({ shift: [0, 5, -20].map((v, i) => v - target[i]), dolly: 1.5 });
+    expect(steps[3]).toEqual(steps[2]);
+  } finally { await act(() => renderer?.unmount()); }
 });

@@ -980,7 +980,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   words side by side. Stops sit `gap` (default 10) deeper each, zigzagging up to `drift` (default 2.4)
   sideways, or at `path[k]`. The scene camera shifts onto each stop over `duration` (default .8 s) with
   `ease` (default `out`); the text never moves. The next `ahead` (default 2) stops wait dimmed, passed
-  ones fade out, and steps after the last stop hold the camera there and bring them all back. The
+  ones fade out, and steps after the last stop hold the camera there and bring them all back. From
+  step `gather`, every stop instead glides into one evenly spaced row at `row` (default centered at the
+  last stop's height and depth), all lit and in focus, while the camera pulls back onto it. The
   scene's own `camera.steps` override these moves field by field.
 - `Layers count label value meter` nests one more translucent layer around `value` per step,
   each landing with a flash and sparks, dims the value under each layer and fills the meter to the

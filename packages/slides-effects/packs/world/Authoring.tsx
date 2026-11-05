@@ -392,15 +392,18 @@ const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldPr
 function sceneTrack(scene: SceneProps): WorldTrack {
   return flightCamera(scene, { ...findLayout(scene.layout, false, scene)?.camera, via: undefined, viaTarget: undefined, ...scene.camera });
 }
-/** A scene's `Flight` adds a camera step per stop that shifts the camera onto it, and holds on the last stop through the remaining `durations`; authored `steps` win per field. */
+/** A scene's `Flight` adds a camera step per stop that shifts the camera onto it, and holds on the last stop through the remaining `durations`; from `gather` it
+ * pulls back onto the row instead. Authored `steps` win per field. */
 function flightCamera(scene: SceneProps, track: WorldTrack): WorldTrack {
   let props: Record<string, unknown> | undefined;
   collect(scene.children, child => { if (child.type === Flight) props ??= child.props; });
   if (!props) return track;
   const stops = flightStops(props), first = Number(props.step ?? 1), at = (props.at ?? [0, 3.2, 0]) as V3, target = track.target ?? at;
   const duration = Number(props.duration ?? .8), ease = (props.ease ?? "out") as Ease, steps = { ...track.steps };
+  const gather = props.gather as number | undefined, row = flightRow(props, stops);
   for (let c = 0; c < Math.max(stops.length, (scene.durations?.length ?? 0) - first); c++) {
-    steps[first + c] = { shift: sub(add(at, stops[Math.min(c, stops.length - 1)]), target), duration, ease, ...track.steps?.[first + c] };
+    const gathered = gather !== undefined && first + c >= gather;
+    steps[first + c] = { shift: sub(add(at, gathered ? row : stops[Math.min(c, stops.length - 1)]), target), ...gathered ? { dolly: 1.5 } : {}, duration, ease, ...track.steps?.[first + c] };
   }
   return { ...track, steps };
 }
@@ -1081,27 +1084,43 @@ export function flightStops(props: Record<string, unknown>): V3[] {
   const path = props.path as V3[] | undefined, gap = Number(props.gap ?? 10), drift = Number(props.drift ?? 2.4);
   return (props.words as unknown[]).map((_, k) => path?.[k] ?? [(k % 2 ? -1 : 1) * drift * (.5 + .5 * hash(k * 3 + 1)), drift * (hash(k * 5 + 2) - .5), -gap * (k + 1)]);
 }
+/** Where `gather` lines the stops up: `row`, or centered at the last stop's height and depth. */
+function flightRow(props: Record<string, unknown>, stops: V3[]): V3 {
+  const last = stops[stops.length - 1];
+  return (props.row as V3 | undefined) ?? [0, last[1], last[2]];
+}
+/** Centers of `widths` laid side by side `gap` apart, the whole run centered on 0. */
+function rowCenters(widths: number[], gap: number) {
+  let left = -(widths.reduce((a, b) => a + b, 0) + gap * (widths.length - 1)) / 2;
+  return widths.map(w => { const x = left + w / 2; left += w + gap; return x; });
+}
 /** Words at stops down into depth, one stop (a word or a row of words) per step from `step`; the scene camera flies to each, over `duration` with `ease`.
- * The next `ahead` stops wait dimmed in the distance, passed ones fade out, and steps after the last stop bring them all back. */
+ * The next `ahead` stops wait dimmed in the distance, passed ones fade out, and steps after the last stop bring them all back.
+ * From step `gather` every stop instead glides into one evenly spaced row at `row` as the camera pulls back onto it, lighting up and fading back in over the
+ * second half so passed words never sweep past the lens. */
 function flight(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const stops = (props.words as (string | string[])[]).map(w => typeof w === "string" ? [w] : w), offsets = flightStops(props), first = Number(props.step ?? 1);
-  const size = Number(props.size ?? .5) * TYPE, ahead = Number(props.ahead ?? 2), duration = Number(props.duration ?? .8), passed = "#a8aeb8";
+  const size = Number(props.size ?? .5) * TYPE, ahead = Number(props.ahead ?? 2), duration = Number(props.duration ?? .8), ease = (props.ease ?? "out") as Ease, passed = "#a8aeb8";
+  const gather = props.gather as number | undefined, gathered = (s: number) => gather !== undefined && s >= gather, gap = size * 1.5;
+  const widths = stops.map(words => words.map(w => w.length * MONO * size));
+  const row = flightRow(props, offsets), xs = rowCenters(widths.flat(), gap);
   const look = (k: number, s: number) => {
     const c = s - first;
-    if (c === k) return { color: INK.white, glow: 1, opacity: 1 };
+    if (c === k || gathered(s)) return { color: INK.white, glow: 1, opacity: 1 };
     if (c >= stops.length) return { color: passed, glow: .5, opacity: 1 };
     if (k < c) return { color: passed, glow: .3, opacity: 0 };
     return { color: INK.muted, glow: .25, opacity: k - c <= ahead ? 1 : 0 };
   };
   const track = <T,>(k: number, pick: (l: ReturnType<typeof look>) => T) =>
-    [{ step: 0, value: pick(look(k, 0)) }, ...Array.from({ length: first + stops.length }, (_, s) => key(s + 1, pick(look(k, s + 1)), 0, duration * .6))];
+    [{ step: 0, value: pick(look(k, 0)) }, ...Array.from({ length: first + stops.length }, (_, s) => gathered(s + 1)
+      ? key(s + 1, pick(look(k, s + 1)), duration * .5, duration * .5) : key(s + 1, pick(look(k, s + 1)), 0, duration * .6))];
+  let placed = 0;
   return <Stage id={id} position={at}>{stops.map((words, k) => {
-    const widths = words.map(w => w.length * MONO * size), gap = size * 1.5, total = widths.reduce((a, b) => a + b, 0) + gap * (words.length - 1);
-    return <Stage key={k} id={`${id}/${k}`} sharp={Array.from({ length: first + stops.length + 1 }, (_, s) => ({ step: s, value: Math.min(s - first, stops.length - 1) === k, duration: 0 }))} position={offsets[k]}>{words.map((word, j) => {
-      const x = -total / 2 + widths.slice(0, j).reduce((a, b) => a + b, 0) + gap * j + widths[j] / 2;
-      return <Text3D key={word} id={`${id}/${k}/${word}`} text={word} mono size={size} position={[x, 0, 0]}
-        color={track(k, l => l.color)} emissive={track(k, l => l.glow)} opacity={track(k, l => l.opacity)} />;
-    })}</Stage>;
+    const local = rowCenters(widths[k], gap), inRow = xs.slice(placed, placed += words.length), lined: V3 = [inRow[0] - local[0] + row[0], row[1], row[2]];
+    return <Stage key={k} id={`${id}/${k}`} sharp={Array.from({ length: first + stops.length + 1 }, (_, s) => ({ step: s, value: gathered(s) || Math.min(s - first, stops.length - 1) === k, duration: 0 }))}
+      position={(gather === undefined ? offsets[k] : [{ step: 0, value: offsets[k] }, key(gather, lined, 0, duration, ease)]) as V3}>{words.map((word, j) =>
+        <Text3D key={word} id={`${id}/${k}/${word}`} text={word} mono size={size} position={[local[j], 0, 0]}
+          color={track(k, l => l.color)} emissive={track(k, l => l.glow)} opacity={track(k, l => l.opacity)} />)}</Stage>;
   })}</Stage>;
 }
 /** `count` translucent layers nested around `value`, each wider and nearer than the last, one more on each step from `step`, over a `meter` that fills

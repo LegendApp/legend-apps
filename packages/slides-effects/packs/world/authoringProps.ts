@@ -101,7 +101,7 @@ const kindFields: Record<string, Fields> = {
     viewport: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), window: step, links: step },
   layers: { count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"), meter: list(fraction, true), colors: list(color),
     bob: wave, orbit: wave, pulse: wave, lag: number(0, " of seconds"), words: list(text), size: positive() },
-  flight: { words: list(either(text, list(text), "a word or a list of words")), path: list(vec3), gap: positive(), drift: number(0), size: positive(), ahead: number(0), ease },
+  flight: { words: list(either(text, list(text), "a word or a list of words")), path: list(vec3), gap: positive(), drift: number(0), size: positive(), ahead: number(0), ease, gather: step, row: vec3 },
 };
 const required: Record<string, string[]> = { bars: ["items"], tree: ["nodes"], keys: ["keys"], flight: ["words"] };
 
