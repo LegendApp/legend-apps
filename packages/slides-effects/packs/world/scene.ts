@@ -353,7 +353,8 @@ export function sdfInstance(options: SDFOptions): Instance {
   return { ...primitive("box", { ...options, size: options.size ?? 1 }), sdf: { wgsl: options.wgsl, bounds: options.bounds, steps: options.steps } };
 }
 
-export const worldHeaderSize = 128;
+/** Slots 128–159 hold the track bend window (see `trackBendSlot`). */
+export const worldHeaderSize = 160;
 /** Reserved header slots for the projected World clock used by custom WGSL contexts. */
 export const worldClockOffset = 24;
 /** Header slot holding the camera's travel speed between track stations, 0 at rest to 1 at the move's peak; the next slot holds its radial blur. */

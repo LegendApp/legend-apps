@@ -69,6 +69,8 @@ const carry = shape({ lift: number(), spread: number(), spin: number(), stagger:
 const stepCamera = shape({ orbit: number(-Infinity, " of degrees"), dolly: positive(), shift: vec3, fov: is(v => finite(v) && v > 0 && v < 180, "degrees between 0 and 180"),
   duration: positive(" of seconds"), ease });
 export const cameraFields: Fields = { spacing: positive(), duration: positive(" of seconds"), ease, position: vec3, target: vec3, via: vec3, viaTarget: vec3,
+  turn: is(v => finite(v) && Math.abs(v as number) <= 60, "degrees from -60 to 60"), rise: number(-Infinity, " of world units"),
+  bank: is(v => finite(v) && (v as number) >= 0 && (v as number) <= 45, "degrees from 0 to 45"),
   frame: oneOf("station", "world"), carry, steps: record(stepCamera, step) };
 const ambientOne = either(oneOf(...ambientEffects), shape({ effect: oneOf(...ambientEffects), count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"),
   color, density: number(0), length: positive() }, ["effect"]), `one of ${ambientEffects.join(", ")}, or { effect, … }`);

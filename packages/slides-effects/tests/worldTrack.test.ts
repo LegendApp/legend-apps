@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
 import { cardInstances, customInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
-import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "../packs/world/track";
+import { buildCourse, createTrackFrame, retainTrackScene, sampleTrackFrame, trackBendSlot, trackIds, trackX, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
 const options = { spacing: 32, duration: 2 };
@@ -68,8 +68,9 @@ test("Previous retraces the authored rail, including after an interrupted move",
   expect(reversed.values.slice(0, 8)).toEqual(middle.values.slice(0, 8));
   const halfwayBack = sample(reversed, 1, "0:again");
   expect(halfwayBack.cursor).toBeCloseTo(0.25);
-  expect(halfwayBack.values.slice(0, 3)).toEqual([0.9375, 4.3125, 3]);
-  expect(halfwayBack.values.slice(4, 8)).toEqual([0, 0, -10.25, 0]);
+  const outbound = sample(entered, 2 * Math.cbrt(1 / 16), "1", true);
+  expect(outbound.cursor).toBeCloseTo(0.25, 9);
+  halfwayBack.values.slice(0, 8).forEach((value, field) => expect(value).toBeCloseTo(outbound.values[field], 9));
   expect(sample(reversed, 2, "0:again").values.slice(0, 8)).toEqual(first.values.slice(0, 8));
 });
 
@@ -77,26 +78,72 @@ test("a cold jump uses all intervening rail segments and returns to the original
   const first = sample(createTrackFrame(), 0);
   const jump = sample(first, 0, "4", true);
   expect(jump.values.slice(0, 8)).toEqual(first.values.slice(0, 8));
-  expect(sample(jump, 4, "4", true).cursor).toBe(2);
-  const settled = sample(jump, 8, "4", true);
+  // However far the jump, it takes at most 1.5 s.
+  expect(sample(jump, 0.75, "4", true).cursor).toBe(2);
+  const settled = sample(jump, 1.5, "4", true);
   expect(settled.values[2]).toBe(-114);
   const back = sample(settled, 0, "0:again");
-  expect(sample(back, 8, "0:again").values.slice(0, 8)).toEqual(first.values.slice(0, 8));
+  expect(sample(back, 1.5, "0:again").values.slice(0, 8)).toEqual(first.values.slice(0, 8));
 });
 
-test("default motion has a 1.7 second cubic flight, a quadratic rise, 40 degree FOV and zero roll", () => {
+test("default motion has a cubic flight, a mid-travel rise, 40 degree FOV and level stations", () => {
   const prepared = scene();
-  const at = (previous: TrackFrame, slideKey: string, time: number) => {
+  const at = (previous: TrackFrame, slideKey: string, time: number, track: WorldTrack = { turn: 0, rise: 1, duration: 1.7, spacing: 32 }) => {
     const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
-    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, {});
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
   };
   const first = at(createTrackFrame(), "0", 0), start = at(first, "1", 0);
   const middle = at(start, "1", 0.85);
-  expect(middle.values.slice(0, 3)).toEqual([1.25, 4.55, -6]);
+  expect(middle.values.slice(0, 3)).toEqual([0, 4.6, -6]);
   expect(middle.values.slice(4, 8)).toEqual([0, 0, -19, 0]);
   expect(middle.values[3]).toBe(Math.tan(40 * Math.PI / 360));
   expect(at(start, "1", 0.425).cursor).toBe(0.0625);
   expect(at(start, "1", 1.7).values.slice(0, 3)).toEqual([0, 3.6, -18]);
+});
+
+test("unannotated slides each take a different leg of one continuous track", () => {
+  const course = buildCourse({}, 12);
+  const legs = course.dx.slice(1).map((dx, i) => [Math.round(dx * 10), Math.round(course.rise[i + 1] * 10), Math.round(course.duration[i + 1] * 100)].join());
+  expect(new Set(legs).size).toBe(legs.length);
+  expect(course.dx.slice(1).filter((dx, i) => i > 0 && Math.sign(dx) !== Math.sign(course.dx[i])).length).toBeGreaterThan(5);
+  expect(buildCourse({}, 12)).toEqual(course);
+  for (let k = 1; k < 12; k++) {
+    // Curves stay clear of the stations: each station's content and resting camera sit on a straight.
+    expect(trackX(course, -course.offset[k])).toBeCloseTo(course.x[k], 9);
+    expect(trackX(course, -course.offset[k] + 14)).toBeCloseTo(course.x[k], 9);
+    expect(trackX(course, -course.offset[k] - 4)).toBeCloseTo(course.x[k], 9);
+  }
+});
+
+test("authored legs set turn, rise, length and pace; the camera and bend window follow the curve and hold level", () => {
+  const course: WorldTrack["course"] = [undefined, { turn: 30, rise: 2, spacing: 40, duration: 1, bank: 6 }, { turn: -20, rise: -1 }];
+  const track: WorldTrack = { course };
+  const prepared = scene();
+  const at = (previous: TrackFrame, slideKey: string, time: number) => {
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
+    return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
+  };
+  const built = buildCourse(track, 4);
+  expect(built.offset[1]).toBe(40);
+  expect(built.dx[1]).toBeCloseTo(Math.tan(Math.PI / 6) * (-4 - (-40 + 15)) / 1.5);
+  expect(Math.sign(built.dx[2])).toBe(-1);
+  const first = at(createTrackFrame(), "0", 0), start = at(first, "1", 0);
+  const frames = Array.from({ length: 31 }, (_, i) => at(start, "1", i / 30));
+  const settled = frames[30];
+  expect(settled.values.slice(0, 3).map(v => +v.toFixed(9))).toEqual([+built.x[1].toFixed(9), 3.6, -26]);
+  expect(settled.values[4]).toBeCloseTo(built.x[1], 9);
+  expect(settled.values[7]).toBe(0);
+  expect(settled.straight!.slice(0, 3)).toEqual([0, 3.6, -26]);
+  // Always forward; leaning right through the right-hand curve, then level again.
+  frames.slice(1).forEach((frame, i) => expect(frame.values[2]).toBeLessThanOrEqual(frames[i].values[2]));
+  expect(Math.max(...frames.map(frame => frame.values[7]))).toBeGreaterThan(0.05);
+  expect(Math.max(...frames.map(frame => frame.values[1]))).toBeGreaterThan(5);
+  expect(settled.values[trackBendSlot]).toBe(0);
+  expect(settled.values[trackBendSlot + 1]).toBeGreaterThan(1);
+  expect(settled.values.slice(trackBendSlot + 2, trackBendSlot + 5)).toEqual([built.from[1], built.to[1], built.dx[1]]);
+  // Previous retraces the same bent path.
+  const back = at(settled, "0:again", 0);
+  for (let i = 0; i <= 30; i++) at(back, "0:again", i / 30).values.slice(0, 8).forEach((value, field) => expect(value).toBeCloseTo(frames[30 - i].values[field], 9));
 });
 
 test("per-slide camera and look controls, durations and object morphs are retained on reverse", () => {
@@ -106,7 +153,7 @@ test("per-slide camera and look controls, durations and object morphs are retain
     return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
   };
   const first = at(createTrackFrame(), "0", 0, {});
-  const start = at(first, "1", 0, { duration: 2,
+  const start = at(first, "1", 0, { duration: 2, spacing: 32, turn: 0,
     position: [-2, 4, 14], target: [1, 1, 0], via: [6, 8, 20], viaTarget: [2, 4, 12] });
   const forward = at(start, "1", 1, {});
   expect(forward.values.slice(0, 3)).toEqual([2.5, 5.9, -7]);
@@ -277,7 +324,7 @@ test("a station's ease shapes its flight, and a step camera's ease its move", ()
     const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: String(step), stepIndex: step }), slideTime: time, stepTime: time };
     return sampleTrackFrame(previous, sampleWorldUniforms(prepared, playback) as number[], trackIds(prepared), playback, track);
   };
-  const linear: WorldTrack = { ease: "linear" };
+  const linear: WorldTrack = { ease: "linear", duration: 1.7 };
   expect(at(at(at(createTrackFrame(), "0", 0, 0, {}), "1", 0, 0, linear), "1", 0, .425, linear).cursor).toBe(.25);
   const step = (ease?: "linear") => { const track: WorldTrack = { position: [0, 4, 10], target: [0, 4, 0], steps: { 1: { orbit: 90, duration: 1, ease } } };
     const start = at(createTrackFrame(), "0", 0, 0, track);
@@ -399,15 +446,16 @@ test("station carry bows shared objects and Previous retraces the flight", () =>
   continuityPart(forward, "shared").slice(0, 3).forEach((value, i) => expect(continuityPart(back, "shared")[i]).toBeCloseTo(value,6));
 });
 test("banking holds level at stations and retraces the same roll on Previous", () => {
-  const scene = prepareWorldScene({ instances: [] }), options = { bank: 4 };
+  const scene = prepareWorldScene({ instances: [] }), options = { bank: 4, duration: 2 };
   const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
   const entered = continuitySample(first, scene, "1", 0, options);
-  const forward = continuitySample(entered, scene, "1", .7, options);
+  // The camera banks while it runs through the curve.
+  const forward = continuitySample(entered, scene, "1", 1.2, options);
   expect(Math.abs(forward.values[7])).toBeGreaterThan(.01);
   const end = continuitySample(entered, scene, "1", 2, options);
   expect(end.values[7]).toBeCloseTo(0);
   const reverse = continuitySample(end, scene, "0:again", 0, options);
-  expect(continuitySample(reverse, scene, "0:again", 1.3, options).values[7]).toBeCloseTo(forward.values[7]);
+  expect(continuitySample(reverse, scene, "0:again", .8, options).values[7]).toBeCloseTo(forward.values[7]);
   expect(continuitySample(entered, scene, "1", 20, options).values.slice(0, 8)).toEqual(continuitySample(entered, scene, "1", 30, options).values.slice(0, 8));
 });
 
@@ -460,7 +508,7 @@ test.each([false, true])("Previous retraces an unfinished step orbit (returning:
 
 test("fixed environment ids stay in world space while shared station parts carry forward", () => {
   const scene = prepareWorldScene({ instances: [boxPose("environment/post", [0, 2, 0]), boxPose("content", [2, 1, 0])] });
-  const options = { fixed: ["environment/"], carry: { lift: 4 } };
+  const options = { fixed: ["environment/"], carry: { lift: 4 }, spacing: 32 };
   const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
   const entered = continuitySample(first, scene, "1", 0, options);
   const middle = continuitySample(entered, scene, "1", 1, options);

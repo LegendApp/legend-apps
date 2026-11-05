@@ -110,9 +110,12 @@ test("a cold slide's background registration retains the World; a slide without 
     expect(mounts).toBe(1);
     expect(Array.from(values().slice(0, 8))).toEqual(before.slice(0, 8));
     expect(values()[worldHeaderSize]).toBe(4);
-    tick(7000);
+    // A jump across several stations flies the whole way in 1.5 s.
+    tick(3750);
     expect(values()[2]).toBeGreaterThan(before[2]);
     expect(values()[worldHeaderSize]).toBeCloseTo(2);
+    tick(4500);
+    expect(values()[worldHeaderSize]).toBe(0);
     await act(() => renderer.update(content(1, runtime(1), false)));
     flushUI();
     expect(renderer.root.findAllByType("world-gpu")).toHaveLength(0);

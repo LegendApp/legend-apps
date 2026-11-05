@@ -15,15 +15,25 @@ export type WorldTrack = {
   fixed?: string[];
   /** Radial motion blur toward the frame's centre at peak travel speed (default 1; 0 turns it off). */
   blur?: number;
-  /** Peak rail banking in degrees; stations hold level. */
+  /** Peak rail banking in degrees, leaning into the curve; stations hold level (default a fifth of `turn`). */
   bank?: number;
+  /** Peak heading in degrees the track swings through between the previous station and this one: positive curves right, negative left. */
+  turn?: number;
+  /** World units the camera's path lifts at mid-travel into this station; negative dips. */
+  rise?: number;
+  /** Segments by slide index, so every station sits on one track even before it is visited. Unset fields get varied per-slide defaults. */
+  course?: (WorldSegment | undefined)[];
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
 };
 /** Orbits the station camera `orbit` degrees about its target, scales its distance by `dolly`, moves both by `shift` and sets `fov`, over `duration` seconds with `ease`. */
 export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fov?: number; duration?: number; ease?: Ease };
+/** One slide's leg of the track, from the previous station into this one. */
+export type WorldSegment = Pick<WorldTrack, "spacing" | "duration" | "ease" | "bank" | "turn" | "rise" | "position">;
 type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera; stepIndex?: number; pose?: CameraPose };
 const defaultFixed = ["tunnel:", "trails:"];
+/** Longest flight, in seconds, for a jump across more than one station. */
+const jumpDuration = 1.5;
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
@@ -32,6 +42,8 @@ export type TrackFrame = {
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the step pose when the move began (position, tan half-fov, target); it fades out over the move. */
   cameraDelta?: number[]; entering?: boolean;
+  /** The camera before the track bend, so later moves start from the same unbent coordinates. */
+  straight?: number[]; course?: Course;
 };
 
 export function createTrackFrame(): TrackFrame {
@@ -62,9 +74,9 @@ function quadratic(a: Vec3, control: Vec3, b: Vec3, t: number): Vec3 {
     u * u * a[1] + 2 * u * t * control[1] + t * t * b[1],
     u * u * a[2] + 2 * u * t * control[2] + t * t * b[2]];
 }
-function stationAt(stations: Record<number, Station>, index: number, spacing: number): Station {
+function stationAt(stations: Record<number, Station>, index: number, course: Course): Station {
   "worklet";
-  return stations[index] ?? { offset: index * spacing, track: {} };
+  return stations[index] ?? { offset: course.offset[index], track: course.tracks[index] ?? {} };
 }
 function worldPoint(point: Vec3, offset: number): Vec3 {
   "worklet";
@@ -80,17 +92,94 @@ function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): Camera
     target, fov: step.fov ?? pose.fov, roll: pose.roll };
 }
 
+/** Station depths along the straight track, and the curves that bend it: curve k shifts the centreline by `dx` between depths `from` and `to`. */
+type Course = { offset: number[]; from: number[]; to: number[]; dx: number[]; x: number[]; bank: number[]; rise: number[]; duration: number[]; ease: Ease[]; tracks: WorldSegment[] };
+/** Header slots for WGSL `trackX`: the centreline's x before the window, the curve count, then from/to/dx per curve. */
+export const trackBendSlot = 128, trackBendCurves = 8;
+/** How far content may reach past its station before the next curve begins. */
+const contentDepth = 4;
+function hash(index: number, salt: number) {
+  "worklet";
+  const x = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+/** Each curve sits between one station's content and the next station's camera, so settled slides stay rigid.
+ * Without a `course`, visited stations keep their own track and the rest use `options`.
+ * Unset fields vary by slide: curves mostly alternate sides, with hashed amount, rise, length and pace. */
+export function buildCourse(options: WorldTrack, count: number, stations: Record<number, Station> = {}): Course {
+  "worklet";
+  const world = options.frame === "world", base = options.spacing ?? 32;
+  const course: Course = { offset: [0], from: [0], to: [0], dx: [0], x: [0], bank: [0], rise: [0], duration: [options.duration ?? 1.7], ease: [options.ease ?? "cubic"],
+    tracks: [options.course?.[0] ?? {}] };
+  for (let k = 1; k < count; k++) {
+    const seg: WorldSegment = options.course ? options.course[k] ?? {} : stations[k]?.track ?? options;
+    const spacing = seg.spacing ?? (world ? base : base * (1 + 0.35 * hash(k, 4)));
+    const turn = seg.turn ?? (world ? 0 : (k % 2 ? 1 : -1) * (hash(k, 1) < 0.25 ? -1 : 1) * (14 + 22 * hash(k, 2)));
+    const offset = course.offset[k - 1] + spacing, from = -course.offset[k - 1] - contentDepth, to = -offset + (seg.position?.[2] ?? 14) + 1;
+    const dx = from - to > 2 ? Math.tan(turn * Math.PI / 180) * (from - to) / 1.5 : 0;
+    course.offset.push(offset); course.from.push(from); course.to.push(to); course.dx.push(dx); course.x.push(course.x[k - 1] + dx);
+    course.bank.push(seg.bank ?? Math.abs(turn) * 0.2);
+    course.rise.push(seg.rise ?? (world ? 0 : -0.4 + 2.8 * hash(k, 3)));
+    course.duration.push(seg.duration ?? (world ? 1.7 : 1.7 * Math.sqrt(spacing / 32) * (0.9 + 0.2 * hash(k, 5))));
+    course.ease.push(seg.ease ?? "cubic");
+    course.tracks.push(options.course ? seg : {});
+  }
+  return course;
+}
+function curveProgress(course: Course, k: number, z: number) {
+  "worklet";
+  return Math.min(1, Math.max(0, (course.from[k] - z) / (course.from[k] - course.to[k])));
+}
+/** The centreline's x at straight-track depth `z`; WGSL `trackX` evaluates the same sum over the header window. */
+export function trackX(course: Course, z: number) {
+  "worklet";
+  let x = 0;
+  for (let k = 1; k < course.dx.length; k++) if (course.dx[k]) {
+    const u = curveProgress(course, k, z);
+    x += course.dx[k] * u * u * (3 - 2 * u);
+  }
+  return x;
+}
+/** Leans into each half of a curve; level on the straights. */
+function trackRoll(course: Course, z: number) {
+  "worklet";
+  let roll = 0;
+  for (let k = 1; k < course.dx.length; k++) {
+    const u = curveProgress(course, k, z);
+    if (course.dx[k] && u > 0 && u < 1) roll -= Math.sign(course.dx[k]) * course.bank[k] * Math.PI / 180 * Math.sin(2 * Math.PI * u);
+  }
+  return roll;
+}
+/** Content, lights and the camera are sampled on a straight track; this writes the bend window and moves the camera and lights onto the curve. */
+function bendTrack(frame: TrackFrame, course: Course) {
+  "worklet";
+  const values = frame.values;
+  frame.straight = values.slice(0, 7);
+  const first = Math.max(1, Math.floor(frame.cursor) - 2), last = Math.min(course.dx.length, first + trackBendCurves);
+  values[trackBendSlot] = course.x[first - 1]; values[trackBendSlot + 1] = Math.max(0, last - first);
+  for (let i = 0; i < trackBendCurves; i++) {
+    const k = first + i, at = trackBendSlot + 2 + i * 3, live = k < last;
+    values[at] = live ? course.from[k] : 1; values[at + 1] = live ? course.to[k] : 0; values[at + 2] = live ? course.dx[k] : 0;
+  }
+  values[0] += trackX(course, values[2]); values[4] += trackX(course, values[6]);
+  values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
+  for (let light = 0; light < 4; light++) values[64 + light * 12] += trackX(course, values[64 + light * 12 + 2]);
+  values[112] += trackX(course, values[114]); values[120] += trackX(course, values[122]);
+  return frame;
+}
 
 /** The rail is sampled by station coordinate, so reversing retraces the same curve. */
-function sampleTrackCamera(stations: Record<number, Station>, cursor: number, spacing: number): CameraPose {
+function sampleTrackCamera(stations: Record<number, Station>, cursor: number, course: Course): CameraPose {
   "worklet";
   const endIndex = Math.max(1, Math.ceil(cursor)), t = cursor - (endIndex - 1);
-  const start = stationAt(stations, endIndex - 1, spacing), end = stationAt(stations, endIndex, spacing);
+  const start = stationAt(stations, endIndex - 1, course), end = stationAt(stations, endIndex, course);
   const a = { position: worldPoint(start.track.position ?? [0, 3.6, 14], start.offset), target: worldPoint(start.track.target ?? [0, 0, 0], start.offset), fov: 40, roll: 0 };
   const b = { position: worldPoint(end.track.position ?? [0, 3.6, 14], end.offset), target: worldPoint(end.track.target ?? [0, 0, 0], end.offset), fov: 40, roll: 0 };
-  const position = quadratic(a.position,
-    worldPoint(end.track.via ?? [2.5, 5.5, (end.offset - start.offset) * 0.6875], end.offset),
-    b.position, t);
+  // The default path rises (or dips, staying clear of the floor) by the leg's `rise` at mid-travel; the track's curves supply the sideways swing.
+  const middle = (a.position[1] + b.position[1]) / 2, rise = Math.max(course.rise[endIndex] ?? 0, 1.2 - middle);
+  const via: Vec3 = end.track.via ? worldPoint(end.track.via, end.offset)
+    : [(a.position[0] + b.position[0]) / 2, middle + 2 * rise, (end.offset - start.offset) * 0.6875 - end.offset];
+  const position = quadratic(a.position, via, b.position, t);
   const target = quadratic(a.target,
     worldPoint(end.track.viaTarget ?? [0, 0, (end.offset - start.offset) * 0.3125], end.offset),
     b.target, t);
@@ -104,7 +193,7 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, sp
     target[axis] += (from.target[axis] - a.target[axis]) * u + (to.target[axis] - b.target[axis]) * v;
   }
   return { position, target, fov: 40 + (from.fov - 40) * leave + (to.fov - 40) * arrive,
-    roll: (end.track.bank ?? 0) * Math.PI / 180 * Math.sin(2 * Math.PI * t) };
+    roll: trackRoll(course, position[2]) };
 }
 
 function hidden(values: ArrayLike<number>, at: number) {
@@ -235,32 +324,35 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   // Activation epochs change on re-entry; the slide's numeric index is its stable station identity.
   const world = options.frame === "world";
   const index = preview && !world ? 0 : Number(playback.slideKey.split(":")[0]);
-  const spacing = options.spacing ?? 32;
+  const count = Math.max(index, Math.ceil(first ? 0 : previous.cursor)) + trackBendCurves + 2;
+  const course = !changed && previous.course && previous.course.offset.length >= count ? previous.course : buildCourse(options, count, first ? {} : previous.stations);
   const stations = first ? {} : changed ? { ...previous.stations } : previous.stations;
-  if (first || slideChanged && !stations[index]) stations[index] = { offset: index * spacing, track: options };
+  if (first || slideChanged && !stations[index]) stations[index] = { offset: course.offset[index], track: options };
   if (!first && slideChanged) {
     const departure = Number(previous.slideKey.split(":")[0]);
     if (Math.abs(previous.cursor - departure) < 1e-9 && (stations[departure]?.step || previous.cameraDelta)) {
-      const live = previous.values;
+      const live = previous.straight ?? previous.values;
       stations[departure] = { ...stations[departure], pose: { position: [live[0], live[1], live[2]],
-        target: [live[4], live[5], live[6]], fov: Math.atan(live[3]) * 360 / Math.PI, roll: live[7] } };
+        target: [live[4], live[5], live[6]], fov: Math.atan(live[3]) * 360 / Math.PI, roll: previous.values[7] } };
     }
   }
   if (changed) stations[index] = { ...stations[index], step: options.steps?.[playback.stepIndex], stepIndex: playback.stepIndex,
     pose: slideChanged && stations[index].stepIndex === playback.stepIndex ? stations[index].pose : undefined };
   const origin = first ? index : slideChanged ? previous.cursor : previous.origin;
   const duration = options.duration ?? 1.7;
-  const leg = stations[Math.max(index, Math.ceil(origin))]?.track;
-  const travelDuration = Math.max(1, Math.abs(index - origin)) * (leg?.duration ?? duration);
-  const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, leg?.ease ?? options.ease ?? "cubic");
+  const leg = Math.max(index, Math.ceil(origin)), span = Math.abs(index - origin);
+  // Jumps across several stations rush the whole way in one short flight.
+  const travelDuration = span > 1.5 ? Math.min(jumpDuration, span * course.duration[leg]) : Math.max(1, span) * course.duration[leg];
+  const travel = first ? 1 : easeProgress(playback.slideTime / travelDuration, course.ease[leg]);
   const cursor = origin + (index - origin) * travel;
-  const camera = sampleTrackCamera(stations, cursor, spacing);
+  const camera = sampleTrackCamera(stations, cursor, course);
   const station = world ? 0 : stations[index].offset;
   const reversed = changed ? slideChanged ? index < origin : playback.stepIndex < previous.stepIndex : previous.reversed;
   // Travel back keeps the carry of the segment being retraced.
   const carry = changed ? (slideChanged ? stations[Math.max(index, Math.ceil(origin))]?.track.carry : options.carry) ?? options.carry : previous.carry;
   const retired = changed ? { ...previous.retired } : previous.retired;
   const from = changed ? previous.values.slice() : previous.from;
+  if (changed && previous.straight) for (let i = 0; i < 7; i++) from[i] = previous.straight[i];
   // Reuse draw slots only while their ids keep the same order.
   const same = world && previous.ids.length === ids.length && (previous.ids === ids || ids.every((id, slot) => id === previous.ids[slot]));
   const declaredSet = changed || ids !== previous.ids || declared !== previous.declared ? new Set(declared) : null;
@@ -292,7 +384,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const fixed = options.fixed ?? defaultFixed;
   const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
-    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering };
+    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, course };
   for (let i = 0; i < 7; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[7] = camera.roll;
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
@@ -302,7 +394,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[travelSpeedSlot + 1] = values[travelSpeedSlot] * (options.blur ?? 1);
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed);
-    return visibleTrackFrame(frame, previous);
+    return bendTrack(visibleTrackFrame(frame, previous), course);
   }
   // Lights travel with the station; floor markings stay in world space.
   for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
@@ -336,5 +428,5 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       values[at + 23] = from[old + 23] + (values[at + 23] - from[old + 23]) * progress;
     } else if (!first && progress < 1) values[at + 23] *= progress;
   }
-  return visibleTrackFrame(frame, previous);
+  return bendTrack(visibleTrackFrame(frame, previous), course);
 }

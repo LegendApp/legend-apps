@@ -213,7 +213,23 @@ export function Chapter({ slide }: { slide: number }) {
 
 `stepOffset` adds to the step index, so tracks in the shared scene address a running beat with `{ step, delay, value }`. Give a part one pose per beat; the track samples the flight between them.
 
-The rail holds still at each station. `bank` sets the peak lean in degrees during travel (default 0); its sign chooses the lean, and Previous retraces the same curve and banking. Held step orbits unwind near departure and return near arrival on the reverse trip.
+The rail holds still at each station and always travels forward along one continuous track; Previous retraces the same curve and banking. Each slide's `camera` (its `track`) shapes the leg into its station:
+
+| Field | Effect |
+| --- | --- |
+| `turn` | Peak heading in degrees the track swings through, −60 to 60: positive curves right, negative left |
+| `rise` | World units the camera lifts at mid-travel; negative dips (it stays above the floor) |
+| `spacing` | Leg length in world units |
+| `bank` | Peak lean into the curve, 0–45 degrees (default a fifth of `turn`) |
+| `duration`, `ease` | Flight time and easing |
+
+Unset fields vary by slide, deterministically, so an unannotated deck still curves left and right with different rises, lengths and pace (`frame: "world"` keeps a straight, level track). The bend happens between one station's content and the next station's camera, so settled slides stay square to the camera; the floor markings, tunnel and other fixed scenery follow it. A jump across more than one slide flies the whole way in at most 1.5 s.
+
+```mdx
+<Scene id="hooks" layout="cloud" camera={{ turn: -30, rise: 2, spacing: 44, duration: 2.1, bank: 8 }} durations={[2.4]}>
+```
+
+Held step orbits unwind near departure and return near arrival on the reverse trip.
 
 With station-local content, `track.fixed` accepts raw part-id prefixes (for example `["environment/", "dust:"]`) that stay in world coordinates. This keeps the environment still while matching content ids carry between stations.
 

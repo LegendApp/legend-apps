@@ -19,7 +19,7 @@ import { burstInstances, choreographyInstances, type BurstOptions, type Choreogr
 import { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions, type StoplightOptions } from "./stage";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
-export type { WorldCarry, WorldStepCamera, WorldTrack } from "./track";
+export type { WorldCarry, WorldSegment, WorldStepCamera, WorldTrack } from "./track";
 
 export { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances } from "./stage";
 export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, StoplightLamp, StoplightOptions, TubePulse } from "./stage";
@@ -270,6 +270,10 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   }
   if (track && [track.position, track.target, track.via, track.viaTarget].some(point => point && point.some(value => !Number.isFinite(value)))) {
     throw new Error("World track points must be finite");
+  }
+  if (track && [track, ...track.course ?? []].some(leg => leg && (leg.turn !== undefined && !(Math.abs(leg.turn) <= 60) || leg.rise !== undefined && !Number.isFinite(leg.rise) ||
+    leg.bank !== undefined && !(leg.bank >= 0 && leg.bank <= 45) || [leg.spacing, leg.duration].some(value => value !== undefined && !(value > 0 && Number.isFinite(value)))))) {
+    throw new Error("World track turn must be within ±60 degrees, bank 0–45 degrees, rise finite, and spacing and duration positive");
   }
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);

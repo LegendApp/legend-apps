@@ -4,7 +4,7 @@ import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector } from "./scene";
 import { ambientEffects, authoringError, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldTrack } from "./World";
+import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -374,15 +374,19 @@ function sameSceneValue(a: unknown, b: unknown): boolean {
 // Each deck's pack retains one preparation per named world across equivalent renderer mounts.
 const slidePlans = new Map<string, { declarations: SceneProps[]; slides: WorldProps[] }>();
 function plannedSlides(content: readonly ReactNode[], world: string) {
-  const declarations: SceneProps[] = [];
-  for (const children of content) collect(children, child => {
-    if (child.type === Scene && !child.props.prepare && (child.props.world ?? "scene") === world) declarations.push(child.props as SceneProps);
-  });
+  const declarations: SceneProps[] = [], indices: number[] = [];
+  content.forEach((children, index) => collect(children, child => {
+    if (child.type === Scene && !child.props.prepare && (child.props.world ?? "scene") === world) { declarations.push(child.props as SceneProps); indices.push(index); }
+  }));
   if (!declarations.length) return [];
   let cached = slidePlans.get(world);
   if (!cached || !sameSceneValue(declarations, cached.declarations)) {
-    cached = { declarations, slides: prepareWorldSlides(declarations.map(scene => { const { children, layout, camera, colors, ambient, mdxSource, ...props } = scene;
-      return { ...props, track: { spacing: 32, ...findLayout(layout, false, scene)?.camera, ...camera }, children: expandScene(children, layout, scene) }; })) };
+    const tracks = declarations.map(scene => ({ ...findLayout(scene.layout, false, scene)?.camera, ...scene.camera }));
+    // Every station's leg, by slide index, so the whole deck shares one track.
+    const course: WorldSegment[] = [];
+    tracks.forEach(({ spacing, duration, ease, bank, turn, rise, position }, i) => { course[indices[i]] = { spacing, duration, ease, bank, turn, rise, position }; });
+    cached = { declarations, slides: prepareWorldSlides(declarations.map((scene, i) => { const { children, layout, camera, colors, ambient, mdxSource, ...props } = scene;
+      return { ...props, track: { ...tracks[i], course }, children: expandScene(children, layout, scene) }; })) };
     slidePlans.set(world, cached);
   }
   return cached.slides;

@@ -23,6 +23,18 @@ fn partRotation(base:u32)->mat3x3f {
   vec3f(s.x*s.y*c.z-c.x*s.z,s.x*s.y*s.z+c.x*c.z,s.x*c.y),
   vec3f(c.x*s.y*c.z+s.x*s.z,c.x*s.y*s.z-s.x*c.z,c.x*c.y));
 }
+// The track's centreline x at straight depth z: a smoothstep per curve in the header window (track.ts \`trackX\`).
+fn trackCurve(z:f32,at:u32)->f32 { return clamp((uniforms[at]-z)/(uniforms[at]-uniforms[at+1u]),0.,1.); }
+fn trackX(z:f32)->f32 {
+ var x=uniforms[128]; for(var i=0u;i<u32(uniforms[129]);i++) { let u=trackCurve(z,130u+i*3u); x+=uniforms[132u+i*3u]*u*u*(3.-2.*u); } return x;
+}
+fn trackSlope(z:f32)->f32 {
+ var s=0.; for(var i=0u;i<u32(uniforms[129]);i++) { let at=130u+i*3u; let u=trackCurve(z,at); s-=uniforms[at+2u]*6.*u*(1.-u)/(uniforms[at]-uniforms[at+1u]); } return s;
+}
+// Parts are sampled on a straight track; bending shifts them sideways onto the curve.
+fn bend(p:vec3f)->vec3f { return vec3f(p.x+trackX(p.z),p.y,p.z); }
+fn bendNormal(p:vec3f,n:vec3f)->vec3f { return vec3f(n.x,n.y,n.z-trackSlope(p.z)*n.x); }
+fn unbend(p:vec3f)->vec3f { return vec3f(p.x-trackX(p.z),p.y,p.z); }
 fn cameraForward()->vec3f { return normalize(vector(4u)-vector(0u)); }
 fn cameraRight()->vec3f {
  let forward=cameraForward();
@@ -135,7 +147,7 @@ fn roundRect(p:vec2f,half:vec2f,radius:f32)->f32 { let q=abs(p)-half+radius; ret
 @vertex fn cardVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->CardVertex {
  let base=slot(iid); let half=cardHalf(base); let margin=uniforms[base+16u]*presence(half)*2.5+.01;
  let local=mix(-half.xy-margin,half.xy+margin,corner(vid));
- var result:CardVertex; result.position=projected(vector(base)+partRotation(base)*vec3f(local,half.z)); result.local=local; result.instance=iid;
+ var result:CardVertex; result.position=projected(bend(vector(base))+partRotation(base)*vec3f(local,half.z)); result.local=local; result.instance=iid;
  if(uniforms[base+23u]<=.001 || presence(half)<=0.) { result.position=vec4f(2.,2.,0.,1.); }
  return result;
 }
@@ -154,7 +166,7 @@ fn over(dst:vec4f,color:vec3f,alpha:f32)->vec4f { return vec4f(color*alpha+dst.r
 fn blurredStroke(d:f32,width:f32,sigma:f32)->f32 { return width/(2.5066*sigma)*exp(-d*d/(2.*sigma*sigma)); }
 fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniforms[13])*uniforms[14],-8.,8.))); }
 @fragment fn cardFragment(in:CardVertex)->CardResult {
- let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=vector(base)+rotation*vec3f(p,half.z);
+ let base=slot(in.instance); let half=cardHalf(base); let p=in.local; let rotation=partRotation(base); let world=bend(vector(base))+rotation*vec3f(p,half.z);
  if(dot(rotation[2],eye()-world)<0.) { discard; }
  let pixel=max(length(fwidth(p))*.7071,.00001);
  let radius=clamp(uniforms[base+11u],0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
@@ -213,12 +225,12 @@ ${custom ? "fn geometryId(iid:u32)->u32 { let marker=instanceAt(slot(iid)).geome
  var point=vec3f(0.); var normal=vec3f(0.,1.,0.);
  ${shape}
  ${sdf ? `point=mix(${bounds[0]},${bounds[1]},point/radius*.5+.5)*radius;` : ""}
- let scale=max(part.scale,vec3f(.0001)); let rotation=partRotation(base); let world=origin+rotation*(point*scale);
- var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(rotation*(normal/scale));
+ let scale=max(part.scale,vec3f(.0001)); let rotation=partRotation(base); let straight=origin+rotation*(point*scale); let world=bend(straight);
+ var result:WorldVertex; result.position=projected(world); result.world=world; result.normal=normalize(bendNormal(straight,rotation*(normal/scale)));
  result.color=part.color; result.emissive=part.emissive; result.material=vec4f(part.roughness,part.metal,part.rim,part.activation);
  result.albedo=part.albedo; result.opacity=part.opacity; result.instance=iid;
  ${sphere ? `
- let center=projected(origin); let radii=scale*radius;
+ let center=projected(bend(origin)); let radii=scale*radius;
  let extent=max(radii.x,max(radii.y,radii.z));
  if(result.opacity<=.001 || center.w+extent<=.05 || center.w-extent>=500.) {
   result.position=vec4f(2.,2.,0.,1.); return result;
@@ -239,7 +251,7 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let base=slot(in.instance); let part=instanceAt(base);
  let radii=max(part.scale,vec3f(.0001))*max(part.radius,.0001);
  let rotation=partRotation(base); let inverse=transpose(rotation);
- let origin=(inverse*(eye()-part.position))/radii; let ray=normalize((inverse*(in.world-eye()))/radii);
+ let center=bend(part.position); let origin=(inverse*(eye()-center))/radii; let ray=normalize((inverse*(in.world-eye()))/radii);
  let along=dot(origin,ray); let closest=origin-ray*along; let field=1.-dot(closest,closest);
  let edge=max(fwidth(field),.00001);
  if(field<=0. || in.opacity<=.001) { discard; }
@@ -247,7 +259,7 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  var local=vec3f(0.); var hit=vec3f(0.); var clip=vec4f(0.); var found=false;
  for(var root=0u;root<2u;root++) {
   if(roots[root]<0.) { continue; }
-  local=origin+ray*roots[root]; hit=part.position+rotation*(local*radii); clip=projected(hit);
+  local=origin+ray*roots[root]; hit=center+rotation*(local*radii); clip=projected(hit);
   if(clip.w<=.05 || clip.z<0. || clip.z>clip.w) { continue; }
   found=true; break;
  }
@@ -263,7 +275,7 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
 @fragment fn worldFragment(in:WorldVertex)->SDFResult {
  if(in.opacity<=.001) { discard; }
  let base=slot(in.instance); let part=instanceAt(base);
- let origin=part.position; let scale=max(part.scale*part.radius,vec3f(.0001));
+ let origin=bend(part.position); let scale=max(part.scale*part.radius,vec3f(.0001));
  let rotation=partRotation(base); let inverse=transpose(rotation);
  let rayOrigin=(inverse*(eye()-origin))/scale; let rayDirection=normalize((inverse*(in.world-eye()))/scale);
  let direction=select(rayDirection,vec3f(.000001),abs(rayDirection)<vec3f(.000001));
@@ -297,7 +309,7 @@ struct ShadowVertex { @builtin(position) position:vec4f, @location(0) local:vec2
 @vertex fn shadowVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->ShadowVertex {
  let part=instanceAt(${worldHeaderSize}u+(iid+${offset}u)*${worldInstanceSize}u);
  let r=max(part.scale,vec3f(.0001))*max(part.radius,.0001); let local=corner(vid)*2.-1.;
- let p=keyProject(part.position+keyRight()*local.x*max(r.x,r.z)+keyUp()*local.y*r.y);
+ let p=keyProject(bend(part.position)+keyRight()*local.x*max(r.x,r.z)+keyUp()*local.y*r.y);
  var result:ShadowVertex; result.local=local; result.position=vec4f(p.xy,clamp(p.z,0.,1.),1.);
  if(part.opacity<.5) { result.position=vec4f(2.,2.,0.,1.); }
  return result;
@@ -320,7 +332,7 @@ fn slot(iid:u32)->u32 { return ${worldHeaderSize}u+(iid+${offset}u)*${worldInsta
 @vertex fn labelVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->LabelVertex {
  let base=slot(iid); let size=uniforms[base+3u]; let width=uniforms[base+8u];
  let local=mix(vec2f(-.25,-.4),vec2f(width+.25,1.05),corner(vid));
- let world=vector(base)+vec3f((local.x-width*uniforms[base+10u])*size,(local.y-.36)*size,0.);
+ let world=bend(vector(base))+vec3f((local.x-width*uniforms[base+10u])*size,(local.y-.36)*size,0.);
  var result:LabelVertex; result.position=projected(world); result.world=world; result.local=local; result.instance=iid;
  if(uniforms[base+23u]<=.001 || uniforms[base+9u]<1.) { result.position=vec4f(2.,2.,0.,1.); }
  return result;
@@ -413,8 +425,9 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  if(distance<=.05 || distance>=500. || abs(world.x)>uniforms[39] || abs(world.z)>uniforms[39]) { discard; }
  let normal=vec3f(0.,1.,0.); let view=normalize(vector(0u)-world); let material=Material(vector(40u),vector(40u)*uniforms[19],uniforms[37],uniforms[43]);
  var color=${markings.lit === false ? "material.emissive" : "illuminate(world,normal,material,vec3f(0.),0.,0.)"};
- var mask=0.; let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
- ${paint}
+ var mask=0.; let hit=world;
+ { let world=unbend(hit); let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
+ ${paint} }
  ${look.shadowBinding !== undefined ? "color*=keyShadow(world,normal);" : ""}
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;

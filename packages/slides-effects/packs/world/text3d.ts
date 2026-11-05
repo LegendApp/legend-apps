@@ -216,7 +216,7 @@ fn rotate(v:vec3f,degrees:vec3f)->vec3f {
  if(uniforms[base+23u]<=.001) { result.position=vec4f(2.,2.,0.,1.); return result; }
  let scale=max(vector(base+8u),vec3f(.0001)); let size=uniforms[base+3u];
  let rotation=vector(base+12u);
- let world=vector(base)+rotate((local-vec3f(uniforms[base+19u],uniforms[base+15u],0.))*size*scale,rotation);
+ let world=bend(vector(base))+rotate((local-vec3f(uniforms[base+19u],uniforms[base+15u],0.))*size*scale,rotation);
  result.position=projected(world); result.world=world; result.normal=normalize(rotate(normal/scale,rotation));
  return result;
 }

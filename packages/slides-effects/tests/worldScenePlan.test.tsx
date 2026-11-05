@@ -8,6 +8,7 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 import * as Reanimated from "react-native-reanimated";
 import { Scene } from "../packs/world/Authoring";
+import { worldHeaderSize } from "../packs/world/scene";
 import { Box, Sphere, Tube, WorldSlide } from "../packs/world/World";
 
 test("authored slides retain one GPU graph across different geometry, steps and reverse navigation", async () => {
@@ -137,7 +138,7 @@ test("planned surfaces reuse one immutable UI scene while keeping sampled output
     const values = live.root.findByType("gpu").props.frameData.value, before = Array.from(values);
     const still = preview.root.findByType("gpu").props.frameData.value;
     expect(still).not.toBe(values);
-    expect(still[128]).not.toBe(values[128]);
+    expect(still[worldHeaderSize]).not.toBe(values[worldHeaderSize]);
     expect(Array.from(values)).toEqual(before);
   } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); mutables.mockRestore(); }
 });
