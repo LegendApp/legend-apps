@@ -74,6 +74,10 @@ is the full rise and fade time in seconds (default `.4`). `repeat: "infinite"` w
 `every` repeats the pulse on the shared playback clock. `flash: false` keeps a
 persistent recolor, with `glow` setting its brightness.
 
+Boxes have a lighter face (`boxColor`, default `#2a303a`) inside a lighter edge
+(`borderColor`, default `#8a94a3`) so they read against dark scenery; both take
+theme color names, and flashes glow on top.
+
 ## Charts
 
 `Bars` takes `items={[{ label, value, color }]}` and these style props:

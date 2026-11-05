@@ -602,6 +602,8 @@ const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay
   step, delay, value: frames[0].value, duration: 0, loop: { every, frames: frames.slice(1).map(f => ({ ...f, at: (f.delay ?? 0) - delay, step: undefined, delay: undefined })) },
 }];
 type CodeMark = { text: string; color?: string; step?: number; delay?: number };
+/** Tree box face and edge albedo: lighter than night scenery so idle boxes read; flashes glow on top. */
+const TREE_BOX = { fill: "#2a303a", border: "#8a94a3" };
 /** A tree flash: `ids` (default all) take `color` on `step`, in a wave down the levels `hop` seconds apart, or all at once with `wave: false` (beams from `from`). */
 type TreeFlash = { step: number; color: string; ids?: string[]; wave?: boolean; from?: string; hop?: number; delay?: number; flash?: boolean; glow?: number; pulseDuration?: number; repeat?: number | "infinite"; every?: number };
 /** `anchor: "center"` centers a panel of this size on its position instead of hanging it from its top-left line. */
@@ -1145,6 +1147,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
     const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
     const delay = props.delay as number | undefined;
+    const boxColor = String(paint(props.boxColor ?? TREE_BOX.fill, INK.colors)), borderColor = String(paint(props.borderColor ?? TREE_BOX.border, INK.colors));
     const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
     const pulseFrames = <T,>(f: TreeFlash, n: { d: number }, rest: T, peak: T): Keyframe<T>[] => {
@@ -1168,9 +1171,9 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
         <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
           key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>
           <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={delay === undefined ? [width,height,.5] : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: delay + i * .07, value: [width,height,.5], duration: .45, ease: "spring" }]} color={color ?? idle} emissive={emissive}
-            material={{ albedo: "#101115", metal: .85, roughness: .3, rim: 0 }} />
+            material={{ albedo: borderColor, metal: .3, roughness: .5, rim: 0 }} />
           <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
-            material={{ albedo: "#000000", metal: 0, roughness: 1 }} />
+            material={{ albedo: boxColor, metal: 0, roughness: 1 }} />
           <Box id={`${id}/${n.id}/rim`} position={[0,-height / 2 + .02,0]} scale={[width + .02,.035,.52]} color={color ?? idle} emissive={typeof emissive === "number" ? .9 : compileTrack(emissive, value => .9 + value * 2).frames} material={{ albedo: "#000000" }} />
           <Text3D id={`${id}/${n.id}/label`} text={n.label ?? n.id} mono font={font} size={(labelSize ?? (n.d < 2 ? .21 : .17)) * TYPE} position={[0,typed.length ? .12 : 0,.27]}
             emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />

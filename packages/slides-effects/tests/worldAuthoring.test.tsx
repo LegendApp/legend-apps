@@ -36,7 +36,7 @@ test("tree labels, stable ids and parent layout survive edits; malformed declara
   const tree = flat(expandScene(<Tree id="tree" nodes={nodes} />));
   const assembly = tree.find(node => node.type === Stage && node.props.id === "tree/child/assembly")!.props.position as { value: number[] }[];
   expect(assembly.at(-1)!.value).toEqual([3, .35, 0]);
-  expect(tree.find(node => node.type === RoundedBox && node.props.id === "tree/child")!.props.material).toMatchObject({ metal: .85, roughness: .3 });
+  expect(tree.find(node => node.type === RoundedBox && node.props.id === "tree/child")!.props.material).toMatchObject({ metal: .3, roughness: .5 });
   expect(tree.some(node => node.type === Burst && node.props.id === "tree/child/landing")).toBe(true);
   expect(tree.find(node => node.type === Text3D && node.props.id === "tree/root/label")!.props.text).toBe("Owner");
   expect(() => readScenes([<Scene id="bad"><Headline id="same">A</Headline><Headline id="same">B</Headline></Scene>])).toThrow("Duplicate scene part");

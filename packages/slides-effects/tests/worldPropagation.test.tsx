@@ -22,6 +22,14 @@ const tree = (wave = true, repeat: number | "infinite" = "infinite") => expandSc
 const property = (parts: React.ReactNode, id: string, key: string) => flat(parts).find(n => n.props.id === id)!.props[key];
 const sample = (value: unknown, seconds: number, step = 1) => sampleTrack(compileTrack(value as Animated<number>), clock(seconds, step));
 
+test("tree boxes have a lighter face and edge that props and theme names override", () => {
+  const albedo = (parts: React.ReactNode, id: string) => property(parts, id, "material").albedo;
+  const plain = expandScene(<Tree id="t" nodes={nodes} />);
+  expect([albedo(plain, "t/root/plate"), albedo(plain, "t/root")]).toEqual(["#2a303a", "#8a94a3"]);
+  const themed = expandScene(<Tree id="t" nodes={nodes} boxColor="#334455" borderColor="muted" />);
+  expect([albedo(themed, "t/root/plate"), albedo(themed, "t/root")]).toEqual(["#334455", "#7d838c"]);
+});
+
 test("tree boxes pulse back to their resting color and glow at each light arrival", () => {
   for (const wave of [true, false]) for (const repeat of [1, 2, "infinite"] as const) {
     const parts = expandScene(<Tree id="pulse" color="#123456" nodes={[
