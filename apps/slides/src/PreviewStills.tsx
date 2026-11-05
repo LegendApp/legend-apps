@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { useBackgroundIntensitySetting } from "./slidesSettings";
@@ -16,8 +16,8 @@ const SURFACE_MS = 8000;
 
 export const stillKey = (slide: number, step: number) => `${slide}:${step}`;
 
-/** Stills of every step's settled frame, thrown away whenever the deck or its look changes. */
-export function usePreviewStills(aspect = 16 / 9) {
+/** Cache visited previews without rendering the rest of the deck in the background. */
+export function usePreviewStills(aspect: number, current: string, next: string) {
   const revision = useValue(slidesState$.revision);
   const intensity = useBackgroundIntensitySetting();
   const slides = useValue(slidesState$.slides);
@@ -28,35 +28,36 @@ export function usePreviewStills(aspect = 16 / 9) {
   if (stills.generation !== generation) setStills({ generation, byKey: {} });
   const add = (key: string, uri: string, from: string) => setStills(state => state.generation === from
     ? { generation: from, byKey: { ...state.byKey, [key]: uri } } : state);
-  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets } };
+  const nearby = targets.filter(key => key === current || key === next);
+  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets: nearby, stills: stills.byKey } };
 }
 
-/** Renders each step once, hidden, ahead of the talk; while the caller navigates it holds its place. Key it by generation. */
-export function PreviewStillSweep({ add, aspect, generation, paused, targets }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[] }) {
-  const [position, setPosition] = useState(0);
-  const target = targets[position];
+/** Capture missing nearby previews between navigation, never while the audience is playing. Key it by generation. */
+export function PreviewStillSweep({ add, aspect, generation, paused, targets, stills }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[]; stills: Record<string, string> }) {
+  const [skipped, setSkipped] = useState<string[]>([]);
   const announced = useRef<string | undefined>(undefined);
   const noSurface = useRef(new Set<number>());
-  const nextPosition = (from: number) => {
-    let next = from + 1;
-    while (next < targets.length && noSurface.current.has(Number(targets[next]!.split(":")[0]))) next++;
-    return next;
-  };
+  const target = targets.find(key => !stills[key] && !skipped.includes(key) && !noSurface.current.has(Number(key.split(":")[0])));
+  const currentRequest = useRef<SurfaceStillRequest | undefined>(undefined);
   const request = useMemo((): SurfaceStillRequest => ({
     id: paused ? undefined : target,
     announce: () => { announced.current = target; },
-    deliver: (id, uri) => { if (id !== target) return; add(id, uri, generation); setPosition(nextPosition); },
+    deliver: (id, uri) => { if (id !== target || currentRequest.current !== request || !request.id) return; add(id, uri, generation); },
   }), [target, paused, generation]);
+  useLayoutEffect(() => {
+    currentRequest.current = request;
+    return () => { currentRequest.current = undefined; };
+  }, [request]);
   useEffect(() => {
     if (paused || !target) return;
-    const skip = () => setPosition(nextPosition);
+    const skip = () => setSkipped(previous => [...previous, target]);
     let timer = setTimeout(() => {
       if (announced.current === target) timer = setTimeout(skip, SURFACE_MS);
       else { noSurface.current.add(Number(target.split(":")[0])); skip(); }
     }, NO_SURFACE_MS);
     return () => clearTimeout(timer);
   }, [target, paused]);
-  if (!target) return null;
+  if (paused || !target) return null;
   const [slide, step] = target.split(":").map(Number);
   return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
     <SurfaceStillContext.Provider value={request}>
