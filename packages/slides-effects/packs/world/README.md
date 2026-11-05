@@ -946,6 +946,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
   and flashing them on each keystroke. `typing.repeat: "infinite"` repeats the typing
   sequence after a short hold, resetting the bound values and badges together.
+  `parent={{ title, renders: true }}` adds a connected node above the panels. Set
+  `renders: true` on a parent or panel to tick its badge with each keystroke; omitted
+  flags keep those badges at one.
 - `CodeMorph` takes one ```` ```diff-tsx ```` fence per step after the first, each starting from
   the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
   Matching tokens carry over with their syntax colors; changed tokens fade out and in.

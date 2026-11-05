@@ -6,15 +6,18 @@ import { Form, expandScene } from "../packs/world/Authoring";
 import { prepareWorldSlides } from "../packs/world/World";
 import { instanceOpacity } from "../packs/world/scene";
 
-test("form typing starts empty, mirrors every prefix and counts only bound field renders", () => {
+for (const ancestors of [false, true]) test(`form typing mirrors prefixes with ancestor counters ${ancestors ? "enabled" : "disabled"}`, () => {
   const text = "Ada Lovelace", delay = .6, interval = .2;
-  const children = expandScene(<Form id="form" typing={{ step: 1, bind: "name", text, delay, interval, repeat: "infinite" }} panels={[
-    { title: "Form", fields: [{ value: "", bind: "name" }, { value: "email" }] },
-    { title: "Profile", fields: [{ value: "", bind: "name", big: true }, { value: "email" }] },
+  const step = ancestors ? 0 : 1;
+  const children = expandScene(<Form id="form" parent={ancestors ? { title: "Root", renders: true } : undefined} typing={{ step, bind: "name", text, delay, interval, repeat: "infinite" }} panels={[
+    { title: "Form", renders: ancestors, fields: [{ value: "", bind: "name" }, { value: "email" }] },
+    { title: "Profile", renders: ancestors, fields: [{ value: "", bind: "name", big: true }, { value: "email" }] },
   ]} />);
   const scene = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+  expect(scene.instances.some(part => part.id?.startsWith("form/parent/title"))).toBe(ancestors);
+  if (ancestors) for (const panel of [0, 1]) expect(scene.instances.some(part => part.id?.startsWith(`form/parent/link/${panel}`))).toBe(true);
   const period = delay + (text.length - 1) * interval + 1.5;
-  const check = (time: number, count: number, stepIndex = 1) => {
+  const check = (time: number, count: number, stepIndex = step) => {
     const clock = { slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } };
     const visible = (prefix: string) => scene.instances.filter(part => part.id?.startsWith(prefix) && instanceOpacity(part, clock) > .5);
     for (const panel of [0, 1]) {
@@ -25,12 +28,19 @@ test("form typing starts empty, mirrors every prefix and counts only bound field
       const badge = visible(`${field}/badge/n`);
       expect(badge).toHaveLength(String(count + 1).length);
       expect(badge.every(part => part.id!.startsWith(`${field}/badge/n${count}:`))).toBe(true);
-      for (const prefix of [`form/${panel}/badge/`, `form/${panel}/1/`]) {
-        for (const part of scene.instances.filter(part => part.id?.startsWith(prefix))) expect(instanceOpacity(part, clock)).toBe(1);
-      }
+      const panelBadge = visible(`form/${panel}/badge/n`);
+      const n = ancestors ? count : 0;
+      expect(panelBadge).toHaveLength(String(n + 1).length);
+      expect(panelBadge.every(part => part.id!.startsWith(`form/${panel}/badge/n${n}:`))).toBe(true);
+      for (const part of scene.instances.filter(part => part.id?.startsWith(`form/${panel}/1/`))) expect(instanceOpacity(part, clock)).toBe(1);
+    }
+    if (ancestors) {
+      const badge = visible("form/parent/badge/n");
+      expect(badge).toHaveLength(String(count + 1).length);
+      expect(badge.every(part => part.id!.startsWith(`form/parent/badge/n${count}:`))).toBe(true);
     }
   };
-  check(20, 0, 0);
+  if (!ancestors) check(20, 0, 0);
   check(delay - .01, 0);
   for (const cycle of [0, 1000]) {
     for (let count = 1; count <= text.length; count++) check(cycle * period + delay + (count - 1) * interval + .01, count);
