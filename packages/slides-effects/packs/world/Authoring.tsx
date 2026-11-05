@@ -588,7 +588,7 @@ const inkOf = (colors: SceneColors) => ({ colors, white: colors.text, muted: col
   purple: colors.highlight, blue: colors.link, green: colors.added, accent: colors.accent });
 type Ink = ReturnType<typeof inkOf>;
 /** Code panels: a near-opaque plate in the theme's `panel` color with a quiet rim, so scenery never shows through the code. */
-const PANEL = { fill: .94, edge: .3, glow: .05 };
+const PANEL = { fill: .96, edge: .3, glow: .05 };
 /** JetBrains Mono advance, in em. */
 const MONO = .6;
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
@@ -853,7 +853,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, children:
   const highlight = props.highlight as { color?: string; opacity?: number } | undefined;
   const highlightColor = paint(highlight?.color, INK.colors) as string ?? INK.blue, highlightOpacity = highlight?.opacity ?? .12;
   return <Stage id={id} position={anchored(at, props.anchor, width, Math.max(...states.map(s => height(s.length))))}>
-    <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} fill={.75} />
+    <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={INK.colors.panel} />
     {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card flat fill={1} edge={0} glow={0} radius={.02} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
       position={[width / 2 - .3, -row * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]} color={highlightColor}
       opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
@@ -897,7 +897,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, source: s
   const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
   const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
   return <Stage id={id} position={at}>
-    <Card id={`${id}/card`} {...PANEL} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
+    <Card id={`${id}/card`} {...PANEL} fill={Number(props.fill ?? PANEL.fill)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
       scale={[{ step: 0, value: [width, full, .06] }, key(collapse, [width, short, .06], .45, .5)]} />
     {lines.map((text, n) => {
@@ -980,10 +980,6 @@ function layers(id: string, at: V3, props: Record<string, unknown>, INK: Ink, so
       <Text3D id={`${id}/value/text`} text={value} mono size={.6 * TYPE} position={[0, -.15, -.5]} color={INK.white}
         emissive={[{ step: 0, value: 1.1 }, ...Array.from({ length: count }, (_, k) => key(first + k, 1.1 * .82 ** (k + 1), land, .6))]} />
     </Stage>}
-    {meter.length > 0 && <>
-      <Box id={`${id}/track`} size={.5} position={[0, floor, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
-      <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} emissive={2.6}
-        color={[{ step: 0, value: color(0) }, ...meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
     {taxMeter(id, meter, first, length, floor, color, INK, caption)}
   </Stage>;
 }
@@ -1006,12 +1002,12 @@ function taxMeter(id: string, meter: number[], first: number, length: number, fl
   const fill = (fraction: number) => ({ position: [-length / 2 + fraction * length / 2, floor, .05] as V3, scale: [Math.max(.001, fraction * length), .16, .16] as V3 });
   const meterTrack = (pick: (f: ReturnType<typeof fill>) => V3) => meter.length ? [{ step: 0, value: pick(fill(meter[0])) }, ...meter.slice(1).map((f, s) => key(first + s + 1, pick(fill(f)), land + .15 * s, .7 + .25 * s))] : pick(fill(0));
   return <>
+    {meter.length > 0 && <>
+      <Box id={`${id}/track`} size={.5} position={[0, floor, 0]} scale={[length, .16, .14]} color={INK.idle} emissive={.4} />
+      <Box id={`${id}/fill`} size={.5} position={meterTrack(f => f.position)} scale={meterTrack(f => f.scale)} emissive={2.6}
+        color={[{ step: 0, value: color(0) }, ...meter.slice(1).map((_, s) => key(first + s + 1, color(s + 1), land, .4))]} />
     </>}
     {caption && <Text3D id={`${id}/caption`} text={caption} mono size={.2 * TYPE} position={[0, floor - .6, 0]} color={INK.muted} emissive={.8} />}
-  </Stage>;
-}
-type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };
-/** A part's `exit`, and a non-text part's `enter`, move it as one Stage; text also fades out and keeps its per-glyph entrance. */
   </>;
 }
 /** A code line centered on `at`, wrapping one glowing box around each of `words` per step, left to right. Each box hugs its word, centered on
@@ -1047,6 +1043,10 @@ function proxyLine(id: string, at: V3, props: Record<string, unknown>, INK: Ink,
       </Fragment>;
     })}
     {taxMeter(id, meter, first, Math.max(4, line.length * advance), floor, color, INK, caption)}
+  </Stage>;
+}
+type PartMotion = { step?: number; delay?: number; duration?: number; ease?: Ease };
+/** A part's `exit`, and a non-text part's `enter`, move it as one Stage; text also fades out and keeps its per-glyph entrance. */
 function moved(id: string, part: ReactNode, enter: PartMotion & { from?: V3 } | undefined, exit: PartMotion & { to?: V3 } | undefined) {
   const frames: { step: number; value: V3; delay?: number; duration?: number; ease?: Ease }[] = [];
   if (enter) { const e = { ...enterDefaults, ...enter }; frames.push({ step: 0, value: e.from }, { step: e.step, delay: e.delay, value: [0, 0, 0], duration: e.duration, ease: e.ease }); }
