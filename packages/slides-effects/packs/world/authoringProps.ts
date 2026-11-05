@@ -73,7 +73,7 @@ const stepCamera = shape({ orbit: number(-Infinity, " of degrees"), dolly: posit
 export const cameraFields: Fields = { spacing: positive(), duration: positive(" of seconds"), ease, position: vec3, target: vec3, via: vec3, viaTarget: vec3,
   turn: is(v => finite(v) && Math.abs(v as number) <= 60, "degrees from -60 to 60"), rise: number(-Infinity, " of world units"),
   bank: is(v => finite(v) && (v as number) >= 0 && (v as number) <= 45, "degrees from 0 to 45"),
-  frame: oneOf("station", "world"), carry, steps: record(stepCamera, step), heldMotion: fraction, heldBlur: number(0) };
+  frame: oneOf("station", "world"), carry, steps: record(stepCamera, step), heldMotion: fraction, heldBlur: number(0), depthFade: number(0), heldFade: fraction };
 const ambientOne = either(oneOf(...ambientEffects), shape({ effect: oneOf(...ambientEffects), count: is(v => Number.isInteger(v) && (v as number) > 0, "a whole number > 0"),
   color, density: number(0), length: positive() }, ["effect"]), `one of ${ambientEffects.join(", ")}, or { effect, … }`);
 const sceneFields: Fields = { id: text, layout: is(v => typeof v === "string", "a layout name"), durations: list(positive(" of seconds")), camera: shape(cameraFields),

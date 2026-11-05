@@ -1,5 +1,6 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
 import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { depthFadeSlot } from "./track";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
 import { d } from "typegpu";
@@ -89,6 +90,11 @@ type Look = { key?: boolean; environment?: boolean; shadowBinding?: number; shad
 function lightingCode(lightCount: number, look: Look = {}) {
   return `${look.key ? keyLightCode(look.shadowBinding, !look.shadeAll) : ""}${look.environment ? environmentCode : ""}
 fn eye()->vec3f { return vector(0u); }
+/** 1 up to \`depthFade\` world units past the camera target, then falling off; steeper while a station holds under \`heldFade\`. */
+fn depthFade(world:vec3f)->f32 {
+ let fade=uniforms[${depthFadeSlot}]; if(fade<=0.) { return 1.; }
+ let start=uniforms[32]+fade; return pow(start/max(start,length(eye()-world)),3.+6.*uniforms[${depthFadeSlot + 1}]);
+}
 fn projected(world:vec3f)->vec4f { ${look.shadowCaster ? "let p=keyProject(world); return vec4f(p.xy,clamp(p.z,0.,1.),1.);"
   : "return project(world);"} }
 struct Material { albedo:vec3f, emissive:vec3f, roughness:f32, metal:f32 }
@@ -123,7 +129,7 @@ fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimInten
   color+=(diffuse+fresnel*distribution*visibility)*nl*vector(base+4u)*max(0.,uniforms[base+3u])*attenuation*cone;
  }
  let rim=pow(1.-nv,3.);
- return clamp(color+rim*(rimColor*rimIntensity+vector(48u)*uniforms[51]*activation),vec3f(0.),vec3f(4096.));
+ return clamp(color+rim*(rimColor*rimIntensity+vector(48u)*uniforms[51]*activation),vec3f(0.),vec3f(4096.))*depthFade(world);
 }
 `;
 }
@@ -429,6 +435,7 @@ struct FloorResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  { let world=unbend(hit); let fade=1.-smoothstep(.25,1.,length(fwidth(world.xz)));
  ${paint} }
  ${look.shadowBinding !== undefined ? "color*=keyShadow(world,normal);" : ""}
+ color*=depthFade(world);
  let clip=project(world); return FloorResult(vec4f(color,1.),clamp(clip.z/clip.w,0.,1.));
 }`;
 }

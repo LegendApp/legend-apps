@@ -19,6 +19,10 @@ export type WorldTrack = {
   heldMotion?: number;
   /** Extra DOF blur radius while the camera holds, as a share of `maxBlur` (default 0). Both ease back to full motion and base blur during flights. */
   heldBlur?: number;
+  /** World units past the camera target beyond which lit scenery, lights and floor fade to black, so the background stays calm and far lights fade instead of aliasing (default 0, off). */
+  depthFade?: number;
+  /** Steepens that falloff while the camera holds, from 0 to 1 (default 0); it eases back during flights like `heldBlur`. */
+  heldFade?: number;
   /** Peak rail banking in degrees, leaning into the curve; stations hold level (default 12% of `turn`). */
   bank?: number;
   /** Peak heading in degrees the track swings through between the previous station and this one: positive curves right, negative left. */
@@ -106,6 +110,8 @@ type Course = { offset: number[]; from: number[]; to: number[]; dx: number[]; x:
 export const trackBendSlot = 128, trackBendCurves = 8;
 /** Header slot after the bend window holding the held DOF blur, as a share of `maxBlur`. */
 export const heldBlurSlot = trackBendSlot + 2 + trackBendCurves * 3;
+/** Header slots holding `depthFade` and the held `heldFade`. */
+export const depthFadeSlot = heldBlurSlot + 1;
 /** How far content may reach past its station before the next curve begins. */
 const contentDepth = 4;
 function hash(index: number, salt: number) {
@@ -432,6 +438,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[travelSpeedSlot + 1] = values[travelSpeedSlot] * (options.blur ?? 1);
   const flying = Math.min(1, values[travelSpeedSlot] * 2), held = 1 - flying * flying * (3 - 2 * flying);
   values[heldBlurSlot] = (options.heldBlur ?? 0) * held;
+  values[depthFadeSlot] = options.depthFade ?? 0;
+  values[depthFadeSlot + 1] = (options.heldFade ?? 0) * held;
   if (options.heldMotion !== undefined) {
     const stamp = playback.lastTimestamp ?? NaN, step = Math.min(0.1, Math.max(0, (stamp - previous.stamp) / 1000));
     frame.scenery = first || !(step >= 0) || !Number.isFinite(previous.scenery) ? values[worldClockOffset + 3]

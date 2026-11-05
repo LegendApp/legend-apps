@@ -384,6 +384,10 @@ reads that speed, 0 at rest to 1 at the move's peak, as `travelSpeed()`.
 To calm the scenery while a slide holds, `heldMotion` (0–1) slows `continuousTime()`, which drives trails and
 tunnel lights, to that share of full speed, and `heldBlur` widens the DOF blur radius by that share of `maxBlur`.
 Both ease back to full motion and base blur with travel speed, so only camera flights run at full speed.
+`depthFade` (world units, default 0 off) keeps everything up to that far past the camera target at full brightness,
+then fades lit scenery, lights and the floor toward black in their own shaders, so the background behind content
+stays calm and distant lamps fade instead of speckling; `heldFade` (0–1) steepens that falloff while a slide holds.
+Prefer them over `heldBlur`, whose wide DOF gather breaks small bright lights into speckles.
 
 ```tsx
 import { Stoplight } from "slides:world/World";

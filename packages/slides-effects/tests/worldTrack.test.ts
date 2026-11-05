@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { compileDeck } from "../../presentation/src/compiler";
 import { createPlaybackState } from "../../presentation/src/playbackState";
 import { cardInstances, customInstances, keyframeSpans, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
-import { buildCourse, createTrackFrame, heldBlurSlot, retainTrackScene, sampleTrackFrame, trackBendSlot, trackIds, trackX, type TrackFrame, type WorldTrack } from "../packs/world/track";
+import { buildCourse, createTrackFrame, heldBlurSlot, depthFadeSlot, retainTrackScene, sampleTrackFrame, trackBendSlot, trackIds, trackX, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
 
 const options = { spacing: 32, duration: 2 };
@@ -407,7 +407,7 @@ test("travel speed peaks mid-move, and fixed track parts stay put while the came
 });
 
 test("held stations slow the scenery clock and widen focus blur, easing back to full motion in flight", () => {
-  const prepared = scene(), track = { ...options, heldMotion: .1, heldBlur: .5 };
+  const prepared = scene(), track = { ...options, heldMotion: .1, heldBlur: .5, depthFade: 30, heldFade: .5 };
   const at = (previous: TrackFrame, time: number, slide: string) => {
     const playback = { ...createPlaybackState({ phase: "playing", slideKey: slide, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time, lastTimestamp: 50000 + time * 1000 };
     return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, track);
@@ -416,10 +416,13 @@ test("held stations slow the scenery clock and widen focus blur, easing back to 
   const start = at(createTrackFrame(), 3, "0");
   expect(scenery(start)).toBeCloseTo(53);
   expect(start.values[heldBlurSlot]).toBe(.5);
+  expect(start.values[depthFadeSlot + 1]).toBe(.5);
   const held = at(start, 3.05, "0");
   expect(scenery(held) - scenery(start)).toBeCloseTo(.005);
   const middle = at(at(held, 0.95, "1"), 1, "1");
   expect(middle.values[heldBlurSlot]).toBeCloseTo(0);
+  expect(middle.values[depthFadeSlot]).toBe(30);
+  expect(middle.values[depthFadeSlot + 1]).toBeCloseTo(0);
   expect(scenery(at(middle, 1.05, "1")) - scenery(middle)).toBeCloseTo(.05);
 });
 
