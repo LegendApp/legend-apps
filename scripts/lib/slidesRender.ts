@@ -8,6 +8,7 @@ export const renderUsage = `Usage: bun run slides render <deck.mdx> [options]
   --fps N                   Fixed frame rate (default 60)
   --step-seconds S          Duration of each state (default 3, rounded to frames)
   --width N --height N      Output pixels (default deck size, or 1920×1080)
+  --slide-references        Include slide reference labels (default off)
   --chrome PATH             Chromium executable (or CHROME_PATH)
   --ffmpeg PATH             Encoder executable (default ffmpeg)
 
@@ -20,10 +21,17 @@ export function parseRenderArgs(args: string[]) {
   if (!deck || deck.startsWith("--") || !deck.endsWith(".mdx")) throw new Error("Pass a .mdx deck first.");
   const values = new Map<string, string>();
   const allowed = new Set(["--slide", "--slides", "--steps", "--out", "--video", "--fps", "--step-seconds", "--width", "--height", "--chrome", "--ffmpeg"]);
-  for (let i = 0; i < rest.length; i += 2) {
+  let slideReferences = false;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--slide-references") {
+      if (slideReferences) throw new Error("Repeated option --slide-references");
+      slideReferences = true;
+      continue;
+    }
     if (!allowed.has(rest[i]) || !rest[i + 1] || rest[i + 1].startsWith("--")) throw new Error(`Invalid option ${rest[i]}`);
     if (values.has(rest[i])) throw new Error(`Repeated option ${rest[i]}`);
     values.set(rest[i], rest[i + 1]);
+    i++;
   }
   if (values.has("--slide") && values.has("--slides")) throw new Error("Use --slide or --slides.");
   if (values.has("--out") && values.has("--video")) throw new Error("Use --out or --video.");
@@ -34,7 +42,7 @@ export function parseRenderArgs(args: string[]) {
   };
   const fps = positive("--fps", 60)!;
   const seconds = positive("--step-seconds", 3, false)!;
-  return { deck: path.resolve(deck), slides: values.get("--slide") ?? values.get("--slides") ?? "all", steps: values.get("--steps") ?? "all",
+  return { slideReferences, deck: path.resolve(deck), slides: values.get("--slide") ?? values.get("--slides") ?? "all", steps: values.get("--steps") ?? "all",
     out: path.resolve(values.get("--out") ?? "rendered"), video: values.get("--video") && path.resolve(values.get("--video")!),
     fps, framesPerStep: Math.max(1, Math.round(seconds * fps)), width: positive("--width"), height: positive("--height"),
     chrome: values.get("--chrome"), ffmpeg: values.get("--ffmpeg") ?? "ffmpeg" };

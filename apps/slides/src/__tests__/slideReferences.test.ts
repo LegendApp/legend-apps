@@ -19,5 +19,7 @@ test("defaults follow development and presentation mode; explicit choices win", 
     expect(slideReferencesVisible(false)).toBe(true);
     toggleSlideReferences();
     expect(slideReferencesVisible(true)).toBe(false);
+    setSlidesState({ config: { slideReferences: true }, slideReferences: false });
+    expect(slideReferencesVisible(false)).toBe(false);
   } finally { setSlidesState(initial); }
 });

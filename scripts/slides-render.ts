@@ -76,7 +76,7 @@ export async function renderSlides(args: string[]) {
     await send("Page.enable");
     await send("Emulation.setDeviceMetricsOverride", { width: options.width ?? 1920, height: options.height ?? 1080, deviceScaleFactor: 1, mobile: false });
     await send("Page.addScriptToEvaluateOnNewDocument", { source: `(${installRenderClock.toString()})();` });
-    await send("Page.navigate", { url: pathToFileURL(path.join(website, "index.html")).href });
+    await send("Page.navigate", { url: pathToFileURL(path.join(website, "index.html")).href + `?slide-references=${options.slideReferences}` });
     const tick = (time: number) => evaluate(`globalThis.__slidesRenderClock.tick(${time})`);
     let time = 0, tickIndex = 0;
     async function ready() {
