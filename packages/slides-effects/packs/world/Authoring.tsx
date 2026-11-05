@@ -642,7 +642,7 @@ type Ink = ReturnType<typeof inkOf>;
 const PANEL = { fill: .9, edge: 1, line: 1.5, glow: .05 };
 const panelStyle = (props: Record<string, unknown>) => ({ ...PANEL, fill: Number(props.fill ?? PANEL.fill), edge: Number(props.border ?? PANEL.edge) });
 /** JetBrains Mono advance, in em. */
-const MONO = .6;
+const MONO = .6, LABEL = "#f2f4f8";
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
 const loopTrack = <T,>(frames: Keyframe<T>[], step: number, every: number, delay = 0): Keyframe<T>[] => [frames[0], {
   step, delay, value: frames[0].value, duration: 0, loop: { every, frames: frames.slice(1).map(f => ({ ...f, at: (f.delay ?? 0) - delay, step: undefined, delay: undefined })) },
@@ -996,20 +996,24 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
   </Stage>;
 }
 /** Code that highlights where state is created (`source`), passed (`pass`) and read (`reads`) on `mark`, collapses everything else on `collapse`,
- * and lifts the source and read lines into a tree of `nodes` labels on `extract`. */
+ * and lifts the source and read lines into a tree of `nodes` labels on `extract`. A `{ id, text }` node shares `text` with its compact line:
+ * those tokens grow and fly into the box as its label while everything else fades out. */
 function codeTrace(id: string, at: V3, props: Record<string, unknown>, children: ReactNode, INK: Ink) {
   const fences = Children.toArray(children).filter(child => codeSource(child).trim());
   const source = codeSource(fences[0]), tokens = codeHighlight(fences[0])?.tokens;
   const lines = source.replace(/\n$/, "").split("\n"), size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), em = size * TYPE, advance = em * MONO;
-  const origin = Number(props.source), reads = props.reads as number[], pass = (props.pass ?? []) as number[], labels = props.nodes as string[];
+  const origin = Number(props.source), reads = props.reads as number[], pass = (props.pass ?? []) as number[];
+  const nodes = props.nodes as (string | { id: string; text: string })[], labels = nodes.map(n => typeof n === "string" ? n : n.text);
   const mark = Number(props.mark ?? 1), collapse = Number(props.collapse ?? 2), extract = Number(props.extract ?? 3);
   const hot = [origin, ...reads].sort((a, b) => a - b), gap = lineHeight * 1.8;
   const width = Math.max(...lines.map(l => l.length)) * advance + .9, full = (lines.length - 1) * lineHeight + em + .6, short = (hot.length - 1) * gap + em + .6;
   const bandOpacity = (props.highlight as { opacity?: number } | undefined)?.opacity ?? 1;
-  const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * 3.6, -3.2, 0];
-  const show = [{ step: 0, value: 0 }, key(extract, 1, 1.25, .35)];
+  const labelEm = .2 * TYPE, labelAdvance = labelEm * MONO, boxWidths = labels.map(label => Math.max(3.3, label.length * labelAdvance + .6));
+  const spread = Math.max(3.6, ...boxWidths.slice(1).map(w => w + .4)), shared = new Set<number>();
+  const tx = width + 3.2, node = (k: number): V3 => k === 0 ? [tx, -.4, 0] : [tx + (k - (reads.length + 1) / 2) * spread, -3.2, 0];
+  const show = [{ step: 0, value: 0 }, key(extract, 1, .6, .4)];
   const centered: V3 = [at[0] - width / 2 + .3, at[1] + (full - em - .6) / 2, at[2]];
-  const position = props.anchor === "center" ? [{ step: 0, value: centered }, key(extract, [at[0] - tx, at[1] + (labels.length > 1 ? 1.8 : .4), at[2]] as V3, .55, .9)] : at;
+  const position = props.anchor === "center" ? [{ step: 0, value: centered }, key(extract, [at[0] - tx, at[1] + (labels.length > 1 ? 1.8 : .4), at[2]] as V3, 0, 1)] : at;
   let morph: ReactNode;
   if (fences.length > 1) {
     if (fences.length !== 2) throw Error(`Code trace ${id}: use one source fence and one compact target fence.`);
@@ -1023,18 +1027,29 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
       [[...diff(lines, tokens, "-"), ...diff(target, targetTokens, "+")]], INK, gap);
     morph = React.Children.map(tree.props.children, child => {
       if (!isValidElement<Record<string, unknown>>(child)) return child;
-      if (child.props.id === `${id}/card`) return React.cloneElement(child, { opacity: [{ step: 0, value: 1 }, key(extract, 0, .9, .4)] });
+      if (child.props.id === `${id}/card`) return React.cloneElement(child, { opacity: [{ step: 0, value: 1 }, key(extract, 0, 0, .4)] });
       if (child.type === Box) return null;
       if (child.type !== Text3D) return child;
       const opacity = compileTrack(child.props.opacity as Animated<number>);
       if ((opacity.frames.at(-1)?.value ?? opacity.initial) === 0) return child;
       const track = compileTrack(child.props.position as Animated<V3>), end = track.frames.at(-1)?.value ?? track.initial;
-      const row = Math.round(-end[1] / gap), n = hot[row], destination = node(n === origin ? 0 : 1 + reads.indexOf(n));
-      const middle = (target[row].length - target[row].trimStart().length + target[row].trimEnd().length) * advance / 2;
+      const row = Math.round(-end[1] / gap), n = hot[row], k = n === origin ? 0 : 1 + reads.indexOf(n), share = nodes[k];
+      const fade = { opacity: [{ step: 0, value: opacity.initial }, ...opacity.frames, key(extract, 0, 0, .4)] };
+      if (typeof share === "string") return React.cloneElement(child, fade);
+      const text = String(child.props.text), column = Math.round(end[0] / advance), from = target[row].indexOf(share.text), to = from + share.text.length;
+      if (from < 0) throw Error(`Code trace ${id}: shared "${share.id}" text is not in compact line ${row + 1}.`);
+      if (column + text.length <= from || column >= to) return React.cloneElement(child, fade);
+      if (column < from || column + text.length > to) throw Error(`Code trace ${id}: shared "${share.id}" text splits the token "${text}".`);
+      shared.add(k);
+      const scale = labelEm / em, p = node(k), glyphs = child.props.glyphs as ((i: number, char: string, home: V3, color?: string) => GlyphMotion | undefined) | undefined;
       return React.cloneElement(child, {
-        position: [{ step: 0, value: track.initial }, ...track.frames, key(extract, [end[0], end[1], 1.4] as V3, 0, .45),
-          key(extract, [destination[0] - middle + end[0], destination[1], 1.4] as V3, .55, .9)],
-        opacity: [{ step: 0, value: opacity.initial }, ...opacity.frames, key(extract, 0, 1.25, .35)],
+        position: [{ step: 0, value: track.initial }, ...track.frames, key(extract, [p[0] - labels[k].length * labelAdvance / 2 + (column - from) * labelAdvance, p[1], .25] as V3, 0, 1)],
+        glyphs: (i: number, char: string, home: V3, color?: string): GlyphMotion => {
+          const own = glyphs?.(i, char, home, color), grown = compileTrack(own?.scale ?? 1);
+          return { ...own, scale: [{ step: 0, value: grown.initial }, ...grown.frames, key(extract, scale, 0, 1)],
+            offset: [{ step: 0, value: [0, 0, 0] }, key(extract, home.map(v => v * (scale - 1)) as V3, 0, 1)],
+            color: [{ step: 0, value: color ?? LABEL }, key(extract, LABEL, 0, 1)] };
+        },
       });
     });
   }
@@ -1065,11 +1080,11 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
     })}
     </>}
     {labels.map((label, k) => { const p = node(k), root = node(0), mid = (root[1] + p[1]) / 2; return <Fragment key={`node${k}`}>
-      <Card id={`${id}/node${k}`} position={p} scale={[3.3, .85, .4]} color={k ? INK.blue : INK.amber} opacity={show}
-        emissive={[{ step: 0, value: 0 }, key(extract, 7, 1.25, .1), key(extract, 1.8, 1.4, .6)]} />
-      <Text3D id={`${id}/node${k}/label`} text={label} mono size={.2 * TYPE} position={[p[0], p[1], .25]} opacity={show} />
+      <Card id={`${id}/node${k}`} position={p} scale={[boxWidths[k], .85, .4]} color={k ? INK.blue : INK.amber} opacity={show}
+        emissive={[{ step: 0, value: 0 }, key(extract, 7, .9, .1), key(extract, 1.8, 1, .6)]} />
+      {!shared.has(k) && <Text3D id={`${id}/node${k}/label`} text={label} mono size={labelEm} position={[p[0], p[1], .25]} opacity={show} />}
       {k > 0 && <RoutedTube id={`${id}/edge${k}`} thickness={.035} color={INK.amber} emissive={3} path={[[root[0], root[1] - .45, 0], [root[0], mid, 0], [p[0], mid, 0], [p[0], p[1] + .45, 0]]}
-        draw={[{ step: 0, value: 0 }, key(extract, 1, 1.6, .5)]} pulses={[{ step: extract, delay: 2.2, every: 1.1, duration: .5, color: INK.amber, size: .11, emissive: 10 }]} />}
+        draw={[{ step: 0, value: 0 }, key(extract, 1, .6, .4)]} pulses={[{ step: extract, delay: 2.2, every: 1.1, duration: .5, color: INK.amber, size: .11, emissive: 10 }]} />}
     </Fragment>; })}
   </Stage>;
 }

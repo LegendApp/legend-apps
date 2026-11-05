@@ -72,3 +72,37 @@ test("repeated same-color tokens match one-to-one through a multiline rewrite", 
   const rows = items.map(node => value<[number, number, number]>(node.props.position, 1, 2)[1]);
   expect(rows).toEqual([-.27, -.54]);
 });
+
+test("shared trace nodes fly their compact tokens into the boxes as labels, with no doubles", async () => {
+  const shares = [{ id: "owner", text: "useSignal" }, { id: "reader", text: "<span>{state}</span>" }];
+  const tree = flat(expandScene(<CodeTrace id="trace" source={1} reads={[3]} nodes={shares}>
+    {await highlightedFence('function App() {\n  const state = useState(0)\n  ignored()\n  return <span>{state}</span>\n}')}
+    {await highlightedFence('const state = useSignal(0)\n<span>{state}</span>')}
+  </CodeTrace>));
+  expect(tree.filter(node => String(node.props.id).endsWith("/label"))).toHaveLength(0);
+  const visible = tree.filter(node => node.type === Text3D && value<number>(node.props.opacity, 2, 2) === 1);
+  shares.forEach(({ text }, k) => {
+    const box = tree.find(node => node.props.id === `trace/node${k}`)!, center = (box.props.position as number[])[0], advance = .2 * 100 / 72 * .6;
+    const glyphs = visible.flatMap(token => text3dInstances(token.props as never).map(glyph => {
+      const at = value<[number, number, number]>(token.props.position, 3, 2), home = glyph.glyph!.home, offset = sampleTrack(glyph.glyph!.offset, clock(3, 2));
+      return { x: at[0] + home[0] + offset[0], y: at[1], scale: sampleTrack(glyph.scale, clock(3, 2))[0], opacity: value<number>(token.props.opacity, 3, 2) };
+    })).filter(glyph => glyph.opacity > 0 && Math.abs(glyph.y - (box.props.position as number[])[1]) < .01).sort((a, b) => a.x - b.x);
+    const chars = [...text].flatMap((char, i) => char === " " ? [] : [center - text.length * advance / 2 + (i + .5) * advance]);
+    expect(glyphs.map(glyph => glyph.x).map(x => x.toFixed(4))).toEqual(chars.map(x => x.toFixed(4)));
+    for (const glyph of glyphs) expect(glyph.scale).toBeCloseTo(.2 / .13);
+  });
+  for (const token of visible.filter(node => ["const", "state", "=", "(", "0", ")"].includes(String(node.props.text)) && value<[number, number, number]>(node.props.position, 2, 2)[1] === 0))
+    expect(value<number>(token.props.opacity, 3, .4)).toBe(0);
+  for (const token of visible.filter(node => node.props.text === "useSignal")) {
+    expect(value<number>(token.props.opacity, 3, .5)).toBe(1);
+    const scale = sampleTrack(text3dInstances(token.props as never)[0].scale, clock(3, .5))[0];
+    expect(scale).toBeGreaterThan(1); expect(scale).toBeLessThan(.2 / .13);
+  }
+  expect(value<number>(tree.find(node => node.props.id === "trace/card")!.props.opacity, 3, .4)).toBe(0);
+  const box = tree.find(node => node.props.id === "trace/node1")!;
+  expect(value<number>(box.props.opacity, 3, .6)).toBe(0);
+  expect(value<number>(box.props.opacity, 3, 1)).toBe(1);
+  const fences = [await highlightedFence('function App() {\n  const state = useState(0)\n  ignored()\n  return <span>{state}</span>\n}'), await highlightedFence('const state = useSignal(0)\n<span>{state}</span>')];
+  expect(() => expandScene(<CodeTrace id="trace" source={1} reads={[3]} nodes={[{ id: "x", text: "missing" }, "Reader"]}>{fences}</CodeTrace>))
+    .toThrow(/shared "x" text is not in compact line 1/);
+});
