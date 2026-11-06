@@ -20,24 +20,28 @@ for (const ancestors of [false, true]) test(`form typing mirrors prefixes with a
   const check = (time: number, count: number, stepIndex = step) => {
     const clock = { slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } };
     const visible = (prefix: string) => scene.instances.filter(part => part.id?.startsWith(prefix) && instanceOpacity(part, clock) > .5);
+    const countAt = (offset: number) => time % period >= period - .1 ? 0 : Math.max(0, Math.min(text.length, Math.floor((time % period - delay - offset) / interval) + 1));
+    const propagated = ancestors ? countAt(.72) : count;
     for (const panel of [0, 1]) {
+      const fieldCount = panel === 0 ? count : propagated;
       const field = `form/${panel}/0`;
       const glyphs = visible(`${field}/v`);
-      expect(glyphs).toHaveLength(text.slice(0, count).replaceAll(" ", "").length);
-      expect(glyphs.every(part => part.id!.startsWith(`${field}/v${count}:`))).toBe(true);
+      expect(glyphs).toHaveLength(text.slice(0, fieldCount).replaceAll(" ", "").length);
+      expect(glyphs.every(part => part.id!.startsWith(`${field}/v${fieldCount}:`))).toBe(true);
       const badge = visible(`${field}/badge/n`);
-      expect(badge).toHaveLength(String(count + 1).length);
-      expect(badge.every(part => part.id!.startsWith(`${field}/badge/n${count}:`))).toBe(true);
+      expect(badge).toHaveLength(String(propagated + 1).length);
+      expect(badge.every(part => part.id!.startsWith(`${field}/badge/n${propagated}:`))).toBe(true);
       const panelBadge = visible(`form/${panel}/badge/n`);
-      const n = ancestors ? count : 0;
+      const n = ancestors ? propagated : 0;
       expect(panelBadge).toHaveLength(String(n + 1).length);
       expect(panelBadge.every(part => part.id!.startsWith(`form/${panel}/badge/n${n}:`))).toBe(true);
       for (const part of scene.instances.filter(part => part.id?.startsWith(`form/${panel}/1/`))) expect(instanceOpacity(part, clock)).toBe(1);
     }
     if (ancestors) {
+      const n = countAt(.36);
       const badge = visible("form/parent/badge/n");
-      expect(badge).toHaveLength(String(count + 1).length);
-      expect(badge.every(part => part.id!.startsWith(`form/parent/badge/n${count}:`))).toBe(true);
+      expect(badge).toHaveLength(String(n + 1).length);
+      expect(badge.every(part => part.id!.startsWith(`form/parent/badge/n${n}:`))).toBe(true);
     }
   };
   if (!ancestors) check(20, 0, 0);
@@ -120,4 +124,46 @@ test("form caret leaves with its form and resets on re-entry; no idle form pulse
   expect(instancePosition(caret, { ...clock(0, 2), stepOrigins: { 1: -.8, 2: 0 } })[0]).toBeCloseTo(start[0] + .26 * 100 / 72 * .6);
   const idle = prepareWorldSlides([{ children: expandScene(<Form id="idle" parent={{ title: "App", renders: true }} panels={[{ title: "Form", fields: [{ value: "a" }] }]} />) }])[0].scenePlan!.content.prepared;
   expect(idle.instances.some(i => i.id?.includes("/caret") || i.route?.pulse || i.id?.includes("/input/up"))).toBe(false);
+});
+
+test("form text and counters commit at their pulse phase, including interruption and re-entry", () => {
+  const s = pulseScene();
+  const check = (c: ReturnType<typeof clock>, local: number, parent: number, child: number) => {
+    const version = (prefix: string, n: number, digits = false) => {
+      const visible = s.instances.filter(i => i.id?.startsWith(prefix) && instanceOpacity(i, c) > .5);
+      expect(visible).toHaveLength(digits ? String(n + 1).length : n);
+      expect(visible.every(i => i.id!.startsWith(`${prefix}${n}:`))).toBe(true);
+    };
+    version("form/0/0/v", local);
+    version("form/1/0/v", child);
+    version("form/parent/badge/n", parent, true);
+    for (const p of [0, 1]) {
+      version(`form/${p}/badge/n`, child, true);
+      version(`form/${p}/0/badge/n`, child, true);
+    }
+  };
+  for (const cycle of [0, 10]) for (const [keyTime, n] of [[.6, 1], [1.9, 2]]) {
+    const t = cycle * 3.4 + keyTime;
+    check(clock(t - .001), n - 1, n - 1, n - 1);
+    check(clock(t + .001), n, n - 1, n - 1);
+    check(clock(t + .359), n, n - 1, n - 1);
+    check(clock(t + .361), n, n, n - 1);
+    check(clock(t + .719), n, n, n - 1);
+    check(clock(t + .721), n, n, n);
+    const at = (id: string, time: number) => sampleTrack(s.instances.find(i => i.id === id)!.emissive, clock(time));
+    for (const [id, offset, rest] of [["form/parent/badge/disc", .36, .9], ...[0, 1].flatMap(p => [
+      [`form/${p}/badge/disc`, .72, .9], [`form/${p}/0/badge/disc`, .72, .9], [`form/${p}/0`, .72, .8],
+    ])] as [string, number, number][]) {
+      expect(at(id, t + offset - .001)).toBeCloseTo(rest);
+      expect(at(id, t + offset + .06)).toBeCloseTo(7);
+    }
+  }
+  // Advancing away preserves the interrupted step's phase; its clock must not restart.
+  check({ ...clock(.02, 2), stepOrigins: { 1: -.8, 2: 0 } }, 1, 0, 0);
+  check({ ...clock(.02, 2), stepOrigins: { 1: -1.1, 2: 0 } }, 1, 1, 0);
+  // Reversing before the typing step and then re-entering discards pending propagation.
+  check(clock(20, 0), 0, 0, 0);
+  check(clock(0), 0, 0, 0);
+  check(clock(.601), 1, 0, 0);
+  check(clock(3.35), 0, 0, 0);
 });
