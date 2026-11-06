@@ -1446,7 +1446,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat === "infinite" ? 1 : f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
     const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
-    const delay = props.delay as number | undefined;
+    const delay = props.delay as number | undefined, drop = props.drop as number | undefined, levelHeight = Number(props.levelHeight ?? 1.65);
     const boxColor = String(paint(props.boxColor ?? TREE_BOX.fill, INK.colors)), borderColor = String(paint(props.borderColor ?? TREE_BOX.border, INK.colors));
     const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
@@ -1467,9 +1467,10 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       const bursts = own.filter(f => f.wave === false && f.from !== undefined && f.from !== n.id), from = bursts.length ? nodes.find(m => m.id === bursts[0].from) : undefined;
       const width = Number(n.width ?? nodeWidth ?? (n.d < 2 ? 3 : 2.3)), height = Number(n.height ?? .82), side = n.x < 0 ? -1 : 1, land = delay === undefined ? 1.35 + i / Math.max(1, nodes.length - 1) * .35 : delay + i * .07 + .3;
       const typed = n.typed && beat ? Array.from({ length: beat.count }, (_, k) => ({ text: `"${n.typed!.slice(0, k + 1)}"`, from: beat.start + k * beat.every + n.d * HOP, to: k + 1 < beat.count ? beat.start + (k + 1) * beat.every + n.d * HOP : undefined })) : [];
-      return <Fragment key={n.id}>
-        <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
-          key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>
+      // `drop`: rows fall in from just under the row above (so they never overlap it), settle, then a soft light wipes across each box.
+      const s = drop === undefined ? 0 : drop + n.d * .18 + nodes.filter(m => m.d === n.d && m.x < n.x).length * .05, lift = Math.min(1, Math.max(.25, levelHeight - height - .1));
+      const fall = Array.from({ length: 6 }, (_, k) => key(0, [n.x,n.y + lift - (lift + .06) * ((k + 1) / 6) ** 2,0] as V3, s + k * .07, .07, "linear"));
+      const box = <>
           <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={delay === undefined ? [width,height,.5] : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: delay + i * .07, value: [width,height,.5], duration: .45, ease: "spring" }]} color={color ?? idle} emissive={emissive}
             material={{ albedo: borderColor, metal: .3, roughness: .5, rim: 0 }} />
           <Box id={`${id}/${n.id}/plate`} position={[0,0,.252]} scale={[width - .14,height - .14,.005]} color={color ?? "#16171b"} emissive={emissive}
@@ -1479,10 +1480,21 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
             emissive={.82} side="#1c1d22" metal={.85} roughness={.28} />
           {typed.map((v, k) => <Text3D key={k} id={`${id}/${n.id}/typed${k}`} text={v.text} mono font={font} size={.14 * TYPE} position={[0,-.17,.27]} color={n.color} emissive={.9}
             opacity={[{ at: 0, value: 0, duration: 0 }, { at: v.from, value: 1, duration: 0 }, ...v.to === undefined ? [] : [{ at: v.to, value: 0, duration: 0 }]]} />)}
-        </Stage>
-        <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
+        </>;
+      return <Fragment key={n.id}>
+        {drop === undefined ? <>
+          <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
+            key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>{box}</Stage>
+          <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
+        </> : <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x,n.y + lift,0] as V3, 0, 0), ...fall, key(0, [n.x,n.y,0] as V3, s + .42, .3, "out")]}>
+          <Stage id={`${id}/${n.id}/fill`} opacity={[key(0, 0, 0, 0), key(0, 1, s, .15)]}>{box}</Stage>
+          {[[.5, .1, 1.2], [.22, .4, .5]].map(([peak, w, glow], b) => <Stage key={b} id={`${id}/${n.id}/wipe${b}`} opacity={[key(0, 0, 0, 0), key(0, peak, s + .72, .15), key(0, 0, s + 1.12, .15)]}
+            position={[key(0, [-width / 2 + .3,0,.27] as V3, 0, 0), key(0, [width / 2 - .3,0,.27] as V3, s + .72, .55, "inOut")]}>
+            <Box id={`${id}/${n.id}/wipe${b}/band`} position={[0,0,b * -.002]} scale={[w,height - .2,.004]} rotation={[0,0,-14]} color="#dfe8ff" emissive={glow} material={{ albedo: "#ffffff", metal: 0, roughness: 1 }} />
+          </Stage>)}
+        </Stage>}
         {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
-          draw={[key(0, 0, 0, 0), key(0, 1, land - .15, .35)]}
+          draw={[key(0, 0, 0, 0), drop === undefined ? key(0, 1, land - .15, .35) : key(0, 1, s + .3, .35)]}
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
         {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
