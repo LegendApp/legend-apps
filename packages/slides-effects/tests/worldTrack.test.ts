@@ -624,8 +624,10 @@ test("focus routes incoming parts sharply and background parts through blur acro
     labelInstance({ id: "far", text: "Far", position: [0, 0, -12] }),
     ...cardInstances({ id: "panel", title: "Panel" }),
     primitive("box", { id: "force-blur", sharp: false }),
-    primitive("sphere", { id: "force-sharp", position: [0, 0, -12], sharp: true })] });
-  const options = { position: [0, 0, 10] as [number, number, number], target: [0, 0, 0] as [number, number, number],
+    primitive("sphere", { id: "force-sharp", position: [0, 0, -12], sharp: true }),
+    primitive("box", { id: "fixed/sharp", sharp: true }),
+    primitive("box", { id: "fixed/auto" })] });
+  const options = { fixed: ["fixed/"], position: [0, 0, 10] as [number, number, number], target: [0, 0, 0] as [number, number, number],
     steps: { 1: { shift: [0, 0, -12] as [number, number, number] } } };
   let frame = createTrackFrame();
   for (const step of [0, 1, 0]) {
@@ -637,6 +639,8 @@ test("focus routes incoming parts sharply and background parts through blur acro
     expect(part(frame, "label:panel:title")[instanceField.sharp]).toBe(step === 0 ? 1 : 0);
     expect(part(frame, "box:force-blur")[instanceField.sharp]).toBe(0);
     expect(part(frame, "sphere:force-sharp")[instanceField.sharp]).toBe(1);
+    expect(part(frame, "box:fixed/sharp")[instanceField.sharp]).toBe(1);
+    expect(part(frame, "box:fixed/auto")[instanceField.sharp]).toBe(0);
   }
 });
 

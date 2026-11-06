@@ -470,7 +470,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const focus = move?.focus !== undefined || options.focus !== undefined || pulled ? focusTarget + (cameraDelta ? (from[32] - focusTarget) * settle : 0) : undefined;
   for (let slot = 0; slot < ids.length; slot++) {
     const at = worldHeaderSize + slot * worldInstanceSize;
-    if (!declaredSlots[slot] || fixedSlots[slot]) values[at + instanceField.sharp] = 0;
+    if (!declaredSlots[slot] || (fixedSlots[slot] && values[at + instanceField.sharp] < 0)) values[at + instanceField.sharp] = 0;
     else if (values[at + instanceField.sharp] < 0) {
       const depth = ((values[at] - destination.position[0]) * fx + (values[at + 1] - destination.position[1]) * fy +
         (values[at + 2] - station - destination.position[2]) * fz) / focusDistance;
