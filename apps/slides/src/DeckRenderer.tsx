@@ -42,6 +42,7 @@ import { normalizeStepCount, getSlidesState, nextSlide, previousSlide, reportSli
 import { ContentErrorBoundary } from "./ContentErrorBoundary";
 import { Layout, LayoutStage } from "./Layout";
 import { SlideReferenceLabel } from "./SlideReferenceLabel";
+import { PerformanceHUD } from "./PerformanceHUD";
 import { SlideSurface } from "./SlideSurface";
 import { Step, Steps, countSteps, resolveSteps } from "./steps";
 import { CodeBlock } from "./CodeBlock";
@@ -343,7 +344,7 @@ export function SlideCanvas({ children, captureEnabled = true, targetIndex, targ
   const selectedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const color = useValue(() => slidesState$.config.theme.backgroundColor.get() ?? "#111827");
   const content = <SlideCanvasContent captureEnabled={captureEnabled} warnLayout={isPreview} reference={<SlideReferenceLabel targetIndex={targetIndex} targetStep={targetStep} isPreview={isPreview} />}>{children}</SlideCanvasContent>;
-  return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview} replacement={backgroundStill}>{content}</SlideBackgroundHost>;
+  return hosted ? content : <SlideBackgroundHost intensity={intensity} slideIndex={selectedIndex} color={color} isPreview={backgroundIsPreview} replacement={backgroundStill}>{content}{!isPreview && <PerformanceHUD />}</SlideBackgroundHost>;
 }
 
 function SlideCanvasContent({ children, captureEnabled, warnLayout, reference }: { children: ReactNode; captureEnabled: boolean; warnLayout: boolean; reference: ReactNode }) {
