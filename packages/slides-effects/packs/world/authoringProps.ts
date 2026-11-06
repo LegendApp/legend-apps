@@ -93,6 +93,7 @@ const kindFields: Record<string, Fields> = {
   grid: { chrome: oneOf("mac"), fill: fraction, border: number(0), resize: oneOf("width", "height"), anchor: oneOf("top", "center"), grow: number(0) },
   morph: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ opacity: fraction, word: shape({ opacity: fraction }) }), marks: codeMarks },
   trace: { size: positive(), lineHeight: positive(), anchor: oneOf("center"), fill: fraction, border: number(0), flat: flag, highlight: shape({ opacity: fraction }) },
+  rule: { lights: flag },
   bars: { items: list(shape({ label: is(v => typeof v === "string", "a string"), value: number(0), color }, ["label", "value"])), height: positive(), width: positive(), depth: positive(),
     gap: positive(), max: positive(), delay: number(0, " of seconds"), stagger: number(0, " of seconds"), duration: positive(" of seconds"), ease, labelSize: positive(),
     from: shape({ part: text, step, delay: number(0, " of seconds"), duration: positive(" of seconds"), fold: flag, color }, ["part"]) },

@@ -154,6 +154,34 @@ export const List = part("list");
 export const Editor = part("editor");
 export const Counter = part("counter");
 export const Rule = part("rule");
+// Lamps at a rule's ends cast soft beams up and in over the line above it: fans of faint emissive rays from each lens, fading in once the rule
+// has grown, then sweeping a few degrees back and forth on a long cycle while staying angled inward.
+const LIGHT = { tilt: 24, sweep: 5, period: 10, length: 4.6, color: "#dfe9ff",
+  // Many faint, overlapping, unlit rays: denser toward the beam's axis and its base, so it reads as soft light rather than separate bars.
+  rays: [-6, -4.5, -3, -1.5, 0, 1.5, 3, 4.5, 6].flatMap(at => [1, .66, .36].map(length => ({ at, length: length * (1 - Math.abs(at) / 24), opacity: .05 * (1 - Math.abs(at) / 8) }))) };
+function ruleLights(id: string, position: V3, width: number, delay: number) {
+  const fade = (to: number): Keyframe<number>[] => [{ at: 0, value: 0, duration: 0 }, { at: delay, value: to, duration: .9, ease: "out" }];
+  return [-1, 1].map(side => {
+    const base: V3 = [position[0] + side * (width / 2 + .22), position[1], position[2] - .3];
+    // Positive angles lean the ray toward the rule's centre; a ray rotates about its own middle, so its middle rides the arc around the lens.
+    const ray = (angle: number, length: number) => { const r = angle * Math.PI / 180;
+      return { position: [base[0] - side * Math.sin(r) * length / 2, base[1] + Math.cos(r) * length / 2, base[2]] as V3, rotation: [0, 0, side * angle] as V3 }; };
+    const swing = <T,>(pick: (angle: number) => T): Keyframe<T>[] => [{ at: 0, value: pick(-LIGHT.sweep), duration: 0, loop: { every: LIGHT.period, frames: [
+      { at: 0, value: pick(LIGHT.sweep), duration: LIGHT.period / 2, ease: "inOut" }, { at: LIGHT.period / 2, value: pick(-LIGHT.sweep), duration: LIGHT.period / 2, ease: "inOut" }] } }];
+    return <Fragment key={side}>
+      <Stage id={`${id}/lamp${side}`} position={base} opacity={fade(1)}>
+        <RoundedBox id={`${id}/lamp${side}/housing`} size={.5} scale={[.72,.3,.3]} position={[0,-.02,-.05]} color="#15161a" emissive={0} rotation={[0, 0, side * LIGHT.tilt]} />
+        <Box id={`${id}/lamp${side}/lens`} size={.5} scale={[.5,.08,.06]} position={[-side * .05,.1,.06]} color={LIGHT.color} emissive={3} rotation={[0, 0, side * LIGHT.tilt]} />
+      </Stage>
+      {LIGHT.rays.map((r, i) => { const length = LIGHT.length * r.length, at = (d: number) => ray(LIGHT.tilt + r.at + d, length);
+        return <Stage key={i} id={`${id}/beam${side}/${i}`} opacity={fade(r.opacity)}>
+          <Box id={`${id}/beam${side}/${i}/ray`} size={.5} scale={[.12 + .02 * Math.abs(r.at),length,.01]} color={LIGHT.color} emissive={1.6}
+            material={{ albedo: "#000000", roughness: 1, metal: 0, rim: 0 }}
+            position={swing(d => add(at(d).position, [0, 0, (i - LIGHT.rays.length) * .005]))} rotation={swing(d => at(d).rotation)} />
+        </Stage>; })}
+    </Fragment>; });
+}
+
 export const Bars = part("bars");
 export const Keys = part("keys");
 export const Grid = part("grid");
@@ -1419,8 +1447,9 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     </Stage>;
   }
   if (kind === "rule") { const delay = Number(props.delay ?? 0), width = Number(props.width ?? 6);
-    return <Box id={id} size={.5} color={String(paint(props.color ?? "accent", INK.colors))} emissive={1.1} position={position}
-      scale={[{ at: delay, value: [0,.09,.12], duration: 0 }, { at: delay, value: [width,.09,.12], duration: .7 }]} />; }
+    const rule = <Box id={id} size={.5} color={String(paint(props.color ?? "accent", INK.colors))} emissive={1.1} position={position}
+      scale={[{ at: delay, value: [0,.09,.12], duration: 0 }, { at: delay, value: [width,.09,.12], duration: .7 }]} />;
+    return props.lights ? <>{rule}{ruleLights(id, position, width, delay + .6)}</> : rule; }
   if (kind === "bars") {
     const items = props.items as { label: string; value: number; color?: string }[], maximum = Number(props.max ?? Math.max(...items.map(b => b.value)));
     // Bars grown `from` another part stay out of sight until its block lands, then rise out of the plinth quicker; out of a folded plate once it has tinted, with a spring.

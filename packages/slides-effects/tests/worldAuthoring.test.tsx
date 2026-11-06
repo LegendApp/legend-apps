@@ -85,6 +85,18 @@ test("layouts and roles: unknown names fail without prepare, stay labels with it
   delete sceneLayouts.custom;
 });
 
+test("a rule with lights adds an inward lamp and swept beam at each end; plain rules stay a single bar", () => {
+  expect(flat(expandScene(<Rule id="r" />, "title")).map(n => n.props.id)).toEqual(["r"]);
+  const lit = flat(expandScene(<Rule id="r" lights />, "title"));
+  expect(lit.filter(n => String(n.props.id).endsWith("/lens")).map(n => (n.props.rotation as number[])[2])).toEqual([-24, 24]);
+  const rays = lit.filter(n => String(n.props.id).endsWith("/ray"));
+  expect(rays.length).toBe(54);
+  // Each ray rests at one end of its sweep and loops slowly to the other, staying tilted toward the centre the whole way.
+  const left = rays[12].props.rotation as { value: number[]; loop: { every: number; frames: { value: number[] }[] } }[];
+  expect(left[0].loop.every).toBe(10);
+  expect([left[0].value[2], ...left[0].loop.frames.map(f => f.value[2])]).toEqual([-19, -29, -19]);
+});
+
 test("generic parts render from layouts without coordinates", () => {
   const nodes = placeTree([{ id: "root" }, { id: "a", p: 0 }, { id: "b", p: 0 }, { id: "a1", p: 1 }, { id: "a2", p: 1 }]);
   expect(nodes.map(n => [n.x, n.y])).toEqual([[0,2],[-2.9,.35],[2.9,.35],[-4.3,-1.3],[-1.5,-1.3]]);
