@@ -746,8 +746,8 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
   const frame = (fid: string, position: unknown, draw: unknown, label: string) => {
     const w = width / 2 + .28, top = row * .4 + .2, bottom = y(shown - 1) - row * .4 - .2;
     return <Stage id={fid} position={position as V3}>
-      <RoutedTube id={`${fid}/edge`} join="miter" path={[[-w, top, .24], [w, top, .24], [w, bottom, .24], [-w, bottom, .24], [-w, top, .24]]} thickness={.04} color={INK.accent} emissive={3} draw={draw as number} />
-      {label && <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.accent} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />}
+      <RoutedTube id={`${fid}/edge`} join="miter" path={[[-w, top, .24], [w, top, .24], [w, bottom, .24], [-w, bottom, .24], [-w, top, .24]]} thickness={.04} color={INK.blue} emissive={3} draw={draw as number} />
+      {label && <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.blue} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />}
     </Stage>;
   };
   const leaving = keys.slice(0, by), entering = keys.slice(shown, shown + by);
