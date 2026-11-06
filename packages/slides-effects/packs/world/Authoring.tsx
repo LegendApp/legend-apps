@@ -767,7 +767,8 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
     </Stage>
     {snapshot("before", before, 0, after, INK.red, beforeLabel)}
     {snapshot("after", after, gap, before, INK.green, afterLabel)}
-    {lines}
+    {/* Keep the emissive links in the bloom input while the list is held. */}
+    <Stage id={`${id}/links`} sharp={false}>{lines}</Stage>
   </Stage>;
 }
 /** Labelled cells that flash together `rate` times a second from `flash.step`, while a resize handle drags the frame. */

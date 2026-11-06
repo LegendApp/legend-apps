@@ -1,6 +1,8 @@
 import "../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import React from "react";
+import { createPlaybackState } from "../../presentation/src/playbackState";
+import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds } from "../packs/world/track";
 import { highlightedFence } from "./highlightedFence";
 import { act, create } from "react-test-renderer";
 import path from "node:path";
@@ -302,5 +304,37 @@ test("sharp overrides apply to every code panel surface and glyph and validate b
     expect(scene.instances.some(instance => instance.card)).toBe(true);
     expect(scene.instances.some(instance => instance.glyph)).toBe(true);
     for (const instance of scene.instances) expect(instance.sharp?.initial).toBe(Number(sharp));
+  }
+});
+
+test("list connectors remain in the bloom input while held, departing and returning", () => {
+  const list = (id: string) => prepareWorldSlides([{ children: expandScene(
+    <Keys id={id} keys={["A", "B", "C", "D"]} viewport={3} scroll={1} window={2} links={3} />
+  ) }])[0].scenePlan!.content.prepared;
+  const a = list("keys"), b = list("next"), options = { duration: 1.2, spacing: 50 };
+  let frame = createTrackFrame();
+  const advance = (scene: typeof a, slideKey: string, step: number, time: number, declared = trackIds(scene)) => {
+    const state = { ...createPlaybackState({ phase: "playing", slideKey, stepKey: `${slideKey}/${step}`, stepIndex: step }), slideTime: time, stepTime: time };
+    frame = sampleTrackFrame(frame, sampleWorldUniforms(scene, state) as number[], trackIds(scene), state, options, declared);
+  };
+  advance(a, "0", 3, 5);
+  const links = trackIds(a).filter(id => id.startsWith("tube:keys/link/"));
+  expect(links.length).toBe(2);
+  const values = () => links.map(id => {
+    const at = worldHeaderSize + frame.ids.indexOf(id) * worldInstanceSize;
+    return { sharp: frame.values[at + instanceField.sharp], emissive: frame.values[at + instanceField.emissive], opacity: frame.values[at + instanceField.opacity] };
+  });
+  const held = values();
+  const card = frame.ids.findIndex(id => id.startsWith("card:keys/"));
+  expect(frame.values[worldHeaderSize + card * worldInstanceSize + instanceField.sharp]).toBe(1);
+  const next = retainTrackScene(b, a);
+  advance(next, "1", 0, .2, trackIds(b));
+  const leaving = values();
+  advance(a, "0:return", 3, 5);
+  const returned = values();
+  for (const state of [held, leaving, returned]) for (const link of state) {
+    expect(link.emissive).toBeCloseTo(3.5);
+    expect(link.opacity).toBeGreaterThan(0);
+    expect(link.sharp).toBe(0);
   }
 });
