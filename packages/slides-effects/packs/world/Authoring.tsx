@@ -594,7 +594,7 @@ export function laneScene(scenes: LaneScene[], index: number, { spacing = 32, fo
   const leaving = before ? laneParts(before).map(({ node, kind, props }) => {
     const into = props.into as string | undefined, id = `${props.id}/out`, at = add((props.at ?? [0, 3.2, 0]) as V3, station(index - 1));
     if (into === undefined) return <Stage key={id} id={`${props.id}/exit`} position={[{ at: 0, value: station(index - 1), duration: 0 }, { at: .1, value: add(station(index - 1), [14, 0, 0]), duration: .8, ease: "cubic" }]}>
-      {expandParts(node, () => ({ ...props, id, enter: undefined, delay: kind === "tree" ? undefined : -9, ...props.beat ? { beat: undefined, value: (props.beat as Beat).count * Number(props.per ?? 1) } : {} }), { ink: INK, scene: `lane${index - 1}` })}</Stage>;
+      {expandParts(node, () => ({ ...props, id, enter: undefined, delay: kind === "tree" ? undefined : -9, ...props.beat ? { beat: undefined, value: (props.beat as Beat).count * Number(props.per ?? 1) } : {} }), { ink: INK, scene: `lane${index - 1}` }, false)}</Stage>;
     const target = parts.find(p => p.props.id === into);
     if (!target || (target.kind !== "tree" && target.kind !== "bars")) throw Error(`Scene part ${props.id} flies into ${into}, which must be a tree or bars on the next scene.`);
     const ends = target.kind === "tree" ? placeTree(target.props.nodes as TreeNode[], target.props as { width?: number; levelHeight?: number }).map(n => [n.x, n.y, 0] as V3)
@@ -638,7 +638,7 @@ export function laneScene(scenes: LaneScene[], index: number, { spacing = 32, fo
     <Stage key="station" id={`station${index}`} position={station(index)}>{expandParts(scene.parts, (kind, props) => {
       const placed = place(kind, props) as PartProps;
       return arrivals.has(placed.id) && placed.delay === undefined ? { ...placed, delay: arrivals.get(placed.id) } : placed;
-    }, { ink: INK, scene: `lane${index}` })}</Stage>, sparks(landings)];
+    }, { ink: INK, scene: `lane${index}` }, false)}</Stage>, sparks(landings)];
 }
 /** A scene's parts with their layout placement, in order, beside the elements they came from. */
 function laneParts(scene: LaneScene) {
@@ -1341,7 +1341,8 @@ function placedIn(node: ReactNode, step: number): Placed[] {
 function foldSource(placed: Placed[], id: string): { rect?: { center: V3; size: V3 }; solids: Placed[] } {
   const card = placed.find(p => p.element.type === Card && p.element.props.id === `${id}/card`);
   if (card) return { rect: card, solids: [] };
-  const solids = placed.filter(p => p.element.type === RoundedBox || p.element.type === Box);
+  // Entrance wipe bands are light, not geometry carried into the folded plate.
+  const solids = placed.filter(p => (p.element.type === RoundedBox || p.element.type === Box) && !/\/wipe[01]\/band$/.test(String(p.element.props.id)));
   if (!solids.length) return { solids };
   const low = [0, 1, 2].map(a => Math.min(...solids.map(p => p.center[a] - p.size[a] / 2))), high = [0, 1, 2].map(a => Math.max(...solids.map(p => p.center[a] + p.size[a] / 2)));
   return { rect: { center: [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, low[2]], size: [high[0] - low[0], high[1] - low[1], .06] }, solids };
@@ -1390,14 +1391,14 @@ function chartFold(chart: PartProps, from: ChartFrom, rect: { center: V3; size: 
       color={[{ step: 0, value: INK.colors.panel }, at(land, plate, .4, "out")]}
       emissive={[{ step: 0, value: .08 }, at(land, 1.4, .12, "out"), at(land + .12, .25, .6, "out")]} /></Fragment>;
 }
-function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }): ReactNode {
+function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, scene: { ink: Ink; scene: string }, treeDrop = true): ReactNode {
   const charts: PartProps[] = [];
   Children.forEach(children, child => { if (isValidElement<PartProps>(child) && (child.type as { worldPart?: string }).worldPart === "bars" && child.props.from) charts.push(place("bars", child.props) as PartProps); });
   const sources = new Map(charts.map(chart => [(chart.from as ChartFrom).part, chart])), launched = new Set<string>();
   const expanded = Children.map(children, child => {
     if (!isValidElement<PartProps>(child)) return child;
     const kind = (child.type as { worldPart?: string }).worldPart;
-    if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place, scene));
+    if (!kind) return child.props.children === undefined ? child : React.cloneElement(child, {}, expandParts(child.props.children, place, scene, treeDrop));
     checkPart(kind, child.props);
     checkCodeChildren(kind, child.props, child.props.children);
     const { children, id: own, at = [0, 3.2, 0], mdxSource: _, carry, enter, exit, sequence, ...props } = place(kind, child.props) as PartProps;
@@ -1408,7 +1409,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
       const fade = leave && [{ step: 0, value: 1 }, { step: leave.step!, delay: leave.delay ?? exitDefaults.delay, value: 0, duration: leave.duration ?? exitDefaults.duration }];
       return sequenced(id, moved(id, textLine(kind, { ...props, ...fade ? { opacity: fade } : {}, enter, id, position, text: source, tokens: codeHighlight(children)?.tokens }, INK), undefined, leave), sequence as Sequence | undefined);
     }
-    const expandedPart = expandPart(kind, id, position, props, children, source, INK);
+    const expandedPart = expandPart(kind, id, position, props, children, source, INK, treeDrop ? enter as PartMotion | undefined : false);
     const focusedPart = props.sharp === undefined ? expandedPart : <Stage id={`${id}/sharp`} sharp={props.sharp as boolean}>{expandedPart}</Stage>;
     const part = sequenced(id, moved(id, focusedPart, enter as PartMotion & { from?: V3 } | undefined, leave), sequence as Sequence | undefined);
     const chart = sources.get(own);
@@ -1425,7 +1426,7 @@ function expandParts(children: ReactNode, place: ReturnType<typeof slotPlacer>, 
   for (const [part, chart] of sources) if (!launched.has(part)) throw Error(`Bars ${chart.id} grows from ${part}, which must be a part beside it in the same scene.`);
   return expanded;
 }
-function expandPart(kind: string, id: string, position: V3, props: Record<string, unknown>, children: ReactNode, source: string, INK: Ink): ReactNode {
+function expandPart(kind: string, id: string, position: V3, props: Record<string, unknown>, children: ReactNode, source: string, INK: Ink, treeEnter?: PartMotion | false): ReactNode {
   if (kind === "list") return <Stage id={id} position={position}><Rows {...props} id={`${id}/rows`} items={props.items as string[]}
     count={Number(props.count ?? 9)} spacing={Number(props.spacing ?? .62)} width={Number(props.width ?? 5.4)} /></Stage>;
   if (kind === "counter") {
@@ -1486,7 +1487,12 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
     const beat = props.beat as Beat | undefined, flashes = ((props.flash ?? []) as TreeFlash[]).flatMap(f => Array.from({ length: f.repeat === "infinite" ? 1 : f.repeat ?? 1 }, (_, r) => ({ ...f, delay: (f.delay ?? 0) + r * (f.every ?? 1.5) })));
     const idle = String(paint(props.color ?? "#22d3ee", INK.colors)), nodeWidth = props.nodeWidth as number | undefined, labelSize = props.labelSize as number | undefined;
     const lit = (f: TreeFlash, n: TreeNode) => !f.ids || f.ids.includes(n.id), font = props.font as Text3DOptions["font"];
-    const delay = props.delay as number | undefined, drop = props.drop as number | undefined, levelHeight = Number(props.levelHeight ?? 1.65);
+    const delay = props.delay as number | undefined, drop = props.drop as number | undefined ?? (treeEnter === false ? undefined : 1.5), levelHeight = Number(props.levelHeight ?? 1.65);
+    // Normal Trees share the drop entrance; laneScene keeps its custom assembly timing and sparks.
+    // A whole-part reveal must reach the stage before its node entrance starts.
+    const reveal = treeEnter ? { ...enterDefaults, ...treeEnter } : undefined, dropStep = reveal?.step ?? 0;
+    const dropDelay = (reveal?.delay ?? 0) + (reveal?.duration ?? 0);
+    const dropKey = <T,>(value: T, delay: number, duration = 0, ease?: Ease) => key(dropStep, value, delay + dropDelay, duration, ease);
     const boxColor = String(paint(props.boxColor ?? TREE_BOX.fill, INK.colors)), borderColor = String(paint(props.borderColor ?? TREE_BOX.border, INK.colors));
     const beats = (n: TreeNode & { d: number }) => beat && !n.quiet ? Array.from({ length: beat.count }, (_, k) => beat.start + k * beat.every + n.d * HOP) : [];
     const arrives = (f: TreeFlash, n: { d: number }) => (f.delay ?? 0) + (f.wave === false ? .22 : n.d * (f.hop ?? .25));
@@ -1509,7 +1515,7 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
       const typed = n.typed && beat ? Array.from({ length: beat.count }, (_, k) => ({ text: `"${n.typed!.slice(0, k + 1)}"`, from: beat.start + k * beat.every + n.d * HOP, to: k + 1 < beat.count ? beat.start + (k + 1) * beat.every + n.d * HOP : undefined })) : [];
       // `drop`: rows fall in from just under the row above (so they never overlap it), settle, then a soft light wipes across each box.
       const s = drop === undefined ? 0 : drop + n.d * .18 + nodes.filter(m => m.d === n.d && m.x < n.x).length * .05, lift = Math.min(1, Math.max(.25, levelHeight - height - .1));
-      const fall = Array.from({ length: 6 }, (_, k) => key(0, [n.x,n.y + lift - (lift + .06) * ((k + 1) / 6) ** 2,0] as V3, s + k * .07, .07, "linear"));
+      const fall = Array.from({ length: 6 }, (_, k) => dropKey([n.x,n.y + lift - (lift + .06) * ((k + 1) / 6) ** 2,0] as V3, s + k * .07, .07, "linear"));
       const box = <>
           <RoundedBox id={`${id}/${n.id}`} radius={.08} edge={0} scale={delay === undefined ? [width,height,.5] : [{ at: 0, value: [1e-4,1e-4,1e-4], duration: 0 }, { at: delay + i * .07, value: [width,height,.5], duration: .45, ease: "spring" }]} color={color ?? idle} emissive={emissive}
             material={{ albedo: borderColor, metal: .3, roughness: .5, rim: 0 }} />
@@ -1526,15 +1532,15 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
           <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x + side * 14,n.y,-3] as V3, 0, 0),
             key(0, [n.x - side * .12,n.y,.06] as V3, land - 1, 1, "out"), key(0, [n.x,n.y,0] as V3, land, .2)]}>{box}</Stage>
           <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
-        </> : <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x,n.y + lift,0] as V3, 0, 0), ...fall, key(0, [n.x,n.y,0] as V3, s + .42, .3, "out")]}>
-          <Stage id={`${id}/${n.id}/fill`} opacity={[key(0, 0, 0, 0), key(0, 1, s, .15)]}>{box}</Stage>
-          {[[.5, .1, 1.2], [.22, .4, .5]].map(([peak, w, glow], b) => <Stage key={b} id={`${id}/${n.id}/wipe${b}`} opacity={[key(0, 0, 0, 0), key(0, peak, s + .72, .15), key(0, 0, s + 1.12, .15)]}
-            position={[key(0, [-width / 2 + .3,0,.27] as V3, 0, 0), key(0, [width / 2 - .3,0,.27] as V3, s + .72, .55, "inOut")]}>
+        </> : <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x,n.y + lift,0] as V3, 0, 0), ...fall, dropKey([n.x,n.y,0] as V3, s + .42, .3, "out")]}>
+          <Stage id={`${id}/${n.id}/fill`} opacity={[key(0, 0, 0, 0), dropKey(1, s, .15)]}>{box}</Stage>
+          {[[.5, .1, 1.2], [.22, .4, .5]].map(([peak, w, glow], b) => <Stage key={b} id={`${id}/${n.id}/wipe${b}`} opacity={[key(0, 0, 0, 0), dropKey(peak, s + .72, .15), dropKey(0, s + 1.12, .15)]}
+            position={[key(0, [-width / 2 + .3,0,.27] as V3, 0, 0), dropKey([width / 2 - .3,0,.27] as V3, s + .72, .55, "inOut")]}>
             <Box id={`${id}/${n.id}/wipe${b}/band`} position={[0,0,b * -.002]} scale={[w,height - .2,.004]} rotation={[0,0,-14]} color="#dfe8ff" emissive={glow} material={{ albedo: "#ffffff", metal: 0, roughness: 1 }} />
           </Stage>)}
         </Stage>}
         {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
-          draw={[key(0, 0, 0, 0), drop === undefined ? key(0, 1, land - .15, .35) : key(0, 1, s + .3, .35)]}
+          draw={[key(0, 0, 0, 0), drop === undefined ? key(0, 1, land - .15, .35) : dropKey(1, s + .3, .35)]}
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
         {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
