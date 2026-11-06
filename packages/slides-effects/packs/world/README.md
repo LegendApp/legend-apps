@@ -977,7 +977,9 @@ Every step keyframe in these parts addresses the scene's own steps, so give the
   on extraction; `anchor="center"` also enables this framing at an explicit `at` position.
   Add a second syntax fence with one compact line per source/read (in source order) to morph
   tokens on `collapse`. Matching tokens keep their identity, new tokens fade and scale in,
-  and the panel and row spacing tween before the same tokens lift into the tree. A node written
+  and the panel and row spacing tween before the same tokens lift into the tree. Set `match="lines"`
+  to match each compact line only against its corresponding source/read line, keeping repeated
+  punctuation attached to that line. Token matching across the whole block is the default. A node written
   `{ id, text }` shares `text` with its compact line: on `extract` those tokens grow and fly into
   the box as its label, tweening to the label color, while the other code and the panel fade out
   and the boxes and edges draw in around them.

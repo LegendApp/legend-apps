@@ -906,7 +906,7 @@ function codeDiffs(children: ReactNode) {
   });
 }
 /** Each diff starts from the previous result. Matching tokens retain their identity and only removed lines are struck through. */
-function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: DiffLine[][], INK: Ink, compactLineHeight?: number) {
+function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: DiffLine[][], INK: Ink, compactLineHeight?: number, sourceLines?: number[]) {
   if (diffs.some(diff => diff.some(([mark]) => !" -+".includes(mark)))) throw Error(`Code morph ${id}: diff lines start with a space, - or +.`);
   const size = Number(props.size ?? .13), lineHeight = Number(props.lineHeight ?? .27), first = Number(props.step ?? 1), em = size * TYPE, advance = em * MONO, settle = .25;
   const rowHeight = (s: number) => s ? compactLineHeight ?? lineHeight : lineHeight;
@@ -925,17 +925,20 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
     let i = 0, removed: number[] = [], added: number[] = [];
     const next: number[] = [], changed = { step: first + t, before: [] as number[], after: [] as number[] };
     const match = () => {
-      const old = removed.flatMap(n => lines[n].parts), fresh = added.flatMap(n => lines[n].parts);
-      const lengths = Array.from({ length: old.length + 1 }, () => new Uint32Array(fresh.length + 1));
-      for (let a = old.length - 1; a >= 0; a--) for (let b = fresh.length - 1; b >= 0; b--)
-        lengths[a][b] = parts[old[a].id].identity === parts[fresh[b].id].identity ? 1 + lengths[a + 1][b + 1] : Math.max(lengths[a + 1][b], lengths[a][b + 1]);
+      const groups = sourceLines ? added.map((n, row) => ({ old: lines[state[sourceLines[row]]].parts, fresh: lines[n].parts }))
+        : [{ old: removed.flatMap(n => lines[n].parts), fresh: added.flatMap(n => lines[n].parts) }];
       const carried = new Set<number>();
-      let a = 0, b = 0;
-      while (a < old.length && b < fresh.length) {
-        if (parts[old[a].id].identity === parts[fresh[b].id].identity) {
-          carried.add(old[a].id); fresh[b].id = old[a].id; a++; b++;
-        } else if (lengths[a + 1][b] >= lengths[a][b + 1]) a++;
-        else b++;
+      for (const { old, fresh } of groups) {
+        const lengths = Array.from({ length: old.length + 1 }, () => new Uint32Array(fresh.length + 1));
+        for (let a = old.length - 1; a >= 0; a--) for (let b = fresh.length - 1; b >= 0; b--)
+          lengths[a][b] = parts[old[a].id].identity === parts[fresh[b].id].identity ? 1 + lengths[a + 1][b + 1] : Math.max(lengths[a + 1][b], lengths[a][b + 1]);
+        let a = 0, b = 0;
+        while (a < old.length && b < fresh.length) {
+          if (parts[old[a].id].identity === parts[fresh[b].id].identity) {
+            carried.add(old[a].id); fresh[b].id = old[a].id; a++; b++;
+          } else if (lengths[a + 1][b] >= lengths[a][b + 1]) a++;
+          else b++;
+        }
       }
       const unmatched = removed.filter(n => !lines[n].parts.some(part => carried.has(part.id) && /\w/.test(parts[part.id].text)));
       const replacements = Math.max(0, added.length - (removed.length - unmatched.length));
@@ -1039,7 +1042,7 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
       return rows.map(text => { const line: DiffLine = [mark, text, lineTokens(syntax, offset, text.length)]; offset += text.length + 1; return line; });
     };
     const tree = codeMorph(id, [0,0,0], { ...props, anchor: undefined, step: collapse, highlight: { opacity: 0, word: { opacity: bandOpacity } } },
-      [[...diff(lines, tokens, "-"), ...diff(target, targetTokens, "+")]], INK, gap);
+      [[...diff(lines, tokens, "-"), ...diff(target, targetTokens, "+")]], INK, gap, props.match === "lines" ? hot : undefined);
     morph = React.Children.map(tree.props.children, child => {
       if (!isValidElement<Record<string, unknown>>(child)) return child;
       if (child.props.id === `${id}/card`) return React.cloneElement(child, { opacity: [{ step: 0, value: 1 }, key(extract, 0, 0, .4)] });

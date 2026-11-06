@@ -11,7 +11,7 @@ import { highlightedFence } from "./highlightedFence";
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
 const clock = (stepIndex: number, stepTime: number) => ({ slideTime: stepIndex * 5 + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 5, 2: 10, 3: 15 } });
-const value = <T extends number | [number, number, number]>(prop: unknown, step: number, time: number): T => sampleTrack(compileTrack(prop as Animated<T>), clock(step, time));
+const value = <T extends number | [number, number, number]>(prop: unknown, step: number, time = 4): T => sampleTrack(compileTrack(prop as Animated<T>), clock(step, time));
 
 async function trace() {
   return flat(expandScene(<CodeTrace id="trace" source={1} reads={[3]} nodes={["Owner", "Reader"]}>
@@ -105,4 +105,35 @@ test("shared trace nodes fly their compact tokens into the boxes as labels, with
   const fences = [await highlightedFence('function App() {\n  const state = useState(0)\n  ignored()\n  return <span>{state}</span>\n}'), await highlightedFence('const state = useSignal(0)\n<span>{state}</span>')];
   expect(() => expandScene(<CodeTrace id="trace" source={1} reads={[3]} nodes={[{ id: "x", text: "missing" }, "Reader"]}>{fences}</CodeTrace>))
     .toThrow(/shared "x" text is not in compact line 1/);
+});
+
+test("line matching carries every compact token from its declared source row together", async () => {
+  const source = 'function Widget() {\n  const value = useState({})\n  return (\n    <>\n      <Control value={value} />\n    </>\n  )\n}\nfunction Editor() {\n  return <input value={value.name} onChange={edit} />\n}\nfunction Preview() {\n  return <span>{value.name}</span>\n}';
+  const target = ['const value = useState({})', '<input value={value.name} onChange={edit} />', '<span>{value.name}</span>'];
+  const rows = [1, 9, 12], advance = .13 * 100 / 72 * .6;
+  const tree = flat(expandScene(<CodeTrace id="trace" source={1} reads={[9, 12]} match="lines"
+    nodes={[{ id: "owner", text: "useState" }, { id: "editor", text: "<input value={value.name}" }, { id: "preview", text: target[2] }]}>
+    {await highlightedFence(source)}{await highlightedFence(target.join("\n"))}
+  </CodeTrace>));
+  const tokens = tree.filter(n => n.type === Text3D && String(n.props.id).includes("/token"));
+  for (const [row, text] of target.entries()) {
+    const moving = tokens.filter(n => value<number>(n.props.opacity, 2) === 1 && Math.abs(value<[number, number, number]>(n.props.position, 2)[1] + row * .27 * 1.8) < 1e-6);
+    expect(moving.map(n => n.props.text).join("")).toBe(text.replace(/\s/g, ""));
+    const indent = source.split("\n")[rows[row]].indexOf(text);
+    for (const token of moving) {
+      const from = value<[number, number, number]>(token.props.position, 1), to = value<[number, number, number]>(token.props.position, 2);
+      expect(from[1]).toBeCloseTo(-rows[row] * .27);
+      expect(from[0] - to[0]).toBeCloseTo(indent * advance);
+      for (const time of [0, .25, .375, .5, .625, .75, 2]) {
+        const at = value<[number, number, number]>(token.props.position, 2, time), leader = value<[number, number, number]>(moving[0].props.position, 2, time);
+        expect(at[1]).toBeCloseTo(leader[1]);
+        expect(at[0] - leader[0]).toBeCloseTo(to[0] - value<[number, number, number]>(moving[0].props.position, 2)[0]);
+        expect(value<number>(token.props.opacity, 2, time)).toBe(1);
+      }
+      expect(value<[number, number, number]>(token.props.position, 1)).toEqual(from);
+    }
+  }
+  expect(tree.filter(n => /\/\d+\/glow$/.test(String(n.props.id)) && value<number>(n.props.opacity, 1) > 0).map(n => n.props.id))
+    .toEqual(["trace/1/glow", "trace/9/glow", "trace/12/glow"]);
+  expect(tree.filter(n => String(n.props.id).endsWith("/label"))).toHaveLength(0);
 });
