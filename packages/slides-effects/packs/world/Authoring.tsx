@@ -513,8 +513,8 @@ fn boxVertex(vid:u32)->ShapeVertex {
 const f32 = (n: number) => n.toFixed(8);
 /** Streaks along -z at floor level, looping on the continuous clock. `length` is the loop's run in world units.
  * At peak travel speed each streak is `stretch` times longer and `boost` times brighter. Every other streak is `accent` (default red). */
-export function speedTrails(length = 250, { stretch = 3, boost = 1.6, accent }: { stretch?: number; boost?: number; accent?: string } = {}) {
-  const count = 26, trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
+export function speedTrails(length = 250, { stretch = 3, boost = 1.6, accent, count = 26 }: { stretch?: number; boost?: number; accent?: string; count?: number } = {}) {
+  const trails = Array.from({ length: count }, (_, i) => ({ x: -11 + 22 * hash(i * 3 + 3), y: .04 + .08 * hash(i * 5 + 3) ** 2.5,
     l: 6 + 10 * hash(i * 7 + 3), ph: hash(i * 11 + 3), sp: .6 + .8 * hash(i * 13 + 3), gain: 2.2 * (.4 + .6 * hash(i * 17 + 3)) }));
   return <Custom id="trails" count={count} vertexCount={36} color="#ffffff" material={{ rim: 0 }} wgsl={`${boxWgsl}
 const D=array<vec4f,${count}>(${trails.map(d => `vec4f(${f32(d.x)},${f32(d.y)},${f32(d.l)},${f32(d.ph)})`).join(",")});
