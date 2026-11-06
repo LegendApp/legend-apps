@@ -766,7 +766,8 @@ sides are lit solid geometry; `edge` adds the familiar card rim highlight.
 `emissive`, and animated `draw` coverage from zero to one. Coverage and pulses
 advance by total path length, including across bends. `pulses` is a list of
 `{ step, at, delay, duration, color, size }` events; all timing is in seconds.
-Pulse beads use a fixed instance pool and disappear after arrival.
+Pulse beads use a fixed instance pool and disappear after arrival. Closed paths may use
+`join="miter"` to meet their tube segments on shared corner planes.
 
 `RenderTree` uses solid rounded nodes and orthogonal routes by default. Existing
 flash selections still work. A typed flash is

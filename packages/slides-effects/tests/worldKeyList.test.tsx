@@ -100,3 +100,15 @@ test("a viewport column scrolls, then shows the keys in view before and after, o
   expect(p<Vec3>("p/B", "position", 2)).toEqual([0, -.8, 0]);
   expect(p<number>("p/A/card", "opacity", 1)).toBe(1);
 });
+
+test("viewport outlines clear the card faces in all three frames", () => {
+  const nodes = flat(expandScene(<Keys id="w" keys={["A", "B", "C", "D"]} viewport={2} scroll={1} window={2} links={3} />));
+  for (const name of ["viewport", "before", "after"]) {
+    const edge = nodes.find(n => n.props.id === `w/${name}/edge`)!.props;
+    const path = edge.path as Vec3[], thickness = edge.thickness as number;
+    expect(edge.join).toBe("miter");
+    // The entire tube, including its rear surface, clears the .3-deep card and its .17-deep text.
+    expect(Math.min(...path.map(p => p[2])) - thickness).toBeGreaterThan(.17);
+    expect(path[0]).toEqual(path.at(-1)!);
+  }
+});

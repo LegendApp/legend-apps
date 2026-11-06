@@ -66,7 +66,7 @@ export function createTrackFrame(): TrackFrame {
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
 export function trackIds(scene: PreparedWorldScene): string[] {
-  return scene.instances.map(part => `${part.label ? "label" : part.card ? "card" : part.glyph ? "glyph" : part.custom ? "custom" : part.kind}:${part.id ?? ""}`);
+  return scene.instances.map(part => `${part.label ? "label" : part.card ? "card" : part.glyph ? "glyph" : part.custom && !part.route ? "custom" : part.kind}:${part.id ?? ""}`);
 }
 
 /** Keep draw descriptors so an omitted object can remain visible, then return on reverse.

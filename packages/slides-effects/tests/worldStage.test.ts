@@ -6,6 +6,7 @@ import { compileTrack, prepareWorldScene, sampleWorldUniforms, instancePosition,
 import { roundedBoxInstances, routedTubeInstances, pillarInstances, stoplightInstances } from "../packs/world/stage";
 import { routePoint } from "../packs/world/stageMotion";
 import { worldGraphTopology } from "../packs/world/render";
+import { trackIds } from "../packs/world/track";
 
 const clock = (time: number, step = 1): ClockSample => ({ slideTime: time, stepTime: time - 2, stepIndex: step, stepOrigins: { 0: 0, 1: 2 } });
 
@@ -159,4 +160,21 @@ test("a stoplight lights each lamp from its own color and glow, red on the left 
   expect(sampleTrack(custom[1].emissive, clock(0, 0))).toBe(0);
   expect(sampleTrack(custom[1].emissive, clock(9, 1))).toBe(8);
   expect(() => stoplightInstances({ lights: [] })).toThrow();
+});
+
+test("mitered closed routed tubes join every corner, including the closing endpoint, without changing default routes", () => {
+  const path: [number, number, number][] = [[-2, 1, 0], [2, 1, 0], [2, -1, 0], [-2, -1, 0], [-2, 1, 0]];
+  const closed = routedTubeInstances({ id: "frame", path, join: "miter" });
+  expect(closed).toHaveLength(4);
+  expect(trackIds(prepareWorldScene({ instances: closed })).sort()).toEqual(["tube:frame:0", "tube:frame:1", "tube:frame:2", "tube:frame:3"]);
+  for (const segment of closed) {
+    expect(segment.custom).toBeDefined();
+    expect(segment.custom!.vertexCount).toBe(12 * 6 * 6);
+    // Both ends intersect the adjacent segment's bisector plane; the growing endpoint stays square until it arrives.
+    expect(segment.custom!.wgsl).toContain("dot(normal, startMiter)");
+    expect(segment.custom!.wgsl).toContain("dot(normal, endMiter)");
+    expect(segment.custom!.wgsl).toContain("length(endpoint)");
+  }
+  expect(routedTubeInstances({ id: "default", path }).every(i => !i.custom)).toBe(true);
+  expect(() => routedTubeInstances({ id: "open", path: path.slice(0, -1), join: "miter" })).toThrow("closed path");
 });

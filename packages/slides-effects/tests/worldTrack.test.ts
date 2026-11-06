@@ -6,6 +6,7 @@ import { createPlaybackState } from "../../presentation/src/playbackState";
 import { cardInstances, customInstances, instanceField, keyframeSpans, labelInstance, prepareWorldScene, primitive, sampleWorldUniforms, settledKey, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { buildCourse, createTrackFrame, heldBlurSlot, depthFadeSlot, retainTrackScene, sampleTrackFrame, trackBendSlot, trackIds, trackX, type TrackFrame, type WorldTrack } from "../packs/world/track";
 import { sampleWorldClock } from "../packs/world/timing";
+import { routedTubeInstances } from "../packs/world/stage";
 
 const options = { spacing: 32, duration: 2 };
 const scene = (column = false, extra = false) => prepareWorldScene({ instances: [
@@ -194,7 +195,8 @@ test("matching follows ids across reordered draw slots; tube endpoints share sta
   const clock = (slideKey: string, time: number) => ({ ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time });
   const first = prepareWorldScene({ instances: [primitive("box", { id: "a", position: [-4, 0, 0] }), primitive("box", { id: "b", position: [4, 0, 0] })] });
   const next = prepareWorldScene({ keyLight: {}, lights: [{ position: [0, 6, 4] }], instances: [primitive("box", { id: "b", position: [8, 0, 0] }), primitive("box", { id: "a", position: [-8, 0, 0] }),
-    primitive("tube", { position: [-8, 0, 0], end: [8, 0, 0] })] });
+    primitive("tube", { position: [-8, 0, 0], end: [8, 0, 0] }),
+    ...routedTubeInstances({ id: "frame", join: "miter", path: [[-2, 1, .24], [2, 1, .24], [2, -1, .24], [-2, -1, .24], [-2, 1, .24]] })] });
   const sampleScene = (previous: TrackFrame, prepared: typeof first, slide: string, time: number) =>
     sampleTrackFrame(previous, sampleWorldUniforms(prepared, clock(slide, time)) as number[], trackIds(prepared), clock(slide, time), options);
   const start = sampleScene(createTrackFrame(), first, "0", 0);
@@ -205,6 +207,11 @@ test("matching follows ids across reordered draw slots; tube endpoints share sta
   expect(part(settled, "box:a")[0]).toBe(-8);
   expect(part(settled, "tube:")[2]).toBe(-32);
   expect(part(settled, "tube:")[14]).toBe(-32);
+  for (let corner = 0; corner < 4; corner++) {
+    const joined = part(settled, `tube:frame:${corner}`);
+    expect(joined[2]).toBeCloseTo(.24 - 32);
+    expect(joined[14]).toBeCloseTo(joined[2]);
+  }
   expect(settled.values[122]).toBe(-32);
   expect(settled.values[114]).toBe(-20);
   expect(settled.values[66]).toBe(-28);
