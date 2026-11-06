@@ -4,7 +4,7 @@ import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector, compileTrack, type Keyframe } from "./scene";
 import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, sequenceDefaults, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, PointLight, RoundedBox, Rows, RoutedTube, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldStepCamera, type WorldTrack } from "./World";
+import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, SpotLight, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldStepCamera, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -154,16 +154,25 @@ export const List = part("list");
 export const Editor = part("editor");
 export const Counter = part("counter");
 export const Rule = part("rule");
-// A lit rule is a blue illuminated strip set just in front of the title's base, with two real point lights ahead of and below the letters,
-// so their lower front faces and bevels catch a soft blue glow. Lights, not stacked translucent rays: shading falls off smoothly.
-// They fade in once the strip has grown, then drift together slowly from side to side.
-const LIGHT = { color: "#4aa8ff", forward: .55, intensity: 60, range: 4.5, sweep: .12, period: 10 };
-function ruleLights(position: V3, width: number, delay: number) {
-  const at = (x: number, side: number): V3 => [position[0] + (x + side * LIGHT.sweep) * width / 2, position[1] + .1, position[2] + LIGHT.forward + .6];
-  return [-.5, .5].map(x => <PointLight key={x} color={LIGHT.color} range={LIGHT.range}
-    intensity={[{ at: 0, value: 0, duration: 0 }, { at: delay, value: LIGHT.intensity, duration: .9, ease: "out" }]}
-    position={[{ at: 0, value: at(x, -1), duration: 0, loop: { every: LIGHT.period, frames: [
-      { at: 0, value: at(x, 1), duration: LIGHT.period / 2, ease: "inOut" }, { at: LIGHT.period / 2, value: at(x, -1), duration: LIGHT.period / 2, ease: "inOut" }] } }]} />);
+// A lit rule is a glowing blue strip set just in front of the title's base, with a compact spotlight head built into each end. Each head's spot light aims up and inward at the letters' front faces, so they catch a soft blue glow that falls off smoothly.
+// The heads and lights fade in once the strip has grown, then their beams sweep slowly back and forth across the title.
+const LIGHT = { color: "#4aa8ff", lens: "#8cc8ff", forward: .55, emissive: 3.2, intensity: 260, range: 7, angle: .55, rise: 1.2, sweep: [.15, .45], period: 10 };
+function ruleLights(id: string, position: V3, width: number, delay: number) {
+  const fade = <T,>(from: T, to: T): Keyframe<T>[] => [{ at: 0, value: from, duration: 0 }, { at: delay, value: to, duration: .9, ease: "out" }];
+  return [-1, 1].map(side => {
+    const end: V3 = [position[0] + side * width / 2, position[1], position[2] + LIGHT.forward];
+    // Targets swing between two points on the title's front plane, inward of this end, so the beam pans across the letters.
+    const aim = (share: number): V3 => [position[0] + side * (1 - share * 2) * width / 2, position[1] + LIGHT.rise, position[2]];
+    return <Fragment key={side}>
+      <Stage id={`${id}/head${side}`} position={end} opacity={fade(0, 1)}>
+        <RoundedBox id={`${id}/head${side}/housing`} size={.5} scale={[.3,.18,.2]} color="#0b0d12" emissive={0} material={{ albedo: "#0b0d12", roughness: .6, metal: 0, rim: 0 }} />
+        <Box id={`${id}/head${side}/lens`} size={.5} scale={[.2,.05,.14]} position={[-side * .02,.05,.03]} rotation={[0, 0, side * 28]} color={LIGHT.lens} emissive={5}
+          material={{ albedo: "#000000", rim: 0 }} />
+      </Stage>
+      <SpotLight color={LIGHT.color} range={LIGHT.range} angle={LIGHT.angle} position={add(end, [-side * .05, .1, .35])} intensity={fade(0, LIGHT.intensity)}
+        target={[{ at: 0, value: aim(LIGHT.sweep[0]), duration: 0, loop: { every: LIGHT.period, frames: [
+          { at: 0, value: aim(LIGHT.sweep[1]), duration: LIGHT.period / 2, ease: "inOut" }, { at: LIGHT.period / 2, value: aim(LIGHT.sweep[0]), duration: LIGHT.period / 2, ease: "inOut" }] } }]} />
+    </Fragment>; });
 }
 
 export const Bars = part("bars");
@@ -1432,10 +1441,10 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
   }
   if (kind === "rule") { const delay = Number(props.delay ?? 0), width = Number(props.width ?? 6);
     const lit = !!props.lights, at: V3 = lit ? add(position, [0, 0, LIGHT.forward]) : position;
-    const rule = <Box id={id} size={.5} color={lit ? LIGHT.color : String(paint(props.color ?? "accent", INK.colors))} emissive={lit ? 1.5 : 1.1} position={at}
+    const rule = <Box id={id} size={.5} color={lit ? LIGHT.color : String(paint(props.color ?? "accent", INK.colors))} emissive={lit ? LIGHT.emissive : 1.1} position={at}
       material={lit ? { albedo: "#000000", rim: 0 } : undefined}
       scale={[{ at: delay, value: [0,.09,.12], duration: 0 }, { at: delay, value: [width,.09,.12], duration: .7 }]} />;
-    return lit ? <>{rule}{ruleLights(position, width, delay + .6)}</> : rule; }
+    return lit ? <>{rule}{ruleLights(id, position, width, delay + .6)}</> : rule; }
   if (kind === "bars") {
     const items = props.items as { label: string; value: number; color?: string }[], maximum = Number(props.max ?? Math.max(...items.map(b => b.value)));
     // Bars grown `from` another part stay out of sight until its block lands, then rise out of the plinth quicker; out of a folded plate once it has tinted, with a spring.

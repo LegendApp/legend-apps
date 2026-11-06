@@ -8,7 +8,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { compileDeck } from "../../presentation/src/compiler";
 import { Bars, CodeMorph, CodePanel, Counter, Headline, Keys, Rule, Scene, Tree, codeSource, defineSceneLayout, expandScene, laneScene, placeTree, readScenes, sceneLayouts } from "../packs/world/Authoring";
-import { Box, Burst, Camera, Card, Custom, Pillar, PointLight, RoundedBox, RoutedTube, Stage, Text3D, WorldSlide } from "../packs/world/World";
+import { Box, Burst, Camera, Card, Custom, Pillar, RoundedBox, RoutedTube, SpotLight, Stage, Text3D, WorldSlide } from "../packs/world/World";
 
 const fence = await highlightedFence("function Example() {\n  return 42;\n}");
 const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>>[] => React.Children.toArray(node).flatMap(child =>
@@ -85,21 +85,28 @@ test("layouts and roles: unknown names fail without prepare, stay labels with it
   delete sceneLayouts.custom;
 });
 
-test("a lit rule is a blue strip ahead of the title with sweeping point lights in front of it; plain rules stay a single bar", () => {
+test("a lit rule is a blue strip with a spotlight head at each end aimed up and in at the title, sweeping slowly; plain rules stay a single bar", () => {
   expect(flat(expandScene(<Rule id="r" />, "title")).map(n => n.props.id)).toEqual(["r"]);
   const lit = flat(expandScene(<Rule id="r" lights />, "title")).filter(n => n.type !== React.Fragment);
-  // No translucent ray stacks or end fixtures: just the strip and a light that shades the letters' own faces.
-  expect(lit.map(n => n.type)).toEqual([Box, PointLight, PointLight]);
-  const [strip, light] = lit.map(n => n.props as Record<string, any>);
+  // No translucent ray stacks: the strip, then per end a small head and one real spot light that shades the letters' own faces.
+  expect(lit.map(n => n.type)).toEqual([Box, ...[0, 1].flatMap(() => [Stage, RoundedBox, Box, SpotLight])]);
+  const strip = lit[0].props as Record<string, any>, [left, right] = lit.filter(n => n.type === SpotLight).map(n => n.props as Record<string, any>);
   expect(strip.color).toBe("#4aa8ff");
-  const swing = light.position as { value: number[]; loop: { every: number; frames: { value: number[] }[] } }[];
-  expect(swing[0].loop.every).toBe(10);
-  // The light sits below the title and in front of the strip, which itself sits in front of the title's plane, and drifts side to side.
   expect(strip.position[2]).toBeGreaterThan(0);
-  expect(swing[0].value[2]).toBeGreaterThan(strip.position[2]);
-  expect(swing[0].value[0]).toBeLessThan(0);
-  expect(swing[0].loop.frames[0].value[0]).toBeGreaterThan(swing[0].value[0]);
-  expect(light.intensity[0].value).toBe(0);
+  for (const [light, side] of [[left, -1], [right, 1]] as const) {
+    const target = light.target as { value: number[]; loop: { every: number; frames: { value: number[] }[] } }[];
+    // Sits at its end of the strip, in front of it, and aims up and back at the title plane, inward of its end, panning on a ten-second loop.
+    expect(Math.sign(light.position[0])).toBe(side);
+    expect(light.position[2]).toBeGreaterThan(strip.position[2]);
+    expect(target[0].loop.every).toBe(10);
+    for (const aim of [target[0].value, ...target[0].loop.frames.map(f => f.value)]) {
+      expect(aim[1]).toBeGreaterThan(light.position[1]);
+      expect(aim[2]).toBeLessThan(light.position[2]);
+      expect(side * (light.position[0] - aim[0])).toBeGreaterThan(0);
+    }
+    expect(target[0].loop.frames[0].value[0]).not.toBe(target[0].value[0]);
+    expect(light.intensity[0].value).toBe(0);
+  }
 });
 
 test("generic parts render from layouts without coordinates", () => {
