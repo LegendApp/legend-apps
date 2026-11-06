@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { Form, expandScene } from "../packs/world/Authoring";
 import { prepareWorldSlides } from "../packs/world/World";
-import { instanceOpacity } from "../packs/world/scene";
+import { instanceOpacity, instancePosition, sampleTrack } from "../packs/world/scene";
 
 for (const ancestors of [false, true]) test(`form typing mirrors prefixes with ancestor counters ${ancestors ? "enabled" : "disabled"}`, () => {
   const text = "Ada Lovelace", delay = .6, interval = .2;
@@ -58,4 +58,66 @@ test("form panel badges sit in the header row, clear of the field rows", () => {
   expect(badge[1]).toBe(title[1]);
   expect(badge[0]).toBe(fieldBadge[0]);
   expect(badge[1] - .33).toBeGreaterThan(field[1] + .5);
+});
+
+const pulseForm = (out?: number) => expandScene(<Form id="form" sequence={out === undefined ? undefined : { out, duration: .01 }} parent={{ title: "App", renders: true }} typing={{ step: 1, bind: "name", text: "AB", delay: .6, interval: 1.3, repeat: "infinite" }} panels={[
+  { title: "Form", renders: true, fields: [{ value: "", bind: "name" }] },
+  { title: "Profile", renders: true, fields: [{ value: "", bind: "name", big: true }] },
+]} />);
+const pulseScene = () => prepareWorldSlides([{ children: pulseForm() }])[0].scenePlan!.content.prepared;
+const clock = (time: number, stepIndex = 1) => ({ slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } });
+
+test("caret follows the focused input's text end, including repeat and reverse", () => {
+  const s = pulseScene(), carets = s.instances.filter(i => i.id?.includes("/caret"));
+  expect(carets).toHaveLength(1);
+  const caret = carets[0], base = instancePosition(caret, clock(0))[0];
+  expect(sampleTrack(caret.scale, clock(0, 0))).toEqual([0, 0, 0]);
+  expect(sampleTrack(caret.scale, clock(.7))[0]).toBeGreaterThan(0);
+  for (const cycle of [0, 10]) for (const [time, count] of [[.5, 0], [.61, 1], [1.91, 2]] as const)
+    expect(instancePosition(caret, clock(cycle * 3.4 + time))[0] - base).toBeCloseTo(count * .26 * 100 / 72 * .6, 4);
+  expect(instancePosition(caret, clock(0))[0]).toBe(base);
+});
+
+test("each key travels upward into parent, then down both links and flashes on arrival", () => {
+  const s = pulseScene(), up = s.instances.find(i => i.id === "form/input/up:pulse:0:0")!;
+  expect(up).toBeDefined();
+  const down = [0, 1].map(p => s.instances.find(i => i.id === `form/parent/link/${p}:pulse:0:0`)!);
+  const midUp = clock(.78), midDown = clock(1.14);
+  expect(instanceOpacity(up, midUp)).toBe(1);
+  expect(instancePosition(up, clock(.88))[1]).toBeGreaterThan(instancePosition(up, clock(.68))[1]);
+  for (const pulse of down) {
+    expect(instanceOpacity(pulse, midUp)).toBe(0);
+    expect(instanceOpacity(pulse, midDown)).toBe(1);
+    expect(instancePosition(pulse, clock(1.24))[1]).toBeLessThan(instancePosition(pulse, clock(1.04))[1]);
+  }
+  const parent = s.instances.find(i => i.id === "form/parent/card")!;
+  const boxes = [0, 1].map(p => s.instances.find(i => i.id === `form/${p}/card`)!);
+  for (const time of [.6, 1.9]) {
+    expect(sampleTrack(parent.emissive, clock(time + .42))).toBeGreaterThan(3);
+    for (const box of boxes) {
+      expect(sampleTrack(box.emissive, clock(time + .5))).toBeCloseTo(.6);
+      expect(sampleTrack(box.emissive, clock(time + .78))).toBeGreaterThan(3);
+      expect(sampleTrack(box.emissive, clock(time + 1.15))).toBeCloseTo(.6);
+    }
+  }
+  // The full travel and flash envelope must settle before the next character.
+  let last = 0;
+  for (let dt = 0; dt < 1.3; dt += .01) {
+    const c = clock(.6 + dt);
+    if ([up, ...down].some(i => instanceOpacity(i, c) > 0) || [parent, ...boxes].some(i => sampleTrack(i.emissive, c) > .61)) last = dt;
+  }
+  expect(last).toBeLessThan(1.2);
+  for (const pulse of [up, ...down]) expect(instanceOpacity(pulse, clock(1.85))).toBe(0);
+});
+
+test("form caret leaves with its form and resets on re-entry; no idle form pulse", () => {
+  const s = prepareWorldSlides([{ children: pulseForm(2) }])[0].scenePlan!.content.prepared;
+  const caret = s.instances.find(i => i.id?.endsWith("/caret"))!;
+  const start = instancePosition(caret, clock(0));
+  const leaving = { ...clock(.02, 2), stepOrigins: { 1: -.8, 2: 0 } };
+  expect(instancePosition(caret, leaving)[0]).toBeLessThan(start[0] - 10);
+  expect(instancePosition(caret, clock(0))).toEqual(start);
+  expect(instancePosition(caret, { ...clock(0, 2), stepOrigins: { 1: -.8, 2: 0 } })[0]).toBeCloseTo(start[0] + .26 * 100 / 72 * .6);
+  const idle = prepareWorldSlides([{ children: expandScene(<Form id="idle" parent={{ title: "App", renders: true }} panels={[{ title: "Form", fields: [{ value: "a" }] }]} />) }])[0].scenePlan!.content.prepared;
+  expect(idle.instances.some(i => i.id?.includes("/caret") || i.route?.pulse || i.id?.includes("/input/up"))).toBe(false);
 });

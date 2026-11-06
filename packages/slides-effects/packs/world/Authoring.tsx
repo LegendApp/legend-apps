@@ -827,7 +827,7 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
 }
 type FormNode = { title: string; renders?: boolean };
 type FormField = { value: string; bind?: string; big?: boolean };
-/** Panels of fields with render-count badges. `typing` types `text` into the fields bound to `bind`, one keystroke every `interval` seconds; each keystroke flashes those fields and ticks their badges. */
+/** Panels of fields with render-count badges. `typing` types `text` into the fields bound to `bind`, one keystroke every `interval` seconds; each keystroke flashes those fields and ticks their badges. A rendering parent receives an input pulse and sends it to rendering panels; the first bound field owns the caret. */
 function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const parent = props.parent as FormNode | undefined;
   const panels = props.panels as (FormNode & { fields: FormField[] })[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number; repeat?: "infinite" } | undefined;
@@ -840,17 +840,25 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     for (let k = 1; k < versions.length; k++) times.push((typing.delay ?? .6) + (k - 1) * (typing.interval ?? .45));
   }
   const period = (times.at(-1) ?? 0) + 1.5;
-  const repeat = (frames: Keyframe<number>[]) => typing?.repeat === "infinite" ? loopTrack(frames, typing.step, period) : frames;
+  const repeat = <T,>(frames: Keyframe<T>[]) => typing?.repeat === "infinite" ? loopTrack(frames, typing.step, period) : frames;
   const swap = (k: number) => typing ? repeat([{ step: 0, value: k ? 0 : 1 }, ...k ? [key(typing.step, 1, times[k - 1], 0)] : [], ...k < times.length ? [key(typing.step, 0, times[k], 0)] : [], ...typing.repeat === "infinite" ? [key(typing.step, k ? 0 : 1, period - .1, 0)] : []]) : 1;
-  const flashes = (rest: number) => typing && times.length ? repeat([{ step: 0, value: typing.repeat === "infinite" ? 1.8 : rest }, ...times.flatMap(t => [key(typing.step, 7, t, .05), key(typing.step, 1.8, t + .08, .5)])]) : rest;
-  const lit = typing && times.length ? [{ step: 0, value: INK.idle }, key(typing.step, INK.amber, times[0], .1)] : INK.idle;
+  const source = typing ? panels.findIndex(panel => panel.fields.some(field => field.bind === typing.bind)) : -1;
+  const sourceField = source < 0 ? -1 : panels[source].fields.findIndex(field => field.bind === typing!.bind);
+  const arrivals = { parent: HOP, panel: 2 * HOP };
+  // Match Tree's amber flash envelope, returning to the idle color between keystrokes.
+  const flash = <T,>(rest: T, peak: T, offset = 0) => typing && times.length ? repeat([{ step: 0, value: rest }, ...times.flatMap(t =>
+    [key(typing.step, peak, t + offset, .06), key(typing.step, rest, t + offset + .1, .3)])]) : rest;
+  const pulses = (offset: number) => typing ? times.map(t => ({ step: typing.step, delay: t + offset, duration: HOP,
+    every: typing.repeat === "infinite" ? period : undefined, color: INK.amber, size: .11, emissive: 10 })) : [];
+  const flashes = (rest: number) => flash(rest, 7);
+  const lit = flash(INK.idle, INK.amber);
   const badge = (stage: string, position: V3, bound: boolean) => <Stage key={stage} id={stage} position={position}>
     <Card id={`${stage}/disc`} scale={[.66,.66,.2]} radius={.33} color={bound ? lit : INK.idle} emissive={bound ? flashes(.9) : .9} />
     {(bound ? versions : [""]).map((_, k) => <Text3D key={k} id={`${stage}/n${k}`} text={String(k + 1)} mono size={.26 * TYPE} position={[0, 0, .13]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
   </Stage>;
   return <Stage id={id} position={at}>
     {parent && <Stage id={`${id}/parent`} position={[0, top + 1.5, 0]}>
-      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} color={INK.idle} emissive={.6} />
+      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} color={parent.renders ? flash(INK.idle, INK.amber, arrivals.parent) : INK.idle} emissive={parent.renders ? flash(.6, 3.6, arrivals.parent) : .6} />
       <Text3D id={`${id}/parent/title`} text={parent.title} mono size={.24 * TYPE} position={[-.4, 0, .15]} color={INK.white} />
       {badge(`${id}/parent/badge`, [1.2, 0, .15], !!parent.renders && !!typing)}
     </Stage>}
@@ -858,16 +866,22 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
       const stage = `${id}/${p}`, ph = top + panel.fields.length * (fh + gap) + .1;
       const x = (p - (panels.length - 1) / 2) * spread;
       return <Fragment key={p}>
-        {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, top + 1, -.1], [x, top, -.1]]} thickness={.025} color={INK.idle} emissive={.8} />}
+        {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, top + 1, -.1], [x, top, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={parent.renders && panel.renders ? pulses(arrivals.parent) : undefined} />}
+        {parent?.renders && p === source && <RoutedTube id={`${id}/input/up`} path={[[x, -.05 - sourceField * (fh + gap), .18], [x, top, -.1], [0, top + 1, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={pulses(0)} />}
         <Stage id={stage} position={[x, 0, 0]}>
-          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} color={INK.idle} emissive={.6} />
+          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} color={panel.renders ? flash(INK.idle, INK.amber, parent?.renders ? arrivals.panel : 0) : INK.idle} emissive={panel.renders ? flash(.6, 3.6, parent?.renders ? arrivals.panel : 0) : .6} />
           <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, header, .05]} color={INK.muted} emissive={.8} />
           {badge(`${stage}/badge`, [fw / 2 - .55, header, .05], !!panel.renders && !!typing)}
-          {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`;
+          {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`, size = (field.big ? .34 : .26) * TYPE;
+            const caret = (value: string): V3 => [-fw / 2 + .38 + value.length * size * MONO, y, .2];
             return <Fragment key={f}>
               <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} color={bound ? lit : INK.idle} emissive={bound ? flashes(.8) : .8} />
-              {(bound ? versions : [field.value]).map((value, k) => <Text3D key={k} id={`${cell}/v${k}`} text={value} mono size={(field.big ? .34 : .26) * TYPE} align="left"
+              {(bound ? versions : [field.value]).map((value, k) => <Text3D key={k} id={`${cell}/v${k}`} text={value} mono size={size} align="left"
                 position={[-fw / 2 + .35, y, .18]} color={INK.white} opacity={bound ? swap(k) : 1} />)}
+              {bound && p === source && f === sourceField && <Box id={`${cell}/caret`} scale={[{ step: 0, value: [0, 0, 0] }, key(typing!.step, [.035, size, .025] as V3, 0, 0)]} color={INK.white} emissive={1.2}
+                position={repeat([{ step: 0, value: caret(versions[0]) },
+                  ...times.map((t, k) => key(typing!.step, caret(versions[k + 1]), t, 0)),
+                  ...typing!.repeat === "infinite" ? [key(typing!.step, caret(versions[0]), period - .1, 0)] : []])} />}
               {badge(`${cell}/badge`, [fw / 2 - .55, y, .2], bound)}
             </Fragment>; })}
         </Stage>
