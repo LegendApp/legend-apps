@@ -220,6 +220,22 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, co
     position[axis] += (from.position[axis] - a.position[axis]) * leave + (to.position[axis] - b.position[axis]) * arrive;
     target[axis] += (from.target[axis] - a.target[axis]) * leave + (to.target[axis] - b.target[axis]) * arrive;
   }
+  if (!end.track.via && !end.track.viaTarget) {
+    // Combine framing and rail displacement into one broad lateral sweep. Moving
+    // them separately can steer away from the bend before correcting back onto it.
+    const startBend = trackX(course, from.position[2]), endBend = trackX(course, to.position[2]);
+    const x = from.position[0] + startBend + (to.position[0] + endBend - from.position[0] - startBend) * arrive;
+    const bump = 64 * t * t * t * (1 - t) * (1 - t) * (1 - t);
+    const heading = Math.atan2((endBend - startBend) * 1.875, from.position[2] - to.position[2]) * bump * look;
+    // Interpolate the view vector together: independent depth tangents for eye
+    // and target otherwise add a small yaw correction even on a straight leg.
+    const vx = (from.target[0] - from.position[0]) * leave + (to.target[0] - to.position[0]) * arrive;
+    const vz = (from.target[2] - from.position[2]) * leave + (to.target[2] - to.position[2]) * arrive;
+    position[0] = x - trackX(course, position[2]);
+    target[0] = x + vx * Math.cos(heading) - vz * Math.sin(heading);
+    target[2] = position[2] + vx * Math.sin(heading) + vz * Math.cos(heading);
+    target[0] -= trackX(course, target[2]);
+  }
   return { position, target, fov: 40 + (from.fov - 40) * leave + (to.fov - 40) * arrive,
     roll: trackRoll(course, cursor) * look };
 }

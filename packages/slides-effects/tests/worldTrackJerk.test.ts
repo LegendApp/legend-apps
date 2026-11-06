@@ -116,3 +116,47 @@ test("leaving a held orbit spreads its angular motion over the full flight", () 
   expect(peak(acceleration)).toBeLessThan(.1);
   expect(peak(differences(acceleration))).toBeLessThan(.03);
 });
+
+
+test("framing changes and rail bends make one broad sweep without heading corrections", () => {
+  const track: WorldTrack = { duration: 1.2, ease: "inOut", course: [
+    { spacing: 54, position: [-1, 2.8, 12], turn: 0 },
+    { spacing: 54, position: [-1.3, 4.5, 15], turn: 9 },
+    { spacing: 54, position: [-1.3, 4.5, 15], turn: 9 },
+    { spacing: 54, position: [-1, 3, 16], turn: 8 },
+    { spacing: 54, position: [-1, 2.8, 12], turn: 0 },
+    { spacing: 54, position: [-1.5, 4.8, 16.5], turn: -9 },
+    { spacing: 54, position: [.2, 4.5, 14], turn: 8 },
+  ] };
+  for (const segment of track.course!) { segment!.duration = 1.2; segment!.ease = "inOut"; }
+  // Count meaningful changes of direction, ignoring floating-point roundoff.
+  const extrema = (values: number[]) => {
+    let sign = 0, count = 0;
+    for (let i = 1; i < values.length; i++) {
+      const delta = values[i] - values[i - 1];
+      if (Math.abs(delta) < 1e-5) continue;
+      const next = Math.sign(delta);
+      if (sign && next !== sign) count++;
+      sign = next;
+    }
+    return count;
+  };
+  let rest = at(createTrackFrame(), 0, 0, track);
+  for (let index = 1; index < track.course!.length; index++) {
+    const start = at(rest, index, 0, track);
+    const frames = Array.from({ length: 241 }, (_, i) => at(start, index, i * 1.2 / 240, track));
+    const heading = frames.slice(1).map((frame, i) => Math.atan2(frame.values[0] - frames[i].values[0], frames[i].values[2] - frame.values[2]));
+    expect(extrema(heading)).toBeLessThanOrEqual(1);
+    expect(Math.max(...heading.map(Math.abs))).toBeLessThan(12 * Math.PI / 180);
+    const lateral = frames[240].values[0] - frames[0].values[0];
+    for (let i = 1; i < frames.length; i++) expect((frames[i].values[0] - frames[i - 1].values[0]) * lateral).toBeGreaterThanOrEqual(-1e-8);
+    expect(extrema(frames.map(frame => angles(frame)[0]))).toBeLessThanOrEqual(1);
+    const back = at(frames[240], index - 1, 0, track);
+    for (let i = 0; i <= 240; i++) {
+      const reverse = at(back, index - 1, i * 1.2 / 240, track);
+      reverse.values.slice(0, 8).forEach((value, axis) => expect(value).toBeCloseTo(frames[240 - i].values[axis], 7));
+      expect(reverse.values[2] - reverse.values[6]).toBeGreaterThan(0);
+    }
+    rest = frames[240];
+  }
+});
