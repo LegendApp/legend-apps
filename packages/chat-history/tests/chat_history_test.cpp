@@ -309,7 +309,7 @@ void testCodexProtocolTitles() {
         << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
   }
   std::ofstream(codex / "session_index.jsonl")
-      << "{\"id\":\"" << ids[0] << "\",\"thread_name\":\"Legacy explicit\"}\n"
+      << "{\"id\":\"" << ids[0] << "\",\"thread_name\":\"JOB_DIR=/tmp/fictional explicit name\"}\n"
       << "{\"id\":\"" << ids[1] << "\",\"thread_name\":\"Stale name\"}\n";
   const std::vector<std::string> keys = {"HOME", "CODEX_HOME", "PATH"};
   std::vector<std::optional<std::string>> saved;
@@ -329,22 +329,63 @@ void testCodexProtocolTitles() {
     std::ofstream(bin / "codex") << "#!/bin/sh\nn=0\nwhile IFS= read -r line; do\n"
         << "case \"$line\" in *'\"method\":\"initialized\"'*) continue;; esac\n"
         << "n=$((n+1))\necho \"$line\" >> \"$CODEX_HOME/calls\"\ncase $n in\n"
-        << "1) echo '{\"id\":1,\"result\":{}}';;\n" << responses << "\nesac\ndone\n";
+        << "1) printf '%s\\n' '{\"id\":1,\"result\":{}}';;\n" << responses << "\nesac\ndone\n";
     fs::permissions(bin / "codex", fs::perms::owner_all);
   };
-  stub("2) echo '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[0]
+  const std::vector<std::pair<std::string, std::string>> requests = {
+      {"JOB_DIR=/tmp/fictional/job\nCONFIG=/tmp/fictional/config\nFix the search results", "Fix the search results"},
+      {"Repo: /tmp/fictional/repo (branch main, shared)\nRepair keyboard navigation", "Repair keyboard navigation"},
+      {"# Tooling job\n<instructions>\nUse the configured tools.\n</instructions>\nWORK_DIR=/tmp/fictional\n\nAdd export support", "Add export support"},
+      {"Source-only landing. Shared checkout: /tmp/fictional/repo\nImprove the empty state", "Improve the empty state"},
+      {"  Explain the rendering bug  \nMore details", "Explain the rendering bug"},
+      {"Explain how Repo handles /tmp/fictional paths", "Explain how Repo handles /tmp/fictional paths"},
+      {"Repo is mentioned in this sentence", "Repo is mentioned in this sentence"},
+      {"Explain Repo: /tmp/fictional and its layout", "Explain Repo: /tmp/fictional and its layout"},
+      {"[File: /tmp/fictional/image.png]", "[File: /tmp/fictional/image.png]"},
+      {"# AGENTS.md instructions for /tmp/fictional\n<INSTRUCTIONS>\nFollow local conventions.\n</INSTRUCTIONS>\n<environment_context>\nDirectory: /tmp/fictional\n</environment_context>", ""},
+  };
+  for (const auto& [request, expected] : requests) {
+    // Encode fictional text for both JSONL sessions and the shell protocol stub.
+    std::string encoded;
+    for (char c : request) {
+      if (c == '\n') encoded += "\\n";
+      else if (c == '"' || c == '\\') { encoded += '\\'; encoded += c; }
+      else encoded += c;
+    }
+    const auto session = codex / "sessions" / ("rollout-" + ids[2] + ".jsonl");
+    std::ofstream(session) << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
+    stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[2]
+        + "\",\"preview\":\"" + encoded + "\"}],\"nextCursor\":null}}';;\n"
+        "3) printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
+    const auto protocol = title(getRecentChatCatalog(20), 2);
+    expect(expected.empty() ? protocol.starts_with("Codex chat — ") : protocol == expected,
+        "Protocol preview should derive task text: " + expected + " (got " + protocol + ")");
+    std::ofstream(bin / "codex") << "#!/bin/sh\nexit 1\n";
+    std::ofstream(session) << "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"" << encoded << "\"}}\n";
+    const auto local = title(getRecentChatCatalog(20), 2);
+    expect(expected.empty() ? local.starts_with("Codex chat — ") : local == expected,
+        "Local first user request should derive task text: " + expected);
+    std::ofstream(session) << "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"" << encoded << "\"}]}}\n";
+    const auto response = title(getRecentChatCatalog(20), 2);
+    expect(expected.empty() ? response.starts_with("Codex chat — ") : response == expected,
+        "Local response-item request should derive task text: " + expected);
+  }
+  std::ofstream(codex / "sessions" / ("rollout-" + ids[2] + ".jsonl"))
+      << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
+  fs::remove(codex / "calls");
+  stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[0]
       + "\",\"name\":null,\"preview\":\"Must not replace indexed name\"},{\"id\":\"" + ids[1]
-      + "\",\"name\":\"Current explicit\",\"preview\":\"Ignore excerpt\"}],\"nextCursor\":\"page\\\"two\"}}';;\n"
+      + "\",\"name\":\"Repo: /tmp/fictional xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"preview\":\"Ignore excerpt\"}],\"nextCursor\":\"page\\\"two\"}}';;\n"
       + "3) case \"$line\" in *'page\\\"two'*) ;; *) exit 2;; esac\n"
-      + "echo '{\"id\":3,\"result\":{\"data\":[{\"id\":\"" + ids[2]
+      + "printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[{\"id\":\"" + ids[2]
       + "\",\"preview\":\"Derived user request\"}],\"nextCursor\":null}}';;\n"
       + "4) case \"$line\" in *'\"archived\":true'*) ;; *) exit 3;; esac\n"
-      + "echo '{\"id\":4,\"result\":{\"data\":[{\"id\":\"" + ids[3]
+      + "printf '%s\\n' '{\"id\":4,\"result\":{\"data\":[{\"id\":\"" + ids[3]
       + "\",\"name\":\"Archived explicit\"}],\"nextCursor\":null}}';;");
   const auto rows = getRecentChatCatalog(20);
-  expect(title(rows, 0) == "Legacy explicit", "Indexed name must outrank protocol preview");
+  expect(title(rows, 0) == "JOB_DIR=/tmp/fictional explicit name", "Indexed name must outrank protocol preview");
   expect(title(rows, 2) == "Derived user request", "Missing index title must use protocol preview verbatim across pages");
-  expect(title(rows, 1) == "Current explicit", "Protocol explicit name must outrank legacy name");
+  expect(title(rows, 1) == "Repo: /tmp/fictional xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "Protocol explicit name must outrank legacy name");
   expect(title(rows, 3) == "Archived explicit", "Archived threads must receive protocol names");
   std::ifstream calls(codex / "calls");
   size_t callCount = 0;
@@ -359,19 +400,19 @@ void testCodexProtocolTitles() {
   expect(!fs::exists(codex / "calls") && title(fixture, 2).starts_with("Codex chat — "),
       "Benchmark fixture catalogs must not launch the Codex CLI");
   fs::remove(home / ".codex"); // Subsequent reads must honor CODEX_HOME alone.
-  stub("2) echo '{\"id\":2,\"result\":{\"data\":[],\"nextCursor\":null}}';;\n3) echo '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
+  stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[],\"nextCursor\":null}}';;\n3) printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
   const auto empty = getRecentChatCatalog(20);
-  expect(title(empty, 0) == "Legacy explicit" && title(empty, 2).starts_with("Codex chat — "),
+  expect(title(empty, 0) == "JOB_DIR=/tmp/fictional explicit name" && title(empty, 2).starts_with("Codex chat — "),
       "Empty metadata must preserve indexed names and the unnamed fallback");
   std::ofstream(bin / "codex") << "#!/bin/sh\nexit 1\n";
   const auto unavailable = getRecentChatCatalog(20);
-  expect(title(unavailable, 0) == "Legacy explicit" && title(unavailable, 2).starts_with("Codex chat — "),
+  expect(title(unavailable, 0) == "JOB_DIR=/tmp/fictional explicit name" && title(unavailable, 2).starts_with("Codex chat — "),
       "Unavailable/older CLI must preserve indexed names and the unnamed fallback");
   // The server waits indefinitely for another request, so only the client's
   // timeout can complete this catalog load. Resource-gate pauses are harmless.
   stub("*) IFS= read -r ignored; exit 0;;");
   const auto timedOut = getRecentChatCatalog(20);
-  expect(title(timedOut, 0) == "Legacy explicit" && title(timedOut, 2).starts_with("Codex chat — "),
+  expect(title(timedOut, 0) == "JOB_DIR=/tmp/fictional explicit name" && title(timedOut, 2).starts_with("Codex chat — "),
       "Timed-out metadata must preserve index and unnamed fallback titles");
   for (size_t i = 0; i < keys.size(); ++i) {
     if (saved[i]) setenv(keys[i].c_str(), saved[i]->c_str(), 1);

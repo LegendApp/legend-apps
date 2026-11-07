@@ -89,6 +89,79 @@ std::string boundedTitle(std::string title) {
   return title;
 }
 
+// Only unnamed titles are derived. Metadata is identified by structure rather
+// than words appearing anywhere in an ordinary request.
+std::string taskTitle(const std::string& text) {
+  std::istringstream input(text);
+  std::string title;
+  std::string blockEnd;
+  for (std::string line; title.empty() && std::getline(input, line);) {
+    const auto first = line.find_first_not_of(" \t\r");
+    if (first != std::string::npos) {
+      line = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
+      if (!blockEnd.empty()) {
+        if (line.find(blockEnd) != std::string::npos) blockEnd.clear();
+      } else if (line.front() == '<') {
+        const auto end = line.find('>');
+        if (end != std::string::npos && line[1] != '/') {
+          const std::string tag = line.substr(1, end - 1);
+          blockEnd = "</" + tag + ">";
+          if (line.find(blockEnd) != std::string::npos) blockEnd.clear();
+        }
+      } else {
+        const auto separator = line.find_first_of("=:");
+        const auto path = line.find_first_of("/~");
+        const bool assignment = separator != std::string::npos && line[separator] == '='
+            && line.substr(0, separator).find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos;
+        const std::string label = separator == std::string::npos ? line : line.substr(0, separator);
+        const auto clause = label.rfind(". ");
+        const std::string field = clause == std::string::npos ? label : label.substr(clause + 2);
+        const bool shortLabel = std::count(field.begin(), field.end(), ' ') <= (clause == std::string::npos ? 0 : 1);
+        const bool pathHeader = shortLabel && line.front() != '[' && separator != std::string::npos && line[separator] == ':'
+            && path != std::string::npos
+            && line.find_first_not_of(" \t", separator + 1) == path;
+        const bool heading = line.front() == '#';
+        const bool barePath = line.starts_with("/") || line.starts_with("~/") || line.starts_with("./");
+        if (!assignment && !pathHeader && !heading && !barePath) {
+          title = boundedTitle(line);
+        }
+      }
+    }
+  }
+  return title;
+}
+
+std::string localTaskTitle(const std::string& path) {
+  std::ifstream input(path);
+  std::string title;
+  bool sawUserMessage = false;
+  for (std::string line; !sawUserMessage && title.empty() && std::getline(input, line);) {
+    const ChatJson json(line.data(), line.size());
+    const auto root = json.root(0, line.size());
+    const auto payload = member(json, root, "payload");
+    if (root && payload && payload->kind == JsonValueKind::Object) {
+      const std::string type = stringMember(json, *root, "type");
+      if (type == "event_msg" && stringMember(json, *payload, "type") == "user_message") {
+        sawUserMessage = true;
+        title = taskTitle(stringMember(json, *payload, "message"));
+      } else if (type == "response_item" && stringMember(json, *payload, "role") == "user") {
+        const auto content = json.member(*payload, "content");
+        std::string text;
+        if (content && content->kind == JsonValueKind::Array) {
+          json.forEachArrayValue(*content, [&](const JsonRange& block) {
+            if (block.kind == JsonValueKind::Object && stringMember(json, block, "type") == "input_text") {
+              text += stringMember(json, block, "text") + "\n";
+            }
+            return true;
+          });
+        }
+        title = taskTitle(text);
+      }
+    }
+  }
+  return title;
+}
+
 std::string sessionIdFromPath(const fs::path& path) {
   const std::string stem = path.stem().string();
   return stem.size() >= 36 ? stem.substr(stem.size() - 36) : stem;
@@ -229,10 +302,11 @@ void loadCodexTitles(
               NSString* preview = thread[@"preview"];
               const auto legacy = index.find(found->first);
               if ([name isKindOfClass:NSString.class] && name.length > 0) {
-                found->second->title = boundedTitle(name.UTF8String);
+                found->second->title = std::string(name.UTF8String);
               } else if ((legacy == index.end() || legacy->second.title.empty())
                   && [preview isKindOfClass:NSString.class] && preview.length > 0) {
-                found->second->title = boundedTitle(preview.UTF8String);
+                const std::string title = taskTitle(preview.UTF8String);
+                if (!title.empty()) found->second->title = title;
               }
               remaining.erase(found);
             }
@@ -329,7 +403,10 @@ void addProviderFiles(
       const double updatedAt = found != metadata.end() && found->second.updatedAt > 0
           ? found->second.updatedAt
           : fileModifiedAt(path);
-      std::string title = found != metadata.end() ? boundedTitle(found->second.title) : std::string();
+      std::string title;
+      if (found != metadata.end()) {
+        title = provider == "codex" ? found->second.title : boundedTitle(found->second.title);
+      }
       if (title.empty()) {
         title = fallbackTitle(provider, updatedAt);
       }
@@ -401,6 +478,13 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
         if (summaries.size() == limit) {
           break;
         }
+      }
+    }
+    for (auto& summary : summaries) {
+      const auto metadata = codexMetadata.find(summary.id.substr(6));
+      if (summary.provider == "codex" && (metadata == codexMetadata.end() || metadata->second.title.empty())) {
+        const std::string title = localTaskTitle(summary.path);
+        if (!title.empty()) summary.title = title;
       }
     }
     // Fixture catalogs stay deterministic and never launch the user's CLI.
