@@ -180,7 +180,7 @@ for (const name of ["@legendapp/spark-desktop-links", "react-native-worklets"]) 
   });
 }
 
-for (const name of ["@legend-apps/markdown-block-editor", "react-native-worklets"]) {
+for (const name of ["@legend-apps/markdown-block-editor", "@legend-apps/markdown-parser", "react-native-worklets"]) {
   test(`Chat History release selects the bundled native dependency ${name}`, async () => {
     const config = sparkConfig(await loadAppManifest("chat-history"), "release");
     assert.ok(config.include.includes(name), `${name} must be explicitly selected`);
@@ -191,6 +191,17 @@ for (const name of ["@legend-apps/markdown-block-editor", "react-native-worklets
     }
   });
 }
+
+test("Chat History release does not exclude peer native dependencies of included packages", async () => {
+  const manifest = await loadAppManifest("chat-history");
+  const config = sparkConfig(manifest, "release");
+  for (const pkg of getActiveNativePackages(manifest, "macos")) {
+    const metadata = JSON.parse(fs.readFileSync(path.join(pkg.root, "package.json"), "utf8"));
+    for (const peer of Object.keys(metadata.peerDependencies ?? {})) {
+      assert.ok(!config.expo.autolinking.exclude.includes(peer), `${peer} required by ${pkg.name} must not be excluded`);
+    }
+  }
+});
 
 test("manifests declare Spark modules by import subpath", async () => {
   assert.deepEqual(expandSparkSubpath("@legendapp/spark/dialogs"), ["@legendapp/spark-file-dialog", "@legendapp/spark-message-dialog"]);

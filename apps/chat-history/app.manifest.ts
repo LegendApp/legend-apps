@@ -24,6 +24,7 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legend-apps/markdown-block-editor",
+      "@legend-apps/markdown-parser",
       "@legend-apps/storage",
       "@legendapp/spark/ui",
       "@legendapp/spark/updates",
