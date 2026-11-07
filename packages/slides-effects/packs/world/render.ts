@@ -1,5 +1,5 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
-import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldLightCountSlot, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
 import { depthFadeSlot } from "./track";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
@@ -116,10 +116,10 @@ fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimInten
  let view=normalize(eye()-world); let nv=max(0.,dot(normal,view));
  var color=material.albedo*uniforms[52]+material.emissive*uniforms[18];
  let roughness=clamp(material.roughness,.04,1.); let metal=clamp(material.metal,0.,1.);
- ${lightCount === 0 && !look.key && !look.environment ? "color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55;" : ""}
+ ${!look.key && !look.environment ? `if(uniforms[${worldLightCountSlot}]==0.) { color+=material.albedo*max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))))*.55; }` : ""}
  ${look.key ? "color+=keyLight(world,normal,view,material.albedo,roughness,metal);" : ""}
  ${look.environment ? "color+=environmentLight(normal,view,material.albedo,roughness,metal);" : ""}
- for(var light=0u;light<${lightCount}u;light++) {
+ for(var light=0u;light<min(${lightCount}u,u32(uniforms[${worldLightCountSlot}]));light++) {
   let base=64u+light*12u; let delta=vector(base)-world; let distance=max(length(delta),.001); let toward=delta/distance;
   let range=max(.001,uniforms[base+7u]); let cutoff=pow(max(0.,1.-pow(distance/range,4.)),2.);
   let attenuation=cutoff/max(1.,distance*distance);
@@ -576,7 +576,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     } else counts[instance.kind]++;
   }
   return { quality: scene.quality, msaaSamples: scene.msaaSamples, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
-    floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
+    floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: 4,
     bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,

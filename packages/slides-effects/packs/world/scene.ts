@@ -374,6 +374,7 @@ export function sdfInstance(options: SDFOptions): Instance {
 
 /** Slots 128–159 hold the track bend window (see `trackBendSlot`). */
 export const worldHeaderSize = 160;
+export const worldLightCountSlot = 63;
 /** Reserved header slots for the projected World clock used by custom WGSL contexts. */
 export const worldClockOffset = 24;
 /** Header slot holding the camera's travel speed between track stations, 0 at rest to 1 at the move's peak; the next slot holds its radial blur. */
@@ -869,6 +870,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene | WorldSampleScene
     const color = sampleTrack(field.track, clock);
     values[field.index] = color[0]; values[field.index + 1] = color[1]; values[field.index + 2] = color[2];
   }
+  values[worldLightCountSlot] = scene.lightTracks.length;
   scene.lightTracks.forEach((light, index) => {
     const base = 64 + index * 12, position = sampleTrack(light.position, clock), color = sampleTrack(light.color, clock), target = sampleTrack(light.target, clock);
     const direction: Vec3 = [target[0] - position[0], target[1] - position[1], target[2] - position[2]];

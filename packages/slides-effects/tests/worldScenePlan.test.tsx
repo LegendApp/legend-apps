@@ -9,7 +9,7 @@ import { act, create } from "react-test-renderer";
 import * as Reanimated from "react-native-reanimated";
 import { Scene } from "../packs/world/Authoring";
 import { worldHeaderSize } from "../packs/world/scene";
-import { Box, Effect, haze, Orbs, Sphere, Tube, WorldSlide } from "../packs/world/World";
+import { Box, Effect, haze, Orbs, PointLight, prepareWorldSlides, Sphere, Tube, WorldSlide } from "../packs/world/World";
 
 test.each([false, true])("authored slides retain one GPU graph across geometry, steps and reverse (effects: %s)", async effects => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -179,4 +179,12 @@ test("dev prop tracing does not expand the prepared uniform buffers during navig
     expect(Math.max(...rows)).toBeLessThan(10000);
     expect(renderer.root.findByType("gpu").props.frameData.value.every(Number.isFinite)).toBe(true);
   } finally { await act(() => renderer?.unmount()); flushUI(); trace.mockRestore(); }
+});
+
+test("scene plans share GPU capacity when point lights appear or disappear", () => {
+  const plans = prepareWorldSlides([0, 1, 4].map(count => ({ quality: "high", track: { duration: 1 },
+    children: <><Sphere />{Array.from({ length: count }, (_, index) => <PointLight key={index} />)}</>,
+  })));
+  expect(plans[0].scenePlan.pool).toBeDefined();
+  for (const plan of plans) expect(plan.scenePlan.pool).toBe(plans[0].scenePlan.pool);
 });

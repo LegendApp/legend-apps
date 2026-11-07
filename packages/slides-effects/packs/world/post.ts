@@ -1,4 +1,4 @@
-import { travelSpeedSlot, worldClockOffset, type WorldScene } from "./scene";
+import { travelSpeedSlot, worldLightCountSlot, worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { heldBlurSlot } from "./track";
 import { d } from "typegpu";
@@ -33,7 +33,7 @@ ${depthCode()}
   let z=(f32(sampleIndex)+jitter)*stride; let world=vector(0u)+ray*z;
   let localDensity=density*exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
   let transmission=exp(-opticalDepth); opticalDepth+=localDensity*segment;
-  for(var light=0u;light<${lights}u;light++) {
+  for(var light=0u;light<min(${lights}u,u32(uniforms[${worldLightCountSlot}]));light++) {
    let base=64u+light*12u; let delta=vector(base)-world; let lightDistance=max(length(delta),.001);
    let toward=delta/lightDistance; let radius=max(uniforms[base+7u],.001);
    let attenuation=pow(max(0.,1.-lightDistance/radius),2.)/(1.+lightDistance*lightDistance*.06);

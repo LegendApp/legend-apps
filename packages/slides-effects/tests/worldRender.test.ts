@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { text3dInstances } from "../packs/world/text3d";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
-import { cardInstances, customInstances, labelInstance, prepareWorldScene, primitive, rowInstances, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
+import { cardInstances, customInstances, labelInstance, prepareWorldScene, primitive, rowInstances, sampleWorldUniforms, sdfInstance, worldLightCountSlot, worldHeaderSize, worldInstanceSize, type WorldScene } from "../packs/world/scene";
 
 const quad = `
 fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
@@ -223,4 +223,26 @@ test("a card's pixel line draws its rim as a light border at that width", () => 
   const code = buildWorldGraph(prepared).passes.find(pass => pass.id === "sharp-cards")!.code;
   expect(code).toContain("let line=select(1.4*unit,uniforms[base+15u]*pixel,border);");
   expect(code).toContain("min(1.,.22*uniforms[base+17u]),border)");
+});
+
+test("adding point and spot lights changes uniform data without changing the GPU program", () => {
+  const unlit = scene({ keyLight: {}, lights: [] });
+  for (const count of [1, 4]) {
+    const lit = scene({ keyLight: {}, lights: Array.from({ length: count }, (_, index) => ({
+      kind: index % 2 ? "spot" : "point", position: [0, 8, 0], intensity: 3,
+    })) });
+    expect(worldGraphTopology(lit)).toEqual(worldGraphTopology(unlit));
+    expect(buildWorldGraph(lit)).toEqual(buildWorldGraph(unlit));
+  }
+});
+
+test("the shared light program preserves the no-light fallback and declared dark lights", () => {
+  const clock = { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } };
+  for (const lights of [[], [{ intensity: 0 }], [{ intensity: 2 }, { kind: "spot" as const }]]) {
+    const prepared = scene({ lights });
+    expect(sampleWorldUniforms(prepared, clock)[worldLightCountSlot]).toBe(lights.length);
+    const code = buildWorldGraph(prepared).passes.find(pass => pass.id === "scene-sphere")!.code;
+    expect(code).toContain(`if(uniforms[${worldLightCountSlot}]==0.) { color+=material.albedo`);
+    expect(code).toContain(`light<min(4u,u32(uniforms[${worldLightCountSlot}]))`);
+  }
 });

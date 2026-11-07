@@ -28,7 +28,7 @@ mock.module("@legend-apps/presentation", () => ({
   usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 1280, height: 720 }),
   usePresentationValue: () => playback.value.phase,
 }));
-const { World, Camera, Orbs, Sphere } = await import("../packs/world/World");
+const { World, Camera, Orbs, Sphere, PointLight } = await import("../packs/world/World");
 
 test("world uniforms sample preparation/preview and retain live continuity without React frames", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -383,5 +383,23 @@ test("a preparing non-track World samples its retained entry camera", async () =
     await act(() => renderer.update(content("low", [8, 6, 30])));
     const prepared = renderer.root.findByType("render-graph").props.uniforms.value;
     for (let i = 0; i < 8; i++) expect(prepared[i]).toBeCloseTo(before[i], 5);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("changing the number of lights retains GPU generations and publishes the active count", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  playback.value = createPlaybackState({ phase: "playing", slideKey: "lights", stepKey: "0", stepIndex: 0 });
+  let renderer;
+  const content = count => <World quality="high"><Sphere />{Array.from({ length: count }, (_, index) => <PointLight key={index} intensity={index + 1} />)}</World>;
+  try {
+    await act(() => { renderer = create(content(0)); });
+    const graph = () => renderer.root.findByType("render-graph").props;
+    const first = graph();
+    for (const count of [1, 4, 0]) {
+      await act(() => renderer.update(content(count)));
+      expect(graph().passes).toBe(first.passes);
+      expect(graph().uniforms).toBe(first.uniforms);
+      expect(graph().uniforms.value[63]).toBe(count);
+    }
   } finally { await act(() => renderer?.unmount()); }
 });
