@@ -86,48 +86,50 @@ export function countSteps(children: ReactNode, listTypes: unknown[] = ["ul", "o
 function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   let cursor = 0;
   let maximum = 0;
+  const visitor = (node: ReactNode): ReactNode => {
+    if (!isValidElement<StepProps & { count?: number }>(node)) return node;
+    if (node.type === Steps) {
+      if (typeof node.props.children === "function") {
+        // Do not execute the callback while discovering steps: it can contain
+        // arbitrary content. Its explicit count owns these navigation states.
+        const last = getStateCount(node.props.count) - 1;
+        cursor = Math.max(cursor, last);
+        maximum = Math.max(maximum, last);
+        return node;
+      }
+      if (node.props.count !== undefined) {
+        maximum = Math.max(maximum, getStateCount(node.props.count) - 1);
+      }
+      const items = Children.toArray(node.props.children).flatMap((child) => {
+        if (isValidElement<{ children?: ReactNode }>(child) && listTypes.includes(child.type)) return Children.toArray(child.props.children);
+        return [child];
+      }).filter((child) => typeof child !== "string" || child.trim());
+      if (!render) {
+        for (const child of items) {
+          maximum = Math.max(maximum, ++cursor);
+          visit(child);
+        }
+        return node;
+      }
+      return cloneElement(node, {}, items.map((child, index) => visit(
+        <Step key={index} transition={node.props.transition}>{child}</Step>,
+      )));
+    }
+    let props = node.props;
+    if (node.type === Step) {
+      const at = props.at ?? (props.states ? 0 : cursor + 1);
+      cursor = Math.max(cursor, at, ...Object.keys(props.states ?? {}).map(Number), props.until ?? 0);
+      maximum = Math.max(maximum, cursor);
+      if (render) props = { ...props, at };
+    }
+    const content = visit(props.children);
+    return render ? cloneElement(node, props, content) : node;
+  };
   function visit(nodes: ReactNode): ReactNode {
-    const visitor = (node: ReactNode): ReactNode => {
-      if (!isValidElement<StepProps & { count?: number }>(node)) return node;
-      if (node.type === Steps) {
-        if (typeof node.props.children === "function") {
-          // Do not execute the callback while discovering steps: it can contain
-          // arbitrary content. Its explicit count owns these navigation states.
-          const last = getStateCount(node.props.count) - 1;
-          cursor = Math.max(cursor, last);
-          maximum = Math.max(maximum, last);
-          return node;
-        }
-        if (node.props.count !== undefined) {
-          maximum = Math.max(maximum, getStateCount(node.props.count) - 1);
-        }
-        const items = Children.toArray(node.props.children).flatMap((child) => {
-          if (isValidElement<{ children?: ReactNode }>(child) && listTypes.includes(child.type)) return Children.toArray(child.props.children);
-          return [child];
-        }).filter((child) => typeof child !== "string" || child.trim());
-        if (!render) {
-          for (const child of items) {
-            maximum = Math.max(maximum, ++cursor);
-            visit(child);
-          }
-          return node;
-        }
-        return cloneElement(node, {}, items.map((child, index) => visit(
-          <Step key={index} transition={node.props.transition}>{child}</Step>,
-        )));
-      }
-      let props = node.props;
-      if (node.type === Step) {
-        const at = props.at ?? (props.states ? 0 : cursor + 1);
-        cursor = Math.max(cursor, at, ...Object.keys(props.states ?? {}).map(Number), props.until ?? 0);
-        maximum = Math.max(maximum, cursor);
-        if (render) props = { ...props, at };
-      }
-      const content = visit(props.children);
-      return render ? cloneElement(node, props, content) : node;
-    };
     if (render) return Children.map(nodes, visitor);
-    Children.forEach(nodes, visitor);
+    if (Array.isArray(nodes)) { for (const node of nodes) visit(node); }
+    else if (isValidElement(nodes) || nodes === null || typeof nodes !== "object") visitor(nodes);
+    else Children.forEach(nodes, visitor);
     return nodes;
   }
   const content = visit(children);

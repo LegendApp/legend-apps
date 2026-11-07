@@ -5,11 +5,11 @@ import { createRequire } from "node:module";
 const require = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
 const React = require("react");
 const { transformSync } = require("esbuild");
-let clones = 0;
+let clones = 0, traversals = 0;
 const module = { exports: {} };
 const code = transformSync(readFileSync(new URL("../steps.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs", jsx: "automatic" }).code;
 Function("require", "module", "exports", code)((name) => {
-  if (name === "react") return { ...React, cloneElement(...args) { clones++; return React.cloneElement(...args); } };
+  if (name === "react") return { ...React, Children: { ...React.Children, forEach(...args) { traversals++; return React.Children.forEach(...args); } }, cloneElement(...args) { clones++; return React.cloneElement(...args); } };
   if (name === "react/jsx-runtime") return require(name);
   return {};
 }, module, module.exports);
@@ -39,4 +39,17 @@ test("fresh content and changed step counts are discovered without retaining pri
   assert.equal(countSteps(next), 4);
   const resolved = resolveSteps(next);
   assert.equal(resolved.content[0].props.children[0].props.children[0], "after");
+});
+
+test("static array trees are counted without React child-key traversal", () => {
+  const tree = h(React.Fragment, null, Array.from({ length: 200 }, (_, i) => h("group", { key: i },
+    Array.from({ length: 20 }, (_, k) => h("part", { key: k }, "static")))));
+  traversals = 0;
+  assert.equal(countSteps(tree), 1);
+  assert.equal(traversals, 0);
+});
+test("discovery preserves iterator, nested array and empty child semantics", () => {
+  const tree = [null, false, "", 12, [h(Step, { at: 2 })], new Set([h(Step, { at: 4 }), h(Step, { until: 7 })])];
+  assert.equal(countSteps(tree), resolveSteps(tree).steps);
+  assert.throws(() => countSteps({ invalid: true }), /Objects are not valid/);
 });
