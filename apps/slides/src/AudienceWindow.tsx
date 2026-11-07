@@ -1,7 +1,7 @@
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { PerformanceHUD } from "./PerformanceHUD";
 import { useValue } from "@legendapp/state/react";
-import { SnapshotCaptureBoundary, PreparationBoundary, NavigationTransitionContext, useHasBackground, FocusSurfaceContext, createFocusSurface,
+import { SnapshotCaptureBoundary, PreparationBoundary, NavigationTransitionContext, useHasBackground, useBackgroundReady, FocusSurfaceContext, createFocusSurface,
   measureFocusPair, prepareFocusSurface, invalidateFocusSurface, createFocusMotion, focusCamera, resolveTransition,
   type TransitionDefinition, type SlideTransition, type FocusMotion, type FocusSurface } from "@legend-apps/presentation";
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -34,6 +34,7 @@ export function AudienceWindow() {
 function AudienceContent() {
   const currentStep = useValue(slidesState$.currentStep);
   const hasBackground = useHasBackground();
+  const backgroundReady = useBackgroundReady();
   const currentSlide = useValue(slidesState$.currentSlide);
   const lastPresented = useRef({ index: currentSlide, step: currentStep });
   useLayoutEffect(() => {
@@ -94,7 +95,7 @@ function AudienceContent() {
       ...resolved,
       progress: createTransitionProgress(transitionState.revision !== revision ? 1 : 0),
       contentReady: cut,
-      ready: cut,
+      ready: false,
       cut,
       duration: cut ? cutHoldMs : hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
@@ -113,7 +114,11 @@ function AudienceContent() {
   }, [transitionState]);
 
   useLayoutEffect(() => {
-    if (transitionState.ready || !transitionState.contentReady || transitionState.outgoing === null) return;
+    if (transitionState.ready || !transitionState.contentReady || !backgroundReady || transitionState.outgoing === null) return;
+    if (transitionState.cut) {
+      setTransitionState(current => current === transitionState ? { ...current, ready: true } : current);
+      return;
+    }
     let cancelled = false;
     const prepare = async () => {
       const from = surfaces.get(transitionState.outgoing!);
@@ -166,7 +171,7 @@ function AudienceContent() {
     // measurement reads committed layout; another JS frame only delays startup.
     void prepare();
     return () => { cancelled = true; };
-  }, [transitionState, surfaces, progress]);
+  }, [transitionState, surfaces, progress, backgroundReady]);
 
   useLayoutEffect(() => {
     if (transitionState.outgoing === null || !transitionState.ready) return;

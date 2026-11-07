@@ -11,6 +11,8 @@ export interface PlaybackState extends PlaybackInput {
   slideTime: number;
   stepTime: number;
   lastTimestamp: number | null;
+  /** Last observed UI frame, retained while the integration anchor is reset. */
+  timestamp?: number;
   stepPending: boolean;
   stepOrigins: Record<number, number>;
 }
@@ -31,7 +33,7 @@ export function transitionPlayback(state: PlaybackState, input: PlaybackInput): 
   // exact live frame and identity rather than interpreting that as a new slide.
   if (input.phase === "outgoing" || input.phase === "paused") {
     if (state.phase === input.phase) return state;
-    return { ...state, phase: input.phase, lastTimestamp: null };
+    return { ...state, phase: input.phase, timestamp: state.lastTimestamp ?? state.timestamp, lastTimestamp: null };
   }
 
   const slideChanged = state.slideKey !== input.slideKey;
@@ -41,6 +43,7 @@ export function transitionPlayback(state: PlaybackState, input: PlaybackInput): 
     (enteringPlayback && state.phase !== "paused");
   return {
     ...input,
+    timestamp: state.lastTimestamp ?? state.timestamp,
     stepOrigins: restart ? { [input.stepIndex]: 0 } : stepChanged
       ? { ...Object.fromEntries(Object.entries(state.stepOrigins).filter(([step]) => Number(step) < input.stepIndex)),
           [input.stepIndex]: state.slideTime } : state.stepOrigins,
@@ -66,6 +69,7 @@ export function advancePlayback(state: PlaybackState, timestamp: number): Playba
     stepOrigins: state.stepPending ? { ...state.stepOrigins, [state.stepIndex]: state.slideTime + elapsed } : state.stepOrigins,
     stepTime: state.stepPending ? 0 : state.stepTime + elapsed,
     lastTimestamp: timestamp,
+    timestamp,
     stepPending: false,
   };
 }

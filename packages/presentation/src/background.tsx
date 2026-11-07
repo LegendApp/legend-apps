@@ -1,11 +1,12 @@
 import { useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
-import { Fragment, createContext, useContext, useId, useLayoutEffect, useState, type ReactNode, type ComponentType } from "react";
+import { Fragment, createContext, useCallback, useContext, useId, useLayoutEffect, useState, type ReactNode, type ComponentType } from "react";
 import { StyleSheet, View } from "react-native";
 import { useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
 import { PresentationObservableProvider, usePresentation$ } from "./runtime";
 import { useRuntimeProjection } from "./useRuntimeProjection";
 import type { PresentationRuntime } from "./types";
+import { PreparationBoundary } from "./PreparationBoundary";
 
 type Entry = { children: ReactNode; runtime$: Observable<PresentationRuntime>; priority: number; intensityMultiplier: number; maxIntensity: number };
 type Registry = (id: string, entry: Entry | undefined) => void;
@@ -18,6 +19,8 @@ export function useBackgroundBrightnessScale(){return useContext(BrightnessScale
 const IntensityContext = createContext(1);
 const SizeContext = createContext({ width: 1920, height: 1080 });
 const HasBackgroundContext = createContext(false);
+const BackgroundReadyContext = createContext(true);
+export function useBackgroundReady() { return useContext(BackgroundReadyContext); }
 
 /** Declare in a template or slide. Higher priority overrides the template background. */
 export function Background({ children, priority = 0, intensityMultiplier = 1, maxIntensity = Infinity }: { children?: ReactNode; priority?: number; intensityMultiplier?: number; maxIntensity?: number }) {
@@ -49,13 +52,18 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     return { ...current, [id]: entry };
   }));
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const selected = useValue(() => Object.values(entries).filter((entry) => entry.runtime$.slideIndex.get() === slideIndex)
-    .sort((a, b) => b.priority - a.priority)[0]);
+  const selectedId = useValue(() => Object.keys(entries).filter(id => entries[id].runtime$.slideIndex.get() === slideIndex)
+    .sort((a, b) => entries[b].priority - entries[a].priority)[0]);
+  const selected = selectedId ? entries[selectedId] : undefined;
   // A cold slide registers in its layout effect. Retain the last surface through
   // that commit so its GPU and continuity state survive the registration gap.
   const [retained, setRetained] = useState<Entry>();
   useLayoutEffect(() => { setRetained(selected); }, [selected]);
   const visible = selected ?? retained;
+  const readyKey = selectedId ? `${slideIndex}:${selectedId}` : undefined;
+  const [preparedKey, setPreparedKey] = useState<string>();
+  const ready = !!replacement || !visible || !!selected && preparedKey === readyKey;
+  const backgroundPrepared = useCallback(() => { if (readyKey) setPreparedKey(readyKey); }, [readyKey]);
   const brightnessScale=useSharedValue(1);
   const motion=useSharedValue<BackgroundMotion>({time:0,raw:0,burst:3.5,slideIndex:-1,owner:""});
   const multiplier=selected?.intensityMultiplier ?? 1;
@@ -65,6 +73,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     brightnessScale.value=isPreview || target!==1 ? target : withTiming(1,{duration:1200});
   },[brightnessScale,target,isPreview]);
   return (
+    <BackgroundReadyContext.Provider value={ready}>
     <MotionContext.Provider value={motion}>
     <BrightnessScaleContext.Provider value={brightnessScale}>
     <IntensityContext.Provider value={intensity}>
@@ -76,7 +85,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
           }}>
             <View pointerEvents="none" style={[styles.background, { backgroundColor: color }]}>
               <SizeContext.Provider value={size}>
-                {replacement ?? (visible && <SelectedBackground entry={visible} retained={!selected} isPreview={isPreview} Boundary={boundary} />)}
+                {replacement ?? (visible && <PreparationBoundary onReady={backgroundPrepared}><SelectedBackground entry={visible} retained={!selected} isPreview={isPreview} Boundary={boundary} /></PreparationBoundary>)}
               </SizeContext.Provider>
             </View>
             {children}
@@ -86,6 +95,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
     </IntensityContext.Provider>
     </BrightnessScaleContext.Provider>
     </MotionContext.Provider>
+    </BackgroundReadyContext.Provider>
   );
 }
 function SelectedBackground({ entry, retained, isPreview, Boundary }: { entry: Entry; retained: boolean; isPreview: boolean; Boundary: ComponentType<{ children?: ReactNode }> }) {

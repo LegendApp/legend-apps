@@ -489,7 +489,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   values[depthFadeSlot] = options.depthFade ?? 0;
   values[depthFadeSlot + 1] = (options.heldFade ?? 0) * held;
   if (options.heldMotion !== undefined) {
-    const stamp = playback.lastTimestamp ?? NaN, step = Math.min(0.1, Math.max(0, (stamp - previous.stamp) / 1000));
+    const stamp = playback.lastTimestamp ?? playback.timestamp ?? NaN, step = Math.min(0.1, Math.max(0, (stamp - previous.stamp) / 1000));
     frame.scenery = first || !(step >= 0) || !Number.isFinite(previous.scenery) ? values[worldClockOffset + 3]
       : (previous.scenery + step * (1 + (options.heldMotion - 1) * held)) % 3600;
     frame.stamp = stamp;

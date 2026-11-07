@@ -3,7 +3,7 @@ import { AlphaType, ColorType, ImageFormat, Skia } from "@shopify/react-native-s
 import { PixelRatio, Platform, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask, type GPURenderGraphDefinition, type GPUShaderProps } from "@legend-apps/presentation";
+import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask, useSurfaceSuspension, type GPURenderGraphDefinition, type GPUShaderProps } from "@legend-apps/presentation";
 import { prepareRenderGraph, encodeRenderGraph, type RenderGraphResources } from "./gpuRenderGraph";
 import { reportSlideError } from "./slidesStore";
 import { SurfaceStillContext, type SurfaceStillRequest } from "./SlideCaptureContext";
@@ -38,6 +38,8 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   particles = false, particleCount = 256, particleVertexCount = 6, particleBlend = "additive", previewTime = 4,
   clock: clockMode = "step", image, composite = false, frameData, frameDataSize = 0, borderRadius,
   accessibilityLabel, active = true, children, maxTime, frameTimeIndex, renderGraph, renderScale }: GPUShaderProps) {
+  const suspension = useSurfaceSuspension();
+  const suspended = suspension?.suspended ?? false;
   const size = useBackgroundSize();
   const intensity = useBackgroundIntensity();
   const stillRequest = useContext(SurfaceStillContext);
@@ -81,7 +83,7 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   if (error) throw new Error(error);
   return <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
     <Canvas ref={canvas} style={{ width, height }} />
-    {resources && <UIFrames key={resources.id} resources={resources} still={still} renderScale={renderScale} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} displayScale={displayScale} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={message => { setError(message); reportSlideError(message, errorContext.current.slideIndex, errorContext.current.isPreview); }} onReady={() => setPreparedResources(resources)} />}
+    {resources && <UIFrames key={resources.id} suspended={suspended} suspendedOnUI={suspension?.signal} resources={resources} still={still} renderScale={renderScale} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} displayScale={displayScale} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={message => { setError(message); reportSlideError(message, errorContext.current.slideIndex, errorContext.current.isPreview); }} onReady={() => setPreparedResources(resources)} />}
     {resources && children}
   </View>;
 }
@@ -232,7 +234,7 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
     return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {
+function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; suspended?: boolean; suspendedOnUI?: SharedValue<boolean>; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -246,7 +248,7 @@ function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTi
   const { device, context, clock, groups, compute, render, particles } = r;
   const draw = (dt: number, frozen = false, stillTarget?: StillTarget) => {
     "worklet";
-    if (!alive.value) return;
+    if (!alive.value || suspendedOnUI?.get()) return;
     const state = playback.value;
     const previous = simulationEpoch.value;
     if (state.phase !== "outgoing" && state.phase !== "paused" &&
@@ -289,7 +291,7 @@ function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTi
     finished.value=maxTime!==undefined && time!==undefined && time>=maxTime;
   }, false);
   useEffect(() => {
-    frame.setActive(effectActive && active && !preview && !preparing);
+    frame.setActive(!suspended && effectActive && active && !preview && !preparing);
     runOnUI(() => {
       "worklet";
       const phase = playback.value.phase;
@@ -299,10 +301,10 @@ function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTi
       else if (r.graph && rendered.value && (phase === "paused" || phase === "outgoing")) draw(0, true);
     })();
     return () => frame.setActive(false);
-  }, [active, effectActive, maxTime, frameTimeIndex, preview, preparing, previewTime, step, frame, rendered, finished, brightness, playback, displayScale, width, height, clockMode, frameData, renderScale, particleVertexCount]);
+  }, [suspended, active, effectActive, maxTime, frameTimeIndex, preview, preparing, previewTime, step, frame, rendered, finished, brightness, playback, displayScale, width, height, clockMode, frameData, renderScale, particleVertexCount]);
   const stillId = still?.id;
   useEffect(() => {
-    if (!still || !stillId) return;
+    if (!still || !stillId || suspended) return;
     // Encoding can outlive the request after its timer has already fired.
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -315,12 +317,13 @@ function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTi
       ); };
       runOnUI(() => {
         "worklet";
+        if (!alive.get() || suspendedOnUI?.get()) { buffer.destroy(); return; }
         draw(0, false, { buffer, bytesPerRow });
         runOnJS(finish)();
       })();
     }, STILL_SETTLE_MS);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [still, stillId]);
+  }, [still, stillId, suspended]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
     runOnUI(destroyGPU)(device, alive, disposed);

@@ -1,4 +1,4 @@
-import { Background, GPURenderGraph, registerAdvanceGuard, PresentationCanvasScaleContext, PresentationObservableProvider, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection } from "@legend-apps/presentation";
+import { Background, RetainedSurface, GPURenderGraph, registerAdvanceGuard, PresentationCanvasScaleContext, PresentationObservableProvider, useBackgroundReady, useBackgroundSize, usePlayback, usePresentation$, usePresentationValue, useRuntimeProjection, useSurfaceSuspension } from "@legend-apps/presentation";
 import { Children, Component, Fragment, isValidElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PixelRatio, View } from "react-native";
 import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
@@ -10,9 +10,9 @@ import { advanceResolution, createResolutionState } from "./resolution";
 import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
 import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
 import { text3dInstances, type Text3DOptions } from "./text3d";
-import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldScene, primitive, pulseInstances, rowInstances,
+import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldSample, prepareWorldScene, primitive, pulseInstances, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sdfInstance, sprayInstances, voxelInstances,
-  type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions,
+  type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions, type WorldSampleScene,
   type EffectOptions, type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 // motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
@@ -87,10 +87,10 @@ export { tunnelInstances } from "./lighting";
 export type { EnvironmentOptions, FloorKerb, FloorLine, FloorMarkings, KeyLightOptions, TunnelOptions } from "./lighting";
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
-const scenes = new WeakMap<PreparedWorldScene, SharedValue<PreparedWorldScene>>();
+const scenes = new WeakMap<PreparedWorldScene, SharedValue<WorldSampleScene>>();
 function sharedScene(prepared: PreparedWorldScene) {
   let scene = scenes.get(prepared);
-  if (!scene) { scene = makeMutable(prepared); scenes.set(prepared, scene); }
+  if (!scene) { scene = makeMutable(prepareWorldSample(prepared)); scenes.set(prepared, scene); }
   return scene;
 }
 function retainedPose(id: string) {
@@ -136,7 +136,12 @@ export function World(props: WorldProps) {
 }
 function WorldSlideClock({ children }: { children: ReactNode }) {
   const sourceRuntime$ = usePresentation$();
-  const runtime$ = useRuntimeProjection(() => ({ ...sourceRuntime$.get(), playbackScope: "slide" }), [sourceRuntime$]);
+  const ready = useBackgroundReady();
+  const runtime$ = useRuntimeProjection(() => {
+    const source = sourceRuntime$.get(), preparing = !ready && !source.isPreview;
+    return { ...source, playbackScope: "slide", isActive: source.isActive && !preparing, isPreparing: preparing,
+      playbackPhase: preparing ? "preparing" : source.playbackPhase };
+  }, [sourceRuntime$, ready]);
   return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
 type WorldContent = { prepared: PreparedWorldScene; overlay: ReactNode[] };
@@ -262,15 +267,18 @@ function WorldSurface(props: WorldProps) {
   const content = useMemo(() => ({ prepared: pool ? prepared : renderScene, retained: renderScene, declared }), [pool, prepared, renderScene, declared]);
   return <View pointerEvents="box-none" accessibilityLabel={accessibilityLabel}
     style={{ width, height, borderRadius, overflow: "hidden", backgroundColor, ...(background ? { position: "absolute", left: 0, top: 0 } as const : {}) }}>
-    <WorldSceneRuntime key={topology} {...props} width={width} height={height} content={content} topology={topology}
-      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} retainLiveIds={retainLiveIds} />
+    <RetainedSurface identity={topology}><WorldSceneRuntime key={topology} {...props} width={width} height={height} content={content} topology={topology}
+      pool={pool} continuity={continuity} origin={origin} resolution={resolution} trackFrame={trackFrame} retainLiveIds={retainLiveIds} /></RetainedSurface>
     {overlay.length > 0 && <View pointerEvents="box-none" style={{ position: "absolute", left: 0, top: 0, width, height }}>{overlay}</View>}
   </View>;
 }
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active: requestedActive = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
   WorldProps & { width: number; height: number; content: { prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[] }; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[]) => void }) {
+  const suspension = useSurfaceSuspension();
+  const suspendedOnUI = suspension?.signal;
+  const active = requestedActive && !suspension?.suspended;
   if (!Number.isFinite(renderScale) || renderScale <= 0 || renderScale > 1) throw new Error("World renderScale must be greater than zero and at most one");
   if (track && [track.spacing ?? 32, track.duration ?? 1.7].some(value => !Number.isFinite(value) || value <= 0)) {
     throw new Error("World track values must be positive and finite");
@@ -286,10 +294,11 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const graph = useMemo(() => buildWorldGraph(JSON.parse(topology)), [topology]);
   // Planned station scenes are immutable; each surface keeps its own sampled output and track state.
   const shareScene = !!pool && !!track;
-  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable({ ...prepared }), [prepared, shareScene]);
+  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable({ ...prepareWorldSample(prepared) }), [prepared, shareScene]);
   const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
   const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [pool]);
+  const pooled = !!pool;
   const planSampler = sampleWorldPlan;
   const playback = usePlayback();
   if (buildDuration !== undefined && (!Number.isFinite(buildDuration) || buildDuration < 0)) throw new Error("World buildDuration must be nonnegative");
@@ -337,7 +346,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const scaleKey = `${width}:${height}:${renderScale}`;
   useAnimatedReaction(() => adaptivePlayback?.value ?? null, state => {
     "worklet";
-    if (!state) return;
+    if (!state || suspendedOnUI?.get()) return;
     resolution.value = resolutionEvaluator(resolution.value, { timestamp: state.lastTimestamp,
       playing: active && state.phase === "playing", key: `${state.slideKey}:${scaleKey}` });
   });
@@ -347,13 +356,13 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     return renderScale * (phase && phase !== "preview" && phase !== "preparing" ? resolution.value.scale : 1);
   });
   const trackSampler = sampleTrackFrame;
-  useAnimatedReaction(() => track && active ? { state: playback.value, scene: scene.value, scale: effectiveScale.value } : null, input => {
+  useAnimatedReaction(() => track && active && !suspendedOnUI?.get() ? { state: playback.value, scene: scene.value, scale: effectiveScale.value } : null, input => {
     "worklet";
-    if (!track || !input || input.state.phase !== "playing") return;
+    if (suspendedOnUI?.get() || !track || !input || input.state.phase !== "playing") return;
     const { state, scene, scale } = input;
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
     const sampled = sampleUniforms(scene, clock, null, 1, 1, true);
-    const values = (pool ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
+    const values = (pooled ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
     values[35] = scale;
     const previous = trackFrame.value;
     const next = trackSampler(previous, values, ids, state, track, declared);
@@ -362,30 +371,35 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   });
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
-  const entryPose = continuePrevious && active && (phase === undefined || phase === "playing") ? continuity : undefined;
+  const entryPose = continuePrevious && active && (phase === undefined || phase === "playing" || phase === "preparing") ? continuity : undefined;
   useAnimatedReaction(() => playback.value, state => {
     "worklet";
-    if (track || !continuity || !active || state.phase !== "playing") return;
+    if (suspendedOnUI?.get() || track || !continuity || !active || state.phase !== "playing") return;
     if (origin.value.key !== state.slideKey) origin.value = { key: state.slideKey, pose: continuePrevious ? continuity.value : null };
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration);
     continuity.value = cameraEvaluator(scene.value, clock, origin.value.pose, enterDuration);
   });
   const uniforms = useDerivedValue(() => {
     "worklet";
-    const state = playback.value;
-    const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
+    if (suspendedOnUI?.get()) return pooledOutput.value;
+    const state = playback.value, preparing = state.phase === "preparing";
+    // Prepare the live entry pose without advancing the shared clock or retained track.
+    const sampleState = preparing ? { ...state, phase: "playing" as const } : state;
+    const clock = sampleClock(sampleState, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
     let values: number[] | Float32Array<ArrayBuffer>;
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
         const sampled = sampleUniforms(scene.value, clock, null, 1, 1, true);
-        values = trackSampler(createTrackFrame(), (pool ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[], ids, state, track, declared).values;
+        const planned = pooled ? planSampler(sampled, copies, pooledOutput.value) : sampled;
+        const previous = preparing ? { ...trackFrame.value, output: undefined, retired: { ...trackFrame.value.retired } } : createTrackFrame();
+        values = trackSampler(previous, (preparing ? Float32Array.from(planned) : planned) as number[], ids, sampleState, track, declared).values;
       } else values = trackFrame.value.values;
     } else {
-      const previous = state.phase === "preview" || state.phase === "preparing" ? null
-        : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" ? entryPose?.value : null;
+      const previous = state.phase === "preview" ? null
+        : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" || preparing ? entryPose?.value : null;
       values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
     }
-    return pool && !track ? planSampler(values, copies, pooledOutput.value) : values;
+    return pooled && !track ? planSampler(values, copies, pooledOutput.value) : values;
   });
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}

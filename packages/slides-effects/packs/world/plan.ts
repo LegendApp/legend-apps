@@ -9,6 +9,28 @@ function family(part: Instance): string {
     : part.custom ? customGeometryKeys(part.custom).family : part.sdf ? `sdf:${JSON.stringify(part.sdf)}` : part.kind;
 }
 export type WorldPlan = { topology: WorldGraphTopology; slots: Record<string, number>; instances: number; size: number };
+type PlanSlots = { starts: number[]; limits: number[]; keys: Map<string, number>;
+  customs: WeakMap<NonNullable<Instance["custom"]>, { wgsl: string; vertexCount: number; index: number | undefined }> };
+const slotLayouts = new WeakMap<WorldPlan, PlanSlots>();
+function slotsFor(plan: WorldPlan): PlanSlots {
+  let layout = slotLayouts.get(plan);
+  if (!layout) {
+    const entries = Object.entries(plan.slots), starts = entries.map(([, start]) => start);
+    layout = { starts, limits: starts.map((_, i) => starts[i + 1] ?? plan.instances), keys: new Map(entries.map(([key], i) => [key, i])), customs: new WeakMap() };
+    slotLayouts.set(plan, layout);
+  }
+  return layout;
+}
+function familyIndex(part: Instance, layout: PlanSlots): number | undefined {
+  if (!part.label && !part.card && !part.glyph && part.custom) {
+    const geometry = part.custom, cached = layout.customs.get(geometry);
+    if (cached?.wgsl === geometry.wgsl && cached.vertexCount === geometry.vertexCount) return cached.index;
+    const index = layout.keys.get(family(part));
+    layout.customs.set(geometry, { ...geometry, index });
+    return index;
+  }
+  return layout.keys.get(family(part));
+}
 
 /** Reserve room for an incoming declaration and one outgoing declaration; compatible slides keep one GPU graph. */
 export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWorldScene, WorldPlan> {
@@ -76,16 +98,15 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
 
 /** Rapid navigation can retain more than the two declarations reserved by a pool. */
 export function worldPlanFits(scene: PreparedWorldScene, plan: WorldPlan): boolean {
-  const entries = Object.entries(plan.slots), cursors = { ...plan.slots };
-  const limits = Object.fromEntries(entries.map(([key], i) => [key, entries[i + 1]?.[1] ?? plan.instances]));
-  return scene.instances.every(part => { const key = family(part); return cursors[key] !== undefined && cursors[key]++ < limits[key]; });
+  const layout = slotsFor(plan), cursors = layout.starts.slice();
+  return scene.instances.every(part => { const index = familyIndex(part, layout); return index !== undefined && cursors[index]++ < layout.limits[index]; });
 }
 
 /** Coalesce the sorted source instances into contiguous copies to the shared draw ranges. */
 export function worldPlanCopies(scene: PreparedWorldScene, plan: WorldPlan): [number, number, number][] {
-  const cursors = { ...plan.slots }, copies: [number, number, number][] = [[0, worldHeaderSize, 0]];
+  const layout = slotsFor(plan), cursors = layout.starts.slice(), copies: [number, number, number][] = [[0, worldHeaderSize, 0]];
   scene.instances.forEach((part, i) => {
-    const key = family(part), target = worldHeaderSize + cursors[key]++ * worldInstanceSize;
+    const target = worldHeaderSize + cursors[familyIndex(part, layout)!]++ * worldInstanceSize;
     const source = worldHeaderSize + i * worldInstanceSize, last = copies.at(-1)!;
     if (last[0] + last[1] === source && last[2] + last[1] === target) last[1] += worldInstanceSize;
     else copies.push([source, worldInstanceSize, target]);
@@ -97,8 +118,8 @@ export function worldPlanCopies(scene: PreparedWorldScene, plan: WorldPlan): [nu
 /** The shared graph's empty draw slots have no identity; omitted parts retain their old uniforms by id. */
 export function worldPlanIds(scene: PreparedWorldScene, plan: WorldPlan): string[] {
   const ids = new Array<string>(plan.instances).fill("");
-  const cursors = { ...plan.slots }, source = trackIds(scene);
-  scene.instances.forEach((part, i) => { ids[cursors[family(part)]++] = source[i]; });
+  const layout = slotsFor(plan), cursors = layout.starts.slice(), source = trackIds(scene);
+  scene.instances.forEach((part, i) => { ids[cursors[familyIndex(part, layout)!]++] = source[i]; });
   return ids;
 }
 export function sampleWorldPlan(values: number[] | Float32Array<ArrayBuffer>, copies: [number, number, number][], output: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {

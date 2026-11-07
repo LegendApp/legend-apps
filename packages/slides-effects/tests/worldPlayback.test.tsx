@@ -12,7 +12,7 @@ import { createPlaybackState, advancePlayback, transitionPlayback } from "../../
 import { samplePlayback } from "../../presentation/src/playback";
 import { PresentationObservableProvider, usePresentation$ } from "../../presentation/src/runtime";
 import { useRuntimeProjection } from "../../presentation/src/useRuntimeProjection";
-import { worldHeaderSize } from "../packs/world/scene";
+import { prepareWorldSample, worldHeaderSize } from "../packs/world/scene";
 
 const playback = { value: createPlaybackState({ phase: "playing", slideKey: "a", stepKey: "0", stepIndex: 0 }) };
 const animated = { ...await import("react-native-reanimated") };
@@ -23,7 +23,7 @@ mock.module("react-native-reanimated", () => ({ ...animated, useDerivedValue(rea
 } }));
 mock.module("@legend-apps/presentation", () => ({
   PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
-  Background: ({ children }) => children, registerAdvanceGuard: () => () => {},
+  Background: ({ children }) => children, RetainedSurface: ({ children }) => children, useSurfaceSuspension: () => null, useBackgroundReady: () => true, registerAdvanceGuard: () => () => {},
   GPURenderGraph: props => React.createElement("render-graph", props),
   usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 1280, height: 720 }),
   usePresentationValue: () => playback.value.phase,
@@ -58,7 +58,7 @@ test("world uniforms sample preparation/preview and retain live continuity witho
 
     playback.value = createPlaybackState({ phase: "preparing", slideKey: "b-prepare", stepKey: "0", stepIndex: 0 });
     await mount(<World id="continuity" enter={{ from: "previous", duration: 2 }}>{next}</World>);
-    expect(values().slice(0, 3)).toEqual([0, 5, 30]);
+    expect(values().slice(0, 3)).toEqual(lastLive);
     await unmount();
 
     // Explicitly inactive worlds also leave the retained live pose alone.
@@ -230,18 +230,19 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
   try {
     const { compileDeck } = await import("../../presentation/src/compiler");
     const deck = path.join(directory, "world.mdx");
-    fs.writeFileSync(deck, 'export { World, sampleWorldUniforms, prepareWorldScene, primitive, routedTubeInstances, graphInstances, pulseInstances, sprayInstances, rowInstances, voxelInstances, flyTo, tree, wave } from "slides:world/World"\n\n# World');
+    fs.writeFileSync(deck, 'export { World, prepareWorldSlides, Custom, sampleWorldUniforms, prepareWorldScene, primitive, routedTubeInstances, graphInstances, pulseInstances, sprayInstances, rowInstances, voxelInstances, flyTo, tree, wave } from "slides:world/World"\n\n# World');
     const compiled = await compileDeck(deck, { effectPacksDirectory: path.resolve(import.meta.dirname, "../packs") });
     if (!compiled.success) throw new Error(compiled.errors.join("\n"));
     const require = createRequire(import.meta.url);
     const module = { exports: {} };
     const callbacks = [], mutables = [], preparations = [], reactions = [];
     const presentation = { PresentationObservableProvider, PresentationCanvasScaleContext: React.createContext(1), usePresentation$, useRuntimeProjection,
-      Background: ({ children }) => children, registerAdvanceGuard: () => () => {},
+      Background: ({ children }) => children, RetainedSurface: ({ children }) => children, useSurfaceSuspension: () => null, useBackgroundReady: () => true, registerAdvanceGuard: () => () => {},
       GPURenderGraph: props => React.createElement("compiled-graph", props),
       usePlayback: () => playback, samplePlayback, useBackgroundSize: () => ({ width: 800, height: 500 }),
       usePresentationValue: () => playback.value.phase };
     const reanimated = {
+      runOnJS: fn => fn, runOnUI: fn => fn,
       makeMutable: value => { const shared = { value }; mutables.push(shared); return shared; },
       useSharedValue: value => React.useRef({ value }).current,
       useAnimatedReaction: (prepare, react) => { preparations.push(prepare); reactions.push(react); },
@@ -288,6 +289,7 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
         { step: 2, follow: "rows:row:2", dolly: 7, focus: "rows:row:2" }, api.flyTo("zone", { step: 3, arc: 3 })] },
       exposure: { 0: 1, 1: 1.5, 2: 0.8 }, bloom: { intensity: 1.4 },
     });
+    const compact = prepareWorldSample(scene), isolatedCompact = { ...compact };
     for (const clock of [
       { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } },
       { slideTime: 3, stepTime: 1, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
@@ -296,7 +298,10 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       { slideTime: 2002.6, stepTime: 2000.6, stepIndex: 1, stepOrigins: { 0: 0, 1: 2 } },
       { slideTime: 1, stepTime: 1, stepIndex: 2, stepOrigins: { 2: 0 } },
       { slideTime: 0.5, stepTime: 0.5, stepIndex: 3, stepOrigins: { 3: 0 } },
-    ]) expect(sample(scene, clock)).toEqual(api.sampleWorldUniforms(scene, clock));
+    ]) {
+      expect(sample(scene, clock)).toEqual(api.sampleWorldUniforms(scene, clock));
+      expect(sample(isolatedCompact, clock)).toEqual(api.sampleWorldUniforms(compact, clock));
+    }
     // Mapper inputs come from the serialized closure, including unread values.
     let renderer;
     try {
@@ -329,6 +334,54 @@ test("compiled recursive world evaluators survive an isolated UI-worklet closure
       expect(Object.values(adaptivePreparation.__closure)).not.toContain(playback);
       expect(restore(adaptivePreparation)()).toBeNull();
       expect(Object.values(callbacks.at(-2).__closure)).not.toContain(playback);
+      await act(() => renderer.unmount());
+      const signal = { value: false, get() { return this.value; } };
+      playback.value = createPlaybackState({ phase: "playing", slideKey: "0:0", stepKey: "0:0", stepIndex: 0 });
+      presentation.useSurfaceSuspension = () => ({ suspended: false, signal });
+      const [planned] = api.prepareWorldSlides([{ track: { duration: 1 }, children: React.createElement(api.Custom, { id: "custom", count: 2, vertexCount: 36, wgsl: "program" }) }]);
+      await act(() => { renderer = create(React.createElement(api.World, planned)); });
+      const uniformClosure = callbacks.at(-1).__closure;
+      expect(Object.values(uniformClosure)).not.toContain(planned.scenePlan.pool);
+      expect(restore(callbacks.at(-1))()).toEqual(callbacks.at(-1)());
+      const trackReaction = reactions.filter(reaction => reaction.__closure?.trackSampler).at(-1);
+      const input = { state: playback.value, scene: planned.scenePlan.content.prepared, scale: 1 };
+      restore(trackReaction)(input);
+      const frame = trackReaction.__closure.trackFrame.value;
+      expect(frame.values.length).toBeGreaterThan(0);
+      const beforePreparation = Array.from(frame.values);
+      playback.value = createPlaybackState({ phase: "preparing", slideKey: "1:0", stepKey: "0:0", stepIndex: 0 });
+      const [nextPlanned] = api.prepareWorldSlides([{ ...planned, track: { duration: 1, position: [8, 6, 20] } }]);
+      await act(() => renderer.update(React.createElement(api.World, nextPlanned)));
+      const preparedValues = restore(callbacks.at(-1))();
+      for (let i = 0; i < 8; i++) expect(preparedValues[i]).toBeCloseTo(beforePreparation[i], 5);
+      expect(Array.from(frame.values)).toEqual(beforePreparation);
+      signal.value = true;
+      restore(trackReaction)({ ...input, state: { ...input.state, slideKey: "1:0", slideTime: 4 } });
+      expect(trackReaction.__closure.trackFrame.value).toBe(frame);
+      const resolutionReaction = reactions.filter(reaction => reaction.__closure?.resolutionEvaluator).at(-1);
+      const resolutionBefore = resolutionReaction.__closure.resolution.value;
+      restore(resolutionReaction)({ ...playback.value, lastTimestamp: 90000 });
+      expect(resolutionReaction.__closure.resolution.value).toBe(resolutionBefore);
+
+
     } finally { await act(() => renderer?.unmount()); }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }, 30000);
+
+test("a preparing non-track World samples its retained entry camera", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let renderer;
+  const content = (quality, position) => <World id="prepared-entry-camera" quality={quality} enter={{ from: "previous", duration: 2 }}>
+    <Camera shots={[{ at: 0, position, target: [0, 0, 0] }]} />
+  </World>;
+  try {
+    playback.value = createPlaybackState({ phase: "playing", slideKey: "0:0", stepKey: "0:0", stepIndex: 0 });
+    await act(() => { renderer = create(content("high", [0, 4, 18])); });
+    reactUI();
+    const before = Array.from(renderer.root.findByType("render-graph").props.uniforms.value.slice(0, 8));
+    playback.value = createPlaybackState({ phase: "preparing", slideKey: "1:0", stepKey: "0:0", stepIndex: 0 });
+    await act(() => renderer.update(content("low", [8, 6, 30])));
+    const prepared = renderer.root.findByType("render-graph").props.uniforms.value;
+    for (let i = 0; i < 8; i++) expect(prepared[i]).toBeCloseTo(before[i], 5);
+  } finally { await act(() => renderer?.unmount()); }
+});

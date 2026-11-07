@@ -8,7 +8,8 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
 }`;
 
 type CullRanges = { cull: { offset: number; stride: number; threshold: number }; ranges: Uint32Array; length: number; frame: number };
-type PassResources = { pass: GPUPass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; cull?: number; descriptor?: GPURenderPassDescriptor };
+type RuntimePass<P = GPUPass> = P extends GPUPass ? Omit<P, "code"> : never;
+type PassResources = { pass: RuntimePass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; cull?: number; descriptor?: GPURenderPassDescriptor };
 export type RenderGraphResources = {
   targets: GPUTarget[]; views: Record<string, GPUTextureView>; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
@@ -36,7 +37,7 @@ function multisampled(r: { targets: GPUTarget[] }, value: string) {
   "worklet";
   return value !== "screen" && (targetFor(r.targets, value).samples ?? 1) > 1;
 }
-function output(pass: GPUPass) {
+function output(pass: RuntimePass) {
   "worklet";
   if (pass.kind === "fullscreen") return pass.mip === undefined ? pass.output : pass.output + "@" + pass.mip;
   return pass.kind === "render" ? pass.color[0] ?? pass.depth ?? "screen" : pass.writes?.[0] ?? "screen";
@@ -78,7 +79,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (!ids.has(id)) throw new Error("Unknown GPU resource: " + value);
     if (!Number.isInteger(mip) || mip < 0 || (r.buffers[id] ? mip !== 0 : mip >= (targetFor(targets, value).mips ?? 1))) throw new Error("Invalid GPU mip: " + value);
   };
-  for (const pass of passes) {
+  for (const { code, ...pass } of passes) {
     for (const value of [...(pass.reads ?? []), ...(pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)])]) checkReference(value);
     const reads = new Set((pass.reads ?? []).map(value => { const [id, mip] = reference(value); return id + "@" + mip; }));
     const writes = pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)];
@@ -99,7 +100,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
           : { texture: { sampleType: target!.format === "depth32float" ? "depth" as const : target!.format === "r32float" ? "unfilterable-float" as const : "float" as const,
             multisampled: target!.format === "depth32float" && (target!.samples ?? 1) > 1 } }) });
     }
-    const module = device.createShaderModule({ code: pass.code + (pass.kind === "fullscreen" ? graphVertex : "") });
+    const module = device.createShaderModule({ code: code + (pass.kind === "fullscreen" ? graphVertex : "") });
     const diagnostics = await module.getCompilationInfo();
     const errors = diagnostics.messages.filter(message => message.type === "error");
     if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));

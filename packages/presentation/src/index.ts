@@ -4,7 +4,7 @@ export { useDeferredDispose } from "./useDeferredDispose";
 export { PresentationCanvas, PresentationCanvasScaleContext } from "./PresentationCanvas";
 export { PreparationBoundary, usePreparationTask } from "./PreparationBoundary";
 export { ProgressivePreparation } from "./ProgressivePreparation";
-export { Background, BackgroundHost, useBackgroundIntensity, useBackgroundSize, useBackgroundHost, useHasBackground } from "./background";
+export { Background, BackgroundHost, useBackgroundIntensity, useBackgroundSize, useBackgroundHost, useBackgroundReady, useHasBackground } from "./background";
 export { PresentationProvider, PresentationObservableProvider, usePresentation$, usePresentationValue, usePresentation, useSlideLifecycle, useStep } from "./runtime";
 export { defineTypeGPUScene } from "./typegpu";
 export { renderNativeChildren } from "./nativeChildren";
@@ -71,3 +71,5 @@ export { GPUShader, GPUShaderProvider, GPURenderGraph, type GPUShaderProps, type
 export { registerAdvanceGuard, deferPresentationAdvance } from "./advanceGuard";
 
 export type { CodeHighlight, CodeToken } from "./codeHighlight";
+
+export { RetainedSurface, useSurfaceSuspension } from "./RetainedSurface";

@@ -135,3 +135,21 @@ test("effect options and placement keep distinct pools while parameter values sh
   expect(plans.get(scenes[0])).not.toBe(plans.get(scenes[2]));
   expect(plans.get(scenes[0])).not.toBe(plans.get(scenes[3]));
 });
+
+test("numeric family cursors preserve empty capacities, equivalent descriptors and geometry edits", () => {
+  const original = prepareWorldScene({ instances: customInstances({ id: "source", count: 2, vertexCount: 36, wgsl: "program" }) });
+  const plan = prepareWorldPlans([original]).get(original)!;
+  const equivalent = prepareWorldScene({ instances: customInstances({ id: "copy", count: 2, vertexCount: 36, wgsl: "program" }) });
+  expect(worldPlanFits(equivalent, plan)).toBe(true);
+  expect(worldPlanCopies(equivalent, plan)).toEqual([[0, worldHeaderSize + 2 * worldInstanceSize, 0]]);
+  expect(worldPlanIds(equivalent, plan).filter(Boolean)).toEqual(trackIds(equivalent));
+  expect(worldPlanFits(prepareWorldScene({ instances: [primitive("box")] }), plan)).toBe(false);
+  const geometry = equivalent.instances[0].custom!;
+  geometry.wgsl = "different";
+  expect(worldPlanFits(equivalent, plan)).toBe(false);
+  geometry.wgsl = "program";
+  geometry.vertexCount = 72;
+  expect(worldPlanFits(equivalent, plan)).toBe(false);
+  geometry.vertexCount = 36;
+  expect(worldPlanFits(equivalent, plan)).toBe(true);
+});

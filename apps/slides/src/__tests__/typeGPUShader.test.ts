@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount, still, encode } = {}) {
+function frames({ suspended = false, preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount, still, encode } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -14,6 +14,7 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     plugins: [require.resolve("react-native-worklets/plugin")],
   });
   const effects = [], calls = [], events = [], uniforms = [], errors = [];
+  const suspendedOnUI = { value: suspended, get() { return this.value; } };
   const frameData={value:[1,2,3,4]}, renderScale={value:1,get(){return this.value;}};
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
@@ -25,7 +26,7 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     draw: (...args) => calls.push(["draw", ...args]), end: () => events.push(["end", kind]),
   });
   const device = {
-    createBuffer: () => ({}),
+    createBuffer: () => ({ destroy: () => events.push(["destroy-buffer"]) }),
     queue: { writeBuffer: (_, __, values) => uniforms.push([...values]), submit: () => events.push(["submit"]) },
     createCommandEncoder: () => ({
       copyTextureToBuffer() {},
@@ -54,17 +55,17 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
   const UIFrames = new Function("require", "exports", "encode", code + "\nif (encode) encodeStill = encode; return UIFrames;")(
     name => mocks[name] ?? require(name), {}, encode,
   );
-  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
+  UIFrames({ resources: { alive: { value: true, get() { return this.value; }, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? { size: 16 } : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
-    still, effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    suspended, suspendedOnUI, still, effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, events, uniforms, errors, ready: () => ready, enabled: () => enabled,
     playback, frameData, reactionInputs, redraw: () => effects[0](), retireStill: () => cleanup[1]?.(),
     scale: value => { renderScale.value = value; reaction(); },
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
-    stop: () => cleanup.forEach(fn => fn?.()), device };
+    stop: () => cleanup.forEach(fn => fn?.()), freeze: () => { suspendedOnUI.value = true; }, device };
 }
 
 test.each(["success", "failure"])("retired still capture ignores obsolete %s after the preview changes step", async outcome => {
@@ -297,7 +298,7 @@ test("missing WebGPU and renderer errors surface instead of switching renderers"
       useContext:()=>1,useRef:value=>({current:value}),useEffect(){},useLayoutEffect(){},
       useState:()=>[state++%3===2 ? error : undefined,()=>{}],
     } : name==="react-native" ? {Platform:{OS:"web"}} : name==="@legend-apps/presentation" ? {
-      useBackgroundSize:()=>({width:1920,height:1080}),useBackgroundIntensity:()=>1,
+      useSurfaceSuspension:()=>null,useBackgroundSize:()=>({width:1920,height:1080}),useBackgroundIntensity:()=>1,
       usePresentationValue:()=>0,usePreparationTask(){},
     } : name==="react/jsx-runtime" ? require(name) : {},{},
   );
@@ -411,7 +412,7 @@ test("frame failures report the latest slide context as well as stopping the sur
       useState: () => [state++ % 3 === 0 ? { id: 1 } : undefined, message => errors.push(message)] },
     "react-native": { View: "View", Platform: { OS: "web" } }, "react-native-webgpu": { Canvas: "Canvas" }, "@shopify/react-native-skia": {},
     "react-native-reanimated": {}, "./gpuRenderGraph": {},
-    "@legend-apps/presentation": { useBackgroundSize: () => ({ width: 1920, height: 1080 }), useBackgroundIntensity: () => 1,
+    "@legend-apps/presentation": { useSurfaceSuspension: () => null, useBackgroundSize: () => ({ width: 1920, height: 1080 }), useBackgroundIntensity: () => 1,
       usePresentationValue: field => field === "slideIndex" ? slideIndex : preview, usePreparationTask() {} },
     "./slidesStore": { reportSlideError: (...args) => reports.push(args) },
   };
@@ -454,10 +455,48 @@ test("React Compiler renders frame surfaces without reading shared values", () =
   const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(name => mocks[name] ?? require(name), {});
   const props = { resources: { alive: shared("alive", true), disposed: shared("disposed", false), configured: shared("configured", false),
     graph: shared("graph", {}), device: {}, context: {}, clock: {}, groups: [] }, renderScale: shared("renderScale", 1),
-    frameData: shared("frameData", [0]), frameTimeIndex: 0, width: 1, height: 1, aspect: 1, brightness: 1, particleCount: 0, previewTime: 0,
+    suspendedOnUI: shared("suspension", false), frameData: shared("frameData", [0]), frameTimeIndex: 0, width: 1, height: 1, aspect: 1, brightness: 1, particleCount: 0, previewTime: 0,
     onError() {}, onReady() {} };
   rendering = true;
   UIFrames(props); UIFrames(props); UIFrames({ ...props, particleCount: 1, frameTimeIndex: undefined, maxTime: 2 });
   rendering = false;
   expect(reads).toEqual([]);
+});
+
+
+test("retained surfaces keep the last submitted frame without encoding, simulation, or readiness callbacks", () => {
+  const f = frames({ suspended: true, graph: true, data: true });
+  f.tick();
+  f.scale(0.5);
+  f.redraw();
+  expect(f.enabled()).toBe(false);
+  expect(f.events).toEqual([]);
+  expect(f.uniforms).toEqual([]);
+  expect(f.ready()).toBe(0);
+  f.stop();
+});
+
+test("a queued frame respects suspension committed after callback registration", () => {
+  const f = frames({ graph: true, data: true });
+  try {
+    const presented = f.events.filter(event => event[0] === "present").length;
+    expect(presented).toBeGreaterThan(0);
+    f.freeze();
+    f.tick();
+    expect(f.events.filter(event => event[0] === "present")).toHaveLength(presented);
+  } finally { f.stop(); }
+});
+
+test("a queued still readback retires its buffer when the surface freezes", async () => {
+  let encoded = false;
+  const delivered = [];
+  const f = frames({ preview: true, graph: true, still: { id: "old", deliver: (...args) => delivered.push(args) },
+    encode: async () => { encoded = true; return "unused"; } });
+  try {
+    f.freeze();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    expect(encoded).toBe(false);
+    expect(delivered).toEqual([]);
+    expect(f.events.filter(event => event[0] === "destroy-buffer")).toHaveLength(1);
+  } finally { f.stop(); }
 });

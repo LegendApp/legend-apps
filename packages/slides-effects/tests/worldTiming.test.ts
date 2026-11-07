@@ -75,3 +75,16 @@ test("custom geometry, post effects and grain use the same projected World time"
   expect(code).toContain("PassContext(uniforms[24],uniforms[24],uniforms[25],uniforms[26],depthAt(uv))");
   expect(code).toContain("floor(uniforms[24]*24.)");
 });
+
+test("preparation resets local time while retaining the continuous UI timestamp for entry", () => {
+  const before = elapsed(20);
+  const preparing = transitionPlayback(before, { phase: "preparing", slideKey: "1:2", stepKey: "0:2", stepIndex: 0 });
+  expect(preparing.lastTimestamp).toBeNull();
+  expect(preparing.slideTime).toBe(0);
+  const entry = transitionPlayback(preparing, { ...preparing, phase: "playing" });
+  expect(entry.lastTimestamp).toBeNull();
+  expect(sampleWorldClock(entry, 4, "slide", undefined, false).time).toBe(20);
+  const next = advancePlayback(entry, 21000);
+  expect(next.slideTime).toBe(0);
+  expect(sampleWorldClock(next, 4, "slide", undefined, false).time).toBe(21);
+});

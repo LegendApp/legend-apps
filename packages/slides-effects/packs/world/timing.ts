@@ -20,7 +20,8 @@ export function sampleWorldClock(state: PlaybackState, previewTime: number, mode
   }
   const stepIndex = state.stepIndex + stepOffset;
   // WGSL `continuousTime()` runs on through navigation; wrapped hourly to keep f32 precision.
-  const continuous = live && state.lastTimestamp !== null ? state.lastTimestamp / 1000 % 3600 : undefined;
+  const timestamp = state.lastTimestamp ?? state.timestamp;
+  const continuous = live && timestamp !== undefined ? timestamp / 1000 % 3600 : undefined;
   if (mode === "step") return { slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 }, entryTime: state.stepIndex > 0 ? Infinity : time, time: continuous };
   const delta = time - slideTime;
   return { slideTime: time, stepTime: stepTime + delta, stepIndex: state.stepIndex, stepOrigins: state.stepOrigins, time: continuous };

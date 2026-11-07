@@ -673,25 +673,26 @@ export function instanceOpacity(instance: Instance, clock: ClockSample): number 
   }
   return instance.card?.opacity ? sampleTrack(instance.card.opacity, clock) : 1;
 }
-export function resolveAnchor(scene: WorldScene, id: string, clock: ClockSample): Vec3 | undefined {
+export function resolveAnchor(scene: WorldScene | WorldSampleScene, id: string, clock: ClockSample): Vec3 | undefined {
   "worklet";
   const stage = scene.stages?.find(item => `stage:${item.stage.id}` === id);
   if (stage) return stageOffset([...stage.parents, stage.stage], clock);
-  const row = scene.instances.find(instance => instance.rows && id.startsWith(`${instance.rows.options.id}:row:`));
+  const instances = "lookupInstances" in scene ? scene.lookupInstances : scene.instances;
+  const row = instances.find(instance => instance.rows && id.startsWith(`${instance.rows.options.id}:row:`));
   if (row) return instancePosition({ ...row, rows: { ...row.rows!, logical: Number(id.slice(id.lastIndexOf(":") + 1)) } }, clock);
-  const instance = scene.instances.find(instance => instance.id === id || instance.id === `node:${id}`);
+  const instance = instances.find(instance => instance.id === id || instance.id === `node:${id}`);
   if (instance) return instancePosition(instance, clock);
-  const voxel = scene.instances.find(instance => instance.voxel?.options.id === id);
+  const voxel = instances.find(instance => instance.voxel?.options.id === id);
   if (voxel) {
     const center = voxel.voxel!.options.position ?? [0, 0, 0], offset = stageOffset(voxel.stages, clock);
     return [center[0] + offset[0], center[1] + offset[1], center[2] + offset[2]];
   }
 }
-export function sampleWorldCamera(scene: WorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1): CameraPose {
+export function sampleWorldCamera(scene: WorldScene | WorldSampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1): CameraPose {
   "worklet";
   return evaluateCamera(scene.camera ?? {}, clock, (id, sample) => resolveAnchor(scene, id, sample), previous, enterDuration);
 }
-function focusDepth(value: number | string | undefined, scene: WorldScene, clock: ClockSample, camera: CameraPose): number {
+function focusDepth(value: number | string | undefined, scene: WorldScene | WorldSampleScene, clock: ClockSample, camera: CameraPose): number {
   "worklet";
   if (typeof value === "number") return Math.max(0.05, value);
   const anchor = value ? resolveAnchor(scene, value, clock) : camera.target;
@@ -700,7 +701,7 @@ function focusDepth(value: number | string | undefined, scene: WorldScene, clock
   const length = Math.max(0.001, Math.hypot(...forward));
   return Math.max(0.05, ((anchor[0] - camera.position[0]) * forward[0] + (anchor[1] - camera.position[1]) * forward[1] + (anchor[2] - camera.position[2]) * forward[2]) / length);
 }
-export function sampleFocus(scene: PreparedWorldScene, clock: ClockSample, camera: CameraPose): number {
+export function sampleFocus(scene: PreparedWorldScene | WorldSampleScene, clock: ClockSample, camera: CameraPose): number {
   "worklet";
   const track = scene.focusTrack;
   if (!track) return focusDepth(cameraFocus(scene.camera ?? {}, clock), scene, clock, camera);
@@ -836,12 +837,12 @@ function sampleUniformInputs(plan: UniformInputs, cache: UniformCache, clock: Cl
     values[to] = value;
   }
 }
-export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
+export function sampleWorldUniforms(scene: PreparedWorldScene | WorldSampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
   let cache: UniformCache | undefined;
-  if (reuse) {
-    const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene, UniformCache> }).__worldUniforms ??= new WeakMap();
+  if (reuse || "lookupInstances" in scene) {
+    const caches = (globalThis as { __worldUniforms?: WeakMap<PreparedWorldScene | WorldSampleScene, UniformCache> }).__worldUniforms ??= new WeakMap();
     cache = caches.get(scene);
     if (!cache) {
       cache = { values: new Float32Array(scene.uniformInputs.initial), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN),
@@ -852,7 +853,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   const values = cache?.values ?? new Array<number>(scene.uniformCount).fill(0);
   if (cache) sampleUniformInputs(scene.uniformInputs, cache, clock);
   const objects: Record<string, Vec3> = {};
-  for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance, clock);
+  for (const instance of scene.instances) if (instance.anchor) objects[instance.id!] = instancePosition(instance as Instance, clock);
   values[worldClockOffset] = clock.slideTime; values[worldClockOffset + 1] = clock.stepTime; values[worldClockOffset + 2] = clock.stepIndex; values[worldClockOffset + 3] = clock.time ?? clock.slideTime;
   const camera = sampleWorldCamera(scene, clock, previous, enterDuration);
   values[0] = camera.position[0]; values[1] = camera.position[1]; values[2] = camera.position[2]; values[3] = Math.tan(camera.fov * Math.PI / 360);
@@ -878,14 +879,14 @@ export function sampleWorldUniforms(scene: PreparedWorldScene, clock: ClockSampl
   });
   if (scene.counter) {
     values[53] = 1;
-    values[56] = Math.round(voxelRemaining(scene.instances[scene.counterIndex!], clock));
+    values[56] = Math.round(voxelRemaining(scene.instances[scene.counterIndex!] as Instance, clock));
     values[57] = scene.counter.position?.[0] ?? 0.8; values[58] = scene.counter.position?.[1] ?? 0.12; values[59] = scene.counter.size ?? 0.07;
     const color = scene.counterColor!; values[60] = color[0]; values[61] = color[1]; values[62] = color[2];
   }
   const live = cache ? scene.uniformInputs.live : undefined;
   for (let slot = 0; slot < (live?.length ?? count); slot++) {
     const i = live ? live[slot] : slot;
-    const instance = scene.instances[i];
+    const instance = scene.instances[i] as Instance;
     if (cache) {
       const key = instance.motion === "voxel" ? collapseProgress(instance.voxel!.options.collapse, clock)
         : instance.motion === "tracks" ? settledKey(instance.settle!, clock)
@@ -1014,6 +1015,32 @@ export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fo
   /** Each effect's params occupy `size` floats from `base`, after the instances; `uniformCount` covers them. */
   effectUses: (WorldEffectUse & { before?: WorldEffectStage; after?: WorldEffectStage; base: number })[]; uniformCount: number;
   lightTracks: { position: Track<Vec3>; target: Track<Vec3>; color: Track<Vec3>; intensity: Track<number>; range: Track<number>; angle: Track<number>; spot: boolean }[] };
+export type WorldSampleScene = Omit<PreparedWorldScene, "instances"> & {
+  instances: (Instance | Pick<Instance, "sharp" | "anchor" | "id">)[]; lookupInstances: Instance[];
+};
+const samples = new WeakMap<PreparedWorldScene, WorldSampleScene>();
+const bakedInstance: Pick<Instance, "sharp" | "anchor" | "id"> = {};
+/** Baked uniform slots need no instance data on UI; retain live sampling and declared camera/focus anchors. */
+export function prepareWorldSample(scene: PreparedWorldScene): WorldSampleScene {
+  const cached = samples.get(scene);
+  if (cached) return cached;
+  const references = new Set<string>();
+  const remember = (value: unknown) => { if (typeof value === "string") references.add(value); };
+  for (const shot of scene.camera?.shots ?? []) { remember(shot.follow); remember(shot.focus); }
+  remember(scene.focusTrack?.initial);
+  function focusFrames(frames: Keyframe<number | string>[]) {
+    for (const frame of frames) { remember(frame.value); if (frame.loop) focusFrames(frame.loop.frames); }
+  }
+  focusFrames(scene.focusTrack?.frames ?? []);
+  const ids = [...references], keep = new Set(scene.uniformInputs.live);
+  if (scene.counterIndex !== undefined) keep.add(scene.counterIndex);
+  const lookupInstances = scene.instances.filter(instance => ids.some(id => instance.id === id || instance.id === `node:${id}`
+    || instance.voxel?.options.id === id || instance.rows && id.startsWith(`${instance.rows.options.id}:row:`)));
+  const sample = { ...scene, lookupInstances, instances: scene.instances.map((instance, index) => keep.has(index) || instance.anchor ? instance
+    : instance.sharp ? { sharp: instance.sharp } : bakedInstance) };
+  samples.set(scene, sample);
+  return sample;
+}
 function keyLightFields({ keyLight: key, environment }: WorldScene): [number, Animated<number>][] {
   return [[115, key ? key.intensity ?? 2.2 : 0], [119, key?.shadowSize ?? 20], [123, key?.softness ?? 2], [124, environment ? environment.intensity ?? 1 : 0], [125, key?.shadowStrength ?? 0.85]];
 }
@@ -1084,7 +1111,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
   const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.glyph ? `1g:${instance.glyph.font}:${instance.glyph.segments}` : instance.custom ? customGeometryKeys(instance.custom).order
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
-  instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
+  instances.sort((a, b) => { const x = order(a), y = order(b); return x === y ? 0 : x < y ? -1 : 1; });
   const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));
   const still = (track: Track<unknown>) => track.frames.length === 0;
   for (const instance of instances) {

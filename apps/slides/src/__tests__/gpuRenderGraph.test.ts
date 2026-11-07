@@ -275,3 +275,13 @@ test("native callback copies retain one mutable graph across draws and resizing"
   expect(g.textures.slice(3, 6).every(texture => texture.destroyed)).toBe(true);
   stop();
 });
+
+test("UI graph descriptors retain draw data without copying compile-only shader source", async () => {
+  const g = gpu();
+  const graph = { ...definition, passes: definition.passes.map(pass => ({ ...pass, code: "// compile-only shader source" })) };
+  const resources = await prepareRenderGraph(g.device, graph, "bgra8unorm", {}, {});
+  for (const { pass } of resources.passes) expect(pass).not.toHaveProperty("code");
+  expect(resources.passes[1].pass).toMatchObject({ kind: "render", vertexCount: 24, instanceCount: 40 });
+  encodeRenderGraph(resources, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
+  expect(g.commands.at(-1)).toEqual(["draw", 3, 1]);
+});

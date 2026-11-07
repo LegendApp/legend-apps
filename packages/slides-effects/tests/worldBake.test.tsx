@@ -11,7 +11,7 @@ mock.module("react-native-reanimated", () => ({ ...animated,
   makeMutable: value => { mutables.push(value); return { value }; },
 }));
 mock.module("@legend-apps/presentation", () => ({
-  Background: ({ children }) => children,
+  Background: ({ children }) => children, RetainedSurface: ({ children }) => children, useSurfaceSuspension: () => null, useBackgroundReady: () => true,
   GPURenderGraph: () => null,
   PresentationCanvasScaleContext: React.createContext(1),
   PresentationObservableProvider: ({ children }) => children,
