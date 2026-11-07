@@ -12,6 +12,7 @@ function harness(props = {}) {
   const playback = { value: { phase: "playing", stepTime: 0, slideTime: 0 } };
   let sample;
   const mocks = {
+    react: { useMemo: read => read() },
     "react/jsx-runtime": { jsx: React.createElement },
     "./playback": { usePlayback: () => playback, samplePlayback },
     "react-native-reanimated": {

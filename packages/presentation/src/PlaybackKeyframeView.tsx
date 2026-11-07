@@ -1,9 +1,15 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useDerivedValue } from "react-native-reanimated";
 import { samplePlayback, usePlayback } from "./playback";
 
 export type PlaybackKeyframe = { time: number; x: number; y: number; opacity: number };
+
+// Keep this identity at a Hook boundary: the worklet transform otherwise
+// causes Compiler to inline the waiting object into every component render.
+function useWaitingPose(x: number, y: number) {
+  return useMemo(() => ({ x, y, opacity: 0 }), [x, y]);
+}
 
 /** Native keyframes sample the same clock as shaders, including preview/exit. */
 export function PlaybackKeyframeView({ children, keyframes, delay = 0, repeatDuration, previewTime = 4,
@@ -12,7 +18,7 @@ export function PlaybackKeyframeView({ children, keyframes, delay = 0, repeatDur
   const playback = usePlayback();
   const first = keyframes[0];
   const last = keyframes[keyframes.length - 1];
-  const waiting = { x: first.x, y: first.y, opacity: 0 };
+  const waiting = useWaitingPose(first.x, first.y);
   const pose = useDerivedValue(() => {
     const elapsed = samplePlayback(playback.value, previewTime, clock) * 1000 - delay;
     if (elapsed < 0) return waiting;

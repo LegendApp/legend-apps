@@ -6,6 +6,8 @@ import { StyleSheet, Text, View, type ViewProps } from "react-native";
 import { renderNativeChildren } from "./nativeChildren";
 import { identityCamera, validFocusRect, type FocusCamera, type FocusRect } from "./focusGeometry";
 
+const identityTransformStyle = { transform: [] };
+
 type Entry = { id: string; kind: "region" | "element"; view: View; offsetY?: number };
 export type FocusSurface = {
   root: View | null;
@@ -153,7 +155,7 @@ export function FocusStage({ children, scale = 1 }: { children: ReactNode; scale
   const surface = context?.surface;
   useLayoutEffect(() => { if (surface) surface.scale = scale; }, [surface, scale]);
   const setRoot = useCallback((view: View | null) => { surface?.setRoot(view); }, [surface]);
-  const cameraStyle = useTransitionStyle(focusCameraStyle(context?.motion) ?? { transform: [] });
+  const cameraStyle = useTransitionStyle(focusCameraStyle(context?.motion) ?? identityTransformStyle);
   return (
     <View collapsable={false} ref={setRoot}
       onLayout={(event) => {
@@ -195,7 +197,7 @@ function Marker({ id, kind, children, style, resize = "stretch", onLayout, ...pr
   const motion = context?.motion;
   const pair = kind === "element" && !nested ? motion?.elements.get(id) : undefined;
   const transform = pair && motion ? sharedElementTransform(motion, pair, resize) : undefined;
-  const animatedTransform = useTransitionStyle({ transform: transform ?? StyleSheet.flatten(style)?.transform ?? [] });
+  const animatedTransform = useTransitionStyle({ transform: transform ?? StyleSheet.flatten(style)?.transform ?? identityTransformStyle.transform });
   const content = renderNativeChildren(children, (text) => <Text>{text}</Text>);
   return kind === "element" ? (
     <Animated.View {...props} onLayout={measureLayout} collapsable={false} ref={ref} style={[style, animatedTransform]}>
