@@ -1,6 +1,6 @@
 import Animated from "react-native-reanimated";
 import { useStepStyle } from "./useStepStyle";
-import { Children, cloneElement, isValidElement, useMemo, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useMemo, type ReactElement, type ReactNode } from "react";
 import { View, type ViewStyle } from "react-native";
 import { SceneMotionView, usePresentationValue } from "@legend-apps/presentation";
 
@@ -86,8 +86,8 @@ export function countSteps(children: ReactNode, listTypes: unknown[] = ["ul", "o
 function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   let cursor = 0;
   let maximum = 0;
-  const visitor = (node: ReactNode): ReactNode => {
-    if (!isValidElement<StepProps & { count?: number }>(node)) return node;
+  const visitor = (node: ReactNode): ReactNode => isValidElement<StepProps & { count?: number }>(node) ? element(node) : node;
+  const element = (node: ReactElement<StepProps & { count?: number }>): ReactNode => {
     if (node.type === Steps) {
       if (typeof node.props.children === "function") {
         // Do not execute the callback while discovering steps: it can contain
@@ -128,8 +128,10 @@ function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   function visit(nodes: ReactNode): ReactNode {
     if (render) return Children.map(nodes, visitor);
     if (Array.isArray(nodes)) { for (const node of nodes) visit(node); }
-    else if (isValidElement(nodes) || nodes === null || typeof nodes !== "object") visitor(nodes);
-    else Children.forEach(nodes, visitor);
+    else if (nodes !== null && typeof nodes === "object") {
+      if (isValidElement<StepProps & { count?: number }>(nodes)) element(nodes);
+      else Children.forEach(nodes, visitor);
+    }
     return nodes;
   }
   const content = visit(children);
