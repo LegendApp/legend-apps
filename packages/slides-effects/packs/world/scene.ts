@@ -1061,12 +1061,29 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     if (ids.has(instance.id)) throw new Error(`World instance id is duplicated: ${instance.id}. Give each instance or orb field a unique id.`);
     ids.add(instance.id);
   }
+  // Prepared tracks are immutable; equal constants need only one UI serialization.
+  const constants = new Map<number | string, Track<number | Vec3>>();
+  function constant<T extends number | Vec3>(track: Track<T>): Track<T> {
+    if (track.frames.length) return track;
+    const value = track.initial;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value) || Object.is(value, -0)) return track;
+    } else if (value.some(n => !Number.isFinite(n) || Object.is(n, -0))) return track;
+    const key = typeof value === "number" ? value : value.join(",");
+    const cached = constants.get(key);
+    if (cached) return cached as Track<T>;
+    constants.set(key, track);
+    return track;
+  }
   const instances: Instance[] = scene.instances.map(instance => {
     const material = typeof instance.material === "string" ? scene.materials?.[instance.material] : instance.material;
     if (typeof instance.material === "string" && !material) throw new Error(`Unknown world material: ${instance.material}`);
-    return { ...instance, emissive: material?.emissive === undefined ? instance.emissive : compileTrack(material.emissive), materialTracks: {
-      albedo: material?.albedo === undefined ? instance.color : compileTrack(material.albedo, colorVector), roughness: compileTrack(material?.roughness ?? 0.5),
-      metal: compileTrack(material?.metal ?? 0), rim: compileTrack(material?.rim ?? 1),
+    const color = constant(instance.color);
+    return { ...instance, position: constant(instance.position), size: constant(instance.size), color, scale: constant(instance.scale),
+      rotation: instance.rotation && constant(instance.rotation), sharp: instance.sharp && constant(instance.sharp),
+      emissive: constant(material?.emissive === undefined ? instance.emissive : compileTrack(material.emissive)), materialTracks: {
+      albedo: material?.albedo === undefined ? color : constant(compileTrack(material.albedo, colorVector)), roughness: constant(compileTrack(material?.roughness ?? 0.5)),
+      metal: constant(compileTrack(material?.metal ?? 0)), rim: constant(compileTrack(material?.rim ?? 1)),
     } };
   });
   const byId = new Map(instances.filter(instance => instance.id).map(instance => [instance.id!, instance]));

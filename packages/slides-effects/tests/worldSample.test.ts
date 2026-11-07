@@ -54,3 +54,19 @@ test("compact sampling matches original cached scenes through direct steps, time
     }
   }
 });
+
+
+test("prepared scenes share immutable constants without sharing animations or changing signed zero", () => {
+  const input=Array.from({length:100},(_,i)=>({...primitive("sphere",{id:`part:${i}`,position:[i,0,0]}),anchor:true}));
+  const scene=prepareWorldScene({instances:input});
+  const tracks=new Set(scene.instances.flatMap(p=>[p.size,p.color,p.emissive,p.scale,p.materialTracks.albedo,p.materialTracks.roughness,p.materialTracks.metal,p.materialTracks.rim]));
+  expect(tracks.size).toBeLessThanOrEqual(8);
+  expect(input[0].color).not.toBe(input[1].color);
+  expect(input[0].position.initial).toEqual([0,0,0]);
+  const animated=prepareWorldScene({instances:[primitive("sphere",{position:{0:[0,0,0],1:[1,0,0]}}),primitive("sphere",{position:{0:[0,0,0],1:[1,0,0]}})]});
+  expect(animated.instances[0].position).not.toBe(animated.instances[1].position);
+  const zero=prepareWorldScene({instances:[primitive("sphere",{id:"negative",size:-0,position:[-0,0,0]}),primitive("sphere",{id:"positive",size:0,position:[0,0,0]})]});
+  expect(Object.is(zero.instances.find(p=>p.id==="negative").size.initial,-0)).toBe(true);
+  expect(Object.is(zero.instances.find(p=>p.id==="negative").position.initial[0],-0)).toBe(true);
+  expect(Object.is(zero.instances.find(p=>p.id==="positive").size.initial,0)).toBe(true);
+});
