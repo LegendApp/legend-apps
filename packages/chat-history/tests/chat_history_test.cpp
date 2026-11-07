@@ -333,14 +333,25 @@ void testCodexProtocolTitles() {
     fs::permissions(bin / "codex", fs::perms::owner_all);
   };
   const std::vector<std::pair<std::string, std::string>> requests = {
+      {"JOB_DIR=/tmp/fictional/job\nContinuation of the worker audit.\nConstraints: read only.\nGoal: Check keyboard focus\n1. Open the screen", "Check keyboard focus"},
+      {"Repo: /tmp/fictional/repo\nIndependent worker review.\nContext: previous checks passed.\nUser: \"Repair export sorting\"\nTask: Run focused tests", "Repair export sorting"},
+      {"Repo: /tmp/fictional/repo\nGoal: Land the search fix\nSteps:\n1. Fetch changes", "Land the search fix"},
+      {"JOB_DIR=/tmp/fictional/job\nWorker continuation without a goal\n1. Inspect the source", "Worker continuation without a goal"},
+      {"Repo: /tmp/fictional/repo\nSteps:\n1. Inspect the source", "1. Inspect the source"},
+      {"Note: keep the current behavior\nTask: This is supporting detail", "Note: keep the current behavior"},
+      {"Bug: the search is empty", "Bug: the search is empty"},
+      {"# Worker instructions\nReview the current implementation\nRequest: Improve keyboard navigation", "Improve keyboard navigation"},
+      {"Note: /tmp/fictional is the failing directory", "Note: /tmp/fictional is the failing directory"},
+      {"Fix: \"Save\" fails", "Fix: \"Save\" fails"},
+      {"\"Fix the title\"", "\"Fix the title\""},
       {"Jay: \"Verify the titles\"", "Verify the titles"},
       {"Jay: “Fix it”", "Fix it"},
       {"User: \"Fix the \"Save\" button's label\"", "Fix the \"Save\" button's label"},
       {"Steps:\nRepair the search", "Repair the search"},
       {"Task: run the build", "run the build"},
-      {"Fix: the crash in x", "the crash in x"},
+      {"Fix: the crash in x", "Fix: the crash in x"},
       {"Jay: \"Verify the titles", "Verify the titles"},
-      {"“Fix the title", "Fix the title"},
+      {"“Fix the title", "“Fix the title"},
       {"JOB_DIR=/tmp/fictional/job\nCONFIG=/tmp/fictional/config\nFix the search results", "Fix the search results"},
       {"Repo: /tmp/fictional/repo (branch main, shared)\nRepair keyboard navigation", "Repair keyboard navigation"},
       {"# Tooling job\n<instructions>\nUse the configured tools.\n</instructions>\nWORK_DIR=/tmp/fictional\n\nAdd export support", "Add export support"},
@@ -382,6 +393,13 @@ void testCodexProtocolTitles() {
     expect(expected.empty() ? response.starts_with("Codex chat — ") : response == expected,
         "Local response-item request should derive task text: " + expected);
   }
+  std::ofstream(codex / "sessions" / ("rollout-" + ids[2] + ".jsonl"))
+      << "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":\"Repo: /tmp/fictional\\nWorker review\\nGoal: Repair export sorting\"}}\n";
+  stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[2]
+      + "\",\"preview\":\"Repo: /tmp/fictional\\nWorker review\"}],\"nextCursor\":null}}';;\n"
+      "3) printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
+  expect(title(getRecentChatCatalog(20), 2) == "Repair export sorting",
+      "A shortened protocol preview must not replace the full local task");
   std::ofstream(codex / "sessions" / ("rollout-" + ids[2] + ".jsonl"))
       << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
   fs::remove(codex / "calls");

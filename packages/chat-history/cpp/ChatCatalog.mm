@@ -90,18 +90,22 @@ std::string boundedTitle(std::string title) {
 }
 
 // Only unnamed titles are derived. Metadata is identified by structure rather
-// than words appearing anywhere in an ordinary request.
+// than words appearing anywhere in an ordinary request. Wrapped prompts may
+// name their task later; retain the first meaningful line if they do not.
 std::string taskTitle(const std::string& text) {
   std::istringstream input(text);
   std::string title;
   std::string blockEnd;
-  for (std::string line; title.empty() && std::getline(input, line);) {
+  bool wrapper = false;
+  std::string selected;
+  for (std::string line; selected.empty() && (title.empty() || wrapper) && std::getline(input, line);) {
     const auto first = line.find_first_not_of(" \t\r");
     if (first != std::string::npos) {
       line = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
       if (!blockEnd.empty()) {
         if (line.find(blockEnd) != std::string::npos) blockEnd.clear();
       } else if (line.front() == '<') {
+        if (title.empty()) wrapper = true;
         const auto end = line.find('>');
         if (end != std::string::npos && line[1] != '/') {
           const std::string tag = line.substr(1, end - 1);
@@ -116,39 +120,43 @@ std::string taskTitle(const std::string& text) {
         const std::string label = separator == std::string::npos ? line : line.substr(0, separator);
         const auto clause = label.rfind(". ");
         const std::string field = clause == std::string::npos ? label : label.substr(clause + 2);
-        const bool shortLabel = std::count(field.begin(), field.end(), ' ') <= (clause == std::string::npos ? 0 : 1);
-        const bool pathHeader = shortLabel && line.front() != '[' && separator != std::string::npos && line[separator] == ':'
+        const bool locationField = field == "Repo" || field == "Directory" || field == "Shared checkout";
+        const bool pathHeader = locationField && separator != std::string::npos && line[separator] == ':'
             && path != std::string::npos
             && line.find_first_not_of(" \t", separator + 1) == path;
         const bool heading = line.front() == '#';
         const bool barePath = line.starts_with("/") || line.starts_with("~/") || line.starts_with("./");
         if (!assignment && !pathHeader && !heading && !barePath) {
-          // A short single-word attribution/field is framing, not task text.
           const auto colon = line.find(':');
-          const bool leadingLabel = colon > 0 && colon <= 32
-              && line.substr(0, colon).find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") == std::string::npos
-              && (colon + 1 == line.size() || line[colon + 1] == ' ' || line[colon + 1] == '\t');
-          if (leadingLabel) {
-            const auto request = line.find_first_not_of(" \t", colon + 1);
-            line = request == std::string::npos ? "" : line.substr(request);
+          const std::string label = colon == std::string::npos ? "" : line.substr(0, colon);
+          const auto start = colon == std::string::npos ? std::string::npos : line.find_first_not_of(" \t", colon + 1);
+          const std::string value = start == std::string::npos ? "" : line.substr(start);
+          const bool taskField = label == "Task" || label == "Goal" || label == "Request";
+          const bool speaker = label == "User" || label == "Jay";
+          const std::string opening = value.starts_with("\"") ? "\"" : value.starts_with("“") ? "“" : "";
+          // An attribution with a quoted request is structural framing. Ordinary
+          // labels (Fix:, Note:, Bug:) and standalone quotes remain untouched.
+          const bool quotedRequest = speaker && !opening.empty();
+          if (title.empty() && (taskField || quotedRequest || line == "Steps:")) wrapper = true;
+          if (line != "Steps:") {
+            if (title.empty()) title = boundedTitle(line);
+            if (wrapper && (taskField || quotedRequest) && !value.empty()) {
+              std::string request = value;
+              if (quotedRequest) {
+                const std::string closing = opening == "“" ? "”" : "\"";
+                request.erase(0, opening.size());
+                if (request.ends_with(closing)) request.resize(request.size() - closing.size());
+              }
+              if (!request.empty()) selected = boundedTitle(request);
+            }
           }
-          // Remove only the outer opening quote and its matching final quote.
-          // Inner quotes and apostrophes belong to the request.
-          const std::string opening = line.starts_with("\"") ? "\"" : line.starts_with("“") ? "“" : "";
-          if (!opening.empty()) {
-            const std::string closing = opening == "“" ? "”" : "\"";
-            line.erase(0, opening.size());
-            if (line.ends_with(closing)) line.resize(line.size() - closing.size());
-          }
-          const auto request = line.find_first_not_of(" \t");
-          if (request != std::string::npos) {
-            title = boundedTitle(line.substr(request, line.find_last_not_of(" \t") - request + 1));
-          }
+        } else if (title.empty()) {
+          wrapper = true;
         }
       }
     }
   }
-  return title;
+  return selected.empty() ? title : selected;
 }
 
 std::string localTaskTitle(const std::string& path) {
@@ -324,7 +332,9 @@ void loadCodexTitles(
               if ([name isKindOfClass:NSString.class] && name.length > 0) {
                 found->second->title = std::string(name.UTF8String);
               } else if ((legacy == index.end() || legacy->second.title.empty())
+                  && found->second->title == fallbackTitle("codex", found->second->updatedAt)
                   && [preview isKindOfClass:NSString.class] && preview.length > 0) {
+                // The local request may contain a goal beyond the preview.
                 const std::string title = taskTitle(preview.UTF8String);
                 if (!title.empty()) found->second->title = title;
               }
