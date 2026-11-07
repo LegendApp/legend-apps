@@ -109,8 +109,8 @@ describe("Chat History host window", () => {
         expect(getRecentChats).toHaveBeenCalledWith(1000000);
         expect(openChat).toHaveBeenCalledWith("codex", "/discovered-initial.jsonl");
     });
-    it("renders imported Codex names and labeled previews unchanged", async () => {
-        const chats: ChatSummary[] = ["Explicit name", "Indexed name", "Preview: Derived request"].map((title, id) => ({
+    it("renders imported Codex names and plain previews unchanged", async () => {
+        const chats: ChatSummary[] = ["Explicit name", "Indexed name", "Derived request"].map((title, id) => ({
             id: `codex:${id}`, title, path: `/${id}.jsonl`, provider: "codex", updatedAt: 3 - id,
         }));
         jest.mocked(getRecentChats).mockResolvedValueOnce(chats);

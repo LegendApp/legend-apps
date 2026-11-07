@@ -232,7 +232,7 @@ void loadCodexTitles(
                 found->second->title = boundedTitle(name.UTF8String);
               } else if ((legacy == index.end() || legacy->second.title.empty())
                   && [preview isKindOfClass:NSString.class] && preview.length > 0) {
-                found->second->title = boundedTitle("Preview: " + std::string(preview.UTF8String));
+                found->second->title = boundedTitle(preview.UTF8String);
               }
               remaining.erase(found);
             }

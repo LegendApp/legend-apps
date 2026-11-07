@@ -343,7 +343,7 @@ void testCodexProtocolTitles() {
       + "\",\"name\":\"Archived explicit\"}],\"nextCursor\":null}}';;");
   const auto rows = getRecentChatCatalog(20);
   expect(title(rows, 0) == "Legacy explicit", "Indexed name must outrank protocol preview");
-  expect(title(rows, 2) == "Preview: Derived user request", "Missing index title must use labeled protocol preview across pages");
+  expect(title(rows, 2) == "Derived user request", "Missing index title must use protocol preview verbatim across pages");
   expect(title(rows, 1) == "Current explicit", "Protocol explicit name must outrank legacy name");
   expect(title(rows, 3) == "Archived explicit", "Archived threads must receive protocol names");
   std::ifstream calls(codex / "calls");
