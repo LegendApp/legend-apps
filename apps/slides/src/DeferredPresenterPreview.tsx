@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 /** Previews sample whole scenes on the UI thread: while the audience watches, they trail navigation so that work misses the transition. */
 const AUDIENCE_TRANSITION_MS = 3000;
@@ -13,21 +13,21 @@ export function useAudienceSettled<T>(value: T, audienceOpen: boolean, delay = A
   return audienceOpen ? settled : value;
 }
 
-export function PresenterPreview({ children, overlay, pending, weight }: { children: ReactNode; overlay?: ReactNode; pending: boolean; weight: number }) {
+export function PresenterPreview({ children, pending, weight }: { children: ReactNode; pending: boolean; weight: number }) {
   return (
     <View style={[styles.section, { flex: weight }]}>
       <View
         accessibilityElementsHidden={pending}
         importantForAccessibility={pending ? "no-hide-descendants" : "auto"}
         pointerEvents={pending ? "none" : "auto"}
-        style={[styles.content, pending && styles.hidden]}
+        style={styles.content}
       >
         {children}
       </View>
-      {overlay}
       {pending && (
-        <View style={styles.loading}>
-          <ActivityIndicator accessibilityLabel="Preparing slide preview" color="#a1a1aa" />
+        <View style={children == null ? styles.loading : styles.updating}>
+          <ActivityIndicator accessibilityLabel={children == null ? "Preparing slide preview" : "Updating slide preview"} color="#a1a1aa" />
+          {children != null && <Text style={styles.status}>Updating preview</Text>}
         </View>
       )}
     </View>
@@ -43,6 +43,7 @@ export function DeferredPresenterPreview({ children, immediate = false, pending 
 const styles = StyleSheet.create({
   section: { minWidth: 0 },
   content: { flex: 1 },
-  hidden: { opacity: 0 },
+  updating: { position: "absolute", left: 8, bottom: 8, flexDirection: "row", gap: 6, alignItems: "center", padding: 6, borderRadius: 6, backgroundColor: "#18181bee" },
+  status: { color: "#e4e4e7", fontSize: 12 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
 });

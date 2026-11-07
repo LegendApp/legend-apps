@@ -17,9 +17,10 @@ import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/win
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
+import { RetainedSurface } from "@legend-apps/presentation";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { DeferredPresenterPreview, PresenterPreview, useAudienceSettled } from "./DeferredPresenterPreview";
-import { PreviewStillStack, PreviewStillSweep, stillKey, usePreviewStills } from "./PreviewStills";
+import { PreviewStillCapture, PreviewStillStack, PreviewStillSweep, stillKey, usePreviewStills } from "./PreviewStills";
 import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
 import { DeckEditor } from "./DeckEditor";
@@ -89,30 +90,40 @@ function Button({ disabled, label, onPress }: {
       <Text style={styles.buttonText}>{label}</Text>
     </Pressable>);
 }
-function SlideCounter({ index }: {
+function SlideCounter({ index, stepIndex = 0 }: {
     index: number;
+    stepIndex?: number;
 }) {
     const total = useValue(() => slidesState$.slides.length);
-    const step = useValue(slidesState$.currentStep);
     const stepCount = useValue(() => getSlideStepCount(slidesState$.slides[index].get()));
     if (total === 0)
         return null;
-    return (<View accessible accessibilityLabel={`Slide ${index + 1} of ${total}, step ${step + 1} of ${stepCount}`} pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
+    return (<View accessible accessibilityLabel={`Slide ${index + 1} of ${total}, step ${stepIndex + 1} of ${stepCount}`} pointerEvents="none" className="absolute right-3 top-3 rounded-md bg-zinc-900/90 px-3 py-1">
       <Text className="text-xs font-semibold text-zinc-200" style={{ fontVariant: ["tabular-nums"] }}>
-        {index + 1} / {total} · Step {step + 1} / {stepCount}
+        {index + 1} / {total} · Step {stepIndex + 1} / {stepCount}
       </Text>
     </View>);
 }
-function Preview({ index, animate = false, stepIndex, still }: {
+function Preview({ index, animate = false, stepIndex, still, aspect = 16 / 9, capture }: {
     index: number;
+    capture: { target: string; paused: boolean; generation: string; add(key: string, uri: string, generation: string): void };
+    aspect?: number;
     /** Replaces the live GPU background. */
     still?: ReactNode;
     animate?: boolean;
     stepIndex?: number;
 }) {
-    return (<View style={styles.previewSection}>
-      <View style={styles.preview}>
-        <SlideCanvas targetIndex={index} targetStep={stepIndex} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
+    const [size, setSize] = useState({ width: 0, height: 0 });
+    const width = Math.min(size.width, size.height * aspect);
+    return (<View onLayout={event => { const { width, height } = event.nativeEvent.layout;
+      setSize(current => current.width === width && current.height === height ? current : { width, height }); }} style={styles.previewSection}>
+      <View style={[styles.preview, { width, height: width / aspect }]}>
+        {width > 0 && <RetainedSurface identity={`${capture.generation}:${index}:${still ? `${stepIndex ?? 0}:still` : "live"}`} pointerEvents="box-none">
+          <PreviewStillCapture {...capture}>
+            <SlideCanvas targetIndex={index} targetStep={stepIndex} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
+            <SlideCounter index={index} stepIndex={stepIndex}/>
+          </PreviewStillCapture>
+        </RetainedSurface>}
       </View>
     </View>);
 }
@@ -201,18 +212,26 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     const settledNavigation = useAudienceSettled(navigation, true);
     const settled = audienceOpen ? settledNavigation : navigation;
     const [settledIndex, settledStep, settledNextIndex, settledNextStep] = settled.split(":").map(Number);
-    const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep));
+    const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep),
+      [stillKey(settledIndex, settledStep), stillKey(settledNextIndex, settledNextStep)]);
     // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
     const stillOf = (target: string) => audienceOpen && stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
     const currentStill = stillOf(stillKey(currentIndex, currentStep)), nextStill = stillOf(stillKey(nextIndex, nextStep));
     const currentPending = !currentStill && (settledIndex !== currentIndex || settledStep !== currentStep);
     const nextPending = !nextStill && (settledNextIndex !== nextIndex || settledNextStep !== nextStep);
-    const nextPreview = <Preview index={nextStill ? nextIndex : settledNextIndex} stepIndex={nextStill ? nextStep : settledNextStep} still={nextStill}/>;
+    const shownIndex = currentStill ? currentIndex : settledIndex, shownStep = currentStill ? currentStep : settledStep;
+    const shownNextIndex = nextStill ? nextIndex : settledNextIndex, shownNextStep = nextStill ? nextStep : settledNextStep;
+    const shownStill = stillOf(stillKey(shownIndex, shownStep)), shownNextStill = stillOf(stillKey(shownNextIndex, shownNextStep));
+    const capturePaused = !audienceOpen || settledNavigation !== navigation;
+    const nextPreview = <Preview aspect={audienceAspect} index={shownNextIndex} stepIndex={shownNextStep} still={shownNextStill}
+      capture={{ target: stillKey(shownNextIndex, shownNextStep), generation: sweep.generation, add: sweep.add,
+        paused: capturePaused || !!shownNextStill || stillKey(nextIndex, nextStep) === stillKey(currentIndex, currentStep) }}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
         <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
-        <PresenterPreview pending={currentPending} overlay={<SlideCounter index={currentIndex}/>} weight={showNext ? layout.currentPreviewRatio : 1}>
-          <Preview index={currentStill ? currentIndex : settledIndex} animate={!audienceOpen} stepIndex={currentStill ? currentStep : settledStep} still={currentStill}/>
+        <PresenterPreview pending={currentPending} weight={showNext ? layout.currentPreviewRatio : 1}>
+          <Preview aspect={audienceAspect} index={shownIndex} animate={!audienceOpen} stepIndex={shownStep} still={shownStill}
+            capture={{ target: stillKey(shownIndex, shownStep), generation: sweep.generation, add: sweep.add, paused: capturePaused || !!shownStill }}/>
         </PresenterPreview>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
@@ -734,12 +753,14 @@ const styles = StyleSheet.create({
     pressed: { opacity: 0.75 },
     horizontalResizeHandle: { height: "100%", width: 14 },
     horizontalResizeLine: { height: "100%", width: StyleSheet.hairlineWidth },
-    preview: { flex: 1, overflow: "hidden" },
+    preview: { overflow: "hidden" },
     previews: {
         flexDirection: "row",
         minHeight: 0
     },
     previewSection: {
+        alignItems: "center",
+        justifyContent: "center",
         flex: 1,
         minWidth: 0
     },

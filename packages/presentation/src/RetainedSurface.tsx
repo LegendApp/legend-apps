@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type ViewProps } from "react-native";
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
 import { PreparationBoundary, usePreparationTask } from "./PreparationBoundary";
 
@@ -7,7 +7,7 @@ const SurfaceSuspensionContext = createContext<{ suspended: boolean; signal: Sha
 export function useSurfaceSuspension() { return useContext(SurfaceSuspensionContext); }
 
 /** Keep the last drawn generation until its replacement finishes preparation. */
-export function RetainedSurface({ identity, children }: { identity: string; children: ReactNode }) {
+export function RetainedSurface({ identity, children, pointerEvents = "none" }: { identity: string; children: ReactNode; pointerEvents?: ViewProps["pointerEvents"] }) {
   const suspended = useSurfaceSuspension()?.suspended ?? false;
   const [state, setState] = useState(() => ({ current: { identity, children }, previous: undefined as { identity: string; children: ReactNode } | undefined, ready: false }));
   if (state.current.identity !== identity) {
@@ -18,7 +18,7 @@ export function RetainedSurface({ identity, children }: { identity: string; chil
   }
   usePreparationTask(!state.ready);
   const layers = state.previous ? [state.previous, state.current] : [state.current];
-  return <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+  return <View pointerEvents={pointerEvents} style={StyleSheet.absoluteFill}>
     {layers.map(layer => {
       const incoming = layer === state.current;
       return <SurfaceLayer key={layer.identity} suspended={suspended || !incoming} preparing={incoming && !state.ready}
@@ -34,7 +34,7 @@ function SurfaceLayer({ children, suspended, preparing, onReady }: { children: R
   // Queued callbacks must freeze before the surrounding clock publishes navigation.
   useLayoutEffect(() => { signal.value = suspended; }, [signal, suspended]);
   const value = useMemo(() => ({ suspended, signal }), [suspended, signal]);
-  return <View style={[StyleSheet.absoluteFill, preparing && styles.preparing]}>
+  return <View pointerEvents={suspended || preparing ? "none" : "box-none"} style={[StyleSheet.absoluteFill, preparing && styles.preparing]}>
     <SurfaceSuspensionContext.Provider value={value}>
       <PreparationBoundary onReady={onReady}>{children}</PreparationBoundary>
     </SurfaceSuspensionContext.Provider>

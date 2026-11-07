@@ -5,7 +5,7 @@ import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
 import "./nativeMock";
 import { Background, BackgroundHost, useBackgroundSize } from "../../../../packages/presentation/src/background";
-import { PresentationProvider, usePresentation } from "../../../../packages/presentation/src/runtime";
+import { PresentationObservableProvider, PresentationProvider, usePresentation } from "../../../../packages/presentation/src/runtime";
 
 const runtime = (index, preparing = false) => ({ slideIndex: index, isActive: !preparing, isPreparing: preparing, isPreview: preparing });
 
@@ -91,4 +91,21 @@ test("background failures stay contained and recover on navigation without remou
     expect(tree.root.findAllByType("healthy")).toHaveLength(1);
     expect(tree.root.findAllByType("fallback")).toHaveLength(0);
   } finally { if (tree) await act(() => tree.unmount()); log.mockRestore(); }
+});
+
+
+test("background GPU readiness propagates to a containing surface boundary", async () => {
+  const { PreparationBoundary, usePreparationTask } = await import("../../../../packages/presentation/src/PreparationBoundary");
+  let ready=0, tree;
+  function GPU({ waiting }) { usePreparationTask(waiting); return <gpu/>; }
+  const runtime$ = observable({slideIndex:0,stepIndex:0,isActive:true});
+  const content = waiting => <PreparationBoundary onReady={()=>ready++}><BackgroundHost slideIndex={0} color="black">
+    <PresentationObservableProvider value={runtime$}><Background><GPU waiting={waiting}/></Background></PresentationObservableProvider>
+  </BackgroundHost></PreparationBoundary>;
+  try {
+    await act(()=>{tree=create(content(true));});
+    expect(ready).toBe(0);
+    await act(()=>tree.update(content(false)));
+    expect(ready).toBe(1);
+  } finally { await act(()=>tree?.unmount()); }
 });

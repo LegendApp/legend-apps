@@ -6,7 +6,7 @@ import type { Observable } from "@legendapp/state";
 import { PresentationObservableProvider, usePresentation$ } from "./runtime";
 import { useRuntimeProjection } from "./useRuntimeProjection";
 import type { PresentationRuntime } from "./types";
-import { PreparationBoundary } from "./PreparationBoundary";
+import { PreparationBoundary, usePreparationTask } from "./PreparationBoundary";
 
 type Entry = { children: ReactNode; runtime$: Observable<PresentationRuntime>; priority: number; intensityMultiplier: number; maxIntensity: number };
 type Registry = (id: string, entry: Entry | undefined) => void;
@@ -63,6 +63,7 @@ export function BackgroundHost({ children, slideIndex, color, isPreview = false,
   const readyKey = selectedId ? `${slideIndex}:${selectedId}` : undefined;
   const [preparedKey, setPreparedKey] = useState<string>();
   const ready = !!replacement || !visible || !!selected && preparedKey === readyKey;
+  usePreparationTask(!ready);
   const backgroundPrepared = useCallback(() => { if (readyKey) setPreparedKey(readyKey); }, [readyKey]);
   const brightnessScale=useSharedValue(1);
   const motion=useSharedValue<BackgroundMotion>({time:0,raw:0,burst:3.5,slideIndex:-1,owner:""});

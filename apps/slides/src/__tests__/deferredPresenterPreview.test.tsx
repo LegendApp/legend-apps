@@ -5,6 +5,7 @@ import { act, create } from "react-test-renderer";
 
 mock.module("react-native", () => ({
   View: "view",
+  Text: "text",
   ActivityIndicator: "spinner",
   StyleSheet: { create: value => value, absoluteFillObject: {} },
 }));
@@ -106,17 +107,6 @@ test("an unsettled navigation hides an already committed preview until its targe
   } finally { await act(() => renderer?.unmount()); }
 });
 
-test("the live slide counter stays visible while the stale current preview is hidden", async () => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  let renderer;
-  try {
-    await act(() => { renderer = create(<PresenterPreview pending weight={0.6} overlay={<counter slide={2} />}><preview slide={1}/></PresenterPreview>); });
-    expect(renderer.root.findByType("preview").parent.props.accessibilityElementsHidden).toBe(true);
-    expect(renderer.root.findByType("counter").parent.props.accessibilityElementsHidden).not.toBe(true);
-    expect(renderer.root.findByType("counter").props.slide).toBe(2);
-  } finally { await act(() => renderer?.unmount()); }
-});
-
 test("previews trail navigation only while the audience watches, and rapid navigation settles on the newest target", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   let shown, renderer;
@@ -130,4 +120,16 @@ test("previews trail navigation only while the audience watches, and rapid navig
   await act(() => renderer.update(<Trailing value={3} open={false} />));
   expect(shown).toBe(3);
   await act(() => renderer.unmount());
+});
+
+test("an existing pending preview remains visible while its replacement is prepared", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let renderer;
+  try {
+    await act(() => { renderer = create(<PresenterPreview pending weight={1}><preview slide={1} /></PresenterPreview>); });
+    const content = renderer.root.findByType("preview").parent;
+    expect(JSON.stringify(content.props.style)).not.toContain('"opacity":0');
+    expect(content.props.pointerEvents).toBe("none");
+    expect(renderer.root.findByType("text").props.children).toBe("Updating preview");
+  } finally { await act(() => renderer?.unmount()); }
 });

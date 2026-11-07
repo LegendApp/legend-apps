@@ -3,11 +3,13 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import React, { Profiler, useContext } from "react";
 import { act, create } from "react-test-renderer";
 
+import { PreparationBoundary, usePreparationTask } from "../../../../packages/presentation/src/PreparationBoundary";
+mock.module("@legend-apps/presentation", () => ({ usePreparationTask }));
 const SurfaceStillContext = React.createContext(null);
 let slides = [{ steps: 2 }, { steps: 1 }];
 mock.module("react-native", () => ({
   View: "view",
-  Image: "image",
+  Image: "image", Text: "text",
   StyleSheet: { create: value => value, absoluteFill: {} },
 }));
 mock.module("@legendapp/state/react", () => ({ useValue: read => typeof read === "function" ? read() : read.get() }));
@@ -29,7 +31,7 @@ mock.module("../DeckRenderer", () => ({
   SlideCanvas: ({ children }) => children,
   DeckRenderer: ({ targetIndex }) => <Surface slide={targetIndex} />,
 }));
-const { PreviewStillStack, PreviewStillSweep, usePreviewStills, stillKey } = await import("../PreviewStills");
+const { PreviewStillStack, PreviewStillSweep, PreviewStillCapture, usePreviewStills, stillKey } = await import("../PreviewStills");
 
 let log;
 beforeEach(() => {
@@ -44,8 +46,8 @@ afterEach(() => log.mockRestore());
 
 const wait = ms => act(() => new Promise(resolve => setTimeout(resolve, ms)));
 
-function Host({ paused = false, view, current = "0:0", next = "1:0" }) {
-  const { stills, targets, sweep } = usePreviewStills(16 / 9, current, next);
+function Host({ paused = false, view, current = "0:0", next = "1:0", retained }) {
+  const { stills, targets, sweep } = usePreviewStills(16 / 9, current, next, retained);
   view.current = { stills, targets, add: sweep.add, generation: sweep.generation };
   return <Profiler id="preview-capture" onRender={() => commits++}><PreviewStillSweep key={sweep.generation} {...sweep} paused={paused} /></Profiler>;
 }
@@ -162,4 +164,68 @@ test("a slide with no GPU background is skipped once, without waiting on its oth
   await act(() => request.deliver("1:0", "b"));
   expect(view.current.stills).toEqual({ "1:0": "b" });
   await act(() => renderer.unmount());
+});
+
+function LiveHost({ view, current = "0:0", next = "1:0", paused = false }) {
+  const state = usePreviewStills(16 / 9, current, next);
+  view.current = { ...state, add: state.sweep.add, generation: state.sweep.generation };
+  return <PreviewStillCapture target={current} generation={state.sweep.generation} add={state.sweep.add} paused={paused || !!state.stills[current]}><Surface slide={Number(current.split(":")[0])}/></PreviewStillCapture>;
+}
+test("settled live previews capture their existing surface and reject a retired target", async () => {
+  expect(typeof PreviewStillCapture).toBe("function");
+  const view = {}; let renderer;
+  try {
+    await act(() => { renderer = create(<LiveHost view={view} paused/>); });
+    expect(renderer.root.findAllByType("surface")).toHaveLength(1);
+    expect(request.id).toBeUndefined();
+    await act(() => renderer.update(<LiveHost view={view}/>));
+    const old = request;
+    expect(old.id).toBe("0:0");
+    await act(() => renderer.update(<LiveHost view={view} current="1:0" next="0:0"/>));
+    await act(() => old.deliver("0:0", "obsolete"));
+    expect(view.current.stills).toEqual({});
+    await act(() => request.deliver("1:0", "live"));
+    expect(view.current.stills).toEqual({"1:0":"live"});
+    expect(request.id).toBeUndefined();
+    expect(renderer.root.findAllByType("surface")).toHaveLength(1);
+  } finally { await act(() => renderer?.unmount()); }
+});
+test("preview retention is bounded and preserves the two displayed targets", async () => {
+  slides = Array.from({length:20},()=>({steps:1})); const view = {}; let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} paused retained={["2:0", "3:0"]}/>); });
+    for (let i=0;i<20;i++) await act(() => view.current.add(`${i}:0`, `uri-${i}`, view.current.generation));
+    expect(Object.keys(view.current.stills).length).toBeLessThanOrEqual(12);
+    expect(view.current.stills["0:0"]).toBe("uri-0");
+    expect(view.current.stills["1:0"]).toBe("uri-1");
+    expect(view.current.stills["2:0"]).toBe("uri-2");
+    expect(view.current.stills["3:0"]).toBe("uri-3");
+    const before = view.current.stills;
+    await act(() => view.current.add("19:0", "uri-19", view.current.generation));
+    expect(view.current.stills).toBe(before);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+
+test("a cached preview waits for its own image to decode, rejects late loads, and reports failed images", async () => {
+  let ready = 0, renderer;
+  const targets = ["0:0", "1:0"];
+  const content = uri => <PreparationBoundary onReady={() => ready++}><PreviewStillStack target="0:0" targets={targets} stills={{"0:0":uri,"1:0":"neighbor"}}/></PreparationBoundary>;
+  try {
+    await act(() => { renderer = create(content("first")); });
+    expect(ready).toBe(0);
+    const stale = renderer.root.findAllByType("image")[0].props.onLoad;
+    await act(() => renderer.root.findAllByType("image")[1].props.onLoad());
+    expect(ready).toBe(0);
+    await act(() => renderer.update(content("second")));
+    await act(() => stale());
+    expect(ready).toBe(0);
+    await act(() => renderer.root.findAllByType("image")[0].props.onLoad());
+    expect(ready).toBe(1);
+    await act(() => renderer.update(content("broken")));
+    const beforeError = ready;
+    await act(() => renderer.root.findAllByType("image")[0].props.onError());
+    expect(ready).toBe(beforeError+1);
+    expect(renderer.root.findByType("text").props.children).toBe("Preview unavailable");
+  } finally { await act(() => renderer?.unmount()); }
 });

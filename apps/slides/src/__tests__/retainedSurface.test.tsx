@@ -16,14 +16,16 @@ test("a drawn generation freezes until its replacement is ready; interrupted pre
     useEffect(() => { mounts.push(name); return () => unmounts.push(name); }, []);
     return <surface name={name} suspended={suspension?.suspended} signal={suspension?.signal} />;
   }
-  const render = (name, waiting = false) => <RetainedSurface identity={name}><Surface name={name} waiting={waiting} /></RetainedSurface>;
+  const render = (name, waiting = false) => <RetainedSurface identity={name} pointerEvents="box-none"><Surface name={name} waiting={waiting} /></RetainedSurface>;
   let tree;
   const surfaces = () => tree.root.findAllByType("surface").map(v => [v.props.name, v.props.suspended]);
   try {
     await act(() => { tree = create(render("a")); });
     expect(surfaces()).toEqual([["a", false]]);
+    expect(tree.root.findAllByType("view").map(v=>v.props.pointerEvents)).toEqual(["box-none","box-none"]);
     await act(() => tree.update(render("b", true)));
     expect(surfaces()).toEqual([["a", true], ["b", false]]);
+    expect(tree.root.findAllByType("view").map(v=>v.props.pointerEvents)).toEqual(["box-none","none","none"]);
     expect(unmounts).toEqual([]);
     expect(tree.root.findAllByType("surface").map(node => node.props.signal.get())).toEqual([true, false]);
     await act(() => tree.update(render("c", true)));
