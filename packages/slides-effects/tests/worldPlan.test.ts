@@ -1,7 +1,7 @@
 // @ts-ignore Bun supplies this API at runtime.
 import { expect, test } from "bun:test";
 import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanFits, worldPlanIds } from "../packs/world/plan";
-import { primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { customGeometryKeys, customInstances, primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds } from "../packs/world/track";
 import { text3dInstances } from "../packs/world/text3d";
 import { createPlaybackState } from "../../presentation/src/playbackState";
@@ -10,6 +10,26 @@ import { defineWorldEffect } from "../packs/world/effects";
 import { buildWorldGraph } from "../packs/world/render";
 
 const clock = { slideTime: 3, stepTime: 3, stepIndex: 0, stepOrigins: [0] };
+test("custom geometry keys reuse shader-sized strings and follow descriptor changes", () => {
+  const geometry = { wgsl: "geometry:a", vertexCount: 36 };
+  const first = customGeometryKeys(geometry);
+  expect(customGeometryKeys(geometry)).toBe(first);
+  expect(customGeometryKeys({ ...geometry })).toEqual(first);
+  geometry.vertexCount = 72;
+  expect(customGeometryKeys(geometry)).toEqual({ wgsl: "geometry:a", vertexCount: 72, family: "custom:geometry:a:72", order: "1:geometry:a:72" });
+  geometry.wgsl = "geometry:b";
+  expect(customGeometryKeys(geometry).family).toBe("custom:geometry:b:72");
+});
+test("equal custom programs share draw slots without changing instance order or indices", () => {
+  const a = customInstances({ id: "a", count: 2, vertexCount: 36, wgsl: "program" });
+  const b = customInstances({ id: "b", count: 2, vertexCount: 36, wgsl: "program" });
+  const scene = prepareWorldScene({ instances: [b[1], a[0], b[0], a[1]] });
+  const plan = prepareWorldPlans([scene]).get(scene)!;
+  expect(scene.instances.map(part => [part.id, part.customIndex])).toEqual([[b[1].id, 1], [a[0].id, 0], [b[0].id, 0], [a[1].id, 1]]);
+  expect(plan.topology.customs).toHaveLength(1);
+  expect(worldPlanFits(scene, plan)).toBe(true);
+  expect(worldPlanIds(scene, plan).filter(Boolean)).toEqual(trackIds(scene));
+});
 test("compatible declarations and retained outgoing parts use one graph without changing their uniforms", () => {
   const a = prepareWorldScene({ instances: [primitive("box", { id: "a" }), ...text3dInstances({ id: "word", text: "Hello" })] });
   const b = prepareWorldScene({ instances: [primitive("tube", { id: "b" }), ...text3dInstances({ id: "other", text: "World", mono: true })] });

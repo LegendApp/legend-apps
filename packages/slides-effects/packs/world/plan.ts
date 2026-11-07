@@ -1,12 +1,12 @@
 import { worldEffect } from "./effects";
 import { trackIds } from "./track";
 import { worldGraphTopology, type WorldGraphTopology } from "./render";
-import { worldHeaderSize, worldInstanceSize, type Instance, type PreparedWorldScene } from "./scene";
+import { customGeometryKeys, worldHeaderSize, worldInstanceSize, type Instance, type PreparedWorldScene } from "./scene";
 
 /** Draw families share a pipeline and a contiguous uniform range. */
 function family(part: Instance): string {
   return part.label ? "label" : part.card ? "card" : part.glyph ? `glyph:${part.glyph.font}:${part.glyph.segments}`
-    : part.custom ? `custom:${part.custom.wgsl}:${part.custom.vertexCount}` : part.sdf ? `sdf:${JSON.stringify(part.sdf)}` : part.kind;
+    : part.custom ? customGeometryKeys(part.custom).family : part.sdf ? `sdf:${JSON.stringify(part.sdf)}` : part.kind;
 }
 export type WorldPlan = { topology: WorldGraphTopology; slots: Record<string, number>; instances: number; size: number };
 

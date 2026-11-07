@@ -83,6 +83,15 @@ export type Instance = {
   /** Keyframe spans of a "tracks" instance: per step (ascending), the earliest start and latest end delay; plus slide-time `at` spans. */
   settle?: { steps: number[]; first: number[]; last: number[]; at: number[] };
 };
+const customKeys = new WeakMap<NonNullable<Instance["custom"]>, { wgsl: string; vertexCount: number; family: string; order: string }>();
+export function customGeometryKeys(geometry: NonNullable<Instance["custom"]>) {
+  const cached = customKeys.get(geometry);
+  if (cached?.wgsl === geometry.wgsl && cached.vertexCount === geometry.vertexCount) return cached;
+  const { wgsl, vertexCount } = geometry, suffix = `${wgsl}:${vertexCount}`;
+  const keys = { wgsl, vertexCount, family: `custom:${suffix}`, order: `1:${suffix}` };
+  customKeys.set(geometry, keys);
+  return keys;
+}
 export type GraphOptions = {
   data: TreeNode; layout?: "cone"; radius?: number; levelHeight?: number; position?: Vec3;
   node?: { color?: Animated<string>; dim?: string; size?: Animated<number>; emissive?: Animated<number>; scale?: Animated<Vec3> };
@@ -1073,7 +1082,7 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
   instances.forEach(verifyAnchors);
   for (const instance of instances) instance.sharp = instance.stages?.find(stage => stage.sharp)?.sharp ?? instance.sharp ?? instance.label?.parent?.sharp;
   if (scene.counter && !instances.some(instance => instance.voxel?.options.id === scene.counter!.source)) throw new Error(`Unknown world counter source: ${scene.counter.source}`);
-  const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.glyph ? `1g:${instance.glyph.font}:${instance.glyph.segments}` : instance.custom ? `1:${instance.custom.wgsl}:${instance.custom.vertexCount}`
+  const order = (instance: Instance) => instance.label ? "3" : instance.card ? "2c" : instance.glyph ? `1g:${instance.glyph.font}:${instance.glyph.segments}` : instance.custom ? customGeometryKeys(instance.custom).order
     : instance.sdf ? `2:${instance.sdf.wgsl}` : `0:${instance.kind}`;
   instances.sort((a, b) => { const x = order(a), y = order(b); return x < y ? -1 : x > y ? 1 : 0; });
   const anchorIds = new Set(instances.flatMap(instance => [...instance.endpoints ?? [], ...instance.pulse?.tail ? [instance.pulse.options.id] : []]));
