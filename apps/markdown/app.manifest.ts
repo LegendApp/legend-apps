@@ -22,6 +22,7 @@ const manifest = {
     macos: [
       "@legend-apps/storage",
       "@legendapp/spark/app",
+      "@legendapp/spark/links",
       "@legendapp/spark/ui",
       "@legendapp/spark/context-menu",
       "@legendapp/spark/dialogs",
@@ -32,6 +33,7 @@ const manifest = {
       "@legendapp/spark/menus",
       "@legendapp/spark/windows",
       "react-native-enriched-markdown",
+      "react-native-worklets",
     ],
     ios: [],
     android: [],
