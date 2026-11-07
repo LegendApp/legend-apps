@@ -123,7 +123,27 @@ std::string taskTitle(const std::string& text) {
         const bool heading = line.front() == '#';
         const bool barePath = line.starts_with("/") || line.starts_with("~/") || line.starts_with("./");
         if (!assignment && !pathHeader && !heading && !barePath) {
-          title = boundedTitle(line);
+          // A short single-word attribution/field is framing, not task text.
+          const auto colon = line.find(':');
+          const bool leadingLabel = colon > 0 && colon <= 32
+              && line.substr(0, colon).find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") == std::string::npos
+              && (colon + 1 == line.size() || line[colon + 1] == ' ' || line[colon + 1] == '\t');
+          if (leadingLabel) {
+            const auto request = line.find_first_not_of(" \t", colon + 1);
+            line = request == std::string::npos ? "" : line.substr(request);
+          }
+          // Remove only the outer opening quote and its matching final quote.
+          // Inner quotes and apostrophes belong to the request.
+          const std::string opening = line.starts_with("\"") ? "\"" : line.starts_with("“") ? "“" : "";
+          if (!opening.empty()) {
+            const std::string closing = opening == "“" ? "”" : "\"";
+            line.erase(0, opening.size());
+            if (line.ends_with(closing)) line.resize(line.size() - closing.size());
+          }
+          const auto request = line.find_first_not_of(" \t");
+          if (request != std::string::npos) {
+            title = boundedTitle(line.substr(request, line.find_last_not_of(" \t") - request + 1));
+          }
         }
       }
     }

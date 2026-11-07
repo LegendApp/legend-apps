@@ -333,6 +333,14 @@ void testCodexProtocolTitles() {
     fs::permissions(bin / "codex", fs::perms::owner_all);
   };
   const std::vector<std::pair<std::string, std::string>> requests = {
+      {"Jay: \"Verify the titles\"", "Verify the titles"},
+      {"Jay: “Fix it”", "Fix it"},
+      {"User: \"Fix the \"Save\" button's label\"", "Fix the \"Save\" button's label"},
+      {"Steps:\nRepair the search", "Repair the search"},
+      {"Task: run the build", "run the build"},
+      {"Fix: the crash in x", "the crash in x"},
+      {"Jay: \"Verify the titles", "Verify the titles"},
+      {"“Fix the title", "Fix the title"},
       {"JOB_DIR=/tmp/fictional/job\nCONFIG=/tmp/fictional/config\nFix the search results", "Fix the search results"},
       {"Repo: /tmp/fictional/repo (branch main, shared)\nRepair keyboard navigation", "Repair keyboard navigation"},
       {"# Tooling job\n<instructions>\nUse the configured tools.\n</instructions>\nWORK_DIR=/tmp/fictional\n\nAdd export support", "Add export support"},
@@ -352,10 +360,14 @@ void testCodexProtocolTitles() {
       else if (c == '"' || c == '\\') { encoded += '\\'; encoded += c; }
       else encoded += c;
     }
+    std::string shellEncoded;
+    for (char c : encoded) {
+      shellEncoded += c == '\'' ? "'\\''" : std::string(1, c);
+    }
     const auto session = codex / "sessions" / ("rollout-" + ids[2] + ".jsonl");
     std::ofstream(session) << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
     stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[2]
-        + "\",\"preview\":\"" + encoded + "\"}],\"nextCursor\":null}}';;\n"
+        + "\",\"preview\":\"" + shellEncoded + "\"}],\"nextCursor\":null}}';;\n"
         "3) printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
     const auto protocol = title(getRecentChatCatalog(20), 2);
     expect(expected.empty() ? protocol.starts_with("Codex chat — ") : protocol == expected,
@@ -391,6 +403,10 @@ void testCodexProtocolTitles() {
   size_t callCount = 0;
   for (std::string line; std::getline(calls, line);) ++callCount;
   expect(callCount == 4, "One app-server must batch both active pages and archived metadata");
+  stub("2) printf '%s\\n' '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[2]
+      + "\",\"name\":\"Jay: \\\"x\\\"\",\"preview\":\"Ignore preview\"}],\"nextCursor\":null}}';;\n"
+      "3) printf '%s\\n' '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
+  expect(title(getRecentChatCatalog(20), 2) == "Jay: \"x\"", "Explicit speaker labels and quotes must remain verbatim");
   fs::remove(codex / "calls");
   setenv("CHAT_HISTORY_BENCHMARK_CONFIG", "titles-test", 1);
   setenv("CHAT_HISTORY_BENCHMARK_HOME", home.c_str(), 1);
