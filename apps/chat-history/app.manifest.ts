@@ -23,6 +23,7 @@ const manifest = {
   },
   nativeModules: {
     macos: [
+      "@legend-apps/markdown-block-editor",
       "@legend-apps/storage",
       "@legendapp/spark/ui",
       "@legendapp/spark/updates",
@@ -30,6 +31,7 @@ const manifest = {
       "@legendapp/spark/menus",
       "@legendapp/spark/windows",
       "react-native-enriched-markdown",
+      "react-native-worklets",
     ],
     ios: [],
     android: [],
