@@ -168,6 +168,18 @@ test("unknown declared native modules cannot be silently excluded", async () => 
   assert.throws(() => getActiveNativePackages(invalid, "macos"), /unregistered native package/);
 });
 
+for (const name of ["@legendapp/spark-desktop-links", "react-native-worklets"]) {
+  test(`Markdown release selects the bundled native dependency ${name}`, async () => {
+    const config = sparkConfig(await loadAppManifest("markdown"), "release");
+    assert.ok(config.include.includes(name), `${name} must be explicitly selected`);
+    assert.ok(!config.expo.autolinking.exclude.includes(name), `${name} must not be excluded`);
+    for (const unused of ["@legendapp/spark-processes", "react-native-reanimated", "react-native-webview"]) {
+      assert.ok(!config.include.includes(unused), `${unused} must remain unused`);
+      assert.ok(config.expo.autolinking.exclude.includes(unused), `${unused} must remain excluded`);
+    }
+  });
+}
+
 test("manifests declare Spark modules by import subpath", async () => {
   assert.deepEqual(expandSparkSubpath("@legendapp/spark/dialogs"), ["@legendapp/spark-file-dialog", "@legendapp/spark-message-dialog"]);
   assert.equal(expandSparkSubpath("@legendapp/spark/system")[0], "@legendapp/spark-system");
