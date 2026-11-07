@@ -123,13 +123,13 @@ void loadCodexTitles(
     const std::unordered_map<std::string, CatalogMetadata>& index,
     std::vector<ChatSummary>& summaries) {
   @autoreleasepool {
-    NSMutableSet<NSString*>* remaining = [NSMutableSet set];
-    for (const auto& summary : summaries) {
+    std::unordered_map<std::string, ChatSummary*> remaining;
+    for (auto& summary : summaries) {
       if (summary.provider == "codex") {
-        [remaining addObject:@(summary.id.substr(6).c_str())];
+        remaining.emplace(summary.id.substr(6), &summary);
       }
     }
-    if (remaining.count == 0) return;
+    if (remaining.empty()) return;
 
     // Finder launches do not inherit the user's interactive shell PATH.
     NSString* searchPath = [NSProcessInfo.processInfo.environment[@"PATH"] ?: @""
@@ -212,7 +212,7 @@ void loadCodexTitles(
         send(@{@"method": @"initialized"});
         for (NSNumber* archived in @[@NO, @YES]) {
           NSString* cursor = nil;
-          for (int page = 0; page < 20 && remaining.count > 0; ++page) {
+          for (int page = 0; page < 20 && !remaining.empty(); ++page) {
             NSMutableDictionary* params = [@{@"limit": @100, @"sortKey": @"updated_at",
                 @"archived": archived, @"modelProviders": @[], @"useStateDbOnly": @YES,
                 @"sourceKinds": @[@"cli", @"vscode", @"exec", @"appServer", @"unknown"]} mutableCopy];
@@ -222,21 +222,19 @@ void loadCodexTitles(
             for (id thread in result[@"data"]) {
               if (![thread isKindOfClass:NSDictionary.class]) continue;
               NSString* threadId = thread[@"id"];
-              if (![threadId isKindOfClass:NSString.class] || ![remaining containsObject:threadId]) continue;
-              [remaining removeObject:threadId];
+              if (![threadId isKindOfClass:NSString.class]) continue;
+              const auto found = remaining.find(threadId.UTF8String);
+              if (found == remaining.end()) continue;
               NSString* name = thread[@"name"];
               NSString* preview = thread[@"preview"];
-              const std::string key = threadId.UTF8String;
-              auto legacy = index.find(key);
-              for (auto& summary : summaries) {
-                if (summary.id != "codex:" + key) continue;
-                if ([name isKindOfClass:NSString.class] && name.length > 0) {
-                  summary.title = boundedTitle(name.UTF8String);
-                } else if ((legacy == index.end() || legacy->second.title.empty())
-                    && [preview isKindOfClass:NSString.class] && preview.length > 0) {
-                  summary.title = boundedTitle("Preview: " + std::string(preview.UTF8String));
-                }
+              const auto legacy = index.find(found->first);
+              if ([name isKindOfClass:NSString.class] && name.length > 0) {
+                found->second->title = boundedTitle(name.UTF8String);
+              } else if ((legacy == index.end() || legacy->second.title.empty())
+                  && [preview isKindOfClass:NSString.class] && preview.length > 0) {
+                found->second->title = boundedTitle("Preview: " + std::string(preview.UTF8String));
               }
+              remaining.erase(found);
             }
             id next = result[@"nextCursor"];
             if (![next isKindOfClass:NSString.class] || [next length] == 0 || [next isEqual:cursor]) break;
@@ -405,7 +403,10 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
         }
       }
     }
-    loadCodexTitles(codexHome, home, codexMetadata, summaries);
+    // Fixture catalogs stay deterministic and never launch the user's CLI.
+    if (!fixture) {
+      loadCodexTitles(codexHome, home, codexMetadata, summaries);
+    }
   }
   return summaries;
 }

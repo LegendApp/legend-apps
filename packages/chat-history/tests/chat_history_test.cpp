@@ -350,6 +350,14 @@ void testCodexProtocolTitles() {
   size_t callCount = 0;
   for (std::string line; std::getline(calls, line);) ++callCount;
   expect(callCount == 4, "One app-server must batch both active pages and archived metadata");
+  fs::remove(codex / "calls");
+  setenv("CHAT_HISTORY_BENCHMARK_CONFIG", "titles-test", 1);
+  setenv("CHAT_HISTORY_BENCHMARK_HOME", home.c_str(), 1);
+  const auto fixture = getRecentChatCatalog(20);
+  unsetenv("CHAT_HISTORY_BENCHMARK_CONFIG");
+  unsetenv("CHAT_HISTORY_BENCHMARK_HOME");
+  expect(!fs::exists(codex / "calls") && title(fixture, 2).starts_with("Codex chat — "),
+      "Benchmark fixture catalogs must not launch the Codex CLI");
   fs::remove(home / ".codex"); // Subsequent reads must honor CODEX_HOME alone.
   stub("2) echo '{\"id\":2,\"result\":{\"data\":[],\"nextCursor\":null}}';;\n3) echo '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
   const auto empty = getRecentChatCatalog(20);
