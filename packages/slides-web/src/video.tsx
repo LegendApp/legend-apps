@@ -22,3 +22,8 @@ export function NativeVideoView({ source, poster, playing, position, looping = t
     onError={event => window.dispatchEvent(new ErrorEvent("error", { message: `Could not load video: ${source}: ${event.currentTarget.error?.message}` }))}
     style={{ width: "100%", height: "100%", objectFit: "contain" }} />;
 }
+
+function nativeVideoGroupUnavailable(): never {
+  throw new Error("Synchronized native video groups require macOS.");
+}
+export { nativeVideoGroupUnavailable as useNativeVideoGroup, nativeVideoGroupUnavailable as NativeVideoGroupFrame };

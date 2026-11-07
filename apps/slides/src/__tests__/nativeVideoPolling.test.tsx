@@ -1,8 +1,10 @@
 // @ts-nocheck Controlled UI and metadata runtimes exercise native resource ownership.
 import { expect, mock, test } from "bun:test";
 import React, { useMemo, useRef } from "react";
+import { createRequire } from "node:module";
 import { act, create } from "react-test-renderer";
-mock.module("react-native", () => ({ Platform: { OS: "macos" } }));
+const presentationRequire = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
+mock.module(presentationRequire.resolve("react-native"), () => ({ Platform: { OS: "macos" } }));
 const loads = [], frames = [], players = [];
 function player(source) {
   if (source === "broken") throw new Error("decoder failed");
@@ -16,8 +18,8 @@ function player(source) {
     dispose() { this.disposed++; } };
   players.push(result); return result;
 }
-mock.module("@shopify/react-native-skia", () => ({ Skia: { Video: player }, useVideo: () => {} }));
-mock.module("react-native-reanimated", () => ({
+mock.module(presentationRequire.resolve("@shopify/react-native-skia"), () => ({ Skia: { Video: player }, useVideo: () => {} }));
+mock.module(presentationRequire.resolve("react-native-reanimated"), () => ({
   useAnimatedReaction: () => {}, useDerivedValue: fn => ({ get value() { return fn(); } }),
   createWorkletRuntime: () => ({}), runOnJS: fn => fn, runOnUI: fn => fn,
   runOnRuntime: (_, fn) => (...args) => loads.push(() => fn(...args)),

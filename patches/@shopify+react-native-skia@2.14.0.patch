@@ -55,20 +55,19 @@ index 6443fbf..ec2f9d8 100644
    }
  }
 diff --git a/apple/RNSkAppleVideo.h b/apple/RNSkAppleVideo.h
-index 6505769..3b34734 100644
 --- a/apple/RNSkAppleVideo.h
 +++ b/apple/RNSkAppleVideo.h
 @@ -1,6 +1,8 @@
  #pragma once
- 
+
  #include <string>
 +#include <memory>
 +#include <mutex>
- 
+
  #include <AVFoundation/AVFoundation.h>
  #include <CoreVideo/CoreVideo.h>
-@@ -20,6 +22,11 @@ namespace RNSkia {
- 
+@@ -20,6 +22,26 @@
+
  class RNSkAppleVideo : public RNSkVideo {
  private:
 +  struct DisplayLinkState : std::enable_shared_from_this<DisplayLinkState> {
@@ -76,15 +75,42 @@ index 6505769..3b34734 100644
 +    RNSkAppleVideo *video = nullptr;
 +  };
 +  std::shared_ptr<DisplayLinkState> _displayLinkState;
++#if TARGET_OS_OSX
++  struct SyncState {
++    std::mutex mutex;
++    uint64_t generation = 0;
++    bool enabled = false;
++    bool seekComplete = false;
++    bool ready = false;
++    bool failed = false;
++    bool ended = false;
++    sk_sp<SkImage> image;
++    double time = 0;
++  };
++  std::shared_ptr<SyncState> _sync = std::make_shared<SyncState>();
++  void prepareSynchronizedFrame(double timestamp, uint64_t endingGeneration);
++#endif
    std::string _url;
    AVPlayer *_player = nullptr;
    AVPlayerItem *_playerItem = nullptr;
+@@ -73,6 +95,12 @@
+   void setVolume(float volume) override;
+   void setLooping(bool looping) override;
+   bool isPlaying() override;
++#if TARGET_OS_OSX
++  int syncStatus() override;
++  void prepareSync(double timestamp) override;
++  void playSync(double timestamp, double hostTime) override;
++  double syncHostTime() override;
++#endif
+ };
+
+ } // namespace RNSkia
 diff --git a/apple/RNSkAppleVideo.mm b/apple/RNSkAppleVideo.mm
-index aba8fdf..cdf4a60 100644
 --- a/apple/RNSkAppleVideo.mm
 +++ b/apple/RNSkAppleVideo.mm
-@@ -32,6 +32,8 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
- 
+@@ -32,6 +32,8 @@
+
  RNSkAppleVideo::RNSkAppleVideo(std::string url, RNSkPlatformContext *context)
      : _url(std::move(url)), _context(context) {
 +  _displayLinkState = std::make_shared<DisplayLinkState>();
@@ -92,18 +118,55 @@ index aba8fdf..cdf4a60 100644
    setupPlayer();
    setupDisplayLink();
  }
-@@ -52,6 +54,10 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+@@ -51,6 +53,10 @@
+     CVDisplayLinkStop(_displayLink);
      CVDisplayLinkRelease(_displayLink);
      _displayLink = nullptr;
-   }
++  }
 +  {
 +    std::lock_guard<std::mutex> lock(_displayLinkState->mutex);
 +    _displayLinkState->video = nullptr;
-+  }
+   }
  #endif
    if (_endObserver) {
-     [[NSNotificationCenter defaultCenter] removeObserver:_endObserver];
-@@ -121,7 +127,8 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+@@ -91,11 +97,36 @@
+
+   // Set up end-of-playback observer
+   __weak AVPlayer *weakPlayer = _player;
++#if TARGET_OS_OSX
++  auto lifetime = _displayLinkState;
++#endif
+   _endObserver = [[NSNotificationCenter defaultCenter]
+       addObserverForName:AVPlayerItemDidPlayToEndTimeNotification
+                   object:playerItem
+                    queue:[NSOperationQueue mainQueue]
+               usingBlock:^(NSNotification *note) {
++#if TARGET_OS_OSX
++                std::lock_guard<std::mutex> alive(lifetime->mutex);
++                if (!lifetime->video) return;
++                bool synchronized;
++                uint64_t endingGeneration = 0;
++                {
++                  std::lock_guard<std::mutex> lock(_sync->mutex);
++                  synchronized = _sync->enabled;
++                  if (_sync->ready && _isPlaying &&
++                      CMTimeGetSeconds([_player currentTime]) * 1000 >= _duration) {
++                    endingGeneration = _sync->generation;
++                  }
++                }
++                if (synchronized) {
++                  // Ignore queued end notifications from an earlier seek/cycle.
++                  if (endingGeneration) {
++                    prepareSynchronizedFrame(std::max(0.0, _duration - 1.0),
++                                             endingGeneration);
++                  }
++                  return;
++                }
++#endif
+                 if (_isLooping) {
+                   [weakPlayer seekToTime:kCMTimeZero
+                          toleranceBefore:kCMTimeZero
+@@ -121,23 +152,49 @@
  #else
    // Create CVDisplayLink for macOS
    CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink);
@@ -113,7 +176,52 @@ index aba8fdf..cdf4a60 100644
    _displayLinkRunning = false;
  #endif
  }
-@@ -172,10 +179,14 @@ - (void)displayLinkFired:(CADisplayLink *)sender {
+
+ void RNSkAppleVideo::onDisplayLink() {
++#if TARGET_OS_OSX
++  std::lock_guard<std::mutex> syncLock(_sync->mutex);
++  if (_sync->enabled && !_sync->seekComplete) return;
++  bool synchronized = _sync->enabled;
++#endif
+   CMTime outputItemTime =
+       [_videoOutput itemTimeForHostTime:CACurrentMediaTime()];
+-
+-  if ([_videoOutput hasNewPixelBufferForItemTime:outputItemTime]) {
++#if TARGET_OS_OSX
++  if (synchronized && !_isPlaying) outputItemTime = [_player currentTime];
++#endif
++
++  bool acquirePreparedFrame = false;
++#if TARGET_OS_OSX
++  // A completed seek may target the already acquired frame. Copy it again;
++  // hasNewPixelBuffer intentionally excludes previously acquired video output.
++  acquirePreparedFrame = synchronized && !_sync->ready;
++#endif
++  if (acquirePreparedFrame || [_videoOutput hasNewPixelBufferForItemTime:outputItemTime]) {
+     CMTime actualItemTime = kCMTimeZero;
+     CVPixelBufferRef pixelBuffer =
+         [_videoOutput copyPixelBufferForItemTime:outputItemTime
+                               itemTimeForDisplay:&actualItemTime];
+     if (pixelBuffer) {
+-      _lastImage = _context->makeImageFromNativeBuffer((void *)pixelBuffer);
+-      _lastFrameTimeMs = CMTimeGetSeconds(actualItemTime) * 1000;
++      auto image = _context->makeImageFromNativeBuffer((void *)pixelBuffer);
++      double time = CMTimeGetSeconds(actualItemTime) * 1000;
++#if TARGET_OS_OSX
++      if (synchronized) {
++        _sync->image = std::move(image);
++        _sync->time = time;
++        _sync->ready = _sync->image != nullptr;
++      } else
++#endif
++      {
++        _lastImage = std::move(image);
++        _lastFrameTimeMs = time;
++      }
+       CVPixelBufferRelease(pixelBuffer);
+
+       if (_waitingForFrame) {
+@@ -172,10 +229,14 @@
                                               CVOptionFlags flagsIn,
                                               CVOptionFlags *flagsOut,
                                               void *context) {
@@ -130,6 +238,127 @@ index aba8fdf..cdf4a60 100644
    });
    return kCVReturnSuccess;
  }
+@@ -196,6 +257,15 @@
+ #endif
+
+ sk_sp<SkImage> RNSkAppleVideo::nextImage(double *timeStamp) {
++#if TARGET_OS_OSX
++  {
++    std::lock_guard<std::mutex> lock(_sync->mutex);
++    if (_sync->enabled) {
++      if (timeStamp) *timeStamp = _sync->time / 1000.0;
++      return _sync->image;
++    }
++  }
++#endif
+   if (timeStamp) {
+     *timeStamp = CMTimeGetSeconds([_player currentTime]);
+   }
+@@ -274,6 +344,12 @@
+ double RNSkAppleVideo::framerate() { return _framerate; }
+
+ double RNSkAppleVideo::currentTime() {
++#if TARGET_OS_OSX
++  {
++    std::lock_guard<std::mutex> lock(_sync->mutex);
++    if (_sync->enabled) return _sync->time;
++  }
++#endif
+   // Return the timestamp of the last captured frame for accurate
+   // synchronization
+   return _lastFrameTimeMs;
+@@ -289,4 +365,91 @@
+
+ bool RNSkAppleVideo::isPlaying() { return _isPlaying; }
+
++#if TARGET_OS_OSX
++int RNSkAppleVideo::syncStatus() {
++  std::lock_guard<std::mutex> lock(_sync->mutex);
++  return _sync->failed || _player.status == AVPlayerStatusFailed
++             ? -1 : _sync->ready ? (_sync->ended ? 2 : 1) : 0;
++}
++
++double RNSkAppleVideo::syncHostTime() {
++  return CMTimeGetSeconds(CMClockGetTime(CMClockGetHostTimeClock())) * 1000;
++}
++
++void RNSkAppleVideo::prepareSync(double timestamp) {
++  prepareSynchronizedFrame(timestamp, 0);
++}
++
++void RNSkAppleVideo::prepareSynchronizedFrame(double timestamp,
++                                             uint64_t endingGeneration) {
++  auto state = _sync;
++  double target = std::max(0.0, std::min(timestamp, _duration - 1.0));
++  uint64_t generation;
++  {
++    std::lock_guard<std::mutex> lock(state->mutex);
++    if (endingGeneration && endingGeneration != state->generation) return;
++    generation = ++state->generation;
++    state->enabled = true;
++    state->ready = false;
++    state->seekComplete = false;
++    state->failed = false;
++    state->ended = endingGeneration != 0;
++  }
++  auto lifetime = _displayLinkState;
++  dispatch_async(dispatch_get_main_queue(), ^{
++    std::lock_guard<std::mutex> alive(lifetime->mutex);
++    auto *video = lifetime->video;
++    if (!video) return;
++    {
++      std::lock_guard<std::mutex> lock(state->mutex);
++      if (generation != state->generation) return;
++    }
++    [video->_player pause];
++    video->_isPlaying = false;
++    video->_isLooping = false;
++    video->_player.muted = YES;
++    video->_player.automaticallyWaitsToMinimizeStalling = NO;
++    CMTime time = CMTimeMakeWithSeconds(target / 1000.0, NSEC_PER_SEC);
++    [video->_player seekToTime:time toleranceBefore:kCMTimeZero
++               toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
++      dispatch_async(dispatch_get_main_queue(), ^{
++        std::lock_guard<std::mutex> alive(lifetime->mutex);
++        auto *video = lifetime->video;
++        if (!video) return;
++        {
++          std::lock_guard<std::mutex> lock(state->mutex);
++          if (generation != state->generation) return;
++          state->failed = !finished || video->_player.status == AVPlayerStatusFailed;
++          state->seekComplete = !state->failed;
++        }
++        // Extract even when the completed seek targets the existing position.
++        video->expectFrame();
++      });
++    }];
++  });
++}
++
++void RNSkAppleVideo::playSync(double timestamp, double hostTime) {
++  auto state = _sync;
++  uint64_t generation;
++  {
++    std::lock_guard<std::mutex> lock(state->mutex);
++    generation = state->generation;
++  }
++  auto lifetime = _displayLinkState;
++  dispatch_async(dispatch_get_main_queue(), ^{
++    std::lock_guard<std::mutex> alive(lifetime->mutex);
++    auto *video = lifetime->video;
++    if (!video) return;
++    std::lock_guard<std::mutex> lock(state->mutex);
++    if (generation != state->generation || !state->ready) return;
++    [video->_player setRate:1.0
++                      time:CMTimeMakeWithSeconds(timestamp / 1000.0, NSEC_PER_SEC)
++                atHostTime:CMTimeMakeWithSeconds(hostTime / 1000.0, NSEC_PER_SEC)];
++    video->_isPlaying = true;
++    video->startDisplayLink();
++  });
++}
++#endif
++
+ } // namespace RNSkia
 diff --git a/apple/MetalWindowContext.mm b/apple/MetalWindowContext.mm
 index b93d4c3..3bde459 100644
 --- a/apple/MetalWindowContext.mm
@@ -173,3 +402,46 @@ index 4fa3fd2..28c5760 100644
    };
  
    void resize(int width, int height) override { _skSurface = nullptr; }
+diff --git a/cpp/rnskia/RNSkVideo.h b/cpp/rnskia/RNSkVideo.h
+--- a/cpp/rnskia/RNSkVideo.h
++++ b/cpp/rnskia/RNSkVideo.h
+@@ -26,6 +26,11 @@
+   virtual void setVolume(float volume) = 0;
+   virtual void setLooping(bool looping) = 0;
+   virtual bool isPlaying() = 0;
++  // Optional synchronized playback; unsupported platforms keep their old player.
++  virtual int syncStatus() { return -2; }
++  virtual void prepareSync(double timestamp) {}
++  virtual void playSync(double timestamp, double hostTime) {}
++  virtual double syncHostTime() { return 0; }
+ };
+
+ } // namespace RNSkia
+diff --git a/cpp/api/JsiVideo.h b/cpp/api/JsiVideo.h
+--- a/cpp/api/JsiVideo.h
++++ b/cpp/api/JsiVideo.h
+@@ -30,6 +30,13 @@
+     return std::make_shared<JsiSkImage>(getContext(), std::move(image));
+   }
+
++  int syncStatus() { return getObject()->syncStatus(); }
++  void prepareSync(double timestamp) { getObject()->prepareSync(timestamp); }
++  void playSync(double timestamp, double hostTime) {
++    getObject()->playSync(timestamp, hostTime);
++  }
++  double syncHostTime() { return getObject()->syncHostTime(); }
++
+   double duration() { return getObject()->duration(); }
+
+   double framerate() { return getObject()->framerate(); }
+@@ -58,6 +65,10 @@
+
+   static void definePrototype(jsi::Runtime &runtime, jsi::Object &prototype) {
+     installCommon(runtime, prototype);
++    installMethod(runtime, prototype, "syncStatus", &JsiVideo::syncStatus);
++    installMethod(runtime, prototype, "prepareSync", &JsiVideo::prepareSync);
++    installMethod(runtime, prototype, "playSync", &JsiVideo::playSync);
++    installMethod(runtime, prototype, "syncHostTime", &JsiVideo::syncHostTime);
+     installMethod(runtime, prototype, "nextImage", &JsiVideo::nextImage);
+     installMethod(runtime, prototype, "duration", &JsiVideo::duration);
+     installMethod(runtime, prototype, "framerate", &JsiVideo::framerate);

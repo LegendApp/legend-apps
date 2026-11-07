@@ -104,6 +104,7 @@ export async function buildBrowserPlayer(deckCode: string, preload: unknown[], s
   }
   const replacements: Record<string, string> = {
     "NativeVideoView.tsx": "video.tsx",
+    "useNativeVideoGroup.ts": "video.tsx",
     "slidesSettings.ts": "settings.ts",
     "CodeBlock.tsx": "code.tsx",
     "Webview.tsx": "webview.tsx",

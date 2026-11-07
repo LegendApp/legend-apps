@@ -62,7 +62,8 @@ export { createSnapshotImageCache } from "./snapshotImageCache";
 export { useAdvanceAfterStep } from "./useAdvanceAfterStep";
 
 export { useNativeVideo } from "./useNativeVideo";
-export { NativeVideoView } from "./NativeVideoView";
+export { useNativeVideoGroup, type NativeVideoGroup } from "./useNativeVideoGroup";
+export { NativeVideoView, NativeVideoGroupFrame } from "./NativeVideoView";
 
 export { createTransitionProgress, interpolateTransition, subtractTransition, divideTransition, sampleTransitionValue, resolveTransitionStyle, useTransitionStyle, type TransitionProgress, type TransitionStyle } from "./transitionValues";
 
