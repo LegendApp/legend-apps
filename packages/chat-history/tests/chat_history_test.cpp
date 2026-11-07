@@ -292,6 +292,86 @@ void testCatalogIndexes() {
       "Catalog should skip subagents while filling the requested visible limit");
 }
 
+void testCodexProtocolTitles() {
+  namespace fs = std::filesystem;
+  const auto home = fs::temp_directory_path() / ("legend-codex-titles-" + std::to_string(getpid()));
+  const auto codex = home / "custom-codex";
+  const auto bin = home / ".local/bin";
+  fs::create_directories(codex / "sessions");
+  fs::create_directories(codex / "archived_sessions");
+  fs::create_directories(bin);
+  fs::create_directory_symlink(codex, home / ".codex");
+  const std::vector<std::string> ids = {
+      "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222",
+      "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444"};
+  for (size_t i = 0; i < ids.size(); ++i) {
+    std::ofstream(codex / (i == 3 ? "archived_sessions" : "sessions") / ("rollout-" + ids[i] + ".jsonl"))
+        << "{\"type\":\"session_meta\",\"payload\":{\"source\":\"cli\"}}\n";
+  }
+  std::ofstream(codex / "session_index.jsonl")
+      << "{\"id\":\"" << ids[0] << "\",\"thread_name\":\"Legacy explicit\"}\n"
+      << "{\"id\":\"" << ids[1] << "\",\"thread_name\":\"Stale name\"}\n";
+  const std::vector<std::string> keys = {"HOME", "CODEX_HOME", "PATH"};
+  std::vector<std::optional<std::string>> saved;
+  for (const auto& key : keys) {
+    const char* value = std::getenv(key.c_str());
+    saved.push_back(value ? std::optional<std::string>(value) : std::nullopt);
+  }
+  setenv("HOME", home.c_str(), 1);
+  setenv("CODEX_HOME", codex.c_str(), 1);
+  setenv("PATH", "/usr/bin:/bin", 1); // GUI discovery must find ~/.local/bin/codex.
+  auto title = [&](const std::vector<ChatSummary>& rows, size_t i) {
+    const auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.id == "codex:" + ids[i]; });
+    expect(found != rows.end(), "Protocol fixture should retain every local session");
+    return found->title;
+  };
+  auto stub = [&](const std::string& responses) {
+    std::ofstream(bin / "codex") << "#!/bin/sh\nn=0\nwhile IFS= read -r line; do\n"
+        << "case \"$line\" in *'\"method\":\"initialized\"'*) continue;; esac\n"
+        << "n=$((n+1))\necho \"$line\" >> \"$CODEX_HOME/calls\"\ncase $n in\n"
+        << "1) echo '{\"id\":1,\"result\":{}}';;\n" << responses << "\nesac\ndone\n";
+    fs::permissions(bin / "codex", fs::perms::owner_all);
+  };
+  stub("2) echo '{\"id\":2,\"result\":{\"data\":[{\"id\":\"" + ids[0]
+      + "\",\"name\":null,\"preview\":\"Must not replace indexed name\"},{\"id\":\"" + ids[1]
+      + "\",\"name\":\"Current explicit\",\"preview\":\"Ignore excerpt\"}],\"nextCursor\":\"page\\\"two\"}}';;\n"
+      + "3) case \"$line\" in *'page\\\"two'*) ;; *) exit 2;; esac\n"
+      + "echo '{\"id\":3,\"result\":{\"data\":[{\"id\":\"" + ids[2]
+      + "\",\"preview\":\"Derived user request\"}],\"nextCursor\":null}}';;\n"
+      + "4) case \"$line\" in *'\"archived\":true'*) ;; *) exit 3;; esac\n"
+      + "echo '{\"id\":4,\"result\":{\"data\":[{\"id\":\"" + ids[3]
+      + "\",\"name\":\"Archived explicit\"}],\"nextCursor\":null}}';;");
+  const auto rows = getRecentChatCatalog(20);
+  expect(title(rows, 0) == "Legacy explicit", "Indexed name must outrank protocol preview");
+  expect(title(rows, 2) == "Preview: Derived user request", "Missing index title must use labeled protocol preview across pages");
+  expect(title(rows, 1) == "Current explicit", "Protocol explicit name must outrank legacy name");
+  expect(title(rows, 3) == "Archived explicit", "Archived threads must receive protocol names");
+  std::ifstream calls(codex / "calls");
+  size_t callCount = 0;
+  for (std::string line; std::getline(calls, line);) ++callCount;
+  expect(callCount == 4, "One app-server must batch both active pages and archived metadata");
+  fs::remove(home / ".codex"); // Subsequent reads must honor CODEX_HOME alone.
+  stub("2) echo '{\"id\":2,\"result\":{\"data\":[],\"nextCursor\":null}}';;\n3) echo '{\"id\":3,\"result\":{\"data\":[],\"nextCursor\":null}}';;");
+  const auto empty = getRecentChatCatalog(20);
+  expect(title(empty, 0) == "Legacy explicit" && title(empty, 2).starts_with("Codex chat — "),
+      "Empty metadata must preserve indexed names and the unnamed fallback");
+  std::ofstream(bin / "codex") << "#!/bin/sh\nexit 1\n";
+  const auto unavailable = getRecentChatCatalog(20);
+  expect(title(unavailable, 0) == "Legacy explicit" && title(unavailable, 2).starts_with("Codex chat — "),
+      "Unavailable/older CLI must preserve indexed names and the unnamed fallback");
+  // The server waits indefinitely for another request, so only the client's
+  // timeout can complete this catalog load. Resource-gate pauses are harmless.
+  stub("*) IFS= read -r ignored; exit 0;;");
+  const auto timedOut = getRecentChatCatalog(20);
+  expect(title(timedOut, 0) == "Legacy explicit" && title(timedOut, 2).starts_with("Codex chat — "),
+      "Timed-out metadata must preserve index and unnamed fallback titles");
+  for (size_t i = 0; i < keys.size(); ++i) {
+    if (saved[i]) setenv(keys[i].c_str(), saved[i]->c_str(), 1);
+    else unsetenv(keys[i].c_str());
+  }
+  fs::remove_all(home);
+}
+
 void testStartupCatalog(const std::filesystem::path& fixtureRoot) {
   const auto testHome = std::filesystem::temp_directory_path() /
       ("legend-chat-startup-" + std::to_string(getpid()));
@@ -490,6 +570,7 @@ int main(int argc, char** argv) {
     testDocumentRelease(fixtureRoot);
     testMissingCatalogRoots();
     testCatalogIndexes();
+    testCodexProtocolTitles();
     std::cout << "chat history native tests passed\n";
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

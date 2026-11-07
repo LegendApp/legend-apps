@@ -1,5 +1,5 @@
 import { addAppListener } from "@legendapp/spark/app";
-import { Profiler } from "react";
+import { Fragment, Profiler } from "react";
 import { getRecentChats, openChat, type ChatDocument, type ChatSummary } from "@legend-apps/chat-history";
 import { openWindow, setWindowOptions } from "@legendapp/spark/windows";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -108,6 +108,24 @@ describe("Chat History host window", () => {
         await act(async () => { renderer = create(<App />); });
         expect(getRecentChats).toHaveBeenCalledWith(1000000);
         expect(openChat).toHaveBeenCalledWith("codex", "/discovered-initial.jsonl");
+    });
+    it("renders imported Codex names and labeled previews unchanged", async () => {
+        const chats: ChatSummary[] = ["Explicit name", "Indexed name", "Preview: Derived request"].map((title, id) => ({
+            id: `codex:${id}`, title, path: `/${id}.jsonl`, provider: "codex", updatedAt: 3 - id,
+        }));
+        jest.mocked(getRecentChats).mockResolvedValueOnce(chats);
+        await act(async () => { renderer = create(<App />); });
+        const sidebar = renderer!.root.findAllByType("LegendList" as never)[0]!;
+        let rows!: ReactTestRenderer;
+        try {
+            await act(async () => {
+                rows = create(<>{chats.map((summary) => <Fragment key={summary.id}>{sidebar.props.renderItem({ item: { type: "chat", id: summary.id, summary } })}</Fragment>)}</>);
+            });
+            for (const chat of chats) expect(JSON.stringify(rows.toJSON())).toContain(chat.title);
+            expect(setWindowOptions).toHaveBeenLastCalledWith("main", expect.objectContaining({ title: chats[0]!.title }));
+        } finally {
+            if (rows) await act(async () => rows.unmount());
+        }
     });
     it("opens a saved chat while catalog discovery is still pending", async () => {
         const saved: ChatSummary = {

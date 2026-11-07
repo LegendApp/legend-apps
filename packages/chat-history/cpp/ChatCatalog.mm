@@ -3,6 +3,13 @@
 #include "ChatJson.hpp"
 #include "ChatTime.hpp"
 
+#import <Foundation/Foundation.h>
+
+#include <poll.h>
+#include <sys/socket.h>
+#include <signal.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -104,6 +111,146 @@ void loadCodexIndex(const fs::path& path, std::unordered_map<std::string, Catalo
         }
       }
       lineStart = position + 1;
+    }
+  }
+}
+
+// One short-lived app-server connection for the entire catalog, on the caller's
+// existing background worker. Only initialize and thread/list are sent.
+void loadCodexTitles(
+    const fs::path& codexHome,
+    const fs::path& home,
+    const std::unordered_map<std::string, CatalogMetadata>& index,
+    std::vector<ChatSummary>& summaries) {
+  @autoreleasepool {
+    NSMutableSet<NSString*>* remaining = [NSMutableSet set];
+    for (const auto& summary : summaries) {
+      if (summary.provider == "codex") {
+        [remaining addObject:@(summary.id.substr(6).c_str())];
+      }
+    }
+    if (remaining.count == 0) return;
+
+    // Finder launches do not inherit the user's interactive shell PATH.
+    NSString* searchPath = [NSProcessInfo.processInfo.environment[@"PATH"] ?: @""
+        stringByAppendingFormat:@":%s/.local/bin:%s/.bun/bin:/opt/homebrew/bin:/usr/local/bin",
+        home.c_str(), home.c_str()];
+    NSString* executable = nil;
+    for (NSString* directory in [searchPath componentsSeparatedByString:@":"]) {
+      if (directory.length == 0) continue;
+      NSString* candidate = [directory stringByAppendingPathComponent:@"codex"];
+      if ([NSFileManager.defaultManager isExecutableFileAtPath:candidate]) {
+        executable = candidate;
+        break;
+      }
+    }
+    if (!executable) return;
+
+    NSTask* task = [NSTask new];
+    task.executableURL = [NSURL fileURLWithPath:executable];
+    task.arguments = @[@"app-server", @"--listen", @"stdio://"];
+    task.currentDirectoryURL = [NSURL fileURLWithPath:@(codexHome.c_str())];
+    NSMutableDictionary* environment = [NSProcessInfo.processInfo.environment mutableCopy];
+    environment[@"CODEX_HOME"] = @(codexHome.c_str());
+    task.environment = environment;
+    int sockets[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) return;
+    const int noSigPipe = 1;
+    setsockopt(sockets[0], SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, sizeof(noSigPipe));
+    NSFileHandle* input = [[NSFileHandle alloc] initWithFileDescriptor:sockets[0] closeOnDealloc:YES];
+    NSFileHandle* childInput = [[NSFileHandle alloc] initWithFileDescriptor:sockets[1] closeOnDealloc:YES];
+    NSPipe* output = [NSPipe pipe];
+    task.standardInput = childInput;
+    task.standardOutput = output;
+    task.standardError = NSFileHandle.fileHandleWithNullDevice;
+    if (![task launchAndReturnError:nil]) return;
+    [childInput closeFile];
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    NSMutableData* pending = [NSMutableData data];
+    size_t receivedBytes = 0;
+    int requestId = 0;
+    auto send = [&](NSDictionary* message) {
+      NSMutableData* data = [[NSJSONSerialization dataWithJSONObject:message options:0 error:nil] mutableCopy];
+      [data appendBytes:"\n" length:1];
+      return data.length <= 4096 && ::send(input.fileDescriptor, data.bytes, data.length, MSG_DONTWAIT)
+          == static_cast<ssize_t>(data.length);
+    };
+    // Bound time, pages and output even if the CLI is old or misbehaves.
+    auto request = [&](NSString* method, NSDictionary* params) -> NSDictionary* {
+      const int responseId = ++requestId;
+      if (std::chrono::steady_clock::now() >= deadline
+          || !send(@{@"id": @(responseId), @"method": method, @"params": params})) return nil;
+      while (std::chrono::steady_clock::now() < deadline) {
+        const char* bytes = static_cast<const char*>(pending.bytes);
+        const void* newline = memchr(bytes, '\n', pending.length);
+        if (newline) {
+          const size_t length = static_cast<const char*>(newline) - bytes;
+          NSData* line = [pending subdataWithRange:NSMakeRange(0, length)];
+          [pending replaceBytesInRange:NSMakeRange(0, length + 1) withBytes:nullptr length:0];
+          id message = [NSJSONSerialization JSONObjectWithData:line options:0 error:nil];
+          if ([message isKindOfClass:NSDictionary.class] && [message[@"id"] isEqual:@(responseId)]) {
+            id result = message[@"result"];
+            return [result isKindOfClass:NSDictionary.class] ? result : nil;
+          }
+          continue;
+        }
+        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+            deadline - std::chrono::steady_clock::now()).count();
+        pollfd descriptor{output.fileHandleForReading.fileDescriptor, POLLIN, 0};
+        if (poll(&descriptor, 1, static_cast<int>(std::max<int64_t>(0, left))) <= 0) return nil;
+        char buffer[8192];
+        const ssize_t count = read(descriptor.fd, buffer, sizeof(buffer));
+        if (count <= 0 || (receivedBytes += count) > 16 * 1024 * 1024) return nil;
+        [pending appendBytes:buffer length:static_cast<NSUInteger>(count)];
+      }
+      return nil;
+    };
+
+    @try {
+      if (request(@"initialize", @{@"clientInfo": @{@"name": @"legend_chat_history", @"version": @"1"}})) {
+        send(@{@"method": @"initialized"});
+        for (NSNumber* archived in @[@NO, @YES]) {
+          NSString* cursor = nil;
+          for (int page = 0; page < 20 && remaining.count > 0; ++page) {
+            NSMutableDictionary* params = [@{@"limit": @100, @"sortKey": @"updated_at",
+                @"archived": archived, @"modelProviders": @[], @"useStateDbOnly": @YES,
+                @"sourceKinds": @[@"cli", @"vscode", @"exec", @"appServer", @"unknown"]} mutableCopy];
+            if (cursor) params[@"cursor"] = cursor;
+            NSDictionary* result = request(@"thread/list", params);
+            if (![result[@"data"] isKindOfClass:NSArray.class]) break;
+            for (id thread in result[@"data"]) {
+              if (![thread isKindOfClass:NSDictionary.class]) continue;
+              NSString* threadId = thread[@"id"];
+              if (![threadId isKindOfClass:NSString.class] || ![remaining containsObject:threadId]) continue;
+              [remaining removeObject:threadId];
+              NSString* name = thread[@"name"];
+              NSString* preview = thread[@"preview"];
+              const std::string key = threadId.UTF8String;
+              auto legacy = index.find(key);
+              for (auto& summary : summaries) {
+                if (summary.id != "codex:" + key) continue;
+                if ([name isKindOfClass:NSString.class] && name.length > 0) {
+                  summary.title = boundedTitle(name.UTF8String);
+                } else if ((legacy == index.end() || legacy->second.title.empty())
+                    && [preview isKindOfClass:NSString.class] && preview.length > 0) {
+                  summary.title = boundedTitle("Preview: " + std::string(preview.UTF8String));
+                }
+              }
+            }
+            id next = result[@"nextCursor"];
+            if (![next isKindOfClass:NSString.class] || [next length] == 0 || [next isEqual:cursor]) break;
+            cursor = next;
+          }
+        }
+      }
+    } @catch (NSException* exception) {
+      // An unavailable/older CLI or a closed pipe leaves the index catalog intact.
+    } @finally {
+      [input closeFile];
+      if (task.running) kill(task.processIdentifier, SIGKILL);
+      [task waitUntilExit];
+      [output.fileHandleForReading closeFile];
     }
   }
 }
@@ -215,7 +362,11 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
     const fs::path home(homeValue);
     std::unordered_map<std::string, CatalogMetadata> codexMetadata;
     std::unordered_map<std::string, CatalogMetadata> claudeMetadata;
-    loadCodexIndex(home / ".codex" / "session_index.jsonl", codexMetadata);
+    const char* codexHomeValue = std::getenv("CODEX_HOME");
+    const bool fixture = std::getenv("CHAT_HISTORY_BENCHMARK_CONFIG") != nullptr;
+    const fs::path codexHome = !fixture && codexHomeValue && *codexHomeValue
+        ? fs::path(codexHomeValue) : home / ".codex";
+    loadCodexIndex(codexHome / "session_index.jsonl", codexMetadata);
 
     const fs::path claudeRoot = home / ".claude" / "projects";
     std::error_code error;
@@ -231,8 +382,8 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
     }
 
     std::vector<CatalogCandidate> candidates;
-    addProviderFiles(home / ".codex" / "sessions", "codex", codexMetadata, candidates);
-    addProviderFiles(home / ".codex" / "archived_sessions", "codex", codexMetadata, candidates);
+    addProviderFiles(codexHome / "sessions", "codex", codexMetadata, candidates);
+    addProviderFiles(codexHome / "archived_sessions", "codex", codexMetadata, candidates);
     addProviderFiles(claudeRoot, "claude", claudeMetadata, candidates);
     std::sort(candidates.begin(), candidates.end(), [](const CatalogCandidate& left, const CatalogCandidate& right) {
       if (left.summary.updatedAt != right.summary.updatedAt) {
@@ -254,6 +405,7 @@ std::vector<ChatSummary> getRecentChatCatalog(size_t limit) {
         }
       }
     }
+    loadCodexTitles(codexHome, home, codexMetadata, summaries);
   }
   return summaries;
 }
