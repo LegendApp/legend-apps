@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount } = {}) {
+function frames({ preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount, still, encode } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
@@ -25,8 +25,10 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     draw: (...args) => calls.push(["draw", ...args]), end: () => events.push(["end", kind]),
   });
   const device = {
+    createBuffer: () => ({}),
     queue: { writeBuffer: (_, __, values) => uniforms.push([...values]), submit: () => events.push(["submit"]) },
     createCommandEncoder: () => ({
+      copyTextureToBuffer() {},
       beginComputePass: () => { events.push(["begin", "compute"]); return pass("compute"); },
       beginRenderPass: ({ colorAttachments }) => { events.push(["begin", "render", colorAttachments[0].loadOp]); return pass("render"); }, finish() {},
     }),
@@ -49,21 +51,54 @@ function frames({ preview = false, active = true, effectActive = true, maxTime, 
     "./slidesStore": {},
     "./gpuRenderGraph": { encodeRenderGraph: (_, __, ___, ____, scale) => calls.push(["graph", scale]) },
   };
-  const UIFrames = new Function("require", "exports", code + "\nreturn UIFrames;")(
-    name => mocks[name] ?? require(name), {},
+  const UIFrames = new Function("require", "exports", "encode", code + "\nif (encode) encodeStill = encode; return UIFrames;")(
+    name => mocks[name] ?? require(name), {}, encode,
   );
-  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
+  UIFrames({ resources: { alive: { value: true, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? { size: 16 } : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
-    effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+    still, effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
   const cleanup = effects.map(effect => effect());
   return { calls, events, uniforms, errors, ready: () => ready, enabled: () => enabled,
-    playback, frameData, reactionInputs, redraw: () => effects[0](),
+    playback, frameData, reactionInputs, redraw: () => effects[0](), retireStill: () => cleanup[1]?.(),
     scale: value => { renderScale.value = value; reaction(); },
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), device };
 }
+
+test.each(["success", "failure"])("retired still capture ignores obsolete %s after the preview changes step", async outcome => {
+  const delivered = [];
+  let started, resolve, reject;
+  const encoding = new Promise((yes, no) => { resolve = yes; reject = no; });
+  const ready = new Promise(yes => { started = yes; });
+  const f = frames({ preview: true, graph: true, still: { id: "0:1", deliver: (...args) => delivered.push(args) },
+    encode: () => { started(); return encoding; } });
+  try {
+    await ready;
+    f.retireStill();
+    f.playback.value = { ...f.playback.value, stepKey: "next-step", stepIndex: 2 };
+    if (outcome === "success") resolve("old-step-image"); else reject(new Error("old-step-encoding-failed"));
+    await encoding.catch(() => {});
+    expect(delivered).toEqual([]);
+    expect(f.errors).toEqual([]);
+  } finally { f.stop(); }
+});
+
+test.each(["success", "failure"])("current still capture preserves %s delivery", async outcome => {
+  const delivered = [];
+  let completed;
+  const done = new Promise(yes => { completed = yes; });
+  const f = frames({ preview: true, graph: true,
+    still: { id: "0:1", deliver: (...args) => delivered.push(args) },
+    encode: () => { completed(); return outcome === "success" ? Promise.resolve("current-step-image") : Promise.reject(new Error("current-step-encoding-failed")); } });
+  try {
+    await done;
+    await Promise.resolve();
+    expect(delivered).toEqual(outcome === "success" ? [["0:1", "current-step-image"]] : []);
+    expect(f.errors).toEqual(outcome === "failure" ? ["Error: current-step-encoding-failed"] : []);
+  } finally { f.stop(); }
+});
 
 test("active GPU frames alternate storage buffers and dispatch the configured particle count", () => {
   const f = frames();

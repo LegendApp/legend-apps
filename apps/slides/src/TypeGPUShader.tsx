@@ -303,18 +303,23 @@ function UIFrames({ resources: r, still, renderScale, effectActive = true, maxTi
   const stillId = still?.id;
   useEffect(() => {
     if (!still || !stillId) return;
+    // Encoding can outlive the request after its timer has already fired.
+    let cancelled = false;
     const timer = setTimeout(() => {
       const { width, height } = r.context.canvas;
       const bytesPerRow = (width * 4 + 255) & ~255;
       const buffer = r.device.createBuffer({ size: bytesPerRow * height, usage: 1 | 8 });
-      const finish = () => { void encodeStill(buffer, width, height, bytesPerRow, r.format).then(uri => still.deliver(stillId, uri), error => onError(String(error))); };
+      const finish = () => { void encodeStill(buffer, width, height, bytesPerRow, r.format).then(
+        uri => { if (!cancelled) still.deliver(stillId, uri); },
+        error => { if (!cancelled) onError(String(error)); },
+      ); };
       runOnUI(() => {
         "worklet";
         draw(0, false, { buffer, bytesPerRow });
         runOnJS(finish)();
       })();
     }, STILL_SETTLE_MS);
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [still, stillId]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
