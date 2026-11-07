@@ -24,7 +24,7 @@ import {
   type SlideConfig,
 } from "@legend-apps/presentation";
 import { ScaledView } from "@legend-apps/scaled-view";
-import React, { Children, createContext, isValidElement, useContext, useEffect, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import React, { Children, createContext, isValidElement, useContext, useEffect, useMemo, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import {
   Image,
   Linking,
@@ -77,16 +77,20 @@ const DeckRenderContext = createContext<{ isPreview: boolean; isPreparing?: bool
 function Deck({ children, configJson }: CompiledDeckProps) {
   const { isPreview, isPreparing, isOutgoing, targetIndex, targetStep } = useContext(DeckRenderContext);
   const templates = useValue(slidesState$.templates);
-  const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
-  const parsedConfig = parseObject<DeckConfig>(configJson, {});
-  const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
-  const slides = elements.map((element) => ({
-    metadata: (() => {
+  // Compiled children are stable during navigation; the revision boundary remounts Deck on refresh.
+  const { elements, config, slides } = useMemo(() => {
+    const elements = Children.toArray(children).filter(isValidElement) as ReactElement<CompiledSlideProps>[];
+    const parsedConfig = parseObject<DeckConfig>(configJson, {});
+    const config = { ...parsedConfig, transition: normalizeTransition(parsedConfig.transition) };
+    const slides = elements.map((element) => {
       const parsed = parseObject<SlideConfig>(element.props.metadataJson, {});
-      return { ...parsed, steps: Math.max(countSteps(element.props.children, [markdownComponents.ul, markdownComponents.ol]), typeof parsed.steps === "number" ? parsed.steps : 1), transition: normalizeTransition(parsed.transition) };
-    })(),
-    notes: element.props.notes,
-  }));
+      return {
+        metadata: { ...parsed, steps: Math.max(countSteps(element.props.children, [markdownComponents.ul, markdownComponents.ol]), typeof parsed.steps === "number" ? parsed.steps : 1), transition: normalizeTransition(parsed.transition) },
+        notes: element.props.notes,
+      };
+    });
+    return { elements, config, slides };
+  }, [children, configJson, templates, markdownComponents.ul, markdownComponents.ol]);
   const requestedIndex = useValue(() => targetIndex ?? slidesState$.currentSlide.get());
   const selectedIndex = Math.max(0, Math.min(requestedIndex, elements.length - 1));
 
@@ -95,7 +99,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     if (JSON.stringify(current.config) !== JSON.stringify(config) || JSON.stringify(current.slides) !== JSON.stringify(slides)) {
       setSlidesState({ config, currentSlide: Math.min(current.currentSlide, Math.max(0, slides.length - 1)), slides });
     }
-  }, [configJson, elements.length]);
+  }, [config, slides]);
 
   const runtime$ = useRuntimeProjection(() => {
     const count = slidesState$.slides.length;

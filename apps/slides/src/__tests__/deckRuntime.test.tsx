@@ -10,18 +10,18 @@ import * as state from "@legendapp/state";
 import * as stateReact from "@legendapp/state/react";
 import { act, create } from "react-test-renderer";
 import { FocusStage, GPURenderGraph, useDeckContent, usePresentation } from "@legend-apps/presentation";
-import { getSlidesState, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
+import { getSlidesState, nextSlide, previousSlide, setCurrentSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const titleSpeed$ = state.observable(1);
 const brightness$ = state.observable(1);
 
-function compiledRenderer(exportName = "DeckRenderer") {
+function compiledRenderer(exportName = "DeckRenderer", overrides = {}, compile = true) {
   const filename = fileURLToPath(new URL("../DeckRenderer.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
     filename, babelrc: false, configFile: false,
     presets: [require.resolve("@react-native/babel-preset")],
-    plugins: [[require.resolve("babel-plugin-react-compiler"), { target: "19" }]],
+    plugins: compile ? [[require.resolve("babel-plugin-react-compiler"), { target: "19" }]] : [],
   });
   const nativeLeaves = {
     uniwind: { useResolveClassNames: (value) => value === "text-center text-blue-400 text-5xl"
@@ -42,6 +42,7 @@ function compiledRenderer(exportName = "DeckRenderer") {
     "./TypeGPUShader": { TypeGPUShader: "gpu-shader" },
     "./slidesSettings": { useBackgroundIntensitySetting: () => stateReact.useValue(brightness$), titleAnimationSpeedSetting: { get: () => titleSpeed$.get() } },
     "./Webview": { Webview: "webview" },
+    ...overrides,
   };
   const module = { exports: {} };
   new Function("require", "module", "exports", code)(
@@ -591,6 +592,79 @@ test("slide references stay above the focus stage and update across steps and mo
   } finally {
     if (renderer) await act(() => renderer.unmount());
     globalThis.__DEV__ = previousDev;
+    setSlidesState(initial);
+    log.mockRestore();
+  }
+});
+
+test.each([false, true])("deck metadata reuses step discovery and invalidates on edits and refresh (compiler %s)", async compile => {
+  const initial = getSlidesState();
+  const steps = createRequire(import.meta.url)("../steps");
+  let discoveries = 0;
+  const DeckRenderer = compiledRenderer("DeckRenderer", { "./steps": {
+    ...steps, countSteps: (...args) => { discoveries++; return steps.countSteps(...args); },
+  } }, compile);
+  let edit;
+  function Probe() { return <runtime value={usePresentation()} />; }
+  function Document({ components: c }) {
+    const [version, setVersion] = React.useState(0);
+    edit = setVersion;
+    return <c.Deck configJson={version === 2 ? '{"background":false,"template":"Custom"}' : "{}"}>
+      <c.Slide metadataJson={version === 2 ? '{"steps":8}' : "{}"} notes={`notes-${version}`}>
+        <c.Steps><c.ul>{(version === 3 ? ["One", "Two", "Three", "Four"] : ["One", "Two"])
+          .map(text => <c.li key={text}>{text}</c.li>)}</c.ul></c.Steps>
+        <c.Step at={version === 1 ? 5 : 3} reveal="none">Reveal</c.Step><Probe />
+      </c.Slide>
+      <c.Slide metadataJson="{}" notes=""><c.Steps count={3}>{step => <step-probe value={step} />}</c.Steps></c.Slide>
+    </c.Deck>;
+  }
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  let tree;
+  try {
+    setSlidesState({ component: Document, currentSlide: 0, currentStep: 0, slides: [], config: {},
+      templates: { Custom: ({ children }) => <template-old>{children}</template-old> } });
+    await act(() => { tree = create(<DeckRenderer />); });
+    expect(getSlidesState().slides.map(slide => slide.metadata.steps)).toEqual([4, 3]);
+    const discovered = discoveries;
+    for (const target of [[0, 1], [0, 2], [0, 3], [1, 0], [1, 1]]) {
+      await act(() => nextSlide());
+      expect([getSlidesState().currentSlide, getSlidesState().currentStep]).toEqual(target);
+    }
+    expect(tree.root.findByType("step-probe").props.value).toBe(1);
+    for (const target of [[1, 0], [0, 3], [0, 2]]) {
+      await act(() => previousSlide());
+      expect([getSlidesState().currentSlide, getSlidesState().currentStep]).toEqual(target);
+    }
+    expect(discoveries).toBe(discovered);
+    await act(() => tree.update(<DeckRenderer isPreview targetIndex={1} targetStep={2} />));
+    expect(tree.root.findByType("step-probe").props.value).toBe(2);
+    await act(() => tree.update(<DeckRenderer />));
+    await act(() => edit(1));
+    expect(getSlidesState().slides[0]).toMatchObject({ metadata: { steps: 6 }, notes: "notes-1" });
+    expect(discoveries).toBeGreaterThan(discovered);
+    await act(() => edit(2));
+    expect(getSlidesState().slides[0]).toMatchObject({ metadata: { steps: 8 }, notes: "notes-2" });
+    expect(getSlidesState().config.background).toBe(false);
+    expect(tree.root.findAllByType("template-old")).toHaveLength(1);
+    await act(() => setSlidesState({ templates: { Custom: ({ children }) => <template-new>{children}</template-new> } }));
+    expect(tree.root.findAllByType("template-new")).toHaveLength(1);
+    expect(getSlidesState().slides[0].metadata.steps).toBe(8);
+    await act(() => edit(3));
+    expect(getSlidesState().slides[0].metadata.steps).toBe(5);
+    const beforeRefresh = discoveries;
+    await act(() => setSlidesState({ revision: initial.revision + 1 }));
+    expect(discoveries).toBeGreaterThan(beforeRefresh);
+    expect(getSlidesState().slides.map(slide => slide.metadata.steps)).toEqual([4, 3]);
+    function Replacement({ components: c }) {
+      return <c.Deck configJson="{}"><c.Slide metadataJson="{}" notes="replacement"><c.Step at={6} /></c.Slide>
+        <c.Slide metadataJson="{}" notes="static" /></c.Deck>;
+    }
+    await act(() => setSlidesState({ component: Replacement }));
+    expect(getSlidesState().slides).toEqual([
+      { metadata: { steps: 7 }, notes: "replacement" }, { metadata: { steps: 1 }, notes: "static" },
+    ]);
+  } finally {
+    if (tree) await act(() => tree.unmount());
     setSlidesState(initial);
     log.mockRestore();
   }
