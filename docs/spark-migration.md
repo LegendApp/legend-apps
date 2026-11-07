@@ -1,13 +1,11 @@
 # Spark host migration
 
-The default macOS app commands use the Spark SDK selected in the workspace
-catalog and generate consumers under
-`shell/.legend/spark/<app>` for dev and `<app>-release` for release. Both use
-one union install at `shell/.legend/spark/`; generated projects retain each app's
-native dependencies and exclusions and are not Bun workspaces. Local `packages/*`
-are live workspace links, so new source files resolve without reinstalling.
-Old per-app installs are preserved under `.legacy-installs/` and excluded from
-Metro; remove them only after reviewing the backup.
+The macOS commands use the published Spark SDK pinned in the root workspace
+catalog and installed in root `node_modules`. Debug uses one native host at
+`shell/.legend/spark/debug-host` and app consumers under `<app>-shared-debug`.
+Each app's `.spark/shared-debug.json` records its cloned bundle path. Release
+uses `<app>-release` with per-app native pruning. Generated consumers have no
+dependency installs. Local `packages/*` are live workspace links.
 
 `bun run spark:warm` installs once and prepares all macOS apps. Unchanged inputs
 skip installation; `--reinstall` forces it. `LEGEND_OFFLINE=1` or `--offline`
@@ -17,42 +15,11 @@ The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
-The committed root catalog pins the published npm SDK (`0.0.1`). For a
-local artifact, create the gitignored root `spark.local.json`:
-
-```json
-{"sdk": "file:../legend-spark/artifacts/packages/<tgz>"}
-```
-
-Generated hosts prefer `LEGEND_SPARK_SDK`, then this override, resolving `file:`
-paths from the repo root; otherwise they use the catalog. The selected SDK flows into generated
-`package.json` dependencies and overrides, so changing or removing the override
-invalidates the install hash. Archive contents are also hashed. Do not commit
-local SDK paths in `package.json` or `bun.lock`.
-
-Root scripts and typecheck read Spark's template, bundled native metadata, and
-APIs from root `node_modules`, so the root installation also needs the local SDK
-when testing its changes. Bun does not read `spark.local.json`. The minimal local
-install substitutes only the Spark catalog value for `bun install --no-save`, then
-restores the exact original `package.json` in `finally`; `--no-save` preserves the
-tracked lockfile. `spark:sync` does this automatically. To install an already
-packed artifact without pulling or repacking:
-
-```sh
-bun -e 'import fs from "node:fs"; import { spawnSync } from "node:child_process";
-const source = fs.readFileSync("package.json", "utf8");
-const pkg = JSON.parse(source);
-pkg.catalog["@legendapp/spark"] = JSON.parse(fs.readFileSync("spark.local.json", "utf8")).sdk;
-try {
-  fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
-  const result = spawnSync("bun", ["install", "--no-save"], { stdio: "inherit" });
-  if (result.error) throw result.error;
-  process.exitCode = result.status ?? 1;
-} finally { fs.writeFileSync("package.json", source); }'
-```
-
-Keep the published pin restored after the install. Reinstall normally after
-removing the override to return the root SDK to the published version.
+The committed root catalog pins the published npm SDK (`0.0.2`). Update that
+pin and `bun.lock` together when upgrading. Root scripts, generated consumers,
+and typecheck all use the root installation. `spark.local.json` and
+`LEGEND_SPARK_SDK` do not select an SDK; the former `spark:sync` workflow has
+been removed.
 
 App icon catalogs under `apps/<app>/macos/legendapp-shell-macos/Assets.xcassets`
 or `apps/<app>/AppIcon.appiconset` are copied into Spark's generated native
@@ -69,36 +36,13 @@ while its active block can commit and blur. Native document selections keep Esca
 to collapse the selection. Rebuild native hosts
 after the SDK update; Metro reload alone cannot load the new keyboard contract.
 
-After changing Spark's native SDK, run `bun run pack:local` there, then:
-
-```sh
-bun run spark code install
-bun run spark code build
-bun run spark code start
-```
-
 Packaging smoke-launches the copied release app for 20 seconds before signing;
 `--skip-smoke` explicitly bypasses that check. Exits and new crash reports stop
 packaging with diagnostics.
 
 `build` makes a debug app. `analyze` checks the production JavaScript/native graph
 without a native release build. `install` uses Bun's hoisted linker. The wrapper
-runs Spark's source CLI; repack and reinstall after native SDK changes.
-
-On a machine that pulls the framework from another machine's `dev` remote,
-`bun run spark:sync [app]` (default `slides`) does the whole refresh: fast-forward
-both checkouts from `dev`, install Spark dependencies with `bun install --frozen-lockfile` and run
-`pack:local` when its commit moved or archives are missing, write the ignored local
-override, install the root SDK, and launch a native dev build. The successful pack
-commit is recorded in Spark's ignored `.spark/sync-sdk.json`, so retries recover
-from failed packs and unchanged sources skip packing.
-
-The ignored local override survives pulls; `package.json` edits must be
-committed or stashed first. Spark must have a clean checkout. The root install uses
-`--no-save` to keep the machine-local archive out of the tracked lockfile.
-`LEGEND_SPARK_ROOT` overrides the sibling checkout and `LEGEND_SYNC_REMOTE`
-overrides `dev`. Pass `--skip-pull` to work from the current checkouts or `--no-run`
-to prepare the SDK without installing root dependencies or launching.
+runs the installed Spark CLI. Reinstall and rebuild after upgrading the SDK.
 
 ## Lifecycle ownership
 

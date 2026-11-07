@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { resolveDevServerPort } from "./lib/apps";
+import { matchingMetro } from "./lib/sparkDevServer";
 import { assertRecorderSucceeded, observeRecorder } from "./slides-effects/recording";
 
 const usage = `Usage: bun run slides:record <deck.mdx> [options]
@@ -23,7 +24,7 @@ Video (MP4, 60 fps, ScreenCaptureKit):
   --step-seconds S   time on each step (default 3)
 
   --port N           Metro port (default: the slides dev port); Metro is started and stopped if not running
-  --app PATH         LegendSlides.app (default: the dev build from bun run slides build macos --dev)
+  --app PATH         Slides .app bundle (default: the dev build from bun run slides build macos --dev)
   --effect-packs DIR resolve slides: imports from DIR, e.g. packages/slides-effects/packs (default: installed packs)
   --wait S           wait up to S seconds for another Legend Slides instance to quit (default 600)
   --reserve-bytes N  free-space floor for video capture (default 5000000000)
@@ -71,11 +72,13 @@ if (!slideList && !flag("--all")) throw new Error("Pass --slide LIST or --all.")
 if (video && slideList?.length !== 1) throw new Error("--video records exactly one --slide.");
 
 const appPath = option("--app") ?? (() => {
-  const record = path.join(repo, "shell/.legend/spark/slides/.spark/dev-build.json");
+  const record = path.join(repo, "shell/.legend/spark/slides-shared-debug/.spark/shared-debug.json");
   return fs.existsSync(record) ? JSON.parse(fs.readFileSync(record, "utf8")).app as string : undefined;
 })();
 if (!appPath || !fs.existsSync(appPath)) throw new Error("No Slides dev build. Run: bun run slides build macos --dev (or pass --app).");
-const binary = path.join(appPath, "Contents/MacOS", path.basename(appPath, ".app"));
+const executable = spawnSync("plutil", ["-extract", "CFBundleExecutable", "raw", "-o", "-", path.join(appPath, "Contents/Info.plist")], { encoding: "utf8" });
+if (executable.status !== 0) throw new Error(`Could not read the Slides executable: ${executable.stderr}`);
+const binary = path.join(appPath, "Contents/MacOS", executable.stdout.trim());
 
 const run = (command: string, commandArgs: string[]) => spawnSync(command, commandArgs, { encoding: "utf8" });
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -96,8 +99,8 @@ function appWindows(pid: number): ListedWindow[] {
 }
 const audienceWindow = (pid: number) => appWindows(pid).find(w => /Audience/.test(w.title) && w.width > 200);
 
-const otherInstances = () => run("pgrep", ["-f", "LegendSlides.app/Contents/MacOS/"]).stdout.trim();
-const metroUp = () => fetch(`http://127.0.0.1:${port}/status`).then(r => r.text()).then(t => t.includes("running"), () => false);
+const otherInstances = () => run("pgrep", ["-f", "/(Legend Slides|LegendSlides)[.]app/Contents/MacOS/"]).stdout.trim();
+const metroUp = () => matchingMetro(path.join(repo, "shell/.legend/spark/slides-shared-debug"), port, false);
 
 // Hermes' inspector does not await promises, so calls park their result on a global that is polled.
 async function connect(url: string) {
@@ -150,7 +153,7 @@ try {
   }
   // Launch the binary directly so its PID is ours and it inherits a PATH with bun for the deck compiler.
   app = spawn(binary, ["-ApplePersistenceIgnoreState", "YES", "-RCT_jsLocation", `127.0.0.1:${port}`], {
-    detached: true, stdio: "ignore", env: { ...process.env, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}`, ...effectPacks && { LEGEND_SLIDES_EFFECT_PACKS: effectPacks } } });
+    detached: true, stdio: "ignore", env: { ...process.env, SPARK_BUNDLE_URL: `http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`, PATH: `${path.dirname(process.execPath)}:${process.env.PATH}`, ...effectPacks && { LEGEND_SLIDES_EFFECT_PACKS: effectPacks } } });
   console.log(`Launched ${binary} (pid ${app.pid})`);
   let control: Awaited<ReturnType<typeof connect>> | undefined;
   for (let i = 0; i < 120 && !control; i++, await sleep(1000)) {

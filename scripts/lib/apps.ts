@@ -79,6 +79,7 @@ export function formatAppUsage(appId = "<app>") {
     "  start      Start Metro/dev server",
     "  open       Open the already built macOS app",
     "  run        Build and run the app",
+    "             macOS Debug shares one root native host",
     "  build      Build a release app",
     "  package    Package, sign, notarize, and generate a Sparkle appcast for a macOS release",
     "  githubrelease Create a GitHub release for a packaged macOS app",

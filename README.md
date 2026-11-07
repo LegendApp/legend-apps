@@ -166,6 +166,20 @@ On macOS, `run` and `start` reuse a healthy Metro server for the same app and
 port. `run` opens the development app against that server; its original terminal
 keeps ownership of Metro. A server for another project requires a different `--port`.
 
+macOS Debug commands use one root Bun install and one shared native host at
+`shell/.legend/spark/debug-host`, with one Podfile and Pods set. The root
+`package.json` defines its dependencies; `bun install` applies the repository and
+Spark patches there. Debug links every native module from that install. Native
+source, SDK or dependency changes rebuild the host; JS and window-profile changes
+reuse it.
+
+Each app gets an APFS-cloned bundle with its normal bundle ID, display name,
+storage namespace and window lifecycle policy, including Music's dark glass
+chrome. These bundles share compiled native code and are signed locally.
+Plain Expo Metro serves each app from its `<app>-shared-debug` workspace, avoiding
+Spark's per-app development-build fingerprint gate. Generated workspaces have no
+dependency installs. Release builds retain per-app native pruning and workspaces.
+
 When an app manifest or native package link changes, refresh CocoaPods before
 rebuilding macOS:
 
@@ -213,9 +227,8 @@ bun run test:markdown-e2e
 - `packages/` contains shared TypeScript libraries and React Native native
   modules.
 - `shell/` contains the shared JavaScript entrypoint and mobile native host.
-  Spark generates macOS dev consumers under `shell/.legend/spark/<app>` and
-  release consumers under `<app>-release`, sharing one install in
-  `shell/.legend/spark/node_modules`.
+  Spark generates macOS Debug consumers under `shell/.legend/spark/<app>-shared-debug`
+  and Release consumers under `<app>-release`; both use root `node_modules`.
 - `scripts/` contains app selection, configuration generation, verification,
   build, package, and release tooling.
 - `patches/` contains Bun `patchedDependencies` applied during installation.
@@ -227,9 +240,8 @@ Generated per-app native workspaces and configuration live under
 
 The committed Spark catalog and lockfile select the published npm SDK. Native
 workspace preparation reads that installed SDK and does not need a sibling
-`legend-spark` checkout. For SDK development, `bun run spark:sync` can temporarily
-select a local archive; keep those `package.json` and `bun.lock` changes
-uncommitted and restore the published dependency before committing them.
+`legend-spark` checkout. Update the root catalog pin and lockfile together when
+upgrading Spark. Local SDK selection is no longer supported.
 
 Enable the staged dependency check with `git config core.hooksPath .githooks`.
 It permits local test overrides in the working tree and rejects staging them.

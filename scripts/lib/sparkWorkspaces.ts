@@ -1,18 +1,13 @@
 import fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import type { SparkApplicationConfig } from "@legendapp/spark/config";
+import { prepareConfig, type SparkApplicationConfig } from "@legendapp/spark/config";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { appIds, appsDir, rootDir, shellDir, loadAppManifest, loadAppPackageMetadata } from "./apps";
+import { appsDir, rootDir, shellDir, loadAppPackageMetadata } from "./apps";
 import { getActiveNativePackages, getExcludedNativePackages } from "./nativeModules";
 import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKey } from "./release";
 import { getMacOSReleaseMarkdownConfig, getMacOSReleaseProfile } from "./macosReleaseProfile";
 import type { AppManifest } from "./types";
 import { sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
-
-const { installedRelease, packageSources, materializeReleasePackages, verifyMaterializedReleasePackages } = await import(
-  pathToFileURL(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/dist/release.js")).href
-);
 
 export const sharedSparkWorkspace = path.join(shellDir, ".legend", "spark");
 export const sparkWorkspace = (appId: string, mode: "dev" | "release" = "dev") => path.join(sharedSparkWorkspace, mode === "release" ? `${appId}-release` : appId);
@@ -22,8 +17,8 @@ export function sparkMetroBlockList(appId: string) {
   return [
     "/shell/\\.legend/.*/(?:macos|ios|android|\\.spark)/",
     `${escape(path.join(shellDir, ".legend"))}/(?!spark(?:/|$))[^/]+(?:/|$)`,
-    // Keep the shared install visible while excluding other generated projects.
-    `${escape(path.join(shellDir, ".legend", "spark"))}/(?!(?:${escape(appId)}|node_modules)(?:/|$))[^/]+(?:/|$)`,
+    // Exclude sibling generated projects; dependencies resolve from the root.
+    `${escape(path.join(shellDir, ".legend", "spark"))}/(?!(?:${escape(appId)})(?:/|$))[^/]+(?:/|$)`,
   ];
 }
 
@@ -53,14 +48,15 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
       `${file}:${createHash("sha256").update(fs.readFileSync(path.join(icon, file))).digest("hex")}`).join("\n")).digest("hex"),
   }] as [string, { source: string; hash: string }]] : [];
   const active = getActiveNativePackages(manifest, "macos");
-  const excluded = getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name).filter(name => name !== "@legendapp/spark-desktop-app" && !(name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length));
-  // Keep unused Spark features
-  // out of custom development builds too, rather than waiting for release pruning.
-  for (const pkg of sparkSdkPackages) {
-    if (pkg.native && !active.some(activePackage => activePackage.name === pkg.name) && pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links")) excluded.push(pkg.name);
+  const excluded: string[] = [];
+  if (mode === "release") {
+    excluded.push(...getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name).filter(name => name !== "@legendapp/spark-desktop-app" && !(name === "@legendapp/spark-desktop-links" && manifest.urlSchemes?.macos?.length)));
+    for (const pkg of sparkSdkPackages) {
+      if (pkg.native && !active.some(activePackage => activePackage.name === pkg.name) && pkg.name !== "@legendapp/spark-desktop-app" && !(manifest.urlSchemes?.macos?.length && pkg.name === "@legendapp/spark-desktop-links")) excluded.push(pkg.name);
+    }
+    excluded.push("@react-native-runtimes/core", "@op-engineering/op-sqlite");
+    if (!manifest.nativeModules.macos.includes("react-native-webview")) excluded.push("react-native-webview");
   }
-  excluded.push("@react-native-runtimes/core", "@op-engineering/op-sqlite");
-  if (!manifest.nativeModules.macos.includes("react-native-webview")) excluded.push("react-native-webview");
   return {
     name: manifest.displayName,
     projectId: manifest.bundleIds.macos,
@@ -119,9 +115,11 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     ...(manifest.urlSchemes?.macos ? { scheme: manifest.urlSchemes.macos } : {}),
     // Preserve all document registration fields; Spark's smaller documentTypes
     // contract currently discards extensions and handler rank.
-    include: active.map(pkg => pkg.name),
+    include: mode === "release" ? active.map(pkg => pkg.name) : [],
     expo: {
       slug: manifest.id,
+      // Metro aliases are generated below; Expo's TS setup expects the pre-7 compiler API.
+      experiments: { tsconfigPaths: false },
       ...((iconPlugin.length || manifest.nativeModules.macos.includes("@legend-apps/diff-parser")) ? {
         plugins: [
           ...iconPlugin,
@@ -133,94 +131,14 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
   } satisfies SparkApplicationConfig;
 }
 
-function sparkPackage(manifest: AppManifest) {
-  const repo = json(path.join(rootDir, "package.json"));
-  const localFile = path.join(rootDir, "spark.local.json");
-  const sdk = process.env.LEGEND_SPARK_SDK ?? (fs.existsSync(localFile) ? json(localFile).sdk : repo.catalog["@legendapp/spark"]);
-  if (typeof sdk !== "string") throw new Error("Select a Spark SDK version in LEGEND_SPARK_SDK, spark.local.json or the workspace catalog.");
-  const selectedSdk = sdk.startsWith("file:") ? `file:${path.resolve(rootDir, sdk.slice(5))}` : sdk;
-  const template = json(path.join(sparkSdkRoot, "vendor/node_modules/@legendapp/spark-cli/templates/blank-typescript/package.json"));
-  const app = json(path.join(appsDir, manifest.id, "package.json"));
-  const active = getActiveNativePackages(manifest, "macos");
-  const excluded = new Set(getExcludedNativePackages(manifest, "macos").map(pkg => pkg.name));
-  const dependencies: Record<string, string> = { ...template.dependencies, ...app.dependencies };
-  // Runtimes are optional and these apps do not use worker heaps yet.
-  delete dependencies["@react-native-runtimes/core"];
-  for (const name of excluded) delete dependencies[name];
-  for (const [name, version] of Object.entries(dependencies)) {
-    if (version === "catalog:") dependencies[name] = repo.catalog[name];
-  }
-  const overrides: Record<string, string> = { ...repo.catalog, ...template.overrides, uniwind: "1.6.3", tailwindcss: "4.2.4" };
-  if (sdk.startsWith("file:")) {
-    const archive = path.resolve(rootDir, sdk.slice(5));
-    if (!fs.existsSync(archive)) throw new Error(`The selected Spark SDK archive is missing: ${archive}`);
-    const sdkManifest = path.join(path.dirname(archive), "manifest.json");
-    const archives: Record<string, string> = fs.existsSync(sdkManifest) ? json(sdkManifest) : {};
-    for (const [name, file] of Object.entries(archives)) {
-      if (name.startsWith("@legendapp/spark-")) continue;
-      const location = `file:${path.resolve(path.dirname(sdkManifest), file)}`;
-      overrides[name] = location;
-      if (name in dependencies) dependencies[name] = location;
-    }
-  } else {
-    const sources: Record<string, string> = packageSources();
-    for (const [name, source] of Object.entries(sources)) {
-      if (name === "@legendapp/spark") continue;
-      const location = `file:${path.resolve(sharedSparkWorkspace, source.slice(5))}`;
-      overrides[name] = location;
-      if (name in dependencies) dependencies[name] = location;
-    }
-  }
-  overrides["@legendapp/spark"] = selectedSdk;
-  dependencies["@legendapp/spark"] = selectedSdk;
-  const localPackages = new Set<string>();
-  for (const entry of fs.readdirSync(path.join(rootDir, "packages"))) {
-    const dir = path.join(rootDir, "packages", entry);
-    if (fs.existsSync(path.join(dir, "package.json"))) localPackages.add(json(path.join(dir, "package.json")).name);
-  }
-  for (const pkg of active) if (!pkg.name.startsWith("@legendapp/spark-")) dependencies[pkg.name] = json(path.join(pkg.root, "package.json")).version;
-  for (const name of Object.keys(dependencies)) dependencies[name] = localPackages.has(name) ? "workspace:*" : overrides[name] ?? dependencies[name];
-  return { repo, app, active, dependencies, overrides };
-}
-
-export async function prepareSharedSparkInstall() {
-  const repo = json(path.join(rootDir, "package.json"));
-  const dependencies: Record<string, string> = {};
-  let overrides: Record<string, string> = {};
-  for (const appId of appIds) {
-    const manifest = await loadAppManifest(appId);
-    if (!manifest.platforms.includes("macos")) continue;
-    const pkg = sparkPackage(manifest);
-    for (const [name, version] of Object.entries(pkg.dependencies)) {
-      if (dependencies[name] && dependencies[name] !== version) throw new Error(`Conflicting shared Spark dependency ${name}: ${dependencies[name]} and ${version}`);
-      dependencies[name] = version;
-    }
-    overrides = pkg.overrides;
-  }
-  fs.mkdirSync(sharedSparkWorkspace, { recursive: true });
-  write(path.join(sharedSparkWorkspace, "package.json"), {
-    name: "legend-spark-shared", private: true, packageManager: "bun@1.3.14",
-    workspaces: ["../../../packages/*"], catalog: repo.catalog,
-    dependencies, overrides, trustedDependencies: repo.trustedDependencies,
-    patchedDependencies: Object.fromEntries(Object.entries(repo.patchedDependencies ?? {}).map(([name, file]) => [name, path.relative(sharedSparkWorkspace, path.resolve(rootDir, file as string))])),
-    "enriched-markdown": repo["enriched-markdown"],
-  });
-  return sharedSparkWorkspace;
-}
-
-/** Use the SDK's verified release inputs before hashing or installing the shared workspace. */
-export async function prepareSparkReleasePackages(project: string, offline: boolean) {
-  if (json(path.join(project, "package.json")).dependencies["@legendapp/spark"].startsWith("file:")) return;
-  const release = installedRelease();
-  if (!offline) await materializeReleasePackages(release, project);
-  verifyMaterializedReleasePackages(release, project);
-}
-
 export function preservePreviousSparkInstall(project: string) {
   for (const name of ["node_modules", "bun.lock"]) {
     const previous = path.join(project, name);
     if (!fs.existsSync(previous)) continue;
-    if (name === "node_modules" && fs.readdirSync(previous).every(entry => entry === ".cache")) continue;
+    if (name === "node_modules" && fs.readdirSync(previous).every(entry => entry === ".cache")) {
+      fs.rmSync(previous, { recursive: true });
+      continue;
+    }
     const backup = path.join(path.dirname(project), ".legacy-installs", path.basename(project), name);
     if (fs.existsSync(backup)) throw new Error(`Cannot preserve old Spark install: ${backup} already exists. Move ${previous} before preparing this app.`);
     fs.mkdirSync(path.dirname(backup), { recursive: true });
@@ -229,9 +147,12 @@ export function preservePreviousSparkInstall(project: string) {
   }
 }
 
-export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev") {
-  const project = sparkWorkspace(manifest.id, mode);
-  const { repo, app, active, dependencies, overrides } = sparkPackage(manifest);
+export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "release" = "dev", project = sparkWorkspace(manifest.id, mode)) {
+  const repo = json(path.join(rootDir, "package.json"));
+  const app = json(path.join(appsDir, manifest.id, "package.json"));
+  const active = getActiveNativePackages(manifest, "macos");
+  const dependencies = { ...repo.dependencies, react: repo.devDependencies.react, "react-native": repo.devDependencies["react-native"] };
+  for (const [name, version] of Object.entries(dependencies)) if (version === "catalog:") dependencies[name] = repo.catalog[name];
   preservePreviousSparkInstall(project);
   fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
@@ -241,7 +162,7 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   write(path.join(project, "package.json"), {
     name: `legend-spark-${manifest.id}`, version: app.version, private: true,
     main: "index.ts", packageManager: "bun@1.3.14", catalog: repo.catalog,
-    dependencies, overrides: { ...overrides, ...dependencies },
+    dependencies, overrides: { ...repo.overrides, ...dependencies },
     patchedDependencies: Object.fromEntries(Object.entries(repo.patchedDependencies ?? {}).map(([name, file]) => [name, path.relative(project, path.resolve(rootDir, file as string))])),
     ...(active.some(pkg => pkg.name === "react-native-enriched-markdown")
       ? { "enriched-markdown": mode === "release" && getMacOSReleaseProfile(manifest.id) === "benchmark"
@@ -252,13 +173,15 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   // Remove source generated by the retired delegate-subclass adapter.
   for (const file of ["HostExtension.mm", "HostExtension.h"]) fs.rmSync(path.join(project, file), { force: true });
   write(path.join(project, "desktop.config.json"), config);
+  prepareConfig(project);
   write(path.join(project, "index.ts"), `import { registerRootComponent } from "expo";\nimport ShellApp from ${JSON.stringify(path.join(shellDir, "src/ShellApp"))};\nregisterRootComponent(ShellApp);\n`);
   write(path.join(project, "babel.config.js"), `process.env.LEGEND_APP = ${JSON.stringify(manifest.id)};\nmodule.exports = require(${JSON.stringify(path.join(shellDir, "babel.config.js"))});\n`);
   write(path.join(project, "metro.config.js"), `const path = require("node:path");
 const { makeMetroConfig } = require("expo-desktop-metro-config");
 const { withDesktop } = require("@legendapp/spark/metro");
 const { withUniwindConfig } = require("uniwind/metro");
-const config = makeMetroConfig(__dirname);
+const config = makeMetroConfig(${JSON.stringify(rootDir)});
+config.projectRoot = __dirname;
 ${manifest.id === "slides" ? 'config.cacheVersion = [config.cacheVersion, process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT || ""].join("|");\n' : ""}config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
 config.server.unstable_serverRoot = ${mode === "release" ? "__dirname" : JSON.stringify(rootDir)};
