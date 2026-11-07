@@ -55,7 +55,7 @@ function AudienceContent() {
   const revision = useValue(slidesState$.revision);
   const slideCount = slides.length;
   const [surfaces] = useState(() => new Map<number, FocusSurface>());
-  const [transitionState, setTransitionState] = useState(() => ({
+  const [committedTransition, setTransitionState] = useState(() => ({
     index: currentSlide,
     preparedIndexes: preparationIndexes(currentSlide, slideCount),
     revision,
@@ -68,6 +68,7 @@ function AudienceContent() {
     cut: false,
     motions: new Map<number, FocusMotion>(),
   }));
+  let transitionState = committedTransition;
   // Allocate the incoming opacity with its new layer tree. Resetting a shared
   // TransitionProgress here would also hide the still-mounted outgoing slide.
   if (transitionState.index !== currentSlide || transitionState.revision !== revision) {
@@ -83,7 +84,7 @@ function AudienceContent() {
     if (transitionState.revision === revision) {
       frozenSteps.set(transitionState.index, lastPresented.current.index === transitionState.index ? lastPresented.current.step : 0);
     }
-    setTransitionState({
+    transitionState = {
       index: currentSlide,
       preparedIndexes: transitionState.revision !== revision ? preparationIndexes(currentSlide, slideCount)
         : cut ? [...new Set([...transitionState.preparedIndexes, currentSlide])]
@@ -99,8 +100,12 @@ function AudienceContent() {
       cut,
       duration: cut ? cutHoldMs : hasShared && resolved.duration === 0 ? 320 : resolved.duration,
       motions: new Map(),
-    });
+    };
   }
+  // Persist navigation before readiness updates can rebase over queued idle preparation.
+  useLayoutEffect(() => {
+    if (committedTransition !== transitionState) setTransitionState(transitionState);
+  }, [committedTransition, transitionState]);
   const transition = transitionState.kind;
   const { progress, outgoing: previousSlide } = transitionState;
 

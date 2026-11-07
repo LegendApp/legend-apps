@@ -44,7 +44,7 @@ async function harness(run) {
   try {
     setSlidesState({ currentSlide: 9, currentStep: 0, config: { transition: "fade" }, slides: Array.from({length:20},()=>({metadata:{steps:4},notes:""})) });
     await act(() => { renderer = create(<AudienceWindow />); });
-    await run({ indexes, finish, idle, drain, jobs, decks: () => renderer.root.findAllByType("deck"),
+    await run({ indexes, finish, idle, drain, jobs, flushSync: run => renderer.unstable_flushSync(run), decks: () => renderer.root.findAllByType("deck"),
       unmount: () => act(() => renderer.unmount()) });
   } finally {
     if (renderer) await act(() => renderer.unmount());
@@ -185,4 +185,18 @@ test("cuts retain outgoing content until an asynchronous GPU background is ready
   await act(() => backgroundPending$.waiting.set(false));
   await h.finish();
   expect(h.decks().find(deck => deck.props.targetIndex === 7).props.isPreparing).toBe(false);
+}));
+
+
+test("a cut commits its navigation snapshot before readiness when idle preparation is rebased", () => harness(async h => {
+  await act(() => setCurrentSlide(17)); await h.finish();
+  expect(h.jobs.size).toBe(1);
+  await act(async () => {
+    const [id, idle] = h.jobs.entries().next().value;h.jobs.delete(id);
+    idle({didTimeout:false,timeRemaining:()=>50});
+    h.flushSync(()=>setSlidesState({config:{transition:"none"},currentSlide:18}));
+  });
+  await h.finish();await h.drain();
+  expect(h.indexes()).toEqual([17,18,19]);
+  expect(h.decks().find(d=>d.props.targetIndex===18).props.isPreparing).toBe(false);
 }));
