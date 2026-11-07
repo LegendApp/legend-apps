@@ -79,7 +79,8 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (!ids.has(id)) throw new Error("Unknown GPU resource: " + value);
     if (!Number.isInteger(mip) || mip < 0 || (r.buffers[id] ? mip !== 0 : mip >= (targetFor(targets, value).mips ?? 1))) throw new Error("Invalid GPU mip: " + value);
   };
-  for (const { code, ...pass } of passes) {
+  let modules: Promise<unknown> = Promise.resolve();
+  const preparing = passes.map(async ({ code, ...pass }) => {
     for (const value of [...(pass.reads ?? []), ...(pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)])]) checkReference(value);
     const reads = new Set((pass.reads ?? []).map(value => { const [id, mip] = reference(value); return id + "@" + mip; }));
     const writes = pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)];
@@ -100,19 +101,25 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
           : { texture: { sampleType: target!.format === "depth32float" ? "depth" as const : target!.format === "r32float" ? "unfilterable-float" as const : "float" as const,
             multisampled: target!.format === "depth32float" && (target!.samples ?? 1) > 1 } }) });
     }
-    const module = device.createShaderModule({ code: code + (pass.kind === "fullscreen" ? graphVertex : "") });
-    const diagnostics = await module.getCompilationInfo();
-    const errors = diagnostics.messages.filter(message => message.type === "error");
-    if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));
+    // Native shader parsing is synchronous; serialize its async diagnostics while pipelines compile independently.
+    const moduleReady = modules.then(async () => {
+      const module = device.createShaderModule({ code: code + (pass.kind === "fullscreen" ? graphVertex : "") });
+      const diagnostics = await module.getCompilationInfo();
+      const errors = diagnostics.messages.filter(message => message.type === "error");
+      if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));
+      return module;
+    });
+    modules = moduleReady.then(() => undefined, () => undefined);
+    const module = await moduleReady;
     const layout = device.createBindGroupLayout({ entries });
     const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
     let pipeline: GPUComputePipeline | GPURenderPipeline;
     if (pass.kind === "compute") {
-      pipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module, entryPoint: pass.entry } });
+      pipeline = await device.createComputePipelineAsync({ layout: pipelineLayout, compute: { module, entryPoint: pass.entry } });
     } else {
       const colors = pass.kind === "render" ? pass.color : [output(pass)];
       const blend = pass.kind === "render" ? pass.blend : "none";
-      pipeline = device.createRenderPipeline({ layout: pipelineLayout,
+      pipeline = await device.createRenderPipelineAsync({ layout: pipelineLayout,
         vertex: { module, entryPoint: pass.kind === "render" ? pass.vertex : "graphVertex" },
         fragment: { module, entryPoint: pass.fragment, targets: colors.map(color => ({ format: color === "screen" ? format : targetFor(targets, color).format,
           ...(blend && blend !== "none" ? { blend: { color: { srcFactor: "one" as const, dstFactor: blend === "over" ? "one-minus-src-alpha" as const : "one" as const, operation: "add" as const },
@@ -132,7 +139,13 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
         r.culls.push({ cull, ranges: new Uint32Array(instances * 2), length: 0, frame: 0 });
       }
     }
-    r.passes.push({ pass, pipeline, layout, resolves: [], cull: cullIndex });
+    return { pass, pipeline, layout, resolves: [] as boolean[], cull: cullIndex };
+  });
+  // Finish every device operation before the caller may tear down a failed setup.
+  const prepared = await Promise.allSettled(preparing);
+  for (const result of prepared) {
+    if (result.status === "rejected") throw result.reason;
+    r.passes.push(result.value);
   }
   // A multisampled colour target resolves once, in the last render pass that writes it.
   const resolved = new Set<string>();

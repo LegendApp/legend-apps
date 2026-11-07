@@ -98,7 +98,7 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
     const device = { id, lost: new Promise(() => {}), addEventListener() {}, pushErrorScope() {},
       popErrorScope: () => { ready.resolve(); return validation.promise; }, destroy: () => events.push(["destroy", id]),
       createBuffer: () => ({}), createSampler: () => ({}), createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
-      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipeline: () => ({}),
+      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipelineAsync: async () => ({}),
       queue: { writeBuffer() {}, submit() {} },
       createCommandEncoder: () => ({ finish() {}, beginRenderPass: descriptor => {
         const view = descriptor.colorAttachments[0].view;

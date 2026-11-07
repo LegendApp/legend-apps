@@ -15,8 +15,8 @@ function gpu() {
     createBuffer: descriptor => ({ descriptor }), createSampler: () => ({}),
     createShaderModule: descriptor => ({ descriptor, getCompilationInfo: async () => ({ messages: [] }) }),
     createBindGroupLayout: descriptor => descriptor, createPipelineLayout: descriptor => descriptor,
-    createComputePipeline: descriptor => { pipelines.push(descriptor); return descriptor; },
-    createRenderPipeline: descriptor => { pipelines.push(descriptor); return descriptor; },
+    createComputePipelineAsync: async descriptor => { pipelines.push(descriptor); return descriptor; },
+    createRenderPipelineAsync: async descriptor => { pipelines.push(descriptor); return descriptor; },
     createTexture: descriptor => {
       const texture = { descriptor, width: descriptor.size[0], height: descriptor.size[1], destroyed: false, createView: view => { const result = { texture, view }; views.push(result); return result; }, destroy() { this.destroyed = true; } };
       textures.push(texture); return texture;
@@ -284,4 +284,53 @@ test("UI graph descriptors retain draw data without copying compile-only shader 
   expect(resources.passes[1].pass).toMatchObject({ kind: "render", vertexCount: 24, instanceCount: 40 });
   encodeRenderGraph(resources, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
   expect(g.commands.at(-1)).toEqual(["draw", 3, 1]);
+});
+
+test("graph setup compiles independent pipelines together and retains their declared draw order", async () => {
+  const g = gpu(), pending = [];
+  for (const kind of ["Compute", "Render"]) g.device[`create${kind}PipelineAsync`] = descriptor => new Promise(resolve => pending.push(() => resolve({ descriptor })));
+  let finished = false;
+  const setup = prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {}).then(value => { finished = true; return value; });
+  for (let n = 0; n < 40 && pending.length < 4; n++) await Promise.resolve();
+  expect(finished).toBe(false);
+  expect(pending).toHaveLength(4);
+  for (const index of [3, 1, 2]) pending[index]();
+  await Promise.resolve(); await Promise.resolve();
+  expect(finished).toBe(false);
+  pending[0]();
+  const resources = await setup;
+  expect(resources.passes.map(resource => resource.pass.id)).toEqual(definition.passes.map(pass => pass.id));
+  expect(resources.passes).toHaveLength(4);
+  expect(finished).toBe(true);
+});
+
+test("a pipeline failure cannot release the device while other compilation jobs still use it", async () => {
+  const g = gpu(), pending = [];
+  g.device.createComputePipelineAsync = async () => { throw Error("compile failed"); };
+  g.device.createRenderPipelineAsync = () => new Promise(resolve => pending.push(resolve));
+  let finished = false;
+  const setup = prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {}).finally(() => { finished = true; });
+  for (let n = 0; n < 40 && pending.length < 3; n++) await Promise.resolve();
+  expect(pending).toHaveLength(3);
+  expect(finished).toBe(false);
+  for (const resolve of pending) resolve({});
+  await expect(setup).rejects.toThrow("compile failed");
+  expect(finished).toBe(true);
+});
+
+test("native shader parsing yields diagnostics before parsing another module without waiting for its pipeline", async () => {
+  const g = gpu(), modules = [], pipelines = [];
+  g.device.createShaderModule = () => ({ getCompilationInfo: () => new Promise(resolve => modules.push(() => resolve({ messages: [] }))) });
+  for (const kind of ["Compute", "Render"]) g.device[`create${kind}PipelineAsync`] = () => new Promise(resolve => pipelines.push(resolve));
+  const setup = prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {});
+  for (let index = 0; index < 4; index++) {
+    for (let n = 0; n < 40 && modules.length <= index; n++) await Promise.resolve();
+    expect(modules).toHaveLength(index + 1);
+    expect(pipelines).toHaveLength(index);
+    modules[index]();
+  }
+  for (let n = 0; n < 40 && pipelines.length < 4; n++) await Promise.resolve();
+  expect(pipelines).toHaveLength(4);
+  for (const resolve of pipelines) resolve({});
+  expect((await setup).passes).toHaveLength(4);
 });
