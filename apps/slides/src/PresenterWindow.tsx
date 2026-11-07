@@ -18,7 +18,7 @@ import { ownRegistration } from "@legend-apps/runtime-utils";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { DeferredPresenterPreview, useAudienceSettled } from "./DeferredPresenterPreview";
+import { DeferredPresenterPreview, PresenterPreview, useAudienceSettled } from "./DeferredPresenterPreview";
 import { PreviewStillStack, PreviewStillSweep, stillKey, usePreviewStills } from "./PreviewStills";
 import { ScrollableNotes } from "./ScrollableNotes";
 import { NotesEditingBoundary } from "./EditableMarkdown";
@@ -103,20 +103,16 @@ function SlideCounter({ index }: {
       </Text>
     </View>);
 }
-function Preview({ index, current, animate = false, stepIndex, still, weight = 1 }: {
+function Preview({ index, animate = false, stepIndex, still }: {
     index: number;
     /** Replaces the live GPU background. */
     still?: ReactNode;
-    /** The live slide number, on the preview that counts slides. */
-    current?: number;
     animate?: boolean;
     stepIndex?: number;
-    weight?: number;
 }) {
-    return (<View style={[styles.previewSection, { flex: weight }]}>
+    return (<View style={styles.previewSection}>
       <View style={styles.preview}>
         <SlideCanvas targetIndex={index} targetStep={stepIndex} isPreview={!animate} backgroundIsPreview backgroundStill={still}><DeckRenderer isPreview={!animate} targetIndex={index} targetStep={stepIndex}/></SlideCanvas>
-        {current !== undefined && <SlideCounter index={current}/>}
       </View>
     </View>);
 }
@@ -209,14 +205,18 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
     const stillOf = (target: string) => audienceOpen && stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
     const currentStill = stillOf(stillKey(currentIndex, currentStep)), nextStill = stillOf(stillKey(nextIndex, nextStep));
+    const currentPending = !currentStill && (settledIndex !== currentIndex || settledStep !== currentStep);
+    const nextPending = !nextStill && (settledNextIndex !== nextIndex || settledNextStep !== nextStep);
     const nextPreview = <Preview index={nextStill ? nextIndex : settledNextIndex} stepIndex={nextStill ? nextStep : settledNextStep} still={nextStill}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <View style={[styles.previews, { flex: previewWeight }]}>
         <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
-        <Preview index={currentStill ? currentIndex : settledIndex} current={currentIndex} animate={!audienceOpen} stepIndex={currentStill ? currentStep : settledStep} still={currentStill} weight={showNext ? layout.currentPreviewRatio : 1}/>
+        <PresenterPreview pending={currentPending} overlay={<SlideCounter index={currentIndex}/>} weight={showNext ? layout.currentPreviewRatio : 1}>
+          <Preview index={currentStill ? currentIndex : settledIndex} animate={!audienceOpen} stepIndex={currentStill ? currentStep : settledStep} still={currentStill}/>
+        </PresenterPreview>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>
-            <DeferredPresenterPreview immediate={!!nextStill} weight={1 - layout.currentPreviewRatio}>
+            <DeferredPresenterPreview immediate={!!nextStill} pending={nextPending} weight={1 - layout.currentPreviewRatio}>
               {nextPreview}
             </DeferredPresenterPreview>
           </>)}
@@ -740,6 +740,7 @@ const styles = StyleSheet.create({
         minHeight: 0
     },
     previewSection: {
+        flex: 1,
         minWidth: 0
     },
     resizeHandle: { alignItems: "center", justifyContent: "center" },

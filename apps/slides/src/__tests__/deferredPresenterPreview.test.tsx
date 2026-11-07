@@ -8,7 +8,7 @@ mock.module("react-native", () => ({
   ActivityIndicator: "spinner",
   StyleSheet: { create: value => value, absoluteFillObject: {} },
 }));
-const { DeferredPresenterPreview, useAudienceSettled } = await import("../DeferredPresenterPreview");
+const { DeferredPresenterPreview, PresenterPreview, useAudienceSettled } = await import("../DeferredPresenterPreview");
 
 async function harness(run) {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,6 +88,33 @@ test("resizing the preview leaves stable slide content visible without another r
     if (renderer) await act(() => renderer.unmount());
     log.mockRestore();
   }
+});
+
+test("an unsettled navigation hides an already committed preview until its target catches up", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let renders = 0, renderer;
+  function Preview() { renders++; return <preview />; }
+  const preview = <Preview />;
+  try {
+    await act(() => { renderer = create(<DeferredPresenterPreview pending weight={0.4}>{preview}</DeferredPresenterPreview>); });
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(1);
+    expect(renderer.root.findAllByType("view").some(view => view.props.accessibilityElementsHidden && view.props.pointerEvents === "none")).toBe(true);
+    expect(renders).toBe(1);
+    await act(() => renderer.update(<DeferredPresenterPreview pending={false} weight={0.4}>{preview}</DeferredPresenterPreview>));
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
+    expect(renders).toBe(1);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("the live slide counter stays visible while the stale current preview is hidden", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let renderer;
+  try {
+    await act(() => { renderer = create(<PresenterPreview pending weight={0.6} overlay={<counter slide={2} />}><preview slide={1}/></PresenterPreview>); });
+    expect(renderer.root.findByType("preview").parent.props.accessibilityElementsHidden).toBe(true);
+    expect(renderer.root.findByType("counter").parent.props.accessibilityElementsHidden).not.toBe(true);
+    expect(renderer.root.findByType("counter").props.slide).toBe(2);
+  } finally { await act(() => renderer?.unmount()); }
 });
 
 test("previews trail navigation only while the audience watches, and rapid navigation settles on the newest target", async () => {

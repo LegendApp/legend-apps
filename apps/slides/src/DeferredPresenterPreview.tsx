@@ -13,10 +13,7 @@ export function useAudienceSettled<T>(value: T, audienceOpen: boolean, delay = A
   return audienceOpen ? settled : value;
 }
 
-export function DeferredPresenterPreview({ children, immediate = false, weight }: { children: ReactNode; immediate?: boolean; weight: number }) {
-  const deferred = useDeferredValue(children, null);
-  const preview = immediate ? children : deferred;
-  const pending = preview !== children;
+export function PresenterPreview({ children, overlay, pending, weight }: { children: ReactNode; overlay?: ReactNode; pending: boolean; weight: number }) {
   return (
     <View style={[styles.section, { flex: weight }]}>
       <View
@@ -25,15 +22,22 @@ export function DeferredPresenterPreview({ children, immediate = false, weight }
         pointerEvents={pending ? "none" : "auto"}
         style={[styles.content, pending && styles.hidden]}
       >
-        {preview}
+        {children}
       </View>
+      {overlay}
       {pending && (
         <View style={styles.loading}>
-          <ActivityIndicator accessibilityLabel="Preparing next slide preview" color="#a1a1aa" />
+          <ActivityIndicator accessibilityLabel="Preparing slide preview" color="#a1a1aa" />
         </View>
       )}
     </View>
   );
+}
+
+export function DeferredPresenterPreview({ children, immediate = false, pending = false, weight }: { children: ReactNode; immediate?: boolean; pending?: boolean; weight: number }) {
+  const deferred = useDeferredValue(children, null);
+  const preview = immediate ? children : deferred;
+  return <PresenterPreview pending={pending || preview !== children} weight={weight}>{preview}</PresenterPreview>;
 }
 
 const styles = StyleSheet.create({
