@@ -77,3 +77,41 @@ test("iterables remain discoverable when their contents change under the same el
   items.clear();
   assert.equal(countSteps(tree), 1);
 });
+
+
+test("resolved static scenery reuses its first normalized child keys without cloning again", () => {
+  const scenery = h("world", { key: "scenery" }, Array.from({ length: 20 }, (_, i) => h("group", { key: `group-${i}` },
+    [h("part", { key: "first" }), h("part", { key: "second" })])));
+  const keys = nodes => React.Children.toArray(nodes).map(node => ({ key: node.key,
+    children: React.isValidElement(node) ? keys(node.props.children) : [] }));
+  countSteps(scenery);
+  const first = resolveSteps(scenery);
+  countSteps(scenery);
+  clones = 0;
+  const second = resolveSteps(scenery);
+  assert.equal(clones, 0);
+  assert.deepEqual(keys(second.content), keys(first.content));
+  const reused = resolveSteps([h(Step, { at: 4 }), scenery, h(Step)]);
+  assert.equal(reused.steps, 6);
+  assert.deepEqual(keys(reused.content[1].props.children), keys(first.content[0].props.children));
+});
+
+test("resolved iterable parents reflect additions after their first static render", () => {
+  const items = new Set([h("part", { key: "static" })]);
+  const tree = h("group", null, items);
+  assert.equal(resolveSteps(tree).steps, 1);
+  items.add(h(Step, { key: "reveal", at: 6 }));
+  const changed = resolveSteps(tree);
+  assert.equal(changed.steps, 7);
+  assert.ok(changed.content[0].props.children.some(node => node.type === Step && node.props.at === 6));
+  items.clear();
+  assert.equal(resolveSteps(tree).content[0].props.children.length, 0);
+});
+
+
+test("rendering one-shot iterators does not run an extra discovery pass", () => {
+  function* parts() { yield h(Step, { at: 4 }); yield h("part"); }
+  const result = resolveSteps(h("group", null, parts()));
+  assert.equal(result.steps, 5);
+  assert.equal(result.content[0].props.children.length, 2);
+});

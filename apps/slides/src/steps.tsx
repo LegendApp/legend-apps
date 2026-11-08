@@ -83,7 +83,7 @@ export function countSteps(children: ReactNode, listTypes: unknown[] = ["ul", "o
   return walkSteps(children, listTypes, false).steps;
 }
 
-const stepFreeTrees = new WeakSet<ReactElement>();
+const stepFreeTrees = new WeakMap<ReactElement, ReactElement | null>();
 
 function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   let cursor = 0;
@@ -91,6 +91,8 @@ function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   const visitor = (node: ReactNode): ReactNode => isValidElement<StepProps & { count?: number }>(node) ? element(node) : node;
   const element = (node: ReactElement<StepProps & { count?: number }>): ReactNode => {
     if (!render && stepFreeTrees.has(node)) return node;
+    const cached = render ? stepFreeTrees.get(node) : null;
+    if (cached) return cached;
     const before = dynamicNodes;
     if (!render && (node.type === Steps || node.type === Step)) dynamicNodes++;
     if (node.type === Steps) {
@@ -128,8 +130,10 @@ function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
       if (render) props = { ...props, at };
     }
     const content = visit(props.children);
-    if (!render && before === dynamicNodes) stepFreeTrees.add(node);
-    return render ? cloneElement(node, props, content) : node;
+    if (!render && before === dynamicNodes) stepFreeTrees.set(node, null);
+    const resolved = render ? cloneElement(node, props, content) : node;
+    if (render && stepFreeTrees.has(node)) stepFreeTrees.set(node, resolved);
+    return resolved;
   };
   function visit(nodes: ReactNode): ReactNode {
     if (render) return Children.map(nodes, visitor);

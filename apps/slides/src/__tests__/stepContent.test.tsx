@@ -7,7 +7,7 @@ import "./nativeMock";
 import { frames, flushUI } from "./uiClockMock";
 import { interpolateStepStyle } from "../useStepStyle";
 const { PresentationProvider } = await import("@legend-apps/presentation");
-const { Step, Steps, resolveSteps, stepStyle } = await import("../steps");
+const { Step, Steps, countSteps, resolveSteps, stepStyle } = await import("../steps");
 
 test("step interpolation uses shared playback, retargets from the displayed style and freezes outgoing", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -117,4 +117,30 @@ test("step styles compile with React Compiler and native worklet serialization",
     expect(result.code).toBeTruthy();
     if (file.endsWith("useStepStyle.ts")) expect(result.code).toContain("__workletHash");
   }
+});
+
+
+test("reused resolved scenery preserves component state and receives changed context", async () => {
+  const Context = React.createContext("initial");
+  let mounts = 0;
+  function Stateful() {
+    const value = React.useContext(Context);
+    const [instance] = React.useState(() => ++mounts);
+    return <text>{`${value}:${instance}`}</text>;
+  }
+  const scenery = <static-group key="scenery"><Stateful /></static-group>;
+  const content = (at, value) => <Context.Provider value={value}>
+    {resolveSteps([<Step at={at} />, scenery]).content[1]}
+  </Context.Provider>;
+  let tree;
+  try {
+    await act(() => { tree = create(content(1, "first")); });
+    expect(tree.root.findByType("text").children.join("")).toBe("first:1");
+    countSteps(scenery);
+    await act(() => tree.update(content(5, "next")));
+    expect(tree.root.findByType("text").children.join("")).toBe("next:1");
+    await act(() => tree.update(content(2, "reverse")));
+    expect(tree.root.findByType("text").children.join("")).toBe("reverse:1");
+    expect(mounts).toBe(1);
+  } finally { if (tree) await act(() => tree.unmount()); }
 });
