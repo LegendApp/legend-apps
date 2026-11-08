@@ -297,6 +297,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const shareScene = !!pool && !!track;
   const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable({ ...prepareWorldSample(prepared) }), [prepared, shareScene]);
   const ids = useMemo(() => pool ? worldPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
+  const sampleIds = useMemo(() => trackIds(prepared), [prepared]);
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
   const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [pool]);
   const pooled = !!pool;
@@ -366,7 +367,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const values = (pooled ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
     values[35] = scale;
     const previous = trackFrame.value;
-    const next = trackSampler(previous, values, ids, state, track, declared);
+    const next = trackSampler(previous, values, ids, state, track, declared, { scene, clock, ids: sampleIds });
     trackFrame.value = next;
     if (previous.visible !== next.visible) runOnJS(retainLiveIds)(next.visible);
   });

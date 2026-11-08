@@ -137,7 +137,7 @@ test("fixed previews stay idle while the audience advances slides and steps", as
   }
 });
 
-test("retained outgoing content ignores navigation until it returns to playback", async () => {
+test("retained outgoing content keeps its live activation and ignores later navigation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState();
   const DeckRenderer = compiledRenderer();
@@ -152,10 +152,11 @@ test("retained outgoing content ignores navigation until it returns to playback"
   try {
     setSlidesState({ component: Document, currentSlide: 0, currentStep: 2, slides: [], config: {} });
     await act(() => { tree = create(<DeckRenderer targetIndex={0} />); });
+    await act(() => setSlidesState({ currentStep: 2 }));
     await act(() => setCurrentSlide(1));
     await act(() => tree.update(<DeckRenderer isOutgoing targetIndex={0} targetStep={2} />));
     const frozen = tree.root.findByType("runtime").props.value;
-    expect(frozen).toMatchObject({ playbackPhase: "outgoing", isActive: false, isPreview: false, stepIndex: 2 });
+    expect(frozen).toMatchObject({ playbackPhase: "playing", isActive: true, isPreview: false, stepIndex: 2 });
     renders = 0;
     for (const index of [2, 1, 2]) {
       await act(() => setCurrentSlide(index));

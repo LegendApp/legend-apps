@@ -283,7 +283,7 @@ function AudienceSlide({ onPrepared, index, preparing, incoming, transitioning, 
   motion?: FocusMotion; definition?: TransitionDefinition; reference: SlideTransition; settled: boolean;
   reverse: boolean; hasBackground: boolean; shared: boolean; targetStep?: number;
 }) {
-  const outgoing = !incoming && targetStep !== undefined;
+  const outgoing = !preparing && !incoming && targetStep !== undefined;
   const navigation = useMemo(() => ({ progress, outgoing }), [progress, outgoing]);
   const retainedNavigation = useRetainedLayerValue(navigation, preparing);
   const retainedMotion = useRetainedLayerValue(motion, preparing);
@@ -294,7 +294,7 @@ function AudienceSlide({ onPrepared, index, preparing, incoming, transitioning, 
       <SlideCanvas targetIndex={index} targetStep={targetStep}>
         <UserTransitionLayer definition={definition} reference={reference} progress={progress} incoming={incoming}
           preparing={preparing} settled={settled} reverse={reverse} hasBackground={hasBackground} shared={shared}>
-          <AudienceDeckContent index={index} preparing={preparing && !outgoing} outgoing={outgoing}
+          <AudienceDeckContent index={index} preparing={preparing} outgoing={outgoing}
             targetStep={targetStep} navigation={retainedNavigation} />
         </UserTransitionLayer>
       </SlideCanvas>

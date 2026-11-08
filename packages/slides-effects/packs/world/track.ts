@@ -1,6 +1,6 @@
 import type { PlaybackState } from "@legend-apps/presentation";
-import { contentClearance, easeProgress, type CameraPose, type Ease, type Vec3 } from "./camera";
-import { instanceField, prepareWorldScene, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene } from "./scene";
+import { contentClearance, easeProgress, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
+import { instanceField, prepareWorldScene, sampleWorldUniforms, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type WorldSampleScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
 export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
@@ -44,6 +44,8 @@ type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera; step
 const defaultFixed = ["tunnel:", "trails:"];
 /** Longest flight, in seconds, for a jump across more than one station. */
 const jumpDuration = 1.5;
+type TrackSample = { scene: WorldSampleScene; clock: ClockSample; ids: string[] };
+type Departure = TrackSample & { slots: number[]; offset: number; fixed: boolean[] };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
   reversed: boolean; carry?: WorldCarry; moving: number[]; seeds: number[]; output?: Float32Array;
@@ -56,6 +58,7 @@ export type TrackFrame = {
   straight?: number[]; course?: Course;
   /** The scenery clock written to `continuousTime()` under `heldMotion`, and the timestamp it was last advanced at. */
   scenery: number; stamp: number;
+  sample?: TrackSample; playbackTime?: number; departures?: Departure[];
 };
 
 export function createTrackFrame(): TrackFrame {
@@ -364,7 +367,7 @@ function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame, progress: nu
 
 /** UI-thread sampling. Cached inputs are copied before station transforms, keeping the scene cache untouched. */
 export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: string[], playback: PlaybackState,
-  options: WorldTrack, declared = ids): TrackFrame {
+  options: WorldTrack, declared = ids, sample?: TrackSample): TrackFrame {
   "worklet";
   const preview = playback.phase === "preview" || playback.phase === "preparing";
   if (!preview && (playback.phase === "paused" || playback.phase === "outgoing")) return previous;
@@ -461,7 +464,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
     stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, stepCarry, course,
-    scenery: previous.scenery, stamp: previous.stamp };
+    scenery: previous.scenery, stamp: previous.stamp, sample, playbackTime: playback.slideTime };
   for (let i = 0; i < 8; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   const destination = sampleTrackCamera(stations, index, course, 1);
@@ -495,6 +498,37 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
       : (previous.scenery + step * (1 + (options.heldMotion - 1) * held)) % 3600;
     frame.stamp = stamp;
     values[worldClockOffset + 3] = frame.scenery;
+  }
+  // Omitted live draws keep their departure clock; a cached hidden bead is not a retired pose.
+  let departures = first ? [] : previous.departures ?? [];
+  if (!first && slideChanged && previous.sample) {
+    const source = previous.sample;
+    const slots = source.scene.uniformInputs.live.filter(slot => {
+      const id = source.ids[slot], old = previous.ids.indexOf(id);
+      return old >= 0 && previous.declaredSlots[old] && !declaredSet!.has(id) && ids.includes(id);
+    });
+    if (slots.length) departures = [...departures, { ...source, slots,
+      offset: world ? 0 : stations[Number(previous.slideKey.split(":")[0])].offset,
+      fixed: source.ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) }];
+  }
+  const delta = first ? 0 : Math.max(0, slideChanged ? playback.slideTime : playback.slideTime - (previous.playbackTime ?? playback.slideTime));
+  frame.departures = [];
+  if (progress < 1) for (const departure of departures) {
+    const slots = changed ? departure.slots.filter(slot => !declaredSet!.has(departure.ids[slot]) && ids.includes(departure.ids[slot])) : departure.slots;
+    if (!slots.length) continue;
+    const clock = { ...departure.clock, slideTime: departure.clock.slideTime + delta, stepTime: departure.clock.stepTime + delta,
+      time: sample?.clock.time };
+    const live = sampleWorldUniforms(departure.scene, clock, null, 1, 1, true);
+    for (const slot of slots) {
+      const id = departure.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
+      const saved = Array.from(live.slice(at, at + worldInstanceSize));
+      if (!departure.fixed[slot]) {
+        saved[2] -= departure.offset;
+        if (id.startsWith("tube:")) saved[14] -= departure.offset;
+      }
+      retired[id] = saved;
+    }
+    frame.departures.push({ ...departure, slots, clock });
   }
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed, morphEase);

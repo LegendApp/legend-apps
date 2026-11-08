@@ -21,10 +21,11 @@ import {
   type CompiledSlideProps,
   type DeckConfig,
   type PresentationTemplateProps,
+  type PresentationRuntime,
   type SlideConfig,
 } from "@legend-apps/presentation";
 import { ScaledView } from "@legend-apps/scaled-view";
-import React, { Children, createContext, isValidElement, useContext, useEffect, useMemo, type ComponentProps, type ReactElement, type ReactNode } from "react";
+import React, { Children, createContext, isValidElement, useContext, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import {
   Image,
   Linking,
@@ -101,7 +102,11 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     }
   }, [config, slides]);
 
+  const liveRuntime = useRef<PresentationRuntime | null>(null);
   const runtime$ = useRuntimeProjection(() => {
+    if (isOutgoing && !isPreparing && liveRuntime.current) {
+      return { ...liveRuntime.current, currentSlide: slidesState$.currentSlide.peek() };
+    }
     const count = slidesState$.slides.length;
     const slideIndex = Math.max(0, Math.min(targetIndex ?? slidesState$.currentSlide.get(), count - 1));
     const stepCount = normalizeStepCount(slidesState$.slides[slideIndex].metadata.steps.get());
@@ -123,6 +128,17 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       direction: isPreview || isOutgoing ? undefined : slidesState$.direction.get(),
     };
   }, [isPreview, isPreparing, isOutgoing, targetIndex, targetStep]);
+  useLayoutEffect(() => {
+    const retain = () => {
+      const runtime = runtime$.peek();
+      if (!isOutgoing) {
+        if (runtime.isActive) liveRuntime.current = runtime;
+        else if (runtime.isPreparing || runtime.isPreview) liveRuntime.current = null;
+      }
+    };
+    retain();
+    return runtime$.onChange(retain);
+  }, [runtime$, isOutgoing]);
   const selected = elements[selectedIndex];
   if (!selected) return null;
   const selectedMetadata = slides[selectedIndex].metadata;

@@ -70,7 +70,7 @@ test("completion adds no neighbors; idle preparation mounts one nearest neighbor
   expect(h.jobs.size).toBe(0);
 }));
 
-test("completion freezes the retained outgoing tree without rebuilding either deck", () => harness(async h => {
+test("completion retires the outgoing tree into preparation without rebuilding the incoming deck", () => harness(async h => {
   await act(() => setSlidesState({ currentStep: 3 }));
   await act(() => setCurrentSlide(8));
   const before = [...renders];
@@ -78,10 +78,11 @@ test("completion freezes the retained outgoing tree without rebuilding either de
   expect(source.props).toMatchObject({ isOutgoing: true, isPreparing: false, isPreview: false, targetStep: 3 });
   const navigation = source.props.navigation;
   await h.finish();
-  expect([...renders]).toEqual(before);
+  expect(renders.get(8)).toBe(new Map(before).get(8));
+  expect(renders.get(9)).toBe(new Map(before).get(9) + 1);
   const retained = h.decks().find(deck => deck.props.targetIndex === 9);
   expect(retained.props.navigation).toBe(navigation);
-  expect(retained.props).toMatchObject({ isOutgoing: true, isPreparing: false, isPreview: false, targetStep: 3 });
+  expect(retained.props).toMatchObject({ isOutgoing: false, isPreparing: true, isPreview: false, targetStep: 3 });
   await act(() => setCurrentSlide(9));
   const returning = h.decks().find(deck => deck.props.targetIndex === 9);
   expect(returning.props).toMatchObject({ isOutgoing: false, isPreparing: false, isPreview: false });
