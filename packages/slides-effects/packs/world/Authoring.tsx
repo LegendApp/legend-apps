@@ -1534,10 +1534,10 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
           <Burst id={`${id}/${n.id}/landing`} position={[n.x,n.y,.3]} step={0} delay={land} count={14} lifetime={.7} colors={["#ffa21f", "#ffa21f", "#ffffff"]} emissive={6} size={.025} speed={2.5} />
         </> : <Stage id={`${id}/${n.id}/assembly`} position={[key(0, [n.x,n.y + lift,0] as V3, 0, 0), ...fall, dropKey([n.x,n.y,0] as V3, s + .42, .3, "out")]}>
           <Stage id={`${id}/${n.id}/fill`} opacity={[key(0, 0, 0, 0), dropKey(1, s, .15)]}>{box}</Stage>
-          {[[.5, .1, 1.2], [.22, .4, .5]].map(([peak, w, glow], b) => <Stage key={b} id={`${id}/${n.id}/wipe${b}`} opacity={[key(0, 0, 0, 0), dropKey(peak, s + .72, .15), dropKey(0, s + 1.12, .15)]}
-            position={[key(0, [-width / 2 + .3,0,.27] as V3, 0, 0), dropKey([width / 2 - .3,0,.27] as V3, s + .72, .55, "inOut")]}>
-            <Box id={`${id}/${n.id}/wipe${b}/band`} position={[0,0,b * -.002]} scale={[w,height - .2,.004]} rotation={[0,0,-14]} color="#dfe8ff" emissive={glow} material={{ albedo: "#ffffff", metal: 0, roughness: 1 }} />
-          </Stage>)}
+          <Stage id={`${id}/${n.id}/wipe0`} opacity={[key(0, 0, 0, 0), dropKey(.5, s + .72, .12), dropKey(0, s + 1.32, .12)]}
+            position={[key(0, [-width / 2 - .35,0,.27] as V3, 0, 0), dropKey([width / 2 + .35,0,.27] as V3, s + .72, .72, "linear")]}>
+            <Card id={`${id}/${n.id}/wipe0/band`} scale={[.16,height - .2,.004]} rotation={[0,0,-14]} radius={.08} flat fill={.18} glow={.3} edge={.06} color="#dfe8ff" emissive={1.2} />
+          </Stage>
         </Stage>}
         {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
           draw={[key(0, 0, 0, 0), drop === undefined ? key(0, 1, land - .15, .35) : dropKey(1, s + .3, .35)]}

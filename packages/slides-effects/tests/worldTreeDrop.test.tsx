@@ -53,7 +53,7 @@ for (const id of ["wide-tree", "deep-tree", "signals-tree", "keystroke-react"]) 
       flash={[{ step: 1, color: "#ffaa00", repeat: "infinite", every: 2 }]} />) }])[0].scenePlan!.content.prepared;
     const ids = trackIds(s), plate = `box:${id}/a/plate`;
     expect(ids.some(id => id.includes("/landing"))).toBe(false);
-    expect(ids.filter(id => id.includes("/wipe")).length).toBe(NODES.length * 2);
+    expect(new Set(ids.filter(id => id.includes("/wipe")).map(id => id.split("/band")[0])).size).toBe(NODES.length);
     expect(sample(s, 0, 1)(plate, "opacity")).toBe(0);
     expect(sample(s, 0, 4)(plate, "opacity")).toBeCloseTo(1);
     expect(sample(s, 0, 1.9)(plate, "position", 1)).toBeGreaterThan(sample(s, 0, 4)(plate, "position", 1));

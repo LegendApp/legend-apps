@@ -53,3 +53,38 @@ for (const { scene, step, match } of sources) test(`${match === "/beam" ? "direc
     }
   }
 });
+
+const wipe = () => {
+  const scene = prepare(<Tree id="tree" nodes={[{ id: "root", width: 4 }]} drop={.5} />), ids = trackIds(scene);
+  const bands = ids.filter(id => id.startsWith("card:tree/root/wipe0/"));
+  const sample = (time: number) => sampleWorldUniforms(scene, playback(time)) as number[];
+  const read = (time: number, id: string, name: keyof typeof instanceField, axis = 0) => field(sample(time), ids, id, name, axis);
+  return { bands, read };
+};
+
+test("tree wipe has a translucent center without a strong rim or adjacent solid faces", () => {
+  const scene = prepare(<Tree id="tree" nodes={[{ id: "root", width: 4 }]} drop={.5} />);
+  const bands = scene.instances.filter(part => part.id?.includes("/wipe"));
+  expect(bands).toHaveLength(1);
+  expect(bands[0].card?.flat).toBe(true);
+  expect(bands[0].card!.fill).toBeGreaterThan(0);
+  expect(bands[0].card!.fill).toBeLessThan(1);
+  expect(bands[0].card!.edge).toBeLessThan(bands[0].card!.fill);
+  expect(bands[0].card?.glow).toBeGreaterThan(.1);
+  expect(bands[0].card?.radius).toBeGreaterThan(0);
+});
+
+test("tree wipe crosses the full face at a steady speed and fades with the sweep endpoints", () => {
+  const { bands, read } = wipe(), middle = bands[Math.floor(bands.length / 2)];
+  const x = (time: number) => read(time, middle, "position");
+  const opacity = (time: number) => read(time, middle, "opacity");
+  expect(x(1.22)).toBeLessThan(-2);
+  expect(x(1.94)).toBeGreaterThan(2);
+  const moves = [1.4, 1.5, 1.6, 1.7].map(t => x(t + .05) - x(t));
+  for (const delta of moves) expect(delta).toBeCloseTo(moves[0], 4);
+  expect(opacity(1.22)).toBe(0);
+  expect(opacity(1.3)).toBeGreaterThan(0);
+  expect(opacity(1.87)).toBeGreaterThan(0);
+  expect(opacity(1.94)).toBeCloseTo(0);
+  expect(opacity(30)).toBe(0);
+});
