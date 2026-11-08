@@ -374,7 +374,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   // Activation epochs change on re-entry; the slide's numeric index is its stable station identity.
   const world = options.frame === "world";
   const index = preview && !world ? 0 : Number(playback.slideKey.split(":")[0]);
-  const count = Math.max(index, Math.ceil(first ? 0 : previous.cursor)) + trackBendCurves + 2;
+  const count = Math.max(index, Math.ceil(first ? 0 : Math.max(previous.cursor, previous.origin))) + trackBendCurves + 2;
   const course = !changed && previous.course && previous.course.offset.length >= count ? previous.course : buildCourse(options, count, first ? {} : previous.stations);
   const stations = first ? {} : changed ? { ...previous.stations } : previous.stations;
   if (first || slideChanged && !stations[index]) stations[index] = { offset: course.offset[index], track: options };

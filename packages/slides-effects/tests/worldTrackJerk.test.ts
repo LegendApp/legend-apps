@@ -187,3 +187,28 @@ test("departing a forward step pose follows one continuous rail instead of unwin
     pose.slice(0, 8).forEach((value, axis) => expect(value).toBeCloseTo(samples[movingFrames + 1 - i][axis], 7));
   }
 });
+
+
+test("changing steps during a long reverse arrival preserves the complete camera course", () => {
+  const track: WorldTrack = { spacing: 72, duration: 1.2 };
+  for (const [origin, destination] of [[34, 10], [24, 2]]) {
+    let frame = at(createTrackFrame(), origin, 0, track);
+    frame = at(frame, destination, 0, track);
+    frame = at(frame, destination, 1.3, track);
+    expect(frame.cursor).toBeGreaterThan(destination);
+    expect(frame.cursor).toBeLessThan(destination + 2);
+    for (const [step, time] of [[1, 1.31], [0, 1.35], [1, 1.4], [1, 1.5]]) {
+      const uninterrupted = at(frame, destination, time, track, frame.stepIndex);
+      frame = at(frame, destination, time, track, step);
+      expect(Number.isFinite(frame.cursor)).toBe(true);
+      expect(frame.course!.duration.length).toBeGreaterThan(origin);
+      expect(frame.cursor).toBeCloseTo(uninterrupted.cursor, 10);
+      for (const slot of [0, 1, 2, 3, 4, 5, 6, 7, 32]) {
+        expect(Number.isFinite(frame.values[slot])).toBe(true);
+        expect(frame.values[slot]).toBeCloseTo(uninterrupted.values[slot], 6);
+      }
+    }
+    expect(frame.cursor).toBe(destination);
+    expect(at(frame, destination + 1, .1, track).values.slice(0, 8).every(Number.isFinite)).toBe(true);
+  }
+});
