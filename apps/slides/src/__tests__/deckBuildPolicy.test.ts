@@ -22,6 +22,7 @@ function readyState() {
     slides: [],
     status: "ready",
     templates: {},
+    sourceNotes: ["notes from the previous compiled component"],
   };
 }
 
@@ -39,6 +40,7 @@ describe("deck build policy", () => {
     const applied = { ...current, ...successfulDeckUpdate(current, RebuiltDeck, {}, "/deck/deck.mdx", []) };
     expect(applied.deckLocked).toBe(true);
     expect(applied.pendingDeck).toBeNull();
+    expect(applied.sourceNotes).toBeUndefined();
     expect(applied.currentSlide).toBe(4);
     expect(applied.currentStep).toBe(2);
   });

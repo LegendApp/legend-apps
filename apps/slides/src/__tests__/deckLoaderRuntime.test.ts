@@ -31,8 +31,16 @@ globalThis.__DEV__ = false;
 const compilerRuntime = await import("../compilerRuntime");
 const { compilerRuntime$, resolveCompilerRuntime, changeCompilerRuntime } = compilerRuntime;
 const compilerCommand = await import("../compilerCommand");
+let sourceFiles = {}, inputVersions = {}, directoryEntries = {}, watchedChange;
+const sourceIO = {
+  readText: async path => sourceFiles[path] ?? "# Slide",
+  stat: async path => ({ type: /\.[^/]+$/.test(path) ? "file" : "directory", size: 10, modifiedAt: inputVersions[path] ?? 0 }),
+  list: async path => (directoryEntries[path] ?? []).map(name => ({ name })),
+};
+const { createDeckReloadQueue } = await import("../deckReloadQueue");
+const sourceHelpers = await import("../../../../packages/presentation/src/speakerNotesSource");
 const mocks = {
-  "./deckReloadQueue": { createDeckReloadQueue: () => ({ dispose() {} }) },
+  "./deckReloadQueue": { createDeckReloadQueue },
   "./compilerHelper": await import("../compilerHelper"),
   "./compilerCommand": compilerCommand, "./compilerRuntime": compilerRuntime,
   "./slidesStore": { getSlidesState, setSlidesState },
@@ -42,12 +50,16 @@ const mocks = {
   "./transitionLibrary": { transitionDirectoryPath: () => "/transitions" },
   "./slidesPreferences": { rememberDeckPath() {} },
   "@legend-apps/runtime-utils": { decodeProcessText: value => value, ownRegistration: () => ({ remove: async () => {} }) },
-  "@legendapp/spark/files": { watch: async () => ({ remove() {} }) },
+  "@legendapp/spark/files": { ...sourceIO, watch: async (_path, changed) => { watchedChange = changed; return { remove() {} }; } },
   "@legendapp/spark/app/documents": { noteRecentDocument() {} },
   uniwind: { Uniwind: { __reinit() {} } },
 };
 const require = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
 const { transformSync } = require("esbuild");
+const notesModule = { exports: {} };
+const notesCode = transformSync(readFileSync(new URL("../deckNotesReload.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
+Function("require", "module", "exports", notesCode)(() => sourceHelpers, notesModule, notesModule.exports);
+mocks["./deckNotesReload"] = notesModule.exports;
 const module = { exports: {} };
 const code = transformSync(readFileSync(new URL("../deckLoader.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
 Function("require", "module", "exports", code)(name => mocks[name] ?? {}, module, module.exports);
@@ -277,4 +289,73 @@ test("helper download failure registers only the current deck and a retry opens 
     expect(retryCompilerDownload()).toBeUndefined();
     expect(compilerHelper$.retryDeck.peek()).toBeNull();
   } finally { helperFailure = false; }
+});
+
+test("a notes-only watched save updates notes without compiling, replacing the deck or resetting playback", async () => {
+  discover = async () => runtime;
+  await resolveCompilerRuntime({ refresh: true });
+  const path = "/notes/deck.mdx", helper = "/notes/helper.tsx";
+  sourceFiles = { [path]: "---\ntitle: Deck\n---\n# Slide\n\n<!-- old -->\n" };
+  directoryEntries = { "/notes": ["deck.mdx", "helper.tsx"] };
+  inputVersions = {};
+  let compilations = 0;
+  run = async () => { compilations++; return { ...success, stdout: JSON.stringify({ ...JSON.parse(success.stdout), dependencies: [path, helper] }) }; };
+  expect(await loadDeck(path)).toBe(true);
+  setSlidesState({ slides: [{ metadata: { steps: 2 }, notes: "old" }], currentStep: 1 });
+  const before = getSlidesState();
+  sourceFiles[path] = sourceHelpers.updateSlideSpeakerNotes(sourceFiles[path], 0, "new notes");
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  const after = getSlidesState();
+  expect(compilations).toBe(1);
+  expect(after.slides[0].notes).toBe("new notes");
+  for (const key of ["component", "revision", "currentSlide", "currentStep", "slideStartedAt", "stepStartedAt", "templates", "transitions"]) expect(after[key]).toBe(before[key]);
+  // Atomic saves can cause more than one invalidation, even after metadata was refreshed.
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(compilations).toBe(1);
+  // A coalesced helper edit cannot be mistaken for another notes-only save.
+  sourceFiles[path] = sourceHelpers.updateSlideSpeakerNotes(sourceFiles[path], 0, "newer notes");
+  inputVersions[helper] = 1;
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(compilations).toBe(2);
+  // Frontmatter and ordinary slide edits must also use the compiler.
+  sourceFiles[path] = sourceFiles[path].replace("title: Deck", "title: Changed");
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(compilations).toBe(3);
+  sourceFiles[path] += "\nChanged slide content\n";
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(compilations).toBe(4);
+  // Even with a notes edit, a new platform-specific import invalidates input resolution.
+  sourceFiles[path] = sourceHelpers.updateSlideSpeakerNotes(sourceFiles[path], 0, "last notes");
+  directoryEntries["/notes"].push("helper.macos.tsx");
+  watchedChange();
+  await new Promise(resolve => setTimeout(resolve, 160));
+  expect(compilations).toBe(5);
+});
+
+test("notes classification keeps literal comments and frontmatter in the visual input key", () => {
+  const original = "---\ntitle: '<!-- config -->'\n---\nexport const example = '<!-- JS -->';\n\n# Slide\n\n```text\n<!-- literal -->\n```\n\n<!-- notes -->\n";
+  const before = notesModule.exports.deckNotesSource(original);
+  expect(before.notes).toEqual(["notes"]);
+  for (const notes of ["new notes", "", "More\n\n---\n\nnotes"]) {
+    const source = sourceHelpers.updateSlideSpeakerNotes(original, 0, notes);
+    const after = notesModule.exports.deckNotesSource(source);
+    expect(after.key).toBe(before.key);
+    expect(after.notes).toEqual([notes]);
+  }
+  for (const marker of ["config", "JS", "literal", "# Slide"]) expect(notesModule.exports.deckNotesSource(original.replace(marker, marker + " changed")).key).not.toBe(before.key);
+});
+
+test("a directory changed during compilation cannot seed a notes-only cache", async () => {
+  expect.assertions(1);
+  try {
+    await notesModule.exports.deckNotesInputs("/notes/deck.mdx", ["/notes/deck.mdx", "/notes/helper.tsx"], ["/notes"], {
+      stat: async path => ({ type: path === "/notes" ? "directory" : "file", size: 10, modifiedAt: path === "/notes" ? 11 : 0 }),
+      list: async () => [],
+    }, 10);
+  } catch (error) { expect(String(error)).toContain("directory changed during compilation"); }
 });

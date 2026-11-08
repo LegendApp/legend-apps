@@ -1,6 +1,6 @@
 import { notesLayout, type NoteParagraph, type NoteRegion } from "./notesLayout";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { SpeakerNotesConflictError } from "@legend-apps/presentation";
+import { SpeakerNotesConflictError } from "../../../packages/presentation/src/speakerNotesSource";
 import type { NotesDrafts } from "./notesDrafts";
 import { speakerNotesEditorMarkdown, splitSpeakerNoteSteps } from "./speakerNoteSteps";
 import { defaultPresenterTextColor, defaultPresenterInactiveColor } from "./presenterAppearance";
@@ -12,7 +12,6 @@ import {
 } from "react-native-enriched-markdown";
 import { Pressable, StyleSheet, Text, View, type ViewProps } from "react-native";
 
-export const editableMarkdownSaveDebounceMs = 1000;
 const notesLineHeightRatio = 1.4;
 
 const viewerMarkdownStyle: MarkdownStyle = {
@@ -88,7 +87,6 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   const textStyle = { fontSize, lineHeight: fontSize * notesLineHeightRatio };
   const dismiss = useContext(NotesDismissContext);
   const inputRef = useRef<EnrichedMarkdownTextInputInstance | null>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveQueueRef = useRef(Promise.resolve());
   const savedMarkdownRef = useRef(markdown.trim());
   const draftMarkdownRef = useRef(draftKey && drafts ? drafts.get(draftKey, markdown.trim()) : markdown.trim());
@@ -162,10 +160,6 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   }, [draftKey, drafts, reportSaveError]);
 
   const flushDraft = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = undefined;
-    }
     enqueueSave(draftMarkdownRef.current);
   }, [enqueueSave]);
 
@@ -176,11 +170,12 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
     // onChangeMarkdown already owns the latest draft. Do not wait for a
     // native getMarkdown response while unmounting that same native view:
     // the response can be lost, leaving the final edit unsaved.
+    if (draftKey && drafts) drafts.setEditing(draftKey, false);
     flushDraft();
     editingRef.current = false;
     setEditing(false);
     onEditingChangeRef.current?.(false);
-  }, [flushDraft]);
+  }, [draftKey, drafts, flushDraft]);
 
   useEffect(() => {
     if (!editing || !dismiss) return;
@@ -197,9 +192,10 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
       return;
     }
     editingRef.current = true;
+    if (draftKey && drafts) drafts.setEditing(draftKey, true);
     setEditing(true);
     onEditingChangeRef.current?.(true);
-  }, [editable]);
+  }, [draftKey, drafts, editable]);
 
   const resolveConflict = async (useSaved: boolean) => {
     if (!(saveError instanceof SpeakerNotesConflictError) || resolvingRef.current) return;
@@ -243,16 +239,14 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
   }, [editable, finishEditing]);
 
   useEffect(() => () => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+    if (draftKey && drafts) drafts.setEditing(draftKey, false);
     if (draftMarkdownRef.current !== savedMarkdownRef.current) {
       enqueueSave(draftMarkdownRef.current);
     }
     if (editingRef.current) {
       onEditingChangeRef.current?.(false);
     }
-  }, [enqueueSave]);
+  }, [draftKey, drafts, enqueueSave]);
 
   return (
     <View accessibilityLabel={editable ? "Edit speaker notes" : "Speaker notes"}
@@ -260,7 +254,7 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
       style={[styles.viewerShell, editing && styles.focusedShell]}>
       {saveError && <View className="mb-3 gap-3 rounded-lg border border-amber-700 bg-zinc-900 p-3">
         <Text className="font-semibold text-amber-300">Speaker notes not saved</Text>
-        <Text className="text-zinc-200">{saveError.message} Autosave is paused. Your draft is kept below.</Text>
+        <Text className="text-zinc-200">{saveError.message} Saving is paused. Your draft is kept below.</Text>
         {saveError instanceof SpeakerNotesConflictError && <>
           <Text className="font-semibold text-zinc-300">Saved notes in the deck file</Text>
           <Text selectable className="text-zinc-200">{saveError.savedNotes || "(No saved notes)"}</Text>
@@ -294,8 +288,6 @@ export function EditableMarkdown({ draftKey, drafts, editable, currentStep = 0, 
             setDocument(value);
             draftMarkdownRef.current = value;
             if (draftKey && drafts) drafts.update(draftKey, value, savedMarkdownRef.current);
-            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-            saveTimeoutRef.current = setTimeout(flushDraft, editableMarkdownSaveDebounceMs);
           }} />
         {/* Clip read-only foregrounds to active regions while preserving the editable native view. */}
         {hasInactiveNotes && regions.map((region, index) => region.step === undefined || region.step === currentStep

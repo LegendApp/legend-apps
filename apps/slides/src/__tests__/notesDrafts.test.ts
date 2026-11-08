@@ -136,3 +136,15 @@ test("a new slide with a failed save rejects exit and keeps its draft", async ()
   expect(await drafts.flushAll()).toBe(false);
   expect(drafts.get("second", "")).toBe("unsaved");
 });
+
+test("exit still saves a focused draft without a native blur event", async () => {
+  const drafts = createNotesDrafts(), saved = [];
+  drafts.bind("slide", async text => { saved.push(text); });
+  drafts.setEditing("slide", true);
+  drafts.update("slide", "focused draft", "original");
+  expect(await drafts.flush("slide")).toBe(true);
+  expect(saved).toEqual([]);
+  expect(await drafts.flushAll()).toBe(true);
+  expect(saved).toEqual(["focused draft"]);
+  expect(drafts.entries()).toEqual([]);
+});

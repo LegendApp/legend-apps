@@ -1,11 +1,12 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { createDeckReloadQueue } from "./deckReloadQueue";
+import { deckNotesInputs, deckNotesSource } from "./deckNotesReload";
 import { deckWatchDirectories } from "./deckWatchDirectories";
 import { effectRequests$, reportMissingEffects } from "./effectRequests";
 import { CompilerDownloadError, compilerHelper$ } from "./compilerHelper";
 import { runCompilerCommand } from "./compilerCommand";
 import { CompilerRuntimeMissingError, compilerRuntime$, downloadCompilerRuntime } from "./compilerRuntime";
-import { writeTextIfUnchanged } from "@legendapp/spark/files";
+import { list, readText, stat, writeTextIfUnchanged } from "@legendapp/spark/files";
 import { transitionDirectoryPath } from "./transitionLibrary";
 import * as Motion from "@legendapp/motion";
 import * as LegendState from "@legendapp/state";
@@ -45,6 +46,9 @@ let watchedDeckPath: string | undefined;
 let watchedDirectories: string[] = [];
 let reloadQueue: ReturnType<typeof createDeckReloadQueue> | undefined;
 let buildSequence = 0;
+type NotesBaseline = { path: string; source: string; dependencies: string[]; inputs: string };
+const notesBaselines = new WeakMap<CompileDeckSuccess, NotesBaseline>();
+let notesBaseline: NotesBaseline | undefined;
 let retryCompilerDeck: (() => Promise<boolean>) | undefined;
 
 let draftReloadHandler: ((path: string) => Promise<unknown>) | undefined;
@@ -154,12 +158,32 @@ function watchDeckDirectory(path: string, dependencies?: string[]) {
   watchedDirectories = directories;
   const queue = createDeckReloadQueue(async () => {
     if (draftReloadHandler) await draftReloadHandler(path);
-    else await loadDeck(path, false);
+    else if (!await reloadDeckNotes(path)) await loadDeck(path, false);
   }, 120, error => {
     setSlidesState({ buildErrors: [String(error)], status: "error" });
   });
   reloadQueue = queue;
   watchers = directories.map(path => ownRegistration(watch(path, () => queue.changed({ contentChanged: true }), { recursive: true })));
+}
+
+async function reloadDeckNotes(path: string) {
+  const baseline = notesBaseline;
+  const sequence = buildSequence;
+  const current = getSlidesState();
+  if (!baseline || baseline.path !== path || current.deckPath !== path || current.status !== "ready" || current.pendingDeck) return false;
+  try {
+    const source = await readText(path);
+    const before = deckNotesSource(baseline.source), after = deckNotesSource(source);
+    if (before.key !== after.key || after.notes.length !== current.slides.length) return false;
+    const inputs = await deckNotesInputs(path, baseline.dependencies, watchedDirectories, { stat, list });
+    if (inputs !== baseline.inputs || await readText(path) !== source || baseline !== notesBaseline || sequence !== buildSequence) return false;
+    if (source !== baseline.source) setSlidesState({ sourceNotes: after.notes, slides: current.slides.map((slide, index) => slide.notes === after.notes[index] ? slide : { ...slide, notes: after.notes[index] }) });
+    notesBaseline = { ...baseline, source };
+    return true;
+  } catch {
+    // Uncertain inputs use the normal compiler and its error reporting.
+    return false;
+  }
 }
 
 function decodeBase64(value: string) {
@@ -229,6 +253,8 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
   // Keep the last good deck watched until a replacement is actually published.
   if (!getSlidesState().component) watchDeckDirectory(path);
   setSlidesState({ buildErrors: [], pendingDeck: null, status: "building" });
+  const builtAt = Date.now();
+  const source = draftSource ?? await readText(path);
   const commandResult = await runCompilerCommand([path, "--transitions", transitionDirectoryPath(), ...(draftSource === undefined ? [] : ["--draft"])], {
     input: draftSource,
     timeoutMs: 60_000,
@@ -262,6 +288,15 @@ async function buildDeck(path: string, remember: boolean, sequence: number, draf
     return;
   }
 
+  try {
+    if ((await stat(path)).modifiedAt <= builtAt && await readText(path) === source) {
+      const inputs = await deckNotesInputs(path, result.dependencies, deckWatchDirectories(path, transitionDirectoryPath(), result.dependencies), { stat, list }, builtAt);
+      if (sequence !== buildSequence) return;
+      notesBaselines.set(result, { path, source, dependencies: result.dependencies, inputs });
+    }
+  } catch { /* Without a stable input snapshot, reload through the compiler. */ }
+  if (sequence !== buildSequence) return;
+
   reportMissingEffects(path, []);
 
   // Do not evaluate deck code or replace global styles until the presenter
@@ -285,6 +320,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
     const { component, templates, transitions } = evaluateDeck(result.code);
     applyUniwindStyles(result.uniwindCode);
     watchDeckDirectory(path, result.dependencies);
+    notesBaseline = notesBaselines.get(result);
     setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets });
     if (remember) {
       rememberDeckPath(path);

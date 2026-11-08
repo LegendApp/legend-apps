@@ -97,8 +97,9 @@ function Deck({ children, configJson }: CompiledDeckProps) {
 
   useEffect(() => {
     const current = getSlidesState();
-    if (JSON.stringify(current.config) !== JSON.stringify(config) || JSON.stringify(current.slides) !== JSON.stringify(slides)) {
-      setSlidesState({ config, currentSlide: Math.min(current.currentSlide, Math.max(0, slides.length - 1)), slides });
+    const registeredSlides = current.sourceNotes ? slides.map((slide, index) => ({ ...slide, notes: current.sourceNotes?.[index] ?? slide.notes })) : slides;
+    if (JSON.stringify(current.config) !== JSON.stringify(config) || JSON.stringify(current.slides) !== JSON.stringify(registeredSlides)) {
+      setSlidesState({ config, currentSlide: Math.min(current.currentSlide, Math.max(0, slides.length - 1)), slides: registeredSlides });
     }
   }, [config, slides]);
 

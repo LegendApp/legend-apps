@@ -274,3 +274,44 @@ test("notes retain shared dark link styles while fading steps and editing", asyn
     check(tree.root.findByType("editor"));
   } finally { if (tree) await act(() => tree.unmount()); }
 });
+
+for (const recoverable of [false, true]) test(`notes wait for blur through typing pauses${recoverable ? " with recovery" : ""}`, async () => {
+  const save = mock(async () => {});
+  const drafts = recoverable ? createNotesDrafts() : undefined;
+  let tree;
+  try {
+    await act(() => { tree = create(<EditableMarkdown editable draftKey={recoverable ? "slide" : undefined} drafts={drafts}
+      markdown="original" placeholder="Notes" onSave={save} />); });
+    const editor = tree.root.findByType("editor"), id = editor.props.nativeId;
+    await act(() => { editor.props.onFocus(); editor.props.onChangeMarkdown("first edit"); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1100)); });
+    expect(save).not.toHaveBeenCalled();
+    if (drafts) expect(drafts.get("slide", "")).toBe("first edit");
+    await act(() => editor.props.onChangeMarkdown("latest edit"));
+    await act(async () => editor.props.onBlur());
+    expect(save.mock.calls).toEqual([["latest edit", "original"]]);
+    expect(tree.root.findByType("editor").props.nativeId).toBe(id);
+    await act(async () => editor.props.onBlur());
+    expect(save).toHaveBeenCalledTimes(1);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+test("resuming typing during an earlier blur save keeps later edits local until the next blur", async () => {
+  const drafts = createNotesDrafts();
+  let finish;
+  const save = mock(async () => { if (save.mock.calls.length === 1) await new Promise(resolve => { finish = resolve; }); });
+  let tree;
+  try {
+    await act(() => { tree = create(<EditableMarkdown editable draftKey="slide" drafts={drafts}
+      markdown="original" placeholder="Notes" onSave={save} />); });
+    const editor = tree.root.findByType("editor");
+    await act(() => { editor.props.onFocus(); editor.props.onChangeMarkdown("first edit"); });
+    await act(async () => editor.props.onBlur());
+    await act(() => { editor.props.onFocus(); editor.props.onChangeMarkdown("second edit"); });
+    await act(async () => finish());
+    expect(save.mock.calls).toEqual([["first edit", "original"]]);
+    expect(drafts.get("slide", "")).toBe("second edit");
+    await act(async () => editor.props.onBlur());
+    expect(save.mock.calls).toEqual([["first edit", "original"], ["second edit", "first edit"]]);
+  } finally { if (tree) await act(() => tree.unmount()); }
+});

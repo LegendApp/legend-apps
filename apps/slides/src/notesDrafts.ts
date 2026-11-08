@@ -8,13 +8,15 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
   const saves = new Map<string, Save>();
   const sessionKeys = new Set<string>();
   const pending = new Map<string, Promise<boolean>>();
+  const editing = new Set<string>();
   const persist = () => persistence?.write(Object.fromEntries(drafts));
   const sessionEntries = () => [...drafts.entries()].filter(([key]) => sessionKeys.has(key));
-  const flush = (key: string): Promise<boolean> => {
+  const flush = (key: string, includeEditing = false): Promise<boolean> => {
     const running = pending.get(key);
     if (running) return running;
     const work = Promise.resolve().then(async () => {
       while (drafts.has(key)) {
+        if (editing.has(key) && !includeEditing) return true;
         const save = saves.get(key);
         if (!save) return false;
         const draft = drafts.get(key)!;
@@ -38,6 +40,7 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
       drafts.set(key, { text, base: drafts.has(key) ? drafts.get(key)!.base : base });
       persist();
     },
+    setEditing(key: string, value: boolean) { if (value) editing.add(key); else editing.delete(key); },
     flush,
     async resolve(key: string, base: string, replacement?: string) {
       const before = drafts.get(key);
@@ -70,7 +73,7 @@ export function createNotesDrafts(persistence?: { read(): Record<string, NotesDr
       // Re-snapshot after each batch, and report failure rather than retrying forever.
       // Unopened drafts from earlier sessions are already durable recovery copies.
       while (sessionEntries().length > 0) {
-        if (!(await Promise.all(sessionEntries().map(([key]) => flush(key)))).every(Boolean)) return false;
+        if (!(await Promise.all(sessionEntries().map(([key]) => flush(key, true)))).every(Boolean)) return false;
       }
       return true;
     },

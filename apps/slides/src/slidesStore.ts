@@ -11,6 +11,7 @@ export type DeckSlide = {
 
 export type SlidesState = {
   noteTargets?: string[];
+  sourceNotes?: string[];
   deckLocked: boolean;
   slideReferences?: boolean;
   displayMessage: string;
