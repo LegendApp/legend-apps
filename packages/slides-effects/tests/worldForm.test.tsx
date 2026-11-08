@@ -167,3 +167,41 @@ test("form text and counters commit at their pulse phase, including interruption
   check(clock(.601), 1, 0, 0);
   check(clock(3.35), 0, 0, 0);
 });
+
+test("form card decoration can be disabled without changing fills or typing propagation", () => {
+  const children = expandScene(<Form id="form" card={{ glow: 0, edge: 0 }} parent={{ title: "Root" }}
+    sequence={{ in: 1, out: 2, duration: .2 }}
+    typing={{ step: 1, bind: "name", text: "AB", delay: .6, interval: 1.3, repeat: "infinite" }} panels={[
+      { title: "Editor", fields: [{ value: "", bind: "name" }] },
+      { title: "Preview", fields: [{ value: "", bind: "name" }] },
+    ]} />);
+  const s = prepareWorldSlides([{ children }])[0].scenePlan!.content.prepared;
+  const cards = s.instances.filter(i => i.card);
+  expect(cards).toHaveLength(10);
+  for (const card of cards) {
+    expect(card.card!.glow).toBe(0);
+    expect(card.card!.edge).toBe(0);
+    expect(card.card!.fill).toBe(card.id!.endsWith("/card") ? .9 : 1);
+  }
+  const parent = s.instances.find(i => i.id === "form/parent/card")!;
+  const parentBadge = s.instances.find(i => i.id === "form/parent/badge/disc")!;
+  for (const p of [0, 1]) expect(s.instances.some(i => i.id?.startsWith(`form/parent/link/${p}`))).toBe(true);
+  expect(s.instances.some(i => i.route?.pulse)).toBe(false);
+  for (const time of [.5, .66, 1.05, 1.96, 3.35, 4.06]) {
+    expect(sampleTrack(parent.emissive, clock(time))).toBe(.6);
+    expect(instanceOpacity(parent, clock(time))).toBe(1);
+    expect(sampleTrack(parentBadge.emissive, clock(time))).toBe(.9);
+  }
+  for (const p of [0, 1]) {
+    const field = s.instances.find(i => i.id === `form/${p}/0`)!;
+    expect(sampleTrack(field.emissive, clock(.66))).toBeCloseTo(7);
+    const visible = s.instances.filter(i => i.id?.startsWith(`form/${p}/0/v1:`) && instanceOpacity(i, clock(.66)) > .5);
+    expect(visible).toHaveLength(1);
+  }
+  const middle = instancePosition(parent, clock(.5));
+  const exiting = { ...clock(.1, 2), stepOrigins: { 1: -1, 2: 0 } };
+  expect(instancePosition(parent, exiting)[0]).toBeLessThan(middle[0]);
+  expect(instanceOpacity(parent, exiting)).toBe(1);
+  expect(instancePosition(parent, clock(0, 0))[0]).toBeGreaterThan(middle[0]);
+  expect(instancePosition(parent, clock(.5))[0]).toBeCloseTo(middle[0]);
+});

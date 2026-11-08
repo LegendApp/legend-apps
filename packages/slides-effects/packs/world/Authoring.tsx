@@ -4,7 +4,7 @@ import type { CodeHighlight, CodeToken } from "@legend-apps/presentation";
 import type { Ease } from "./camera";
 import { colorVector, compileTrack, type Keyframe } from "./scene";
 import { ambientEffects, authoringError, checkHighlighted, checkPart, checkScene, defaultColors, enterDefaults, exitDefaults, paint, sequenceDefaults, type Ambient, type SceneColors } from "./authoringProps";
-import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, SpotLight, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldStepCamera, type WorldTrack } from "./World";
+import { Box, Burst, Camera, Card, Custom, DOF, Fog, Orbs, Pillar, RoundedBox, Rows, RoutedTube, SpotLight, Stage, Text3D, WorldSlide, prepareWorldSlides, type Animated, type CardStyle, type GlyphMotion, type Text3DOptions, type WorldProps, type WorldSegment, type WorldStepCamera, type WorldTrack } from "./World";
 
 export type V3 = [number, number, number];
 export type Span = [number, number];
@@ -745,7 +745,7 @@ function viewportList(id: string, at: V3, props: Record<string, unknown>, INK: I
   const inView = (i: number, offset: number) => i - offset >= 0 && i - offset < shown;
   const frame = (fid: string, position: unknown, draw: unknown, label: string) => {
     const w = width / 2 + .28, top = row * .4 + .2, bottom = y(shown - 1) - row * .4 - .2;
-    return <Stage id={fid} position={position as V3}>
+    return <Stage id={fid} position={position as V3} sharp={false}>
       <RoutedTube id={`${fid}/edge`} join="miter" path={[[-w, top, .24], [w, top, .24], [w, bottom, .24], [-w, bottom, .24], [-w, top, .24]]} thickness={.04} color={INK.blue} emissive={3} draw={draw as number} />
       {label && <Text3D id={`${fid}/label`} text={label} mono size={.16 * TYPE} align="left" color={INK.blue} emissive={1.2} position={[-w, top + .3, 0]} opacity={draw as number} />}
     </Stage>;
@@ -850,7 +850,7 @@ type FormNode = { title: string; renders?: boolean };
 type FormField = { value: string; bind?: string; big?: boolean };
 /** Panels of fields with render-count badges. `typing` types `text` into the fields bound to `bind`, one keystroke every `interval` seconds; the first bound field owns the immediate local input and caret. A rendering parent receives an input pulse and sends it to rendering panels; counters, flashes, and mirrored text follow pulse arrivals. */
 function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
-  const parent = props.parent as FormNode | undefined;
+  const parent = props.parent as FormNode | undefined, card = props.card as CardStyle | undefined;
   const panels = props.panels as (FormNode & { fields: FormField[] })[], typing = props.typing as { step: number; bind: string; text: string; delay?: number; interval?: number; repeat?: "infinite" } | undefined;
   const fw = Number(props.fieldWidth ?? 5.4), fh = 1, gap = .45, pw = fw + 1, spread = pw + 1.3, header = .55, top = header + .5, times: number[] = [];
   let versions: string[] = [];
@@ -872,12 +872,12 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   const pulses = (offset: number) => typing ? times.map(t => ({ step: typing.step, delay: t + offset, duration: HOP,
     every: typing.repeat === "infinite" ? period : undefined, color: INK.amber, size: .11, emissive: 10 })) : [];
   const badge = (stage: string, position: V3, bound: boolean, offset: number) => <Stage key={stage} id={stage} position={position}>
-    <Card id={`${stage}/disc`} scale={[.66,.66,.2]} radius={.33} color={bound ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={bound ? flash(.9, 7, offset) : .9} />
+    <Card id={`${stage}/disc`} {...card} scale={[.66,.66,.2]} radius={.33} color={bound ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={bound ? flash(.9, 7, offset) : .9} />
     {(bound ? versions : [""]).map((_, k) => <Text3D key={k} id={`${stage}/n${k}`} text={String(k + 1)} mono size={.26 * TYPE} position={[0, 0, .13]} color={INK.white} opacity={bound ? swap(k, offset) : 1} />)}
   </Stage>;
   return <Stage id={id} position={at}>
     {parent && <Stage id={`${id}/parent`} position={[0, top + 1.5, 0]}>
-      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} color={parent.renders ? flash(INK.idle, INK.amber, arrivals.parent) : INK.idle} emissive={parent.renders ? flash(.6, 3.6, arrivals.parent) : .6} />
+      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} {...card} color={parent.renders ? flash(INK.idle, INK.amber, arrivals.parent) : INK.idle} emissive={parent.renders ? flash(.6, 3.6, arrivals.parent) : .6} />
       <Text3D id={`${id}/parent/title`} text={parent.title} mono size={.24 * TYPE} position={[-.4, 0, .15]} color={INK.white} />
       {badge(`${id}/parent/badge`, [1.2, 0, .15], !!parent.renders && !!typing, arrivals.parent)}
     </Stage>}
@@ -889,13 +889,13 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
         {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, top + 1, -.1], [x, top, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={parent.renders && panel.renders ? pulses(arrivals.parent) : undefined} />}
         {parent?.renders && p === source && <RoutedTube id={`${id}/input/up`} path={[[x, -.05 - sourceField * (fh + gap), .18], [x, top, -.1], [0, top + 1, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={pulses(0)} />}
         <Stage id={stage} position={[x, 0, 0]}>
-          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} color={panel.renders ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={panel.renders ? flash(.6, 3.6, offset) : .6} />
+          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} {...card} color={panel.renders ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={panel.renders ? flash(.6, 3.6, offset) : .6} />
           <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, header, .05]} color={INK.muted} emissive={.8} />
           {badge(`${stage}/badge`, [fw / 2 - .55, header, .05], !!panel.renders && !!typing, offset)}
           {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`, size = (field.big ? .34 : .26) * TYPE;
             const caret = (value: string): V3 => [-fw / 2 + .38 + value.length * size * MONO, y, .2];
             return <Fragment key={f}>
-              <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} color={bound ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={bound ? flash(.8, 7, offset) : .8} />
+              <Card id={cell} position={[0, y, 0]} scale={[fw, fh, .3]} {...card} color={bound ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={bound ? flash(.8, 7, offset) : .8} />
               {(bound ? versions : [field.value]).map((value, k) => <Text3D key={k} id={`${cell}/v${k}`} text={value} mono size={size} align="left"
                 position={[-fw / 2 + .35, y, .18]} color={INK.white} opacity={bound ? swap(k, p === source && f === sourceField ? 0 : offset) : 1} />)}
               {bound && p === source && f === sourceField && <Box id={`${cell}/caret`} scale={[{ step: 0, value: [0, 0, 0] }, key(typing!.step, [.035, size, .025] as V3, 0, 0)]} color={INK.white} emissive={1.2}
@@ -1542,9 +1542,9 @@ function expandPart(kind: string, id: string, position: V3, props: Record<string
         {parent && <RoutedTube id={`${id}/${n.id}/edge`} thickness={.035} color={n.color ?? "#2e3036"} emissive={.3}
           draw={[key(0, 0, 0, 0), drop === undefined ? key(0, 1, land - .15, .35) : dropKey(1, s + .3, .35)]}
           path={[[parent.x,parent.y - .41,0],[parent.x,n.y + .41,0],[n.x,n.y + .41,0]]} pulses={pulses.length ? pulses : undefined} />}
-        {from && <RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
+        {from && <Stage id={`${id}/${n.id}/beam-light`} sharp={false}><RoutedTube id={`${id}/${n.id}/beam`} thickness={.03} color={bursts[0].color} emissive={4} path={[[from.x,from.y,-.35],[n.x,n.y,-.35]]}
           draw={[{ step: 0, value: 0 }, ...bursts.map(f => key(f.step, 1, f.delay ?? 0, .22))]}
-          pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, every: f.repeat === "infinite" ? f.every ?? 1.5 : undefined, color: f.color, size: .12, emissive: 10 }))} />}
+          pulses={bursts.map(f => ({ step: f.step, delay: f.delay ?? 0, duration: .22, every: f.repeat === "infinite" ? f.every ?? 1.5 : undefined, color: f.color, size: .12, emissive: 10 }))} /></Stage>}
       </Fragment>; })}</Stage>;
   }
   if (kind === "keys") return props.viewport === undefined ? keyList(id, position, props, INK) : viewportList(id, position, props, INK);
