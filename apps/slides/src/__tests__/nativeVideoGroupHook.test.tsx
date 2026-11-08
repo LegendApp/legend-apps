@@ -9,13 +9,13 @@ let now = 0, deferUI = false;
 const uiTasks = [];
 function player(source) {
   const native = {
-    source, ready: false, starts: [], prepares: [], disposed: 0,
+    source, ready: false, starts: [], prepares: [], disposed: 0, imageReads: 0,
     duration: () => source === "short" ? 1320 : 11380,
     syncStatus() { return this.ready ? 1 : 0; },
     prepareSync(time) { this.ready = false; this.prepares.push(time); },
     playSync(time, host) { this.starts.push([time, host]); },
     syncHostTime: () => now,
-    setLooping() {}, setVolume() {}, nextImage: () => ({ source }),
+    setLooping() {}, setVolume() {}, nextImage() { this.imageReads++; return { source }; },
     dispose() { this.disposed++; },
   };
   if (source === "old-binary") delete native.prepareSync;
@@ -101,10 +101,14 @@ test("restart hold publishes the first decoded cohort immediately while native p
     native.forEach(p => p.ready = true); now = 100; await act(() => callback.tick());
     expect(value.frames.value).toEqual([{ source: "short" }, { source: "long" }]);
     expect(native.map(p => p.starts.at(-1))).toEqual([[0, 600], [0, 600]]);
+    expect(native.map(p => p.imageReads)).toEqual([1, 1]);
     now = 599; await act(() => callback.tick());
     expect(value.state.value.position).toBe(0);
+    expect(native.map(p => p.imageReads)).toEqual([1, 1]);
+    expect(value.frames.value).toEqual([{ source: "short" }, { source: "long" }]);
     now = 601; await act(() => callback.tick());
     expect(value.state.value.position).toBe(1);
+    expect(native.map(p => p.imageReads)).toEqual([2, 2]);
   } finally { await act(() => tree.unmount()); }
 });
 

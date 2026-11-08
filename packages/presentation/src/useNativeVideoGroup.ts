@@ -27,9 +27,11 @@ export function useNativeVideoGroup(sources: readonly string[], { active, playin
     if (!players?.length) return;
     const previous = state.value;
     if (previous.phase === "paused" || previous.phase === "error") return;
-    const next = updateVideoGroup(previous, players, input.value, players[0].syncHostTime());
+    const now = players[0].syncHostTime();
+    const next = updateVideoGroup(previous, players, input.value, now);
     state.value = next;
-    if (next.phase === "playing" || (previous.phase === "preparing" && next.phase === "paused")) {
+    if ((next.phase === "playing" && (previous.phase === "preparing" || now >= next.hostStart)) ||
+        (previous.phase === "preparing" && next.phase === "paused")) {
       // Publish all images in one UI transaction, after the entire seek barrier.
       frames.value = players.map(player => player.nextImage());
     }
