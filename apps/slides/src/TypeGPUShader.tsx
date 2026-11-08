@@ -106,6 +106,21 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
   });
 }
 
+// Native listeners are GC roots. Keep their scope separate from GPU resources and release their React owner on retirement.
+function shaderErrorHandlers(reporters: { setError(error: string | undefined): void; reportError(error: unknown): void } | undefined) {
+  return {
+    uncaptured(event: GPUUncapturedErrorEvent) {
+      event.preventDefault();
+      const current = reporters;
+      if (current) { current.setError(event.error.message); current.reportError(event.error); }
+    },
+    lost(info: GPUDeviceLostInfo) {
+      if (reporters && info.reason !== "destroyed") reporters.setError("WebGPU device lost: " + info.message);
+    },
+    dispose() { reporters = undefined; },
+  };
+}
+
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
 function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, setResources, setError }: {
   readable: boolean; canvas: RefObject<CanvasRef | null>; surfaceContext(): RNCanvasContext | null; code: string; renderGraph?: GPURenderGraphDefinition;
@@ -115,6 +130,7 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
 }) {
     setResources(undefined);
     setError(undefined);
+    const errorHandlers = shaderErrorHandlers({ setError, reportError });
     let cancelled = false;
     let device: GPUDevice | undefined;
     // Once transferred, the UI renderer owns teardown after its last frame.
@@ -127,15 +143,10 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         if (!adapter) throw new Error("No WebGPU adapter");
         device = await requestShaderDevice(adapter);
         if (cancelled || !canvas.current) { device.destroy(); return; }
-        device.addEventListener("uncapturederror", event => {
-          event.preventDefault();
-          if (!cancelled) { setError(event.error.message); reportError(event.error); }
-        });
+        device.addEventListener("uncapturederror", errorHandlers.uncaptured);
         device.pushErrorScope("validation");
         validationScope = true;
-        void device.lost.then(info => {
-          if (!cancelled && info.reason !== "destroyed") setError("WebGPU device lost: " + info.message);
-        });
+        void device.lost.then(errorHandlers.lost);
         const context = surfaceContext();
         if (!context) throw new Error("WebGPU surface unavailable");
         // The library sizes from view bounds in points (zero during preparation on web).
@@ -231,7 +242,7 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
       setResources({ ...program, readable, graph: program.graph ? makeMutable(program.graph) : undefined, alive, disposed, configured, id: ++nextGPUResourceId });
     }
     void setup();
-    return () => { cancelled = true; if (release) release(); else if (!transferred) device?.destroy(); };
+    return () => { cancelled = true; errorHandlers.dispose(); if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
 function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; suspended?: boolean; suspendedOnUI?: SharedValue<boolean>; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {

@@ -155,3 +155,64 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
   expect(events.filter(event => event[0] === "destroy" && event[1] === 1)).toHaveLength(1);
   expect(events.filter(event => event[0] === "destroy" && event[1] === 2)).toHaveLength(1);
 });
+
+
+test("retired native error listeners do not retain their canvas program", async () => {
+  const listeners = [], adapter = { device: undefined };
+  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" }, PixelRatio: { get: () => 1 } },
+    "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
+    "react-native-reanimated": { makeMutable: value => ({ value }), runOnUI: fn => fn } };
+  const start = new Function("require", "exports", "navigator", code + "\nreturn startShaderCanvas;")(
+    name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => adapter.device }), getPreferredCanvasFormat: () => "bgra8unorm" } },
+  );
+  async function retire() {
+    let clock, complete;
+    const ready = new Promise(resolve => { complete = resolve; });
+    adapter.device = {
+      lost: new Promise(() => {}),
+      addEventListener: (_type, callback) => listeners.push(callback),
+      pushErrorScope() {}, popErrorScope: async () => null,
+      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
+      createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
+      createBuffer: () => { const value = {}; clock = new WeakRef(value); return value; },
+      createRenderPipeline: () => ({}), destroy() {},
+    };
+    let stop = start({ canvas: { current: {} }, surfaceContext: () => ({ canvas: { width: 100, height: 100 } }),
+      code: "shader", width: 100, height: 100, particles: false, particleCount: 0,
+      setResources: value => { if (value) complete(); }, setError() {}, reportError() {},
+    });
+    await ready;
+    stop(); stop = undefined; adapter.device = undefined;
+    return clock;
+  }
+  const clock = await retire();
+  expect(listeners).toHaveLength(1);
+  for (let i = 0; i < 10; i++) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    Bun.gc(true);
+  }
+  expect(clock.deref()).toBeUndefined();
+});
+
+
+test("GPU errors reach only the current canvas owner", () => {
+  const create = new Function("require", "exports", code + "\nreturn shaderErrorHandlers;")(name => name.startsWith("@babel/runtime/") ? require(name) : {}, {});
+  const errors = [], reports = [];
+  const handlers = create({ setError: value => errors.push(value), reportError: value => reports.push(value) });
+  let prevented = 0;
+  const error = { message: "bad draw" }, event = { preventDefault: () => prevented++, error };
+  handlers.uncaptured(event);
+  handlers.lost({ reason: "destroyed", message: "retired" });
+  handlers.lost({ reason: "unknown", message: "driver stopped" });
+  expect(errors).toEqual(["bad draw", "WebGPU device lost: driver stopped"]);
+  expect(reports).toEqual([error]);
+  handlers.dispose();
+  handlers.uncaptured(event);
+  handlers.lost({ reason: "unknown", message: "late notification" });
+  expect(errors).toHaveLength(2);
+  expect(reports).toHaveLength(1);
+  expect(prevented).toBe(2);
+  const retiring = create({ setError: () => retiring.dispose(), reportError: value => reports.push(value) });
+  retiring.uncaptured(event);
+  expect(reports).toEqual([error, error]);
+});
