@@ -51,7 +51,7 @@ export type TrackFrame = {
   visible: string[];
   from: number[]; sources: number[]; retired: Record<string, number[]>; values: number[];
   /** The live camera minus the incoming rail or step pose when the move began (position, tan half-fov, target, bank); it fades out over the move. */
-  cameraDelta?: number[]; entering?: boolean;
+  cameraDelta?: number[]; entering?: boolean; stepCarry?: boolean;
   /** The camera before the track bend, so later moves start from the same unbent coordinates. */
   straight?: number[]; course?: Course;
   /** The scenery clock written to `continuousTime()` under `heldMotion`, and the timestamp it was last advanced at. */
@@ -436,6 +436,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const morphDuration = changed ? slideChanged ? travelDuration : duration : previous.morphDuration;
   const elapsed = first || from.length === 0 ? 1 : Math.min(1, playback.stepTime / morphDuration);
   const entering = changed ? slideChanged : previous.entering;
+  const stepCarry = !first && !slideChanged && elapsed < 1 && (changed ? reversed || previous.stepCarry : previous.stepCarry);
   // Parts carried into a station follow the camera's ease, so a fast flight never overtakes them.
   const morphEase = entering && course.ease[leg] || "cubic";
   const progress = elapsed >= 1 ? 1 : easeProgress(elapsed, morphEase);
@@ -459,7 +460,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const fixed = options.fixed ?? defaultFixed;
   const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
-    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, course,
+    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, stepCarry, course,
     scenery: previous.scenery, stamp: previous.stamp };
   for (let i = 0; i < 8; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
@@ -516,12 +517,12 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     const label = id.startsWith("label:");
     if (label && values[at + 23] === 0) values[at + 3] = 0;
     if (id.startsWith("tube:")) values[at + 14] -= station;
-    // Local step tracks already own their motion and flash timing.
-    if (!entering) continue;
+    // Forward step tracks own their timing; reversals and interrupted returns retain the live pose.
+    if (!entering && !stepCarry) continue;
     const source = sources[slot] ?? -1;
     if (progress < 1 && source >= 0) {
       const old = worldHeaderSize + source * worldInstanceSize;
-      if (carry) {
+      if (carry && entering) {
         carrySlot(values, at, from, old, elapsed, carry, id, seedOf(id), reversed, morphEase);
         continue;
       }
