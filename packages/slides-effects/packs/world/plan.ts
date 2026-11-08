@@ -32,7 +32,7 @@ function familyIndex(part: Instance, layout: PlanSlots): number | undefined {
   return layout.keys.get(family(part));
 }
 
-/** Reserve room for an incoming declaration and one outgoing declaration; compatible slides keep one GPU graph. */
+/** Reserve incoming and outgoing parts, bounded by every declared id plus one anonymous declaration. */
 export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWorldScene, WorldPlan> {
   const groups = new Map<string, { scenes: PreparedWorldScene[]; topology: WorldGraphTopology }>();
   const topologies = scenes.map(worldGraphTopology);
@@ -44,14 +44,23 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
   }
   // An outgoing declaration can have a different look, so every group reserves the same geometry families.
   const templates = new Map<string, Instance>(), capacities = new Map<string, number>();
+  const named = new Map<string, Set<string>>(), anonymous = new Map<string, number>();
   for (const scene of scenes) {
-    const counts = new Map<string, number>();
-    for (const part of scene.instances) {
+    const counts = new Map<string, number>(), unnamed = new Map<string, number>();
+    const identities = trackIds(scene);
+    for (let index = 0; index < scene.instances.length; index++) {
+      const part = scene.instances[index];
       const key = family(part);
       templates.set(key, part);
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      if (part.id) {
+        let ids = named.get(key);
+        if (!ids) named.set(key, ids = new Set());
+        ids.add(identities[index]);
+      } else unnamed.set(key, (unnamed.get(key) ?? 0) + 1);
     }
     for (const [key, count] of counts) capacities.set(key, Math.max(capacities.get(key) ?? 0, count));
+    for (const [key, count] of unnamed) anonymous.set(key, Math.max(anonymous.get(key) ?? 0, count));
   }
   const glyphDraws = topologies.flatMap(topology => topology.glyphs ?? []);
   const plans = new Map<PreparedWorldScene, WorldPlan>();
@@ -60,7 +69,7 @@ export function prepareWorldPlans(scenes: PreparedWorldScene[]): Map<PreparedWor
     let offset = 0;
     const reserve = (key: string) => {
       slots[key] = offset;
-      const count = (capacities.get(key) ?? 0) * 2;
+      const count = Math.min((capacities.get(key) ?? 0) * 2, (named.get(key)?.size ?? 0) + (anonymous.get(key) ?? 0));
       offset += count;
       return count;
     };

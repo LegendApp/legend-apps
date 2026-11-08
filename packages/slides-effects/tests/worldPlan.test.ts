@@ -1,7 +1,7 @@
 // @ts-ignore Bun supplies this API at runtime.
 import { expect, test } from "bun:test";
 import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanFits, worldPlanIds } from "../packs/world/plan";
-import { customGeometryKeys, customInstances, primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
+import { customGeometryKeys, customInstances, compileTrack, primitive, prepareWorldScene, sampleWorldUniforms, sdfInstance, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds } from "../packs/world/track";
 import { text3dInstances } from "../packs/world/text3d";
 import { createPlaybackState } from "../../presentation/src/playbackState";
@@ -41,7 +41,7 @@ test("compatible declarations and retained outgoing parts use one graph without 
   for (const [source, count, target] of copies) {
     Array.from(values.slice(source, source + count)).forEach((v, i) => expect(output[target + i]).toBeCloseTo(v, 5));
   }
-  expect(plan.topology.counts).toEqual({ box: 2, tube: 2, ring: 0, sphere: 0 });
+  expect(plan.topology.counts).toEqual({ box: 1, tube: 1, ring: 0, sphere: 0 });
   const graph = buildWorldGraph(plan.topology);
   expect(graph.uniformsSize).toBe(plan.size);
   for (let slot = worldHeaderSize; slot < plan.size; slot += worldInstanceSize) {
@@ -110,7 +110,7 @@ test("effects share a graph across geometry sizes and copy animated parameters a
   expect(buildWorldGraph(plan.topology).uniformsSize).toBe(plan.size);
   for (const scene of scenes) {
     expect(worldPlanFits(scene, plan)).toBe(true);
-    expect(worldPlanIds(scene, plan)).toHaveLength(6);
+    expect(worldPlanIds(scene, plan)).toHaveLength(plan.instances);
     const retained = retainTrackScene(scene, scenes[1], scenes[1], true);
     expect(worldPlanFits(retained, plan)).toBe(true);
     for (const stepIndex of [0, 1, 0]) {
@@ -118,7 +118,7 @@ test("effects share a graph across geometry sizes and copy animated parameters a
       const pooled = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size));
       const source = scene.effectUses[0].base, target = plan.topology.effects![0].base;
       expect(Array.from(pooled.slice(target))).toEqual(Array.from(sample.slice(source)));
-      expect(target).toBe(worldHeaderSize + 6 * worldInstanceSize);
+      expect(target).toBe(worldHeaderSize + plan.instances * worldInstanceSize);
     }
   }
 });
@@ -152,4 +152,95 @@ test("numeric family cursors preserve empty capacities, equivalent descriptors a
   expect(worldPlanFits(equivalent, plan)).toBe(false);
   geometry.vertexCount = 36;
   expect(worldPlanFits(equivalent, plan)).toBe(true);
+});
+
+test("scenery present in every declaration needs one slot while departures keep their own capacity", () => {
+  const scenes = [0, 1, 2].map(index => prepareWorldScene({ instances: [
+    ...Array.from({ length: 100 }, (_, slot) => primitive("sphere", { id: `shared-${slot}`, position: [slot, index, 0] })),
+    primitive("box", { id: `part-${index}`, position: [index, 0, 0] }),
+  ] }));
+  const plan = prepareWorldPlans(scenes).get(scenes[0])!;
+  expect(plan.instances).toBe(102);
+  for (const [from, to] of [[0, 1], [1, 0], [0, 2], [2, 1]]) {
+    const retained = retainTrackScene(scenes[to], scenes[from]);
+    expect(worldPlanFits(retained, plan)).toBe(true);
+    for (const time of [0, .3, 1.5]) {
+      const sample = sampleWorldUniforms(retained, { ...clock, slideTime: time, stepTime: time });
+      const copies = worldPlanCopies(retained, plan);
+      const values = sampleWorldPlan(sample, copies, new Float32Array(plan.size));
+      for (const [source, size, target] of copies) expect(Array.from(values.slice(target, target + size)))
+        .toEqual(Array.from(Float32Array.from(sample.slice(source, source + size))));
+      expect(worldPlanIds(retained, plan).filter(Boolean)).toEqual(trackIds(retained));
+    }
+  }
+  const second = retainTrackScene(scenes[1], scenes[0], scenes[0], true);
+  const third = retainTrackScene(scenes[2], second, scenes[1], true, trackIds(scenes[0]));
+  expect(worldPlanFits(third, plan)).toBe(false);
+});
+
+for (const frame of ["station", "world"] as const) test(`smaller pools preserve every named field through ${frame} carry, steps and reverse`, () => {
+  const scenes = [0, 1, 2].map(index => prepareWorldScene({ instances: [
+    ...Array.from({ length: 8 }, (_, slot) => primitive("box", { id: `shared-${slot}`, position: [slot, index, 0] })),
+    primitive("sphere", { id: `part-${index}`, position: [index, 2, 0] }),
+  ] }));
+  // Anonymous incoming parts can require the original larger layout beside named departures.
+  const plans = [prepareWorldPlans(scenes).get(scenes[0])!,
+    prepareWorldPlans([...scenes, prepareWorldScene({ instances: Array.from({ length: 8 }, () => primitive("box")) })]).get(scenes[0])!];
+  expect(plans.map(plan => plan.instances)).toEqual([10, 18]);
+  const frames = plans.map(() => createTrackFrame());
+  let layout = scenes[0], declaration = scenes[0];
+  for (const [index, step, time] of [[0,0,0], [0,0,5], [1,0,0], [1,0,.2], [1,0,5],
+    [1,1,0], [1,1,5], [2,0,0], [2,0,5], [0,0,0], [0,0,.6], [0,0,5]]) {
+    const scene = scenes[index];
+    if (scene !== declaration) { layout = retainTrackScene(scene, layout, declaration, true, frames[0].visible); declaration = scene; }
+    const playback = { ...createPlaybackState({ phase: "playing", slideKey: String(index), stepKey: String(step), stepIndex: step }),
+      slideTime: time + (step ? 5 : 0), stepTime: time };
+    const declared = trackIds(scene), sample = sampleWorldUniforms(scene, playback, null, 1, 1, true);
+    const normalized = plans.map((plan, i) => {
+      expect(worldPlanFits(layout, plan)).toBe(true);
+      const values = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size));
+      frames[i] = sampleTrackFrame(frames[i], values as unknown as number[], worldPlanIds(layout, plan), playback,
+        { frame, duration: 1, carry: { lift: 1, spread: 1, spin: .2, stagger: .3 }, steps: { 1: { orbit: 15 } } }, declared);
+      return { header: Array.from(frames[i].values.slice(0, worldHeaderSize)),
+        parts: Object.fromEntries(frames[i].ids.flatMap((id, slot) => id ? [[id, Array.from(frames[i].values.slice(
+          worldHeaderSize + slot * worldInstanceSize, worldHeaderSize + (slot + 1) * worldInstanceSize))]] : [])),
+        visible: frames[i].visible };
+    });
+    expect(normalized[0]).toEqual(normalized[1]);
+  }
+});
+
+test("reachable capacity preserves rapid departures from every declared scene", () => {
+  const scenes = [0, 1, 2].map(index => prepareWorldScene({ instances: [
+    ...Array.from({ length: 8 }, (_, slot) => primitive("box", { id: `shared-${slot}` })), primitive("box", { id: `unique-${index}` }),
+  ] }));
+  const plan = prepareWorldPlans(scenes).get(scenes[0])!;
+  expect(plan.instances).toBe(11);
+  const second = retainTrackScene(scenes[1], scenes[0], scenes[0], true);
+  const third = retainTrackScene(scenes[2], second, scenes[1], true, trackIds(scenes[0]));
+  expect(third.instances).toHaveLength(11);
+  expect(worldPlanFits(third, plan)).toBe(true);
+});
+
+test("anonymous incoming parts keep capacity beside named departures", () => {
+  const a = prepareWorldScene({ instances: [primitive("box", { id: "shared" }), primitive("box", { id: "leaving" })] });
+  const b = prepareWorldScene({ instances: [primitive("box", { id: "shared" }), primitive("box"), primitive("box")] });
+  const plan = prepareWorldPlans([a, b]).get(a)!;
+  expect(plan.instances).toBe(4);
+  const retained = retainTrackScene(b, a);
+  expect(retained.instances).toHaveLength(4);
+  expect(worldPlanFits(retained, plan)).toBe(true);
+});
+
+test("shared custom families count distinct tracked identities", () => {
+  const part = customInstances({ id: "part", count: 1, vertexCount: 36, wgsl: "program" })[0];
+  const custom = prepareWorldScene({ instances: [part] });
+  const route = prepareWorldScene({ instances: [{ ...part, kind: "tube", route: {
+    points: [[0, 0, 0], [1, 0, 0]], lengths: [0, 1], draw: compileTrack(1), segment: 0,
+  } }] });
+  const plan = prepareWorldPlans([custom, route]).get(custom)!;
+  expect(plan.instances).toBe(2);
+  const retained = retainTrackScene(route, custom, custom, true);
+  expect(trackIds(retained)).toEqual([trackIds(route)[0], trackIds(custom)[0]]);
+  expect(worldPlanFits(retained, plan)).toBe(true);
 });
