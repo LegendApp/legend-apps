@@ -83,11 +83,16 @@ export function countSteps(children: ReactNode, listTypes: unknown[] = ["ul", "o
   return walkSteps(children, listTypes, false).steps;
 }
 
+const stepFreeTrees = new WeakSet<ReactElement>();
+
 function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
   let cursor = 0;
-  let maximum = 0;
+  let maximum = 0, dynamicNodes = 0;
   const visitor = (node: ReactNode): ReactNode => isValidElement<StepProps & { count?: number }>(node) ? element(node) : node;
   const element = (node: ReactElement<StepProps & { count?: number }>): ReactNode => {
+    if (!render && stepFreeTrees.has(node)) return node;
+    const before = dynamicNodes;
+    if (!render && (node.type === Steps || node.type === Step)) dynamicNodes++;
     if (node.type === Steps) {
       if (typeof node.props.children === "function") {
         // Do not execute the callback while discovering steps: it can contain
@@ -123,6 +128,7 @@ function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
       if (render) props = { ...props, at };
     }
     const content = visit(props.children);
+    if (!render && before === dynamicNodes) stepFreeTrees.add(node);
     return render ? cloneElement(node, props, content) : node;
   };
   function visit(nodes: ReactNode): ReactNode {
@@ -130,7 +136,11 @@ function walkSteps(children: ReactNode, listTypes: unknown[], render: boolean) {
     if (Array.isArray(nodes)) { for (const node of nodes) visit(node); }
     else if (nodes !== null && typeof nodes === "object") {
       if (isValidElement<StepProps & { count?: number }>(nodes)) element(nodes);
-      else Children.forEach(nodes, visitor);
+      else {
+        // An iterable can change without replacing its parent element.
+        dynamicNodes++;
+        Children.forEach(nodes, visitor);
+      }
     }
     return nodes;
   }

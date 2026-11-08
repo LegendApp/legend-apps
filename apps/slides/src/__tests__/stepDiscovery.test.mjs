@@ -5,11 +5,11 @@ import { createRequire } from "node:module";
 const require = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
 const React = require("react");
 const { transformSync } = require("esbuild");
-let clones = 0, traversals = 0;
+let clones = 0, traversals = 0, validations = 0;
 const module = { exports: {} };
 const code = transformSync(readFileSync(new URL("../steps.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs", jsx: "automatic" }).code;
 Function("require", "module", "exports", code)((name) => {
-  if (name === "react") return { ...React, Children: { ...React.Children, forEach(...args) { traversals++; return React.Children.forEach(...args); } }, cloneElement(...args) { clones++; return React.cloneElement(...args); } };
+  if (name === "react") return { ...React, isValidElement(...args) { validations++; return React.isValidElement(...args); }, Children: { ...React.Children, forEach(...args) { traversals++; return React.Children.forEach(...args); } }, cloneElement(...args) { clones++; return React.cloneElement(...args); } };
   if (name === "react/jsx-runtime") return require(name);
   return {};
 }, module, module.exports);
@@ -52,4 +52,28 @@ test("discovery preserves iterator, nested array and empty child semantics", () 
   const tree = [null, false, "", 12, [h(Step, { at: 2 })], new Set([h(Step, { at: 4 }), h(Step, { until: 7 })])];
   assert.equal(countSteps(tree), resolveSteps(tree).steps);
   assert.throws(() => countSteps({ invalid: true }), /Objects are not valid/);
+});
+
+
+test("reused step-free scenery avoids rediscovery without caching surrounding reveal counts", () => {
+  const scenery = h("world", null, Array.from({ length: 200 }, (_, i) => h("group", { key: i },
+    Array.from({ length: 20 }, (_, k) => h("part", { key: k }, "static")))));
+  assert.equal(countSteps([h(Step, { at: 2 }), scenery, h(Step)]), 4);
+  validations = 0;
+  assert.equal(countSteps([h(Step, { at: 7 }), scenery, h(Step)]), 9);
+  assert.ok(validations < 20, `rediscovered ${validations} elements in unchanged scenery`);
+  const reveal = h("group", null, h(Step));
+  assert.equal(countSteps([reveal, reveal]), 3);
+  assert.equal(countSteps([h(Step, { at: 5 }), reveal, reveal]), 8);
+});
+
+test("iterables remain discoverable when their contents change under the same element", () => {
+  const items = new Set([h("part", { key: "static" })]);
+  const tree = h("group", null, items);
+  assert.equal(countSteps(tree), 1);
+  items.add(h(Step, { key: "reveal", at: 6 }));
+  assert.equal(countSteps(tree), 7);
+  assert.equal(countSteps(tree), resolveSteps(tree).steps);
+  items.clear();
+  assert.equal(countSteps(tree), 1);
 });
