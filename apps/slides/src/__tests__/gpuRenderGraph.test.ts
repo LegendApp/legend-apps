@@ -334,3 +334,21 @@ test("native shader parsing yields diagnostics before parsing another module wit
   for (const resolve of pipelines) resolve({});
   expect((await setup).passes).toHaveLength(4);
 });
+
+
+test("cold shader parsing lets queued navigation run before the whole graph is prepared", async () => {
+  const g = gpu(), module = g.device.createShaderModule;
+  let parsed = 0, navigationAfter;
+  const navigation = new Promise(resolve => setTimeout(() => { navigationAfter = parsed; resolve(); }, 0));
+  g.device.createShaderModule = descriptor => {
+    const start = performance.now();
+    while (performance.now() - start < 6) {}
+    parsed++;
+    return module(descriptor);
+  };
+  await prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {});
+  await navigation;
+  expect(navigationAfter).toBeGreaterThan(0);
+  expect(navigationAfter).toBeLessThan(definition.passes.length);
+  expect(parsed).toBe(definition.passes.length);
+});

@@ -79,7 +79,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     if (!ids.has(id)) throw new Error("Unknown GPU resource: " + value);
     if (!Number.isInteger(mip) || mip < 0 || (r.buffers[id] ? mip !== 0 : mip >= (targetFor(targets, value).mips ?? 1))) throw new Error("Invalid GPU mip: " + value);
   };
-  let modules: Promise<unknown> = Promise.resolve();
+  let modules: Promise<unknown> = Promise.resolve(), parsingMs = 0;
   const preparing = passes.map(async ({ code, ...pass }) => {
     for (const value of [...(pass.reads ?? []), ...(pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)])]) checkReference(value);
     const reads = new Set((pass.reads ?? []).map(value => { const [id, mip] = reference(value); return id + "@" + mip; }));
@@ -101,10 +101,15 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
           : { texture: { sampleType: target!.format === "depth32float" ? "depth" as const : target!.format === "r32float" ? "unfilterable-float" as const : "float" as const,
             multisampled: target!.format === "depth32float" && (target!.samples ?? 1) > 1 } }) });
     }
-    // Native shader parsing is synchronous; serialize its async diagnostics while pipelines compile independently.
+    // Fulfilled diagnostics can otherwise parse the entire graph in one JS turn.
+    // Yield after small parsing batches while independent pipelines keep compiling.
     const moduleReady = modules.then(async () => {
+      if (parsingMs >= 4) { await new Promise<void>(resolve => setTimeout(resolve, 0)); parsingMs = 0; }
+      const start = performance.now();
       const module = device.createShaderModule({ code: code + (pass.kind === "fullscreen" ? graphVertex : "") });
-      const diagnostics = await module.getCompilationInfo();
+      const compilation = module.getCompilationInfo();
+      parsingMs += performance.now() - start;
+      const diagnostics = await compilation;
       const errors = diagnostics.messages.filter(message => message.type === "error");
       if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));
       return module;
