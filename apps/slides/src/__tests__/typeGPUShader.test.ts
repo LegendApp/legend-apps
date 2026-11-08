@@ -500,3 +500,37 @@ test("a queued still readback retires its buffer when the surface freezes", asyn
     expect(f.events.filter(event => event[0] === "destroy-buffer")).toHaveLength(1);
   } finally { f.stop(); }
 });
+
+
+test("retained native view props do not own retired GPU programs", async () => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false, presets: [require.resolve("@react-native/babel-preset")],
+  });
+  const state = { resource: undefined, index: 0 };
+  const mocks = {
+    react: { useContext: () => 1, useRef: value => ({ current: value }), useEffect() {}, useLayoutEffect() {},
+      useState: () => [state.index++ % 3 === 0 ? state.resource : undefined, () => {}] },
+    "react-native": { View: "native-view" }, "@shopify/react-native-skia": {}, "react-native-webgpu": { Canvas: "canvas" },
+    "react-native-reanimated": {}, "./gpuRenderGraph": {}, "./slidesStore": {}, "./SlideCaptureContext": {},
+    "@legend-apps/presentation": { useSurfaceSuspension: () => null, useBackgroundSize: () => ({ width: 16, height: 9 }),
+      useBackgroundIntensity: () => 1, usePresentationValue: () => 0, usePreparationTask() {} },
+  };
+  const render = new Function("require", "exports", "navigator", code + "\nreturn TypeGPUShader;")(
+    name => mocks[name] ?? require(name), {}, { gpu: {} });
+  function retire() {
+    state.resource = { device: {}, id: 1 };
+    const weak = new WeakRef(state.resource), element = render({ code: "", children: "overlay" });
+    const view = element.type === "native-view" ? element : element.props.children.find(child => child?.type === "native-view");
+    // Fabric/DevTools can retain old native props after the render-only controller unmounts.
+    const retainedProps = view.props;
+    expect(retainedProps.children).toContain("overlay");
+    state.resource = undefined;
+    return { weak, retainedProps };
+  }
+  const retired = retire();
+  for (let i = 0; i < 3; i++) { await new Promise(resolve => setTimeout(resolve, 0)); Bun.gc(true); }
+  expect(retired.weak.deref()).toBeUndefined();
+  expect(retired.retainedProps.children[0].type).toBe("canvas");
+});

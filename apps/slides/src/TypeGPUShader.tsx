@@ -81,11 +81,13 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize, renderGraph, readable]);
   if (!supported) throw new Error("WebGPU is required to render this effect");
   if (error) throw new Error(error);
-  return <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
-    <Canvas ref={canvas} style={{ width, height }} />
+  return <>
+    <View accessibilityLabel={accessibilityLabel} pointerEvents="none" style={{ width, height, overflow: "hidden", borderRadius: borderRadius ?? (background ? 0 : 20) }}>
+      <Canvas ref={canvas} style={{ width, height }} />
+      {resources && children}
+    </View>
     {resources && <UIFrames key={resources.id} suspended={suspended} suspendedOnUI={suspension?.signal} resources={resources} still={still} renderScale={renderScale} effectActive={active} maxTime={maxTime} frameTimeIndex={frameTimeIndex} displayScale={displayScale} width={width} height={height} aspect={width/height} brightness={brightness} particleCount={particleCount} particleVertexCount={particleVertexCount} clockMode={clockMode} frameData={frameData} previewTime={previewTime} onError={message => { setError(message); reportSlideError(message, errorContext.current.slideIndex, errorContext.current.isPreview); }} onReady={() => setPreparedResources(resources)} />}
-    {resources && children}
-  </View>;
+  </>;
 }
 
 /** Back the drawable at device pixels, the slide's display scale times the screen's backing scale. */
