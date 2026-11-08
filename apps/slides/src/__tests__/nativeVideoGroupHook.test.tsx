@@ -5,7 +5,8 @@ import { act, create } from "react-test-renderer";
 import { createRequire } from "node:module";
 const presentationRequire = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url));
 const loads = [], callbacks = [], players = [];
-let now = 0;
+let now = 0, deferUI = false;
+const uiTasks = [];
 function player(source) {
   const native = {
     source, ready: false, starts: [], prepares: [], disposed: 0,
@@ -24,8 +25,10 @@ function player(source) {
 mock.module(presentationRequire.resolve("react-native"), () => ({ Platform: { OS: "macos" } }));
 mock.module(presentationRequire.resolve("@shopify/react-native-skia"), () => ({ Skia: { Video: player } }));
 mock.module(presentationRequire.resolve("react-native-reanimated"), () => ({
-  createWorkletRuntime: () => ({}), runOnJS: fn => fn, runOnUI: fn => fn,
+  createWorkletRuntime: () => ({}), runOnJS: fn => fn,
+  runOnUI: fn => (...args) => deferUI ? uiTasks.push(() => fn(...args)) : fn(...args),
   runOnRuntime: (_, fn) => (...args) => loads.push(() => fn(...args)),
+  makeMutable: value => ({ value }),
   useSharedValue: value => useRef({ value }).current,
   useFrameCallback: fn => {
     const latest = useRef(fn); latest.current = fn;
@@ -103,4 +106,23 @@ test("restart hold publishes the first decoded cohort immediately while native p
     now = 601; await act(() => callback.tick());
     expect(value.state.value.position).toBe(1);
   } finally { await act(() => tree.unmount()); }
+});
+
+test("a new source cohort cannot display the previous clip while UI cleanup is pending", async () => {
+  let value, tree;
+  function Probe({ sources }) { value = useNativeVideoGroup(sources, { active: true, resetKey: "carousel" }); return null; }
+  await act(() => { tree = create(<Probe sources={["short"]} />); });
+  try {
+    await act(() => loads.shift()());
+    players.at(-1).ready = true; await act(() => callbacks.at(-1).tick());
+    expect(value.frames.value).toEqual([{ source: "short" }]);
+    deferUI = true;
+    await act(() => tree.update(<Probe sources={["long"]} />));
+    expect(value.frames.value).toEqual([]);
+  } finally {
+    deferUI = false;
+    await act(() => { while (uiTasks.length) uiTasks.shift()(); });
+    await act(() => loads.shift()());
+    await act(() => tree.unmount());
+  }
 });

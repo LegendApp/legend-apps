@@ -1,7 +1,7 @@
 import { Skia, type SkImage } from "@shopify/react-native-skia";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
-import { createWorkletRuntime, runOnJS, runOnRuntime, runOnUI, useFrameCallback, useSharedValue } from "react-native-reanimated";
+import { createWorkletRuntime, makeMutable, runOnJS, runOnRuntime, runOnUI, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { createVideoGroupState, updateVideoGroup, type SynchronizedVideo, type VideoGroupInput } from "./videoGroup";
 
 let loadingRuntime: ReturnType<typeof createWorkletRuntime> | undefined;
@@ -19,7 +19,7 @@ export function useNativeVideoGroup(sources: readonly string[], { active, playin
   const [loaded, setLoaded] = useState<{ key: string; players: SynchronizedVideo[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const players = loaded?.key === sourceKey ? loaded.players : null;
-  const frames = useSharedValue<(SkImage | null)[]>([]);
+  const frames = useMemo(() => makeMutable<(SkImage | null)[]>([]), [sourceKey]);
   const state = useSharedValue(createVideoGroupState());
   const input = useSharedValue<VideoGroupInput>({ active, playing, resetKey, seek, restartHoldMs });
   const frame = useFrameCallback(() => {
