@@ -874,6 +874,7 @@
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-webgpu@0.20.0": "patches/react-native-webgpu@0.20.0.patch",
+    "react-devtools-core@6.1.5": "patches/react-devtools-core@6.1.5.patch",
     "@shopify/react-native-skia@2.14.0": "patches/@shopify+react-native-skia@2.14.0.patch",
   },
   "catalog": {

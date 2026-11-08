@@ -1,0 +1,82 @@
+diff --git a/dist/backend.js b/dist/backend.js
+--- a/dist/backend.js
++++ b/dist/backend.js
+@@ -10909,7 +10909,12 @@
+ 
+ var idToDevToolsInstanceMap = new Map(); // Map of canonical HostInstances to the nearest parent DevToolsInstance.
+ 
+-var publicInstanceToDevToolsInstanceMap = new Map(); // Map of resource DOM nodes to all the nearest DevToolsInstances that depend on it.
++var publicInstanceToDevToolsInstanceMap = new WeakMap();
++var publicInstanceTagToDevToolsInstanceMap = new Map();
++
++function getPublicInstanceMap(instance) {
++  return typeof instance === 'number' ? publicInstanceTagToDevToolsInstanceMap : publicInstanceToDevToolsInstanceMap;
++} // Map of resource DOM nodes to all the nearest DevToolsInstances that depend on it.
+ 
+ var hostResourceToDevToolsInstanceMap = new Map(); // Ideally, this should be injected from Reconciler config
+ 
+@@ -10954,14 +10959,14 @@
+ 
+ function aquireHostInstance(nearestInstance, hostInstance) {
+   var publicInstance = getPublicInstance(hostInstance);
+-  publicInstanceToDevToolsInstanceMap.set(publicInstance, nearestInstance);
++  getPublicInstanceMap(publicInstance).set(publicInstance, nearestInstance);
+ }
+ 
+ function releaseHostInstance(nearestInstance, hostInstance) {
+   var publicInstance = getPublicInstance(hostInstance);
+ 
+-  if (publicInstanceToDevToolsInstanceMap.get(publicInstance) === nearestInstance) {
+-    publicInstanceToDevToolsInstanceMap.delete(publicInstance);
++  if (getPublicInstanceMap(publicInstance).get(publicInstance) === nearestInstance) {
++    getPublicInstanceMap(publicInstance).delete(publicInstance);
+   }
+ }
+ 
+@@ -10976,7 +10981,7 @@
+       resourceInstances = new Set();
+       hostResourceToDevToolsInstanceMap.set(publicInstance, resourceInstances); // Store the first match in the main map for quick access when selecting DOM node.
+ 
+-      publicInstanceToDevToolsInstanceMap.set(publicInstance, nearestInstance);
++      getPublicInstanceMap(publicInstance).set(publicInstance, nearestInstance);
+     }
+ 
+     resourceInstances.add(nearestInstance);
+@@ -10995,8 +11000,8 @@
+ 
+       if (resourceInstances.size === 0) {
+         hostResourceToDevToolsInstanceMap.delete(publicInstance);
+-        publicInstanceToDevToolsInstanceMap.delete(publicInstance);
+-      } else if (publicInstanceToDevToolsInstanceMap.get(publicInstance) === nearestInstance) {
++        getPublicInstanceMap(publicInstance).delete(publicInstance);
++      } else if (getPublicInstanceMap(publicInstance).get(publicInstance) === nearestInstance) {
+         // This was the first one. Store the next first one in the main map for easy access.
+         // eslint-disable-next-line no-for-of-loops/no-for-of-loops
+         var _iterator = renderer_createForOfIteratorHelper(resourceInstances),
+@@ -11005,7 +11010,7 @@
+         try {
+           for (_iterator.s(); !(_step = _iterator.n()).done;) {
+             var firstInstance = _step.value;
+-            publicInstanceToDevToolsInstanceMap.set(firstInstance, nearestInstance);
++            getPublicInstanceMap(firstInstance).set(firstInstance, nearestInstance);
+             break;
+           }
+         } catch (err) {
+@@ -13669,7 +13674,7 @@
+   function getNearestMountedDOMNode(publicInstance) {
+     var domNode = publicInstance;
+ 
+-    while (domNode && !publicInstanceToDevToolsInstanceMap.has(domNode)) {
++    while (domNode && !getPublicInstanceMap(domNode).has(domNode)) {
+       // $FlowFixMe: In practice this is either null or Element.
+       domNode = domNode.parentNode;
+     }
+@@ -13678,7 +13683,7 @@
+   }
+ 
+   function getElementIDForHostInstance(publicInstance) {
+-    var instance = publicInstanceToDevToolsInstanceMap.get(publicInstance);
++    var instance = getPublicInstanceMap(publicInstance).get(publicInstance);
+ 
+     if (instance !== undefined) {
+       if (instance.kind === FILTERED_FIBER_INSTANCE) {

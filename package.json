@@ -125,6 +125,7 @@
     "typescript": "~7.0.2"
   },
   "patchedDependencies": {
+    "react-devtools-core@6.1.5": "patches/react-devtools-core@6.1.5.patch",
     "@shopify/react-native-skia@2.14.0": "patches/@shopify+react-native-skia@2.14.0.patch",
     "react-native-macos@0.83.0": "patches/react-native-macos@0.83.0.patch",
     "react-native-webgpu@0.20.0": "patches/react-native-webgpu@0.20.0.patch",
