@@ -534,3 +534,51 @@ test("retained native view props do not own retired GPU programs", async () => {
   expect(retired.weak.deref()).toBeUndefined();
   expect(retired.retainedProps.children[0].type).toBe("canvas");
 });
+
+
+test.each(["map", "range", "data", "image", "null", "encode", "success"])("still readback owns borrowed pixels through %s", async failure => {
+  const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
+  const require = createRequire(filename);
+  const { code } = transformSync(readFileSync(filename, "utf8"), {
+    filename, babelrc: false, configFile: false, presets: [require.resolve("@react-native/babel-preset")],
+  });
+  const events = [], bytes = new ArrayBuffer(512);
+  new Uint8Array(bytes).fill(7);
+  let mapped = false, input;
+  const fail = stage => { if (failure === stage) throw new Error(stage); };
+  const buffer = {
+    mapAsync: async mode => { expect(mode).toBe(1); fail("map"); mapped = true; },
+    getMappedRange: () => { fail("range"); return bytes; },
+    destroy: () => { events.push("buffer"); mapped = false; new Uint8Array(bytes).fill(0); },
+  };
+  const skia = { AlphaType: { Premul: "premul" }, ColorType: { BGRA_8888: "bgra", RGBA_8888: "rgba" }, ImageFormat: { JPEG: "jpeg" }, Skia: {
+    Data: { fromBytes: pixels => { fail("data"); input = pixels; return { pixels, dispose: () => events.push("data") }; } },
+    Image: { MakeImage: (info, data, stride) => {
+      fail("image");
+      expect(info).toEqual({ width: 16, height: 2, colorType: "bgra", alphaType: "premul" });
+      expect(stride).toBe(256);
+      if (failure === "null") return null;
+      return { encodeToBase64: (format, quality) => {
+        fail("encode");
+        if (data.pixels.buffer === bytes) expect(mapped).toBe(true);
+        expect(data.pixels[0]).toBe(7);
+        expect([format, quality]).toEqual(["jpeg", 90]);
+        return "pixels";
+      }, dispose: () => events.push("image") };
+    } },
+  } };
+  const mocks = { react: {}, "react-native": {}, "react-native-reanimated": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {},
+    "./gpuRenderGraph": {}, "./slidesStore": {}, "./SlideCaptureContext": {}, "@shopify/react-native-skia": skia };
+  const encode = new Function("require", "exports", code + "\nreturn encodeStill;")(name => mocks[name] ?? require(name), {});
+  if (failure === "success") {
+    expect(await encode(buffer, 16, 2, 256, "bgra8unorm")).toBe("data:image/jpeg;base64,pixels");
+    expect(input.buffer).toBe(bytes);
+  } else await expect(encode(buffer, 16, 2, 256, "bgra8unorm")).rejects.toThrow(failure === "null" ? "Could not encode a slide still" : failure);
+  expect(events.filter(event => event === "buffer")).toHaveLength(1);
+  const dataCreated = !["map", "range", "data"].includes(failure);
+  const imageCreated = dataCreated && !["image", "null"].includes(failure);
+  expect(events.filter(event => event === "data")).toHaveLength(dataCreated ? 1 : 0);
+  expect(events.filter(event => event === "image")).toHaveLength(imageCreated ? 1 : 0);
+  if (imageCreated) expect(events.indexOf("image")).toBeLessThan(events.indexOf("data"));
+  if (dataCreated) expect(events.indexOf("data")).toBeLessThan(events.indexOf("buffer"));
+});

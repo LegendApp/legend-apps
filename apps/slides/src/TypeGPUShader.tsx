@@ -346,14 +346,16 @@ function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, rende
 
 
 async function encodeStill(buffer: GPUBuffer, width: number, height: number, bytesPerRow: number, format: GPUTextureFormat) {
-  await buffer.mapAsync(1);
-  const data = Skia.Data.fromBytes(new Uint8Array(buffer.getMappedRange()).slice());
-  buffer.destroy();
-  const image = Skia.Image.MakeImage({ width, height, colorType: format.startsWith("bgra") ? ColorType.BGRA_8888 : ColorType.RGBA_8888, alphaType: AlphaType.Premul }, data, bytesPerRow);
-  data.dispose();
-  if (!image) throw new Error("Could not encode a slide still");
-  try { return `data:image/jpeg;base64,${image.encodeToBase64(ImageFormat.JPEG, 90)}`; }
-  finally { image.dispose(); }
+  try {
+    await buffer.mapAsync(1);
+    const data = Skia.Data.fromBytes(new Uint8Array(buffer.getMappedRange()));
+    try {
+      const image = Skia.Image.MakeImage({ width, height, colorType: format.startsWith("bgra") ? ColorType.BGRA_8888 : ColorType.RGBA_8888, alphaType: AlphaType.Premul }, data, bytesPerRow);
+      if (!image) throw new Error("Could not encode a slide still");
+      try { return `data:image/jpeg;base64,${image.encodeToBase64(ImageFormat.JPEG, 90)}`; }
+      finally { image.dispose(); }
+    } finally { data.dispose(); }
+  } finally { buffer.destroy(); }
 }
 
 /** writeBuffer copies synchronously, so surfaces on the UI runtime share one exact-length staging array per size. */
