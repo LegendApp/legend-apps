@@ -195,15 +195,16 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, co
   const start = stationAt(stations, endIndex - 1, course), end = stationAt(stations, endIndex, course);
   const a = { position: worldPoint(start.track.position ?? [0, 3.6, 14], start.offset), target: worldPoint(start.track.target ?? [0, 0, 0], start.offset), fov: 40, roll: 0 };
   const b = { position: worldPoint(end.track.position ?? [0, 3.6, 14], end.offset), target: worldPoint(end.track.target ?? [0, 0, 0], end.offset), fov: 40, roll: 0 };
-  // Quintic Hermite depth keeps a shared tangent and zero acceleration through skipped stations.
+  const from = start.pose ?? stepCamera(a, start.step), to = end.pose ?? stepCamera(b, end.step);
+  // Interpolate held poses directly so step depth and rail travel share one trajectory.
   const point = (key: "position" | "target", fallback: Vec3): Vec3 => {
     "worklet";
-    const p = key === "position" ? a.position : a.target, q = key === "position" ? b.position : b.target;
+    const p = from[key], q = to[key];
     const before = stationAt(stations, Math.max(0, endIndex - 2), course), after = stationAt(stations, endIndex + 1, course);
     const z0 = (before.track[key] ?? fallback)[2] - before.offset, z3 = (after.track[key] ?? fallback)[2] - after.offset;
     const depth = q[2] - p[2];
-    const m0 = endIndex === 1 ? depth : -Math.min(Math.abs(depth), Math.abs(p[2] - z0));
-    const m1 = -Math.min(Math.abs(depth), Math.abs(z3 - q[2]));
+    const m0 = endIndex === 1 ? depth : Math.sign(depth) * Math.min(Math.abs(depth), Math.abs(p[2] - z0));
+    const m1 = Math.sign(depth) * Math.min(Math.abs(depth), Math.abs(z3 - q[2]));
     const t3 = t * t * t, t4 = t3 * t, t5 = t4 * t, u = smooth(t);
     const result: Vec3 = [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u,
       p[2] + depth * u + m0 * (t - 6 * t3 + 8 * t4 - 3 * t5) + m1 * (-4 * t3 + 7 * t4 - 3 * t5)];
@@ -216,13 +217,7 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, co
     return result;
   };
   const position = point("position", [0, 3.6, 14]), target = point("target", [0, 0, 0]);
-  const from = start.pose ?? stepCamera(a, start.step), to = end.pose ?? stepCamera(b, end.step);
-  // A held step pose belongs to the station, so Previous follows the same unwind in reverse.
   const arrive = smooth(t), leave = 1 - arrive;
-  for (let axis = 0; axis < 3; axis++) {
-    position[axis] += (from.position[axis] - a.position[axis]) * leave + (to.position[axis] - b.position[axis]) * arrive;
-    target[axis] += (from.target[axis] - a.target[axis]) * leave + (to.target[axis] - b.target[axis]) * arrive;
-  }
   if (!end.track.via && !end.track.viaTarget) {
     // Combine framing and rail displacement into one broad lateral sweep. Moving
     // them separately can steer away from the bend before correcting back onto it.

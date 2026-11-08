@@ -160,3 +160,30 @@ test("framing changes and rail bends make one broad sweep without heading correc
     rest = frames[240];
   }
 });
+
+test("departing a forward step pose follows one continuous rail instead of unwinding its depth separately", () => {
+  const departure: WorldTrack = { spacing: 40, duration: 2, ease: "inOut", turn: 0, rise: 0,
+    position: [0, 3, 12], target: [0, 2, 0], steps: { 3: { shift: [5, 0, -28] } } };
+  const arrival: WorldTrack = { ...departure, position: [0, 4, 10], steps: undefined };
+  let frame = at(createTrackFrame(), 0, 0, departure);
+  frame = at(frame, 0, 0, departure, 3);
+  frame = at(frame, 0, 2, departure, 3);
+  const start = frame.values.slice(0, 8), samples = [start];
+  const movingFrames = Math.round(arrival.duration! * 60);
+  for (let i = 0; i <= movingFrames + 18; i++) {
+    frame = at(frame, 1, i / 60, arrival);
+    samples.push(frame.values.slice(0, 8));
+  }
+  samples[1].forEach((value, axis) => expect(value).toBeCloseTo(start[axis], 8));
+  for (let i = 1; i < samples.length; i++) {
+    expect(samples[i][2]).toBeLessThanOrEqual(samples[i - 1][2] + 1e-8);
+    expect(samples[i][0]).toBeLessThanOrEqual(samples[i - 1][0] + 1e-8);
+  }
+  const end = at(createTrackFrame(), 1, 0, arrival).values.slice(0, 8);
+  samples.at(-1)!.forEach((value, axis) => expect(value).toBeCloseTo(end[axis], 8));
+  const back = at(frame, 0, 0, departure, 3);
+  for (let i = 0; i <= movingFrames; i++) {
+    const pose = at(back, 0, i / 60, departure, 3).values;
+    pose.slice(0, 8).forEach((value, axis) => expect(value).toBeCloseTo(samples[movingFrames + 1 - i][axis], 7));
+  }
+});
