@@ -235,7 +235,8 @@ function WorldSurface(props: WorldProps) {
   const height = background ? size.height : configuredHeight;
   const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? worldContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
-  const requestedPool = props.scenePlan?.pool;
+  const preview = usePresentationValue("isPreview");
+  const requestedPool = preview ? undefined : props.scenePlan?.pool;
   const liveIds = useRef<string[]>([]);
   const retainLiveIds = useCallback((ids: string[]) => { liveIds.current = ids; }, []);
   const slide = usePresentationValue("slideIndex");

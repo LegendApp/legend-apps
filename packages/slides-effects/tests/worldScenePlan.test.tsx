@@ -117,9 +117,8 @@ test("equivalent scene plans still invalidate for changed geometry, appearance a
   } finally { await act(() => renderer?.unmount()); }
 });
 
-test("planned surfaces reuse one immutable UI scene while keeping sampled outputs separate", async () => {
+test("planned audience and previews sample independently", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  const mutables = spyOn(Reanimated, "makeMutable");
   const declarations = [<Scene id="one" world="copies"><Box id="part" position={[
     { at: 0, value: [0, 0, 0], duration: 0 }, { at: 0, value: [2, 0, 0], duration: 2, ease: "linear" },
   ]} /></Scene>];
@@ -137,13 +136,12 @@ test("planned surfaces reuse one immutable UI scene while keeping sampled output
   try {
     await act(() => { live = create(content(false)); preview = create(content(true)); });
     flushUI(); frames.forEach(frame => frame.tick(0)); frames.forEach(frame => frame.tick(1000));
-    expect(mutables.mock.calls.filter(([value]) => value?.instances).length).toBe(1);
     const values = live.root.findByType("gpu").props.frameData.value, before = Array.from(values);
     const still = preview.root.findByType("gpu").props.frameData.value;
     expect(still).not.toBe(values);
     expect(still[worldHeaderSize]).not.toBe(values[worldHeaderSize]);
     expect(Array.from(values)).toEqual(before);
-  } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); mutables.mockRestore(); }
+  } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); }
 });
 
 
@@ -187,4 +185,31 @@ test("scene plans share GPU capacity when point lights appear or disappear", () 
   })));
   expect(plans[0].scenePlan.pool).toBeDefined();
   for (const plan of plans) expect(plan.scenePlan.pool).toBe(plans[0].scenePlan.pool);
+});
+
+test("static previews reserve only their slide while audience scenes keep the deck pool", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const declarations = [<Scene id="one" world="preview-capacity"><Box id="part" /></Scene>,
+    <Scene id="two" world="preview-capacity"><Orbs count={512} /></Scene>];
+  function Renderer(props) { return <gpu {...props} />; }
+  const content = preview => <DeckContentContext.Provider value={declarations}><GPUShaderProvider renderer={Renderer}>
+    <BackgroundHost slideIndex={0} color="#05060a" isPreview={preview}>
+      <PresentationObservableProvider value={observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0,
+        slideCount: 2, stepCount: 1, startedAt: 0, stepStartedAt: 0, isActive: !preview,
+        isPreview: preview, isPreparing: false, playbackPhase: preview ? "preview" : "playing", playbackScope: "slide" })}>
+        {declarations[0]}
+      </PresentationObservableProvider>
+    </BackgroundHost>
+  </GPUShaderProvider></DeckContentContext.Provider>;
+  let live, preview;
+  try {
+    await act(() => { live = create(content(false)); preview = create(content(true)); });
+    await act(() => { flushUI(); frames.forEach(frame => frame.tick(4000)); });
+    const audience = live.root.findByType("gpu").props, still = preview.root.findByType("gpu").props;
+    expect(audience.renderGraph.passes.some(pass => pass.id === "scene-sphere")).toBe(true);
+    expect(still.renderGraph.passes.some(pass => pass.id === "scene-sphere")).toBe(false);
+    expect(still.renderGraph.passes.find(pass => pass.id === "scene-box").instanceCount).toBe(1);
+    expect(still.frameData.value.length).toBeLessThan(audience.frameData.value.length);
+    expect(still.frameData.value.every(Number.isFinite)).toBe(true);
+  } finally { await act(() => { live?.unmount(); preview?.unmount(); }); flushUI(); }
 });
