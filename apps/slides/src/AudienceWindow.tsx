@@ -242,11 +242,13 @@ function AudienceContent() {
   // Retain keyed surfaces during motion, then replenish one neighbor per idle
   // commit. Finishing a transition must not synchronously cold-mount its slots.
   const preparedIndexes = transitionState.preparedIndexes;
+  // Keep prepared native views in place; promotion must not move an opaque
+  // surface above the outgoing slide before its animated style is installed.
   const renderedLayers = [
     ...preparedIndexes.filter((index) => !layers.some((layer) => layer.index === index))
       .map((index) => ({ index, style: styles.preload })),
     ...layers,
-  ];
+  ].sort((a, b) => a.index - b.index);
 
   return (
     <SnapshotCaptureBoundary suspended={previousSlide !== null}>
@@ -327,7 +329,7 @@ function AudienceLayer({ children, style, preparing, behindBackground, progress,
   const retainedStyle = useRetainedTransitionStyle(style, preparing);
   const animatedStyle = useTransitionStyle({ opacity: 1, transform: [], ...retainedStyle });
   return <Animated.View accessibilityElementsHidden={preparing} importantForAccessibility={preparing ? "no-hide-descendants" : "auto"}
-    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, animatedStyle, { zIndex: behindBackground || !nativeReady ? -1 : 1 }]}>{children}</Animated.View>;
+    pointerEvents={preparing ? "none" : "auto"} style={[styles.layer, animatedStyle, { zIndex: behindBackground || !nativeReady ? -1 : transitioning ? 2 : 1 }]}>{children}</Animated.View>;
 }
 
 function UserTransitionLayer({ children, definition, reference, progress, incoming, reverse, hasBackground, shared, settled, preparing }: {
@@ -378,7 +380,7 @@ function AudienceFocusSurface({ children, index, motion, surfaces, layoutKey }: 
 }
 
 const styles = StyleSheet.create({
-  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 2 },
+  blackout: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000", zIndex: 3 },
   layer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
   // Full-size, opaque preparation surfaces sit behind the visible slides.
   // Opacity zero or a 1px layout prevents usable native snapshots.

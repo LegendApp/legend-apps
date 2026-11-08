@@ -63,7 +63,7 @@ test("completion adds no neighbors; idle preparation mounts one nearest neighbor
   await act(() => setCurrentSlide(7));
   await h.finish();
   expect(h.indexes()).toEqual([7,8]);
-  expect(mounts).toEqual([8,10,9,7]);
+  expect([...mounts].sort((a, b) => a - b)).toEqual([7,8,9,10]);
   await h.idle();
   expect(h.indexes()).toEqual([6,7,8]);
   expect(mounts.at(-1)).toBe(6);

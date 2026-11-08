@@ -69,7 +69,7 @@ test("first native progress reveals only the incoming layer without rerendering 
     const progress = tree.root.findAll(node => node.type?.name === "AudienceSlide")
       .find(node => node.props.index === 1).props.progress;
     await act(() => { progress.value = 0.02; reactUI(); });
-    expect(incoming().props.style[2].zIndex).toBe(1);
+    expect(incoming().props.style[2].zIndex).toBe(2);
     expect([...renders]).toEqual(before);
     await act(() => { progress.value = 0.5; reactUI(); });
     expect([...renders]).toEqual(before);

@@ -22,7 +22,9 @@ function sharedValue(initial) {
     set(next) { this.value = typeof next === "function" ? next(this.value) : next; },
   };
 }
-mock.module("react-native-reanimated", () => ({
+const native = { ...await import("react-native-reanimated") };
+const clockMock = {
+  ...native,
   __esModule: true,
   createWorkletRuntime: () => ({}),
   runOnRuntime: (_runtime, fn) => fn,
@@ -52,6 +54,8 @@ mock.module("react-native-reanimated", () => ({
       return frame;
     }, []);
   },
-}));
+};
+mock.module("react-native-reanimated", () => clockMock);
+mock.module("../../../../packages/presentation/node_modules/react-native-reanimated", () => clockMock);
 
 export const flushUI = () => { while (transactions.length) transactions.shift()(); reactUI(); };
