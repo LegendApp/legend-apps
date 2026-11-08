@@ -95,8 +95,9 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
   const flushUI = () => { while (ui.length) ui.shift()(); };
   const begin = async id => {
     const ready = deferred(), validation = deferred(), transferred = deferred(), resources = [];
+    let ownedGraph;
     const device = { id, lost: new Promise(() => {}), addEventListener() {}, pushErrorScope() {},
-      popErrorScope: () => { ready.resolve(); return validation.promise; }, destroy: () => events.push(["destroy", id]),
+      popErrorScope: () => { ready.resolve(); return validation.promise; }, destroy: () => { if (ownedGraph) expect(ownedGraph.value).toBeUndefined(); events.push(["destroy", id]); },
       createBuffer: () => ({}), createSampler: () => ({}), createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
       createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipelineAsync: async () => ({}),
       queue: { writeBuffer() {}, submit() {} },
@@ -110,7 +111,7 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
     pendingDevices.push(device);
     const stop = startShaderCanvas({ canvas: { current: {} }, surfaceContext: () => context, code: "", particles: false, particleCount: 1,
       renderGraph: { targets: [], passes: [{ kind: "fullscreen", id: `screen-${id}`, code: "", fragment: "main", output: "screen" }] },
-      setResources: value => { resources.push(value); if (value) transferred.resolve(value); }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
+      setResources: value => { resources.push(value); if (value) { ownedGraph = value.graph; transferred.resolve(value); } }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
     await ready.promise;
     return { stop, validation, transferred, resources };
   };
@@ -125,19 +126,25 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
   const old = await begin(1);
   expect(configurations()).toEqual([]);
   old.validation.resolve(null);
-  const oldFrames = mount(await old.transferred.promise);
+  const oldResources = await old.transferred.promise;
+  expect(oldResources.graph.value).toBeUndefined();
+  const oldFrames = mount(oldResources);
   expect(configurations()).toEqual([]);
   flushUI(); oldFrames.tick();
   expect(configurations()).toEqual([1]);
   old.stop(); oldFrames.stop();
+  expect(oldResources.graph.value.passes).toHaveLength(1);
   const replacement = await begin(2);
   oldFrames.tick();
   expect(configurations()).toEqual([1]);
   replacement.validation.resolve(null);
-  const newFrames = mount(await replacement.transferred.promise);
+  const newResources = await replacement.transferred.promise;
+  const newFrames = mount(newResources);
   expect(configurations()).toEqual([1]);
   flushUI();
   expect(configurations()).toEqual([1, 2]);
+  expect(oldResources.graph.value).toBeUndefined();
+  expect(newResources.graph.value.passes).toHaveLength(1);
   expect(events.findIndex(event => event[0] === "destroy" && event[1] === 1)).toBeLessThan(events.findIndex(event => event[0] === "configure" && event[1] === 2));
   const draws = events.filter(event => event[0] === "draw").length;
   oldFrames.tick();

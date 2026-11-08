@@ -25,7 +25,7 @@ type Resources = {
   groups: GPUBindGroup[];
   compute?: GPUComputePipeline;
   render?: GPURenderPipeline;
-  graph?: SharedValue<RenderGraphResources>;
+  graph?: SharedValue<RenderGraphResources | undefined>;
   particles?: GPURenderPipeline;
   frameData?: GPUBuffer;
   composite?: { pipeline: GPURenderPipeline; group: GPUBindGroup; texture: GPUTexture };
@@ -239,9 +239,16 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
       if (validationError) throw new Error(validationError.message);
       if (cancelled) { program.device.destroy(); return; }
       const alive = makeMutable(true), disposed = makeMutable(false), configured = makeMutable(false);
-      release = () => runOnUI(destroyGPU)(program.device, alive, disposed);
+      // The guest decorator retains the initializer even after UI value changes.
+      const graph = program.graph ? makeMutable<RenderGraphResources | undefined>(undefined) : undefined;
+      if (graph) runOnUI((value: SharedValue<RenderGraphResources | undefined>, prepared: RenderGraphResources) => {
+        "worklet";
+        value.value = prepared;
+      })(graph, program.graph!);
+      const device = program.device;
+      release = () => runOnUI(destroyGPU)(device, alive, disposed, graph);
       transferred = true;
-      setResources({ ...program, readable, graph: program.graph ? makeMutable(program.graph) : undefined, alive, disposed, configured, id: ++nextGPUResourceId });
+      setResources({ ...program, readable, graph, alive, disposed, configured, id: ++nextGPUResourceId });
     }
     void setup();
     return () => { cancelled = true; errorHandlers.dispose(); if (release) release(); else if (!transferred) device?.destroy(); };
@@ -253,7 +260,7 @@ function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, rende
   const preparing = usePresentationValue("isPreparing");
   const step = usePresentationValue("stepIndex");
   const playback = usePlayback();
-  const { alive, disposed } = r;
+  const { alive, disposed, graph } = r;
   const count = useSharedValue(0);
   const rendered = useSharedValue(false);
   const finished = useSharedValue(false);
@@ -339,8 +346,8 @@ function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, rende
   }, [still, stillId, suspended]);
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
-    runOnUI(destroyGPU)(device, alive, disposed);
-  }, [alive, disposed, device]);
+    runOnUI(destroyGPU)(device, alive, disposed, graph);
+  }, [alive, disposed, device, graph]);
   return null;
 }
 
@@ -366,11 +373,12 @@ function scratch(length: number) {
   return arrays[length] ??= new Float32Array(length);
 }
 
-function destroyGPU(device: GPUDevice, alive: SharedValue<boolean>, disposed: SharedValue<boolean>) {
+function destroyGPU(device: GPUDevice, alive: SharedValue<boolean>, disposed: SharedValue<boolean>, graph?: SharedValue<RenderGraphResources | undefined>) {
   "worklet";
   alive.value = false;
   if (!disposed.value) {
     disposed.value = true;
+    if (graph) graph.value = undefined;
     device.destroy();
   }
 }
@@ -421,7 +429,7 @@ function submitGPUFrame(r: Resources, frame: number, particleCount: number, part
   const encoder = device.createCommandEncoder();
   if (r.graph) {
     const screen = context.getCurrentTexture();
-    encodeRenderGraph(r.graph.value, device, encoder, screen, renderScale, data);
+    encodeRenderGraph(r.graph.value!, device, encoder, screen, renderScale, data);
     if (still) encoder.copyTextureToBuffer({ texture: screen }, { buffer: still.buffer, bytesPerRow: still.bytesPerRow }, [screen.width, screen.height]);
     device.queue.submit([encoder.finish()]); context.present();
     return;
