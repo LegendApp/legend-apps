@@ -1,7 +1,9 @@
+// @ts-ignore Bun supplies this API at runtime.
 import { expect, test } from "bun:test";
-import { compileTrack, customInstances, graphInstances, prepareWorldSample, prepareWorldScene, primitive, pulseInstances, resolveAnchor, rowInstances,
+import { compileTrack, customInstances, instanceField, worldHeaderSize, worldInstanceSize, graphInstances, prepareWorldSample, prepareWorldScene, primitive, pulseInstances, resolveAnchor, rowInstances,
   sampleWorldCamera, sampleWorldUniforms, sprayInstances, voxelInstances } from "../packs/world/scene";
 import { tree, wave } from "../packs/world/graph";
+import { routedTubeInstances } from "../packs/world/stage";
 import { text3dInstances } from "../packs/world/text3d";
 
 function fixture() {
@@ -59,14 +61,62 @@ test("compact sampling matches original cached scenes through direct steps, time
 test("prepared scenes share immutable constants without sharing animations or changing signed zero", () => {
   const input=Array.from({length:100},(_,i)=>({...primitive("sphere",{id:`part:${i}`,position:[i,0,0]}),anchor:true}));
   const scene=prepareWorldScene({instances:input});
-  const tracks=new Set(scene.instances.flatMap(p=>[p.size,p.color,p.emissive,p.scale,p.materialTracks.albedo,p.materialTracks.roughness,p.materialTracks.metal,p.materialTracks.rim]));
+  const tracks=new Set(scene.instances.flatMap(p=>[p.size,p.color,p.emissive,p.scale,p.materialTracks!.albedo,p.materialTracks!.roughness,p.materialTracks!.metal,p.materialTracks!.rim]));
   expect(tracks.size).toBeLessThanOrEqual(8);
   expect(input[0].color).not.toBe(input[1].color);
   expect(input[0].position.initial).toEqual([0,0,0]);
   const animated=prepareWorldScene({instances:[primitive("sphere",{position:{0:[0,0,0],1:[1,0,0]}}),primitive("sphere",{position:{0:[0,0,0],1:[1,0,0]}})]});
   expect(animated.instances[0].position).not.toBe(animated.instances[1].position);
   const zero=prepareWorldScene({instances:[primitive("sphere",{id:"negative",size:-0,position:[-0,0,0]}),primitive("sphere",{id:"positive",size:0,position:[0,0,0]})]});
-  expect(Object.is(zero.instances.find(p=>p.id==="negative").size.initial,-0)).toBe(true);
-  expect(Object.is(zero.instances.find(p=>p.id==="negative").position.initial[0],-0)).toBe(true);
-  expect(Object.is(zero.instances.find(p=>p.id==="positive").size.initial,0)).toBe(true);
+  expect(Object.is(zero.instances.find(p=>p.id==="negative")!.size.initial,-0)).toBe(true);
+  expect(Object.is(zero.instances.find(p=>p.id==="negative")!.position.initial[0],-0)).toBe(true);
+  expect(Object.is(zero.instances.find(p=>p.id==="positive")!.size.initial,0)).toBe(true);
+});
+
+test("constant route segments use baked uniforms while pulses and moving routes remain live", () => {
+  const path: [number, number, number][] = [[0, 0, 0], [0, 1, 0], [3, 1, 0]];
+  const scene = prepareWorldScene({ instances: [
+    ...routedTubeInstances({ id: "full", path }),
+    ...routedTubeInstances({ id: "partial", path, draw: .4 }),
+    ...routedTubeInstances({ id: "hidden", path, draw: 0 }),
+    ...routedTubeInstances({ id: "frame", join: "miter", path: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]] }),
+    ...routedTubeInstances({ id: "animated", path, draw: { 0: 0, 1: 1 }, pulses: [{ step: 1, every: 2 }] }),
+    ...routedTubeInstances({ id: "drift", path }).map(part => ({ ...part, drift: .2 })),
+  ] });
+  const sample = prepareWorldSample(scene);
+  scene.instances.forEach((part, index) => {
+    const baked = !part.id!.startsWith("animated:") && !part.id!.startsWith("drift:");
+    expect(part.motion === "static").toBe(baked);
+    expect(scene.uniformInputs.live.includes(index)).toBe(!baked);
+    expect("route" in sample.instances[index]).toBe(!baked);
+  });
+});
+
+test("baked routes match uncached endpoints and opacity through stages, steps and reverse", () => {
+  const path: [number, number, number][] = [[0, 0, 0], [0, 1, 0], [3, 1, 0]];
+  const stage = { id: "moving", position: compileTrack<[number, number, number]>({ 0: [0, 0, 0], 1: [2, 3, 0] }), glow: compileTrack(1) };
+  const fade = { id: "fade", position: compileTrack<[number, number, number]>([1, 2, 0]), glow: compileTrack(2), opacity: compileTrack({ 0: 0, 1: 1 }) };
+  const scene = prepareWorldScene({ instances: [
+    ...[0, .4, 1].flatMap((draw, i) => routedTubeInstances({ id: `fixed-${i}`, path, draw })),
+    ...routedTubeInstances({ id: "framed", join: "miter", path: [[0, 0, 0], [2, 0, 0], [2, 1, 0], [0, 1, 0], [0, 0, 0]] }),
+    ...routedTubeInstances({ id: "moving", path }).map(part => ({ ...part, stages: [stage] })),
+    ...routedTubeInstances({ id: "fading", path }).map(part => ({ ...part, stages: [fade], sharp: compileTrack({ 0: false, 1: true }, Number) })),
+    ...routedTubeInstances({ id: "drawing", path, draw: [{ step: 0, value: 0 }, { step: 1, value: 1, duration: 2 }], pulses: [{ step: 1, every: 2, duration: .5 }] }),
+  ], camera: { shots: [{ step: 0, follow: "fixed-1:0" }, { step: 1, follow: "moving:1" }] } });
+  const compact = prepareWorldSample(scene);
+  for (const stepIndex of [0, 1, 2, 1, 0]) for (const time of [0, .2, .7, 2, 5]) {
+    const clock = { slideTime: time, stepTime: time, stepIndex, stepOrigins: { [stepIndex]: 0 } };
+    const expected = sampleWorldUniforms(scene, clock);
+    for (const actual of [sampleWorldUniforms(scene, clock, undefined, 1, 1, true), sampleWorldUniforms(compact, clock)]) {
+      let difference = 0;
+      for (let i = 0; i < expected.length; i++) {
+        const slot = Math.floor((i - worldHeaderSize) / worldInstanceSize), field = (i - worldHeaderSize) % worldInstanceSize;
+        // Hidden live instances retain their last pose; static routes still compare every baked field.
+        if (slot >= 0 && scene.instances[slot].motion !== "static" && field !== instanceField.opacity && field !== instanceField.sharp &&
+          expected[worldHeaderSize + slot * worldInstanceSize + instanceField.opacity] === 0) continue;
+        difference = Math.max(difference, Math.abs(expected[i] - actual[i]));
+      }
+      expect(difference).toBeLessThan(.0001);
+    }
+  }
 });

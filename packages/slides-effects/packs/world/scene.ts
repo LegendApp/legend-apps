@@ -1141,7 +1141,8 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
       (!instance.glyph || still(instance.glyph.offset) && still(instance.glyph.rotation) && still(instance.glyph.opacity)) &&
       (!instance.card?.opacity || still(instance.card.opacity)) &&
       (instance.stages ?? []).every(stage => still(stage.position) && still(stage.glow) && !stage.opacity && !stage.wave) &&
-      !instance.choreography && !instance.burst && !instance.route && !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
+      !instance.choreography && !instance.burst && (!instance.route || !instance.route.pulse && still(instance.route.draw) && !instance.drift) &&
+      !instance.pillar && !instance.pulse && !instance.spray && !instance.rows && !instance.graph && !instance.endpoints) {
       const collapses = !!instance.voxel?.options.collapse;
       if (!instance.drift) instance.motion = collapses ? "voxel" : "static";
       else if (!collapses) instance.motion = "drift";
