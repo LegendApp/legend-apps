@@ -35,7 +35,7 @@ for (const msaaSamples of [1, 4] as const) test(`focused parts bypass focus and 
   }
   expect(pass("scene-box")).toMatchObject({ color: ["hdr"] });
   expect(pass("floor")).toMatchObject({ color: ["hdr"] });
-  expect(pass("scene-cards").code).toContain("vec4f(color*depthFade(world),alpha)");
+  expect(pass("scene-cards").code).toContain("vec4f(color*fade,alpha*fade)");
   for (const stage of ["dof-gather", "dof-composite", "bloom-threshold"]) expect(pass(stage).reads).not.toContain("sharp");
   const final = pass("tonemap");
   expect(final.reads).toEqual([expect.any(String), "bloom-up@0", "sharp", "depth"]);
@@ -216,10 +216,10 @@ test("text draws cull by their own opacity slots in scene and shadow", () => {
 });
 
 test("a card's pixel line draws its rim as a light border at that width", () => {
-  const prepared = scene({ instances: [...cardInstances({ id: "panel", line: 1.5, edge: 1 }), ...cardInstances({ id: "plain" })] });
+  const prepared = scene({ instances: [...cardInstances({ id: "panel", line: 2, edge: 1 }), ...cardInstances({ id: "plain" })] });
   const values = sampleWorldUniforms(prepared, { slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } });
   const slot = (id: string) => worldHeaderSize + prepared.instances.findIndex(instance => instance.id === id) * worldInstanceSize + 15;
-  expect([values[slot("panel")], values[slot("plain")]]).toEqual([1.5, 0]);
+  expect([values[slot("panel")], values[slot("plain")]]).toEqual([2, 1.5]);
   const code = buildWorldGraph(prepared).passes.find(pass => pass.id === "sharp-cards")!.code;
   expect(code).toContain("let line=select(1.4*unit,uniforms[base+15u]*pixel,border);");
   expect(code).toContain("min(1.,.22*uniforms[base+17u]),border)");

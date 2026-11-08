@@ -181,7 +181,7 @@ test("form card decoration can be disabled without changing fills or typing prop
   for (const card of cards) {
     expect(card.card!.glow).toBe(0);
     expect(card.card!.edge).toBe(0);
-    expect(card.card!.fill).toBe(card.id!.endsWith("/card") ? .9 : 1);
+    expect(card.card!.fill).toBe(1);
   }
   const parent = s.instances.find(i => i.id === "form/parent/card")!;
   const parentBadge = s.instances.find(i => i.id === "form/parent/badge/disc")!;

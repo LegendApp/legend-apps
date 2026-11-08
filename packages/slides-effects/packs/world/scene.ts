@@ -249,7 +249,7 @@ export function rowInstances(options: RowsOptions): Instance[] {
   }));
   return [...slots, ...ghosts, ...labels];
 }
-function cardStyle({ radius = 0.12, glow = 0.14, edge = 0.6, avatar = 0, fill = 1, line = 0 }: CardStyle): Required<CardStyle> {
+function cardStyle({ radius = 0.12, glow = 0, edge = 0.6, avatar = 0, fill = 1, line = 1.5 }: CardStyle): Required<CardStyle> {
   return { radius, glow, edge, avatar, fill, line };
 }
 function largestScale(scale: Animated<Vec3> | undefined): Vec3 {

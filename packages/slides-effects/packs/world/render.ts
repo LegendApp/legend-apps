@@ -188,14 +188,14 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let corner=uniforms[base+11u]; let radius=clamp(select(corner,-corner*max(fwidth(p.x),fwidth(p.y)),corner<0.),0.,min(half.x,half.y)); let d=roundRect(p,half.xy,radius);
  let pixel=max(fwidth(d),.00001);
  let accent=encode(vector(base+4u)); let shown=presence(half); let edge=uniforms[base+17u]/.6;
- let sigma=max(uniforms[base+16u],.001)*.78; let unit=sigma/14.;
+ let sigma=max(uniforms[base+16u],.015)*.78; let unit=sigma/14.;
  let h=clamp((uniforms[base+7u]-.03)/.06,0.,1.); let v=clamp(.5-p.y/half.y*.5,0.,1.);
  let coverage=1.-smoothstep(-pixel*.5,pixel*.5,d);
  var layer=vec4f(0.);
- layer=over(layer,accent,.45*h*edge*shown*blurredStroke(d,5.*unit,sigma));
- let fill=select(mix(mix(vec3f(.1,.14,.22),.055+accent*.18,h),mix(vec3f(.04,.06,.1),.025+accent*.07,h),v),accent,uniforms[base+31u]>.5);
+ if(uniforms[base+16u]>0.) { layer=over(layer,accent,.45*h*edge*shown*blurredStroke(d,5.*unit,sigma)); }
+ let fill=select(mix(mix(vec3f(.1,.14,.22),.12+accent*.18,h),mix(vec3f(.04,.06,.1),.085+accent*.07,h),v),accent,uniforms[base+31u]>.5);
  layer=over(layer,fill,coverage*uniforms[base+19u]);
- layer=over(layer,accent,.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
+ layer=over(layer,accent,coverage*.45*h*edge*blurredStroke(d,2.5*unit,3.*unit));
  let border=uniforms[base+15u]>0.; let line=select(1.4*unit,uniforms[base+15u]*pixel,border);
  // Box-filter the stroke so a subpixel rim keeps its coverage as it crosses pixel centers.
  let rim=clamp((line+pixel)*.5-abs(d),0.,min(line,pixel))/pixel;
@@ -216,15 +216,16 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  let at=select(world+normalize(world-eye())*.3,world,onFace);
  let clip=projected(at); var depth=clamp(clip.z/clip.w,0.,1.);
  var color=toScene(encode(aces(background*exposure))*(1.-alpha)+layer.rgb*opacity)-background*(1.-alpha);
- if(!onFace) {
-  depth=min(1.,ceil(depth*8192.)/8192.);
+ if(!onFace) { depth=min(1.,ceil(depth*8192.)/8192.); }
+ if(!onFace && !partSharp(base)) {
   // The fog pass fogs the glow by the card's depth, but the open background around it by the far plane: blend over the
   // fogged background and undo the card-depth fog, so the glow reads as an overlay without a darker halo.
   let z=max(dot(at-eye(),cameraForward()),.05); let near=fogAt(z,at.y); let far=fogAt(500.,eye().y+(at.y-eye().y)*500./z);
   let fog=vector(20u); let behind=mix(background,fog,far);
   color=(toScene(encode(aces(behind*exposure))*(1.-alpha)+layer.rgb*opacity)-fog*near)/max(1.-near,.01)-background*(1.-alpha);
  }
- return CardResult(vec4f(color*depthFade(world),alpha),depth);
+ let fade=depthFade(world);
+ return CardResult(vec4f(color*fade,alpha*fade),depth);
 }`;
 }
 const instanceLoader = loaderCode(WorldInstance, "fn instanceAt(base:u32)", key => `base+${instanceField[key as keyof typeof instanceField]}u`);

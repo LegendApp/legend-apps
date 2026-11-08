@@ -659,9 +659,7 @@ function textLine(kind: string, { size: nominal, depth, track, delay, duration, 
 const inkOf = (colors: SceneColors) => ({ colors, white: colors.text, muted: colors.muted, idle: colors.idle, red: colors.removed, amber: colors.hot,
   purple: colors.highlight, blue: colors.link, green: colors.added, accent: colors.accent });
 type Ink = ReturnType<typeof inkOf>;
-/** Code panels are mostly opaque glass with a 1.5px light border: only a hint of the scenery shows through. Their code is flat, unlit text unless `flat={false}`. */
-const PANEL = { fill: .9, edge: 1, line: 1.5, glow: .05 };
-const panelStyle = (props: Record<string, unknown>) => ({ ...PANEL, fill: Number(props.fill ?? PANEL.fill), edge: Number(props.border ?? PANEL.edge) });
+const panelStyle = (props: Record<string, unknown>) => ({ fill: props.fill as number | undefined, edge: props.border as number | undefined });
 /** JetBrains Mono advance, in em. */
 const MONO = .6, LABEL = "#f2f4f8";
 const key = <T,>(step: number, value: T, delay = 0, duration = .5, ease?: Ease) => ({ step, delay, value, duration, ...ease ? { ease } : {} });
@@ -833,7 +831,7 @@ function grid(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
     return flash ? loop([{ step: 0, value: 0 }, ...drag.map(d => d.pull ? key(flash.step, 1, d.at + s * move, .12) : key(flash.step, 0, d.at + (1 - s) * move, .12))]) : 0;
   };
   return <Stage id={id} position={at}>
-    <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} fill={Number(props.fill ?? .15)} edge={props.border as number | undefined} color={INK.idle} emissive={.5} />
+    <Card id={`${id}/frame`} position={track(f => f.position)} scale={track(f => f.scale)} {...panelStyle(props)} color={INK.idle} emissive={.5} />
     {mac && <>
       <Card id={`${id}/bar`} flat fill={1} edge={0} glow={0} position={track(f => f.bar)} scale={track(f => f.barScale)} color="#2b2e35" />
       {["#ff5f57", "#febc2e", "#28c840"].map((dot, k) => <Card key={dot} id={`${id}/dot${k}`} flat fill={1} edge={0} glow={0} radius={.075}
@@ -877,7 +875,7 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
   </Stage>;
   return <Stage id={id} position={at}>
     {parent && <Stage id={`${id}/parent`} position={[0, top + 1.5, 0]}>
-      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} fill={.9} {...card} color={parent.renders ? flash(INK.idle, INK.amber, arrivals.parent) : INK.idle} emissive={parent.renders ? flash(.6, 3.6, arrivals.parent) : .6} />
+      <Card id={`${id}/parent/card`} scale={[3.6, 1, .2]} {...card} color={parent.renders ? flash(INK.idle, INK.amber, arrivals.parent) : INK.idle} emissive={parent.renders ? flash(.6, 3.6, arrivals.parent) : .6} />
       <Text3D id={`${id}/parent/title`} text={parent.title} mono size={.24 * TYPE} position={[-.4, 0, .15]} color={INK.white} />
       {badge(`${id}/parent/badge`, [1.2, 0, .15], !!parent.renders && !!typing, arrivals.parent)}
     </Stage>}
@@ -889,7 +887,7 @@ function form(id: string, at: V3, props: Record<string, unknown>, INK: Ink) {
         {parent && <RoutedTube id={`${id}/parent/link/${p}`} path={[[0, top + 1, -.1], [x, top, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={parent.renders && panel.renders ? pulses(arrivals.parent) : undefined} />}
         {parent?.renders && p === source && <RoutedTube id={`${id}/input/up`} path={[[x, -.05 - sourceField * (fh + gap), .18], [x, top, -.1], [0, top + 1, -.1]]} thickness={.025} color={INK.idle} emissive={.8} pulses={pulses(0)} />}
         <Stage id={stage} position={[x, 0, 0]}>
-          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} fill={.9} {...card} color={panel.renders ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={panel.renders ? flash(.6, 3.6, offset) : .6} />
+          <Card id={`${stage}/card`} position={[0, top - ph / 2, -.2]} scale={[pw, ph, .2]} {...card} color={panel.renders ? flash(INK.idle, INK.amber, offset) : INK.idle} emissive={panel.renders ? flash(.6, 3.6, offset) : .6} />
           <Text3D id={`${stage}/title`} text={panel.title.toUpperCase()} mono size={.17 * TYPE} align="left" tracking={.1} position={[-pw / 2 + .4, header, .05]} color={INK.muted} emissive={.8} />
           {badge(`${stage}/badge`, [fw / 2 - .55, header, .05], !!panel.renders && !!typing, offset)}
           {panel.fields.map((field, f) => { const y = -.55 - f * (fh + gap), bound = !!typing && field.bind === typing.bind, cell = `${stage}/${f}`, size = (field.big ? .34 : .26) * TYPE;
