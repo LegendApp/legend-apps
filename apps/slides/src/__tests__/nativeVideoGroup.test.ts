@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { createVideoGroupState, updateVideoGroup, type SynchronizedVideo } from "../../../../packages/presentation/src/videoGroup";
-function fixture() {
+import { createVideoGroupState, updateVideoGroup, type SynchronizedVideo, type VideoGroupInput } from "../../../../packages/presentation/src/videoGroup";
+function fixture(restartHoldMs = 0) {
   const players = [1320, 2770, 11380].map(duration => ({
     duration: () => duration, prepared: false, ended: false, prepares: [] as number[], starts: [] as number[][],
     prepareSync(time: number) { this.prepared = false; this.ended = false; this.prepares.push(time); },
@@ -8,7 +8,7 @@ function fixture() {
     playSync(time: number, host: number) { this.starts.push([time, host]); },
   }));
   let state = createVideoGroupState();
-  const input = { active: true, playing: true, resetKey: "slide:step1", seek: null as null | { id: number; position: number } };
+  const input: VideoGroupInput = { restartHoldMs, active: true, playing: true, resetKey: "slide:step1", seek: null as null | { id: number; position: number } };
   const tick = (now: number) => { state = updateVideoGroup(state, players as unknown as SynchronizedVideo[], input, now); return state; };
   const ready = () => players.forEach(player => player.prepared = true);
   return { players, input, tick, ready };
@@ -106,4 +106,27 @@ test("clearing a seek request does not issue another seek or move a paused group
   f.input.seek = null;
   expect(f.tick(40).position).toBe(800);
   expect(f.players.map(p => p.prepares.length)).toEqual([2, 2, 2]);
+});
+
+test("restart holds decoded first frames for 500ms from the whole cohort becoming ready", () => {
+  const f = fixture(500); f.tick(0);
+  f.players[0].prepared = true; f.tick(100);
+  expect(f.players.every(p => p.starts.length === 0)).toBe(true);
+  f.ready(); f.tick(300);
+  expect(f.players.map(p => p.starts.at(-1))).toEqual([[0, 800], [0, 800], [0, 800]]);
+  expect(f.tick(799).position).toBe(0);
+  expect(f.tick(801).position).toBe(1);
+});
+test("every loop and reveal gets a fresh first-frame hold", () => {
+  const f = fixture(500); f.tick(0); f.ready(); f.tick(10);
+  f.players[2].ended = true; f.tick(11900); f.ready(); f.tick(11910);
+  expect(f.players.map(p => p.starts.at(-1))).toEqual([[0, 12410], [0, 12410], [0, 12410]]);
+  f.input.resetKey = "next-reveal"; f.tick(13000); f.ready(); f.tick(13010);
+  expect(f.players.map(p => p.starts.at(-1))).toEqual([[0, 13510], [0, 13510], [0, 13510]]);
+});
+test("resuming mid-clip uses the normal native dispatch lead rather than a restart hold", () => {
+  const f = fixture(500); f.tick(0); f.ready(); f.tick(10); f.tick(1510);
+  f.input.playing = false; f.tick(1610); f.ready(); f.tick(1700);
+  f.input.playing = true; f.tick(2000); f.ready(); f.tick(2100);
+  expect(f.players.map(p => p.starts.at(-1))).toEqual([[1100, 2200], [1100, 2200], [1100, 2200]]);
 });

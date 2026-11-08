@@ -10,6 +10,7 @@ export type SynchronizedVideo = Video & {
 export type VideoGroupInput = {
   active: boolean;
   playing: boolean;
+  restartHoldMs?: number;
   resetKey: string;
   seek: { id: number; position: number } | null;
 };
@@ -67,8 +68,8 @@ export function updateVideoGroup(previous: VideoGroupState, players: Synchronize
     }
     state.phase = input.playing ? "playing" : "paused";
     state.origin = state.position;
-    // All native commands are posted in this UI transaction, before this deadline.
-    state.hostStart = now + 100;
+    // Keep decoded first frames visible until the common native start deadline.
+    state.hostStart = now + (state.position === 0 ? Math.max(100, input.restartHoldMs ?? 0) : 100);
     if (input.playing) {
       for (const player of players) {
         if (state.position < player.duration()) player.playSync(state.position, state.hostStart);

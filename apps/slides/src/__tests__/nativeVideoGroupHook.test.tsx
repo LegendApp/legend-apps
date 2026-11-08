@@ -87,3 +87,20 @@ test("source membership changes dispose the previous cohort and wait for the new
   expect(next.map(p => p.starts.at(-1)[0])).toEqual([0, 0]);
   await act(() => tree.unmount()); expect(next.map(p => p.disposed)).toEqual([1, 1]);
 });
+
+test("restart hold publishes the first decoded cohort immediately while native playback waits", async () => {
+  let value, tree;
+  function Probe() { value = useNativeVideoGroup(["short", "long"], { active: true, resetKey: "hold", restartHoldMs: 500 }); return null; }
+  await act(() => { tree = create(<Probe />); });
+  try {
+    await act(() => loads.shift()());
+    const native = players.slice(-2), callback = callbacks.at(-1);
+    native.forEach(p => p.ready = true); now = 100; await act(() => callback.tick());
+    expect(value.frames.value).toEqual([{ source: "short" }, { source: "long" }]);
+    expect(native.map(p => p.starts.at(-1))).toEqual([[0, 600], [0, 600]]);
+    now = 599; await act(() => callback.tick());
+    expect(value.state.value.position).toBe(0);
+    now = 601; await act(() => callback.tick());
+    expect(value.state.value.position).toBe(1);
+  } finally { await act(() => tree.unmount()); }
+});

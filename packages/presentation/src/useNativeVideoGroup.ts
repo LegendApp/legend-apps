@@ -7,11 +7,12 @@ import { createVideoGroupState, updateVideoGroup, type SynchronizedVideo, type V
 let loadingRuntime: ReturnType<typeof createWorkletRuntime> | undefined;
 
 /** Pass only visible sources. Change resetKey for slide entry or a reveal. */
-export function useNativeVideoGroup(sources: readonly string[], { active, playing = true, resetKey, seek = null }: {
+export function useNativeVideoGroup(sources: readonly string[], { active, playing = true, resetKey, seek = null, restartHoldMs = 0 }: {
   active: boolean;
   playing?: boolean;
   resetKey: string;
   seek?: VideoGroupInput["seek"];
+  restartHoldMs?: number;
 }) {
   const sourceKey = JSON.stringify(sources);
   const uris = useMemo(() => JSON.parse(sourceKey) as string[], [sourceKey]);
@@ -20,7 +21,7 @@ export function useNativeVideoGroup(sources: readonly string[], { active, playin
   const players = loaded?.key === sourceKey ? loaded.players : null;
   const frames = useSharedValue<(SkImage | null)[]>([]);
   const state = useSharedValue(createVideoGroupState());
-  const input = useSharedValue<VideoGroupInput>({ active, playing, resetKey, seek });
+  const input = useSharedValue<VideoGroupInput>({ active, playing, resetKey, seek, restartHoldMs });
   const frame = useFrameCallback(() => {
     "worklet";
     if (!players?.length) return;
@@ -94,14 +95,14 @@ export function useNativeVideoGroup(sources: readonly string[], { active, playin
   useLayoutEffect(() => {
     runOnUI(() => {
       "worklet";
-      input.value = { active, playing, resetKey, seek: seekId === null ? null : { id: seekId, position: seekPosition } };
+      input.value = { active, playing, resetKey, restartHoldMs, seek: seekId === null ? null : { id: seekId, position: seekPosition } };
       if (!players?.length) return;
       state.value = updateVideoGroup(state.value, players, input.value, players[0].syncHostTime());
       if (!active) frames.value = [];
     })();
     frame.setActive(active && !!players?.length);
     return () => frame.setActive(false);
-  }, [active, playing, resetKey, seekId, seekPosition, players, input, state, frames, frame]);
+  }, [active, playing, resetKey, seekId, seekPosition, restartHoldMs, players, input, state, frames, frame]);
 
   return { frames, state, error };
 }
