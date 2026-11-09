@@ -16,7 +16,7 @@ const success = { exit: { type: "exited", code: 0 }, stdout: JSON.stringify({
   success: true, code: "module.exports.default = function Deck() {};", uniwindCode: "{}", warnings: [], dependencies: [],
 }), stderr: "" };
 mock.module("../compilerRuntimeCore", () => ({ findRuntime: () => discover(), runtimeArch: async () => "x64", probeRuntime() {}, installPinnedBun: (...args) => install(...args) }));
-mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => "", setCompilerRuntimePathSetting() {} }));
+mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => "", setCompilerRuntimePathSetting() {}, useBackgroundIntensitySetting: () => 1 }));
 mock.module("@legendapp/spark/files", () => ({ getDirectory: async () => "/Users/me/Library/Application Support/Slides", exists() {}, mkdir() {}, move() {}, remove() {} }));
 mock.module("@legendapp/spark/processes", () => ({ runCommand: options => run(options), spawn() {}, resolveCommand() {} }));
 mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => value }));
@@ -358,4 +358,80 @@ test("a directory changed during compilation cannot seed a notes-only cache", as
       list: async () => [],
     }, 10);
   } catch (error) { expect(String(error)).toContain("directory changed during compilation"); }
+});
+
+test("recompiled note saves keep the mounted audience visible at its current slide and step", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const { useValue } = await import("@legendapp/state/react");
+  const { reactUI, transactions } = await import("./uiClockMock");
+  const skia = { ...await import("@shopify/react-native-skia") };
+  mock.module("../../../../packages/presentation/node_modules/@shopify/react-native-skia", () => skia);
+  const { BackgroundHost, usePreparationTask } = await import("@legend-apps/presentation");
+  const pending = observable(false);
+  mock.module("../DeckRenderer", () => ({
+    DeckRenderer: props => {
+      usePreparationTask(useValue(pending));
+      return React.createElement("deck", props);
+    },
+    SlideCanvas: "canvas", SlideBackgroundHost: BackgroundHost,
+  }));
+  const { AudienceWindow } = await import("../AudienceWindow");
+  const { setCurrentSlide } = await import("../slidesStore");
+  const initial = getSlidesState();
+  const path = "/notes-revision/deck.mdx";
+  let tree;
+  try {
+    discover = async () => runtime;
+    await resolveCompilerRuntime({ refresh: true });
+    sourceFiles = { [path]: "# One\n\n---\n\n# Two\n\n<!-- old -->\n\n---\n\n# Three" };
+    directoryEntries = { "/notes-revision": ["deck.mdx"] };
+    // A directory changed during compilation cannot seed the notes-only cache.
+    inputVersions = { "/notes-revision": Date.now() + 60_000 };
+    run = async () => ({ ...success, stdout: JSON.stringify({ ...JSON.parse(success.stdout), dependencies: [path] }) });
+    await loadDeck(path, false);
+    setSlidesState({ currentSlide: 1, currentStep: 2, deckLocked: false,
+      slides: Array.from({ length: 3 }, () => ({ metadata: { steps: 3 }, notes: "" })), config: { transition: "fade" } });
+    await act(async () => { tree = create(React.createElement(AudienceWindow)); });
+    const layer = index => tree.root.findAllByType("animated-view")
+      .filter(node => node.props.accessibilityElementsHidden !== undefined)
+      .find(node => node.findByType("deck").props.targetIndex === index);
+    const save = async notes => {
+      const revision = getSlidesState().revision;
+      await act(async () => {
+        await sourceHelpers.persistSlideSpeakerNotesWithFileAccess(path, 1, notes, {
+          read: sourceIO.readText,
+          writeIfUnchanged: async (_path, expected, next) => {
+            expect(sourceFiles[path]).toBe(expected);
+            sourceFiles[path] = next;
+            return true;
+          },
+        });
+        watchedChange();
+        await new Promise(resolve => setTimeout(resolve, 160));
+      });
+      expect(getSlidesState()).toMatchObject({ revision: revision + 1, currentSlide: 1, currentStep: 2 });
+    };
+    for (const notes of ["first save", "second save"]) {
+      await save(notes);
+      expect(layer(1).props.style[2].zIndex).toBe(1);
+      expect(layer(1).findByType("deck").props.isPreparing).toBe(false);
+    }
+    await act(async () => { pending.set(true); });
+    await save("waiting for preparation");
+    expect(layer(1).props.style[2].zIndex).toBe(-1);
+    expect(layer(1).findByType("deck").props.isPreparing).toBe(true);
+    await act(async () => { pending.set(false); });
+    expect(layer(1).props.style[2].zIndex).toBe(1);
+    await act(async () => { setCurrentSlide(2); });
+    const progress = tree.root.findAll(node => node.type?.name === "AudienceSlide")
+      .find(node => node.props.index === 2).props.progress;
+    expect(layer(2).props.style[2].zIndex).toBe(-1);
+    await act(async () => { progress.value = 0.2; reactUI(); });
+    expect(layer(2).props.style[2].zIndex).toBe(2);
+    expect(layer(1).findByType("deck").props.isOutgoing).toBe(true);
+  } finally {
+    if (tree) await act(async () => { tree.unmount(); });
+    transactions.length = 0;
+    setSlidesState(initial);
+  }
 });

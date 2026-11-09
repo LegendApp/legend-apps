@@ -95,7 +95,7 @@ function AudienceContent() {
       frozenSteps,
       ...resolved,
       progress: createTransitionProgress(transitionState.revision !== revision ? 1 : 0),
-      contentReady: cut,
+      contentReady: cut && transitionState.revision === revision,
       ready: false,
       cut,
       duration: cut ? cutHoldMs : hasShared && resolved.duration === 0 ? 320 : resolved.duration,
@@ -119,7 +119,7 @@ function AudienceContent() {
   }, [transitionState]);
 
   useLayoutEffect(() => {
-    if (transitionState.ready || !transitionState.contentReady || !backgroundReady || transitionState.outgoing === null) return;
+    if (transitionState.ready || !transitionState.contentReady || !backgroundReady) return;
     if (transitionState.cut) {
       setTransitionState(current => current === transitionState ? { ...current, ready: true } : current);
       return;
