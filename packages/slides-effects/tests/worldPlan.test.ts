@@ -37,7 +37,7 @@ test("compatible declarations and retained outgoing parts use one graph without 
   expect(plans.get(b)).toBe(plan);
   const retained = retainTrackScene(b, a);
   const values = sampleWorldUniforms(retained, clock);
-  const copies = worldPlanCopies(retained, plan), output = sampleWorldPlan(values, copies, new Float32Array(plan.size));
+  const copies = worldPlanCopies(retained, plan), output = sampleWorldPlan(values, copies, new Float32Array(plan.size), plan.lightOffset);
   for (const [source, count, target] of copies) {
     Array.from(values.slice(source, source + count)).forEach((v, i) => expect(output[target + i]).toBeCloseTo(v, 5));
   }
@@ -66,7 +66,7 @@ test("pooled station uniforms match baked scenes by part id through omission, st
     if (scene !== base) { previous = retainTrackScene(scene, previous, base); layout = retainTrackScene(scene, layout, base, true); base = scene; }
     const playback = { ...createPlaybackState({ phase: "playing", slideKey, stepKey, stepIndex: Number(stepKey) }), slideTime: time, stepTime: time };
     const raw = sampleWorldUniforms(scene, playback, null, 1, 1, true);
-    const values = sampleWorldPlan(raw, worldPlanCopies(scene, plan), new Float32Array(plan.size));
+    const values = sampleWorldPlan(raw, worldPlanCopies(scene, plan), new Float32Array(plan.size), plan.lightOffset);
     pooled = sampleTrackFrame(pooled, values as unknown as number[], worldPlanIds(layout, plan), playback, {}, trackIds(scene));
     baked = sampleTrackFrame(baked, sampleWorldUniforms(previous, playback) as number[], trackIds(previous), playback, {}, trackIds(scene));
     for (let i = 0; i < worldHeaderSize; i++) expect(pooled.values[i]).toBeCloseTo(baked.values[i], 4);
@@ -115,7 +115,7 @@ test("effects share a graph across geometry sizes and copy animated parameters a
     expect(worldPlanFits(retained, plan)).toBe(true);
     for (const stepIndex of [0, 1, 0]) {
       const sample = sampleWorldUniforms(scene, { ...clock, stepIndex }, null, 1, 1, true);
-      const pooled = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size));
+      const pooled = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size), plan.lightOffset);
       const source = scene.effectUses[0].base, target = plan.topology.effects![0].base;
       expect(Array.from(pooled.slice(target))).toEqual(Array.from(sample.slice(source)));
       expect(target).toBe(worldHeaderSize + plan.instances * worldInstanceSize);
@@ -167,7 +167,7 @@ test("scenery present in every declaration needs one slot while departures keep 
     for (const time of [0, .3, 1.5]) {
       const sample = sampleWorldUniforms(retained, { ...clock, slideTime: time, stepTime: time });
       const copies = worldPlanCopies(retained, plan);
-      const values = sampleWorldPlan(sample, copies, new Float32Array(plan.size));
+      const values = sampleWorldPlan(sample, copies, new Float32Array(plan.size), plan.lightOffset);
       for (const [source, size, target] of copies) expect(Array.from(values.slice(target, target + size)))
         .toEqual(Array.from(Float32Array.from(sample.slice(source, source + size))));
       expect(worldPlanIds(retained, plan).filter(Boolean)).toEqual(trackIds(retained));
@@ -198,7 +198,7 @@ for (const frame of ["station", "world"] as const) test(`smaller pools preserve 
     const declared = trackIds(scene), sample = sampleWorldUniforms(scene, playback, null, 1, 1, true);
     const normalized = plans.map((plan, i) => {
       expect(worldPlanFits(layout, plan)).toBe(true);
-      const values = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size));
+      const values = sampleWorldPlan(sample, worldPlanCopies(scene, plan), new Float32Array(plan.size), plan.lightOffset);
       frames[i] = sampleTrackFrame(frames[i], values as unknown as number[], worldPlanIds(layout, plan), playback,
         { frame, duration: 1, carry: { lift: 1, spread: 1, spin: .2, stagger: .3 }, steps: { 1: { orbit: 15 } } }, declared);
       return { header: Array.from(frames[i].values.slice(0, worldHeaderSize)),

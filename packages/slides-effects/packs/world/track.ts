@@ -1,6 +1,6 @@
 import type { PlaybackState } from "@legend-apps/presentation";
 import { contentClearance, easeProgress, type CameraPose, type ClockSample, type Ease, type Vec3 } from "./camera";
-import { instanceField, prepareWorldScene, sampleWorldUniforms, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type WorldSampleScene } from "./scene";
+import { instanceField, prepareWorldScene, sampleWorldUniforms, sampleWorldLight, worldLightCountSlot, worldLightOffsetSlot, worldLightSize, travelSpeedSlot, worldClockOffset, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type WorldSampleScene } from "./scene";
 
 /** How matched parts fly between poses: `lift` and `spread` bow the path, `spin` tumbles it, `stagger` is the share of the move spent waiting. */
 export type WorldCarry = { lift?: number; spread?: number; spin?: number; stagger?: number };
@@ -29,6 +29,8 @@ export type WorldTrack = {
   bank?: number;
   /** Peak heading in degrees the track swings through between the previous station and this one: positive curves right, negative left. */
   turn?: number;
+  /** `heading` retains each leg's turn as a change of road heading; a zero turn continues straight. Accumulated headings must stay within ±60°. Default `swing` returns parallel after each bend. */
+  turnMode?: "swing" | "heading";
   /** World units the camera's path lifts at mid-travel into this station; negative dips. */
   rise?: number;
   /** Segments by slide index, so every station sits on one track even before it is visited. Unset fields get varied per-slide defaults. */
@@ -45,6 +47,7 @@ const defaultFixed = ["tunnel:", "trails:"];
 /** Longest flight, in seconds, for a jump across more than one station. */
 const jumpDuration = 1.5;
 type TrackSample = { scene: WorldSampleScene; clock: ClockSample; ids: string[] };
+type TrackLight = { id: string; track: PreparedWorldScene["lightTracks"][number]; clock: ClockSample; offset: number; fromOffset: number };
 type Departure = TrackSample & { slots: number[]; offset: number; fixed: boolean[] };
 export type TrackFrame = {
   key: string; slideKey: string; stepIndex: number; origin: number; cursor: number; morphDuration: number;
@@ -58,13 +61,14 @@ export type TrackFrame = {
   straight?: number[]; course?: Course;
   /** The scenery clock written to `continuousTime()` under `heldMotion`, and the timestamp it was last advanced at. */
   scenery: number; stamp: number;
+  lights: TrackLight[];
   sample?: TrackSample; playbackTime?: number; departures?: Departure[];
 };
 
 export function createTrackFrame(): TrackFrame {
   "worklet";
   return { key: "", slideKey: "", stepIndex: 0, origin: 0, cursor: 0, morphDuration: 0, reversed: false, moving: [], seeds: [],
-    stations: {}, ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], from: [], sources: [], retired: {}, values: [], scenery: NaN, stamp: NaN };
+    stations: {}, lights: [], ids: [], declared: [], declaredSlots: [], fixedSlots: [], visible: [], from: [], sources: [], retired: {}, values: [], scenery: NaN, stamp: NaN };
 }
 
 /** Geometry families are matched separately: packed label data must never become mesh data. */
@@ -74,12 +78,17 @@ export function trackIds(scene: PreparedWorldScene): string[] {
 
 /** Keep draw descriptors so an omitted object can remain visible, then return on reverse.
  * Keep the previous declaration plus older parts still visible in the live frame. */
-export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene, declared = previous, layoutOnly = false, visible: string[] = []): PreparedWorldScene {
+export function retainTrackScene(scene: PreparedWorldScene, previous: PreparedWorldScene, declared = previous, layoutOnly = false, visible: string[] = [], visibilityCurrent = true): PreparedWorldScene {
   const ids = new Set(trackIds(scene)), oldIds = trackIds(previous), last = new Set([...trackIds(declared), ...visible]);
   const omitted = previous.instances.filter((part, index) => part.id && !ids.has(oldIds[index]) && last.has(oldIds[index]));
-  if (!omitted.length) return scene;
-  const combined = { ...scene, instances: [...scene.instances, ...omitted] };
-  return layoutOnly ? combined : prepareWorldScene(combined);
+  const lightIds = new Set(scene.lightIds), live = new Set([...declared.lightIds, ...visible]);
+  const lights = [...scene.lights ?? []];
+  previous.lightIds.forEach((id, index) => { if (!lightIds.has(id) && (!visibilityCurrent || live.has(id))) { lightIds.add(id); lights.push(previous.lights![index]); } });
+  if (!omitted.length && lights.length === scene.lightIds.length) return scene;
+  const combined = { ...scene, instances: [...scene.instances, ...omitted], lights };
+  const retained = layoutOnly ? { ...combined, lightIds: [...lightIds] } : prepareWorldScene(combined);
+  retained.declaredLightIds = scene.declaredLightIds;
+  return retained;
 }
 
 function smooth(value: number) {
@@ -109,14 +118,16 @@ function stepCamera(pose: CameraPose, step: WorldStepCamera | undefined): Camera
     target, fov: step.fov ?? pose.fov, roll: pose.roll };
 }
 
-/** Station depths along the straight track, and the curves that bend it: curve k shifts the centreline by `dx` between depths `from` and `to`. */
-type Course = { offset: number[]; from: number[]; to: number[]; dx: number[]; x: number[]; bank: number[]; rise: number[]; duration: number[]; ease: (Ease | undefined)[]; tracks: WorldSegment[] };
-/** Header slots for WGSL `trackX`: the centreline's x before the window, the curve count, then from/to/dx per curve. */
+/** Station depths and quintic bends: `dx` changes lateral offset in swing mode, or slope in heading mode. */
+type Course = { heading: boolean; slope: number[]; offset: number[]; from: number[]; to: number[]; dx: number[]; x: number[]; bank: number[]; rise: number[]; duration: number[]; ease: (Ease | undefined)[]; tracks: WorldSegment[] };
+/** WGSL bend window: base x, curve count, then from/to/dx per curve. */
 export const trackBendSlot = 128, trackBendCurves = 8;
 /** Header slot after the bend window holding the held DOF blur, as a share of `maxBlur`. */
 export const heldBlurSlot = trackBendSlot + 2 + trackBendCurves * 3;
 /** Header slots holding `depthFade` and the held `heldFade`. */
 export const depthFadeSlot = heldBlurSlot + 1;
+/** Heading windows retain the incoming slope, reference depth and mode in the final three header slots. */
+export const trackHeadingSlot = depthFadeSlot + 2;
 /** How far content may reach past its station before the next curve begins. */
 const contentDepth = 4;
 function hash(index: number, salt: number) {
@@ -130,7 +141,7 @@ function hash(index: number, salt: number) {
 export function buildCourse(options: WorldTrack, count: number, stations: Record<number, Station> = {}): Course {
   "worklet";
   const world = options.frame === "world", base = options.spacing ?? (world ? 32 : 48);
-  const course: Course = { offset: [0], from: [0], to: [0], dx: [0], x: [0], bank: [0], rise: [0], duration: [options.duration ?? 1.7], ease: [options.ease],
+  const course: Course = { heading: options.turnMode === "heading", slope: [0], offset: [0], from: [0], to: [0], dx: [0], x: [0], bank: [0], rise: [0], duration: [options.duration ?? 1.7], ease: [options.ease],
     tracks: [options.course?.[0] ?? {}] };
   for (let k = 1; k < count; k++) {
     const seg: WorldSegment = options.course ? options.course[k] ?? {} : stations[k]?.track ?? options;
@@ -138,8 +149,14 @@ export function buildCourse(options: WorldTrack, count: number, stations: Record
     const side = [1, 1, 0, -1, -1, 0][(k - 1) % 6];
     const turn = seg.turn ?? (world ? 0 : side * (6 + 4 * hash(k, 2)));
     const offset = course.offset[k - 1] + spacing, from = -course.offset[k - 1] - contentDepth, to = -offset + (seg.position?.[2] ?? 14) + 1;
-    const dx = from - to > 2 ? Math.tan(turn * Math.PI / 180) * (from - to) / 1.875 : 0;
-    course.offset.push(offset); course.from.push(from); course.to.push(to); course.dx.push(dx); course.x.push(course.x[k - 1] + dx);
+    const priorSlope = course.slope[k - 1];
+    const heading = Math.atan(priorSlope) + turn * Math.PI / 180;
+    if (course.heading && from - to > 2 && Math.abs(heading) > Math.PI / 3 + 1e-9) throw new Error("World heading course must stay within 60 degrees of forward");
+    const slope = turn === 0 ? priorSlope : Math.tan(heading);
+    const dx = from - to > 2 ? course.heading ? slope - priorSlope : Math.tan(turn * Math.PI / 180) * (from - to) / 1.875 : 0;
+    course.offset.push(offset); course.from.push(from); course.to.push(to); course.dx.push(dx);
+    course.slope.push(course.heading ? priorSlope + dx : 0);
+    course.x.push(course.x[k - 1] + (course.heading ? priorSlope * spacing + dx * ((from - to) / 2 + to + offset) : dx));
     course.bank.push(seg.bank ?? Math.abs(turn) * 0.12);
     course.rise.push(seg.rise ?? (world || turn === 0 ? 0 : 0.3 * hash(k, 3)));
     course.duration.push(seg.duration ?? (world ? 1.7 : 1.7 * Math.sqrt(spacing / 32) * (0.9 + 0.2 * hash(k, 5))));
@@ -158,14 +175,25 @@ export function trackX(course: Course, z: number) {
   let x = 0;
   for (let k = 1; k < course.dx.length; k++) if (course.dx[k]) {
     const u = curveProgress(course, k, z);
-    x += course.dx[k] * smooth(u);
+    const length = course.from[k] - course.to[k];
+    x += course.dx[k] * (course.heading ? length * (u * u * u * u * (2.5 + u * (-3 + u)) + Math.max(0, (course.to[k] - z) / length)) : smooth(u));
   }
   return x;
 }
-/** A broad eased lean per leg, with zero first and second derivatives at the stations. */
-function trackRoll(course: Course, cursor: number) {
+/** Derivative of the same centreline, also used by WGSL to transform normals. */
+export function trackSlope(course: Course, z: number) {
   "worklet";
-  const k = Math.max(1, Math.ceil(cursor)), u = cursor - (k - 1);
+  let slope = 0;
+  for (let k = 1; k < course.dx.length; k++) if (course.dx[k]) {
+    const u = curveProgress(course, k, z);
+    slope -= course.dx[k] * (course.heading ? smooth(u) : 30 * u * u * (1 - u) * (1 - u) / (course.from[k] - course.to[k]));
+  }
+  return slope;
+}
+/** A broad eased lean per leg, with zero first and second derivatives at the stations. */
+function trackRoll(course: Course, cursor: number, z: number) {
+  "worklet";
+  const k = Math.max(1, Math.ceil(cursor)), u = course.heading ? curveProgress(course, k, z) : cursor - (k - 1);
   if (u === 0 || u === 1 || course.dx[k] === 0) return 0;
   return -Math.sign(course.dx[k]) * course.bank[k] * Math.PI / 180 * 64 * u * u * u * (1 - u) * (1 - u) * (1 - u);
 }
@@ -174,8 +202,15 @@ function bendTrack(frame: TrackFrame, course: Course, look: number, focus?: numb
   "worklet";
   const values = frame.values;
   frame.straight = values.slice(0, 7);
-  const first = Math.max(1, Math.floor(frame.cursor) - 2), last = Math.min(course.dx.length, first + trackBendCurves);
-  values[trackBendSlot] = course.x[first - 1]; values[trackBendSlot + 1] = Math.max(0, last - first);
+  let first = Math.max(1, Math.floor(frame.cursor) - 2);
+  if (course.heading) {
+    first = 1;
+    while (first + 1 < course.dx.length && course.to[first] >= Math.max(values[2], values[6])) first++;
+  }
+  const last = Math.min(course.dx.length, first + trackBendCurves);
+  values[trackBendSlot] = course.heading ? trackX(course, course.from[first]) : course.x[first - 1];
+  values[trackBendSlot + 1] = Math.max(0, last - first);
+  values[trackHeadingSlot] = course.slope[first - 1]; values[trackHeadingSlot + 1] = course.from[first]; values[trackHeadingSlot + 2] = course.heading ? 1 : 0;
   for (let i = 0; i < trackBendCurves; i++) {
     const k = first + i, at = trackBendSlot + 2 + i * 3, live = k < last;
     values[at] = live ? course.from[k] : 1; values[at + 1] = live ? course.to[k] : 0; values[at + 2] = live ? course.dx[k] : 0;
@@ -183,7 +218,11 @@ function bendTrack(frame: TrackFrame, course: Course, look: number, focus?: numb
   const bend = trackX(course, values[2]);
   values[0] += bend; values[4] += bend + (trackX(course, values[6]) - bend) * look;
   values[32] = focus ?? Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
-  for (let light = 0; light < 4; light++) values[64 + light * 12] += trackX(course, values[64 + light * 12 + 2]);
+  for (let light = 0; light < values[worldLightCountSlot]; light++) {
+    const base = values[worldLightOffsetSlot] + light * worldLightSize;
+    values[base] += trackX(course, values[base + 2]);
+    values[base + 8] += trackX(course, values[base + 10]);
+  }
   values[112] += trackX(course, values[114]); values[120] += trackX(course, values[122]);
   return frame;
 }
@@ -218,7 +257,21 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, co
   };
   const position = point("position", [0, 3.6, 14]), target = point("target", [0, 0, 0]);
   const arrive = smooth(t), leave = 1 - arrive;
-  if (!end.track.via && !end.track.viaTarget) {
+  if (course.heading && !end.track.via && !end.track.viaTarget) {
+    const depth = to.position[2] - from.position[2];
+    const framing = depth === 0 ? arrive : (position[2] - from.position[2]) / depth;
+    position[0] = from.position[0] + (to.position[0] - from.position[0]) * framing;
+    const ax = from.target[0] - from.position[0] + trackX(course, from.target[2]) - trackX(course, from.position[2]);
+    const bx = to.target[0] - to.position[0] + trackX(course, to.target[2]) - trackX(course, to.position[2]);
+    const az = from.position[2] - from.target[2], bz = to.position[2] - to.target[2];
+    const a = Math.atan2(ax, az), b = Math.atan2(bx, bz);
+    const sa = trackSlope(course, from.position[2]), sb = trackSlope(course, to.position[2]);
+    const progress = Math.abs(sb - sa) > 1e-8 ? Math.max(0, Math.min(1, (trackSlope(course, position[2]) - sa) / (sb - sa))) : arrive;
+    const heading = a + (b - a) * progress, distance = Math.hypot(ax, az) * leave + Math.hypot(bx, bz) * arrive;
+    target[2] = position[2] - Math.cos(heading) * distance;
+    target[0] = position[0] + trackX(course, position[2]) + Math.sin(heading) * distance - trackX(course, target[2]);
+  }
+  if (!course.heading && !end.track.via && !end.track.viaTarget) {
     // Combine framing and rail displacement into one broad lateral sweep. Moving
     // them separately can steer away from the bend before correcting back onto it.
     const startBend = trackX(course, from.position[2]), endBend = trackX(course, to.position[2]);
@@ -235,7 +288,7 @@ function sampleTrackCamera(stations: Record<number, Station>, cursor: number, co
     target[0] -= trackX(course, target[2]);
   }
   return { position, target, fov: 40 + (from.fov - 40) * leave + (to.fov - 40) * arrive,
-    roll: trackRoll(course, cursor) * look };
+    roll: trackRoll(course, cursor, position[2]) * look };
 }
 
 function hidden(values: ArrayLike<number>, at: number) {
@@ -349,11 +402,11 @@ function visibleTrackFrame(frame: TrackFrame, previous: TrackFrame, progress: nu
     const id = frame.ids[slot];
     const at = worldHeaderSize + slot * worldInstanceSize;
     restoreRetired(frame.values, at, id, frame.retired[id]);
-    frame.values[at + instanceField.sharp] = 0;
     frame.values[at + 23] *= 1 - progress;
     if (progress === 1) delete frame.retired[id];
     if (frame.values[at + 23] > .002) visible.push(id);
   }
+  visible.push(...frame.lights.map(light => light.id));
   const same = frame.declared === previous.declared && frame.declared.length + visible.length === previous.visible.length &&
     visible.every((id, i) => id === previous.visible[frame.declared.length + i]);
   frame.visible = same ? previous.visible : [...frame.declared, ...visible];
@@ -396,7 +449,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const travel = first ? 1 : travelEase(playback.slideTime / travelDuration, course.ease[leg]);
   const cursor = origin + (index - origin) * travel;
   // A fast jump keeps a steady forward gaze instead of whipping through every intervening turn.
-  const look = span > 1.5 ? 1 / (span * span) : 1;
+  const jumpLook = span > 1.5 ? 1 / (span * span) : 1;
+  const look = course.heading ? jumpLook + (1 - jumpLook) * travel : jumpLook;
   const camera = sampleTrackCamera(stations, cursor, course, look);
   const station = world ? 0 : stations[index].offset;
   const reversed = changed ? slideChanged ? index < origin : playback.stepIndex < previous.stepIndex : previous.reversed;
@@ -458,12 +512,14 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
   const fixed = options.fixed ?? defaultFixed;
   const fixedSlots = changed || ids !== previous.ids ? ids.map(id => fixed.some(prefix => id.startsWith(prefix, id.indexOf(":") + 1))) : previous.fixedSlots;
   const frame: TrackFrame = { key, slideKey: playback.slideKey, stepIndex: playback.stepIndex, origin, cursor, morphDuration, reversed, carry, moving: previous.moving, seeds: previous.seeds, output,
-    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, cameraDelta, entering, stepCarry, course,
+    stations, ids, declared, declaredSlots, fixedSlots, visible: previous.visible, from, sources, retired, values, lights: [], cameraDelta, entering, stepCarry, course,
     scenery: previous.scenery, stamp: previous.stamp, sample, playbackTime: playback.slideTime };
   for (let i = 0; i < 8; i++) values[i] = posed[i] + (cameraDelta ? cameraDelta[i] * settle : 0);
   values[32] = Math.hypot(values[0] - values[4], values[1] - values[5], values[2] - values[6]);
   const destination = sampleTrackCamera(stations, index, course, 1);
-  const fx = destination.target[0] - destination.position[0], fy = destination.target[1] - destination.position[1], fz = destination.target[2] - destination.position[2];
+  const destinationBend = course.heading ? trackX(course, destination.position[2]) : 0;
+  const fx = destination.target[0] - destination.position[0] + (course.heading ? trackX(course, destination.target[2]) - destinationBend : 0);
+  const fy = destination.target[1] - destination.position[1], fz = destination.target[2] - destination.position[2];
   const focusDistance = Math.hypot(fx, fy, fz);
   const focusTarget = Math.max(.05, move?.focus ?? options.focus ?? focusDistance);
   const focus = move?.focus !== undefined || options.focus !== undefined || pulled ? focusTarget + (cameraDelta ? (from[32] - focusTarget) * settle : 0) : undefined;
@@ -471,7 +527,8 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     const at = worldHeaderSize + slot * worldInstanceSize;
     if (!declaredSlots[slot] || (fixedSlots[slot] && values[at + instanceField.sharp] < 0)) values[at + instanceField.sharp] = 0;
     else if (values[at + instanceField.sharp] < 0) {
-      const depth = ((values[at] - destination.position[0]) * fx + (values[at + 1] - destination.position[1]) * fy +
+      const bend = course.heading ? trackX(course, values[at + 2] - station) - destinationBend : 0;
+      const depth = ((values[at] + bend - destination.position[0]) * fx + (values[at + 1] - destination.position[1]) * fy +
         (values[at + 2] - station - destination.position[2]) * fz) / focusDistance;
       values[at + instanceField.sharp] = Math.abs(depth - focusTarget) <= Math.max(1, values[54]) ? 1 : 0;
     }
@@ -517,6 +574,7 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     for (const slot of slots) {
       const id = departure.ids[slot], at = worldHeaderSize + slot * worldInstanceSize;
       const saved = Array.from(live.slice(at, at + worldInstanceSize));
+      if (saved[instanceField.sharp] < 0) saved[instanceField.sharp] = retired[id][instanceField.sharp];
       if (!departure.fixed[slot]) {
         saved[2] -= departure.offset;
         if (id.startsWith("tube:")) saved[14] -= departure.offset;
@@ -525,12 +583,45 @@ export function sampleTrackFrame(previous: TrackFrame, values: number[], ids: st
     }
     frame.departures.push({ ...departure, slots, clock });
   }
+  const lightScene = sample?.scene;
+  const lightIds = lightScene?.declaredLightIds ?? [];
+  const oldLights = first ? [] : previous.lights;
+  const incoming = new Set(lightIds);
+  const lightDelta = !slideChanged && previous.sample && sample ? sample.clock.slideTime - previous.sample.clock.slideTime : delta;
+  const lightStepDelta = !slideChanged && previous.sample && sample ? sample.clock.stepTime - previous.sample.clock.stepTime : delta;
+  for (let i = 0; i < lightIds.length; i++) {
+    const id = lightIds[i], old = oldLights.find(light => light.id === id);
+    const clock = old ? { ...old.clock, slideTime: old.clock.slideTime + lightDelta, stepTime: old.clock.stepTime + lightStepDelta, time: sample!.clock.time } : sample!.clock;
+    if (old && changed && !slideChanged) {
+      clock.stepIndex = sample!.clock.stepIndex; clock.stepTime = sample!.clock.stepTime;
+      const shift = clock.slideTime - sample!.clock.slideTime;
+      clock.stepOrigins = Object.fromEntries(Object.entries(sample!.clock.stepOrigins).map(([step, origin]) => [step, origin + shift]));
+    }
+    const targetOffset = world ? 0 : station;
+    const fromOffset = changed ? old?.offset ?? targetOffset : old?.fromOffset ?? targetOffset;
+    frame.lights.push({ id, track: lightScene!.lightTracks[lightScene!.lightIds.indexOf(id)], clock, fromOffset,
+      offset: fromOffset + (targetOffset - fromOffset) * progress });
+  }
+  if (progress < 1) for (const light of oldLights) if (!incoming.has(light.id)) frame.lights.push({ ...light,
+    clock: { ...light.clock, slideTime: light.clock.slideTime + delta, stepTime: light.clock.stepTime + delta, time: sample?.clock.time } });
+  if (lightScene) {
+    values[worldLightCountSlot] = frame.lights.length;
+    for (let i = 0; i < frame.lights.length; i++) {
+      const light = frame.lights[i], base = values[worldLightOffsetSlot] + i * worldLightSize;
+      sampleWorldLight(light.track, light.clock, values, base);
+      values[base + 2] -= light.offset;
+      values[base + 10] -= light.offset;
+    }
+  }
   if (world) {
     sampleWorldFrame(frame, values as unknown as Float32Array, changed, elapsed, morphEase);
     return bendTrack(visibleTrackFrame(frame, previous, progress), course, look, focus);
   }
   // Lights travel with the station; floor markings stay in world space.
-  for (let light = 0; light < 4; light++) values[64 + light * 12 + 2] -= station;
+  if (!lightScene) for (let light = 0; light < values[worldLightCountSlot]; light++) {
+    const base = values[worldLightOffsetSlot] + light * worldLightSize;
+    values[base + 2] -= station; values[base + 10] -= station;
+  }
   values[114] -= station;
   values[122] -= station;
   for (let slot = 0; slot < ids.length; slot++) {

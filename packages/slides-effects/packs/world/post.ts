@@ -1,4 +1,4 @@
-import { travelSpeedSlot, worldLightCountSlot, worldClockOffset, type WorldScene } from "./scene";
+import { travelSpeedSlot, worldLightCountSlot, worldLightOffsetSlot, worldLightSize, worldClockOffset, type WorldScene } from "./scene";
 import type { Vec3 } from "./camera";
 import { heldBlurSlot } from "./track";
 import { d } from "typegpu";
@@ -34,11 +34,11 @@ ${depthCode()}
   let localDensity=density*exp(clamp(-(world.y-uniforms[13])*uniforms[14],-8.,8.));
   let transmission=exp(-opticalDepth); opticalDepth+=localDensity*segment;
   for(var light=0u;light<min(${lights}u,u32(uniforms[${worldLightCountSlot}]));light++) {
-   let base=64u+light*12u; let delta=vector(base)-world; let lightDistance=max(length(delta),.001);
+   let base=u32(uniforms[${worldLightOffsetSlot}])+light*${worldLightSize}u; let delta=vector(base)-world; let lightDistance=max(length(delta),.001);
    let toward=delta/lightDistance; let radius=max(uniforms[base+7u],.001);
    let attenuation=pow(max(0.,1.-lightDistance/radius),2.)/(1.+lightDistance*lightDistance*.06);
    var cone=1.; let cosine=uniforms[base+11u];
-   if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)))); }
+   if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)-vector(base)+vec3f(0.,-.00001,0.)))); }
    let angle=dot(direction,toward); let falloff=max(.01,1.+anisotropy*anisotropy-2.*anisotropy*angle); let phase=(1.-anisotropy*anisotropy)/(falloff*sqrt(falloff));
    scattering+=vector(base+4u)*uniforms[base+3u]*attenuation*cone*phase*transmission*localDensity*segment;
   }
@@ -120,7 +120,7 @@ export const hazeEffect = defineWorldEffect<{ amount: d.F32; rate: d.F32; start:
 @fragment fn haze(@location(0) uv:vec2f)->@location(0) vec4f {
  let p=params(); let color=textureSampleLevel(source,linearSampler,uv,0.).rgb;
  let amount=(1.-exp(-max(0.,depthAt(uv)-uniforms[${dofSlots.focus}]-p.start)*p.rate))*p.amount;
- return vec4f(mix(color,mix(p.tint,p.horizon,smoothstep(.85,.4,uv.y)),amount),1.);
+ return vec4f(mix(color,mix(p.tint,p.horizon,(1.-smoothstep(.4,.85,uv.y))),amount),1.);
 }` }] }),
 });
 export function customPostCode(bindings: string, wgsl: string) {

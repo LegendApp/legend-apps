@@ -1,6 +1,6 @@
 import type { GPUPass, GPURenderGraphDefinition } from "@legend-apps/presentation";
-import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldLightCountSlot, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
-import { depthFadeSlot } from "./track";
+import { instanceField, travelSpeedSlot, WorldInstance, worldClockOffset, worldLightCountSlot, worldLightOffsetSlot, worldLightSize, worldHeaderSize, worldInstanceSize, type PreparedWorldScene, type PrimitiveKind, type WorldScene } from "./scene";
+import { depthFadeSlot, trackHeadingSlot } from "./track";
 import type { Vec3 } from "./camera";
 import { customPostCode, dofEffect, dofSlots, finalCode, fogCode, shaftCode, type CustomGeometry, type SDFGeometry, type WorldPostPass } from "./post";
 import { d } from "typegpu";
@@ -24,13 +24,26 @@ fn partRotation(base:u32)->mat3x3f {
   vec3f(s.x*s.y*c.z-c.x*s.z,s.x*s.y*s.z+c.x*c.z,s.x*c.y),
   vec3f(c.x*s.y*c.z+s.x*s.z,c.x*s.y*s.z-s.x*c.z,c.x*c.y));
 }
-// The track's centreline x at straight depth z: a quintic smootherstep per curve in the header window (track.ts \`trackX\`).
+// The JS course and this window share quintic bends; heading bends integrate slope and retain it beyond the curve.
 fn trackCurve(z:f32,at:u32)->f32 { return clamp((uniforms[at]-z)/(uniforms[at]-uniforms[at+1u]),0.,1.); }
 fn trackX(z:f32)->f32 {
- var x=uniforms[128]; for(var i=0u;i<u32(uniforms[129]);i++) { let u=trackCurve(z,130u+i*3u); x+=uniforms[132u+i*3u]*u*u*u*(10.+u*(-15.+6.*u)); } return x;
+ let heading=uniforms[${trackHeadingSlot + 2}]>.5;
+ var x=uniforms[128];
+ if(heading) { x+=uniforms[${trackHeadingSlot}]*(uniforms[${trackHeadingSlot + 1}]-z); }
+ for(var i=0u;i<u32(uniforms[129]);i++) {
+  let at=130u+i*3u; let u=trackCurve(z,at); var curve=u*u*u*(10.+u*(-15.+6.*u));
+  if(heading) { let length=uniforms[at]-uniforms[at+1u]; curve=length*(u*u*u*u*(2.5+u*(-3.+u))+max(0.,(uniforms[at+1u]-z)/length)); }
+  x+=uniforms[at+2u]*curve;
+ } return x;
 }
 fn trackSlope(z:f32)->f32 {
- var s=0.; for(var i=0u;i<u32(uniforms[129]);i++) { let at=130u+i*3u; let u=trackCurve(z,at); s-=uniforms[at+2u]*30.*u*u*(1.-u)*(1.-u)/(uniforms[at]-uniforms[at+1u]); } return s;
+ let heading=uniforms[${trackHeadingSlot + 2}]>.5; var s=0.;
+ if(heading) { s=-uniforms[${trackHeadingSlot}]; }
+ for(var i=0u;i<u32(uniforms[129]);i++) {
+  let at=130u+i*3u; let u=trackCurve(z,at); var slope=30.*u*u*(1.-u)*(1.-u)/(uniforms[at]-uniforms[at+1u]);
+  if(heading) { slope=u*u*u*(10.+u*(-15.+6.*u)); }
+  s-=uniforms[at+2u]*slope;
+ } return s;
 }
 // Parts are sampled on a straight track; bending shifts them sideways onto the curve.
 fn bend(p:vec3f)->vec3f { return vec3f(p.x+trackX(p.z),p.y,p.z); }
@@ -120,11 +133,11 @@ fn illuminate(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimInten
  ${look.key ? "color+=keyLight(world,normal,view,material.albedo,roughness,metal);" : ""}
  ${look.environment ? "color+=environmentLight(normal,view,material.albedo,roughness,metal);" : ""}
  for(var light=0u;light<min(${lightCount}u,u32(uniforms[${worldLightCountSlot}]));light++) {
-  let base=64u+light*12u; let delta=vector(base)-world; let distance=max(length(delta),.001); let toward=delta/distance;
+  let base=u32(uniforms[${worldLightOffsetSlot}])+light*${worldLightSize}u; let delta=vector(base)-world; let distance=max(length(delta),.001); let toward=delta/distance;
   let range=max(.001,uniforms[base+7u]); let cutoff=pow(max(0.,1.-pow(distance/range,4.)),2.);
   let attenuation=cutoff/max(1.,distance*distance);
   var cone=1.; let cosine=uniforms[base+11u];
-  if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)))); }
+  if(cosine>-.99) { cone=smoothstep(cosine,min(.9999,cosine+.08),dot(-toward,normalize(vector(base+8u)-vector(base)+vec3f(0.,-.00001,0.)))); }
   let halfVector=normalize(toward+view+vec3f(.00001));
   let nl=max(0.,dot(normal,toward)); let nh=max(0.,dot(normal,halfVector));
   let vh=max(0.,dot(view,halfVector)); let alpha=roughness*roughness; let a2=alpha*alpha;
@@ -577,7 +590,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     } else counts[instance.kind]++;
   }
   return { quality: scene.quality, msaaSamples: scene.msaaSamples, toneMapping: scene.toneMapping, outputColorSpace: scene.outputColorSpace, bloomMode: scene.bloom?.mode, counts, backgroundVector: scene.backgroundVector,
-    floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: 4,
+    floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
@@ -752,5 +765,5 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
   }
   const buffers = [...labels ? [glyphBuffer()] : [], ...glyphFonts.map((font, index) => text3dBuffer(font, `text3d-${index}`))];
   const effectEnd = effectUses.reduce((end, use) => Math.max(end, use.base + worldEffect(use.effect).size), 0);
-  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: Math.max(worldHeaderSize + instanceCount * worldInstanceSize, effectEnd) };
+  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: Math.max(worldHeaderSize + instanceCount * worldInstanceSize, effectEnd) + lights * worldLightSize };
 }

@@ -424,7 +424,7 @@ test("stages, material references, light direction and HDR post settings share a
   expect(values[51]).toBe(2); expect(values[54]).toBe(2);
   expect(sampleWorldUniforms(prepareWorldScene({ instances: [] }), sample)[54]).toBe(0);
   expect(sampleWorldUniforms(prepareWorldScene({ instances: [] }), sample)[51]).toBe(0);
-  expect(values.slice(72, 75)).toEqual([0, -1, 0]); expect(values[75]).toBeCloseTo(Math.cos(0.4));
+  expect(values.slice(values[64] + 8, values[64] + 11)).toEqual([0, 0, 0]); expect(values[values[64] + 11]).toBeCloseTo(Math.cos(0.4));
   const named = prepareWorldScene({ instances: [primitive("sphere", { id: "b", position: [1, 2, 3] })], stages: scene.stages });
   expect(resolveAnchor(named, "b", sample)).toEqual([1, 2, 3]);
   expect(resolveAnchor(named, "stage:b", sample)).toEqual([12, 0, 0]);
@@ -482,7 +482,7 @@ test("custom and bounded geometry keep their own draw groups and validate resour
   expect(() => prepareWorldScene({ instances: [primitive("box", { material: "missing" })] })).toThrow("material");
   expect(() => prepareWorldScene({ instances: [], dof: { scale: 0 } })).toThrow("scale");
   expect(() => prepareWorldScene({ instances: [], bloom: { scale: 1.1 } })).toThrow("scale");
-  expect(() => prepareWorldScene({ instances: [], lights: Array.from({ length: 5 }, () => ({})) })).toThrow("four");
+  expect(prepareWorldScene({ instances: [], lights: Array.from({ length: 5 }, () => ({})) }).lightTracks).toHaveLength(5);
 });
 
 test("dense back-to-back keyframes sample linearly and stay piecewise linear", () => {

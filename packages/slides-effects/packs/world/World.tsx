@@ -237,24 +237,25 @@ function WorldSurface(props: WorldProps) {
   const declared = useMemo(() => trackIds(prepared), [prepared]);
   const preview = usePresentationValue("isPreview");
   const requestedPool = preview ? undefined : props.scenePlan?.pool;
-  const liveIds = useRef<string[]>([]);
-  const retainLiveIds = useCallback((ids: string[]) => { liveIds.current = ids; }, []);
+  const liveIds = useRef({ ids: [] as string[], slide: -1 });
+  const retainLiveIds = useCallback((ids: string[], slide: number) => { liveIds.current = { ids, slide }; }, []);
   const slide = usePresentationValue("slideIndex");
   // Repeated declarations reuse the same departure; older live parts survive rapid navigation.
   const [retained, setRetained] = useState({ slide, input: prepared, scene: prepared, previous: prepared, previousInput: prepared,
-    live: [] as string[], pool: requestedPool, sourcePool: requestedPool });
+    live: [] as string[], visibilityCurrent: false, pool: requestedPool, sourcePool: requestedPool });
   let trackScene = retained.scene, pool = props.track ? retained.pool : requestedPool;
   if (props.track && (retained.slide !== slide || retained.input !== prepared)) {
     const previous = retained.slide === slide ? retained.previous : retained.scene;
     const previousInput = retained.slide === slide ? retained.previousInput : retained.input;
-    const live = retained.slide === slide ? retained.live : liveIds.current;
+    const live = retained.slide === slide ? retained.live : liveIds.current.ids;
+    const visibilityCurrent = retained.slide === slide ? retained.visibilityCurrent : liveIds.current.slide === retained.slide;
     pool = JSON.stringify(retained.sourcePool?.topology) === JSON.stringify(requestedPool?.topology) ? retained.pool ?? requestedPool : undefined;
-    trackScene = retainTrackScene(prepared, previous, previousInput, !!pool, live);
+    trackScene = retainTrackScene(prepared, previous, previousInput, !!pool, live, visibilityCurrent);
     if (pool && !worldPlanFits(trackScene, pool)) {
       pool = undefined;
-      trackScene = retainTrackScene(prepared, previous, previousInput, false, live);
+      trackScene = retainTrackScene(prepared, previous, previousInput, false, live, visibilityCurrent);
     }
-    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput, live, pool, sourcePool: requestedPool });
+    setRetained({ slide, input: prepared, scene: trackScene, previous, previousInput, live, visibilityCurrent, pool, sourcePool: requestedPool });
   }
   const renderScene = props.track ? trackScene : prepared;
   // At two or more device pixels per slide unit the drawable already supersamples, so auto quality drops MSAA.
@@ -276,7 +277,7 @@ function WorldSurface(props: WorldProps) {
 function WorldSceneRuntime({ width, height, background = false, quality = "auto",
   buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active: requestedActive = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
   WorldProps & { width: number; height: number; content: { prepared: PreparedWorldScene; retained: PreparedWorldScene; declared: string[] }; topology: string; pool?: WorldPlan; continuity?: SharedValue<CameraPose | null>;
-    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[]) => void }) {
+    origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[], slide: number) => void }) {
   const suspension = useSurfaceSuspension();
   const suspendedOnUI = suspension?.signal;
   const active = requestedActive && !suspension?.suspended;
@@ -301,6 +302,7 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
   const copies = useMemo(() => pool ? worldPlanCopies(prepared, pool) : [], [prepared, pool]);
   const pooledOutput = useMemo(() => makeMutable(new Float32Array(pool?.size ?? 0)), [pool]);
   const pooled = !!pool;
+  const lightOffset = pool?.lightOffset ?? 0;
   const planSampler = sampleWorldPlan;
   const playback = usePlayback();
   if (buildDuration !== undefined && (!Number.isFinite(buildDuration) || buildDuration < 0)) throw new Error("World buildDuration must be nonnegative");
@@ -364,12 +366,12 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     const { state, scene, scale } = input;
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
     const sampled = sampleUniforms(scene, clock, null, 1, 1, true);
-    const values = (pooled ? planSampler(sampled, copies, pooledOutput.value) : sampled) as number[];
+    const values = (pooled ? planSampler(sampled, copies, pooledOutput.value, lightOffset) : sampled) as number[];
     values[35] = scale;
     const previous = trackFrame.value;
     const next = trackSampler(previous, values, ids, state, track, declared, { scene, clock, ids: sampleIds });
     trackFrame.value = next;
-    if (previous.visible !== next.visible) runOnJS(retainLiveIds)(next.visible);
+    if (previous.visible !== next.visible || previous.slideKey !== next.slideKey) runOnJS(retainLiveIds)(next.visible, Number(next.slideKey.split(":")[0]));
   });
   const enterDuration = enter?.duration ?? 1;
   const continuePrevious = enter?.from === "previous";
@@ -392,16 +394,16 @@ function WorldSceneRuntime({ width, height, background = false, quality = "auto"
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
         const sampled = sampleUniforms(scene.value, clock, null, 1, 1, true);
-        const planned = pooled ? planSampler(sampled, copies, pooledOutput.value) : sampled;
+        const planned = pooled ? planSampler(sampled, copies, pooledOutput.value, lightOffset) : sampled;
         const previous = preparing ? { ...trackFrame.value, output: undefined, retired: { ...trackFrame.value.retired } } : createTrackFrame();
-        values = trackSampler(previous, (preparing ? Float32Array.from(planned) : planned) as number[], ids, sampleState, track, declared).values;
+        values = trackSampler(previous, (preparing ? Float32Array.from(planned) : planned) as number[], ids, sampleState, track, declared, { scene: scene.value, clock, ids: sampleIds }).values;
       } else values = trackFrame.value.values;
     } else {
       const previous = state.phase === "preview" ? null
         : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" || preparing ? entryPose?.value : null;
       values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
     }
-    return pooled && !track ? planSampler(values, copies, pooledOutput.value) : values;
+    return pooled && !track ? planSampler(values, copies, pooledOutput.value, lightOffset) : values;
   });
   return <WorldGPU fallback={fallback ?? null}>
     <GPURenderGraph {...graph} uniforms={uniforms} width={width} height={height} background={background}

@@ -57,7 +57,8 @@ test("text-only scenes clear background depth and bind sharp color without fused
 });
 
 for (const quality of ["low", "medium", "high"] as const) test(`all enabled post effects remain present at ${quality} quality`, () => {
-  const graph = buildWorldGraph(scene({ quality, floor: {}, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] }));
+  const prepared = scene({ quality, floor: {}, dof: { aperture: .7 }, shafts: { intensity: 1 }, lights: [{ position: [0, 8, 0] }] });
+  const graph = buildWorldGraph(prepared);
   const ids = graph.passes.map(pass => pass.id);
   for (const id of ["scene-sphere", "floor", "shafts", "dof-gather", "dof-composite", "bloom-threshold", "tonemap"]) expect(ids).toContain(id);
   // Bloom is the last HDR stage with nothing placed after it, so the tonemap adds it instead of a separate composite pass.
@@ -67,7 +68,7 @@ for (const quality of ["low", "medium", "high"] as const) test(`all enabled post
   const target = (id: string) => graph.targets.find(target => target.id === id)!;
   expect(target("dof").scale).toBe(scale * .5);
   expect(target("shafts").scale).toBe(scale * .5);
-  expect(graph.uniformsSize).toBe(worldHeaderSize + worldInstanceSize);
+  expect(graph.uniformsSize).toBe(prepared.uniformCount);
 });
 
 test("animated floor, light and focus changes preserve topology while static quality controls change it", () => {
@@ -225,14 +226,14 @@ test("a card's pixel line draws its rim as a light border at that width", () => 
   expect(code).toContain("min(1.,.22*uniforms[base+17u]),border)");
 });
 
-test("adding point and spot lights changes uniform data without changing the GPU program", () => {
-  const unlit = scene({ keyLight: {}, lights: [] });
-  for (const count of [1, 4]) {
-    const lit = scene({ keyLight: {}, lights: Array.from({ length: count }, (_, index) => ({
-      kind: index % 2 ? "spot" : "point", position: [0, 8, 0], intensity: 3,
-    })) });
-    expect(worldGraphTopology(lit)).toEqual(worldGraphTopology(unlit));
-    expect(buildWorldGraph(lit)).toEqual(buildWorldGraph(unlit));
+test("light storage capacity follows the scene while animation values preserve its program", () => {
+  for (const count of [0, 1, 4, 9]) {
+    const lights = Array.from({ length: count }, (_, index) => ({ kind: index % 2 ? "spot" as const : "point" as const, position: [0, 8, 0] as [number, number, number], intensity: 3 }));
+    const lit = scene({ keyLight: {}, lights });
+    const animated = scene({ keyLight: {}, lights: lights.map(light => ({ ...light, intensity: { 0: 1, 2: 4 } })) });
+    expect(worldGraphTopology(lit)).toEqual(worldGraphTopology(animated));
+    expect(buildWorldGraph(lit)).toEqual(buildWorldGraph(animated));
+    expect(buildWorldGraph(lit).uniformsSize).toBe(lit.uniformCount);
   }
 });
 
@@ -243,6 +244,6 @@ test("the shared light program preserves the no-light fallback and declared dark
     expect(sampleWorldUniforms(prepared, clock)[worldLightCountSlot]).toBe(lights.length);
     const code = buildWorldGraph(prepared).passes.find(pass => pass.id === "scene-sphere")!.code;
     expect(code).toContain(`if(uniforms[${worldLightCountSlot}]==0.) { color+=material.albedo`);
-    expect(code).toContain(`light<min(4u,u32(uniforms[${worldLightCountSlot}]))`);
+    expect(code).toContain(`light<min(${lights.length}u,u32(uniforms[${worldLightCountSlot}]))`);
   }
 });

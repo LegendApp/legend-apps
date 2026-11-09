@@ -375,6 +375,8 @@ export function sdfInstance(options: SDFOptions): Instance {
 /** Slots 128–159 hold the track bend window (see `trackBendSlot`). */
 export const worldHeaderSize = 160;
 export const worldLightCountSlot = 63;
+export const worldLightOffsetSlot = 64;
+export const worldLightSize = 12;
 /** Reserved header slots for the projected World clock used by custom WGSL contexts. */
 export const worldClockOffset = 24;
 /** Header slot holding the camera's travel speed between track stations, 0 at rest to 1 at the move's peak; the next slot holds its radial blur. */
@@ -838,6 +840,14 @@ function sampleUniformInputs(plan: UniformInputs, cache: UniformCache, clock: Cl
     values[to] = value;
   }
 }
+export function sampleWorldLight(light: PreparedWorldScene["lightTracks"][number], clock: ClockSample, values: number[] | Float32Array, base: number) {
+  "worklet";
+  const position = sampleTrack(light.position, clock), color = sampleTrack(light.color, clock), target = sampleTrack(light.target, clock);
+  for (let axis = 0; axis < 3; axis++) { values[base + axis] = position[axis]; values[base + 4 + axis] = color[axis]; values[base + 8 + axis] = target[axis]; }
+  values[base + 3] = sampleTrack(light.intensity, clock); values[base + 7] = sampleTrack(light.range, clock);
+  values[base + 11] = light.spot ? Math.cos(sampleTrack(light.angle, clock)) : -1;
+}
+
 export function sampleWorldUniforms(scene: PreparedWorldScene | WorldSampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
@@ -870,15 +880,10 @@ export function sampleWorldUniforms(scene: PreparedWorldScene | WorldSampleScene
     const color = sampleTrack(field.track, clock);
     values[field.index] = color[0]; values[field.index + 1] = color[1]; values[field.index + 2] = color[2];
   }
-  values[worldLightCountSlot] = scene.lightTracks.length;
-  scene.lightTracks.forEach((light, index) => {
-    const base = 64 + index * 12, position = sampleTrack(light.position, clock), color = sampleTrack(light.color, clock), target = sampleTrack(light.target, clock);
-    const direction: Vec3 = [target[0] - position[0], target[1] - position[1], target[2] - position[2]];
-    const length = Math.max(0.001, Math.hypot(...direction));
-    for (let axis = 0; axis < 3; axis++) { values[base + axis] = position[axis]; values[base + 4 + axis] = color[axis]; values[base + 8 + axis] = direction[axis] / length; }
-    values[base + 3] = sampleTrack(light.intensity, clock); values[base + 7] = sampleTrack(light.range, clock);
-    values[base + 11] = light.spot ? Math.cos(sampleTrack(light.angle, clock)) : -1;
-  });
+  const lightIds = scene.declaredLightIds;
+  values[worldLightCountSlot] = lightIds.length;
+  values[worldLightOffsetSlot] = scene.lightTracks.length ? scene.lightOffset : 0;
+  lightIds.forEach((id, index) => sampleWorldLight(scene.lightTracks[scene.lightIds.indexOf(id)], clock, values, scene.lightOffset + index * worldLightSize));
   if (scene.counter) {
     values[53] = 1;
     values[56] = Math.round(voxelRemaining(scene.instances[scene.counterIndex!] as Instance, clock));
@@ -1012,6 +1017,7 @@ export function sampleWorldUniforms(scene: PreparedWorldScene | WorldSampleScene
 
 export type PreparedWorldScene = WorldScene & { exposureTrack: Track<number>; fogTrack: Track<Vec3>; backgroundVector: Vec3;
   uniformInputs: UniformInputs;
+  lightOffset: number; lightIds: string[]; declaredLightIds: string[];
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
   focusTrack?: Track<number | string>; counterColor?: Vec3; counterIndex?: number;
   /** Each effect's params occupy `size` floats from `base`, after the instances; `uniformCount` covers them. */
@@ -1053,7 +1059,6 @@ function keyLightVectors({ keyLight: key }: WorldScene): { index: number; track:
     { index: 120, track: compileTrack<Vec3>(key.target ?? [0, 0, 0]) }];
 }
 export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
-  if ((scene.lights?.length ?? 0) > 4) throw new Error("World supports at most four point or spot lights");
   for (const effect of [scene.bloom, scene.dof, scene.shafts]) if (effect) {
     if (effect.scale !== undefined && (!Number.isFinite(effect.scale) || effect.scale <= 0 || effect.scale > 1)) throw new Error("World effect scale must be greater than zero and at most one");
     if ("samples" in effect && effect.samples !== undefined && (!Number.isInteger(effect.samples) || effect.samples < 1 || effect.samples > 64)) throw new Error("World effect samples must be an integer between one and 64");
@@ -1174,7 +1179,15 @@ export function prepareWorldScene(scene: WorldScene): PreparedWorldScene {
     uniformCount += effect.size;
     return { ...use, before, after, base };
   });
-  const prepared = { ...scene, instances, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
+  const lightOffset = uniformCount;
+  uniformCount += (scene.lights?.length ?? 0) * worldLightSize;
+  const lightOccurrences = new Map<string, number>();
+  const lightIds = (scene.lights ?? []).map(light => {
+    const key = JSON.stringify(light), occurrence = lightOccurrences.get(key) ?? 0;
+    lightOccurrences.set(key, occurrence + 1);
+    return `light:${key}:${occurrence}`;
+  });
+  const prepared = { ...scene, instances, lightOffset, lightIds, declaredLightIds: lightIds, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
     backgroundVector: colorVector(scene.backgroundColor ?? "#05060a"), postTracks: fields.map(([index, value]) => ({ index, track: compileTrack(value) })),
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
     colorTracks, effectUses, uniformCount,

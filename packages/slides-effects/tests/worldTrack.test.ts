@@ -214,7 +214,7 @@ test("matching follows ids across reordered draw slots; tube endpoints share sta
   }
   expect(settled.values[122]).toBe(-32);
   expect(settled.values[114]).toBe(-20);
-  expect(settled.values[66]).toBe(-28);
+  expect(settled.values[settled.values[64] + 2]).toBe(-28);
 });
 
 test("omitted objects fade at their last pose, then return only when declared", () => {
@@ -644,7 +644,7 @@ test("focus routes incoming parts sharply and background parts through blur acro
   }
 });
 
-test("departing parts lose sharpness while incoming focus stays sharp during travel", () => {
+test("departing parts retain sharpness while incoming focus stays sharp during travel", () => {
   const a = prepareWorldScene({ instances: [labelInstance({ id: "old", text: "Old" })] });
   const b = prepareWorldScene({ instances: [labelInstance({ id: "new", text: "New" })] });
   const playback = (slideKey: string, time: number) => ({ ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0" }), slideTime: time, stepTime: time });
@@ -653,7 +653,7 @@ test("departing parts lose sharpness while incoming focus stays sharp during tra
   expect(part(frame, "label:old")[instanceField.sharp]).toBe(1);
   const retained = retainTrackScene(b, a), next = playback("1", .2);
   frame = sampleTrackFrame(frame, sampleWorldUniforms(retained, next) as number[], trackIds(retained), next, {}, trackIds(b));
-  expect(part(frame, "label:old")[instanceField.sharp]).toBe(0);
+  expect(part(frame, "label:old")[instanceField.sharp]).toBe(1);
   expect(part(frame, "label:new")[instanceField.sharp]).toBe(1);
 });
 
