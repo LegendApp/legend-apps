@@ -325,7 +325,7 @@ elements still move between their layouts. A new navigation cancels the current 
 from the new source slide's layout; it does not preserve intermediate velocity.
 Presenter previews always show the final layout.
 
-While the audience window is open, a GPU background in a presenter preview is a still of that step's settled frame, so previews change with navigation and cost the audience nothing. Each deck renders its stills once, hidden, when it loads; a step without a still shows its live preview about 3 s after navigation.
+While the audience window is open, a GPU background in a presenter preview uses a still of that step's settled frame. After a deck loads, Slides prepares current and next backgrounds first, then every remaining slide/step, on one hidden surface at a time. Preparation pauses during navigation and while the audience window is open. All encoded stills are kept for the loaded deck; only nearby images stay decoded. Stills are discarded when the deck, background intensity or aspect changes. A step not yet prepared falls back to a live preview about 3 s after navigation, marked Updating preview until it catches up.
 
 `FocusRegion` and `SharedElement` accept native `View` props, including `style`.
 They are available directly in MDX and can be imported from

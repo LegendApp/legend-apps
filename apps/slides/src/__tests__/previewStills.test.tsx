@@ -7,6 +7,7 @@ import { PreparationBoundary, usePreparationTask } from "../../../../packages/pr
 mock.module("@legend-apps/presentation", () => ({ usePreparationTask }));
 const SurfaceStillContext = React.createContext(null);
 let slides = [{ steps: 2 }, { steps: 1 }];
+let revision = 1, intensity = 1;
 mock.module("react-native", () => ({
   View: "view",
   Image: "image", Text: "text",
@@ -15,9 +16,9 @@ mock.module("react-native", () => ({
 mock.module("@legendapp/state/react", () => ({ useValue: read => typeof read === "function" ? read() : read.get() }));
 mock.module("../slidesStore", () => ({
   getSlideStepCount: slide => slide.steps,
-  slidesState$: { revision: { get: () => 1 }, slides: { get: () => slides } },
+  slidesState$: { revision: { get: () => revision }, slides: { get: () => slides } },
 }));
-mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => 1 }));
+mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => intensity }));
 mock.module("../SlideCaptureContext", () => ({ SurfaceStillContext }));
 let surfaces = new Set([0, 1]);
 let request, commits;
@@ -38,6 +39,7 @@ beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   log = spyOn(console, "error").mockImplementation(() => {});
   slides = [{ steps: 2 }, { steps: 1 }];
+  revision = intensity = 1;
   surfaces = new Set([0, 1]);
   request = undefined;
   commits = 0;
@@ -46,28 +48,37 @@ afterEach(() => log.mockRestore());
 
 const wait = ms => act(() => new Promise(resolve => setTimeout(resolve, ms)));
 
-function Host({ paused = false, view, current = "0:0", next = "1:0", retained }) {
-  const { stills, targets, sweep } = usePreviewStills(16 / 9, current, next, retained);
+function Host({ paused = false, view, current = "0:0", next = "1:0", aspect = 16 / 9 }) {
+  const { stills, targets, sweep } = usePreviewStills(aspect, current, next);
   view.current = { stills, targets, add: sweep.add, generation: sweep.generation };
   return <Profiler id="preview-capture" onRender={() => commits++}><PreviewStillSweep key={sweep.generation} {...sweep} paused={paused} /></Profiler>;
 }
 
-test("holding a large deck requests two previews and makes no more commits after capture", async () => {
-  slides = Array.from({ length: 100 }, () => ({ steps: 5 }));
+test("deck opening bakes every reveal once on one hidden surface, then stays idle", async () => {
+  slides = Array.from({ length: 20 }, () => ({ steps: 5 }));
+  surfaces = new Set(slides.map((_, index) => index));
   const view = {};
   let renderer;
   try {
     await act(() => { renderer = create(<Host view={view} />); });
-    expect(view.current.targets).toHaveLength(500);
-    for (const id of ["0:0", "1:0"]) {
-      expect(request.id).toBe(id);
-      await act(() => request.deliver(id, id));
+    expect(view.current.targets).toHaveLength(100);
+    const captured = [];
+    for (let i = 0; i < 100; i++) {
+      expect(renderer.root.findAllByType("surface")).toHaveLength(1);
+      const id = request.id;
+      captured.push(id);
+      await act(() => request.deliver(id, `uri-${id}`));
     }
+    expect(captured.slice(0, 2)).toEqual(["0:0", "1:0"]);
+    expect(new Set(captured)).toEqual(new Set(view.current.targets));
+    expect(Object.keys(view.current.stills)).toHaveLength(100);
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
     const heldCommits = commits;
     await wait(450);
     expect(commits - heldCommits).toBe(0);
-    await act(() => renderer.update(<Host view={view} current="1:0" next="0:0" />));
+    await act(() => renderer.update(<Host view={view} current="15:3" next="15:4" />));
+    expect(view.current.stills["15:3"]).toBe("uri-15:3");
+    expect(view.current.stills["15:4"]).toBe("uri-15:4");
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
   } finally { await act(() => renderer?.unmount()); }
 });
@@ -88,19 +99,18 @@ test("a still stack shows only its target and keeps its neighbours decoded", asy
   await act(() => renderer.unmount());
 });
 
-test("the sweep captures only current and next previews, then stays idle until navigation", async () => {
+test("the sweep prioritizes current and next, then prepares the remaining reveals", async () => {
   const view = {};
   let renderer;
   await act(() => { renderer = create(<Host view={view} />); });
-  for (const id of ["0:0", "1:0"]) {
+  for (const id of ["0:0", "1:0", "0:1"]) {
     expect(request.id).toBe(id);
     await act(() => request.deliver(id, `uri-${id}`));
   }
-  expect(view.current.stills).toEqual({ "0:0": "uri-0:0", "1:0": "uri-1:0" });
+  expect(view.current.stills).toEqual({ "0:0": "uri-0:0", "1:0": "uri-1:0", "0:1": "uri-0:1" });
   expect(renderer.root.findAllByType("surface")).toHaveLength(0);
   await act(() => renderer.update(<Host view={view} current="0:1" />));
-  expect(request.id).toBe("0:1");
-  await act(() => request.deliver("0:1", "uri-0:1"));
+  expect(view.current.stills["0:1"]).toBe("uri-0:1");
   expect(renderer.root.findAllByType("surface")).toHaveLength(0);
   await act(() => renderer.unmount());
 });
@@ -152,6 +162,25 @@ test("stills survive the deck changing shape, and the old deck's are dropped", a
   await act(() => renderer.unmount());
 });
 
+test.each(["revision", "intensity", "aspect"])("a changed %s restarts baking and rejects the previous generation", async change => {
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await act(() => request.deliver("0:0", "old"));
+    const old = request;
+    if (change === "revision") revision++;
+    if (change === "intensity") intensity = .5;
+    await act(() => renderer.update(<Host view={view} aspect={change === "aspect" ? 4 / 3 : 16 / 9} />));
+    expect(view.current.stills).toEqual({});
+    expect(request.id).toBe("0:0");
+    await act(() => old.deliver("1:0", "obsolete"));
+    expect(view.current.stills).toEqual({});
+    await act(() => request.deliver("0:0", "new"));
+    expect(view.current.stills).toEqual({ "0:0": "new" });
+  } finally { await act(() => renderer?.unmount()); }
+});
+
 test("a slide with no GPU background is skipped once, without waiting on its other steps", async () => {
   surfaces = new Set([1]);
   const view = {};
@@ -190,23 +219,6 @@ test("settled live previews capture their existing surface and reject a retired 
     expect(renderer.root.findAllByType("surface")).toHaveLength(1);
   } finally { await act(() => renderer?.unmount()); }
 });
-test("preview retention is bounded and preserves the two displayed targets", async () => {
-  slides = Array.from({length:20},()=>({steps:1})); const view = {}; let renderer;
-  try {
-    await act(() => { renderer = create(<Host view={view} paused retained={["2:0", "3:0"]}/>); });
-    for (let i=0;i<20;i++) await act(() => view.current.add(`${i}:0`, `uri-${i}`, view.current.generation));
-    expect(Object.keys(view.current.stills).length).toBeLessThanOrEqual(12);
-    expect(view.current.stills["0:0"]).toBe("uri-0");
-    expect(view.current.stills["1:0"]).toBe("uri-1");
-    expect(view.current.stills["2:0"]).toBe("uri-2");
-    expect(view.current.stills["3:0"]).toBe("uri-3");
-    const before = view.current.stills;
-    await act(() => view.current.add("19:0", "uri-19", view.current.generation));
-    expect(view.current.stills).toBe(before);
-  } finally { await act(() => renderer?.unmount()); }
-});
-
-
 test("a cached preview waits for its own image to decode, rejects late loads, and reports failed images", async () => {
   let ready = 0, renderer;
   const targets = ["0:0", "1:0"];

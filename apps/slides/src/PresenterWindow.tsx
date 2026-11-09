@@ -212,8 +212,7 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     const settledNavigation = useAudienceSettled(navigation, true);
     const settled = audienceOpen ? settledNavigation : navigation;
     const [settledIndex, settledStep, settledNextIndex, settledNextStep] = settled.split(":").map(Number);
-    const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep),
-      [stillKey(settledIndex, settledStep), stillKey(settledNextIndex, settledNextStep)]);
+    const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep));
     // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
     const stillOf = (target: string) => audienceOpen && stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
     const currentStill = stillOf(stillKey(currentIndex, currentStep)), nextStill = stillOf(stillKey(nextIndex, nextStep));

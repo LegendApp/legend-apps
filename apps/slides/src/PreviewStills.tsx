@@ -11,15 +11,14 @@ import { SurfaceStillContext, type SurfaceStillRequest } from "./SlideCaptureCon
 const STILL_WIDTH = 960;
 /** Decoded stills kept mounted on each side of a target, so the usual step shows without a decode. */
 const STILL_WINDOW = 2;
-const MAX_STILLS = 12;
 /** A slide without a GPU background says nothing; once one announces itself it may need to compile pipelines. */
 const NO_SURFACE_MS = 400;
 const SURFACE_MS = 8000;
 
 export const stillKey = (slide: number, step: number) => `${slide}:${step}`;
 
-/** Cache visited previews without rendering the rest of the deck in the background. */
-export function usePreviewStills(aspect: number, current: string, next: string, retained?: readonly string[]) {
+/** Bake step backgrounds before presenting; keep only nearby images decoded. */
+export function usePreviewStills(aspect: number, current: string, next: string) {
   const revision = useValue(slidesState$.revision);
   const intensity = useBackgroundIntensitySetting();
   const slides = useValue(slidesState$.slides);
@@ -28,19 +27,13 @@ export function usePreviewStills(aspect: number, current: string, next: string, 
   const generation = `${revision}:${intensity}:${aspect}:${targets.length}`;
   const [stills, setStills] = useState<{ generation: string; byKey: Record<string, string> }>({ generation, byKey: {} });
   if (stills.generation !== generation) setStills({ generation, byKey: {} });
-  const visible = useRef([current, next, ...retained ?? []]);
-  useLayoutEffect(() => { visible.current = [current, next, ...retained ?? []]; }, [current, next, retained]);
   const add = useCallback((key: string, uri: string, from: string) => setStills(state => {
     if (state.generation !== from || state.byKey[key] === uri) return state;
-    const byKey = { ...state.byKey, [key]: uri };
-    for (const candidate of Object.keys(byKey)) {
-      if (Object.keys(byKey).length <= MAX_STILLS) break;
-      if (!visible.current.includes(candidate)) delete byKey[candidate];
-    }
-    return { generation: from, byKey };
+    return { generation: from, byKey: { ...state.byKey, [key]: uri } };
   }), []);
   const nearby = targets.filter(key => key === current || key === next);
-  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets: nearby, stills: stills.byKey } };
+  const remaining = targets.filter(key => key !== current && key !== next);
+  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets: [...nearby, ...remaining], stills: stills.byKey } };
 }
 
 function useStillRequest(target: string | undefined, paused: boolean, generation: string, add: (key: string, uri: string, generation: string) => void) {
@@ -64,7 +57,7 @@ export function PreviewStillCapture({ children, target, paused, generation, add 
   return <SurfaceStillContext.Provider value={request}>{children}</SurfaceStillContext.Provider>;
 }
 
-/** Capture missing nearby previews between navigation, never while the audience is playing. Key it by generation. */
+/** Bake one target at a time, never during audience playback. Key it by generation. */
 export function PreviewStillSweep({ add, aspect, generation, paused, targets, stills }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[]; stills: Record<string, string> }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const noSurface = useRef(new Set<number>());
