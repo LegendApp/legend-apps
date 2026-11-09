@@ -12,9 +12,9 @@ bun scripts/slides-size-budget.ts \
   --compiler shell/.legend/spark/slides-release/.spark/compiler/slides-compiler-darwin-arm64-<sha256>.zip
 ```
 
-Use a new output ZIP path each time. The script reports JSON and exits 1 if the app ZIP exceeds **25,000,000 bytes** or the optional compiler ZIP exceeds **12,000,000 bytes**. Override these local regression guardrails with `--budget-mb` and `--compiler-budget-mb` (decimal MB). They are not release promises or wired into CI. Check both downloads separately: compiler bytes are deferred until first use, not part of the app download. Read the exact compiler filename from `.spark/compiler/artifact.json`.
+Use a new output ZIP path each time. The script reports JSON and exits 1 if the app ZIP exceeds **25,000,000 bytes** or the optional compiler ZIP exceeds **15,500,000 bytes**. Override these local regression guardrails with `--budget-mb` and `--compiler-budget-mb` (decimal MB). They are not release promises or wired into CI. Check both downloads separately: compiler bytes are deferred until first use, not part of the app download. Read the exact compiler filename from `.spark/compiler/artifact.json`.
 
-The ZIP uses `ditto -c -k -rsrc --sequesterRsrc --keepParent`, matching the notarization upload archive shape. The check does not sign, notarize, upload, release or bump versions. Signing and stapling can change the final distribution's size. Logical app bytes sum regular files without following symlinks; components partition executable, JS bundle, frameworks/dylibs, assets (including fonts), helpers and metadata. Filesystem allocation and compressed ZIP size are different metrics.
+The ZIP uses `ditto -c -k -rsrc --sequesterRsrc --keepParent --zlibCompressionLevel 9`, matching the notarization upload archive shape. The check does not sign, notarize, upload, release or bump versions. Signing and stapling can change the final distribution's size. Logical app bytes sum regular files without following symlinks; components partition executable, JS bundle, frameworks/dylibs, assets (including fonts), helpers and metadata. Filesystem allocation and compressed ZIP size are different metrics.
 
 On the shared build machine, run builds, checks and archiving through the existing heavy queue. Use `~/devroot/scripts/heavy slides --tier release --priority low -- bun run slides build macos` for the low-priority Release lane; the wrapper's explicit tier overrides `APP_LOCK_TIER`. Check available disk before starting and monitor it during builds. Use the repository's supported Node version and cached dependencies; do not install packages manually.
 
@@ -37,7 +37,7 @@ The Spark SDK already requests Release dead-code stripping, thin LTO, size optim
 
 Compiler package filtering keeps licenses, manifests, runtime TypeScript, CSS and native binaries while omitting development/test/documentation files, declarations and source maps. React's production JSX development-runtime entry remains available for explicit Webview imports. The trimmed helper is production-only: `NODE_ENV=development` fails with module-not-found errors for removed development builds. Verify the packaged helper outside the repository with Bun and Node, including CSS generation, worklets, Webviews and effect-pack compilation after any filter change.
 
-The compiler-on-demand branch supplies the separate download contract; see [compiler downloads](slides-compiler-download.md). The unmerged [HTML export action](https://github.com/LegendApp/legend-apps/pull/6) adds a browser runtime dependency closure to the helper. This work does not depend on that PR. When it lands, the 12 MB compiler budget is expected to be re-baselined upward after measuring the combined artifact; preserve HTML export and other real features rather than trimming them to fit the current budget.
+The separate download contract is described in [compiler downloads](slides-compiler-download.md). The merged [HTML export action](https://github.com/LegendApp/legend-apps/pull/6) includes the browser runtime closure and full Skottie-capable CanvasKit. The integrated measurement below replaces the earlier 12 MB compiler guardrail with 15.5 MB; the app guardrail remains 25 MB.
 
 ## Fresh arm64 Release measurement (2026-10-26)
 
@@ -102,4 +102,25 @@ The app map contains **34,725,234 live symbol bytes**. Thin-LTO objects retain g
 
 The largest individual data symbols are tree-sitter parse tables; removing them would reduce supported native syntax features. The full map and top-20 JSON are retained as local measurement artifacts, not committed binary files. The CLI regenerates that summary with `--link-map`.
 
-Validation: 11 focused tests passed (113 assertions), the changed scripts passed scoped TypeScript checks, and Slides/macOS identity and native-package verification passed. No full-project typecheck or native UI feature walkthrough was run. The unmerged export-action PR #6 is excluded: its browser runtime will grow the optional compiler artifact and requires a new combined measurement.
+Validation: 11 focused tests passed (113 assertions), the changed scripts passed scoped TypeScript checks, and Slides/macOS identity and native-package verification passed. No full-project typecheck or native UI feature walkthrough was run. This historical measurement excludes export-action PR #6; use the integrated compiler measurement below for the combined payload.
+
+
+## Integrated compiler and HTML exports (2026-10-27)
+
+Base: `b8ae4802da9b6874b4c1dacd6b391dc4f66a8a1e`, after merging PRs #4–#7. Measured source: `25b5b53dc23d25cae1268d414864300f52056c1e`. macOS arm64, Node 24.19.0, Bun 1.3.14, matching cached dependencies, ad hoc signed helpers. Compiler artifacts were packaged directly with `packageSlidesCompilerArtifact`; no native app was rebuilt. The 12 MB guardrail failed on the combined baseline.
+
+| Payload (bytes) | Combined baseline | After shrinking |
+| --- | ---: | ---: |
+| Compiler ZIP | 15,952,356 | 15,054,995 |
+| Installed helper, regular files | 41,188,315 | 35,330,933 |
+| Demo HTML folder | 1,419,398 | 1,419,245 |
+| Lottie HTML folder | 13,004,544 | 6,284,639 |
+| Lottie files, sum of gzip-9 bytes | 5,115,737 | 4,028,904 |
+
+Maximum ZIP compression saves 47,027 bytes; removing unreachable State adapters saves another 116,464 bytes. Brotli storage of the full CanvasKit WASM saves 734,133 ZIP bytes and 5,564,389 installed bytes. Gzipping the HTML WASM and full Roboto font before Base64 encoding saves 6,719,843 folder bytes against the preceding step and adds 255 bytes to the helper ZIP. Tiny player-size differences between packaging runs are not separate wins. The gzip totals compress each regular file separately and exclude HTTP headers; they are payload-size estimates, not network timing measurements.
+
+The helper decompresses CanvasKit in memory during export, preserving the installed-size saving. Offline HTML uses the browser's `DecompressionStream("gzip")` and temporary blob URLs. The full WASM and font bytes are preserved, including Skottie and non-Latin glyph coverage; no native rendering engines, syntax languages, locales or font variants were removed. Maximum-quality Brotli increases packaging time; the artifact test allows two minutes for its two helper builds.
+
+Signed extraction/cache tests, Bun and Node compilation/exports, cancellation, destination replacement and local-only debug maps pass. Baseline and new demo/Lottie folders render in headless Chrome through `file://` with networking disabled, no HTTP requests and no runtime errors. Other browsers and native UI were not exercised for these packaging changes.
+
+Level 9 also reduces an unchanged older app fixture's ZIP from 30,974,075 to 30,891,940 bytes, with identical entry CRCs and sizes. That fixture still embeds its old helper and has unknown source provenance: this isolates archive compression and is not a measurement of the merged app. Its installed bytes are unchanged. The fresh native app figures above remain historical; no new native app download/install claim is made here.
