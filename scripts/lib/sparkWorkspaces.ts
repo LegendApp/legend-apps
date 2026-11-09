@@ -120,6 +120,10 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     // Preserve all document registration fields; Spark's smaller documentTypes
     // contract currently discards extensions and handler rank.
     include: active.map(pkg => pkg.name),
+    ...(manifest.id === "slides" && mode === "release" ? { helpers: { "slides-compiler": {
+      "macos-arm64": { directory: ".spark/compiler/helper", executable: "run" },
+      "macos-x64": { directory: ".spark/compiler/helper", executable: "run" },
+    } } } : {}),
     expo: {
       slug: manifest.id,
       ...((iconPlugin.length || manifest.nativeModules.macos.includes("@legend-apps/diff-parser")) ? {
@@ -259,7 +263,7 @@ const { makeMetroConfig } = require("expo-desktop-metro-config");
 const { withDesktop } = require("@legendapp/spark/metro");
 const { withUniwindConfig } = require("uniwind/metro");
 const config = makeMetroConfig(__dirname);
-${manifest.id === "slides" ? 'config.cacheVersion = [config.cacheVersion, process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT || ""].join("|");\n' : ""}config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
+config.watchFolders = [...new Set([...(config.watchFolders || []), ${JSON.stringify(rootDir)}])];
 config.resolver.extraNodeModules = { ...config.resolver.extraNodeModules, "@legend-apps/app": ${JSON.stringify(path.join(appsDir, manifest.id, "src"))} };
 config.server.unstable_serverRoot = ${mode === "release" ? "__dirname" : JSON.stringify(rootDir)};
 config.resolver.useWatchman = false;

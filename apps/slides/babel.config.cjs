@@ -1,5 +1,5 @@
 module.exports = function (api) {
-  const names = ["EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH", "EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT"];
+  const names = ["EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH"];
   api.cache.using(() => names.map(name => process.env[name] || "").join("|"));
 
   const inlineCompilerPath = ({ types: t }) => ({

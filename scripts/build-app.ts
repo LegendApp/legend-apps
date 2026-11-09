@@ -143,11 +143,6 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
       signSlidesCompiler(helper, getExistingCodeSignIdentity(appPath));
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
     }
-    if (appId === "slides") {
-      const compilerDirectory = path.join(appPath, "Contents/Helpers/slides-compiler.helper");
-      fs.rmSync(compilerDirectory, { recursive: true, force: true });
-      signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));
-    }
     const didNormalizeAssets = normalizeMacOSMetroAssetPaths(appPath);
     if (didNormalizeAssets) {
       signMacOSApp(appPath, getExistingCodeSignIdentity(appPath));

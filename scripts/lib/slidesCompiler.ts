@@ -5,8 +5,6 @@ import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { rootDir } from "./apps";
 import { collectSlidesHostClasses } from "./slidesHostClasses";
-import { buildBrowserPlayer } from "../../packages/slides-web/export";
-import { hostModules } from "../../packages/presentation/src/compiler/compileDeck";
 import { bundleSlidesCompiler, slidesCompilerEntry } from "./slidesCompilerBundle";
 
 /** Omit package documentation and development files; retain runtime TypeScript and licenses. */
@@ -130,6 +128,8 @@ export async function packageSlidesCompiler(destination: string) {
 
 /** Preserve only esbuild's browser input files and the links/manifests needed to resolve them. */
 async function packageSlidesWebRuntime(destination: string, copied: Map<string, string>) {
+  const { buildBrowserPlayer } = await import("../../packages/slides-web/export");
+  const { hostModules } = await import("../../packages/presentation/src/compiler/compileDeck");
   const deck = [...hostModules].map(name => `exports[${JSON.stringify(name)}] = require(${JSON.stringify(name)});`).join("\n");
   const browser = await buildBrowserPlayer(deck, [], true, "", path.join(destination, "player.js"), undefined, false);
   const files = new Set(Object.keys(browser.metafile!.inputs).filter(file => !/^(?:compiled:|<)/.test(file)).map(file => path.resolve(rootDir, file)));
@@ -224,8 +224,41 @@ export function signSlidesCompiler(directory: string, identity: string) {
   }
 }
 
-/** Produce a local, content-addressed download and the pin embedded by Babel. Never uploads. */
-export async function packageSlidesCompilerArtifact(output: string, arch: string, identity = process.env.LEGEND_DEVELOPER_ID_APPLICATION
+/** Keep the compiler archive inside a portable Spark helper, with no dependency symlinks exposed. */
+export function writeSlidesCompilerBundle(output: string, archive: string) {
+  const bytes = fs.readFileSync(archive);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  fs.mkdirSync(output, { recursive: true });
+  fs.copyFileSync(archive, path.join(output, "compiler.zip"));
+  fs.writeFileSync(path.join(output, "run"), `#!/bin/sh
+set -eu
+umask 077
+compiler_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+root="\${LEGEND_SLIDES_COMPILER_CACHE:?Missing compiler cache directory}"
+/bin/mkdir -p "$root"
+scratch="$(/usr/bin/mktemp -d "$root/.prepare-XXXXXXXX")"
+trap '/bin/rm -rf "$scratch"' EXIT
+actual="$(/usr/bin/shasum -a 256 "$compiler_dir/compiler.zip")"
+if [ "\${actual%% *}" != "${sha256}" ]; then
+  echo "The built-in deck compiler failed its integrity check. Rebuild or reinstall Legend Slides." >&2
+  exit 1
+fi
+/usr/bin/ditto -x -k "$compiler_dir/compiler.zip" "$scratch/payload"
+entry="$scratch/payload/slides-compiler.helper/run"
+if [ ! -x "$entry" ]; then
+  echo "The built-in deck compiler is incomplete. Rebuild or reinstall Legend Slides." >&2
+  exit 1
+fi
+final="$root/${sha256}"
+/bin/rm -rf "$final"
+/bin/mv "$scratch/payload/slides-compiler.helper" "$final"
+printf '%s\\n' "$final/run"
+`, { mode: 0o755 });
+  return { sha256, bytes: bytes.length };
+}
+
+/** Produce the exact compiler payload copied into the app before signing. Never uploads. */
+export async function packageSlidesCompilerBundle(output: string, arch: string, identity = process.env.LEGEND_DEVELOPER_ID_APPLICATION
   || (process.env.LEGEND_TEAM_NAME && process.env.LEGEND_TEAM_ID
     ? `Developer ID Application: ${process.env.LEGEND_TEAM_NAME} (${process.env.LEGEND_TEAM_ID})` : "-")) {
   if (arch !== process.arch) throw new Error(`Build the ${arch} compiler on a matching Mac; installed native compiler dependencies are ${process.arch}.`);
@@ -237,18 +270,12 @@ export async function packageSlidesCompilerArtifact(output: string, arch: string
     const zip = path.join(scratch, "compiler.zip");
     const packed = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", "--norsrc", helper, zip], { encoding: "utf8" });
     if (packed.status !== 0) throw new Error(`Compiler archive failed: ${packed.stderr}`);
-    const bytes = fs.readFileSync(zip);
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const name = `slides-compiler-darwin-${arch}-${sha256}.zip`;
-    fs.renameSync(zip, path.join(output, name));
-    const artifact = { url: `https://legend.so/slides/compiler/${name}`, sha256, bytes: bytes.length, arch };
-    fs.writeFileSync(path.join(output, "artifact.json"), JSON.stringify(artifact, null, 2) + "\n");
-    return artifact;
+    return { ...writeSlidesCompilerBundle(path.join(output, "helper"), zip), arch };
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 }
 
 if (import.meta.main) {
   const [output, arch = process.arch] = process.argv.slice(2);
   if (!output) throw new Error("Usage: bun scripts/lib/slidesCompiler.ts <output-directory> [arm64|x64]");
-  console.log(JSON.stringify(await packageSlidesCompilerArtifact(path.resolve(output), arch), null, 2));
+  console.log(JSON.stringify(await packageSlidesCompilerBundle(path.resolve(output), arch), null, 2));
 }

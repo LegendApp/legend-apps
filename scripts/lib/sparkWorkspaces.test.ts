@@ -153,23 +153,11 @@ test("generated native config loads the current Spark native API", async () => {
   }
 });
 
-test("Slides compiler pins invalidate Metro's persistent cache", async () => {
-  const project = prepareSparkWorkspace(await loadAppManifest("slides"), "release");
-  const source = fs.readFileSync(path.join(project, "metro.config.js"), "utf8");
-  const cacheVersion = (pin: string) => {
-    const module = { exports: {} as { cacheVersion?: string } };
-    runInNewContext(source, {
-      __dirname: project, module, process: { env: { EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT: pin } },
-      require: (name: string) => name === "node:path" ? path : {
-        makeMetroConfig: () => ({ cacheVersion: "base", resolver: {}, server: {} }),
-        withDesktop: (config: unknown) => config,
-        withUniwindConfig: (config: unknown) => config,
-      },
-    });
-    return module.exports.cacheVersion;
-  };
-  assert.equal(cacheVersion("first-pin"), "base|first-pin");
-  assert.notEqual(cacheVersion("first-pin"), cacheVersion("next-pin"));
+test("Slides Release declares its built-in compiler helper; Debug uses the checkout", async () => {
+  const manifest = await loadAppManifest("slides");
+  const release = sparkConfig(manifest, "release");
+  assert.deepEqual(release.helpers["slides-compiler"]["macos-arm64"], { directory: ".spark/compiler/helper", executable: "run" });
+  assert.equal(sparkConfig(manifest, "dev").helpers, undefined);
 });
 
 test("unknown declared native modules cannot be silently excluded", async () => {

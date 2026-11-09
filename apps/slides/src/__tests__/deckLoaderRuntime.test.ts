@@ -20,12 +20,12 @@ mock.module("../slidesSettings", () => ({ getCompilerRuntimePathSetting: () => "
 mock.module("@legendapp/spark/files", () => ({ getDirectory: async () => "/Users/me/Library/Application Support/Slides", exists() {}, mkdir() {}, move() {}, remove() {} }));
 mock.module("@legendapp/spark/processes", () => ({ runCommand: options => run(options), spawn() {}, resolveCommand() {} }));
 mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => value }));
-class CompilerDownloadError extends Error {}
+class CompilerPreparationError extends Error {}
 const compilerHelper$ = observable({ retryDeck: null });
 let helperFailure = false;
 mock.module("../compilerHelper", () => ({
-  resolveCompilerHelper: async () => { if (helperFailure) throw new CompilerDownloadError("Connect to the internet and choose Retry Compiler Download."); return "/compiler/run"; },
-  compilerHelper$, CompilerDownloadError,
+  resolveCompilerHelper: async () => { if (helperFailure) throw new CompilerPreparationError("Rebuild the app or choose Retry Compiler Preparation."); return "/compiler/run"; },
+  compilerHelper$, CompilerPreparationError,
 }));
 globalThis.__DEV__ = false;
 const compilerRuntime = await import("../compilerRuntime");
@@ -63,7 +63,7 @@ mocks["./deckNotesReload"] = notesModule.exports;
 const module = { exports: {} };
 const code = transformSync(readFileSync(new URL("../deckLoader.ts", import.meta.url), "utf8"), { loader: "ts", format: "cjs" }).code;
 Function("require", "module", "exports", code)(name => mocks[name] ?? {}, module, module.exports);
-const { loadDeck, previewDeckSource, invalidateDeckBuild, retryCompilerDownload } = module.exports;
+const { loadDeck, previewDeckSource, invalidateDeckBuild, retryCompilerPreparation } = module.exports;
 mock.module("../deckLoader", () => ({ loadDeck }));
 const turn = () => new Promise(done => setTimeout(done, 0));
 function deferred() {
@@ -270,23 +270,23 @@ test("failed on-demand installation leaves the deck prompt and subsequent loads 
   expect(getSlidesState()).toMatchObject({ deckPath: "/failed.mdx", status: "ready" });
 });
 
-test("helper download failure registers only the current deck and a retry opens it", async () => {
+test("helper preparation failure registers only the current deck and a retry opens it", async () => {
   discover = async () => runtime;
   await resolveCompilerRuntime({ refresh: true });
   helperFailure = true;
   try {
     expect(await loadDeck("/helper-first.mdx")).toBe(false);
     expect(compilerHelper$.retryDeck.peek()).toBe("/helper-first.mdx");
-    expect(getSlidesState().buildErrors.join(" ")).toContain("Retry Compiler Download");
+    expect(getSlidesState().buildErrors.join(" ")).toContain("Retry Compiler Preparation");
     expect(await loadDeck("/helper-latest.mdx", false, "# Unsaved draft")).toBe(false);
     expect(compilerHelper$.retryDeck.peek()).toBe("/helper-latest.mdx");
     helperFailure = false;
     let input;
     run = async options => { input = options.input; return success; };
-    expect(await retryCompilerDownload()).toBe(true);
+    expect(await retryCompilerPreparation()).toBe(true);
     expect(input).toBe("# Unsaved draft");
     invalidateDeckBuild();
-    expect(retryCompilerDownload()).toBeUndefined();
+    expect(retryCompilerPreparation()).toBeUndefined();
     expect(compilerHelper$.retryDeck.peek()).toBeNull();
   } finally { helperFailure = false; }
 });

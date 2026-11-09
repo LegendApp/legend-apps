@@ -77,15 +77,15 @@ export function CompilerRuntimePrompt() {
   </View>;
 }
 
-/** Helper acquisition is separate from choosing the Bun/Node runtime. */
-export function CompilerDownloadPrompt() {
+/** Preparing the bundled compiler is separate from choosing the Bun/Node runtime. */
+export function CompilerHelperPrompt() {
   const busy = useValue(compilerHelper$.busy), message = useValue(compilerHelper$.message);
   const error = useValue(compilerHelper$.error), path = useValue(compilerHelper$.retryDeck);
   if (!busy && (!error || !path)) return null;
   return <View style={{ padding: 16, borderRadius: 10, backgroundColor: "#20242c", gap: 10 }}>
     <Text style={{ color: "#fafafa", fontSize: 14 }}>{busy ? message : error}</Text>
-    {!busy && path && <RuntimeButton title="Retry Compiler Download" onPress={() => {
-      void import("./deckLoader").then(({ retryCompilerDownload }) => retryCompilerDownload());
+    {!busy && path && <RuntimeButton title="Retry Compiler Preparation" onPress={() => {
+      void import("./deckLoader").then(({ retryCompilerPreparation }) => retryCompilerPreparation());
     }} />}
   </View>;
 }

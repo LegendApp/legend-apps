@@ -1,21 +1,17 @@
-# Slides compiler downloads
+# Slides built-in compiler
 
-macOS Slides downloads its existing compiler helper on first compiler use (opening a deck or a compiler-backed effects action). Native rendering features and the compiler payload are unchanged. Development builds still use the source compiler and a local Bun.
+macOS Release apps include the deck compiler in `Contents/Helpers/slides-compiler.helper`. Opening a deck and compiler-backed effects actions do not download compiler code. Development builds use the checkout compiler and local Bun instead.
 
-## Local production
+## Packaging
 
-`bun run slides build macos` (or `bun scripts/spark-app.ts slides build-release`) packages the helper **before** the app's Metro bundle. The build writes a ZIP and `artifact.json` under `shell/.legend/spark/slides-release/.spark/compiler/`. The ZIP contains the same bundled compiler, stylesheets, browser runtimes and native esbuild/lightningcss/oxide dependencies as the former embedded helper. It is signed before archiving using the app’s identity fallback: `LEGEND_DEVELOPER_ID_APPLICATION`, or `Developer ID Application: <LEGEND_TEAM_NAME> (<LEGEND_TEAM_ID>)` when both team variables are set. Without either configuration, signing is ad hoc (`-`). Build each architecture on a matching Mac with that architecture's workspace dependencies. No runtime or package installation is added.
+`bun run slides build macos` packages the compiler before preparing the Release workspace. `.spark/compiler/helper/` contains a signed compiler archive (`compiler.zip`) and its SHA-256-pinned preparation launcher. Spark copies this portable helper into the app before signing. Its preparation fingerprint includes the archive, so changed compiler bytes invalidate app reuse. Build each architecture on a matching Mac with matching workspace dependencies.
 
-For an artifact-only local build, run `bun scripts/lib/slidesCompiler.ts <output-directory> [arm64|x64]`. This does not build, upload or distribute the app.
+For compiler-only packaging, use `bun scripts/lib/slidesCompiler.ts <output-directory> [arm64|x64]`. No upload or hosting step is required. The archive retains the compiler, stylesheets, Webview runtimes and native esbuild/lightningcss/oxide dependencies, including internal dependency links. The outer Spark helper contains regular files only.
 
-Babel embeds the descriptor's exact URL, SHA-256, compressed byte count and architecture through `EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT`. The descriptor also keys Metro's persistent cache so a rebuild cannot retain an earlier pin. App and compiler must be built together; no remotely mutable manifest selects executable code. The app bundle no longer contains `Contents/Helpers/slides-compiler.helper`. Normal macOS packaging signs the app without modifying the external compiler archive.
+## First use and failures
 
-## Hosting contract (manual; builds never upload)
+The app launches its bundled helper through Spark. On first use in each app session, the launcher verifies the bundled archive and extracts it into Application Support under `compiler/<sha256>/`, repairing changed or missing extracted files. Concurrent commands share preparation; later commands reuse it. Failed extraction is staged separately and never executed. Older content-addressed compiler directories are not automatically evicted.
 
-Host each generated ZIP at `https://legend.so/slides/compiler/slides-compiler-darwin-<arch>-<sha256>.zip`, on the pack catalog's origin. Serve the exact ZIP bytes with HTTP 200, no redirect or transformation, and long-lived immutable caching. Keep old artifacts available while their app versions are supported. Publish/verify the artifact before distributing its matching app; an unpublished or missing artifact produces the retry message. `artifact.json` is local build evidence, not a runtime catalog. Do not re-sign or re-compress a ZIP after its pin has been embedded; rebuild the app if it changes. Artifact signing/notarization and app release remain manual release responsibilities.
+Integrity or preparation failures offer **Retry Compiler Preparation** for the pending deck. A damaged app should be rebuilt or reinstalled; connecting to the internet cannot repair its bundled archive.
 
-## Cache and failures
-
-The app stores `<sha256>.zip` and the extracted helper under its Application Support `compiler/` directory. Concurrent commands share one acquisition. Each app launch verifies the cached ZIP against the embedded SHA-256 and re-extracts it on first use, repairing missing or changed extracted files offline. Subsequent commands in that launch reuse the extracted helper. A partial download/extraction is staged separately and is never executed. Different app pins coexist; there is no automatic eviction of older compiler versions.
-
-Without a cached ZIP, offline use cannot compile new decks. Connection, integrity and extraction failures show a specific message and a **Retry Compiler Download** action for the pending deck; effects actions retain their existing retry controls. Bun/Node selection and its separate on-demand Bun download are unchanged. Once acquired, the helper receives the same command arguments, environment, draft input and output handling as before.
+The JavaScript runtime is separate: use an existing Bun 1.3+ or Node 22+, or download Bun through Settings. A fresh machine without either runtime still needs that one-time setup. Once the runtime is available, compiler preparation works offline without a source checkout.

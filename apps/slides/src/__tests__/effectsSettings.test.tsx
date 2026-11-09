@@ -25,6 +25,7 @@ const slidesState$ = observable({ deckLocked: false, audienceOpen: false });
 mock.module("../slidesStore", () => ({ slidesState$, getSlidesState: () => slidesState$.peek() }));
 mock.module("@legend-apps/presentation", () => ({ NativeVideoView: "video" }));
 mock.module("../compilerRuntime", () => ({ runtimeHost() {}, compilerRuntime$: observable({}), changeCompilerRuntime() {}, resolveCompilerRuntime() {}, downloadCompilerRuntime() {}, setCustomCompilerRuntime() {} }));
+mock.module("@legendapp/spark/processes", () => ({ runCommand() {} }));
 mock.module("@legendapp/spark/dialogs", () => ({ openFileDialog() {} }));
 mock.module("@legendapp/spark/settings/window", () => ({
   SettingsSection: ({ title, description, headerRight, children }) => <section title={title} description={description}>{headerRight}{children}</section>,
@@ -136,7 +137,7 @@ test("presenter stacks simultaneous runtime, compiler and effects banners", asyn
     expect(button(column, "Install Required Effects")).toBeDefined();
     await act(() => compilerRuntime$.status.set("ready"));
     expect(banners()).toHaveLength(2);
-    expect(button(column, "Retry Compiler Download")).toBeDefined();
+    expect(button(column, "Retry Compiler Preparation")).toBeDefined();
   } finally {
     if (renderer) await act(() => renderer.unmount());
     compilerRuntime$.assign({ retryDeck: null, status: "ready", error: "" });

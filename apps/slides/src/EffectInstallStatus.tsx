@@ -3,10 +3,10 @@ import { Pressable, Text, View } from "react-native";
 import { loadDeck } from "./deckLoader";
 import { runEffectCommand } from "./effectCommands";
 import { effectRequests$ } from "./effectRequests";
-import { CompilerRuntimePrompt, CompilerDownloadPrompt } from "./CompilerRuntimePrompt";
+import { CompilerRuntimePrompt, CompilerHelperPrompt } from "./CompilerRuntimePrompt";
 export function EffectInstallStatus() {
   return <View pointerEvents="box-none" className="absolute bottom-4 left-4 right-4 z-20 gap-2">
-    <CompilerRuntimePrompt /><CompilerDownloadPrompt /><EffectPackStatus />
+    <CompilerRuntimePrompt /><CompilerHelperPrompt /><EffectPackStatus />
   </View>;
 }
 

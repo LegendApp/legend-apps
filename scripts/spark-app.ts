@@ -25,7 +25,6 @@ const env = {
   LEGEND_APP: appId, LEGEND_PLATFORM: "macos", SPARK_PLATFORM: "macos",
   ...(installOptions.offline ? { LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } : {}),
   EXPO_PUBLIC_LEGEND_SYNTAX_ASSET_SOURCE: ["start", "run"].includes(action) ? getDevSyntaxAssetSourceRoot() : undefined,
-  EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT: undefined as string | undefined,
   EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_PATH: appId === "slides" ? getSlidesCompilerPath() : undefined,
   EXPO_PUBLIC_LEGEND_DIFF_CUSTOMIZER_PATH: appId === "diff" ? path.resolve(project, "../../../../scripts/diff-customization.mjs") : undefined,
 };
@@ -39,6 +38,10 @@ try {
   if (["install", "build", "build-release", "run", "start"].includes(action)) {
     await prepareSparkReleasePackages(sharedProject, installOptions.offline);
     installSparkWorkspace({ project: sharedProject, appId, env, ...installOptions });
+  }
+  if (appId === "slides" && action === "build-release") {
+    const { packageSlidesCompilerBundle } = await import("./lib/slidesCompiler");
+    await packageSlidesCompilerBundle(path.join(project, ".spark/compiler"), process.env.SPARK_MACOS_ARCH ?? process.arch);
   }
   prepareSparkWorkspace(manifest, mode);
   if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
@@ -57,12 +60,6 @@ else if (action !== "install") {
     await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, appArgs, env });
   }
   else if (action === "build-release" || action === "build") {
-    if (appId === "slides" && action === "build-release") {
-      const { packageSlidesCompilerArtifact } = await import("./lib/slidesCompiler");
-      const arch = process.env.SPARK_MACOS_ARCH ?? process.arch;
-      const artifact = await packageSlidesCompilerArtifact(path.join(project, ".spark/compiler"), arch);
-      env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = JSON.stringify(artifact);
-    }
     runCommand("node", [cli, ...buildArgs], { cwd: project, env });
   }
   else if (action === "start") await runSparkDevServer({ appId, project, cli, runnerArgs: actionArgs, noOpen: true, env });

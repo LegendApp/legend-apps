@@ -3,7 +3,7 @@ import { createDeckReloadQueue } from "./deckReloadQueue";
 import { deckNotesInputs, deckNotesSource } from "./deckNotesReload";
 import { deckWatchDirectories } from "./deckWatchDirectories";
 import { effectRequests$, reportMissingEffects } from "./effectRequests";
-import { CompilerDownloadError, compilerHelper$ } from "./compilerHelper";
+import { CompilerPreparationError, compilerHelper$ } from "./compilerHelper";
 import { runCompilerCommand } from "./compilerCommand";
 import { CompilerRuntimeMissingError, compilerRuntime$, downloadCompilerRuntime } from "./compilerRuntime";
 import { list, readText, stat, writeTextIfUnchanged } from "@legendapp/spark/files";
@@ -53,7 +53,7 @@ let retryCompilerDeck: (() => Promise<boolean>) | undefined;
 
 let draftReloadHandler: ((path: string) => Promise<unknown>) | undefined;
 
-export function retryCompilerDownload() { return retryCompilerDeck?.(); }
+export function retryCompilerPreparation() { return retryCompilerDeck?.(); }
 
 export function setDraftReloadHandler(handler?: (path: string) => Promise<unknown>) {
   draftReloadHandler = handler;
@@ -218,7 +218,7 @@ export async function loadDeck(path: string, remember = true, draftSource?: stri
       break;
     } catch (error) {
       if (sequence === buildSequence) {
-        if (error instanceof CompilerDownloadError) {
+        if (error instanceof CompilerPreparationError) {
           compilerHelper$.retryDeck.set(path);
           retryCompilerDeck = () => loadDeck(path, remember, draftSource, onSourceIndex);
         }

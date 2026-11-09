@@ -1,6 +1,6 @@
 # Slides macOS download size
 
-Measure a newly built Release app, including its matching compiler pin. Debug builds and old app artifacts are not comparable. Keep Skia, Lottie, WebGPU and Reanimated enabled: native rendering features are part of the host, even when effect sources come from downloadable packs.
+Measure a newly built Release app, including its bundled compiler. Debug builds and old app artifacts are not comparable. Keep Skia, Lottie, WebGPU and Reanimated enabled: native rendering features are part of the host, even when effect sources come from downloadable packs.
 
 ## Local check
 
@@ -9,10 +9,10 @@ bun run slides build macos
 bun scripts/slides-size-budget.ts \
   shell/.legend/spark/slides-release/.spark/products/macos-arm64/release/LegendSlides.app \
   --zip /tmp/LegendSlides-size.zip \
-  --compiler shell/.legend/spark/slides-release/.spark/compiler/slides-compiler-darwin-arm64-<sha256>.zip
+  --compiler shell/.legend/spark/slides-release/.spark/compiler/helper/compiler.zip
 ```
 
-Use a new output ZIP path each time. The script reports JSON and exits 1 if the app ZIP exceeds **25,000,000 bytes** or the optional compiler ZIP exceeds **12,000,000 bytes**. Override these local regression guardrails with `--budget-mb` and `--compiler-budget-mb` (decimal MB). They are not release promises or wired into CI. Check both downloads separately: compiler bytes are deferred until first use, not part of the app download. Read the exact compiler filename from `.spark/compiler/artifact.json`.
+Use a new output ZIP path each time. The script reports JSON and exits 1 if the app ZIP exceeds **25,000,000 bytes** or the optional compiler ZIP exceeds **12,000,000 bytes**. Override these local regression guardrails with `--budget-mb` and `--compiler-budget-mb` (decimal MB). They are not release promises or wired into CI. The compiler is included in the app ZIP; the optional compiler figure measures its contribution separately. The existing thresholds and measurements below predate bundling the compiler and need a new Release baseline; no new size claim is made here.
 
 The ZIP uses `ditto -c -k -rsrc --sequesterRsrc --keepParent`, matching the notarization upload archive shape. The check does not sign, notarize, upload, release or bump versions. Signing and stapling can change the final distribution's size. Logical app bytes sum regular files without following symlinks; components partition executable, JS bundle, frameworks/dylibs, assets (including fonts), helpers and metadata. Filesystem allocation and compressed ZIP size are different metrics.
 
@@ -37,7 +37,7 @@ The Spark SDK already requests Release dead-code stripping, thin LTO, size optim
 
 Compiler package filtering keeps licenses, manifests, runtime TypeScript, CSS and native binaries while omitting development/test/documentation files, declarations and source maps. React's production JSX development-runtime entry remains available for explicit Webview imports. The trimmed helper is production-only: `NODE_ENV=development` fails with module-not-found errors for removed development builds. Verify the packaged helper outside the repository with Bun and Node, including CSS generation, worklets, Webviews and effect-pack compilation after any filter change.
 
-The compiler-on-demand branch supplies the separate download contract; see [compiler downloads](slides-compiler-download.md). The unmerged [HTML export action](https://github.com/LegendApp/legend-apps/pull/6) adds a browser runtime dependency closure to the helper. This work does not depend on that PR. When it lands, the 12 MB compiler budget is expected to be re-baselined upward after measuring the combined artifact; preserve HTML export and other real features rather than trimming them to fit the current budget.
+The compiler is bundled with the app; see [built-in compiler packaging](slides-compiler-download.md). The measurements below describe the earlier separate-download design. Preserve the compiler’s browser runtime and native dependencies when establishing new size budgets.
 
 ## Fresh arm64 Release measurement (2026-10-26)
 

@@ -1,34 +1,37 @@
-// @ts-nocheck Native I/O is replaced to test shared acquisition and explicit retry.
+// @ts-nocheck Native helper launch is replaced; run the actual preparation and shared retry state.
 import { expect, mock, test } from "bun:test";
-let installs = 0, complete;
-mock.module("../compilerRuntime", () => ({ runtimeHost: async () => ({}) }));
-class CompilerDownloadError extends Error {}
-mock.module("../compilerHelperCore", () => ({ CompilerDownloadError, installCompilerHelper: async (_host, _pin, report) => {
-  installs++; report("Downloading deck compiler…");
+import { CompilerPreparationError } from "../compilerHelperCore";
+const calls = [];
+let complete;
+mock.module("../compilerRuntime", () => ({ runtimeHost: async () => ({ dataDirectory: "/data", exists: async () => true }) }));
+mock.module("@legendapp/spark/processes", () => ({ runCommand: options => {
+  calls.push(options);
   return new Promise((resolve, reject) => { complete = { resolve, reject }; });
 } }));
-process.env.EXPO_PUBLIC_LEGEND_SLIDES_COMPILER_ARTIFACT = JSON.stringify({ sha256: "pin" });
+mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: value => value }));
 const { compilerHelper$, resolveCompilerHelper } = await import("../compilerHelper");
 const turn = () => new Promise(done => setTimeout(done, 0));
 
-test("concurrent commands share acquisition, failure clears it, success is reused", async () => {
+test("concurrent commands share bundled preparation, failure clears it, and success is reused", async () => {
   const first = resolveCompilerHelper(), second = resolveCompilerHelper();
   expect(first).toBe(second);
   await turn();
-  expect(installs).toBe(1);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ target: { type: "helper", name: "slides-compiler" }, env: { LEGEND_SLIDES_COMPILER_CACHE: "/data/compiler" } });
   expect(compilerHelper$.busy.peek()).toBe(true);
-  expect(compilerHelper$.message.peek()).toBe("Downloading deck compiler…");
-  complete.reject(new CompilerDownloadError("offline: retry"));
-  await expect(first).rejects.toThrow("offline: retry");
-  await expect(second).rejects.toThrow("offline: retry");
+  expect(compilerHelper$.message.peek()).toBe("Preparing built-in deck compiler…");
+  complete.reject(new CompilerPreparationError("corrupt built-in compiler: retry"));
+  await expect(first).rejects.toThrow("corrupt built-in compiler: retry");
+  await expect(second).rejects.toThrow("corrupt built-in compiler: retry");
   expect(compilerHelper$.busy.peek()).toBe(false);
-  expect(compilerHelper$.error.peek()).toBe("offline: retry");
+  expect(compilerHelper$.error.peek()).toBe("corrupt built-in compiler: retry");
   const retry = resolveCompilerHelper();
   await turn();
-  expect(installs).toBe(2);
+  expect(calls).toHaveLength(2);
   expect(compilerHelper$.error.peek()).toBe("");
-  complete.resolve("/verified/run");
-  expect(await retry).toBe("/verified/run");
-  expect(await resolveCompilerHelper()).toBe("/verified/run");
-  expect(installs).toBe(2);
+  const entry = `/data/compiler/${"a".repeat(64)}/run`;
+  complete.resolve({ exit: { type: "exited", code: 0 }, stdout: entry, stderr: "" });
+  expect(await retry).toBe(entry);
+  expect(await resolveCompilerHelper()).toBe(entry);
+  expect(calls).toHaveLength(2);
 });
