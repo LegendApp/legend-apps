@@ -1,7 +1,7 @@
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePreparationTask } from "@legend-apps/presentation";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
 import { useBackgroundIntensitySetting } from "./slidesSettings";
 import { getSlideStepCount, slidesState$ } from "./slidesStore";
@@ -61,7 +61,10 @@ export function PreviewStillCapture({ children, target, paused, generation, add 
 export function PreviewStillSweep({ add, aspect, generation, paused, targets, stills }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[]; stills: Record<string, string> }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const noSurface = useRef(new Set<number>());
-  const target = targets.find(key => !stills[key] && !skipped.includes(key) && !noSurface.current.has(Number(key.split(":")[0])));
+  const missing = targets.filter(key => !stills[key] && !noSurface.current.has(Number(key.split(":")[0])));
+  const unavailable = missing.filter(key => skipped.includes(key)).length;
+  const target = missing.find(key => !skipped.includes(key));
+  const completed = targets.length - missing.length;
   const { request, announced } = useStillRequest(target, paused, generation, add);
   useEffect(() => {
     if (paused || !target) return;
@@ -72,13 +75,22 @@ export function PreviewStillSweep({ add, aspect, generation, paused, targets, st
     }, NO_SURFACE_MS);
     return () => clearTimeout(timer);
   }, [target, paused]);
-  if (paused || !target) return null;
-  const [slide, step] = target.split(":").map(Number);
-  return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
-    <SurfaceStillContext.Provider value={request}>
-      <SlideCanvas targetIndex={slide} targetStep={step} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={slide} targetStep={step} /></SlideCanvas>
-    </SurfaceStillContext.Provider>
-  </View>;
+  if (targets.length === 0) return null;
+  const label = target ? `${paused ? "Preview preparation paused" : "Preparing previews"} · ${completed}/${targets.length}`
+    : unavailable ? `Previews incomplete · ${unavailable} unavailable` : `Previews ready · ${targets.length}/${targets.length}`;
+  const [slide, step] = target?.split(":").map(Number) ?? [];
+  return <>
+    <View accessibilityLiveRegion="polite" accessibilityLabel={label} accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: targets.length, now: completed }} className="flex-row items-center gap-2 px-3 py-1">
+      {!paused && target && <ActivityIndicator size="small" color="#a1a1aa" accessibilityLabel="Preparing previews" />}
+      <Text className="text-xs text-zinc-400">{label}</Text>
+    </View>
+    {!paused && target && <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
+      <SurfaceStillContext.Provider value={request}>
+        <SlideCanvas targetIndex={slide} targetStep={step} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={slide} targetStep={step} /></SlideCanvas>
+      </SurfaceStillContext.Provider>
+    </View>}
+  </>;
 }
 
 export function PreviewStillStack({ stills, targets, target }: { stills: Record<string, string>; targets: string[]; target: string }) {

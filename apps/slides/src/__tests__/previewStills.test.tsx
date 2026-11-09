@@ -9,7 +9,7 @@ const SurfaceStillContext = React.createContext(null);
 let slides = [{ steps: 2 }, { steps: 1 }];
 let revision = 1, intensity = 1;
 mock.module("react-native", () => ({
-  View: "view",
+  View: "view", ActivityIndicator: "spinner",
   Image: "image", Text: "text",
   StyleSheet: { create: value => value, absoluteFill: {} },
 }));
@@ -80,6 +80,56 @@ test("deck opening bakes every reveal once on one hidden surface, then stays idl
     expect(view.current.stills["15:3"]).toBe("uri-15:3");
     expect(view.current.stills["15:4"]).toBe("uri-15:4");
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("preparation status follows captures, pauses, and completes without further capture work", async () => {
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    expect(renderer.root.findByType("text").props.children).toBe("Preparing previews · 0/3");
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(1);
+    await act(() => request.deliver("0:0", "first"));
+    expect(renderer.root.findByType("text").props.children).toBe("Preparing previews · 1/3");
+    await act(() => renderer.update(<Host view={view} paused />));
+    expect(renderer.root.findByType("text").props.children).toBe("Preview preparation paused · 1/3");
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    await act(() => renderer.update(<Host view={view} />));
+    await act(() => request.deliver("1:0", "second"));
+    await act(() => request.deliver("0:1", "third"));
+    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("a GPU capture timeout reports incomplete preparation, never ready", async () => {
+  slides = [{ steps: 1 }];
+  const setTimer = globalThis.setTimeout;
+  const timer = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) =>
+    setTimer(callback, delay === 400 || delay === 8000 ? 1 : delay, ...args));
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await wait(20);
+    expect(renderer.root.findByType("text").props.children).toBe("Previews incomplete · 1 unavailable");
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    await act(() => view.current.add("0:0", "recovered", view.current.generation));
+    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 1/1");
+  } finally { timer.mockRestore(); await act(() => renderer?.unmount()); }
+});
+
+test("no preparation indicator appears before a deck is loaded", async () => {
+  slides = [];
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={{}} />); });
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
+    expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
   } finally { await act(() => renderer?.unmount()); }
 });
 
@@ -190,8 +240,10 @@ test("a slide with no GPU background is skipped once, without waiting on its oth
   await wait(450);
   // Slide 0 never announced a surface, so its second step is not rendered at all.
   expect(request.id).toBe("1:0");
+  expect(renderer.root.findByType("text").props.children).toBe("Preparing previews · 2/3");
   await act(() => request.deliver("1:0", "b"));
   expect(view.current.stills).toEqual({ "1:0": "b" });
+  expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
   await act(() => renderer.unmount());
 });
 

@@ -226,8 +226,8 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
       capture={{ target: stillKey(shownNextIndex, shownNextStep), generation: sweep.generation, add: sweep.add,
         paused: capturePaused || !!shownNextStill || stillKey(nextIndex, nextStep) === stillKey(currentIndex, currentStep) }}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
+      <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
       <View style={[styles.previews, { flex: previewWeight }]}>
-        <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
         <PresenterPreview pending={currentPending} weight={showNext ? layout.currentPreviewRatio : 1}>
           <Preview aspect={audienceAspect} index={shownIndex} animate={!audienceOpen} stepIndex={shownStep} still={shownStill}
             capture={{ target: stillKey(shownIndex, shownStep), generation: sweep.generation, add: sweep.add, paused: capturePaused || !!shownStill }}/>
