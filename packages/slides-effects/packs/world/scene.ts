@@ -162,7 +162,7 @@ function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: Cloc
   const origin = frame.at ?? (clock.stepOrigins[frame.step ?? 0] ?? clock.slideTime - clock.stepTime) + (frame.delay ?? 0);
   const elapsed = Math.max(0, clock.slideTime - origin);
   const completed = frame.at === undefined && (frame.step ?? 0) < clock.stepIndex && clock.stepOrigins[frame.step ?? 0] === undefined;
-  if (frame.loop) return completed ? frame.value : sampleTrackFrames({ initial: frame.value, frames: frame.loop.frames },
+  if (frame.loop) return sampleTrackFrames({ initial: frame.value, frames: frame.loop.frames },
     clockAtTime(clock, elapsed % frame.loop.every), frame.loop.frames.length);
   const progress = completed || (frame.duration ?? 0.65) <= 0 ? 1 : elapsed / (frame.duration ?? 0.65);
   // A finished frame holds its value. Skipping its start value keeps dense back-to-back keyframes linear instead of
