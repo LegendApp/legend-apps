@@ -4,7 +4,7 @@ import { expect, mock, test } from "bun:test";
 import React, { Profiler } from "react";
 import { act, create } from "react-test-renderer";
 const jobs = [];
-let resolveCapture, nativeCaptures = 0, posterLoads = 0;
+let resolveCapture, nativeCaptures = 0;
 mock.module("@legend-apps/presentation", () => ({ snapshotCaptureQueue: {
   enqueue(run) { const job = { run, cancelled: false }; jobs.push(job); return () => { job.cancelled = true; }; },
 } }));
@@ -13,7 +13,7 @@ mock.module("@shopify/react-native-skia", () => ({ Canvas: "canvas", Image: "sk-
 }));
 const { createSnapshotImageCache } = await import("../../presentation/src/snapshotImageCache");
 const cache = createSnapshotImageCache({ dispose: image => image.dispose() });
-mock.module("../packs/media/blurImages", () => ({ blurImages: cache, resizeBlurImage: image => image, disposeBlurImage: image => image.dispose(), loadPosterBlurImage: () => { posterLoads++; return new Promise(resolve => { resolveCapture = resolve; }); } }));
+mock.module("../packs/media/blurImages", () => ({ blurImages: cache, resizeBlurImage: image => image, disposeBlurImage: image => image.dispose() }));
 const { CarouselBlurView } = await import("../packs/media/CarouselBlurView");
 test("layout and capture completion publish shared values without React commits, cancelling stale captures", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -100,20 +100,75 @@ test("static snapshots are shared across windows and reused after unmount, witho
 });
 
 
-test("recording posters share a composed texture across windows without native view capture", async () => {
-  jobs.length = 0; cache.clear(); nativeCaptures = posterLoads = 0;
+test("mounted posters keep live fallback until onLoad, crossfade on the UI clock, and cancel stale loads", async () => {
+  jobs.length = 0; cache.clear(); nativeCaptures = 0;
   const progress = { value: { position: 0 } };
-  let a, b;
-  const content = <CarouselBlurView enabled progress={progress} index={1} poster="recording.png" posterTop={10}><video /></CarouselBlurView>;
-  const layout = tree => tree.root.findAllByType("view")[0].props.onLayout({ nativeEvent: { layout: { width: 100, height: 60 } } });
+  let tree, commits = 0;
+  const content = (poster = "recording.png", enabled = true) => <Profiler id="poster" onRender={() => commits++}>
+    <CarouselBlurView enabled={enabled} progress={progress} index={1} poster={poster} posterTop={10}><video /></CarouselBlurView>
+  </Profiler>;
+  const opacity = () => tree.root.findAllByType("animated-view").map(view => view.props.style[1].value.opacity);
   try {
-    await act(() => { a = create(content); b = create(content); });
-    await act(() => { layout(a); layout(b); });
-    const first = jobs[0].run();
-    const image = { width: () => 100, height: () => 60, dispose() {} };
-    await act(async () => { resolveCapture(image); await first; await jobs[1].run(); });
-    expect(nativeCaptures).toBe(0); expect(posterLoads).toBe(1);
-    expect(a.root.findByType("sk-image").props.image.value).toBe(image);
-    expect(b.root.findByType("sk-image").props.image.value).toBe(image);
-  } finally { await act(() => { a?.unmount(); b?.unmount(); }); cache.clear(); }
+    await act(() => { tree = create(content()); });
+    const firstLoad = tree.root.findByType("image").props.onLoad;
+    const initial = commits;
+    expect(opacity()).toEqual([1, 0]);
+    expect(tree.root.findByType("image").props.blurRadius).toBe(10);
+    expect(tree.root.findByType("image").props.resizeMode).toBe("contain");
+    expect(tree.root.findAllByType("canvas")).toHaveLength(0);
+    expect(jobs).toHaveLength(0);
+    expect(nativeCaptures).toBe(0);
+    progress.value.position = 0.5;
+    expect(opacity()).toEqual([1, 0]);
+    await act(() => firstLoad());
+    expect(opacity()).toEqual([0.5, 0.5]);
+    expect(commits).toBe(initial);
+    progress.value.position = 1;
+    expect(opacity()).toEqual([1, 0]);
+    progress.value.position = 0;
+    expect(opacity()).toEqual([0, 1]);
+    await act(() => tree.update(content("replacement.png")));
+    expect(opacity()).toEqual([1, 0]);
+    await act(() => firstLoad());
+    expect(opacity()).toEqual([1, 0]);
+    await act(() => tree.root.findByType("image").props.onLoad());
+    expect(opacity()).toEqual([0, 1]);
+    await act(() => tree.update(content("replacement.png", false)));
+    expect(opacity()).toEqual([1, 0]);
+    await act(() => tree.update(content("replacement.png", true)));
+    expect(opacity()).toEqual([0, 1]);
+    const lateLoad = tree.root.findByType("image").props.onLoad;
+    await act(() => tree.unmount()); tree = undefined;
+    await act(() => lateLoad());
+  } finally { if (tree) await act(() => tree.unmount()); cache.clear(); }
+});
+
+test("poster captions retain a native text snapshot and media header geometry", async () => {
+  jobs.length = 0;
+  let tree;
+  try {
+    await act(() => { tree = create(<CarouselBlurView enabled progress={{ value: { position: 0 } }} index={1}
+      poster="captioned.png" posterTop={100} posterCaption="Sample app"><video /></CarouselBlurView>); });
+    await act(() => tree.root.findAllByType("view")[0].props.onLayout({ nativeEvent: { layout: { width: 1600, height: 1000 } } }));
+    expect(tree.root.findByType("text").props.style).toEqual({ color: "#f8fafc", fontSize: 1600 * 0.035, fontWeight: "600" });
+    expect(tree.root.findAllByType("canvas")).toHaveLength(1);
+    const body = tree.root.findByType("image").parent.props.style[1];
+    expect(body).toEqual({ top: 100, borderRadius: 12, overflow: "hidden", backgroundColor: "#14253a" });
+  } finally { if (tree) await act(() => tree.unmount()); }
+});
+
+
+test("a preview poster load cannot hide the audience live fallback", async () => {
+  let audience, preview;
+  const content = position => <CarouselBlurView enabled progress={{ value: { position } }} index={1} poster="shared.png"><video /></CarouselBlurView>;
+  try {
+    await act(() => { audience = create(content(0)); preview = create(content(1)); });
+    await act(() => preview.root.findByType("image").props.onLoad());
+    expect(audience.root.findAllByType("animated-view")[0].props.style[1].value.opacity).toBe(1);
+    expect(audience.root.findAllByType("animated-view")[1].props.style[1].value.opacity).toBe(0);
+    expect(preview.root.findAllByType("animated-view")[0].props.style[1].value.opacity).toBe(1);
+    await act(() => audience.root.findByType("image").props.onLoad());
+    expect(audience.root.findAllByType("animated-view")[0].props.style[1].value.opacity).toBe(0);
+    expect(preview.root.findAllByType("animated-view")[0].props.style[1].value.opacity).toBe(1);
+  } finally { await act(() => { audience?.unmount(); preview?.unmount(); }); }
 });
