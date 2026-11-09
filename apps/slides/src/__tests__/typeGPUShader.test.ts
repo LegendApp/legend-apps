@@ -5,17 +5,17 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 import { fileURLToPath } from "node:url";
 
-function frames({ suspended = false, preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount, still, encode } = {}) {
+function frames({ compiled = false, scaling = true, suspended = false, preview = false, active = true, effectActive = true, maxTime, frameTimeIndex, preparing = false, composite = false, data = false, clockMode = "step", simulation = true, graph = false, particleCount = 2048, particleVertexCount, still, encode } = {}) {
   const filename = fileURLToPath(new URL("../TypeGPUShader.tsx", import.meta.url));
   const require = createRequire(filename);
   const { code } = transformSync(readFileSync(filename, "utf8"), {
     filename, babelrc: false, configFile: false,
     presets: [require.resolve("@react-native/babel-preset")],
-    plugins: [require.resolve("react-native-worklets/plugin")],
+    plugins: [...(compiled ? [[require.resolve("babel-plugin-react-compiler"), { target: "19" }]] : []), require.resolve("react-native-worklets/plugin")],
   });
   const effects = [], calls = [], events = [], uniforms = [], errors = [];
   const suspendedOnUI = { value: suspended, get() { return this.value; } };
-  const frameData={value:[1,2,3,4]}, renderScale={value:1,get(){return this.value;}};
+  const frameData={value:[1,2,3,4]}, renderScale=scaling ? {value:1,get(){return this.value;}} : undefined;
   const playback = { value: { phase: preparing ? "preparing" : preview ? "preview" : active ? "playing" : "paused",
     slideKey: "slide", stepKey: "step", stepIndex: 1, stepTime: 0, slideTime: 10 } };
   let callback, reaction, reactionInputs, enabled = false, ready = 0;
@@ -35,7 +35,17 @@ function frames({ suspended = false, preview = false, active = true, effectActiv
     }),
     destroy: () => calls.push(["destroy"]),
   };
+  let rendering = false, inUI = false;
+  const onUI = fn => { const previous = inUI; inUI = true; try { return fn(); } finally { inUI = previous; } };
+  if (compiled) for (const shared of [playback, frameData, renderScale].filter(Boolean)) {
+    let value = shared.value;
+    Object.defineProperty(shared, "value", { get() {
+      if (rendering && !inUI) throw new Error("Shared value read during React render");
+      return value;
+    }, set(next) { value = next; } });
+  }
   const mocks = {
+    "react/compiler-runtime": { c: size => Array(size).fill(Symbol.for("react.memo_cache_sentinel")) },
     react: { useRef: value => ({ current: value }), useEffect: effect => effects.push(effect) },
     "react-native": {},
     "@shopify/react-native-skia": {}, "react-native-webgpu": {},
@@ -46,7 +56,7 @@ function frames({ suspended = false, preview = false, active = true, effectActiv
     "react-native-reanimated": {
       useSharedValue: value => ({ value }),
       useFrameCallback: fn => { callback = fn; return frame; },
-      useAnimatedReaction: (prepare, fn) => { reactionInputs = prepare.__closure; let previous = prepare(); reaction = () => { const next = prepare(); fn(next, previous); previous = next; }; },
+      useAnimatedReaction: (prepare, fn) => { reactionInputs = prepare.__closure; let previous = onUI(prepare); reaction = () => { const next = onUI(prepare); fn(next, previous); previous = next; }; },
       runOnJS: fn => fn, runOnUI: fn => fn,
     },
     "./slidesStore": {},
@@ -55,14 +65,16 @@ function frames({ suspended = false, preview = false, active = true, effectActiv
   const UIFrames = new Function("require", "exports", "encode", code + "\nif (encode) encodeStill = encode; return UIFrames;")(
     name => mocks[name] ?? require(name), {}, encode,
   );
+  rendering = true;
   UIFrames({ resources: { alive: { value: true, get() { return this.value; }, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? { size: 16 } : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
     suspended, suspendedOnUI, still, effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
+  rendering = false;
   const cleanup = effects.map(effect => effect());
   return { calls, events, uniforms, errors, ready: () => ready, enabled: () => enabled,
     playback, frameData, reactionInputs, redraw: () => effects[0](), retireStill: () => cleanup[1]?.(),
-    scale: value => { renderScale.value = value; reaction(); },
+    scale: value => { if (renderScale) renderScale.value = value; reaction(); },
     tick: () => { playback.value = { ...playback.value, stepTime: playback.value.stepTime + 0.016 };
       callback({ timeSincePreviousFrame: 16 }); },
     stop: () => cleanup.forEach(fn => fn?.()), freeze: () => { suspendedOnUI.value = true; }, device };
@@ -136,6 +148,56 @@ test("particle-free frames skip empty particle work but still clear, draw fullsc
     expect(f.events).toEqual([...frame.events, ...frame.events]);
     f.stop();
   }
+});
+
+test.each(["replacement", "in-place"])("a frozen preview redraws after %s step uniforms catch up without changing render scale", update => {
+  const f = frames({ preview: true, graph: true, data: true, simulation: false });
+  try {
+    expect(f.uniforms.at(-1)).toEqual([1, 2, 3, 4]);
+    // The navigation redraw can run before the upstream uniform mapper publishes its new sample.
+    f.playback.value = { ...f.playback.value, stepKey: "next", stepIndex: 2 };
+    if (update === "replacement") f.frameData.value = [5, 6, 7, 8];
+    else f.frameData.value.splice(0, 4, 5, 6, 7, 8);
+    f.scale(1);
+    expect(f.uniforms.at(-1)).toEqual([5, 6, 7, 8]);
+    expect(f.enabled()).toBe(false);
+    const submitted = f.events.filter(event => event[0] === "submit").length;
+    f.scale(1);
+    expect(f.events.filter(event => event[0] === "submit")).toHaveLength(submitted);
+  } finally { f.stop(); }
+});
+
+test("preview uniform updates redraw even when the graph has no render-scale input", () => {
+  const f = frames({ preview: true, graph: true, data: true, scaling: false, simulation: false });
+  try {
+    f.frameData.value = [5, 6, 7, 8];
+    f.scale(1);
+    expect(f.uniforms.at(-1)).toEqual([5, 6, 7, 8]);
+    expect(f.enabled()).toBe(false);
+  } finally { f.stop(); }
+});
+
+test("uniform updates during live playback leave drawing to its existing frame callback", () => {
+  const f = frames({ graph: true, data: true, simulation: false });
+  try {
+    const submitted = f.events.filter(event => event[0] === "submit").length;
+    f.frameData.value = [5, 6, 7, 8];
+    f.scale(1);
+    expect(f.events.filter(event => event[0] === "submit")).toHaveLength(submitted);
+    f.tick();
+    expect(f.uniforms.at(-1)).toEqual([5, 6, 7, 8]);
+    expect(f.events.filter(event => event[0] === "submit")).toHaveLength(submitted + 1);
+  } finally { f.stop(); }
+});
+
+test("React-compiled preview worklets keep shared-value reads on UI and redraw the new step", () => {
+  const f = frames({ compiled: true, preview: true, graph: true, data: true, simulation: false });
+  try {
+    f.playback.value = { ...f.playback.value, stepKey: "next", stepIndex: 2 };
+    f.frameData.value = [5, 6, 7, 8];
+    f.scale(1);
+    expect(f.uniforms.at(-1)).toEqual([5, 6, 7, 8]);
+  } finally { f.stop(); }
 });
 
 test("shared render scale redraws a paused graph at its frozen clock and frame", () => {

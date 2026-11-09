@@ -295,10 +295,14 @@ function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, rende
       runOnJS(onError)(String(caught));
     }
   };
-  const scaleInputs = r.graph && renderScale ? { scale: renderScale, uniforms: frameData } : null;
-  // Order a frozen redraw after the uniform mapper has sampled the same scale.
-  useAnimatedReaction(() => scaleInputs ? { scale: scaleInputs.scale.value, uniforms: scaleInputs.uniforms?.value } : null, (snapshot, previous) => {
-    if (snapshot && previous && snapshot.scale !== previous.scale && rendered.value && playback.value.phase !== "playing") draw(0, true);
+  const frozenInputs = r.graph && (renderScale || frameData) ? { scale: renderScale, uniforms: frameData } : null;
+  // Reading uniforms orders frozen redraws after their mapper, including step-only changes.
+  useAnimatedReaction(() => frozenInputs ? { scale: frozenInputs.scale?.value, uniforms: frozenInputs.uniforms?.value, stepKey: playback.value.stepKey } : null, (snapshot, previous) => {
+    if (!snapshot || !rendered.value) return;
+    const phase = playback.value.phase;
+    const resized = previous && snapshot.scale !== previous.scale;
+    const previewChanged = phase === "preview" && (!previous || snapshot.stepKey !== previous.stepKey || snapshot.uniforms !== previous.uniforms);
+    if (phase !== "playing" && (resized || previewChanged)) draw(0, true);
   });
   const frame = useFrameCallback(info => {
     if (!effectActive || playback.value.phase !== "playing") return;
