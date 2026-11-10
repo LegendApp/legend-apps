@@ -1090,9 +1090,6 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
     });
   }
   return <Stage id={id} position={position}>
-    {morph && lines.map((_, n) => (hot.includes(n) || pass.includes(n)) && <Card key={`mark${n}`} id={`${id}/${n}/glow`} {...HIGHLIGHT}
-      position={[width / 2 - .3, -n * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]}
-      opacity={[{ step: 0, value: 0 }, key(mark, bandOpacity, 0, .4), key(collapse, 0, 0, .3)]} />)}
     {morph ?? <>
     <Card id={`${id}/card`} {...panelStyle(props)} color={INK.colors.panel} opacity={[{ step: 0, value: 1 }, key(extract, 0, .9, .4)]}
       position={[{ step: 0, value: [width / 2 - .3, -(full - em - .6) / 2, -.14] }, key(collapse, [width / 2 - .3, -(short - em - .6) / 2, -.14], .45, .5)]}
@@ -1115,6 +1112,9 @@ function codeTrace(id: string, at: V3, props: Record<string, unknown>, children:
       </Fragment>;
     })}
     </>}
+    {morph && lines.map((_, n) => (hot.includes(n) || pass.includes(n)) && <Card key={`mark${n}`} id={`${id}/${n}/glow`} {...HIGHLIGHT}
+      position={[width / 2 - .3, -n * lineHeight, -.07]} scale={[width - .2, lineHeight, .02]}
+      opacity={[{ step: 0, value: 0 }, key(mark, bandOpacity, 0, .4), key(collapse, 0, 0, .3)]} />)}
     {labels.map((label, k) => { const p = node(k), root = node(0), mid = (root[1] + p[1]) / 2; return <Fragment key={`node${k}`}>
       <Card id={`${id}/node${k}`} position={p} scale={[boxWidths[k], .85, .4]} color={k ? INK.blue : INK.amber} opacity={show}
         emissive={[{ step: 0, value: 0 }, key(extract, 7, .9, .1), key(extract, 1.8, 1, .6)]} />

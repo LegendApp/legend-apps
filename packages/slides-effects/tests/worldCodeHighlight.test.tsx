@@ -5,7 +5,8 @@ import React from "react";
 import type { CodeHighlight } from "@legend-apps/presentation";
 import { highlightCode } from "../../presentation/src/compiler/remarkCodeHighlight";
 import { CodePanel, CodeMorph, CodeTrace, Scene, expandScene, readScenes } from "../packs/world/Authoring";
-import { Text3D } from "../packs/world/World";
+import { Text3D, prepareWorldSlides } from "../packs/world/World";
+import { buildWorldGraph } from "../packs/world/render";
 import { cardInstances, instanceField, colorVector, compileTrack, prepareWorldScene, sampleWorldUniforms, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 import { layoutText3D, text3dInstances } from "../packs/world/text3d";
 import { font } from "../packs/world/text3d-mono";
@@ -176,5 +177,51 @@ test("morph highlights clear on the next step and restore on reverse seeks", asy
       if (stepIndex === active && stepTime === 1 && !id.includes("/band0/0/") && !id.includes("/band1/0/"))
         expect(visible).toBeGreaterThan(0);
     });
+  }
+});
+
+for (const opacity of [0, .2, 1]) test(`code highlights composite over their opaque backing at opacity ${opacity}`, async () => {
+  const source = "const value = 1;\nprint(value);\nreturn value;";
+  const highlighted = await highlightCode(source, "ts");
+  const compact = "const value = 1;\nreturn value;";
+  const diff = "-const value = 1;\n+const value = 2;";
+  const variants = [
+    <CodePanel id="code" marks={[{ text: "value", opacity }]}>{fence(source, highlighted)}</CodePanel>,
+    <CodeMorph id="code" highlight={{ opacity, initial: false }}>{fence(diff, await highlightCode(diff, "diff-ts"))}</CodeMorph>,
+    <CodeTrace id="code" source={0} reads={[2]} nodes={["Owner", "Reader"]} highlight={{ opacity }}>{fence(source, highlighted)}</CodeTrace>,
+    <CodeTrace id="code" source={0} reads={[2]} nodes={["Owner", "Reader"]} highlight={{ opacity }}>
+      {fence(source, highlighted)}{fence(compact, await highlightCode(compact, "ts"))}
+    </CodeTrace>,
+  ];
+  for (const [variant, children] of variants.entries()) {
+    const scene = prepareWorldSlides([{ children: expandScene(children) }])[0].scenePlan!.content.prepared;
+    const pass = buildWorldGraph(scene).passes.find(p => p.id === "sharp-cards")!;
+    expect(pass).toMatchObject({ blend: "over", depthCompare: "less-equal" });
+    const expression = pass.code.match(/let alpha=(layer\.a[^;]+);/)![1];
+    const alphaAt = new Function("fill", "opacity", "return " + expression.replace("layer.a", "fill"));
+    const cards = scene.instances.filter(part => part.card);
+    const highlights = cards.filter(part => part.card!.flat);
+    expect(highlights.length).toBeGreaterThan(0);
+    for (const stepIndex of [0, 1, 2, 1, 0]) for (const stepTime of [0, .2, 1]) {
+      const values = sampleWorldUniforms(scene, { slideTime: stepIndex + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 1, 2: 2 } });
+      const at = (part: typeof cards[number]) => worldHeaderSize + scene.instances.indexOf(part) * worldInstanceSize;
+      for (const highlight of highlights) {
+        const h = at(highlight), point = values.slice(h, h + 3);
+        point[2] += values[h + instanceField.scale + 2] * values[h + instanceField.radius];
+        let depth = Infinity, scenery = 1;
+        // Intersect a ray from the sampled eye through the band's interior with the actual card draw range.
+        for (const card of cards) {
+          const base = at(card), half = values.slice(base + instanceField.scale, base + instanceField.scale + 3).map(v => v * values[base + instanceField.radius]);
+          const t = (values[base + 2] + half[2] - values[2]) / (point[2] - values[2]);
+          const x = values[0] + t * (point[0] - values[0]), y = values[1] + t * (point[1] - values[1]);
+          if (half[0] <= .0001 || half[1] <= .0001 || Math.abs(x - values[base]) >= half[0] || Math.abs(y - values[base + 1]) >= half[1]) continue;
+          const alpha = alphaAt(card.card!.fill, values[base + instanceField.opacity]);
+          if (alpha < .003 || t > depth) continue;
+          scenery *= 1 - alpha;
+          depth = t;
+        }
+        expect(scenery, `variant ${variant}, ${highlight.id}, step ${stepIndex}, time ${stepTime}`).toBeCloseTo(0);
+      }
+    }
   }
 });
