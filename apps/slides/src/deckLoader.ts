@@ -321,7 +321,7 @@ function publishDeck(result: CompileDeckSuccess, path: string, remember: boolean
     applyUniwindStyles(result.uniwindCode);
     watchDeckDirectory(path, result.dependencies);
     notesBaseline = notesBaselines.get(result);
-    setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets });
+    setSlidesState({ ...successfulDeckUpdate(getSlidesState(), component, templates, path, result.warnings), transitions, noteTargets: result.noteTargets, previewIdentity: result.previewIdentity });
     if (remember) {
       rememberDeckPath(path);
       noteRecentDocument(path);

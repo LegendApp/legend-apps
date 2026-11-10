@@ -1,4 +1,5 @@
 import { getDeckSourceStructure, getSpeakerNotesTargets } from "../speakerNotesSource";
+import { createPreviewIdentity } from "./previewIdentity";
 import { builtinTransitionSources } from "../transitions";
 import { resolveTransitionFile } from "./transitionLibrary";
 import fs from "node:fs";
@@ -343,11 +344,12 @@ function formatMessages(messages: Message[]) {
 }
 
 function dependenciesFrom(result: BuildResult, workingDirectory: string) {
-  return Object.keys(result.metafile?.inputs ?? {}).filter((input) => !input.startsWith("builtin-transition:")).map((input) => path.resolve(workingDirectory, input)).sort();
+  return Object.keys(result.metafile?.inputs ?? {}).filter((input) => !input.startsWith("builtin-transition:")).map((input) => path.resolve(workingDirectory, input.replace(/^deck-asset:/, ""))).sort();
 }
 
+const cssPath = path.resolve(import.meta.dirname, "../../../../shell/src/global.css");
+
 async function compileUniwind(deckRoot: string, draftSource?: string, packRoots: string[] = []) {
-  const cssPath = path.resolve(import.meta.dirname, "../../../../shell/src/global.css");
   const compileVirtual = await loadUniwindCompiler();
   // Tailwind scans an isolated copy for new draft classes; the actual deck and
   // its directory are never written until the user saves.
@@ -370,6 +372,7 @@ async function compileUniwind(deckRoot: string, draftSource?: string, packRoots:
 
 export async function compileDeck(deckPath: string, options: { source?: string; transitionDirectory?: string; effectPacksDirectory?: string; onTiming?: Timing } = {}): Promise<CompileDeckResult> {
   const absoluteDeckPath = path.resolve(deckPath);
+  const builtAt = Date.now();
   if (!absoluteDeckPath.toLowerCase().endsWith(".mdx")) {
     return { success: false, errors: ["Decks must use the .mdx extension."], warnings: [] };
   }
@@ -440,14 +443,21 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
       writeEffectLock(absoluteDeckPath, { schemaVersion: 1, packs: pins });
     }
     if (fs.existsSync(effectLockPath(absoluteDeckPath))) extraDependencies.add(effectLockPath(absoluteDeckPath));
+    const dependencies = [...new Set([...dependenciesFrom(result, path.dirname(absoluteDeckPath)), ...extraDependencies])].sort();
+    const previewIdentity = await createPreviewIdentity(absoluteDeckPath, source,
+      [...dependencies.filter(file => file !== effectLockPath(absoluteDeckPath)), cssPath],
+      JSON.stringify([
+        transformVersion ?? createHash("sha256").update(fs.readFileSync(import.meta.filename)).digest("hex"), codeHighlightVersion,
+        builtinTransitionSources, Object.entries(pins).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0),
+        process.versions, process.cwd(), process.env.NODE_ENV, process.env.BABEL_ENV,
+        Object.entries(process.env).filter(([name]) => name.startsWith("WORKLETS_")).sort(),
+      ]), builtAt);
     return {
       effectPackIds: [...packIds].sort(),
       code,
       noteTargets: getSpeakerNotesTargets(source),
-      dependencies: [...new Set([
-        ...dependenciesFrom(result, path.dirname(absoluteDeckPath)),
-        ...extraDependencies,
-      ])].sort(),
+      previewIdentity,
+      dependencies,
       success: true,
       uniwindCode,
       warnings: formatMessages(result.warnings),

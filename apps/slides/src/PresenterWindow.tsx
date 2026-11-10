@@ -214,23 +214,23 @@ function PresenterWorkspace({ audienceAspect, currentIndex, currentStep, deckPat
     const [settledIndex, settledStep, settledNextIndex, settledNextStep] = settled.split(":").map(Number);
     const { stills, targets, sweep } = usePreviewStills(audienceAspect ?? 16 / 9, stillKey(currentIndex, currentStep), stillKey(nextIndex, nextStep));
     // A still costs the audience nothing, so it follows navigation; anything without one trails it live.
-    const stillOf = (target: string) => audienceOpen && stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
-    const currentStill = stillOf(stillKey(currentIndex, currentStep)), nextStill = stillOf(stillKey(nextIndex, nextStep));
-    const currentPending = !currentStill && (settledIndex !== currentIndex || settledStep !== currentStep);
-    const nextPending = !nextStill && (settledNextIndex !== nextIndex || settledNextStep !== nextStep);
+    const stillOf = (target: string) => stills[target] ? <PreviewStillStack stills={stills} targets={targets} target={target}/> : undefined;
+    const currentStill = audienceOpen ? stillOf(stillKey(currentIndex, currentStep)) : undefined, nextStill = stillOf(stillKey(nextIndex, nextStep));
+    const currentPending = sweep.loading || !currentStill && (settledIndex !== currentIndex || settledStep !== currentStep);
+    const nextPending = sweep.loading || !nextStill && (settledNextIndex !== nextIndex || settledNextStep !== nextStep);
     const shownIndex = currentStill ? currentIndex : settledIndex, shownStep = currentStill ? currentStep : settledStep;
     const shownNextIndex = nextStill ? nextIndex : settledNextIndex, shownNextStep = nextStill ? nextStep : settledNextStep;
-    const shownStill = stillOf(stillKey(shownIndex, shownStep)), shownNextStill = stillOf(stillKey(shownNextIndex, shownNextStep));
+    const shownStill = audienceOpen ? stillOf(stillKey(shownIndex, shownStep)) : undefined, shownNextStill = stillOf(stillKey(shownNextIndex, shownNextStep));
     const capturePaused = !audienceOpen || settledNavigation !== navigation;
-    const nextPreview = <Preview aspect={audienceAspect} index={shownNextIndex} stepIndex={shownNextStep} still={shownNextStill}
+    const nextPreview = sweep.loading ? null : <Preview aspect={audienceAspect} index={shownNextIndex} stepIndex={shownNextStep} still={shownNextStill}
       capture={{ target: stillKey(shownNextIndex, shownNextStep), generation: sweep.generation, add: sweep.add,
         paused: capturePaused || !!shownNextStill || stillKey(nextIndex, nextStep) === stillKey(currentIndex, currentStep) }}/>;
     return (<View onLayout={handleWorkspaceLayout} style={styles.workspace}>
       <PreviewStillSweep key={sweep.generation} {...sweep} paused={audienceOpen || settledNavigation !== navigation}/>
       <View style={[styles.previews, { flex: previewWeight }]}>
         <PresenterPreview pending={currentPending} weight={showNext ? layout.currentPreviewRatio : 1}>
-          <Preview aspect={audienceAspect} index={shownIndex} animate={!audienceOpen} stepIndex={shownStep} still={shownStill}
-            capture={{ target: stillKey(shownIndex, shownStep), generation: sweep.generation, add: sweep.add, paused: capturePaused || !!shownStill }}/>
+          {!sweep.loading && <Preview aspect={audienceAspect} index={shownIndex} animate={!audienceOpen} stepIndex={shownStep} still={shownStill}
+            capture={{ target: stillKey(shownIndex, shownStep), generation: sweep.generation, add: sweep.add, paused: capturePaused || !!shownStill }}/>}
         </PresenterPreview>
         {showNext && (<>
             <ResizeHandle direction="horizontal" label="Resize current and next slide previews" onResize={(delta) => resize("previews", delta)} onResizeEnd={persistLayout}/>

@@ -17,14 +17,14 @@ test("rehearsal follows input immediately while hidden capture waits for settlem
       program.node.body = program.node.body.filter(node => node.type === "FunctionDeclaration" && node.id.name === "PresenterWorkspace");
     } } })],
   });
-  let audienceOpen = false, settled = "1:0:1:1", stills = {};
+  let audienceOpen = false, settled = "1:0:1:1", stills = {}, loading = false;
   const layout = { notesRatio: .3, currentPreviewRatio: .7 };
   const dependencies = {
     useValue: value => value.get(), useObservable: () => ({ get: () => layout, peek: () => layout }),
     useRef: React.useRef, useEffect: React.useEffect, useCallback: React.useCallback,
     slidesState$: { audienceOpen: { get: () => audienceOpen } },
     useAudienceSettled: (navigation, enabled) => enabled ? settled : navigation,
-    usePreviewStills: () => ({ stills, targets: [], sweep: { generation: "one" } }),
+    usePreviewStills: () => ({ stills, targets: [], sweep: { generation: "one", loading } }),
     stillKey: (index, step) => `${index}:${step}`,
     View: "view", Preview: "preview", SlideCounter: "counter", PreviewStillSweep: "capture-sweep", PreviewStillCapture: "capture-live", ResizeHandle: "resize",
     PresenterPreview: "preview-frame", DeferredPresenterPreview: "deferred-preview", PreviewStillStack: "preview-still",
@@ -60,6 +60,13 @@ test("rehearsal follows input immediately while hidden capture waits for settlem
     expect(renderer.root.findByType("deferred-preview").props.pending).toBe(false);
     expect(renderer.root.findByType("deferred-preview").props.immediate).toBe(true);
     expect(renderer.root.findAllByType("preview").map(node => [node.props.index, node.props.stepIndex])).toEqual([[2, 1], [2, 2]]);
+    loading = true;
+    await act(() => renderer.update(React.cloneElement(content)));
+    expect(renderer.root.findAllByType("preview")).toHaveLength(0);
+    expect(renderer.root.findByType("preview-frame").props.pending).toBe(true);
+    loading = false;
+    await act(() => renderer.update(React.cloneElement(content)));
+    expect(renderer.root.findAllByType("preview").map(node => node.props.still.props.target)).toEqual(["2:1", "2:2"]);
   } finally { await act(() => renderer?.unmount()); }
 });
 

@@ -1,9 +1,11 @@
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePreparationTask } from "@legend-apps/presentation";
-import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, PixelRatio, StyleSheet, Text, View } from "react-native";
 import { DeckRenderer, SlideCanvas } from "./DeckRenderer";
-import { useBackgroundIntensitySetting } from "./slidesSettings";
+import { useBackgroundIntensitySetting, useTitleAnimationSpeedSetting } from "./slidesSettings";
+import * as previewFiles from "@legendapp/spark/files";
+import { createPreviewCache, type PreviewCacheSnapshot } from "./previewCache";
 import { getSlideStepCount, slidesState$ } from "./slidesStore";
 import { SurfaceStillContext, type SurfaceStillRequest } from "./SlideCaptureContext";
 
@@ -15,25 +17,47 @@ const STILL_WINDOW = 2;
 const NO_SURFACE_MS = 400;
 const SURFACE_MS = 8000;
 
+const previewCache = createPreviewCache(previewFiles);
+// Bump when host rendering or frozen preview sampling changes.
+const PREVIEW_RENDER_VERSION = 1;
+
 export const stillKey = (slide: number, step: number) => `${slide}:${step}`;
 
 /** Bake step backgrounds before presenting; keep only nearby images decoded. */
 export function usePreviewStills(aspect: number, current: string, next: string) {
   const revision = useValue(slidesState$.revision);
   const intensity = useBackgroundIntensitySetting();
+  const speed = useTitleAnimationSpeedSetting();
+  const identity = useValue(slidesState$.previewIdentity);
+  const deck = identity?.deck;
   const slides = useValue(slidesState$.slides);
   const targets = useMemo(() => slides.flatMap((slide, index) =>
     Array.from({ length: getSlideStepCount(slide) }, (_, step) => stillKey(index, step))), [slides]);
-  const generation = `${revision}:${intensity}:${aspect}:${targets.length}`;
-  const [stills, setStills] = useState<{ generation: string; byKey: Record<string, string> }>({ generation, byKey: {} });
-  if (stills.generation !== generation) setStills({ generation, byKey: {} });
+  const cacheKey = JSON.stringify([PREVIEW_RENDER_VERSION, identity?.content, intensity, aspect, speed, PixelRatio.get(), STILL_WIDTH]);
+  const generation = `${revision}:${cacheKey}:${deck ? "" : targets.length}`;
+  const [stills, setStills] = useState<{ generation: string; byKey: Record<string, string>; noSurface: number[]; loading: boolean }>({ generation, byKey: {}, noSurface: [], loading: !!deck });
+  if (stills.generation !== generation) setStills({ generation, byKey: {}, noSurface: [], loading: !!deck });
+  const active = useRef(generation);
+  useLayoutEffect(() => { active.current = generation; return () => { active.current = ""; }; }, [generation]);
+  useEffect(() => {
+    if (!deck) return;
+    let retired = false;
+    void previewCache.read(deck, cacheKey).then(cached => {
+      if (!retired) setStills(state => state.generation === generation
+        ? { ...state, byKey: cached?.stills ?? state.byKey, noSurface: cached?.noSurface ?? [], loading: false } : state);
+    });
+    return () => { retired = true; };
+  }, [deck, cacheKey, generation]);
+  const save = useCallback((snapshot: PreviewCacheSnapshot, from: string) => {
+    if (deck && from === active.current) void previewCache.save(deck, cacheKey, snapshot);
+  }, [deck, cacheKey]);
   const add = useCallback((key: string, uri: string, from: string) => setStills(state => {
     if (state.generation !== from || state.byKey[key] === uri) return state;
-    return { generation: from, byKey: { ...state.byKey, [key]: uri } };
+    return { ...state, byKey: { ...state.byKey, [key]: uri } };
   }), []);
   const nearby = targets.filter(key => key === current || key === next);
   const remaining = targets.filter(key => key !== current && key !== next);
-  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets: [...nearby, ...remaining], stills: stills.byKey } };
+  return { stills: stills.byKey, targets, sweep: { add, aspect, generation, targets: [...nearby, ...remaining], stills: stills.byKey, loading: stills.loading, knownNoSurface: stills.noSurface, save } };
 }
 
 function useStillRequest(target: string | undefined, paused: boolean, generation: string, add: (key: string, uri: string, generation: string) => void) {
@@ -58,34 +82,37 @@ export function PreviewStillCapture({ children, target, paused, generation, add 
 }
 
 /** Bake one target at a time, never during audience playback. Key it by generation. */
-export function PreviewStillSweep({ add, aspect, generation, paused, targets, stills }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[]; stills: Record<string, string> }) {
+export function PreviewStillSweep({ add, aspect, generation, paused, targets, stills, loading = false, knownNoSurface = [], save }: { add(key: string, uri: string, generation: string): void; aspect: number; generation: string; paused: boolean; targets: string[]; stills: Record<string, string>; loading?: boolean; knownNoSurface?: number[]; save?(snapshot: PreviewCacheSnapshot, generation: string): void }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const noSurface = useRef(new Set<number>());
-  const missing = targets.filter(key => !stills[key] && !noSurface.current.has(Number(key.split(":")[0])));
+  const missing = targets.filter(key => !stills[key] && !noSurface.current.has(Number(key.split(":")[0])) && !knownNoSurface.includes(Number(key.split(":")[0])));
   const unavailable = missing.filter(key => skipped.includes(key)).length;
   const target = missing.find(key => !skipped.includes(key));
   const completed = targets.length - missing.length;
-  const { request, announced } = useStillRequest(target, paused, generation, add);
+  const { request, announced } = useStillRequest(target, paused || loading, generation, add);
   useEffect(() => {
-    if (paused || !target) return;
+    if (loading || paused || !target) return;
     const skip = () => setSkipped(previous => [...previous, target]);
     let timer = setTimeout(() => {
       if (announced.current === target) timer = setTimeout(skip, SURFACE_MS);
       else { noSurface.current.add(Number(target.split(":")[0])); skip(); }
     }, NO_SURFACE_MS);
     return () => clearTimeout(timer);
-  }, [target, paused]);
+  }, [target, paused, loading]);
+  useEffect(() => {
+    if (!loading && !paused && !target && !unavailable && targets.length) save?.({ stills, noSurface: [...new Set([...knownNoSurface, ...noSurface.current])], targets }, generation);
+  }, [loading, paused, target, unavailable, stills, knownNoSurface, save, generation, targets]);
   if (targets.length === 0) return null;
-  const label = target ? `${paused ? "Preview preparation paused" : "Preparing previews"} · ${completed}/${targets.length}`
+  const label = loading ? "Loading saved previews" : target ? `${paused ? "Preview preparation paused" : "Preparing previews"} · ${completed}/${targets.length}`
     : unavailable ? `Previews incomplete · ${unavailable} unavailable` : `Previews ready · ${targets.length}/${targets.length}`;
   const [slide, step] = target?.split(":").map(Number) ?? [];
   return <>
     <View accessibilityLiveRegion="polite" accessibilityLabel={label} accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: targets.length, now: completed }} className="flex-row items-center gap-2 px-3 py-1">
-      {!paused && target && <ActivityIndicator size="small" color="#a1a1aa" accessibilityLabel="Preparing previews" />}
+      {(loading || !paused && target) && <ActivityIndicator size="small" color="#a1a1aa" accessibilityLabel="Preparing previews" />}
       <Text className="text-xs text-zinc-400">{label}</Text>
     </View>
-    {!paused && target && <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
+    {!loading && !paused && target && <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>
       <SurfaceStillContext.Provider value={request}>
         <SlideCanvas targetIndex={slide} targetStep={step} isPreview backgroundIsPreview><DeckRenderer isPreview targetIndex={slide} targetStep={step} /></SlideCanvas>
       </SurfaceStillContext.Provider>

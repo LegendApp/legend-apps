@@ -10,6 +10,7 @@ export type DeckSlide = {
 };
 
 export type SlidesState = {
+  previewIdentity?: CompileDeckSuccess["previewIdentity"];
   noteTargets?: string[];
   sourceNotes?: string[];
   deckLocked: boolean;

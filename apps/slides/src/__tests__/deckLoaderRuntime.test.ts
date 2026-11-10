@@ -299,17 +299,19 @@ test("a notes-only watched save updates notes without compiling, replacing the d
   directoryEntries = { "/notes": ["deck.mdx", "helper.tsx"] };
   inputVersions = {};
   let compilations = 0;
-  run = async () => { compilations++; return { ...success, stdout: JSON.stringify({ ...JSON.parse(success.stdout), dependencies: [path, helper] }) }; };
+  const previewIdentity = { deck: "a".repeat(64), content: "b".repeat(64) };
+  run = async () => { compilations++; return { ...success, stdout: JSON.stringify({ ...JSON.parse(success.stdout), dependencies: [path, helper], previewIdentity }) }; };
   expect(await loadDeck(path)).toBe(true);
   setSlidesState({ slides: [{ metadata: { steps: 2 }, notes: "old" }], currentStep: 1 });
   const before = getSlidesState();
+  expect(before.previewIdentity).toEqual(previewIdentity);
   sourceFiles[path] = sourceHelpers.updateSlideSpeakerNotes(sourceFiles[path], 0, "new notes");
   watchedChange();
   await new Promise(resolve => setTimeout(resolve, 160));
   const after = getSlidesState();
   expect(compilations).toBe(1);
   expect(after.slides[0].notes).toBe("new notes");
-  for (const key of ["component", "revision", "currentSlide", "currentStep", "slideStartedAt", "stepStartedAt", "templates", "transitions"]) expect(after[key]).toBe(before[key]);
+  for (const key of ["component", "revision", "currentSlide", "currentStep", "slideStartedAt", "stepStartedAt", "templates", "transitions", "previewIdentity"]) expect(after[key]).toBe(before[key]);
   // Atomic saves can cause more than one invalidation, even after metadata was refreshed.
   watchedChange();
   await new Promise(resolve => setTimeout(resolve, 160));

@@ -1,4 +1,5 @@
 export type CompileDeckSuccess = {
+  previewIdentity?: { deck: string; content: string };
   effectPackIds?: string[];
   noteTargets?: string[];
   sourceSlideEnds?: number[];

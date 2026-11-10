@@ -8,7 +8,7 @@ import { gunzipSync } from "node:zlib";
 import React from "react";
 import { compileDeck } from "../compiler";
 import { renderNativeChildren } from "../nativeChildren";
-import { getDeckSourceStructure } from "../speakerNotesSource";
+import { getDeckSourceStructure, updateSlideSpeakerNotes } from "../speakerNotesSource";
 
 const temporaryDirectories: string[] = [];
 // RN 0.83 supplies this interpreter through the app's Hermes pod; prepare it
@@ -33,6 +33,24 @@ afterEach(() => {
 });
 
 describe("compileDeck", () => {
+  test("preview identity ignores compiled speaker notes while tracking visible source", async () => {
+    const source = "# First\n\n<!-- old note -->\n\n---\n\n# Second\n";
+    const deck = createDeck({ "deck.mdx": source });
+    const before = await compileDeck(deck);
+    expect(before.success).toBe(true);
+    if (!before.success) return;
+    expect(before.previewIdentity?.content).toMatch(/^[a-f0-9]{64}$/);
+    const notes = updateSlideSpeakerNotes(source, 0, "a much longer\nnew note");
+    const after = await compileDeck(deck, { source: notes });
+    expect(after.success).toBe(true);
+    if (!after.success) return;
+    expect(after.code).not.toBe(before.code);
+    expect(after.previewIdentity).toEqual(before.previewIdentity);
+    const visible = await compileDeck(deck, { source: notes.replace("# First", "# Changed") });
+    expect(visible.success).toBe(true);
+    if (visible.success) expect(visible.previewIdentity?.content).not.toBe(before.previewIdentity?.content);
+  });
+
   test("maps MDX diagnostics through notes, slide separators, and slide frontmatter", async () => {
     for (const newline of ["\n", "\r\n", "\r"]) {
       const source = ["# First", "", "<!--", "speaker notes", "more notes", "-->", "", "---", "layout: center", "---", "", "# Second", "", "  <View>", ""].join(newline);
@@ -54,6 +72,7 @@ describe("compileDeck", () => {
     expect(result.code).toContain("movie.webm");
     expect(result.dependencies.some(file => file.endsWith("font.woff2"))).toBe(true);
     expect(result.dependencies.some(file => file.endsWith("movie.webm"))).toBe(true);
+    expect(result.dependencies.every(file => fs.existsSync(file))).toBe(true);
   });
   test("still rejects separators inside layout containers after preprocessing", async () => {
     const result = await compileDeck(createDeck({ "deck.mdx": ":::group\n\nOne\n\n---\n\nTwo\n\n:::" }));

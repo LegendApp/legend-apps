@@ -7,18 +7,30 @@ import { PreparationBoundary, usePreparationTask } from "../../../../packages/pr
 mock.module("@legend-apps/presentation", () => ({ usePreparationTask }));
 const SurfaceStillContext = React.createContext(null);
 let slides = [{ steps: 2 }, { steps: 1 }];
-let revision = 1, intensity = 1;
+let revision = 1, intensity = 1, speed = 1, density = 2;
+let identity, reads = 0, writes = 0, cacheSequence = 0;
+const disk = new Map();
+const waitingReads = [];
+mock.module("@legendapp/spark/files", () => ({
+  getDirectory: async () => "/cache",
+  readText: async file => { reads++; if (waitingReads.length) return waitingReads.shift(); if (!disk.has(file)) throw Error("missing"); return disk.get(file); },
+  writeText: async (file, data) => { writes++; disk.set(file, data); },
+  mkdir: async () => {},
+  move: async (from, to) => { disk.set(to, disk.get(from)); disk.delete(from); },
+  remove: async file => { disk.delete(file); },
+}));
+const cachedIdentity = () => ({ deck: (++cacheSequence).toString(16).padStart(64, "0"), content: "b".repeat(64) });
 mock.module("react-native", () => ({
-  View: "view", ActivityIndicator: "spinner",
+  View: "view", ActivityIndicator: "spinner", PixelRatio: { get: () => density },
   Image: "image", Text: "text",
   StyleSheet: { create: value => value, absoluteFill: {} },
 }));
 mock.module("@legendapp/state/react", () => ({ useValue: read => typeof read === "function" ? read() : read.get() }));
 mock.module("../slidesStore", () => ({
   getSlideStepCount: slide => slide.steps,
-  slidesState$: { revision: { get: () => revision }, slides: { get: () => slides } },
+  slidesState$: { revision: { get: () => revision }, slides: { get: () => slides }, previewIdentity: { get: () => identity } },
 }));
-mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => intensity }));
+mock.module("../slidesSettings", () => ({ useBackgroundIntensitySetting: () => intensity, useTitleAnimationSpeedSetting: () => speed }));
 mock.module("../SlideCaptureContext", () => ({ SurfaceStillContext }));
 let surfaces = new Set([0, 1]);
 let request, commits;
@@ -39,7 +51,7 @@ beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   log = spyOn(console, "error").mockImplementation(() => {});
   slides = [{ steps: 2 }, { steps: 1 }];
-  revision = intensity = 1;
+  revision = intensity = speed = 1; density = 2; identity = undefined; reads = writes = 0; disk.clear(); waitingReads.length = 0;
   surfaces = new Set([0, 1]);
   request = undefined;
   commits = 0;
@@ -50,7 +62,7 @@ const wait = ms => act(() => new Promise(resolve => setTimeout(resolve, ms)));
 
 function Host({ paused = false, view, current = "0:0", next = "1:0", aspect = 16 / 9 }) {
   const { stills, targets, sweep } = usePreviewStills(aspect, current, next);
-  view.current = { stills, targets, add: sweep.add, generation: sweep.generation };
+  view.current = { stills, targets, add: sweep.add, generation: sweep.generation, loading: sweep.loading, save: sweep.save };
   return <Profiler id="preview-capture" onRender={() => commits++}><PreviewStillSweep key={sweep.generation} {...sweep} paused={paused} /></Profiler>;
 }
 
@@ -130,6 +142,97 @@ test("no preparation indicator appears before a deck is loaded", async () => {
     await act(() => { renderer = create(<Host view={{}} />); });
     expect(renderer.root.findAllByType("text")).toHaveLength(0);
     expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+async function bake() {
+  for (const id of ["0:0", "1:0", "0:1"]) await act(() => request.deliver(id, `data:image/jpeg;base64,${btoa(id)}`));
+}
+
+test("a reopened deck restores previews without GPU capture, and note edits do no extra IO", async () => {
+  identity = cachedIdentity();
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await bake();
+    expect(writes).toBe(1);
+    const cached = view.current.stills, readCount = reads;
+    slides = slides.map(slide => ({ ...slide, notes: "new notes" }));
+    await act(() => renderer.update(<Host view={view} />));
+    expect(view.current.stills).toBe(cached);
+    expect(reads).toBe(readCount); expect(writes).toBe(1);
+    await act(() => renderer.unmount());
+    revision++;
+    const metadata = slides; slides = [];
+    await act(() => { renderer = create(<Host view={view} />); });
+    expect(reads).toBe(readCount + 1);
+    slides = metadata;
+    await act(() => renderer.update(<Host view={view} />));
+    expect(reads).toBe(readCount + 1);
+    expect(view.current.stills).toEqual(cached);
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+    expect(writes).toBe(1);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test.each(["intensity", "aspect", "speed", "density", "content"])("a changed %s invalidates the persisted snapshot", async change => {
+  identity = cachedIdentity();
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await bake();
+    if (change === "intensity") intensity = .5;
+    if (change === "speed") speed = 2;
+    if (change === "density") density = 1;
+    if (change === "content") identity = { ...identity, content: "c".repeat(64) };
+    await act(() => renderer.update(<Host view={view} aspect={change === "aspect" ? 4 / 3 : 16 / 9} />));
+    expect(view.current.stills).toEqual({});
+    expect(request.id).toBe("0:0");
+    expect(renderer.root.findAllByType("surface")).toHaveLength(1);
+  } finally { await act(() => renderer?.unmount()); }
+});
+
+test("a delayed restore cannot repopulate a newer deck generation", async () => {
+  identity = cachedIdentity();
+  const view = {};
+  let renderer, release;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await bake();
+    const oldCache = [...disk.values()][0];
+    const oldSave = view.current.save, oldGeneration = view.current.generation;
+    await act(() => renderer.unmount());
+    waitingReads.push(new Promise(resolve => { release = resolve; }));
+    await act(() => { renderer = create(<Host view={view} />); });
+    expect(view.current.loading).toBe(true);
+    expect(renderer.root.findByType("text").props.children).toBe("Loading saved previews");
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    identity = { ...identity, content: "d".repeat(64) };
+    await act(() => renderer.update(<Host view={view} />));
+    expect(view.current.stills).toEqual({});
+    await act(() => release(oldCache));
+    await act(() => oldSave(JSON.parse(oldCache), oldGeneration));
+    expect(writes).toBe(1);
+    expect(view.current.stills).toEqual({});
+    expect(request.id).toBe("0:0");
+  } finally { release?.("{}"); await act(() => renderer?.unmount()); }
+});
+
+test("restored no-GPU slide knowledge completes progress without another sweep", async () => {
+  identity = cachedIdentity(); surfaces = new Set([1]);
+  const view = {};
+  let renderer;
+  try {
+    await act(() => { renderer = create(<Host view={view} />); });
+    await wait(450);
+    await act(() => request.deliver("1:0", "data:image/jpeg;base64,AA=="));
+    await act(() => renderer.unmount());
+    await act(() => { renderer = create(<Host view={view} />); });
+    expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
   } finally { await act(() => renderer?.unmount()); }
 });
 
