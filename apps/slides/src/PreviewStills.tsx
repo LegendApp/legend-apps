@@ -102,14 +102,13 @@ export function PreviewStillSweep({ add, aspect, generation, paused, targets, st
   useEffect(() => {
     if (!loading && !paused && !target && !unavailable && targets.length) save?.({ stills, noSurface: [...new Set([...knownNoSurface, ...noSurface.current])], targets }, generation);
   }, [loading, paused, target, unavailable, stills, knownNoSurface, save, generation, targets]);
-  if (targets.length === 0) return null;
-  const label = loading ? "Loading saved previews" : target ? `${paused ? "Preview preparation paused" : "Preparing previews"} · ${completed}/${targets.length}`
-    : unavailable ? `Previews incomplete · ${unavailable} unavailable` : `Previews ready · ${targets.length}/${targets.length}`;
+  if (targets.length === 0 || !loading && (paused || !target)) return null;
+  const label = loading ? "Loading saved previews" : `Preparing previews · ${completed}/${targets.length}`;
   const [slide, step] = target?.split(":").map(Number) ?? [];
   return <>
     <View accessibilityLiveRegion="polite" accessibilityLabel={label} accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: targets.length, now: completed }} className="flex-row items-center gap-2 px-3 py-1">
-      {(loading || !paused && target) && <ActivityIndicator size="small" color="#a1a1aa" accessibilityLabel="Preparing previews" />}
+      <ActivityIndicator size="small" color="#a1a1aa" accessibilityLabel="Preparing previews" />
       <Text className="text-xs text-zinc-400">{label}</Text>
     </View>
     {!loading && !paused && target && <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={[styles.sweep, { width: STILL_WIDTH, height: STILL_WIDTH / aspect }]}>

@@ -95,7 +95,7 @@ test("deck opening bakes every reveal once on one hidden surface, then stays idl
   } finally { await act(() => renderer?.unmount()); }
 });
 
-test("preparation status follows captures, pauses, and completes without further capture work", async () => {
+test("preparation status is visible only while loading or generating, with no idle row", async () => {
   const view = {};
   let renderer;
   try {
@@ -105,20 +105,22 @@ test("preparation status follows captures, pauses, and completes without further
     await act(() => request.deliver("0:0", "first"));
     expect(renderer.root.findByType("text").props.children).toBe("Preparing previews · 1/3");
     await act(() => renderer.update(<Host view={view} paused />));
-    expect(renderer.root.findByType("text").props.children).toBe("Preview preparation paused · 1/3");
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
     expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    expect(renderer.toJSON()).toBeNull();
     await act(() => renderer.update(<Host view={view} />));
     await act(() => request.deliver("1:0", "second"));
     await act(() => request.deliver("0:1", "third"));
-    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
     expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
+    expect(renderer.toJSON()).toBeNull();
   } finally { await act(() => renderer?.unmount()); }
 });
 
-test("a GPU capture timeout reports incomplete preparation, never ready", async () => {
-  slides = [{ steps: 1 }];
+test("a GPU capture timeout stops the progress indicator without persisting incomplete work", async () => {
+  slides = [{ steps: 1 }]; identity = cachedIdentity();
   const setTimer = globalThis.setTimeout;
   const timer = spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) =>
     setTimer(callback, delay === 400 || delay === 8000 ? 1 : delay, ...args));
@@ -127,11 +129,13 @@ test("a GPU capture timeout reports incomplete preparation, never ready", async 
   try {
     await act(() => { renderer = create(<Host view={view} />); });
     await wait(20);
-    expect(renderer.root.findByType("text").props.children).toBe("Previews incomplete · 1 unavailable");
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
     expect(renderer.root.findAllByType("spinner")).toHaveLength(0);
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
-    await act(() => view.current.add("0:0", "recovered", view.current.generation));
-    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 1/1");
+    expect(writes).toBe(0);
+    await act(() => view.current.add("0:0", "data:image/jpeg;base64,AA==", view.current.generation));
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
+    expect(writes).toBe(1);
   } finally { timer.mockRestore(); await act(() => renderer?.unmount()); }
 });
 
@@ -172,7 +176,7 @@ test("a reopened deck restores previews without GPU capture, and note edits do n
     expect(reads).toBe(readCount + 1);
     expect(view.current.stills).toEqual(cached);
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
-    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
     expect(writes).toBe(1);
   } finally { await act(() => renderer?.unmount()); }
 });
@@ -232,7 +236,7 @@ test("restored no-GPU slide knowledge completes progress without another sweep",
     await act(() => renderer.unmount());
     await act(() => { renderer = create(<Host view={view} />); });
     expect(renderer.root.findAllByType("surface")).toHaveLength(0);
-    expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+    expect(renderer.root.findAllByType("text")).toHaveLength(0);
   } finally { await act(() => renderer?.unmount()); }
 });
 
@@ -346,7 +350,7 @@ test("a slide with no GPU background is skipped once, without waiting on its oth
   expect(renderer.root.findByType("text").props.children).toBe("Preparing previews · 2/3");
   await act(() => request.deliver("1:0", "b"));
   expect(view.current.stills).toEqual({ "1:0": "b" });
-  expect(renderer.root.findByType("text").props.children).toBe("Previews ready · 3/3");
+  expect(renderer.root.findAllByType("text")).toHaveLength(0);
   await act(() => renderer.unmount());
 });
 
