@@ -3,7 +3,7 @@ import "../../../apps/slides/src/__tests__/nativeMock";
 import { expect, test } from "bun:test";
 import React from "react";
 import { CodeMorph, CodeTrace, expandScene } from "../packs/world/Authoring";
-import { Text3D } from "../packs/world/World";
+import { Card, Text3D } from "../packs/world/World";
 import { compileTrack, sampleTrack, type Animated } from "../packs/world/scene";
 import { text3dInstances } from "../packs/world/text3d";
 import { highlightedFence } from "./highlightedFence";
@@ -12,6 +12,34 @@ const flat = (node: React.ReactNode): React.ReactElement<Record<string, unknown>
   React.isValidElement<{ children?: React.ReactNode }>(child) ? [child, ...flat(child.props.children)] : []);
 const clock = (stepIndex: number, stepTime: number) => ({ slideTime: stepIndex * 5 + stepTime, stepIndex, stepTime, stepOrigins: { 0: 0, 1: 5, 2: 10, 3: 15 } });
 const value = <T extends number | [number, number, number]>(prop: unknown, step: number, time = 4): T => sampleTrack(compileTrack(prop as Animated<T>), clock(step, time));
+
+test("morphs can omit initial highlights while retaining later line and word highlights", async () => {
+  const fences = [
+    await highlightedFence("-const value = first()\n+const value = second()", "diff-tsx"),
+    await highlightedFence("-const value = second()\n+const value = third()", "diff-tsx"),
+  ];
+  const defaults = flat(expandScene(<CodeMorph id="m">{fences}</CodeMorph>));
+  const tree = flat(expandScene(<CodeMorph id="m" highlight={{ initial: false, opacity: .4, word: { opacity: .7 } }}>{fences}</CodeMorph>));
+  const highlights = tree.filter(node => node.type === Card && /\/(band|word)/.test(String(node.props.id)));
+  expect(highlights.some(node => String(node.props.id).includes("/band"))).toBe(true);
+  expect(highlights.some(node => String(node.props.id).includes("/word"))).toBe(true);
+  for (const time of [0, .5, 4]) {
+    for (const node of highlights) expect(value<number>(node.props.opacity, 0, time)).toBe(0);
+    expect(value<number>(defaults.find(node => node.props.id === "m/band0/0/0")!.props.opacity, 0, time)).toBe(1);
+  }
+  for (const step of [1, 2, 3, 2, 1, 0]) {
+    const active = highlights.filter(node => value<number>(node.props.opacity, step) > 0);
+    expect(active.length > 0).toBe(step === 1 || step === 2);
+    for (const node of active) {
+      const word = String(node.props.id).includes("/word");
+      expect(value<number>(node.props.opacity, step, .25)).toBe(0);
+      expect(value<number>(node.props.opacity, step, .4)).toBeCloseTo((word ? .7 : .4) / 2);
+      expect(value<number>(node.props.opacity, step)).toBe(word ? .7 : .4);
+      expect(value<number>(defaults.find(other => other.props.id === node.props.id)!.props.opacity, step)).toBe(1);
+    }
+  }
+  expect(() => expandScene(<CodeMorph id="m" highlight={{ initial: "false" }}>{fences}</CodeMorph>)).toThrow(/highlight.initial must be true or false/);
+});
 
 async function trace() {
   return flat(expandScene(<CodeTrace id="trace" source={1} reads={[3]} nodes={["Owner", "Reader"]}>

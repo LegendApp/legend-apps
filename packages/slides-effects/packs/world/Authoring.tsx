@@ -981,7 +981,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
   const width = Math.max(...widths), height = (s: number) => (states[s].length - 1) * rowHeight(s) + em + .6;
   const panel = (s: number) => ({ position: [widths[s] / 2 - .3, -(height(s) - em - .6) / 2, -.14] as V3, scale: [widths[s], height(s), .06] as V3 });
   const panelTrack = (pick: (p: ReturnType<typeof panel>) => V3) => [{ step: 0, value: pick(panel(0)) }, ...states.slice(1).map((_, t) => key(first + t, pick(panel(t + 1)), settle, .5))];
-  const highlight = props.highlight as { opacity?: number; word?: { opacity?: number } } | undefined;
+  const highlight = props.highlight as { initial?: boolean; opacity?: number; word?: { opacity?: number } } | undefined;
   const highlightOpacity = highlight?.opacity ?? 1, wordOpacity = highlight?.word?.opacity ?? highlightOpacity;
   // On a changed line that keeps some tokens, each run of new tokens gets its own band over the line band.
   const words = bands.flatMap((band, t) => band.after.flatMap(row => {
@@ -999,7 +999,7 @@ function codeMorph(id: string, at: V3, props: Record<string, unknown>, diffs: Di
     <Card id={`${id}/card`} position={panelTrack(p => p.position)} scale={panelTrack(p => p.scale)} {...panelStyle(props)} color={INK.colors.panel} />
     {bands.flatMap((band, t) => [band.before, band.after].flatMap((rows, side) => rows.map(row => <Card {...HIGHLIGHT} key={`${t}/${side}/${row}`} id={`${id}/band${t}/${side}/${row}`}
       position={[widths[t + side] / 2 - .3, -row * rowHeight(t + side), -.07]} scale={[widths[t + side] - .2, rowHeight(t + side), .02]}
-      opacity={[{ step: 0, value: t === 0 && side === 0 ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
+      opacity={[{ step: 0, value: t === 0 && side === 0 && highlight?.initial !== false ? highlightOpacity : 0 }, key(band.step, side ? highlightOpacity : 0, side ? settle : 0, .3),
         key(band.step + 1, 0, 0, 0)]} />)))}
     {words.map(({ row, from, to, t, step }) => <Card {...HIGHLIGHT} key={`${t}/${row}/${from}`} id={`${id}/word${t}/${row}/${from}`}
       position={[(from + to) / 2 * advance, -row * rowHeight(t + 1), -.06]} scale={[(to - from) * advance + .08, rowHeight(t + 1) * .84, .02]}
