@@ -5,6 +5,8 @@ import React from "react";
 import { Text } from "react-native";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { VaultLinkIndex } from "../markdownLinkIndex";
+import { setMarkdownWindowDirtyDocument } from "../markdownEditorActions";
+import { writeTextIfUnchanged } from "@legendapp/spark/files";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
@@ -73,6 +75,7 @@ jest.mock("@legendapp/spark/shortcuts/commands", () => ({ createHotkeyRouter: je
 
 jest.mock("@legendapp/spark/files", () => ({
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+  writeTextIfUnchanged: jest.fn(async () => ({ written: true })),
 }));
 
 
@@ -349,6 +352,28 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       mockSessionOptions.onDocumentLoaded?.();
     });
     expect(mockFind.mock.calls).toEqual([["[[target]]", false, true], ["[[target]]"]]);
+    mockBacklinksOpen = false;
+    await view.unmount();
+  });
+
+  it("links an unlinked mention on disk unless another window has unsaved edits to that note", async () => {
+    mockVault.index = new VaultLinkIndex("/vault");
+    mockVault.index.set("/vault/Target.md", "# Target");
+    mockVault.index.set("/vault/c.md", "about target here");
+    mockSessionState$.assign({ documentSource: "file", filename: "/vault/Target.md" });
+    mockBacklinksOpen = true;
+    mockSession.handleError.mockClear();
+    const view = await render(<MarkdownEditorWindow folders={["/vault"]} />);
+    await act(async () => fireEvent.press(view.getByText(/Unlinked mentions/)));
+
+    setMarkdownWindowDirtyDocument("other-window", "/vault/c.md");
+    await act(async () => fireEvent.press(view.getByLabelText("Link mention in c.md")));
+    expect(writeTextIfUnchanged).not.toHaveBeenCalled();
+    expect(mockSession.handleError).toHaveBeenLastCalledWith(new Error("Save c.md before linking mentions in it."));
+
+    setMarkdownWindowDirtyDocument("other-window", null);
+    await act(async () => fireEvent.press(view.getByLabelText("Link mention in c.md")));
+    expect(writeTextIfUnchanged).toHaveBeenCalledWith("/vault/c.md", "about target here", "about [[Target|target]] here");
     mockBacklinksOpen = false;
     await view.unmount();
   });

@@ -36,3 +36,15 @@ export function registerMarkdownEditorRecentDocumentHandler(windowId: string, ha
 export function getMarkdownEditorRecentDocumentHandler() {
   return recentDocumentWindows.active() ?? null;
 }
+
+/** Each window's document while it has unsaved edits, so no window rewrites it on disk underneath them. */
+const dirtyDocumentWindows = new Map<string, string>();
+
+export function setMarkdownWindowDirtyDocument(windowId: string, path: string | null) {
+  if (path) dirtyDocumentWindows.set(windowId, path);
+  else dirtyDocumentWindows.delete(windowId);
+}
+
+export function hasUnsavedMarkdownDocument(path: string) {
+  return [...dirtyDocumentWindows.values()].includes(path);
+}

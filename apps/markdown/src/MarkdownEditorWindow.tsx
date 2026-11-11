@@ -1,6 +1,5 @@
-import { watch } from "@legendapp/spark/files";
+import { watch, writeTextIfUnchanged } from "@legendapp/spark/files";
 import { ownRegistration } from "@legend-apps/runtime-utils";
-import { getDirectory } from "./markdownFiles";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import {
   MarkdownDocument,
@@ -15,7 +14,7 @@ import {
   useWorkspaceWindow,
   WorkspaceSidebar,
 } from "@legend-apps/workspace";
-import { useValue } from "@legendapp/state/react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
@@ -45,8 +44,9 @@ import {
 } from "./useMarkdownWindows";
 import { editorWindowIdentifier, markdownFileTypes } from "./appConstants";
 import { BacklinksPanel, revealMention } from "./BacklinksPanel";
-import { getDirectory as getParentDirectory, getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
-import type { NoteMention } from "./markdownLinkIndex";
+import { getDirectory, getFilename, getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import { getNoteTitle, linkMention, type NoteMention } from "./markdownLinkIndex";
+import { hasUnsavedMarkdownDocument, setMarkdownWindowDirtyDocument } from "./markdownEditorActions";
 import { useVaultLinkIndex } from "./useVaultLinkIndex";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
@@ -268,7 +268,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const backlinksOpen = useMarkdownBacklinksOpenSetting();
   // The vault is the sidebar folder holding the document, else its first folder, else the document's own folder.
   const vaultFolders = workspace.state.folders;
-  const vaultRoot = vaultFolders.find(folder => currentFile?.startsWith(`${folder}/`)) ?? vaultFolders[0] ?? (currentFile && getParentDirectory(currentFile)) ?? null;
+  const vaultRoot = vaultFolders.find(folder => currentFile?.startsWith(`${folder}/`)) ?? vaultFolders[0] ?? (currentFile && getDirectory(currentFile)) ?? null;
   const vault = useVaultLinkIndex(backlinksOpen ? vaultRoot : null, handleError);
   const pendingRevealRef = useRef<{ mention: NoteMention; path: string; text: string } | null>(null);
   useEffect(() => {
@@ -288,6 +288,20 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     pendingRevealRef.current = { mention, path, text };
     switchToFile(path).catch(handleError);
   }, [currentFile, documentCommandsRef, handleError, switchToFile, vault]);
+  useObserveEffect(() => {
+    const { documentSource, filename, isDirty } = session.sessionState$.get();
+    setMarkdownWindowDirtyDocument(windowId, isDirty && documentSource === "file" ? filename : null);
+  });
+  useEffect(() => () => setMarkdownWindowDirtyDocument(windowId, null), [windowId]);
+  const linkUnlinkedMention = useCallback(async (path: string, mention: NoteMention) => {
+    const text = vault.index?.getText(path);
+    const linked = currentFile && text !== undefined ? linkMention(text, mention, getNoteTitle(currentFile)) : null;
+    // Writing under unsaved edits in another window would force a conflict on them, so ask for a save first.
+    if (hasUnsavedMarkdownDocument(path)) throw new Error(`Save ${getFilename(path)} before linking mentions in it.`);
+    if (text === undefined || linked === null || !(await writeTextIfUnchanged(path, text, linked)).written) {
+      throw new Error(`${getFilename(path)} changed on disk. Try again once backlinks refresh.`);
+    }
+  }, [currentFile, vault]);
 
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
@@ -347,7 +361,14 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
           session={session}
           theme={displayTheme.markdownDocument}
         />
-        {backlinksOpen && <BacklinksPanel onOpenMention={openMention} target={currentFile} vault={vault} />}
+        {backlinksOpen && (
+          <BacklinksPanel
+            onLinkMention={(path, mention) => { linkUnlinkedMention(path, mention).catch(handleError); }}
+            onOpenMention={openMention}
+            target={currentFile}
+            vault={vault}
+          />
+        )}
       </View>
     </View>
   );

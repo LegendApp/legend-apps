@@ -1,4 +1,4 @@
-import { parseNoteLinks, VaultLinkIndex } from "../markdownLinkIndex";
+import { linkMention, parseFrontmatterAliases, parseNoteLinks, VaultLinkIndex } from "../markdownLinkIndex";
 import { scanVault, updateVaultPath } from "../useVaultLinkIndex";
 
 const tree: Record<string, string | null> = {};
@@ -82,6 +82,35 @@ describe("VaultLinkIndex.linkedMentions", () => {
     ]);
     index.delete("/vault/b.md");
     expect(index.linkedMentions("/vault/Target.md").map(group => group.source)).toEqual(["/vault/a.md"]);
+  });
+});
+
+describe("unlinked mentions", () => {
+  it("reads frontmatter aliases as inline lists, block lists or single values", () => {
+    expect(parseFrontmatterAliases("---\naliases: [One, \"Two\"]\n---\n")).toEqual(["One", "Two"]);
+    expect(parseFrontmatterAliases("---\ntags: x\naliases:\n  - One\n  - 'Two'\nother: y\n---")).toEqual(["One", "Two"]);
+    expect(parseFrontmatterAliases("---\nalias: Solo\n---")).toEqual(["Solo"]);
+    expect(parseFrontmatterAliases("aliases: [Not frontmatter]")).toEqual([]);
+  });
+
+  it("finds whole-word title and alias text outside links, code and URLs", () => {
+    const index = new VaultLinkIndex("/vault");
+    index.set("/vault/Project X.md", "---\naliases: [PX]\n---\nProject X mentions itself.");
+    index.set("/vault/a.md", "About project x and PX.\n[[Project X]] `Project X` Project Xylophone https://px.dev/Project-X [Project X](https://x.dev)");
+    index.set("/vault/b.md", "nothing here");
+    expect(index.unlinkedMentions("/vault/Project X.md")).toEqual([{
+      mentions: [
+        { context: "About project x and PX.", contextStart: 0, end: 15, start: 6, text: "project x" },
+        { context: "About project x and PX.", contextStart: 0, end: 22, start: 20, text: "PX" },
+      ],
+      source: "/vault/a.md",
+    }]);
+  });
+
+  it("links a mention with the title, keeping other wording as the alias", () => {
+    expect(linkMention("See Note now", { end: 8, start: 4, text: "Note" }, "Note")).toBe("See [[Note]] now");
+    expect(linkMention("See note now", { end: 8, start: 4, text: "note" }, "Note")).toBe("See [[Note|note]] now");
+    expect(linkMention("Changed", { end: 8, start: 4, text: "Note" }, "Note")).toBeNull();
   });
 });
 

@@ -92,6 +92,21 @@ export function parseNoteLinks(text: string): MarkdownNoteLink[] {
   return links.sort((a, b) => a.start - b.start);
 }
 
+/** Reads `aliases` (or `alias`) from YAML frontmatter, as an inline list, a block list or a single value. */
+export function parseFrontmatterAliases(text: string): string[] {
+  const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(text);
+  if (!match) return [];
+  const lines = match[1].split("\n");
+  const index = lines.findIndex(line => /^alias(es)?\s*:/.test(line));
+  if (index < 0) return [];
+  const unquote = (value: string) => value.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  const inline = lines[index].replace(/^alias(es)?\s*:/, "").trim();
+  const values = inline
+    ? inline.replace(/^\[|\]$/g, "").split(",")
+    : lines.slice(index + 1).filter((_, i, rest) => rest.slice(0, i + 1).every(line => /^\s*-\s/.test(line))).map(line => line.replace(/^\s*-\s/, ""));
+  return values.map(unquote).filter(Boolean);
+}
+
 function stripMarkdownExtension(path: string) {
   return isMarkdownPath(path) ? path.slice(0, path.lastIndexOf(".")) : path;
 }
@@ -114,6 +129,10 @@ function getLineContext(text: string, start: number, end: number) {
   const contextStart = text.lastIndexOf("\n", start - 1) + 1;
   const lineEnd = text.indexOf("\n", end);
   return { context: text.slice(contextStart, lineEnd < 0 ? text.length : lineEnd), contextStart };
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Links and text of every Markdown note in a vault folder, updated one file at a time. */
@@ -192,5 +211,33 @@ export class VaultLinkIndex {
     }
     return groups.sort((a, b) => a.source.localeCompare(b.source));
   }
+
+  /** Plain-text occurrences of the note's title or aliases outside links and code, grouped by source note. */
+  unlinkedMentions(target: string): NoteMentions[] {
+    const names = [getNoteTitle(target), ...parseFrontmatterAliases(this.notes.get(target)?.text ?? "")].filter(name => name.trim());
+    if (names.length === 0) return [];
+    // Longer names first, so an alias containing the title wins its span.
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])(?:${names.sort((a, b) => b.length - a.length).map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}_])`, "giu");
+    const groups: NoteMentions[] = [];
+    for (const [source, { links, text }] of this.notes) {
+      if (source === target) continue;
+      let masked = maskMarkdownCode(text);
+      for (const { end, start } of links) masked = masked.slice(0, start) + " ".repeat(end - start) + masked.slice(end);
+      // Bare URLs and Markdown link text are not mentions either.
+      masked = masked.replace(/\[[^\]\n]*\]\([^)\n]*\)|<?\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, match => " ".repeat(match.length));
+      const mentions = [...masked.matchAll(pattern)].map(match => {
+        const start = match.index, end = start + match[0].length;
+        return { ...getLineContext(text, start, end), end, start, text: text.slice(start, end) };
+      });
+      if (mentions.length > 0) groups.push({ mentions, source });
+    }
+    return groups.sort((a, b) => a.source.localeCompare(b.source));
+  }
 }
 
+/** Rewrites one unlinked mention as a wikilink, keeping the original wording as the alias when it differs. */
+export function linkMention(text: string, mention: Pick<NoteMention, "end" | "start" | "text">, title: string) {
+  if (text.slice(mention.start, mention.end) !== mention.text) return null;
+  const link = mention.text === title ? `[[${title}]]` : `[[${title}|${mention.text}]]`;
+  return text.slice(0, mention.start) + link + text.slice(mention.end);
+}
