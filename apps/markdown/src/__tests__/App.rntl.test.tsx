@@ -145,6 +145,14 @@ describe("App markdown shell actions", () => {
         expect(command).toHaveBeenCalledTimes(1);
         unregister();
     });
+    it("gives Toggle Backlinks a View menu shortcut no other menu item uses", () => {
+        const shortcuts: string[] = [];
+        const visit = (items: readonly any[]) => items.forEach(item => item.type === "submenu" ? visit(item.items) : item.shortcut && shortcuts.push(item.shortcut.toLowerCase()));
+        visit(markdownMenuConfig);
+        const view = markdownMenuConfig.find(item => item.id === "view");
+        expect(view?.type === "submenu" && view.items.find(item => item.type !== "separator" && item.id === "toggleBacklinks")).toMatchObject({ shortcut: "Cmd+Shift+b" });
+        expect(new Set(shortcuts).size).toBe(shortcuts.length);
+    });
     it("routes the native Select All menu action to the document", async () => {
         const selectAll = jest.fn();
         const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { selectAll }, jest.fn());

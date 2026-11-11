@@ -16,7 +16,7 @@ import {
   WorkspaceSidebar,
 } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
@@ -44,11 +44,15 @@ import {
   useMarkdownSettingsWindow,
 } from "./useMarkdownWindows";
 import { editorWindowIdentifier, markdownFileTypes } from "./appConstants";
-import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import { BacklinksPanel, revealMention } from "./BacklinksPanel";
+import { getDirectory as getParentDirectory, getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import type { NoteMention } from "./markdownLinkIndex";
+import { useVaultLinkIndex } from "./useVaultLinkIndex";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
   applyMarkdownThemeSetting,
   getMarkdownSidebarOpenSetting,
+  useMarkdownBacklinksOpenSetting,
   setMarkdownSidebarOpenSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
@@ -111,7 +115,9 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   });
   const { openTab, renameTab } = workspace;
   // Tabs follow the session: opening a file adds its tab and Save As renames it.
+  const [documentLoadCount, noteDocumentLoaded] = useReducer((count: number) => count + 1, 0);
   const session = useMarkdownDocumentSession({
+    onDocumentLoaded: noteDocumentLoaded,
     onFileOpened: openTab,
     onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
   });
@@ -259,6 +265,30 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   }, [autosave, currentFile, openSelectedFile, openUntitledDocument, prepareCurrentDocumentForClose, workspace]);
   const workspaceColors = displayTheme.colors;
 
+  const backlinksOpen = useMarkdownBacklinksOpenSetting();
+  // The vault is the sidebar folder holding the document, else its first folder, else the document's own folder.
+  const vaultFolders = workspace.state.folders;
+  const vaultRoot = vaultFolders.find(folder => currentFile?.startsWith(`${folder}/`)) ?? vaultFolders[0] ?? (currentFile && getParentDirectory(currentFile)) ?? null;
+  const vault = useVaultLinkIndex(backlinksOpen ? vaultRoot : null, handleError);
+  const pendingRevealRef = useRef<{ mention: NoteMention; path: string; text: string } | null>(null);
+  useEffect(() => {
+    const pending = pendingRevealRef.current;
+    const commands = documentCommandsRef.current;
+    if (!pending || pending.path !== currentFile || !commands) return;
+    pendingRevealRef.current = null;
+    revealMention(commands, pending.text, pending.mention).catch(handleError);
+  }, [currentFile, documentCommandsRef, documentLoadCount, handleError]);
+  const openMention = useCallback((path: string, mention: NoteMention) => {
+    const text = vault.index?.getText(path) ?? "";
+    const commands = documentCommandsRef.current;
+    if (path === currentFile && commands) {
+      revealMention(commands, text, mention).catch(handleError);
+      return;
+    }
+    pendingRevealRef.current = { mention, path, text };
+    switchToFile(path).catch(handleError);
+  }, [currentFile, documentCommandsRef, handleError, switchToFile, vault]);
+
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
     if (editorSmokeVariant) {
@@ -299,23 +329,26 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         <Text className="text-muted">{findStatus}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
       </View>}
-      <MarkdownEditorSessionContent
-        autosaveEnabled={autosave === "enabled"}
-        backgroundStyle={backgroundStyle}
-        dangerColor={displayTheme.colors.danger}
-        foregroundColor={displayTheme.colors.foreground}
-        formattingToolbarMode={formattingToolbarMode}
-        isLinkPopoverOpen={isLinkPopoverOpen}
-        markdownLayout={markdownLayout}
-        markdownStyle={markdownStyle}
-        mutedColor={displayTheme.colors.muted}
-        onApplyLink={applyLink}
-        onCancelLink={() => setIsLinkPopoverOpen(false)}
-        onInsertLink={insertLink}
-        renderSelectionToolbar={renderSelectionToolbar}
-        session={session}
-        theme={displayTheme.markdownDocument}
-      />
+      <View className="flex-1 flex-row">
+        <MarkdownEditorSessionContent
+          autosaveEnabled={autosave === "enabled"}
+          backgroundStyle={backgroundStyle}
+          dangerColor={displayTheme.colors.danger}
+          foregroundColor={displayTheme.colors.foreground}
+          formattingToolbarMode={formattingToolbarMode}
+          isLinkPopoverOpen={isLinkPopoverOpen}
+          markdownLayout={markdownLayout}
+          markdownStyle={markdownStyle}
+          mutedColor={displayTheme.colors.muted}
+          onApplyLink={applyLink}
+          onCancelLink={() => setIsLinkPopoverOpen(false)}
+          onInsertLink={insertLink}
+          renderSelectionToolbar={renderSelectionToolbar}
+          session={session}
+          theme={displayTheme.markdownDocument}
+        />
+        {backlinksOpen && <BacklinksPanel onOpenMention={openMention} target={currentFile} vault={vault} />}
+      </View>
     </View>
   );
 

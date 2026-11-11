@@ -4,6 +4,7 @@ import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
+import { VaultLinkIndex } from "../markdownLinkIndex";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
@@ -25,6 +26,10 @@ const mockMarkdownDocument = jest.fn((_props: unknown) => {
 const mockInvalidateLayoutMeasurements = jest.fn();
 const mockReloadDocument = jest.fn();
 const mockCheckForExternalChanges = jest.fn(async () => {});
+const mockFind = jest.fn(async (_query: string, _backwards?: boolean, _fromStart?: boolean) => true);
+let mockBacklinksOpen = false;
+let mockSessionOptions: { onDocumentLoaded?: () => void } = {};
+const mockVault = { index: new VaultLinkIndex("/vault") as VaultLinkIndex | null };
 const mockSessionState$ = observable<MarkdownDocumentSessionState>({
   conflict: null,
   commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
@@ -41,6 +46,7 @@ const mockSession = {
       invalidateLayoutMeasurements: mockInvalidateLayoutMeasurements,
       reload: mockReloadDocument,
       checkForExternalChanges: mockCheckForExternalChanges,
+      find: mockFind,
     },
   },
   flushCurrentDocumentBeforeTransition: jest.fn(async () => true),
@@ -108,7 +114,14 @@ jest.mock("../MarkdownFloatingSurface", () => ({
 }));
 
 jest.mock("../useMarkdownDocumentSession", () => ({
-  useMarkdownDocumentSession: () => mockSession,
+  useMarkdownDocumentSession: (options: typeof mockSessionOptions) => {
+    mockSessionOptions = options;
+    return mockSession;
+  },
+}));
+
+jest.mock("../useVaultLinkIndex", () => ({
+  useVaultLinkIndex: (root: string | null) => root === "/vault" ? mockVault : { index: null },
 }));
 
 jest.mock("../useMarkdownDocumentEvents", () => ({
@@ -135,6 +148,7 @@ jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
   getMarkdownSidebarOpenSetting: () => true,
   setMarkdownSidebarOpenSetting: jest.fn(),
+  useMarkdownBacklinksOpenSetting: () => mockBacklinksOpen,
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
   useMarkdownDisplayThemeSetting: () => "system",
@@ -314,6 +328,28 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     await act(async () => { mockSessionState$.conflict.set("missing"); });
     expect(view.queryByText("Use disk")).toBeNull();
     expect(view.getByText(/removed from disk/)).toBeTruthy();
+    await view.unmount();
+  });
+
+  it("lists backlinks for the active note and opens a mention in its tab, then selects it", async () => {
+    mockVault.index!.set("/vault/Target.md", "# Target");
+    mockVault.index!.set("/vault/b.md", "x [[Target]]\nagain [[target]]");
+    mockSessionState$.assign({ documentSource: "file", filename: "/vault/Target.md" });
+    mockBacklinksOpen = true;
+    const view = await render(<MarkdownEditorWindow folders={["/vault"]} />);
+    expect(view.getByText("b.md")).toBeTruthy();
+    expect(view.getByText("2")).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByText(/^again/)));
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/b.md");
+    expect(mockFind).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockSessionState$.assign({ filename: "/vault/b.md" });
+      mockSessionOptions.onDocumentLoaded?.();
+    });
+    expect(mockFind.mock.calls).toEqual([["[[target]]", false, true], ["[[target]]"]]);
+    mockBacklinksOpen = false;
     await view.unmount();
   });
 });

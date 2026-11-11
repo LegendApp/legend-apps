@@ -44,6 +44,7 @@ const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "
 
 type MarkdownSettingsFile = {
   autosave: MarkdownAutosaveSetting;
+  backlinksOpen: boolean;
   contentWidth: MarkdownContentWidthSetting;
   density: MarkdownDocumentDensitySetting;
   displayTheme: MarkdownDisplayThemeSetting;
@@ -63,6 +64,7 @@ type MarkdownSettingsFile = {
 
 const initialMarkdownSettings: MarkdownSettingsFile = {
   autosave: "enabled",
+  backlinksOpen: false,
   contentWidth: "standard",
   density: "comfortable",
   displayTheme: "light",
@@ -151,6 +153,14 @@ export function getMarkdownSidebarOpenSetting(): boolean {
 
 export function setMarkdownSidebarOpenSetting(open: boolean) {
   markdownSettings$.sidebarOpen.set(open);
+}
+
+export function useMarkdownBacklinksOpenSetting(): boolean {
+  return useValue(markdownSettings$.backlinksOpen) === true;
+}
+
+export function toggleMarkdownBacklinksOpenSetting() {
+  markdownSettings$.backlinksOpen.set(open => open !== true);
 }
 
 export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {

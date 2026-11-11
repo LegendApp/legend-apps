@@ -73,6 +73,14 @@ export const markdownMenuConfig: MenuRootItem[] = [
     ],
   },
   { type: "submenu",
+    id: "view",
+    label: "View",
+    target: { menu: "view" },
+    items: [
+      { type: "action", id: "toggleBacklinks", label: "Toggle Backlinks", shortcut: "Cmd+Shift+b" },
+    ],
+  },
+  { type: "submenu",
     id: "format",
     label: "Format",
     items: [

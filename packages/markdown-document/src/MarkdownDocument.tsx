@@ -3292,13 +3292,13 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectDocument().catch(reportAsyncError);
     }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
 
-    const find = useCallback(async (query: string, backwards = false) => {
+    const find = useCallback(async (query: string, backwards = false, fromStart = false) => {
       if (!query) return false;
       await commitActiveBlock({ updateReactState: true });
       const count = getBlockCount();
       if (count === 0) return false;
       const previous = findMatchRef.current;
-      const continuing = previous?.query === query && getBlockIndexById(previous.blockId) >= 0;
+      const continuing = !fromStart && previous?.query === query && getBlockIndexById(previous.blockId) >= 0;
       const firstIndex = continuing ? getBlockIndexById(previous.blockId) : 0;
       for (let step = 0; step <= count; step += 1) {
         const index = (firstIndex + (backwards ? -step : step) + count) % count;

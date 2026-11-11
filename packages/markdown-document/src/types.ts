@@ -103,7 +103,8 @@ export type MarkdownDocumentCommands = {
   undo(): void;
   redo(): void;
   selectAll(): void;
-  find(query: string, backwards?: boolean): Promise<boolean>;
+  /** Selects the next case-insensitive match, or the first one when `fromStart` is set. */
+  find(query: string, backwards?: boolean, fromStart?: boolean): Promise<boolean>;
   commitAndBlurActiveBlock(): boolean;
   extendBlockSelectionDown(): boolean;
   extendBlockSelectionUp(): boolean;

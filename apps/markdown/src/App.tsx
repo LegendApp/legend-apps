@@ -15,7 +15,7 @@ import {
 } from "./markdownEditorActions";
 import { isMarkdownPath, newMarkdownDocumentLaunchArgument } from "./markdownFiles";
 import { markdownMenuConfig, markdownMenuState$ } from "./markdownMenus";
-import { applyMarkdownThemeSetting } from "./markdownSettings";
+import { applyMarkdownThemeSetting, toggleMarkdownBacklinksOpenSetting } from "./markdownSettings";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import {
   openMarkdownEditorWindow,
@@ -87,6 +87,7 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     saveAs: dispatchMarkdownEditorMenuAction,
     saveWorkspace: dispatchMarkdownEditorMenuAction,
     toggleSidebar: dispatchMarkdownEditorMenuAction,
+    toggleBacklinks: toggleMarkdownBacklinksOpenSetting,
     revealInFinder: dispatchMarkdownEditorMenuAction,
     undo: dispatchMarkdownEditorMenuAction,
     redo: dispatchMarkdownEditorMenuAction,

@@ -39,9 +39,11 @@ export type MarkdownDocumentSessionOptions = {
   onFileOpened?: (path: string) => void;
   /** The document was saved to `to`; `from` is null for an untitled document. */
   onFileSavedAs?: (from: string | null, to: string) => void;
+  /** The editor finished loading the window's document. */
+  onDocumentLoaded?: () => void;
 };
 
-export function useMarkdownDocumentSession({ onFileOpened, onFileSavedAs }: MarkdownDocumentSessionOptions = {}) {
+export function useMarkdownDocumentSession({ onDocumentLoaded, onFileOpened, onFileSavedAs }: MarkdownDocumentSessionOptions = {}) {
   const sessionState$ = useObservable<MarkdownDocumentSessionState>({
     conflict: null,
     commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
@@ -67,7 +69,8 @@ export function useMarkdownDocumentSession({ onFileOpened, onFileSavedAs }: Mark
     } else {
       sessionState$.lastError.set(null);
     }
-  }, [sessionState$]);
+    onDocumentLoaded?.();
+  }, [onDocumentLoaded, sessionState$]);
 
   const handleError = useCallback((error: unknown) => {
     if (isMarkdownFileConflictError(error)) return;
