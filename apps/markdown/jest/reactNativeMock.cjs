@@ -40,6 +40,7 @@ class ValueXY {
 }
 
 module.exports = {
+  Alert: { alert: jest.fn() },
   UIManager: { hasViewManagerConfig: () => true },
   TurboModuleRegistry: { get: jest.fn(() => null), getEnforcing: jest.fn(() => ({})) },
   NativeEventEmitter: class { addListener() { return { remove() {} }; } },

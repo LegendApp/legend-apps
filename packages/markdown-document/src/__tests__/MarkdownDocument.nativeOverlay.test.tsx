@@ -1,7 +1,7 @@
 import { MarkdownEditorHostCommands } from "@legend-apps/markdown-block-editor";
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
-import { Image, Modal, Platform, Pressable, Text, View } from "react-native";
+import { Image, Linking, Modal, Platform, Pressable, Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { MarkdownDocument } from "../MarkdownDocument";
 import { MarkdownBlockRow, MarkdownRowEditorInput } from "../MarkdownBlockRow";
@@ -1961,6 +1961,23 @@ describe("MarkdownDocument native row editor", () => {
     expect(adapter.sourceMarkdown).toBe(original);
     await act(async () => commands.current!.redo());
     expect(adapter.sourceMarkdown).toBe("- [x] First\n- [x] Second");
+    await act(async () => renderer.unmount());
+  });
+
+  it("lets onLinkPress claim a pressed link before it opens as a URL", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("d1:b0", 0, "[a](Note.md) [b](https://x.dev)")]));
+    const onLinkPress = jest.fn((url: string) => !url.startsWith("https:"));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" onLinkPress={onLinkPress} savePolicy={{ autosave: false }} />);
+    });
+    jest.mocked(Linking.openURL).mockClear();
+    const press = (url: string) => activationView(renderer, "d1:b0").findByType(EnrichedMarkdownText).props.onLinkPress({ url });
+    await act(async () => press("Note.md"));
+    expect(Linking.openURL).not.toHaveBeenCalled();
+    await act(async () => press("https://x.dev"));
+    expect(onLinkPress.mock.calls).toEqual([["Note.md"], ["https://x.dev"]]);
+    expect(Linking.openURL).toHaveBeenCalledWith("https://x.dev");
     await act(async () => renderer.unmount());
   });
 

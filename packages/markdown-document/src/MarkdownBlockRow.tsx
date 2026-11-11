@@ -9,7 +9,7 @@ import {
   type EnrichedMarkdownTextInputInstance,
   type ImagePressEvent,
 } from "react-native-enriched-markdown";
-import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { markdownDocumentStyles as styles } from "./MarkdownDocument.styles";
 import { usesNativeEditorOverlay } from "./constants";
 import type {
@@ -255,6 +255,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   getBlockMetadata,
   onActivate,
   onImagePress,
+  onLinkPress,
   onTaskListItemPress,
   onEditorReady,
   onBlurRef,
@@ -280,6 +281,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onImagePress: (image: ImagePressEvent) => void;
+  onLinkPress: (url: string) => void;
   onTaskListItemPress: (blockId: string, index: number, checked: boolean) => void;
   onEditorReady?: (blockId: string) => void;
   onBlurRef: RefObject<(blockId: string) => void>;
@@ -364,9 +366,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       markdownStyle={markdownStyle}
       onImagePress={onImagePress}
       onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
-      onLinkPress={(event) => {
-        Linking.openURL(event.url).catch(() => {});
-      }}
+      onLinkPress={(event) => onLinkPress(event.url)}
       onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
       renderRevision={renderRevision}
       selectable
@@ -380,9 +380,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       markdownStyle={markdownStyle}
       onImagePress={onImagePress}
       onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
-      onLinkPress={(event) => {
-        Linking.openURL(event.url).catch(() => {});
-      }}
+      onLinkPress={(event) => onLinkPress(event.url)}
       onSelectionDragOutside={(event) => onSelectionDragOutsideRef.current(block.id, normalizeSelectionDragOutsideEvent(event))}
       selectable
     />

@@ -13,6 +13,7 @@ import {
   type EnrichedMarkdownTextInputInstance,
 } from "react-native-enriched-markdown";
 import {
+  Linking,
   Text,
   TextInput,
   View,
@@ -462,6 +463,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       onError,
       onLoadError,
       onLoaded,
+      onLinkPress,
       onConflictChange,
       onSaveStateChange,
       onSelectionAnchorChange,
@@ -576,6 +578,10 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const onErrorRef = useLatestRef(onError);
     const onConflictChangeRef = useLatestRef(onConflictChange);
     const onLoadErrorRef = useLatestRef(onLoadError);
+    const onLinkPressRef = useLatestRef(onLinkPress);
+    const handleLinkPress = useCallback((url: string) => {
+      if (!onLinkPressRef.current?.(url)) Linking.openURL(url).catch(() => {});
+    }, [onLinkPressRef]);
     const onLoadedRef = useLatestRef(onLoaded);
     const onSaveStateChangeRef = useLatestRef(onSaveStateChange);
     const preserveEditingOnBlurRef = useLatestRef(preserveEditingOnBlur);
@@ -3588,6 +3594,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           markdownStyle={resolvedMarkdownStyle}
           onActivate={activateBlock}
           onImagePress={setViewerImage}
+          onLinkPress={handleLinkPress}
           onTaskListItemPress={handleTaskListItemPress}
           onEditorReady={handleEditorReady}
           onBlurRef={handleEditorBlurRef}
@@ -3603,6 +3610,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         activateBlock,
         handleEditorReady,
         handleTaskListItemPress,
+        handleLinkPress,
         documentRenderState$,
         getBlockCount,
         getBlockIdAtIndex,

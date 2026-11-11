@@ -213,6 +213,8 @@ export type MarkdownDocumentProps = {
   onCommandStateChange?: (state: MarkdownDocumentCommandState) => void;
   onLoadError?: (error: Error) => void;
   onLoaded?: (info: MarkdownDocumentLoadedInfo) => void;
+  /** Handles a pressed link; return true to keep it from opening as a URL. */
+  onLinkPress?: (url: string) => boolean;
   onDirtyChange?: (isDirty: boolean) => void;
   onConflictChange?: (status: "changed" | "missing" | null) => void;
   onSaveStateChange?: (state: MarkdownSaveState) => void;

@@ -1,4 +1,4 @@
-import { linkMention, parseFrontmatterAliases, parseNoteLinks, VaultLinkIndex } from "../markdownLinkIndex";
+import { getNewNotePath, linkMention, parseFrontmatterAliases, parseNoteLinks, parseNoteLinkUrl, VaultLinkIndex } from "../markdownLinkIndex";
 import { scanVault, updateVaultPath } from "../useVaultLinkIndex";
 
 const tree: Record<string, string | null> = {};
@@ -63,6 +63,22 @@ describe("VaultLinkIndex.resolve", () => {
     expect(index.resolve({ kind: "markdown", target: "b/deep.md" }, "/vault/a/c.md")).toBe("/vault/a/b/Deep.md");
     expect(index.resolve({ kind: "markdown", target: "/x/Deep.md" }, "/vault/a/c.md")).toBe("/vault/x/Deep.md");
     expect(index.resolve({ kind: "markdown", target: "Deep.md" }, "/vault/a/c.md")).toBeNull();
+  });
+});
+
+describe("pressed note links", () => {
+  it("reads relative Markdown paths and scheme-less targets as note links", () => {
+    expect(parseNoteLinkUrl("../My%20Note.md#Part")).toEqual({ kind: "markdown", subpath: "Part", target: "../My Note.md" });
+    expect(parseNoteLinkUrl("Note#Heading")).toEqual({ kind: "wiki", subpath: "Heading", target: "Note" });
+    expect(parseNoteLinkUrl("https://x.dev/a.md")).toBeNull();
+    expect(parseNoteLinkUrl("mailto:a@b.c")).toBeNull();
+    expect(parseNoteLinkUrl("#Heading")).toBeNull();
+  });
+
+  it("creates missing notes beside a relative link or in the vault root", () => {
+    expect(getNewNotePath("/vault", { kind: "markdown", target: "../New.md" }, "/vault/a/b/c.md")).toBe("/vault/a/New.md");
+    expect(getNewNotePath("/vault", { kind: "wiki", target: "New" }, "/vault/a/c.md")).toBe("/vault/New.md");
+    expect(getNewNotePath("/vault", { kind: "wiki", target: "dir/New.md" }, "/vault/a/c.md")).toBe("/vault/dir/New.md");
   });
 });
 

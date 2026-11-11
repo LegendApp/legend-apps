@@ -14,7 +14,7 @@ type BacklinksPanelProps = {
 };
 
 /** How many times `mention.text` occurs before it in `text`, case-insensitively, as Find counts matches. */
-function getOccurrence(text: string, mention: NoteMention) {
+function getOccurrence(text: string, mention: Pick<NoteMention, "start" | "text">) {
   const haystack = text.toLocaleLowerCase(), needle = mention.text.toLocaleLowerCase();
   let count = 0;
   for (let at = haystack.indexOf(needle); at >= 0 && at < mention.start; at = haystack.indexOf(needle, at + needle.length)) count++;
@@ -22,7 +22,7 @@ function getOccurrence(text: string, mention: NoteMention) {
 }
 
 /** Selects a mention in the open document with Find, which matches the same text in order. */
-export async function revealMention(commands: MarkdownDocumentCommands, text: string, mention: NoteMention) {
+export async function revealMention(commands: MarkdownDocumentCommands, text: string, mention: Pick<NoteMention, "start" | "text">) {
   if (!await commands.find(mention.text, false, true)) return;
   for (let skip = getOccurrence(text, mention); skip > 0; skip--) await commands.find(mention.text);
 }

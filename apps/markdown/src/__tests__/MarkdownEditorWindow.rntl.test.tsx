@@ -6,7 +6,8 @@ import { Text } from "react-native";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { VaultLinkIndex } from "../markdownLinkIndex";
 import { setMarkdownWindowDirtyDocument } from "../markdownEditorActions";
-import { writeTextIfUnchanged } from "@legendapp/spark/files";
+import { writeText, writeTextIfUnchanged } from "@legendapp/spark/files";
+import { Alert } from "react-native";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
@@ -75,6 +76,9 @@ jest.mock("@legendapp/spark/shortcuts/commands", () => ({ createHotkeyRouter: je
 
 jest.mock("@legendapp/spark/files", () => ({
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+  exists: jest.fn(async () => false),
+  mkdir: jest.fn(async () => {}),
+  writeText: jest.fn(async () => {}),
   writeTextIfUnchanged: jest.fn(async () => ({ written: true })),
 }));
 
@@ -374,6 +378,35 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     setMarkdownWindowDirtyDocument("other-window", null);
     await act(async () => fireEvent.press(view.getByLabelText("Link mention in c.md")));
     expect(writeTextIfUnchanged).toHaveBeenCalledWith("/vault/c.md", "about target here", "about [[Target|target]] here");
+    mockBacklinksOpen = false;
+    await view.unmount();
+  });
+
+  it("opens a pressed note link in a tab and offers to create a missing note", async () => {
+    mockVault.index = new VaultLinkIndex("/vault");
+    mockVault.index.set("/vault/Target.md", "# Target");
+    mockVault.index.set("/vault/a/Note.md", "# Part");
+    mockSessionState$.assign({ documentSource: "file", filename: "/vault/Target.md" });
+    mockBacklinksOpen = true;
+    mockFind.mockClear();
+    const view = await render(<MarkdownEditorWindow folders={["/vault"]} />);
+    const onLinkPress = () => (mockMarkdownDocument.mock.calls.at(-1)![0] as { onLinkPress: (url: string) => boolean }).onLinkPress;
+
+    expect(onLinkPress()("https://example.com")).toBe(false);
+    await act(async () => { expect(onLinkPress()("note#Part")).toBe(true); });
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/a/Note.md");
+    await act(async () => {
+      mockSessionState$.assign({ filename: "/vault/a/Note.md" });
+      mockSessionOptions.onDocumentLoaded?.();
+    });
+    expect(mockFind).toHaveBeenCalledWith("Part", false, true);
+
+    const alert = jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find(button => button.text === "Create")?.onPress?.());
+    await act(async () => { onLinkPress()("Fresh idea"); });
+    expect(alert).toHaveBeenCalledWith("Create “Fresh idea”?", expect.any(String), expect.any(Array));
+    expect(writeText).toHaveBeenCalledWith("/vault/Fresh idea.md", "");
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/Fresh idea.md");
+    alert.mockRestore();
     mockBacklinksOpen = false;
     await view.unmount();
   });

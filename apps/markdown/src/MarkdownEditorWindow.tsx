@@ -1,4 +1,4 @@
-import { watch, writeTextIfUnchanged } from "@legendapp/spark/files";
+import { exists, mkdir, watch, writeText, writeTextIfUnchanged } from "@legendapp/spark/files";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import {
@@ -16,7 +16,7 @@ import {
 } from "@legend-apps/workspace";
 import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -45,9 +45,9 @@ import {
 import { editorWindowIdentifier, markdownFileTypes } from "./appConstants";
 import { BacklinksPanel, revealMention } from "./BacklinksPanel";
 import { getDirectory, getFilename, getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
-import { getNoteTitle, linkMention, type NoteMention } from "./markdownLinkIndex";
+import { getNewNotePath, getNoteTitle, linkMention, parseNoteLinkUrl, type NoteMention } from "./markdownLinkIndex";
 import { hasUnsavedMarkdownDocument, setMarkdownWindowDirtyDocument } from "./markdownEditorActions";
-import { useVaultLinkIndex } from "./useVaultLinkIndex";
+import { scanVault, useVaultLinkIndex } from "./useVaultLinkIndex";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
   applyMarkdownThemeSetting,
@@ -270,7 +270,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const vaultFolders = workspace.state.folders;
   const vaultRoot = vaultFolders.find(folder => currentFile?.startsWith(`${folder}/`)) ?? vaultFolders[0] ?? (currentFile && getDirectory(currentFile)) ?? null;
   const vault = useVaultLinkIndex(backlinksOpen ? vaultRoot : null, handleError);
-  const pendingRevealRef = useRef<{ mention: NoteMention; path: string; text: string } | null>(null);
+  const pendingRevealRef = useRef<{ mention: Pick<NoteMention, "start" | "text">; path: string; text: string } | null>(null);
   useEffect(() => {
     const pending = pendingRevealRef.current;
     const commands = documentCommandsRef.current;
@@ -288,6 +288,25 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     pendingRevealRef.current = { mention, path, text };
     switchToFile(path).catch(handleError);
   }, [currentFile, documentCommandsRef, handleError, switchToFile, vault]);
+  // Note links open in a tab like Obsidian's; a missing target can be created first.
+  const openNoteLink = useCallback((url: string) => {
+    const link = parseNoteLinkUrl(url);
+    if (!link || !currentFile || !vaultRoot) return false;
+    (async () => {
+      const index = vault.index ?? (await scanVault(vaultRoot)).index;
+      const path = index.resolve(link, currentFile) ?? await createNoteIfConfirmed(getNewNotePath(vaultRoot, link, currentFile));
+      if (!path) return;
+      const heading = link.subpath && !link.subpath.startsWith("^") ? { mention: { start: 0, text: link.subpath }, path, text: "" } : null;
+      const commands = documentCommandsRef.current;
+      if (path === currentFile) {
+        if (heading && commands) await revealMention(commands, "", heading.mention);
+        return;
+      }
+      pendingRevealRef.current = heading;
+      await switchToFile(path);
+    })().catch(handleError);
+    return true;
+  }, [currentFile, documentCommandsRef, handleError, switchToFile, vault, vaultRoot]);
   useObserveEffect(() => {
     const { documentSource, filename, isDirty } = session.sessionState$.get();
     setMarkdownWindowDirtyDocument(windowId, isDirty && documentSource === "file" ? filename : null);
@@ -357,6 +376,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
           onApplyLink={applyLink}
           onCancelLink={() => setIsLinkPopoverOpen(false)}
           onInsertLink={insertLink}
+          onLinkPress={openNoteLink}
           renderSelectionToolbar={renderSelectionToolbar}
           session={session}
           theme={displayTheme.markdownDocument}
@@ -401,6 +421,23 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
 export default MarkdownEditorWindow;
 
+function createNoteIfConfirmed(path: string) {
+  return new Promise<string | null>((resolve, reject) => {
+    Alert.alert(`Create “${getNoteTitle(path)}”?`, `No note matches this link. A new note will be created at ${path}.`, [
+      { onPress: () => resolve(null), style: "cancel", text: "Cancel" },
+      { onPress: () => {
+        (async () => {
+          if (!await exists(path)) {
+            await mkdir(getDirectory(path) ?? "/", { recursive: true });
+            await writeText(path, "");
+          }
+          return path;
+        })().then(resolve, reject);
+      }, text: "Create" },
+    ]);
+  });
+}
+
 function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
@@ -440,6 +477,7 @@ type MarkdownEditorSessionContentProps = {
   onApplyLink: (url: string) => void;
   onCancelLink: () => void;
   onInsertLink: () => void;
+  onLinkPress: NonNullable<MarkdownDocumentProps["onLinkPress"]>;
   renderSelectionToolbar: NonNullable<MarkdownDocumentProps["renderSelectionToolbar"]>;
   session: MarkdownDocumentSession;
   theme: MarkdownDocumentProps["theme"];
@@ -458,6 +496,7 @@ function MarkdownEditorSessionContent({
   onApplyLink,
   onCancelLink,
   onInsertLink,
+  onLinkPress,
   renderSelectionToolbar,
   session,
   theme,
@@ -492,6 +531,7 @@ function MarkdownEditorSessionContent({
           isUntitledDocument={isUntitledDocument}
           markdownLayout={markdownLayout}
           markdownStyle={markdownStyle}
+          onLinkPress={onLinkPress}
           renderSelectionToolbar={renderSelectionToolbar}
           session={session}
           selectionToolbarEnabled={formattingToolbarMode === "selection"}
@@ -593,6 +633,7 @@ type MarkdownDocumentSurfaceProps = {
   isUntitledDocument: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
   markdownStyle: MarkdownDocumentProps["markdownStyle"];
+  onLinkPress: NonNullable<MarkdownDocumentProps["onLinkPress"]>;
   renderSelectionToolbar: NonNullable<MarkdownDocumentProps["renderSelectionToolbar"]>;
   selectionToolbarEnabled: boolean;
   session: MarkdownDocumentSession;
@@ -607,6 +648,7 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
   isUntitledDocument,
   markdownLayout,
   markdownStyle,
+  onLinkPress,
   renderSelectionToolbar,
   selectionToolbarEnabled,
   session,
@@ -636,6 +678,7 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
         onLoaded={session.handleDocumentLoaded}
         onConflictChange={session.setConflict}
         onSaveStateChange={session.setSaveState}
+        onLinkPress={onLinkPress}
         renderSelectionToolbar={renderSelectionToolbar}
         savePolicy={savePolicy}
         selectionToolbarEnabled={selectionToolbarEnabled}

@@ -92,6 +92,24 @@ export function parseNoteLinks(text: string): MarkdownNoteLink[] {
   return links.sort((a, b) => a.start - b.start);
 }
 
+/**
+ * Reads a pressed link's URL as a note link: a relative Markdown path, or anything else without a scheme as a
+ * wikilink target. Returns null for URLs that should open externally.
+ */
+export function parseNoteLinkUrl(url: string): Pick<MarkdownNoteLink, "kind" | "subpath" | "target"> | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("#")) return null;
+  const { subpath, target } = splitSubpath(url);
+  const decoded = decode(target).trim();
+  if (!decoded) return null;
+  return { kind: isMarkdownPath(decoded) ? "markdown" : "wiki", subpath: subpath && decode(subpath), target: decoded };
+}
+
+/** Where Obsidian creates a missing note: beside the linking note for a relative path, else in the vault root. */
+export function getNewNotePath(root: string, link: Pick<MarkdownNoteLink, "kind" | "target">, from: string) {
+  if (link.kind === "markdown") return normalizePath(link.target.startsWith("/") ? `${root}${link.target}` : `${getDirectory(from) ?? root}/${link.target}`);
+  return normalizePath(`${root}/${link.target}${isMarkdownPath(link.target) ? "" : ".md"}`);
+}
+
 /** Reads `aliases` (or `alias`) from YAML frontmatter, as an inline list, a block list or a single value. */
 export function parseFrontmatterAliases(text: string): string[] {
   const match = /^---\n([\s\S]*?)\n---(?:\n|$)/.exec(text);
