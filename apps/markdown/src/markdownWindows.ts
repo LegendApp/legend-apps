@@ -26,7 +26,9 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
                 contentLayout: "fullSize" as const,
                 transparent: true,
                 material: "titlebar" as const,
-                blendingMode: "withinWindow" as const
+                blendingMode: "withinWindow" as const,
+                // Tint the band with the page color; a little alpha keeps the material showing.
+                tintColor: `${displayTheme.colors.background.slice(0, 7)}E6`
             }
         }
     };
