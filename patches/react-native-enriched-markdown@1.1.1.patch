@@ -1,0 +1,368 @@
+diff --git a/cpp/parser/MD4CParser.cpp b/cpp/parser/MD4CParser.cpp
+--- a/cpp/parser/MD4CParser.cpp
++++ b/cpp/parser/MD4CParser.cpp
+@@ -298,13 +298,16 @@
+       return 1;
+     auto *impl = static_cast<Impl *>(userdata);
+ 
+     switch (type) {
+-      case MD_SPAN_A: {
++      case MD_SPAN_A:
++      case MD_SPAN_WIKILINK: {
++        // A wikilink becomes a link whose URL is its raw target (`Note#Heading`), so it presses like any link.
+         auto node = std::make_shared<MarkdownASTNode>(NodeType::Link);
+         if (detail) {
+-          auto *linkDetail = static_cast<MD_SPAN_A_DETAIL *>(detail);
+-          std::string url = impl->getAttributeText(&linkDetail->href);
++          const MD_ATTRIBUTE *href = type == MD_SPAN_A ? &static_cast<MD_SPAN_A_DETAIL *>(detail)->href
++                                                       : &static_cast<MD_SPAN_WIKILINK_DETAIL *>(detail)->target;
++          std::string url = impl->getAttributeText(href);
+           if (!url.empty()) {
+             node->setAttribute(ATTR_URL, url);
+           }
+         }
+@@ -855,8 +858,11 @@
+   }
+   if (md4cFlags.admonitions) {
+     flags |= MD_FLAG_ADMONITIONS;
+   }
++  if (md4cFlags.wikilinks) {
++    flags |= MD_FLAG_WIKILINKS;
++  }
+ 
+   // Configure MD4C parser with callbacks
+   MD_PARSER parser = {
+       0, // abi_version
+diff --git a/cpp/parser/MD4CParser.hpp b/cpp/parser/MD4CParser.hpp
+--- a/cpp/parser/MD4CParser.hpp
++++ b/cpp/parser/MD4CParser.hpp
+@@ -15,8 +15,9 @@
+     bool permissiveAutolinks = true;
+     bool hardSoftBreaks = false;
+     bool preserveBlankLines = false;
+     bool admonitions = true;
++    bool wikilinks = false;
+ };
+ 
+ class MD4CParser {
+ public:
+diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
+--- a/ios/EnrichedMarkdown.mm
++++ b/ios/EnrichedMarkdown.mm
+@@ -203,8 +203,9 @@
+   flags.highlight = props.highlight;
+   flags.hardSoftBreaks = props.hardSoftBreaks;
+   flags.preserveBlankLines = props.preserveBlankLines;
+   flags.admonitions = props.admonitions;
++  flags.wikilinks = props.wikilinks;
+   return flags;
+ }
+ 
+ - (instancetype)initWithFrame:(CGRect)frame
+diff --git a/ios/EnrichedMarkdownText.mm b/ios/EnrichedMarkdownText.mm
+--- a/ios/EnrichedMarkdownText.mm
++++ b/ios/EnrichedMarkdownText.mm
+@@ -155,8 +155,9 @@
+   flags.highlight = props.highlight;
+   flags.hardSoftBreaks = props.hardSoftBreaks;
+   flags.preserveBlankLines = props.preserveBlankLines;
+   flags.admonitions = props.admonitions;
++  flags.wikilinks = props.wikilinks;
+   return flags;
+ }
+ 
+ #pragma mark - Measuring and State
+diff --git a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
+--- a/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
++++ b/ios/generated/ReactCodegen/EnrichedMarkdownTextSpec/Props.h
+@@ -2574,8 +2574,9 @@
+   bool highlight{false};
+   bool hardSoftBreaks{false};
+   bool preserveBlankLines{false};
+   bool admonitions{false};
++  bool wikilinks{false};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+   bool operator==(const EnrichedMarkdownMd4cFlagsStruct&) const = default;
+@@ -2589,8 +2590,9 @@
+     result["highlight"] = highlight;
+     result["hardSoftBreaks"] = hardSoftBreaks;
+     result["preserveBlankLines"] = preserveBlankLines;
+     result["admonitions"] = admonitions;
++    result["wikilinks"] = wikilinks;
+     return result;
+   }
+ #endif
+ };
+@@ -2629,8 +2631,12 @@
+   auto tmp_admonitions = map.find("admonitions");
+   if (tmp_admonitions != map.end()) {
+     fromRawValue(context, tmp_admonitions->second, result.admonitions);
+   }
++  auto tmp_wikilinks = map.find("wikilinks");
++  if (tmp_wikilinks != map.end()) {
++    fromRawValue(context, tmp_wikilinks->second, result.wikilinks);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownMd4cFlagsStruct &value) {
+   return "[Object EnrichedMarkdownMd4cFlagsStruct]";
+@@ -7029,8 +7035,9 @@
+   bool highlight{false};
+   bool hardSoftBreaks{false};
+   bool preserveBlankLines{false};
+   bool admonitions{false};
++  bool wikilinks{false};
+ 
+ 
+ #ifdef RN_SERIALIZABLE_STATE
+   bool operator==(const EnrichedMarkdownTextMd4cFlagsStruct&) const = default;
+@@ -7044,8 +7051,9 @@
+     result["highlight"] = highlight;
+     result["hardSoftBreaks"] = hardSoftBreaks;
+     result["preserveBlankLines"] = preserveBlankLines;
+     result["admonitions"] = admonitions;
++    result["wikilinks"] = wikilinks;
+     return result;
+   }
+ #endif
+ };
+@@ -7084,8 +7092,12 @@
+   auto tmp_admonitions = map.find("admonitions");
+   if (tmp_admonitions != map.end()) {
+     fromRawValue(context, tmp_admonitions->second, result.admonitions);
+   }
++  auto tmp_wikilinks = map.find("wikilinks");
++  if (tmp_wikilinks != map.end()) {
++    fromRawValue(context, tmp_wikilinks->second, result.wikilinks);
++  }
+ }
+ 
+ static inline std::string toString(const EnrichedMarkdownTextMd4cFlagsStruct &value) {
+   return "[Object EnrichedMarkdownTextMd4cFlagsStruct]";
+diff --git a/ios/internals/ENRMViewFreeMeasurement.h b/ios/internals/ENRMViewFreeMeasurement.h
+--- a/ios/internals/ENRMViewFreeMeasurement.h
++++ b/ios/internals/ENRMViewFreeMeasurement.h
+@@ -94,8 +94,9 @@
+   flags.highlight = props.highlight;
+   flags.hardSoftBreaks = props.hardSoftBreaks;
+   flags.preserveBlankLines = props.preserveBlankLines;
+   flags.admonitions = props.admonitions;
++  flags.wikilinks = props.wikilinks;
+   return flags;
+ }
+ 
+ /**
+diff --git a/ios/parser/ENRMMarkdownParser.h b/ios/parser/ENRMMarkdownParser.h
+--- a/ios/parser/ENRMMarkdownParser.h
++++ b/ios/parser/ENRMMarkdownParser.h
+@@ -10,8 +10,9 @@
+ @property (nonatomic, assign) BOOL highlight;
+ @property (nonatomic, assign) BOOL hardSoftBreaks;
+ @property (nonatomic, assign) BOOL preserveBlankLines;
+ @property (nonatomic, assign) BOOL admonitions;
++@property (nonatomic, assign) BOOL wikilinks;
+ 
+ + (instancetype)defaultFlags;
+ 
+ @end
+diff --git a/ios/parser/ENRMMarkdownParser.mm b/ios/parser/ENRMMarkdownParser.mm
+--- a/ios/parser/ENRMMarkdownParser.mm
++++ b/ios/parser/ENRMMarkdownParser.mm
+@@ -15,8 +15,9 @@
+     _highlight = NO;
+     _hardSoftBreaks = NO;
+     _preserveBlankLines = NO;
+     _admonitions = YES;
++    _wikilinks = NO;
+   }
+   return self;
+ }
+ 
+@@ -35,8 +36,9 @@
+   copy.highlight = self.highlight;
+   copy.hardSoftBreaks = self.hardSoftBreaks;
+   copy.preserveBlankLines = self.preserveBlankLines;
+   copy.admonitions = self.admonitions;
++  copy.wikilinks = self.wikilinks;
+   return copy;
+ }
+ 
+ @end
+diff --git a/ios/parser/MarkdownParserBridge.mm b/ios/parser/MarkdownParserBridge.mm
+--- a/ios/parser/MarkdownParserBridge.mm
++++ b/ios/parser/MarkdownParserBridge.mm
+@@ -179,8 +179,9 @@
+   cppFlags.highlight = flags.highlight;
+   cppFlags.hardSoftBreaks = flags.hardSoftBreaks;
+   cppFlags.preserveBlankLines = flags.preserveBlankLines;
+   cppFlags.admonitions = flags.admonitions;
++  cppFlags.wikilinks = flags.wikilinks;
+ 
+   Markdown::MD4CParser parser;
+   auto cppAST = parser.parse(cppMarkdown, cppFlags, isGFM);
+ 
+diff --git a/lib/module/EnrichedMarkdownNativeComponent.ts b/lib/module/EnrichedMarkdownNativeComponent.ts
+--- a/lib/module/EnrichedMarkdownNativeComponent.ts
++++ b/lib/module/EnrichedMarkdownNativeComponent.ts
+@@ -405,8 +405,13 @@
+    * Forced off for `flavor="commonmark"`.
+    * @default true
+    */
+   admonitions: boolean;
++  /**
++   * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++   * @default false
++   */
++  wikilinks: boolean;
+ }
+ 
+ interface StreamingConfigInternal {
+   tableMode: string;
+diff --git a/lib/module/EnrichedMarkdownTextNativeComponent.ts b/lib/module/EnrichedMarkdownTextNativeComponent.ts
+--- a/lib/module/EnrichedMarkdownTextNativeComponent.ts
++++ b/lib/module/EnrichedMarkdownTextNativeComponent.ts
+@@ -406,8 +406,13 @@
+    * Forced off for `flavor="commonmark"`.
+    * @default true
+    */
+   admonitions: boolean;
++  /**
++   * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++   * @default false
++   */
++  wikilinks: boolean;
+ }
+ 
+ interface StreamingConfigInternal {
+   tableMode: string;
+diff --git a/lib/module/native/EnrichedMarkdownText.js b/lib/module/native/EnrichedMarkdownText.js
+--- a/lib/module/native/EnrichedMarkdownText.js
++++ b/lib/module/native/EnrichedMarkdownText.js
+@@ -122,9 +122,10 @@
+     hardSoftBreaks: md4cFlags.hardSoftBreaks ?? false,
+     preserveBlankLines: md4cFlags.preserveBlankLines ?? false,
+     // Admonitions are a GitHub-flavor feature; force them off in commonmark so
+     // `> [!NOTE]` renders as a plain blockquote.
+-    admonitions: flavor === 'github' ? md4cFlags.admonitions ?? true : false
++    admonitions: flavor === 'github' ? md4cFlags.admonitions ?? true : false,
++    wikilinks: md4cFlags.wikilinks ?? false
+   }), [md4cFlags, flavor]);
+   const contextMenuCallbacksRef = useRef(new Map());
+   useEffect(() => {
+     const callbacksMap = new Map();
+diff --git a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
+--- a/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownNativeComponent.d.ts
+@@ -351,8 +351,13 @@
+      * Forced off for `flavor="commonmark"`.
+      * @default true
+      */
+     admonitions: boolean;
++    /**
++     * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++     * @default false
++     */
++    wikilinks: boolean;
+ }
+ interface StreamingConfigInternal {
+     tableMode: string;
+     codeBlockMode: string;
+diff --git a/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts b/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
+--- a/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
++++ b/lib/typescript/src/EnrichedMarkdownTextNativeComponent.d.ts
+@@ -351,8 +351,13 @@
+      * Forced off for `flavor="commonmark"`.
+      * @default true
+      */
+     admonitions: boolean;
++    /**
++     * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++     * @default false
++     */
++    wikilinks: boolean;
+ }
+ interface StreamingConfigInternal {
+     tableMode: string;
+     codeBlockMode: string;
+diff --git a/lib/typescript/src/types/MarkdownStyle.d.ts b/lib/typescript/src/types/MarkdownStyle.d.ts
+--- a/lib/typescript/src/types/MarkdownStyle.d.ts
++++ b/lib/typescript/src/types/MarkdownStyle.d.ts
+@@ -422,7 +422,13 @@
+      * where the syntax renders as a plain blockquote.
+      * @default true
+      */
+     admonitions?: boolean;
++    /**
++     * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target
++     * (`Note`, `Note#Heading`); the alias is the link text.
++     * @default false
++     */
++    wikilinks?: boolean;
+ }
+ export {};
+ //# sourceMappingURL=MarkdownStyle.d.ts.map
+\ No newline at end of file
+diff --git a/src/EnrichedMarkdownNativeComponent.ts b/src/EnrichedMarkdownNativeComponent.ts
+--- a/src/EnrichedMarkdownNativeComponent.ts
++++ b/src/EnrichedMarkdownNativeComponent.ts
+@@ -405,8 +405,13 @@
+    * Forced off for `flavor="commonmark"`.
+    * @default true
+    */
+   admonitions: boolean;
++  /**
++   * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++   * @default false
++   */
++  wikilinks: boolean;
+ }
+ 
+ interface StreamingConfigInternal {
+   tableMode: string;
+diff --git a/src/EnrichedMarkdownTextNativeComponent.ts b/src/EnrichedMarkdownTextNativeComponent.ts
+--- a/src/EnrichedMarkdownTextNativeComponent.ts
++++ b/src/EnrichedMarkdownTextNativeComponent.ts
+@@ -406,8 +406,13 @@
+    * Forced off for `flavor="commonmark"`.
+    * @default true
+    */
+   admonitions: boolean;
++  /**
++   * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target.
++   * @default false
++   */
++  wikilinks: boolean;
+ }
+ 
+ interface StreamingConfigInternal {
+   tableMode: string;
+diff --git a/src/native/EnrichedMarkdownText.tsx b/src/native/EnrichedMarkdownText.tsx
+--- a/src/native/EnrichedMarkdownText.tsx
++++ b/src/native/EnrichedMarkdownText.tsx
+@@ -179,8 +179,9 @@
+       // Admonitions are a GitHub-flavor feature; force them off in commonmark so
+       // `> [!NOTE]` renders as a plain blockquote.
+       admonitions:
+         flavor === 'github' ? (md4cFlags.admonitions ?? true) : false,
++      wikilinks: md4cFlags.wikilinks ?? false,
+     }),
+     [md4cFlags, flavor]
+   );
+ 
+diff --git a/src/types/MarkdownStyle.ts b/src/types/MarkdownStyle.ts
+--- a/src/types/MarkdownStyle.ts
++++ b/src/types/MarkdownStyle.ts
+@@ -455,5 +455,11 @@
+    * where the syntax renders as a plain blockquote.
+    * @default true
+    */
+   admonitions?: boolean;
++  /**
++   * Render `[[Note]]`, `[[Note|alias]]` and `[[Note#Heading]]` as links whose URL is the target
++   * (`Note`, `Note#Heading`); the alias is the link text.
++   * @default false
++   */
++  wikilinks?: boolean;
+ }
