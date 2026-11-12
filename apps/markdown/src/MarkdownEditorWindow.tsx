@@ -227,7 +227,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   return (
     <>
       <MarkdownFileWatcher session={session} />
-      {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+      {findVisible && <View className="mt-8 flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
         <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
           value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
         <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
@@ -241,6 +241,7 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         dangerColor={displayTheme.colors.danger}
         foregroundColor={displayTheme.colors.foreground}
         formattingToolbarMode={formattingToolbarMode}
+        insetTopChrome={!findVisible}
         isLinkPopoverOpen={isLinkPopoverOpen}
         markdownLayout={markdownLayout}
         markdownStyle={markdownStyle}
@@ -290,6 +291,8 @@ type MarkdownEditorSessionContentProps = {
   dangerColor: string;
   foregroundColor: string;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
+  /** Pushes banners and the top toolbar below the titlebar material when nothing above does. */
+  insetTopChrome: boolean;
   isLinkPopoverOpen: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
   markdownStyle: MarkdownDocumentProps["markdownStyle"];
@@ -308,6 +311,7 @@ function MarkdownEditorSessionContent({
   dangerColor,
   foregroundColor,
   formattingToolbarMode,
+  insetTopChrome,
   isLinkPopoverOpen,
   markdownLayout,
   markdownStyle,
@@ -322,13 +326,15 @@ function MarkdownEditorSessionContent({
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
   const isUntitledDocument = documentSource === "untitled";
+  const hasTopChrome = useValue(() => !!session.sessionState$.conflict.get() || !!session.sessionState$.lastError.get())
+    || formattingToolbarMode === "top";
 
   if (!filename) {
     return null;
   }
 
   return (
-    <View style={[styles.root, backgroundStyle]}>
+    <View style={[styles.root, backgroundStyle]} className={insetTopChrome && hasTopChrome ? "pt-8" : undefined}>
       <MarkdownConflictBanner color={foregroundColor} session={session} />
       <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (

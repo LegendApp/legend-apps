@@ -24,7 +24,9 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         macos: {
             titleBar: {
                 contentLayout: "fullSize" as const,
-                transparent: true
+                transparent: true,
+                material: "titlebar" as const,
+                blendingMode: "withinWindow" as const
             }
         }
     };
@@ -33,16 +35,15 @@ function createMarkdownWindowsNavigator() {
     // Register synchronously after this module has loaded, so editor hooks can
     // import its window operations without an initialization cycle.
     const { MarkdownEditorWindow } = require("./MarkdownEditorWindow") as typeof import("./MarkdownEditorWindow");
+    const editorWindowStyle = createMarkdownEditorWindowStyle({ includeFrame: true });
     const markdownWindowsConfig = {
         [editorWindowModuleName]: {
             component: MarkdownEditorWindow,
             id: editorWindowIdentifier,
             options: {
                 title: "Untitled",
-                ...createMarkdownEditorWindowStyle({ includeFrame: true }),
-                macos: {
-                    restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
-                }
+                ...editorWindowStyle,
+                macos: { ...editorWindowStyle.macos, restoreOnLaunch: true }
             },
         },
         [settingsWindowModuleName]: {
