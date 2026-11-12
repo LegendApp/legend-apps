@@ -270,11 +270,12 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const vaultFolders = workspace.state.folders;
   const vaultRoot = vaultFolders.find(folder => currentFile?.startsWith(`${folder}/`)) ?? vaultFolders[0] ?? (currentFile && getDirectory(currentFile)) ?? null;
   const vault = useVaultLinkIndex(backlinksOpen ? vaultRoot : null, handleError);
-  const pendingRevealRef = useRef<{ mention: Pick<NoteMention, "start" | "text">; path: string; text: string } | null>(null);
+  // Opening a file sets currentFile before its document loads, so a reveal waits for the next load.
+  const pendingRevealRef = useRef<{ loads: number; mention: Pick<NoteMention, "start" | "text">; path: string; text: string } | null>(null);
   useEffect(() => {
     const pending = pendingRevealRef.current;
     const commands = documentCommandsRef.current;
-    if (!pending || pending.path !== currentFile || !commands) return;
+    if (!pending || pending.path !== currentFile || documentLoadCount <= pending.loads || !commands) return;
     pendingRevealRef.current = null;
     revealMention(commands, pending.text, pending.mention).catch(handleError);
   }, [currentFile, documentCommandsRef, documentLoadCount, handleError]);
@@ -285,9 +286,9 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       revealMention(commands, text, mention).catch(handleError);
       return;
     }
-    pendingRevealRef.current = { mention, path, text };
+    pendingRevealRef.current = { loads: documentLoadCount, mention, path, text };
     switchToFile(path).catch(handleError);
-  }, [currentFile, documentCommandsRef, handleError, switchToFile, vault]);
+  }, [currentFile, documentCommandsRef, documentLoadCount, handleError, switchToFile, vault]);
   // Note links open in a tab like Obsidian's; a missing target can be created first.
   const openNoteLink = useCallback((url: string) => {
     const link = parseNoteLinkUrl(url);
@@ -296,7 +297,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       const index = vault.index ?? (await scanVault(vaultRoot)).index;
       const path = index.resolve(link, currentFile) ?? await createNoteIfConfirmed(getNewNotePath(vaultRoot, link, currentFile));
       if (!path) return;
-      const heading = link.subpath && !link.subpath.startsWith("^") ? { mention: { start: 0, text: link.subpath }, path, text: "" } : null;
+      const heading = link.subpath && !link.subpath.startsWith("^") ? { loads: documentLoadCount, mention: { start: 0, text: link.subpath }, path, text: "" } : null;
       const commands = documentCommandsRef.current;
       if (path === currentFile) {
         if (heading && commands) await revealMention(commands, "", heading.mention);
@@ -306,7 +307,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       await switchToFile(path);
     })().catch(handleError);
     return true;
-  }, [currentFile, documentCommandsRef, handleError, switchToFile, vault, vaultRoot]);
+  }, [currentFile, documentCommandsRef, documentLoadCount, handleError, switchToFile, vault, vaultRoot]);
   useObserveEffect(() => {
     const { documentSource, filename, isDirty } = session.sessionState$.get();
     setMarkdownWindowDirtyDocument(windowId, isDirty && documentSource === "file" ? filename : null);

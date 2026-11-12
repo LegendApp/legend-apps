@@ -351,10 +351,10 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/b.md");
     expect(mockFind).not.toHaveBeenCalled();
 
-    await act(async () => {
-      mockSessionState$.assign({ filename: "/vault/b.md" });
-      mockSessionOptions.onDocumentLoaded?.();
-    });
+    // Opening sets the filename before the document loads; the reveal waits for the load.
+    await act(async () => { mockSessionState$.assign({ filename: "/vault/b.md" }); });
+    expect(mockFind).not.toHaveBeenCalled();
+    await act(async () => { mockSessionOptions.onDocumentLoaded?.(); });
     expect(mockFind.mock.calls).toEqual([["[[target]]", false, true], ["[[target]]"]]);
     mockBacklinksOpen = false;
     await view.unmount();
@@ -395,10 +395,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(onLinkPress()("https://example.com")).toBe(false);
     await act(async () => { expect(onLinkPress()("note#Part")).toBe(true); });
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/a/Note.md");
-    await act(async () => {
-      mockSessionState$.assign({ filename: "/vault/a/Note.md" });
-      mockSessionOptions.onDocumentLoaded?.();
-    });
+    await act(async () => { mockSessionState$.assign({ filename: "/vault/a/Note.md" }); });
+    expect(mockFind).not.toHaveBeenCalled();
+    await act(async () => { mockSessionOptions.onDocumentLoaded?.(); });
     expect(mockFind).toHaveBeenCalledWith("Part", false, true);
 
     const alert = jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find(button => button.text === "Create")?.onPress?.());
