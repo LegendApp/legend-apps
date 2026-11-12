@@ -1,4 +1,5 @@
 import { watch } from "@legendapp/spark/files";
+import { GlassView } from "@legendapp/spark/ui/glass";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { getDirectory } from "./markdownFiles";
 import {
@@ -51,6 +52,9 @@ import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature"
 import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
+
+const TITLEBAR_HEIGHT = 52;
+
 type MarkdownEditorWindowProps = {
   launchArguments?: string[];
 };
@@ -107,10 +111,16 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
     () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
     [appearanceSettings, displayTheme, layoutTheme],
   );
-  const markdownLayout = useMemo(
-    () => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings),
-    [appearanceSettings, layoutTheme],
-  );
+  const markdownLayout = useMemo(() => {
+    const layout = getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings);
+    return {
+      ...layout,
+      content: {
+        ...layout.content,
+        verticalPadding: Math.max(TITLEBAR_HEIGHT + 12, layout.content?.verticalPadding ?? 48),
+      },
+    };
+  }, [appearanceSettings, layoutTheme]);
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
@@ -225,9 +235,9 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
   }
 
   return (
-    <>
+    <View style={[styles.root, backgroundStyle]}>
       <MarkdownFileWatcher session={session} />
-      {findVisible && <View className="mt-8 flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+      {findVisible && <View style={styles.topChrome} className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
         <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
           value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
         <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
@@ -253,7 +263,11 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         session={session}
         theme={displayTheme.markdownDocument}
       />
-    </>
+      <View pointerEvents="none" style={styles.titlebar}>
+        <GlassView style={styles.glass} />
+        <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.7 }]} />
+      </View>
+    </View>
   );
 }
 
@@ -291,7 +305,7 @@ type MarkdownEditorSessionContentProps = {
   dangerColor: string;
   foregroundColor: string;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
-  /** Pushes banners and the top toolbar below the titlebar material when nothing above does. */
+  /** Insets banners and the top toolbar when the find bar is hidden. */
   insetTopChrome: boolean;
   isLinkPopoverOpen: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
@@ -334,7 +348,7 @@ function MarkdownEditorSessionContent({
   }
 
   return (
-    <View style={[styles.root, backgroundStyle]} className={insetTopChrome && hasTopChrome ? "pt-8" : undefined}>
+    <View style={[styles.root, backgroundStyle, insetTopChrome && hasTopChrome && styles.topChromePadding]}>
       <MarkdownConflictBanner color={foregroundColor} session={session} />
       <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (
@@ -510,6 +524,28 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
 });
 
 const styles = StyleSheet.create({
+  titlebar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: TITLEBAR_HEIGHT,
+    overflow: "hidden",
+  },
+  glass: {
+    // Keep the rounded glass edges outside the clipped titlebar band.
+    position: "absolute",
+    top: -48,
+    bottom: -48,
+    left: -48,
+    right: -48,
+  },
+  topChrome: {
+    marginTop: TITLEBAR_HEIGHT,
+  },
+  topChromePadding: {
+    paddingTop: TITLEBAR_HEIGHT,
+  },
   document: {
     flex: 1,
   },
@@ -527,7 +563,7 @@ const styles = StyleSheet.create({
   placeholder: {
     left: 40,
     position: "absolute",
-    top: 48,
+    top: TITLEBAR_HEIGHT + 12,
     zIndex: 1,
   },
   placeholderText: {
