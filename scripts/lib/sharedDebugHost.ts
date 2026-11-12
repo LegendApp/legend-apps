@@ -30,8 +30,11 @@ export function rootNativeSignature() {
   const pins = sdk.installedPackages(rootDir).filter((pkg: { name: string }) =>
     ["react", "react-native", "react-native-macos", "expo"].includes(pkg.name))
     .map((pkg: { name: string; json: { version: string } }) => [pkg.name, pkg.json.version]);
-  return hash([sdk.VERSION, process.env.SPARK_MACOS_ARCH ?? process.arch, modules, pins, sdk.hostSourceSignature(rootDir), sdk.localSigningIdentity(sharedDebugWorkspace, "dev")]);
+  return hash([sdk.VERSION, process.env.SPARK_MACOS_ARCH ?? process.arch, modules, pins, rootMarkdownConfig(), sdk.hostSourceSignature(rootDir), sdk.localSigningIdentity(sharedDebugWorkspace, "dev")]);
 }
+
+/** The host links every root module, so it takes the root's native Markdown flags too. */
+const rootMarkdownConfig = () => read(path.join(rootDir, "package.json"))["enriched-markdown"];
 
 export function findSharedDebugHost(): SharedHost | undefined {
   if (!fs.existsSync(receiptFile)) return;
@@ -48,6 +51,8 @@ export async function buildSharedDebugHost(cli: string, env: Record<string, stri
     const base = await loadAppManifest("hello-world");
     prepareSparkWorkspace({ ...base, displayName: "Legend Debug Host",
       bundleIds: { ...base.bundleIds, macos: "so.legend.debughost" } }, "dev", sharedDebugWorkspace);
+    const packageFile = path.join(sharedDebugWorkspace, "package.json");
+    write(packageFile, { ...read(packageFile), "enriched-markdown": rootMarkdownConfig() });
     const configFile = path.join(sharedDebugWorkspace, "desktop.config.json");
     const config = read(configFile);
     // All root modules are linked, independently of the app being launched.
