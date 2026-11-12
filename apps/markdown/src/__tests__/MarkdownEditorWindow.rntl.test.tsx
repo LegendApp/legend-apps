@@ -404,8 +404,8 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     const alert = jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find(button => button.text === "Create")?.onPress?.());
     await act(async () => { onLinkPress()("Fresh idea"); });
     expect(alert).toHaveBeenCalledWith("Create “Fresh idea”?", expect.any(String), expect.any(Array));
-    expect(writeText).toHaveBeenCalledWith("/vault/Fresh idea.md", "");
-    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/Fresh idea.md");
+    expect(writeText).toHaveBeenCalledWith("/vault/a/Fresh idea.md", "");
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/vault/a/Fresh idea.md");
     alert.mockRestore();
     mockBacklinksOpen = false;
     await view.unmount();

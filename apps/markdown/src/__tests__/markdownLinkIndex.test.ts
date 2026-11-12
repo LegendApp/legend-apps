@@ -75,9 +75,9 @@ describe("pressed note links", () => {
     expect(parseNoteLinkUrl("#Heading")).toBeNull();
   });
 
-  it("creates missing notes beside a relative link or in the vault root", () => {
+  it("creates missing notes beside the linking note, or vault-relative for a wikilink path", () => {
     expect(getNewNotePath("/vault", { kind: "markdown", target: "../New.md" }, "/vault/a/b/c.md")).toBe("/vault/a/New.md");
-    expect(getNewNotePath("/vault", { kind: "wiki", target: "New" }, "/vault/a/c.md")).toBe("/vault/New.md");
+    expect(getNewNotePath("/vault", { kind: "wiki", target: "New" }, "/vault/a/c.md")).toBe("/vault/a/New.md");
     expect(getNewNotePath("/vault", { kind: "wiki", target: "dir/New.md" }, "/vault/a/c.md")).toBe("/vault/dir/New.md");
   });
 });

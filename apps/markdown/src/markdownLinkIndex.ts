@@ -104,10 +104,11 @@ export function parseNoteLinkUrl(url: string): Pick<MarkdownNoteLink, "kind" | "
   return { kind: isMarkdownPath(decoded) ? "markdown" : "wiki", subpath: subpath && decode(subpath), target: decoded };
 }
 
-/** Where Obsidian creates a missing note: beside the linking note for a relative path, else in the vault root. */
+/** Where a missing note is created: beside the linking note, except for a wikilink path, which is vault-relative. */
 export function getNewNotePath(root: string, link: Pick<MarkdownNoteLink, "kind" | "target">, from: string) {
   if (link.kind === "markdown") return normalizePath(link.target.startsWith("/") ? `${root}${link.target}` : `${getDirectory(from) ?? root}/${link.target}`);
-  return normalizePath(`${root}/${link.target}${isMarkdownPath(link.target) ? "" : ".md"}`);
+  const folder = link.target.includes("/") ? root : getDirectory(from) ?? root;
+  return normalizePath(`${folder}/${link.target}${isMarkdownPath(link.target) ? "" : ".md"}`);
 }
 
 /** Reads `aliases` (or `alias`) from YAML frontmatter, as an inline list, a block list or a single value. */
