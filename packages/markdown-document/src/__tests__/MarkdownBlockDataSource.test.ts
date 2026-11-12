@@ -72,7 +72,7 @@ describe("MarkdownBlockDataSource", () => {
     expect(mutations).toHaveBeenCalledWith(expect.objectContaining({ operations: [
       // Delete only the placeholder, leaving the active editor's container alive.
       { type: "splice", index: 1, deleteCount: 1, insertCount: 0 },
-      { type: "update", index: 1, count: 1, layout: "invalidate" },
+      { type: "update", index: 1, count: 1, layout: "preserve" },
     ] }));
   });
 
@@ -99,7 +99,7 @@ describe("MarkdownBlockDataSource", () => {
     expect(batches).toEqual([{
       length: 4,
       operations: [
-        { type: "update", index: 1, count: 1, layout: "invalidate" },
+        { type: "update", index: 1, count: 1, layout: "preserve" },
         { type: "splice", index: 2, deleteCount: 0, insertCount: 1 },
       ],
       previousLength: 3,
@@ -108,7 +108,7 @@ describe("MarkdownBlockDataSource", () => {
     }]);
   });
 
-  it("publishes a layout-invalidating update for an unchanged block identity", () => {
+  it("keeps the measured layout for an unchanged block identity", () => {
     const blocks = [block("a", 0)];
     const adapter = {} as MarkdownDocumentAdapter;
     const dataSource = new MarkdownBlockDataSource(adapter, "d1", snapshot(blocks));
@@ -122,7 +122,7 @@ describe("MarkdownBlockDataSource", () => {
       type: "update",
       index: 0,
       count: 1,
-      layout: "invalidate",
+      layout: "preserve",
     }]);
   });
 
@@ -139,7 +139,7 @@ describe("MarkdownBlockDataSource", () => {
     expect(dataSource.getItem(0)).toBe("a");
     expect(dataSource.getItem(1)).toBe("c");
     expect(batches[0]?.operations).toEqual([
-      { type: "update", index: 0, count: 1, layout: "invalidate" },
+      { type: "update", index: 0, count: 1, layout: "preserve" },
       { type: "splice", index: 1, deleteCount: 1, insertCount: 0 },
     ]);
   });
@@ -160,7 +160,7 @@ describe("MarkdownBlockDataSource", () => {
     expect([0, 1, 2].map((index) => dataSource.getItem(index))).toEqual(["b", "c", "a"]);
     expect(batches[0]?.operations).toEqual([
       { type: "move", from: 0, to: 2, count: 1 },
-      { type: "update", index: 0, count: 3, layout: "invalidate" },
+      { type: "update", index: 0, count: 3, layout: "preserve" },
     ]);
   });
 
