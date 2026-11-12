@@ -63,6 +63,10 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
+jest.mock("@legendapp/spark/ui/glass", () => ({
+  GlassView: require("react-native").View,
+}));
+
 jest.mock("@legendapp/spark/files", () => ({
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));

@@ -24,9 +24,7 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         macos: {
             titleBar: {
                 contentLayout: "fullSize" as const,
-                transparent: true,
-                material: "titlebar" as const,
-                blendingMode: "withinWindow" as const
+                transparent: true
             }
         }
     };
