@@ -6,8 +6,7 @@
   "type": "module",
   "enriched-markdown": {
     "enableCodeHighlight": true,
-    "enableMath": true,
-    "enableWikilinks": true
+    "enableMath": true
   },
   "workspaces": [
     "shell",

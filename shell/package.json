@@ -5,8 +5,7 @@
   "main": "index.ts",
   "enriched-markdown": {
     "enableCodeHighlight": true,
-    "enableMath": true,
-    "enableWikilinks": true
+    "enableMath": true
   },
   "scripts": {
     "start": "expo start",
