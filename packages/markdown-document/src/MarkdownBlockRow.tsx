@@ -266,6 +266,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   documentRenderState$,
   markdownLayout,
   markdownStyle,
+  md4cFlags,
   renderCommentBubble,
   selectionOverlayStyle,
   item: blockId,
@@ -279,6 +280,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   documentRenderState$: Observable<MarkdownDocumentRenderState>;
   markdownLayout: MarkdownDocumentLayout;
   markdownStyle: NonNullable<MarkdownDocumentProps["markdownStyle"]>;
+  md4cFlags: MarkdownDocumentProps["md4cFlags"];
   onActivate: (block: MarkdownBlockSnapshot, selection: number) => void;
   onImagePress: (image: ImagePressEvent) => void;
   onLinkPress: (url: string) => void;
@@ -364,6 +366,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       blockId={block.id}
       containerStyle={styles.renderedText}
       markdownStyle={markdownStyle}
+      md4cFlags={md4cFlags}
       onImagePress={onImagePress}
       onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
       onLinkPress={(event) => onLinkPress(event.url)}
@@ -378,6 +381,7 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
       flavor="github"
       markdown={markdown}
       markdownStyle={markdownStyle}
+      md4cFlags={md4cFlags}
       onImagePress={onImagePress}
       onTaskListItemPress={(event) => onTaskListItemPress(block.id, event.index, event.checked)}
       onLinkPress={(event) => onLinkPress(event.url)}

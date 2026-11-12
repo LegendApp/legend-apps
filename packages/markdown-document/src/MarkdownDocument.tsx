@@ -458,6 +458,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       filename,
       markdownLayout,
       markdownStyle,
+      md4cFlags,
       onDirtyChange,
       onCommandStateChange,
       onError,
@@ -3592,6 +3593,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           getBlockMetadata={getBlockAtIndexForRender}
           markdownLayout={resolvedMarkdownLayout}
           markdownStyle={resolvedMarkdownStyle}
+          md4cFlags={md4cFlags}
           onActivate={activateBlock}
           onImagePress={setViewerImage}
           onLinkPress={handleLinkPress}
@@ -3623,6 +3625,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         renderCommentBubble,
         resolvedMarkdownLayout,
         resolvedMarkdownStyle,
+        md4cFlags,
         blockSelectionOverlayStyle,
       ],
     );

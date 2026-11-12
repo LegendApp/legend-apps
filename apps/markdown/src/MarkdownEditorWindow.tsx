@@ -641,6 +641,9 @@ type MarkdownDocumentSurfaceProps = {
   theme: MarkdownDocumentProps["theme"];
 };
 
+// [[Note]] links are a notes-vault feature, so only Markdown asks enriched-markdown's parser for them.
+const md4cFlags = { wikilinks: true };
+
 const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
   preserveEditingOnBlur,
   autosaveEnabled,
@@ -672,6 +675,7 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
         filename={filename}
         markdownLayout={markdownLayout}
         markdownStyle={markdownStyle}
+        md4cFlags={md4cFlags}
         onCommandStateChange={session.setCommandState}
         onDirtyChange={session.setIsDirty}
         onError={session.handleError}

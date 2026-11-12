@@ -1981,6 +1981,17 @@ describe("MarkdownDocument native row editor", () => {
     await act(async () => renderer.unmount());
   });
 
+  it("passes md4cFlags to rendered blocks", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("d1:b0", 0, "[[Note]]")]));
+    const md4cFlags = { wikilinks: true };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md" md4cFlags={md4cFlags} savePolicy={{ autosave: false }} />);
+    });
+    expect(activationView(renderer, "d1:b0").findByType(EnrichedMarkdownText).props.md4cFlags).toBe(md4cFlags);
+    await act(async () => renderer.unmount());
+  });
+
   it.each(["ios", "macos"] as const)("opens and closes an image viewer on %s without activating the editor", async (platform) => {
     const platformMock = jest.replaceProperty(Platform, "OS", platform);
     try {

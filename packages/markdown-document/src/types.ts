@@ -1,7 +1,7 @@
 import type { Observable } from "@legendapp/state";
 import type { ReactNode, Ref } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import type { MarkdownStyle } from "react-native-enriched-markdown";
+import type { MarkdownStyle, Md4cFlags } from "react-native-enriched-markdown";
 
 export type MarkdownBlockMetadata = {
   id: string;
@@ -207,6 +207,8 @@ export type MarkdownDocumentProps = {
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
   markdownStyle?: MarkdownStyle;
+  /** Parser options for rendered blocks, such as `{ wikilinks: true }`. */
+  md4cFlags?: Md4cFlags;
   markdownLayout?: MarkdownDocumentLayout;
   theme?: MarkdownDocumentTheme;
   commandsRef?: Ref<MarkdownDocumentCommands>;
