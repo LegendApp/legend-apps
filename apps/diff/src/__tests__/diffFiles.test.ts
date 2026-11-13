@@ -154,9 +154,9 @@ describe("diffFiles", () => {
       value: "/tmp/repo",
     });
     expect(getLaunchDiffSource(["main...HEAD", "--cwd", "/tmp/repo"])).toEqual({
-      args: ["main...HEAD"],
+      range: "main...HEAD",
       cwd: "/tmp/repo",
-      kind: "git",
+      kind: "range",
       label: "main...HEAD",
       value: "/tmp/repo main...HEAD",
     });
@@ -164,9 +164,9 @@ describe("diffFiles", () => {
 
   it("reads legend diff open URLs", () => {
     expect(getDiffSourceFromOpenUrl("legend-diff://open?cwd=%2Ftmp%2Frepo&arg=main...HEAD")).toEqual({
-      args: ["main...HEAD"],
+      range: "main...HEAD",
       cwd: "/tmp/repo",
-      kind: "git",
+      kind: "range",
       label: "main...HEAD",
       value: "/tmp/repo main...HEAD",
     });
@@ -222,4 +222,28 @@ describe("diffFiles", () => {
     expect(getDiffSourceLabel(null)).toBe("Legend Diff");
     expect(getLaunchDiffFolder(["--diff-folder=/tmp/repo"])).toBe("/tmp/repo");
   });
+});
+
+it.each([
+  [["--index-vs-workdir"], { kind: "index-vs-workdir", label: "Worktree vs Index" }],
+  [["--head-vs-index"], { kind: "head-vs-index", label: "Index vs HEAD" }],
+  [["--commit", "abc123"], { kind: "commit", sha: "abc123", label: "Commit abc123" }],
+  [["--range", "base..topic"], { kind: "range", range: "base..topic", label: "base..topic" }],
+  [["base...topic"], { kind: "range", range: "base...topic" }],
+] as const)("opens explicit Git comparison arguments %j from launch and ldiff URLs", (args, expected) => {
+  const launch = getLaunchDiffSource([...args, "--cwd", "/tmp/repo"]);
+  const params = new URLSearchParams({ cwd: "/tmp/repo", args: JSON.stringify(args) });
+  const url = `legend-diff://open?${params}`;
+  expect(launch).toMatchObject({ ...expected, cwd: "/tmp/repo" });
+  expect(getDiffSourceFromOpenUrl(url)).toEqual(launch);
+  expect(normalizeDiffOpenSource(url)).toEqual(launch);
+  expect(getLaunchDiffSource(["--diff-source", url])).toEqual(launch);
+});
+
+it("keeps GitHub URL priority when the repository name contains a range separator", () => {
+  const value = "https://github.com/owner/repo..name/pull/7";
+  const expected = { diffUrl: `${value}.diff`, kind: "github", label: "owner/repo..name#7", value };
+  expect(normalizeDiffOpenSource(value, "/tmp/repo")).toEqual(expected);
+  const params = new URLSearchParams({ cwd: "/tmp/repo", arg: value });
+  expect(getDiffSourceFromOpenUrl(`legend-diff://open?${params}`)).toEqual(expected);
 });

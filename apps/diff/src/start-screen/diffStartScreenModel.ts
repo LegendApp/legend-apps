@@ -1,5 +1,5 @@
 import type { RecentDiffSource } from "../diffAppMetadata";
-import { getDiffFolderCompareBaseKey, type DiffOpenSource } from "../diffFiles";
+import { getDiffFolderCompareBaseKey, isDiffGitSource, type DiffOpenSource } from "../diffFiles";
 
 export type DiffRecentFilter = "all" | "folders" | "files" | "prs" | "commits";
 
@@ -27,9 +27,8 @@ export function getRecentDiffSourceKind(source: DiffOpenSource): DiffRecentSourc
   if (source.kind === "folder") {
     return "folder";
   }
-  if (source.kind === "git") {
-    return "git";
-  }
+  if (source.kind === "commit") return "commit";
+  if (isDiffGitSource(source)) return "git";
   if (source.kind === "filePair") {
     return "filePair";
   }

@@ -3,7 +3,6 @@ import { type SyntaxStyleMap } from "@legend-apps/source-viewer";
 import { type SyntaxRenderLine } from "@legend-apps/syntax-parser";
 import { type VirtualizedDocumentRequestOptions, type VirtualizedDocumentRowsState, type VirtualizedDocumentVisibleRangeInfo, type VirtualizedFixedDocumentListRef, type VirtualizedFixedDocumentListRenderRowProps } from "@legend-apps/virtualized-document";
 import { type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { runCommand } from "@legendapp/spark/processes";
 import { type SidebarSplitViewResizeEvent } from "@legendapp/spark/ui/split-view";
 import { type Observable, type OpaqueObject } from "@legendapp/state";
 import { type ReactElement, type ReactNode, type RefObject } from "react";
@@ -14,7 +13,6 @@ import { getDiffViewModeSetting, type DiffSettingsFile } from "../diffSettings";
 import { type DiffSideBySideDataSource } from "../viewer/diffSideBySideDataSource";
 import { type DiffLoadedState, type DiffSplitPaneMetrics } from "../viewer/diffViewerModel";
 
-export type DiffCommandResult = Awaited<ReturnType<typeof runCommand>>;
 export type DiffLoadedPayload = DiffLoadResult | DiffLoadProgress;
 export type DiffLoadedCacheEntry = {
     loaded: DiffLoadedPayload;

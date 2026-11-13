@@ -614,8 +614,10 @@ describe("diffMerge", () => {
     const commands: string[] = [];
     const runner = createTestProcesses({
       run: (params) => {
+        if (params.args?.includes("--absolute-git-dir")) return { stdout: "/repo/.git\n" };
+        if (params.target.type === "command" && params.target.name === "sh") return { stdout: "ref: refs/heads/main\n\0" };
         commands.push([(params.target.type === "executable" ? params.target.path : params.target.name), ...(params.args ?? [])].join(" "));
-        if ((params.target.type === "executable" ? params.target.path : params.target.name) === "git" && params.args?.[0] === "ls-files") {
+        if (params.args?.includes("ls-files")) {
           return {
             exitCode: 0,
             stderr: "",
@@ -660,7 +662,7 @@ describe("diffMerge", () => {
       ],
     });
     expect(commands).toEqual([
-      "git ls-files -u -z",
+      "git -c core.quotepath=off ls-files -u -z",
       "cat -- src/app.ts",
     ]);
   });

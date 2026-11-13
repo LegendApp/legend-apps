@@ -7,7 +7,20 @@ const diffCwdLaunchArgument = "--cwd";
 const diffNamespacedCwdLaunchArgument = "--diff-cwd";
 const diffUrlScheme = "legend-diff:";
 
+export type DiffGitComparison =
+  | { kind: "index-vs-workdir" }
+  | { kind: "head-vs-index" }
+  | { kind: "commit"; sha: string }
+  | { kind: "range"; range: string };
+
+export type DiffGitOpenSource = DiffGitComparison & {
+  cwd: string;
+  label: string;
+  value: string;
+};
+
 export type DiffOpenSource =
+  | DiffGitOpenSource
   | {
       compareBase?: DiffFolderCompareBase;
       kind: "folder";
@@ -51,6 +64,36 @@ export type DiffFolderCompareBase =
       ref: string;
       useMergeBase?: boolean;
     };
+
+export function createDiffGitSource(cwd: string, comparison: DiffGitComparison): DiffGitOpenSource {
+  const target = comparison.kind === "commit" ? comparison.sha
+    : comparison.kind === "range" ? comparison.range : comparison.kind;
+  const label = comparison.kind === "index-vs-workdir" ? "Worktree vs Index"
+    : comparison.kind === "head-vs-index" ? "Index vs HEAD"
+    : comparison.kind === "commit" ? `Commit ${comparison.sha.slice(0, 12)}` : comparison.range;
+  return { ...comparison, cwd, label, value: `${cwd} ${target}` };
+}
+
+export function isDiffGitSource(source: DiffOpenSource): source is DiffGitOpenSource | Extract<DiffOpenSource, { kind: "git" }> {
+  return source.kind === "git" || source.kind === "index-vs-workdir" || source.kind === "head-vs-index"
+    || source.kind === "commit" || source.kind === "range";
+}
+
+function isGitRange(value: string) {
+  return !value.startsWith("-") && /^[^\s.]+(?:\.[^\s.]+)*\.{2,3}[^\s.]+(?:\.[^\s.]+)*$/.test(value);
+}
+
+function getExplicitGitSource(args: string[], cwd: string | null | undefined) {
+  if (!cwd?.trim()) return null;
+  if (args.length === 1 && (args[0] === "--index-vs-workdir" || args[0] === "--head-vs-index")) {
+    return createDiffGitSource(cwd, { kind: args[0].slice(2) as "index-vs-workdir" | "head-vs-index" });
+  }
+  if (args.length === 2 && args[0] === "--commit" && args[1]) {
+    return createDiffGitSource(cwd, { kind: "commit", sha: args[1] });
+  }
+  const range = args.length === 1 ? args[0] : args.length === 2 && args[0] === "--range" ? args[1] : null;
+  return range && isGitRange(range) ? createDiffGitSource(cwd, { kind: "range", range }) : null;
+}
 
 export function getDiffFolderCompareBaseKey(compareBase: DiffFolderCompareBase | undefined) {
   if (!compareBase || compareBase.kind === "head") {
@@ -247,8 +290,10 @@ function normalizeDiffOpenSourceString(value: string, cwd?: string | null) {
   const folderPath = !isGitDiffArgument(trimmedValue)
     ? resolvedFilePath
     : null;
-  return getFilePairSourceFromText(trimmedValue, cwd)
+  return getDiffSourceFromOpenUrl(trimmedValue)
+    ?? getFilePairSourceFromText(trimmedValue, cwd)
     ?? getGithubDiffSource(trimmedValue)
+    ?? getExplicitGitSource([trimmedValue], cwd)
     ?? (isGitDiffArgument(trimmedValue) ? createGitDiffSource([trimmedValue], cwd) : null)
     ?? (resolvedFilePath && isDiffFilePath(resolvedFilePath) ? createDiffFileSource(resolvedFilePath) : null)
     ?? (folderPath ? {
@@ -285,7 +330,12 @@ export function getLaunchDiffSource(launchArguments: string[] | undefined) {
   const explicitSource = getLaunchArgumentValue(args, diffSourceLaunchArgument)
     ?? getLaunchArgumentValue(args, diffUrlLaunchArgument)
     ?? getLaunchArgumentValue(args, diffFolderLaunchArgument);
-  let source = normalizeDiffOpenSource(explicitSource, cwd);
+  const commit = getLaunchArgumentValue(args, "--commit");
+  const range = getLaunchArgumentValue(args, "--range");
+  const comparisonArgs = commit ? ["--commit", commit] : range ? ["--range", range]
+    : args.includes("--head-vs-index") ? ["--head-vs-index"]
+    : args.includes("--index-vs-workdir") ? ["--index-vs-workdir"] : [];
+  let source = normalizeDiffOpenSource(explicitSource, cwd) ?? getExplicitGitSource(comparisonArgs, cwd);
 
   if (!source) {
     const githubUrl = args.find((argument) => getGithubDiffSource(argument));
@@ -340,6 +390,8 @@ export async function openDiffFilePairDialog() {
 
 function getFirstPositionalLaunchArgument(args: string[]) {
   const valueFlags = new Set([
+    "--commit",
+    "--range",
     diffCwdLaunchArgument,
     diffFolderLaunchArgument,
     diffNamespacedCwdLaunchArgument,
@@ -392,7 +444,7 @@ function getDiffCliSource(args: string[], cwd: string | null) {
       ?? (resolvedPath && isDiffFilePath(resolvedPath) ? createDiffFileSource(resolvedPath) : null)
       ?? (isExplicitLocalCliSource(argument) ? normalizeDiffOpenSource(argument, cwd) : null);
   }
-  return source ?? createGitDiffSource(args, cwd);
+  return source ?? getExplicitGitSource(args, cwd) ?? createGitDiffSource(args, cwd);
 }
 
 export function getDiffSourceFromOpenUrl(value: string) {

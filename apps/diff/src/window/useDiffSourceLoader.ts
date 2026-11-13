@@ -5,11 +5,12 @@ import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { runCommand } from "@legendapp/spark/processes";
 import { useWindowId } from "@legendapp/spark/windows";
 import type { RefObject } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { type UnsavedDiffMergeDraftReason } from "../confirmUnsavedDiffMergeDrafts";
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "../diffAppMetadata";
-import { type DiffOpenSource, getDiffFolderCompareBaseKey, getDiffRecentDocumentPath } from "../diffFiles";
+import { type DiffOpenSource, getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, isDiffGitSource } from "../diffFiles";
 import { type DiffMergeState, createReadyMergeState, loadDiffMergeState } from "../diffMerge";
+import { readDiffGitSource } from "../git/diffGitSource";
 import { getDiffIgnoreWhitespaceChangesSetting, getDiffShowOnlyHunksSetting } from "../diffSettings";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "../filePairDiff";
 import { getActiveDiffFile } from "../viewer/diffFilePresentation";
@@ -17,7 +18,7 @@ import { diffInitialRowCount, diffLoadedCacheMaxRows, diffProgressiveInitialPain
 import type { DiffViewerModel } from "../viewer/diffViewerModel";
 import { type DiffLoadProgressState, type DiffLoadSourceOptions, type DiffLoadTrace, type DiffViewerState, emptyDiffLoadProgressState, emptyDiffViewerState, unavailableDiffMergeState } from "../viewer/diffViewerModel";
 import { createOpenError, createRefreshError, getErrorMessage, shouldPrepareMergeDraftsForSourceChange, sourcesMatch } from "../viewer/diffViewerSupport";
-import { type DiffCommandResult, type DiffLoadedCacheEntry, type DiffLoadedPayload, type DiffMergeDraftFile, type DiffMergeFileResolveQueue } from "./diffWindowTypes";
+import { type DiffLoadedCacheEntry, type DiffLoadedPayload, type DiffMergeDraftFile, type DiffMergeFileResolveQueue } from "./diffWindowTypes";
 
 export function disposeDiffDocument(document: DiffDocument, reason: string) {
     document.cancelTokenizationRequests(reason);
@@ -48,13 +49,6 @@ export function deleteLoadedCacheEntriesWithPrefix(cache: Map<string, DiffLoaded
             deleteLoadedCacheEntry(cache, key, reason);
         }
     }
-}
-
-function createGitDiffCommandError(commandResult: DiffCommandResult) {
-    const message = decodeProcessText(commandResult.stderr)
-        ? decodeProcessText(commandResult.stderr)
-        : `git diff exited with code ${(commandResult.exit.type === "exited" ? commandResult.exit.code : -1)}.`;
-    return new Error(message);
 }
 
 function waitForDiffProgressPoll(delayMs = diffProgressiveLoadPollMs) {
@@ -101,7 +95,9 @@ export function getDiffSourceCacheKey(source: DiffOpenSource) {
     if (source.kind === "diffFile") {
         return `${source.kind}:${source.value}`;
     }
-    return `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`;
+    return source.kind === "folder"
+        ? `${source.kind}:${source.value}:${getDiffFolderCompareBaseKey(source.compareBase)}`
+        : `${source.kind}:${source.value}`;
 }
 
 function getDiffLoadedCacheKey(source: DiffOpenSource, showOnlyHunks: boolean, ignoreWhitespaceChanges: boolean) {
@@ -183,6 +179,8 @@ export function useDiffSourceLoader({
     activeFileIndex$: DiffViewerModel["activeFileIndex$"];
 }) {
     "use no memo";
+    const gitLoadAbortRef = useRef<AbortController | null>(null);
+    useEffect(() => () => gitLoadAbortRef.current?.abort(), []);
     const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
         const stateBeforeTransition = state$.peek();
         const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
@@ -205,6 +203,9 @@ export function useDiffSourceLoader({
         }
         const requestId = loadRequestIdRef.current + 1;
         loadRequestIdRef.current = requestId;
+        gitLoadAbortRef.current?.abort();
+        const gitLoadController = new AbortController();
+        gitLoadAbortRef.current = gitLoadController;
         activeProgressiveSessionRef.current?.cancel();
         activeProgressiveSessionRef.current = null;
         const loadStartedAt = nowMs();
@@ -403,19 +404,9 @@ export function useDiffSourceLoader({
                     }
                 }
             }
-            else if (nextSource.kind === "git") {
-                const commandResult = await runCommand({
-                    args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
-                    target: { type: "command", name: "git" },
-                    cwd: nextSource.cwd,
-                    timeoutMs: 60000,
-                });
-                if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 0) {
-                    loadError = createGitDiffCommandError(commandResult);
-                }
-                else {
-                    result = await loadUnifiedDiff(decodeProcessText(commandResult.stdout), nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
-                }
+            else if (isDiffGitSource(nextSource)) {
+                const text = await readDiffGitSource(nextSource, { ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges, signal: gitLoadController.signal });
+                result = await loadUnifiedDiff(text, nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
             }
             else if (nextSource.kind === "filePair") {
                 const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
@@ -536,6 +527,7 @@ export function useDiffSourceLoader({
             loadError = error;
         }
         finally {
+            if (gitLoadAbortRef.current === gitLoadController) gitLoadAbortRef.current = null;
             if (loadRequestIdRef.current !== requestId) {
                 progressiveSession?.cancel();
             }
