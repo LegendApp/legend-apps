@@ -58,7 +58,7 @@
         "react-native-macos": "0.83.0",
         "react-native-reanimated": "4.3.4",
         "react-native-webgpu": "0.8.5",
-        "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/react-native-webview-16.0.0-333e421ad38b.tgz",
+        "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/react-native-webview-16.0.0-333e421ad38b.tgz",
         "react-native-worklets": "0.8.3",
         "sf-symbols-typescript": "^2.2.0",
         "tailwind-merge": "^3.0.2",
@@ -938,8 +938,8 @@
     "@legendapp/list": "workspace:*",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@op-engineering/op-sqlite": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/op-engineering-op-sqlite-18.2.1-a14b99ecf491.tgz",
-    "@react-native-runtimes/core": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/runtimes-4df45cb5ea74.tgz",
+    "@op-engineering/op-sqlite": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/op-engineering-op-sqlite-18.2.1-a14b99ecf491.tgz",
+    "@react-native-runtimes/core": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/runtimes-4df45cb5ea74.tgz",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-blockquote": "3.32.0",
     "@tiptap/extension-bold": "3.32.0",
@@ -964,7 +964,7 @@
     "dompurify": "3.4.17",
     "expo": "55.0.32",
     "expo-asset": "55.0.20",
-    "expo-audio": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/expo-audio-55.0.18-a8d70b5b39bd.tgz",
+    "expo-audio": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/expo-audio-55.0.18-a8d70b5b39bd.tgz",
     "expo-constants": "55.0.17",
     "expo-desktop-modules-core": "55.0.2",
     "expo-desktop-stubs": "55.0.2",
@@ -980,8 +980,8 @@
     "react-native-enriched-html": "1.1.1",
     "react-native-enriched-markdown": "1.1.1",
     "react-native-macos": "0.83.0",
-    "react-native-nitro-modules": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/react-native-nitro-modules-0.37.0-5df8774796c4.tgz",
-    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/react-native-webview-16.0.0-333e421ad38b.tgz",
+    "react-native-nitro-modules": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/react-native-nitro-modules-0.37.0-5df8774796c4.tgz",
+    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/react-native-webview-16.0.0-333e421ad38b.tgz",
     "react-native-windows": "0.83.2",
     "tailwindcss": "4.2.4",
     "uniwind": "1.6.3",
@@ -989,7 +989,7 @@
   "catalog": {
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
-    "@legendapp/spark": "0.0.2",
+    "@legendapp/spark": "0.0.3",
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.2.0",
     "react-native": "0.83.10",
@@ -1497,7 +1497,7 @@
 
     "@legendapp/motion": ["@legendapp/motion@2.5.3", "", { "dependencies": { "@legendapp/tools": "2.0.1" }, "peerDependencies": { "nativewind": ">=4.0.0", "react": ">=16", "react-native": "*" } }, "sha512-IcNiStiK3qG5LaIPLC8fVV0BHIrkf7EY5HfOv3xbuMH0z4D945yaaEDafP5bboHf/uj9XRjTQHVTtZgwpMNlHw=="],
 
-    "@legendapp/spark": ["@legendapp/spark@0.0.2", "", { "dependencies": { "@expo/config-plugins": "55.0.12", "@legendapp/state": "^3.0.0-beta.42", "@react-native-runtimes/core": "0.1.0-alpha.2", "@react-native-windows/find-dotnet-tools": "0.0.0-canary.3", "base64-js": "1.5.1", "clsx": "^2.1.1", "cross-spawn": "7.0.6", "diff": "8.0.4", "expo-desktop": "1.0.6", "expo-desktop-config-plugins": "1.3.2", "npm": "11.21.1", "react-native-nitro-modules": "0.37.0", "tailwind-merge": "^3.4.0", "typescript": "5.9.3", "ws": "8.21.0", "yaml": "2.9.1" }, "peerDependencies": { "@expo/ui": "55.0.17", "@legendapp/list": ">=3.3.0", "@op-engineering/op-sqlite": "18.2.1", "expo": "55.0.32", "expo-audio": "55.0.18", "expo-clipboard": "~55.0.17", "expo-crypto": "~55.0.19", "expo-linking": "~55.0.17", "expo-secure-store": "~55.0.18", "expo-web-browser": "~55.0.20", "react": "^19.2.0", "react-dom": "^19.2.0", "react-native": "0.83.10", "react-native-enriched-html": "1.1.1", "react-native-enriched-markdown": "1.1.1", "react-native-webview": "16.0.0", "react-native-windows": "0.83.2", "uniwind": "^1.6.3" }, "optionalPeers": ["@expo/ui", "@op-engineering/op-sqlite", "expo-audio", "expo-clipboard", "expo-crypto", "expo-linking", "expo-secure-store", "expo-web-browser", "react-dom", "react-native-enriched-html", "react-native-enriched-markdown", "react-native-webview", "react-native-windows", "uniwind"], "bin": { "spark": "bin/spark.cjs" } }, "sha512-aWk9eLf71KhHrBaYGtHCLGvrc/yDZauqgveS6c8Q2oTgsdLGzNiemgNUAszOUN3rO5ddBP3NV6wvcufBAqLh1Q=="],
+    "@legendapp/spark": ["@legendapp/spark@0.0.3", "", { "dependencies": { "@expo/config-plugins": "55.0.12", "@legendapp/state": "^3.0.0-beta.42", "@react-native-runtimes/core": "0.1.0-alpha.2", "@react-native-windows/find-dotnet-tools": "0.0.0-canary.3", "base64-js": "1.5.1", "clsx": "^2.1.1", "cross-spawn": "7.0.6", "diff": "8.0.4", "expo-desktop": "1.0.6", "expo-desktop-config-plugins": "1.3.2", "npm": "11.21.1", "react-native-nitro-modules": "0.37.0", "tailwind-merge": "^3.4.0", "typescript": "5.9.3", "ws": "8.21.0", "yaml": "2.9.1" }, "peerDependencies": { "@expo/ui": "55.0.17", "@legendapp/list": ">=3.3.0", "@op-engineering/op-sqlite": "18.2.1", "expo": "55.0.32", "expo-audio": "55.0.18", "expo-clipboard": "~55.0.17", "expo-crypto": "~55.0.19", "expo-linking": "~55.0.17", "expo-secure-store": "~55.0.18", "expo-web-browser": "~55.0.20", "react": "^19.2.0", "react-dom": "^19.2.0", "react-native": "0.83.10", "react-native-enriched-html": "1.1.1", "react-native-enriched-markdown": "1.1.1", "react-native-webview": "16.0.0", "react-native-windows": "0.83.2", "uniwind": "^1.6.3" }, "optionalPeers": ["@expo/ui", "@op-engineering/op-sqlite", "expo-audio", "expo-clipboard", "expo-crypto", "expo-linking", "expo-secure-store", "expo-web-browser", "react-dom", "react-native-enriched-html", "react-native-enriched-markdown", "react-native-webview", "react-native-windows", "uniwind"], "bin": { "spark": "bin/spark.cjs" } }, "sha512-fdIVCdfhxUSpXOkj28D2py67g4GD9QXm92r7c+xsrLwoASUT6KjsQBgR9vj3V71dWVr+pD0Adadxeq26b5mabw=="],
 
     "@legendapp/state": ["@legendapp/state@3.0.0-beta.47", "", { "dependencies": { "use-sync-external-store": "^1.2.2" }, "peerDependencies": { "expo-sqlite": "^15.0.0" }, "optionalPeers": ["expo-sqlite"] }, "sha512-MPgPacXXSoAazAv7ulW/o0ZAtK4YHk3twvXZ241l2HqAHciHozb7tg5SMbEAc2HKUUfC3JBh+9+DXfMsYokLpQ=="],
 
@@ -1555,7 +1555,7 @@
 
     "@react-native-macos/virtualized-lists": ["@react-native-macos/virtualized-lists@0.83.0", "", { "dependencies": { "invariant": "^2.2.4", "nullthrows": "^1.1.1" }, "peerDependencies": { "@types/react": "^19.2.0", "react": "*", "react-native": "*" }, "optionalPeers": ["@types/react"] }, "sha512-BCqsS5WmJ1rZ62gR+kixlxpx2V62q/sFc/sqPkVwblqN/ianB3YdJ7noG+mGyxEscddUp7qu22+pfWJEEOKXZw=="],
 
-    "@react-native-runtimes/core": ["@react-native-runtimes/core@https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/runtimes-4df45cb5ea74.tgz", { "dependencies": { "@babel/parser": "7.28.5", "@babel/traverse": "7.28.5", "react-native-nitro-modules": "0.37.0" }, "peerDependencies": { "@expo/config-plugins": ">=9.0.0", "react": "*", "react-native": "*", "react-native-nitro-modules": "*" }, "optionalPeers": ["@expo/config-plugins"] }, "sha512-QaAY8qj+ihrmwx58lacic7zaxI2iiD339IOAtSXRuoS5xMh8oNVInC04/G2LS12rt4X+jGW8xCOCZtCm10TKTw=="],
+    "@react-native-runtimes/core": ["@react-native-runtimes/core@https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/runtimes-4df45cb5ea74.tgz", { "dependencies": { "@babel/parser": "7.28.5", "@babel/traverse": "7.28.5", "react-native-nitro-modules": "0.37.0" }, "peerDependencies": { "@expo/config-plugins": ">=9.0.0", "react": "*", "react-native": "*", "react-native-nitro-modules": "*" }, "optionalPeers": ["@expo/config-plugins"] }, "sha512-QaAY8qj+ihrmwx58lacic7zaxI2iiD339IOAtSXRuoS5xMh8oNVInC04/G2LS12rt4X+jGW8xCOCZtCm10TKTw=="],
 
     "@react-native-windows/cli": ["@react-native-windows/cli@0.83.2", "", { "dependencies": { "@react-native-windows/codegen": "0.83.1", "@react-native-windows/fs": "0.83.1", "@react-native-windows/package-utils": "0.83.1", "@react-native-windows/telemetry": "0.83.1", "@xmldom/xmldom": "^0.7.7", "chalk": "^4.1.0", "cli-spinners": "^2.2.0", "envinfo": "^7.5.0", "execa": "^5.0.0", "find-up": "^4.1.0", "glob": "^7.1.1", "lodash": "^4.17.15", "mustache": "^4.0.1", "ora": "^3.4.0", "prompts": "^2.4.1", "semver": "^7.3.2", "shelljs": "^0.8.4", "username": "^5.1.0", "xml-formatter": "^2.4.0", "xml-parser": "^1.2.1", "xpath": "^0.0.27" }, "peerDependencies": { "react-native": "*" } }, "sha512-uM3MCmBYU3Cnf+h+4Mc062TLAFhRn4s82EgnIghaPv6dCRstKNA/f9pqo9357p33Ay+uJOlr5VWr1ndGWW9x9w=="],
 
@@ -2817,7 +2817,7 @@
 
     "react-native-macos": ["react-native-macos@0.83.0", "", { "dependencies": { "@jest/create-cache-key-function": "^29.7.0", "@react-native-macos/virtualized-lists": "0.83.0", "@react-native/assets-registry": "0.83.10", "@react-native/codegen": "0.83.10", "@react-native/community-cli-plugin": "0.83.10", "@react-native/gradle-plugin": "0.83.10", "@react-native/js-polyfills": "0.83.10", "@react-native/normalize-colors": "0.83.10", "abort-controller": "^3.0.0", "anser": "^1.4.9", "ansi-regex": "^5.0.0", "babel-jest": "^29.7.0", "babel-plugin-syntax-hermes-parser": "0.32.0", "base64-js": "^1.5.1", "commander": "^12.0.0", "flow-enums-runtime": "^0.0.6", "glob": "^7.1.1", "hermes-compiler": "0.14.1", "invariant": "^2.2.4", "jest-environment-node": "^29.7.0", "memoize-one": "^5.0.0", "metro": "^0.83.6", "metro-runtime": "^0.83.6", "metro-source-map": "^0.83.6", "nullthrows": "^1.1.1", "pretty-format": "^29.7.0", "promise": "^8.3.0", "react-devtools-core": "^6.1.5", "react-refresh": "^0.14.0", "regenerator-runtime": "^0.13.2", "scheduler": "0.27.0", "semver": "^7.1.3", "stacktrace-parser": "^0.1.10", "whatwg-fetch": "^3.0.0", "ws": "^7.5.10", "yargs": "^17.6.2" }, "peerDependencies": { "@types/react": "^19.1.1", "react": "^19.2.0", "react-native": "0.83.10" }, "optionalPeers": ["@types/react"], "bin": { "react-native": "cli.js", "react-native-macos": "cli.js" } }, "sha512-8hRb3b1QuKNC0xoHOq3BEErlsjrgJACyxXL5ny7dUr5zGxBCle5Tu9gPysCCITp1iyIINLEApHB/NkoRaKsU7Q=="],
 
-    "react-native-nitro-modules": ["react-native-nitro-modules@https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/react-native-nitro-modules-0.37.0-5df8774796c4.tgz", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-PS2k5FJB+Ll9JZ8EZPJotCX1PmMbuBtWuxnsGiw0DV//dDyZ5tvARPJovzSDN7QTKChBneFvQpdZjsy3RwSEmw=="],
+    "react-native-nitro-modules": ["react-native-nitro-modules@https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/react-native-nitro-modules-0.37.0-5df8774796c4.tgz", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-PS2k5FJB+Ll9JZ8EZPJotCX1PmMbuBtWuxnsGiw0DV//dDyZ5tvARPJovzSDN7QTKChBneFvQpdZjsy3RwSEmw=="],
 
     "react-native-reanimated": ["react-native-reanimated@4.3.4", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.3.1", "semver": "^7.7.3" }, "peerDependencies": { "react": "*", "react-native": "0.81 - 0.85", "react-native-worklets": "0.8.x" } }, "sha512-kQJMiDROed3eO+asdXfodDxgsDDIGM/ifnHFAiPsKWxmrcPu+Bz4vO0fg79eyuEmKCeQuDczmn4tkTb4RbSVYA=="],
 
@@ -2833,7 +2833,7 @@
 
     "react-native-webgpu": ["react-native-webgpu@0.8.5", "", { "peerDependencies": { "react": "*", "react-native": ">=0.81.0", "react-native-reanimated": ">=4.2.1", "react-native-worklets": ">=0.7.2" }, "optionalPeers": ["react-native-reanimated", "react-native-worklets"] }, "sha512-P0c7YrEZddebPrejfQxxlEnHyCBnE2WA2XkjbXT23R8NdDwVlTHWCsqpHDLNpR+XVdjjejLuaCZYD+PMexZMXg=="],
 
-    "react-native-webview": ["react-native-webview@https://github.com/LegendApp/legend-spark/releases/download/v0.0.2/react-native-webview-16.0.0-333e421ad38b.tgz", { "dependencies": { "escape-string-regexp": "^4.0.0", "invariant": "2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-8Y7ng49ujcECIV+aBOPgcCSSPfMhPFacMw/+c9B9q7GYAlgD1XSa8lmfsZbk6kY1/s74ZkhoP9RBfkk/LmuVXg=="],
+    "react-native-webview": ["react-native-webview@https://github.com/LegendApp/legend-spark/releases/download/v0.0.3/react-native-webview-16.0.0-333e421ad38b.tgz", { "dependencies": { "escape-string-regexp": "^4.0.0", "invariant": "2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-8Y7ng49ujcECIV+aBOPgcCSSPfMhPFacMw/+c9B9q7GYAlgD1XSa8lmfsZbk6kY1/s74ZkhoP9RBfkk/LmuVXg=="],
 
     "react-native-windows": ["react-native-windows@0.83.2", "", { "dependencies": { "@babel/runtime": "^7.0.0", "@jest/create-cache-key-function": "^29.7.0", "@react-native-community/cli": "20.0.0", "@react-native-community/cli-platform-android": "20.0.0", "@react-native-community/cli-platform-ios": "20.0.0", "@react-native-windows/cli": "0.83.2", "@react-native/assets": "1.0.0", "@react-native/assets-registry": "0.83.4", "@react-native/codegen": "0.83.4", "@react-native/community-cli-plugin": "0.83.4", "@react-native/gradle-plugin": "0.83.4", "@react-native/js-polyfills": "0.83.4", "@react-native/new-app-screen": "0.83.4", "@react-native/normalize-colors": "0.83.4", "@react-native/virtualized-lists": "0.83.4", "abort-controller": "^3.0.0", "anser": "^1.4.9", "ansi-regex": "^5.0.0", "babel-jest": "^29.7.0", "babel-plugin-syntax-hermes-parser": "0.32.0", "base64-js": "^1.5.1", "chalk": "^4.0.0", "commander": "^12.0.0", "event-target-shim": "^5.0.1", "flow-enums-runtime": "^0.0.6", "glob": "^7.1.1", "hermes-compiler": "0.14.1", "invariant": "^2.2.4", "jest-environment-node": "^29.7.0", "memoize-one": "^5.0.0", "metro-runtime": "^0.83.3", "metro-source-map": "^0.83.3", "mkdirp": "^0.5.1", "nullthrows": "^1.1.1", "pretty-format": "^29.7.0", "promise": "^8.3.0", "react-devtools-core": "^6.1.5", "react-refresh": "^0.14.0", "regenerator-runtime": "^0.13.2", "scheduler": "0.27.0", "semver": "^7.1.3", "source-map-support": "^0.5.19", "stacktrace-parser": "^0.1.10", "whatwg-fetch": "^3.0.0", "ws": "^7.5.10", "yargs": "^17.6.2" }, "peerDependencies": { "@types/react": "^19.1.1", "react": "^19.2.0", "react-native": "^0.83.0" } }, "sha512-Zm/oS/YUK19Ba1G814HD+sSmmEMR/gQuhVb/TCpM+fqlqAKukF/XyNVoC/8CFboGCfj1+7AvKW267p9jiyKnbw=="],
 

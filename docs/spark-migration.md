@@ -16,7 +16,7 @@ The hook checks the digest against `bun.lock` after native patch preparation;
 do not create the stamp by hand or set that variable to skip an install.
 
 An unrecorded generated host can also stop with Spark's "pending migrations"
-guard. The pinned Spark 0.0.2 CLI has no supported migration-only command.
+guard. The pinned Spark 0.0.3 CLI has no supported migration-only command.
 `spark upgrade --dry-run` previews an upgrade; `spark upgrade` fetches the
 release channel, changes dependency inputs and installs them. Neither is an
 installed-version-only initialization path for generated consumers. Keep the
@@ -28,7 +28,7 @@ The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)
 for the current API mapping and validation scope.
 
-The committed root catalog pins the published npm SDK (`0.0.2`). Update that
+The committed root catalog pins the published npm SDK (`0.0.3`). Update that
 pin and `bun.lock` together when upgrading. Root scripts, generated consumers,
 and typecheck all use the root installation. `spark.local.json` and
 `LEGEND_SPARK_SDK` do not select an SDK; the former `spark:sync` workflow has
