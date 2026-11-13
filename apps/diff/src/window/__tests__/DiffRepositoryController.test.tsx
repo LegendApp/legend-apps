@@ -119,3 +119,18 @@ it("does not attach an asynchronously discovered watcher after the window closes
   await act(async () => { finish({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] }); });
   expect(watchDirectories).not.toHaveBeenCalled();
 });
+
+
+it("does not let a delayed watch probe replace a source the user is loading", async () => {
+  const source = createDiffGitSource("/repo", { kind: "index-vs-workdir" });
+  const test = setup(source);
+  const screen = await render(<DiffRepositoryController {...test.props} />);
+  let finish!: (state: GitRepoState) => void;
+  test.repoState.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  test.notify();
+  await act(() => jest.advanceTimersByTimeAsync(300));
+  mockModel.loadingSource$.set(createDiffGitSource("/repo", { kind: "commit", sha: "next" }));
+  await act(async () => { finish(normal); });
+  expect(test.loadSource).not.toHaveBeenCalled();
+  await screen.unmount();
+});

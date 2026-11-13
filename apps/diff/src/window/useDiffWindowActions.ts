@@ -3,6 +3,7 @@ import { revealInFileManager } from "@legendapp/spark/files";
 import { runCommand } from "@legendapp/spark/processes";
 import { useWindowId } from "@legendapp/spark/windows";
 import { useCallback } from "react";
+import { isDiffGitSource } from "../diffFiles";
 import { createDiffCompareSource, createDiffCompareSourceForRef } from "../diffCompareTargets";
 import { getDiffShowOnlyHunksSetting, setDiffShowOnlyHunksSetting } from "../diffSettings";
 import { focusDiffSearchToolbarItem } from "../diffWindowControls";
@@ -55,7 +56,7 @@ export function useDiffWindowActions({
         const currentSource = loadingSource$.peek() ?? state$.peek().source;
         const repoPath = currentSource?.kind === "folder"
             ? currentSource.value
-            : currentSource?.kind === "git"
+            : currentSource && isDiffGitSource(currentSource)
                 ? currentSource.cwd
                 : null;
         const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState$.peek()) : null;
@@ -71,7 +72,7 @@ export function useDiffWindowActions({
         const currentSource = loadingSource$.peek() ?? state$.peek().source;
         const repoPath = currentSource?.kind === "folder"
             ? currentSource.value
-            : currentSource?.kind === "git"
+            : currentSource && isDiffGitSource(currentSource)
                 ? currentSource.cwd
                 : null;
         if (!repoPath || loadingSource$.peek()) {
@@ -90,7 +91,7 @@ export function useDiffWindowActions({
         const currentSource = loadingSource$.peek() ?? state$.peek().source;
         const repoPath = currentSource?.kind === "folder"
             ? currentSource.value
-            : currentSource?.kind === "git"
+            : currentSource && isDiffGitSource(currentSource)
                 ? currentSource.cwd
                 : null;
         if (ref && repoPath && !loadingSource$.peek()) {

@@ -4,21 +4,27 @@ import { GitServiceError, type GitService } from "./GitService";
 export type DiffRepoWatchLocations = Awaited<ReturnType<GitService["watchLocations"]>>;
 export type DiffDirectoryWatcher = (directories: string[], listener: (event: DirectoryChangeEvent) => void) => { remove(): void };
 
+function normalizeWatchPath(path: string) {
+  return path.replace(/^\/private(?=\/(?:tmp|var)(?:\/|$))/, "").replace(/\/+$/, "");
+}
+
 function inside(path: string, directory: string) {
   return path === directory || path.startsWith(`${directory}/`);
 }
 
 export function shouldRefreshDiffRepo(event: DirectoryChangeEvent, locations: DiffRepoWatchLocations) {
   if (event.contentChanged === false) return false;
-  const path = event.filePath.replace(/\/+$/, "");
-  for (const directory of [locations.gitDir, locations.commonDir]) {
+  const path = normalizeWatchPath(event.filePath);
+  for (const location of [locations.gitDir, locations.commonDir]) {
+    const directory = normalizeWatchPath(location);
     if (inside(path, directory)) {
       const relative = path.slice(directory.length + 1);
       return !/^(objects|logs|hooks)(\/|$)/.test(relative);
     }
   }
-  if (!inside(path, locations.root)) return false;
-  const relative = path.slice(locations.root.length + 1);
+  const root = normalizeWatchPath(locations.root);
+  if (!inside(path, root)) return false;
+  const relative = path.slice(root.length + 1);
   if (/(^|\/)(\.git|node_modules|build|dist|DerivedData|Pods|\.spark|\.legend)(\/|$)/.test(relative)) return false;
   return !locations.ignoredPaths.some((ignored) => inside(relative, ignored.replace(/\/+$/, "")));
 }
@@ -30,6 +36,7 @@ export function watchDiffRepo({ locations, watch, reload, onError, suppressedUnt
   onError: (error: unknown) => void;
   suppressedUntil?: () => number;
 }) {
+  locations = { ...locations, root: normalizeWatchPath(locations.root), gitDir: normalizeWatchPath(locations.gitDir), commonDir: normalizeWatchPath(locations.commonDir) };
   let stopped = false;
   let running = false;
   let pending = false;

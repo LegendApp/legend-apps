@@ -160,15 +160,15 @@ export class GitService {
     };
   }
 
-  private read(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000) {
+  private read(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, requiresIndex = false) {
     return this.enqueue(options, async (gitDir) => {
-      await this.inspect(gitDir, options);
+      if (requiresIndex) await this.inspect(gitDir, options);
       return this.git(args, options, timeoutMs);
     });
   }
 
   status(options: GitReadOptions = {}) {
-    return this.read(["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", "--ignored=no"], options).then(parseGitStatus);
+    return this.read(["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", "--ignored=no"], options, 60_000, true).then(parseGitStatus);
   }
 
   repoState(options: GitReadOptions = {}) {
@@ -191,13 +191,12 @@ export class GitService {
     return this.read(["rev-parse", "--verify", "--end-of-options", ref], options).then((value) => value.trim());
   }
 
-  diff(args: readonly string[], options: GitReadOptions = {}) {
-    return this.read(["diff", "-z", ...args], options);
+  diff(args: readonly string[], options: GitReadOptions & { requiresIndex?: boolean } = {}) {
+    return this.read(["diff", "-z", ...args], options, 60_000, options.requiresIndex);
   }
 
   showCommit(sha: string, options: GitReadOptions & { ignoreWhitespaceChanges?: boolean } = {}) {
-    return this.enqueue(options, async (gitDir) => {
-      await this.inspect(gitDir, options);
+    return this.enqueue(options, async () => {
       const commit = (await this.git(["rev-parse", "--verify", "--end-of-options", `${sha}^{commit}`], options)).trim();
       return this.git(["show", "-z", "--format=", "--first-parent", "--root", "--patch", "--no-ext-diff", "--no-color", ...(options.ignoreWhitespaceChanges ? ["--ignore-all-space"] : []), commit, "--"], options);
     });

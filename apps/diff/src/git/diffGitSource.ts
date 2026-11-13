@@ -14,5 +14,5 @@ export async function readDiffGitSource(
   if (source.kind === "head-vs-index") args.push("--cached");
   if (source.kind === "range") args.push(source.range);
   args.push("--");
-  return git.diff(args, options);
+  return git.diff(args, { ...options, requiresIndex: source.kind !== "range" });
 }

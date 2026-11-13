@@ -51,7 +51,7 @@ export function DiffRepositoryController({ onBannerChange, loadSource, suppressR
         suppressedUntil: () => loadingSource$.peek() ? Date.now() + 300 : suppressReloadUntilRef.current,
         reload: async () => {
           const state = await service.repoState({ signal: controller.signal });
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && !loadingSource$.peek()) {
             onBannerChange(getDiffRepoStateBanner(state));
             await loadSource(source, { force: true, reason: "watch" });
           }

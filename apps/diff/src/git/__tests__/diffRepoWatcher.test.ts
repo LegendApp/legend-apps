@@ -133,3 +133,19 @@ it("invalidates ignored paths when ignore rules change so newly unignored files 
   expect(test.reload).toHaveBeenCalledTimes(2);
   test.subscription.remove();
 });
+
+
+it("aligns private temporary roots with native standardized event paths", async () => {
+  let notify!: (event: DirectoryChangeEvent) => void;
+  const watch = jest.fn((_directories: string[], listener: typeof notify) => { notify = listener; return { remove() {} }; });
+  const reload = jest.fn(async () => {});
+  const subscription = watchDiffRepo({
+    locations: { root: "/private/var/tmp/repo", gitDir: "/private/var/tmp/repo/.git", commonDir: "/private/var/tmp/repo/.git", ignoredPaths: [] },
+    watch, reload, onError: jest.fn(),
+  });
+  expect(watch.mock.calls[0]?.[0]).toEqual(["/var/tmp/repo", "/var/tmp/repo/.git"]);
+  notify({ path: "/var/tmp/repo", filePath: "/var/tmp/repo/file", type: "change", contentChanged: true });
+  await jest.advanceTimersByTimeAsync(300);
+  expect(reload).toHaveBeenCalledTimes(1);
+  subscription.remove();
+});

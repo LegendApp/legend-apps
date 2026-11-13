@@ -85,6 +85,10 @@ it("resolves linked worktree gitdir files and detects that worktree's own index 
   writeFileSync(lock, "fixture lock");
   try {
     await expect(git.status()).rejects.toMatchObject({ code: "index-locked", lockPath: lock });
+    await expect(readDiffGitSource(createDiffGitSource(repos.worktree, { kind: "index-vs-workdir" }), {}, git)).rejects.toMatchObject({ code: "index-locked" });
+    await expect(readDiffGitSource(createDiffGitSource(repos.worktree, { kind: "commit", sha: repos.second }), {}, git)).resolves.toContain("+++ b/main-only.txt");
+    await expect(readDiffGitSource(createDiffGitSource(repos.worktree, { kind: "range", range: `${repos.first}..${repos.second}` }), {}, git)).resolves.toContain("+++ b/main-only.txt");
+    await expect(git.refs("%(refname)")).resolves.toContain("refs/heads/main");
     await expect(service(repos.changes).status()).resolves.toMatchObject({ branch: { head: "main" } });
   } finally {
     unlinkSync(lock);

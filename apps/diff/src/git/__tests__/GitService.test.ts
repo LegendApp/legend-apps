@@ -184,3 +184,19 @@ it("serializes root and subdirectory callers using the same resolved Git directo
   await Promise.all([first, second]);
   expect(calls).toEqual(["/shared", "/shared/src"]);
 });
+
+
+it("keeps immutable and metadata reads available while another process holds index.lock", async () => {
+  const runner = runnerFor(async () => processResult({ stdout: "value\n" }));
+  runner.mockImplementation(async (options) => {
+    if (options.args?.includes("--absolute-git-dir")) return processResult({ stdout: "/locked/.git\n" });
+    if (options.target.type === "command" && options.target.name === "sh") return processResult({ stdout: "ref: refs/heads/main\n\0index.lock\0" });
+    return processResult({ stdout: "value\n" });
+  });
+  const service = new GitService("/locked", runner);
+  await expect(service.revParse("HEAD")).resolves.toBe("value");
+  await expect(service.refs("%(refname)")).resolves.toBe("value\n");
+  await expect(service.showCommit("HEAD")).resolves.toBe("value\n");
+  await expect(service.diff(["base..head", "--"])).resolves.toBe("value\n");
+  await expect(service.status()).rejects.toBeInstanceOf(GitIndexLockedError);
+});

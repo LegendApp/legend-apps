@@ -1,5 +1,5 @@
 import { getGitService, GitServiceError } from "./git/GitService";
-import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
+import { getFilename, isDiffGitSource, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
 export const diffCompareToolbarTargetChooseRef = "choose-ref";
@@ -65,7 +65,7 @@ function getLocalRepoPath(source: DiffOpenSource | null | undefined) {
   if (source?.kind === "folder") {
     return source.value;
   }
-  if (source?.kind === "git") {
+  if (source && isDiffGitSource(source)) {
     return source.cwd;
   }
   return null;
@@ -79,6 +79,7 @@ export function getDiffFolderCompareBaseLabel(compareBase: DiffFolderCompareBase
 }
 
 function getActiveSelection(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return refSelection(source.range);
   if (source?.kind === "folder") {
     return source.compareBase?.kind === "ref"
       ? refSelection(source.compareBase.ref)
@@ -91,6 +92,7 @@ function getActiveSelection(source: DiffOpenSource | null | undefined) {
 }
 
 function getActiveLabel(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return source.range;
   if (source?.kind === "folder") {
     return getDiffFolderCompareBaseLabel(source.compareBase);
   }

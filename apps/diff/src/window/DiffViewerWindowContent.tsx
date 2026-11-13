@@ -16,7 +16,7 @@ import { type LayoutChangeEvent, Linking, Platform, TextInput, View } from "reac
 import { type UnsavedDiffMergeDraftReason } from "../confirmUnsavedDiffMergeDrafts";
 import { loadDiffCompareRepoState } from "../diffCompareTargets";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "../diffDrop";
-import { normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "../diffFiles";
+import { isDiffGitSource, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "../diffFiles";
 import { diffHotkeyRouter } from "../diffHotkeys";
 import { createReadyMergeState, writeDiffMergeFileContent } from "../diffMerge";
 import { diffMergeSaveConflictKey } from "../diffMergeControls";
@@ -154,7 +154,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const { loadedFileCount, showSidebarControl, showViewModeToolbar, toolbarSource, visibleFolderPath, visibleSource, visibleSourceLabel } = visibleSourceModel;
     const compareRepoPath = toolbarSource?.kind === "folder"
         ? toolbarSource.value
-        : toolbarSource?.kind === "git"
+        : toolbarSource && isDiffGitSource(toolbarSource)
             ? toolbarSource.cwd
             : null;
     const compareRepoStateReady = compareRepoPath !== null &&
