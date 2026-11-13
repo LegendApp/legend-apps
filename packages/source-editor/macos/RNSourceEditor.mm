@@ -81,7 +81,11 @@ static std::string utf8String(NSString *value) {
   _initialSource = str(next.initialSource);
   _preparedDocumentId = str(next.preparedDocumentId);
   _useInitialSource = next.useInitialSource;
-  if (![_path isEqualToString:path]) { _path = path; _loaded = NO; }
+  if (![_path isEqualToString:path]) {
+    _path = path;
+    // Save As already moved the loaded document's file session to this path.
+    _loaded = _loaded && [_input.fileSession.path isEqualToString:path];
+  }
   _input.syntaxBackend = str(next.syntaxBackend);
   _input.grammarRevision = next.grammarRevision;
   _input.automaticPairs = next.automaticPairs;
@@ -210,6 +214,7 @@ static std::string utf8String(NSString *value) {
     if (self && self->_commandGeneration == generation && self->_eventEmitter) std::static_pointer_cast<const SourceEditorHostEventEmitter>(self->_eventEmitter)->onCommandResult({.id = requestId, .allowed = (bool)allowed, .error = utf8String(error)});
   };
   if ([command isEqual:@"save"] || [command isEqual:@"saveAs"]) [_input saveAs:[command isEqual:@"saveAs"] completion:finish];
+  else if ([command isEqual:@"focus"]) finish([self.window makeFirstResponder:_input], @"");
   else if ([command isEqual:@"confirmClose"]) [_input confirmDiscardWithCompletion:^(BOOL allow) { finish(allow, @""); }];
   else if ([command isEqual:@"find"]) { [_input showFindPanel]; finish(YES, @""); }
   else if ([command isEqual:@"goToLine"]) { [_input showGoToLine]; finish(YES, @""); }

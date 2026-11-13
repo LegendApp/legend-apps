@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from "@testing-library/react-native";
+import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { watch } from "@legendapp/spark/files";
 import { observable } from "@legendapp/state";
 import React from "react";
@@ -67,6 +67,7 @@ const mockSession = {
 jest.mock("@legendapp/spark/ui/glass", () => ({
   GlassView: (props: object) => require("react").createElement(require("react-native").View, { ...props, testID: "mock-glass" }),
 }));
+jest.mock("@legendapp/spark/shortcuts/commands", () => ({ getDefaultHotkeyBindings: jest.requireActual("@legendapp/spark/shortcuts/commands").getDefaultHotkeyBindings, createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
 
 jest.mock("@legendapp/spark/files", () => ({
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
@@ -121,10 +122,6 @@ jest.mock("../useMarkdownDocumentEvents", () => ({
   useRecentMarkdownDocumentOpener: jest.fn(),
 }));
 
-jest.mock("../useMarkdownKeyboardShortcuts", () => ({
-  useMarkdownKeyboardShortcuts: jest.fn(),
-}));
-
 jest.mock("../useMarkdownMenus", () => ({
   useMarkdownMenus: jest.fn(),
 }));
@@ -136,12 +133,17 @@ jest.mock("../useMarkdownWindows", () => ({
 
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
+  getMarkdownSidebarOpenSetting: () => true,
+  setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
   useMarkdownDisplayThemeSetting: () => "system",
   useMarkdownFormattingToolbarModeSetting: () => "selection",
   useMarkdownLayoutThemeSetting: () => "default",
+  useMarkdownHotkeySettings: () => ({}),
 }));
+
+jest.mock("@legendapp/list/react-native", () => ({ LegendList: () => null }));
 
 jest.mock("../userThemes", () => ({
   loadMarkdownUserThemesSync: jest.fn(),
@@ -171,12 +173,30 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
-  it("uses clear glass with a page-color overlay at 0.8", async () => {
-    const view = await render(<MarkdownEditorWindow />);
+  it("keeps tabs above clear glass with a page-color overlay at 0.8", async () => {
+    const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
     const glass = view.getByTestId("mock-glass");
     expect(glass.props.glassStyle).toBe("clear");
+    const background = glass.parent!;
+    const titlebar = background.parent!;
+    expect(background.props.pointerEvents).toBe("none");
+    expect(titlebar.props.pointerEvents).toBe("box-none");
+    expect(within(titlebar).getByLabelText("Beta.md")).toBeTruthy();
     const overlay = glass.parent!.children[1] as TestInstance;
     expect(overlay.props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
+    await view.unmount();
+  });
+
+  it("scopes document and commit hotkeys to the current document window", async () => {
+    const { useRoutedHotkeys } = jest.requireMock("@legendapp/spark/shortcuts/commands");
+    useRoutedHotkeys.mockClear();
+    const view = await render(<MarkdownEditorWindow windowId="markdown-editor-3" />);
+    for (const id of ["focusFirstBlock", "commit"]) {
+      expect(useRoutedHotkeys).toHaveBeenCalledWith(expect.objectContaining({
+        definitions: expect.arrayContaining([expect.objectContaining({ id })]),
+        scope: { kind: "window", windowId: "markdown-editor-3" },
+      }));
+    }
     await view.unmount();
   });
 
@@ -234,7 +254,32 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       autosaveEnabled: true,
       handleError: mockSession.handleError,
       prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
+      windowId: "markdown-editor",
     });
+    await view.unmount();
+  });
+
+  it("switches and closes file tabs through the dirty-document flow", async () => {
+    mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md" });
+    const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+    // Single-file windows start with the sidebar hidden even though the setting is open.
+    expect(view.getByLabelText("Show Sidebar")).toBeTruthy();
+
+    await act(async () => fireEvent.press(view.getByLabelText("b.md")));
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "open" });
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
+
+    mockSession.prepareCurrentDocumentForClose.mockResolvedValueOnce(false);
+    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+    expect(view.getByLabelText("a.md")).toBeTruthy();
+    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "close" });
+    expect(view.queryByLabelText("a.md")).toBeNull();
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
+
+    await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));
+    expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
+    expect(view.getByLabelText("Add Folder")).toBeTruthy();
     await view.unmount();
   });
 
