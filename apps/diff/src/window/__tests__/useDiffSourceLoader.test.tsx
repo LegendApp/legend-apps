@@ -2,6 +2,7 @@ import { loadUnifiedDiff, type DiffLoadResult } from "@legend-apps/diff-parser";
 import { observable } from "@legendapp/state";
 import { act, renderHook } from "@testing-library/react-native";
 import { createDiffGitSource } from "../../diffFiles";
+import { GitIndexLockedError } from "../../git/GitService";
 import { readDiffGitSource } from "../../git/diffGitSource";
 import { emptyDiffViewerState, type DiffViewerState } from "../../viewer/diffViewerModel";
 import { useDiffSourceLoader } from "../useDiffSourceLoader";
@@ -33,7 +34,9 @@ function loaderOptions(): Parameters<typeof useDiffSourceLoader>[0] {
     setOpenErrorValue: jest.fn(),
     setViewerState: jest.fn((next) => state$.set(next)),
     setMergeStateValue: jest.fn(),
-    preserveActiveFilePathRef: { current: null },
+    preserveViewStateRef: { current: null },
+    listRef: { current: null },
+    collapsedFileIndexes$: observable<Set<number>>(new Set()),
     activeFileIndex$: observable<number | null>(null),
   };
 }
@@ -88,4 +91,61 @@ it("aborts superseded Git loads, discards their late results, and aborts on unmo
   await unmount();
   expect(lastSignal.aborted).toBe(true);
   await last;
+});
+
+it("keeps the cached document alive until a watch replacement is ready and remaps view state by path", async () => {
+  const options = loaderOptions();
+  const first = {
+    ...loaded,
+    document: { ...loaded.document, documentId: 1 },
+    files: [{ index: 0, path: "a.ts", oldPath: "a.ts" }, { index: 1, path: "z.ts", oldPath: "z.ts" }],
+  } as DiffLoadResult;
+  jest.mocked(loadUnifiedDiff).mockResolvedValueOnce(first);
+  const { result, unmount } = await renderHook(() => useDiffSourceLoader(options));
+  const source = createDiffGitSource("/repo", { kind: "index-vs-workdir" });
+  await act(() => result.current(source));
+  options.activeFileIndex$.set(1);
+  options.collapsedFileIndexes$.set(new Set([1]));
+  options.listRef.current = { getState: () => ({ scroll: 640 }) } as NonNullable<typeof options.listRef.current>;
+  jest.clearAllMocks();
+  let finish!: (value: DiffLoadResult) => void;
+  jest.mocked(loadUnifiedDiff).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  let refresh!: Promise<void>;
+  await act(() => { refresh = result.current(source, { force: true, reason: "watch" }); });
+  expect(options.state$.peek()).toMatchObject({ status: "loaded", document: first.document });
+  expect(first.document.releaseNativeResources).not.toHaveBeenCalled();
+  expect(options.setLoadingSourceValue).not.toHaveBeenCalled();
+  expect(options.setViewerState).not.toHaveBeenCalled();
+  const replacement = {
+    ...loaded,
+    document: { ...loaded.document, documentId: 2 },
+    files: [{ index: 0, path: "0-new.ts", oldPath: "0-new.ts" }, { index: 1, path: "a.ts", oldPath: "a.ts" }, { index: 2, path: "renamed-z.ts", oldPath: "z.ts" }],
+  } as DiffLoadResult;
+  await act(async () => { finish(replacement); await refresh; });
+  expect(options.state$.peek()).toMatchObject({ document: replacement.document });
+  expect(options.preserveViewStateRef.current).toEqual({ activeFilePath: "z.ts", scrollOffset: 640 });
+  expect(options.collapsedFileIndexes$.peek()).toEqual(new Set([2]));
+  expect(first.document.releaseNativeResources).not.toHaveBeenCalled();
+  await unmount();
+});
+
+it("keeps the visible document on refresh failure and lets a lock race retry without an error banner", async () => {
+  const options = loaderOptions();
+  const { result, unmount } = await renderHook(() => useDiffSourceLoader(options));
+  const source = createDiffGitSource("/repo", { kind: "head-vs-index" });
+  await act(() => result.current(source));
+  jest.clearAllMocks();
+  jest.mocked(readDiffGitSource).mockRejectedValueOnce(new Error("read failed"));
+  await act(() => result.current(source, { force: true, reason: "watch" }));
+  expect(options.state$.peek()).toMatchObject({ document: loaded.document });
+  expect(loaded.document.releaseNativeResources).not.toHaveBeenCalled();
+  expect(options.setDocumentErrorValue).toHaveBeenCalledWith(expect.objectContaining({ message: "read failed" }));
+  jest.clearAllMocks();
+  jest.mocked(readDiffGitSource).mockRejectedValueOnce(new GitIndexLockedError("/repo/.git/index.lock"));
+  await act(async () => {
+    await expect(result.current(source, { force: true, reason: "watch" })).rejects.toMatchObject({ code: "index-locked" });
+  });
+  expect(options.setDocumentErrorValue).not.toHaveBeenCalled();
+  expect(options.state$.peek()).toMatchObject({ document: loaded.document });
+  await unmount();
 });

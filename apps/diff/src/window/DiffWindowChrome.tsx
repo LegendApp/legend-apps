@@ -333,3 +333,14 @@ export function DiffCompareRefPrompt({ backgroundColor, borderColor, foregroundC
       </View>
     </View>);
 }
+
+export function DiffRepoStateBanner({ text, borderColor, foregroundColor, surfaceColor }: {
+    text: string | null;
+    borderColor: string;
+    foregroundColor: string;
+    surfaceColor: string;
+}) {
+    return text ? (<View className="h-7 justify-center border-b px-3" style={{ borderColor, backgroundColor: surfaceColor }}>
+      <Text numberOfLines={1} className="text-xs" style={{ color: foregroundColor }}>{text}</Text>
+    </View>) : null;
+}

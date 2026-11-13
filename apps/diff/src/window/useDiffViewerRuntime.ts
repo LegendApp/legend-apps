@@ -1,9 +1,9 @@
 import { nowMs } from "@legend-apps/source-viewer";
 import { ensureTreeGrammarsForPaths } from "@legend-apps/syntax-parser";
-import { type VirtualizedDocumentVisibleRangeInfo } from "@legend-apps/virtualized-document";
+import { type VirtualizedFixedDocumentListRef, type VirtualizedDocumentVisibleRangeInfo } from "@legend-apps/virtualized-document";
 import { type Observable } from "@legendapp/state";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { DiffFontFamilySetting } from "../diffSettings";
 import { getDiffViewModeSetting } from "../diffSettings";
 import { findFileIndexForRow, getFilesForSourceRowRange, useDiffLoadedModel, useDiffSideBySideRuntime, useVisibleDiffFileTokenizationScheduler } from "../viewer/diffLoadedDocumentModel";
@@ -12,7 +12,7 @@ import { diffBackgroundTokenizeChunkBudgetMs, diffBackgroundTokenizeChunkRowCoun
 import type { DiffViewerModel, DiffViewerState } from "../viewer/diffViewerModel";
 import { getErrorMessage } from "../viewer/diffViewerSupport";
 import { getBackgroundTokenizationPlan } from "./diffWindowRendering";
-import { type DiffItemCountLimitState, type DiffLoadedCacheEntry } from "./diffWindowTypes";
+import { type DiffItemCountLimitState, type DiffRefreshViewState, type DiffLoadedCacheEntry } from "./diffWindowTypes";
 import { disposeDiffDocument } from "./useDiffSourceLoader";
 
 export function useDiffViewerRuntime({
@@ -31,7 +31,8 @@ export function useDiffViewerRuntime({
     diffPaneHeight$,
     nativeSideBySideRows,
     syntaxTokenizationState$,
-    preserveActiveFilePathRef,
+    preserveViewStateRef,
+    listRef,
     setCollapsedFileIndexesValue,
 }: {
     state: DiffViewerState;
@@ -49,7 +50,8 @@ export function useDiffViewerRuntime({
     diffPaneHeight$: DiffViewerModel["diffPaneHeight$"];
     nativeSideBySideRows: boolean;
     syntaxTokenizationState$: Observable<{ ranges: string; version: number; }>;
-    preserveActiveFilePathRef: RefObject<string | null>;
+    preserveViewStateRef: RefObject<DiffRefreshViewState | null>;
+    listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
     setCollapsedFileIndexesValue: DiffViewerModel["setCollapsedFileIndexesValue"];
 }) {
     "use no memo";
@@ -66,9 +68,6 @@ export function useDiffViewerRuntime({
         loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
         ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
         : null;
-    useEffect(() => {
-        setCollapsedSidebarFolders(new Set());
-    }, [loadedDocumentId, setCollapsedSidebarFolders]);
     const { collapsedFileIndexList, diffRows, fileHeaderRowIndexes, getRow, getVisibleListIndex, sideBySideFileHeaderByListIndex, sideBySideHunkHeaderIndexes, sideBySideDataSource, sideBySideListIndexByRowIndex, sideBySideRowCount, visibleItemIndexes, } = useDiffLoadedModel({
         collapsedFileIndexes,
         fontFamily,
@@ -207,16 +206,18 @@ export function useDiffViewerRuntime({
         syntaxHighlightingEnabled,
         syntaxTokenizationState$,
     ]);
-    useEffect(() => {
+    useLayoutEffect(() => {
         resetSideBySideRuntime();
         if (state.status === "loaded") {
-            const preserveActiveFilePath = preserveActiveFilePathRef.current;
-            preserveActiveFilePathRef.current = null;
-            if (preserveActiveFilePath) {
-                const preservedFile = state.files.find((file) => file.path === preserveActiveFilePath || file.oldPath === preserveActiveFilePath);
+            const preserved = preserveViewStateRef.current;
+            preserveViewStateRef.current = null;
+            if (preserved) {
+                const preservedFile = state.files.find((file) => file.path === preserved.activeFilePath || file.oldPath === preserved.activeFilePath);
                 activeFileIndex$.set(preservedFile?.index ?? state.files[0]?.index ?? null);
+                if (preserved.scrollOffset !== undefined) listRef.current?.scrollToOffset({ offset: preserved.scrollOffset, animated: false });
             }
             else {
+                setCollapsedSidebarFolders(new Set());
                 activeFileIndex$.set(state.files[0]?.index ?? null);
                 setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
             }
@@ -228,6 +229,9 @@ export function useDiffViewerRuntime({
         activeFileIndex$,
         resetSideBySideRuntime,
         setCollapsedFileIndexesValue,
+        setCollapsedSidebarFolders,
+        listRef,
+        preserveViewStateRef,
         state.status === "loaded" ? state.document : null,
     ]);
     const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {

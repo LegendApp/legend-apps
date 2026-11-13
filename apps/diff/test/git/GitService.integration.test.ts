@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
-import { readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, watch as watchFS, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "@legendapp/spark/processes";
 import { createDiffGitSource } from "../../src/diffFiles";
 import { loadDiffCompareRepoState } from "../../src/diffCompareTargets";
 import { loadDiffMergeState } from "../../src/diffMerge";
 import { readDiffGitSource } from "../../src/git/diffGitSource";
+import { watchDiffRepo } from "../../src/git/diffRepoWatcher";
+import { getDiffRepoStateBanner } from "../../src/git/diffRepoStateBanner";
 import { GitService, type GitRunner } from "../../src/git/GitService";
 import { fixtureGit, makeGitRepos } from "../fixtures/make-repos";
 
@@ -177,4 +179,50 @@ it("loads compare refs and conflict contents through the migrated GitService pat
     jest.mocked(runCommand).mockReset();
   }
   expect(await loadDiffMergeState(repos.merging, { runCommand: realRunner })).toMatchObject({ status: "ready", conflictFileCount: 1, conflictBlockCount: 1, files: [expect.objectContaining({ path: "conflict.txt" })] });
+});
+
+
+it("reloads a changed fixture once through filesystem events and Git reads", async () => {
+  const git = service(repos.changes);
+  const locations = await git.watchLocations();
+  expect(locations.root).toBe(realpathSync(repos.changes));
+  expect(locations.ignoredPaths).toContain("ignored.txt");
+  const reload = jest.fn(async () => {
+    await git.repoState();
+    expect(await git.diff(["--no-ext-diff", "--no-color", "--", "worktree.txt"])).toContain("watcher update");
+  });
+  const errors: unknown[] = [];
+  const watcher = watchDiffRepo({
+    locations,
+    watch: (_directories, listener) => {
+      const subscription = watchFS(locations.root, { recursive: true }, (_type, filename) => {
+        if (filename) listener({ path: locations.root, filePath: join(locations.root, filename.toString()), type: "change", contentChanged: true });
+      });
+      return { remove: () => subscription.close() };
+    },
+    reload,
+    onError: (error) => errors.push(error),
+  });
+  try {
+    writeFileSync(join(repos.changes, "worktree.txt"), "watcher update\n");
+    writeFileSync(join(repos.changes, "worktree.txt"), "watcher update coalesced\n");
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    expect(errors).toEqual([]);
+    expect(reload).toHaveBeenCalledTimes(1);
+  } finally {
+    watcher.remove();
+  }
+});
+
+it("discovers worktree/common watch roots from a subdirectory and renders real detached state", async () => {
+  const nested = join(repos.worktree, "nested");
+  mkdirSync(nested);
+  writeFileSync(join(repos.worktree, "ignored.txt"), "ignored fixture\n");
+  const locations = await service(nested).watchLocations();
+  expect(locations.root).toBe(realpathSync(repos.worktree));
+  expect(locations.ignoredPaths).toContain("ignored.txt");
+  expect(locations.gitDir).toContain("/.git/worktrees/linked");
+  expect(locations.commonDir).not.toBe(locations.gitDir);
+  const detached = await service(repos.detached).repoState();
+  expect(getDiffRepoStateBanner(detached)).toBe(`Detached HEAD — ${detached.detachedCommit!.slice(0, 8)}`);
 });

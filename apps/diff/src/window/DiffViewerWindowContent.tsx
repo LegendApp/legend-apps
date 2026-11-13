@@ -27,19 +27,20 @@ import { DiffStartScreen } from "../start-screen/DiffStartScreen";
 import { useDiffStartScreenController } from "../start-screen/useDiffStartScreenController";
 import { diffHunkHeaderHeight, DiffSideBySideRow, DiffUnifiedRow } from "../viewer/DiffRows";
 import { diffDocumentErrorHeight, diffDocumentPermissionErrorHeight, diffFileHeaderRowHeight, diffTitlebarTopInset } from "../viewer/diffViewerConstants";
-import { DiffActionHandlersController, DiffFileWatcherController, DiffLaunchController, DiffLoadCompletionController, DiffWindowChromeController, DiffWindowToolbarItemController } from "../viewer/diffViewerControllers";
+import { DiffActionHandlersController, DiffLaunchController, DiffLoadCompletionController, DiffWindowChromeController, DiffWindowToolbarItemController } from "../viewer/diffViewerControllers";
 import { type DiffLoadTrace, useDiffViewerModel } from "../viewer/diffViewerModel";
 import { createRefreshError, getDiffVisibleSourceModel, getErrorMessage, sourcesMatch } from "../viewer/diffViewerSupport";
 import { clearDiffMergeDraftFlag, getUnsavedDiffMergeDraftFiles, useDiffMergeDrafts } from "./diffMergeDrafts";
 import { DiffLoadedContentPane, DiffLoadedSidebarPane, DiffSidebarFileRow, DiffSidebarFolderRow, DiffSplitBody } from "./DiffViewerPane";
-import { DiffCompareRefPrompt, DiffDocumentErrorBody, DiffDownloadingBody, DiffDropSurface, DiffErrorPanel, DiffFatalBody, DiffNativeMenuSavingStateController, DiffNoChangesBody, DiffSearchStatusPanel, DiffStatisticsPanel, DiffUnsavedMergeDraftBannerWithSavingState } from "./DiffWindowChrome";
+import { DiffCompareRefPrompt, DiffRepoStateBanner, DiffDocumentErrorBody, DiffDownloadingBody, DiffDropSurface, DiffErrorPanel, DiffFatalBody, DiffNativeMenuSavingStateController, DiffNoChangesBody, DiffSearchStatusPanel, DiffStatisticsPanel, DiffUnsavedMergeDraftBannerWithSavingState } from "./DiffWindowChrome";
 import { createDiffSidebarRenderState, emptyDiffListIndexByFileIndex, getDiffLineRowHeight } from "./diffWindowRendering";
 import { styles } from "./diffWindowStyles";
-import { type DiffLoadedCacheEntry, type DiffMergeDraftFile, type DiffMergeFileResolveQueue, type DiffSidebarEntry, type DiffSidebarRenderState, type DiffViewerWindowProps } from "./diffWindowTypes";
+import { type DiffRefreshViewState, type DiffLoadedCacheEntry, type DiffMergeDraftFile, type DiffMergeFileResolveQueue, type DiffSidebarEntry, type DiffSidebarRenderState, type DiffViewerWindowProps } from "./diffWindowTypes";
 import { useDiffRowPresentation } from "./useDiffRowPresentation";
 import { clearLoadedCache, deleteLoadedCacheEntriesWithPrefix, disposeDiffDocument, getDiffSourceCacheKey, useDiffSourceLoader } from "./useDiffSourceLoader";
 import { useDiffViewerNavigation } from "./useDiffViewerNavigation";
 import { useDiffViewerRuntime } from "./useDiffViewerRuntime";
+import { DiffRepositoryController } from "./DiffRepositoryController";
 import { useDiffWindowActions } from "./useDiffWindowActions";
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
@@ -86,12 +87,13 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const inlineListIndexByFileIndexRef = useRef<ReadonlyMap<number, number>>(emptyDiffListIndexByFileIndex);
     const urlInputRef = useRef<TextInput | null>(null);
     const [urlInputFocused, setUrlInputFocused] = useState(false);
+    const [repoStateBanner, setRepoStateBanner] = useState<string | null>(null);
     const loadRequestIdRef = useRef(0);
     const loadTraceRef = useRef<DiffLoadTrace | null>(null);
     const loadedCacheRef = useRef(new Map<string, DiffLoadedCacheEntry>());
     const activeProgressiveSessionRef = useRef<DiffLoadSession | null>(null);
     const loggedTraceDocumentRef = useRef<DiffDocument | null>(null);
-    const preserveActiveFilePathRef = useRef<string | null>(null);
+    const preserveViewStateRef = useRef<DiffRefreshViewState | null>(null);
     const mergeDraftsRef = useRef(new Map<string, DiffMergeDraftFile>());
     const mergeDraftsSourceKeyRef = useRef<string | null>(null);
     const savingMergeDraftsRef = useRef(false);
@@ -242,7 +244,8 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         diffPaneHeight$,
         nativeSideBySideRows,
         syntaxTokenizationState$,
-        preserveActiveFilePathRef,
+        preserveViewStateRef,
+        listRef,
         setCollapsedFileIndexesValue,
     });
     const loadSource = useDiffSourceLoader({
@@ -265,8 +268,10 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         setOpenErrorValue,
         setViewerState,
         setMergeStateValue,
-        preserveActiveFilePathRef,
+        preserveViewStateRef,
+        listRef,
         activeFileIndex$,
+        collapsedFileIndexes$,
     });
     useEffect(() => {
         const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
@@ -688,12 +693,12 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
             ? diffDocumentPermissionErrorHeight
             : diffDocumentErrorHeight
         : 0;
-    const diffTopChromeContentHeight = documentErrorHeight;
+    const diffTopChromeContentHeight = documentErrorHeight + (repoStateBanner ? 28 : 0);
     const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
     const activeItemCount = renderViewMode === "unified"
         ? visibleItemIndexes.length
         : sideBySideRowCount;
-    const documentErrorBody = (<DiffDocumentErrorBody borderColor={diffPalette.border} documentError={documentError} foregroundColor={foregroundColor} mutedColor={mutedColor} onDismiss={dismissDocumentError} onOpenExternalUrl={openExternalErrorUrl} onOpenSystemSettings={openPermissionSettings} onRetry={reloadCurrentSource} surfaceColor={diffPalette.surface}/>);
+    const documentErrorBody = (<><DiffRepoStateBanner text={repoStateBanner} borderColor={diffPalette.border} foregroundColor={foregroundColor} surfaceColor={diffPalette.surface}/><DiffDocumentErrorBody borderColor={diffPalette.border} documentError={documentError} foregroundColor={foregroundColor} mutedColor={mutedColor} onDismiss={dismissDocumentError} onOpenExternalUrl={openExternalErrorUrl} onOpenSystemSettings={openPermissionSettings} onRetry={reloadCurrentSource} surfaceColor={diffPalette.surface}/></>);
     const unsavedMergeDraftBanner = hasUnsavedMergeDrafts ? (<DiffUnsavedMergeDraftBannerWithSavingState dangerColor={diffPalette.danger} fileCount={unsavedMergeDraftFiles.length} onDiscard={discardMergeDraftsFromCommand} onSave={saveMergeDraftsFromCommand} primaryColor={diffPalette.primary} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>) : null;
     const startScreenOpenErrorBody = startScreenController.openError ? (<DiffErrorPanel borderColor={diffPalette.border} chooseFolderLabel={startScreenController.openError.kind === "permission" ? "Choose Another Folder" : undefined} error={startScreenController.openError} foregroundColor={foregroundColor} mutedColor={mutedColor} onChooseFolder={openFolder} onDismiss={startScreenController.dismissOpenError} onOpenExternalUrl={openExternalErrorUrl} onOpenSystemSettings={startScreenController.openError.kind === "permission" ? openPermissionSettings : undefined} onRetry={startScreenController.openError.kind !== "permission" && startScreenController.openError.source ? startScreenController.retryOpenError : undefined} surfaceColor={diffPalette.surface}/>) : null;
     const initialLoadingSource = startScreenController.openError ? null : source ?? null;
@@ -752,7 +757,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
       <DiffWindowToolbarItemController compareCurrentSource={compareCurrentSource} onSearchChange={handleSearchChange} onSearchSubmit={handleSearchSubmit} openCompareRefPrompt={openCompareRefPrompt} toggleSidebar={toggleSidebar}/>
       <DiffLaunchController focusUrlInputRequestId={focusUrlInputRequestId} folderPath={folderPath} loadRequestIdRef={loadRequestIdRef} loadSource={loadSource} loadTraceRef={loadTraceRef} source={source} urlInputRef={urlInputRef}/>
       <DiffLoadCompletionController loadTraceRef={loadTraceRef} loggedTraceDocumentRef={loggedTraceDocumentRef}/>
-      <DiffFileWatcherController loadSource={loadSource} suppressReloadUntilRef={suppressFileWatcherReloadUntilRef}/>
+      <DiffRepositoryController onBannerChange={setRepoStateBanner} loadSource={loadSource} suppressReloadUntilRef={suppressFileWatcherReloadUntilRef}/>
       <DiffActionHandlersController copyCurrentFilePath={copyCurrentFilePath} copyCurrentRelativePath={copyCurrentRelativePath} copyCurrentSource={copyCurrentSource} focusSearch={focusSearch} navigateToNextHunk={navigateToNextHunk} navigateToPreviousHunk={navigateToPreviousHunk} reloadCurrentSource={reloadCurrentSource} revealCurrentFolder={revealCurrentFolder} saveMergeDrafts={saveMergeDraftsFromCommand} toggleShowOnlyHunks={toggleShowOnlyHunks} toggleSidebar={toggleSidebar}/>
       <DiffDropSurface backgroundColor={backgroundColor} borderColor={diffPalette.primary} foregroundColor={foregroundColor} mutedColor={mutedColor} onDropDiff={handleDropDiff} syntaxAppearance={syntaxTheme.appearance}>
         {body}

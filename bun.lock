@@ -124,6 +124,7 @@
       "dependencies": {
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
+        "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/source-viewer": "workspace:*",
         "@legend-apps/storage": "0.0.0",

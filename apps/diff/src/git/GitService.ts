@@ -15,6 +15,7 @@ export type GitOperationLog = {
 export type GitRepoState = {
   gitDir: string;
   branch: string | null;
+  detachedCommit: string | null;
   detached: boolean;
   merging: boolean;
   rebasing: "apply" | "merge" | null;
@@ -149,6 +150,7 @@ export class GitService {
     return {
       gitDir,
       branch,
+      detachedCommit: head.startsWith("ref: ") ? null : head.trim(),
       detached: !head.startsWith("ref: "),
       merging: markers.includes("MERGE_HEAD"),
       rebasing: markers.includes("rebase-merge") ? "merge" : markers.includes("rebase-apply") ? "apply" : null,
@@ -171,6 +173,18 @@ export class GitService {
 
   repoState(options: GitReadOptions = {}) {
     return this.enqueue(options, (gitDir) => this.inspect(gitDir, options));
+  }
+
+  watchLocations(options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      return {
+        root,
+        gitDir,
+        commonDir: (await this.git(["rev-parse", "--path-format=absolute", "--git-common-dir"], options)).replace(/\n$/, ""),
+        ignoredPaths: (await this.git(["-C", root, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], options)).split("\0").filter(Boolean),
+      };
+    });
   }
 
   revParse(ref: string, options: GitReadOptions = {}) {

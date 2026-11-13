@@ -209,3 +209,8 @@ export type DiffMergeFileRenderModel = {
     showOnlyHunks: boolean;
 };
 export type DiffMergeFileRenderByPath = Record<string, OpaqueObject<DiffMergeFileRenderModel> | undefined>;
+
+export type DiffRefreshViewState = {
+    activeFilePath: string | null;
+    scrollOffset: number | undefined;
+};

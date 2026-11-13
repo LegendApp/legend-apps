@@ -1,6 +1,8 @@
 import { type DiffDocument, type DiffLoadSession, type DiffLoadStatus, loadUnifiedDiff, loadUnifiedDiffFile, loadUnifiedDiffFromUrl, startGitFolderDiff, startUnifiedDiffFromUrl } from "@legend-apps/diff-parser";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { nowMs } from "@legend-apps/source-viewer";
+import type { VirtualizedFixedDocumentListRef } from "@legend-apps/virtualized-document";
+import { batch } from "@legendapp/state";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { runCommand } from "@legendapp/spark/processes";
 import { useWindowId } from "@legendapp/spark/windows";
@@ -10,6 +12,7 @@ import { type UnsavedDiffMergeDraftReason } from "../confirmUnsavedDiffMergeDraf
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "../diffAppMetadata";
 import { type DiffOpenSource, getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, isDiffGitSource } from "../diffFiles";
 import { type DiffMergeState, createReadyMergeState, loadDiffMergeState } from "../diffMerge";
+import { GitServiceError } from "../git/GitService";
 import { readDiffGitSource } from "../git/diffGitSource";
 import { getDiffIgnoreWhitespaceChangesSetting, getDiffShowOnlyHunksSetting } from "../diffSettings";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "../filePairDiff";
@@ -18,7 +21,7 @@ import { diffInitialRowCount, diffLoadedCacheMaxRows, diffProgressiveInitialPain
 import type { DiffViewerModel } from "../viewer/diffViewerModel";
 import { type DiffLoadProgressState, type DiffLoadSourceOptions, type DiffLoadTrace, type DiffViewerState, emptyDiffLoadProgressState, emptyDiffViewerState, unavailableDiffMergeState } from "../viewer/diffViewerModel";
 import { createOpenError, createRefreshError, getErrorMessage, shouldPrepareMergeDraftsForSourceChange, sourcesMatch } from "../viewer/diffViewerSupport";
-import { type DiffLoadedCacheEntry, type DiffLoadedPayload, type DiffMergeDraftFile, type DiffMergeFileResolveQueue } from "./diffWindowTypes";
+import { type DiffRefreshViewState, type DiffLoadedCacheEntry, type DiffLoadedPayload, type DiffMergeDraftFile, type DiffMergeFileResolveQueue } from "./diffWindowTypes";
 
 export function disposeDiffDocument(document: DiffDocument, reason: string) {
     document.cancelTokenizationRequests(reason);
@@ -43,10 +46,11 @@ export function clearLoadedCache(cache: Map<string, DiffLoadedCacheEntry>, reaso
     cache.clear();
 }
 
-export function deleteLoadedCacheEntriesWithPrefix(cache: Map<string, DiffLoadedCacheEntry>, prefix: string, reason: string) {
+export function deleteLoadedCacheEntriesWithPrefix(cache: Map<string, DiffLoadedCacheEntry>, prefix: string, reason: string, preserveDocument?: DiffDocument) {
     for (const key of Array.from(cache.keys())) {
         if (key.startsWith(prefix)) {
-            deleteLoadedCacheEntry(cache, key, reason);
+            if (cache.get(key)?.loaded.document === preserveDocument) cache.delete(key);
+            else deleteLoadedCacheEntry(cache, key, reason);
         }
     }
 }
@@ -153,8 +157,10 @@ export function useDiffSourceLoader({
     setOpenErrorValue,
     setViewerState,
     setMergeStateValue,
-    preserveActiveFilePathRef,
+    preserveViewStateRef,
+    listRef,
     activeFileIndex$,
+    collapsedFileIndexes$,
 }: {
     state$: DiffViewerModel["state$"];
     mergeDraftsRef: RefObject<Map<string, DiffMergeDraftFile>>;
@@ -175,8 +181,10 @@ export function useDiffSourceLoader({
     setOpenErrorValue: DiffViewerModel["setOpenErrorValue"];
     setViewerState: DiffViewerModel["setViewerState"];
     setMergeStateValue: DiffViewerModel["setMergeStateValue"];
-    preserveActiveFilePathRef: RefObject<string | null>;
+    preserveViewStateRef: RefObject<DiffRefreshViewState | null>;
+    listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
     activeFileIndex$: DiffViewerModel["activeFileIndex$"];
+    collapsedFileIndexes$: DiffViewerModel["collapsedFileIndexes$"];
 }) {
     "use no memo";
     const gitLoadAbortRef = useRef<AbortController | null>(null);
@@ -224,7 +232,7 @@ export function useDiffSourceLoader({
             mergeDraftsSourceKeyRef.current = null;
         }
         if (options?.force) {
-            deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force");
+            deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force", isBackgroundWatchRefresh ? stateBeforeLoad.document : undefined);
         }
         else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
             clearLoadedCache(loadedCacheRef.current, "viewer.load.sourceChange");
@@ -343,13 +351,18 @@ export function useDiffSourceLoader({
                 trace.document = loaded.document;
                 trace.setStateAt = statePayloadFinishedAt;
             }
-            if (isBackgroundWatchRefresh) {
+            batch(() => {
                 const currentLoadedState = state$.peek();
-                preserveActiveFilePathRef.current = currentLoadedState.status === "loaded"
-                    ? getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null
-                    : null;
-            }
-            setViewerState(nextLoadedState);
+                if (isBackgroundWatchRefresh && currentLoadedState.status === "loaded") {
+                    preserveViewStateRef.current = {
+                        activeFilePath: getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null,
+                        scrollOffset: listRef.current?.getState().scroll,
+                    };
+                    const collapsedPaths = new Set(currentLoadedState.files.filter((file) => collapsedFileIndexes$.peek().has(file.index)).map((file) => file.path));
+                    collapsedFileIndexes$.set(new Set(loaded.files.filter((file) => collapsedPaths.has(file.path) || collapsedPaths.has(file.oldPath)).map((file) => file.index)));
+                }
+                setViewerState(nextLoadedState);
+            });
             if (isBackgroundWatchRefresh) {
                 setDocumentErrorValue(null);
             }
@@ -536,6 +549,7 @@ export function useDiffSourceLoader({
             }
         }
         if (loadError && loadRequestIdRef.current === requestId) {
+            if (isBackgroundWatchRefresh && loadError instanceof GitServiceError && loadError.code === "index-locked") throw loadError;
             if (!isBackgroundWatchRefresh) {
                 loadTraceRef.current = null;
                 setMergeStateValue(unavailableDiffMergeState);
@@ -557,6 +571,10 @@ export function useDiffSourceLoader({
             }
         }
     }, [
+        activeFileIndex$,
+        collapsedFileIndexes$,
+        listRef,
+        preserveViewStateRef,
         nativeDiffRows,
         setDocumentErrorValue,
         setLoadProgressValue,
