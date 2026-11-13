@@ -23,6 +23,10 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
 
         macos: {
+            toolbar: {
+                visible: true,
+                style: "unified" as const,
+            },
             titleBar: {
                 contentLayout: "fullSize" as const,
                 transparent: true,
