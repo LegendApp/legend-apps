@@ -195,7 +195,7 @@ index f27b590..18daa06 100644
  
    /**
 diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/react/renderer/uimanager/UIManager.cpp
-index 5582d13..75e28ff 100644
+index 5582d13..5a1d2a5 100644
 --- a/ReactCommon/react/renderer/uimanager/UIManager.cpp
 +++ b/ReactCommon/react/renderer/uimanager/UIManager.cpp
 @@ -120,6 +120,7 @@ std::shared_ptr<ShadowNode> UIManager::cloneNode(
@@ -242,6 +242,19 @@ index 5582d13..75e28ff 100644
    }
  
    shadowTreeRegistry_.visit(
+@@ -469,7 +473,11 @@ void UIManager::setNativeProps_DEPRECATED(
+
+               return std::static_pointer_cast<RootShadowNode>(rootNode);
+             },
+-            {/* default commit options */});
++            // setNativeProps is called from JS. Mount at the end of the
++            // event loop tick, like React commits, so this commit doesn't
++            // flush an intermediate React revision to the screen before
++            // layout effects correct it.
++            {.mountSynchronously = false});
+       });
+ }
+
 diff --git a/ReactCommon/react/runtime/hermes/HermesInstance.cpp b/ReactCommon/react/runtime/hermes/HermesInstance.cpp
 index 4e12be7..aa92db0 100644
 --- a/ReactCommon/react/runtime/hermes/HermesInstance.cpp
