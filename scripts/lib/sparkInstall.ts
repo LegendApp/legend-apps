@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { rootDir } from "./apps";
 
 const ignoredDirectories = new Set(["node_modules", ".git"]);
@@ -73,6 +73,19 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
     hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
   }
   return hash.digest("hex");
+}
+
+export function stampPreparedSparkInstall(project: string, lockfileHash: string, repoRoot = rootDir) {
+  const lock = path.join(project, "bun.lock");
+  if (!/^[a-f0-9]{64}$/.test(lockfileHash) || !fs.existsSync(lock) ||
+    createHash("sha256").update(fs.readFileSync(lock)).digest("hex") !== lockfileHash) {
+    throw new SparkInstallError("Prepared dependencies do not match the verified wt-deps lockfile.");
+  }
+  const nodeModules = path.join(project, "node_modules");
+  if (!fs.existsSync(nodeModules) || !fs.lstatSync(nodeModules).isDirectory()) {
+    throw new SparkInstallError("Prepared dependencies require a real node_modules directory.");
+  }
+  fs.writeFileSync(path.join(nodeModules, ".legend-install-stamp"), `${sparkInstallHash(project, repoRoot)}\n`);
 }
 
 export function parseSparkInstallArgs(args: string[], env: Record<string, string | undefined> = process.env) {
@@ -245,4 +258,8 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
     const reason = needsProject ? "native project needs generation" : prepared?.fingerprint !== fingerprint ? "native preparation is missing or out of date" : missing.length ? `native frameworks missing: ${missing.join(", ")}` : "Pods/Manifest.lock missing";
     throw new SparkInstallError(`Spark build needs ${needsProject ? "template prebuild and " : ""}pod install (${reason}), which may require the network. Reconnect and rerun this command without --offline and with LEGEND_OFFLINE=0. ${sparkOfflineHelp}`);
   }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  stampPreparedSparkInstall(rootDir, process.env.WT_DEPS_LOCKFILE_SHA256 ?? "");
 }

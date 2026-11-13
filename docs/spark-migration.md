@@ -10,6 +10,19 @@ dependency installs. Local `packages/*` are live workspace links.
 `bun run spark:warm` installs once and prepares all macOS apps. Unchanged inputs
 skip installation; `--reinstall` forces it. `LEGEND_OFFLINE=1` or `--offline`
 requires a current shared stamp and fails before network-capable preparation.
+Worktrees prepared by `wt-deps` can record that stamp in postinstall when the
+verified cloned lockfile digest is provided as `WT_DEPS_LOCKFILE_SHA256`.
+The hook checks the digest against `bun.lock` after native patch preparation;
+do not create the stamp by hand or set that variable to skip an install.
+
+An unrecorded generated host can also stop with Spark's "pending migrations"
+guard. The pinned Spark 0.0.2 CLI has no supported migration-only command.
+`spark upgrade --dry-run` previews an upgrade; `spark upgrade` fetches the
+release channel, changes dependency inputs and installs them. Neither is an
+installed-version-only initialization path for generated consumers. Keep the
+guard and leave `.spark/version` to Spark's successful migration flow. This
+requires a Spark CLI migration-only command before retrying a clean host smoke;
+`spark:warm` prepares consumers but does not complete those migrations.
 
 The `bun run spark <app> ...` commands expose the same
 build and analysis workflow directly. See [desktop extraction](spark-desktop-extraction.md)

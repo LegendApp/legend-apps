@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
-import { installSparkWorkspace, parseSparkInstallArgs, sparkInstallHash } from "./sparkInstall";
+import { installSparkWorkspace, parseSparkInstallArgs, sparkInstallHash, stampPreparedSparkInstall } from "./sparkInstall";
 
 function fixture(t: TestContext) {
   const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), "legend-spark-install-"));
@@ -38,6 +38,53 @@ function fixture(t: TestContext) {
   const stamp = path.join(project, "node_modules/.legend-install-stamp");
   return { repoRoot, project, write, options, hash, stamp };
 }
+
+test("verified cloned dependencies receive the normal stamp and work offline", t => {
+  const f = fixture(t);
+  fs.mkdirSync(path.join(f.project, "node_modules"));
+  const lockHash = createHash("sha256").update(fs.readFileSync(path.join(f.project, "bun.lock"))).digest("hex");
+  stampPreparedSparkInstall(f.project, lockHash, f.repoRoot);
+  assert.equal(fs.readFileSync(f.stamp, "utf8").trim(), f.hash());
+  const execute = () => { throw new Error("unexpected install"); };
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, execute), "skipped");
+  f.write("project/bun.lock", "changed lock");
+  assert.throws(() => stampPreparedSparkInstall(f.project, lockHash, f.repoRoot), /lockfile/);
+  assert.throws(() => installSparkWorkspace({ ...f.options, offline: true }, execute), /dependencies changed/);
+});
+
+test("unverified or missing dependencies cannot receive a cloned-install stamp", t => {
+  const f = fixture(t);
+  const lockHash = createHash("sha256").update(fs.readFileSync(path.join(f.project, "bun.lock"))).digest("hex");
+  assert.throws(() => stampPreparedSparkInstall(f.project, lockHash, f.repoRoot), /node_modules/);
+  fs.mkdirSync(path.join(f.project, "node_modules"));
+  for (const hash of ["", "invalid", "0".repeat(64)]) {
+    assert.throws(() => stampPreparedSparkInstall(f.project, hash, f.repoRoot), /lockfile/);
+    assert.equal(fs.existsSync(f.stamp), false);
+  }
+});
+
+test("postinstall stamps only a verified clone after native preparation succeeds", t => {
+  const f = fixture(t);
+  for (const file of ["prepare-spark-install.cjs", "lib/sparkInstall.ts", "lib/apps.ts", "lib/sparkSubpaths.ts"]) {
+    f.write(`project/scripts/${file}`, fs.readFileSync(path.resolve(import.meta.dirname, "..", file), "utf8"));
+  }
+  f.write("project/node_modules/@legendapp/spark/package.json", { name: "@legendapp/spark" });
+  f.write("project/node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-desktop-config/native-patches.cjs",
+    'exports.prepareNativePatches = () => { if (process.env.TEST_PATCH_FAIL) throw Error("native patch failed"); };');
+  const lockHash = createHash("sha256").update(fs.readFileSync(path.join(f.project, "bun.lock"))).digest("hex");
+  const run = (env: Record<string, string> = {}) => spawnSync("node", ["scripts/prepare-spark-install.cjs"], {
+    cwd: f.project, env: { ...process.env, WT_DEPS_LOCKFILE_SHA256: "", ...env }, encoding: "utf8",
+  });
+  assert.equal(run().status, 0);
+  assert.equal(fs.existsSync(f.stamp), false);
+  assert.notEqual(run({ WT_DEPS_LOCKFILE_SHA256: lockHash, TEST_PATCH_FAIL: "1" }).status, 0);
+  assert.equal(fs.existsSync(f.stamp), false);
+  assert.notEqual(run({ WT_DEPS_LOCKFILE_SHA256: "0".repeat(64) }).status, 0);
+  assert.equal(fs.existsSync(f.stamp), false);
+  const result = run({ WT_DEPS_LOCKFILE_SHA256: lockHash });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(fs.readFileSync(f.stamp, "utf8").trim(), sparkInstallHash(f.project, f.project));
+});
 
 for (const file of ["project/package.json", "project/bun.lock", "project/bunfig.toml", "sdk/spark.tgz", "sdk/companion.tgz", "sdk/manifest.json", "patches/local.patch", "packages/local/package.json"]) {
   test(`install hash tracks content changes to ${file}`, t => {
