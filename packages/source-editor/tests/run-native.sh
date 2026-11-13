@@ -25,7 +25,7 @@ syntax_parser_dir="$source_editor_dir/../syntax-parser"
 tree_vendor="$syntax_parser_dir/vendor/tree-sitter"
 node "$syntax_parser_dir/scripts/embed-tree-sitter-queries.ts" --check
 node "$syntax_parser_dir/scripts/compile-tree-sitter.ts" "$source_editor_build"
-source_editor_headers="$source_editor_dir/../../shell/.legend/workspaces/dev/code/macos/Pods/Headers"
+source_editor_headers="$source_editor_dir/../../shell/.legend/spark/code/macos/Pods/Headers"
 syntax_flags=(
   -I"$source_editor_headers/Public" -I"$source_editor_headers/Public/NitroModules"
   -I"$source_editor_headers/Private/NitroModules" -I"$source_editor_headers/Public/React-jsi"

@@ -9,6 +9,7 @@ import { markdownEditorWindowTitle } from "./markdownWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { openOrShowWindow } from "@legend-apps/runtime-utils";
+import { openDocumentWindow, type WorkspaceWindowProps } from "@legend-apps/workspace";
 loadMarkdownUserThemesSync();
 function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame, }: {
     appearance?: "dark" | "light";
@@ -25,26 +26,28 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
             titleBar: {
                 contentLayout: "fullSize" as const,
                 transparent: true,
-                material: "titlebar" as const,
-                blendingMode: "withinWindow" as const
+                titleVisibility: "hidden" as const
             }
         }
+    };
+}
+function createMarkdownEditorWindowOptions() {
+    const editorWindowStyle = createMarkdownEditorWindowStyle({ includeFrame: true });
+    return {
+        title: "Untitled",
+        ...editorWindowStyle,
+        macos: { ...editorWindowStyle.macos, restoreOnLaunch: true }
     };
 }
 function createMarkdownWindowsNavigator() {
     // Register synchronously after this module has loaded, so editor hooks can
     // import its window operations without an initialization cycle.
     const { MarkdownEditorWindow } = require("./MarkdownEditorWindow") as typeof import("./MarkdownEditorWindow");
-    const editorWindowStyle = createMarkdownEditorWindowStyle({ includeFrame: true });
     const markdownWindowsConfig = {
         [editorWindowModuleName]: {
             component: MarkdownEditorWindow,
             id: editorWindowIdentifier,
-            options: {
-                title: "Untitled",
-                ...editorWindowStyle,
-                macos: { ...editorWindowStyle.macos, restoreOnLaunch: true }
-            },
+            options: createMarkdownEditorWindowOptions(),
         },
         [settingsWindowModuleName]: {
             component: SettingsWindow,
@@ -61,13 +64,10 @@ export function registerMarkdownWindows() {
 export function openMarkdownSettingsWindow() {
     return openOrShowWindow(settingsWindowIdentifier, () => MarkdownWindowsNavigator.open(settingsWindowModuleName));
 }
-export function openMarkdownEditorWindow(launchArguments?: string[]) {
-    return MarkdownWindowsNavigator.open(editorWindowModuleName, {
-        props: launchArguments ? { launchArguments } : undefined,
-        options: {
-            ...createMarkdownEditorWindowStyle({ includeFrame: true })
-        }
-    });
+export type MarkdownEditorWindowProps = WorkspaceWindowProps & { launchArguments?: string[] };
+/** Opens a new editor window; the first takes the restorable base ID and later ones are numbered. */
+export function openMarkdownEditorWindow(props: MarkdownEditorWindowProps = {}) {
+    return openDocumentWindow(editorWindowIdentifier, props, createMarkdownEditorWindowOptions());
 }
 export function closeMarkdownEditorWindow() {
     return closeWindow(editorWindowIdentifier);
@@ -75,15 +75,16 @@ export function closeMarkdownEditorWindow() {
 export function showMarkdownEditorWindow() {
     return MarkdownWindowsNavigator.show(editorWindowModuleName);
 }
-export function setMarkdownEditorWindowOptions({ appearance, backgroundColor, filename, isDirty, isUntitledDocument, saveState, }: {
+export function setMarkdownEditorWindowOptions({ appearance, backgroundColor, filename, isDirty, isUntitledDocument, saveState, windowId, }: {
     appearance: "dark" | "light";
     backgroundColor: string;
     filename: string;
     isDirty: boolean;
     isUntitledDocument: boolean;
     saveState: MarkdownSaveState;
+    windowId: string;
 }) {
-    return setWindowOptions(editorWindowIdentifier, {
+    return setWindowOptions(windowId, {
         title: markdownEditorWindowTitle({ filename, isDirty, isUntitledDocument, saveState }),
         ...createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame: false })
     });

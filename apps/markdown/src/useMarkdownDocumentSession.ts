@@ -34,7 +34,14 @@ type OpenUntitledDocumentOptions = {
   preserveError?: boolean;
 };
 
-export function useMarkdownDocumentSession() {
+export type MarkdownDocumentSessionOptions = {
+  /** A file became the window's document by opening it. */
+  onFileOpened?: (path: string) => void;
+  /** The document was saved to `to`; `from` is null for an untitled document. */
+  onFileSavedAs?: (from: string | null, to: string) => void;
+};
+
+export function useMarkdownDocumentSession({ onFileOpened, onFileSavedAs }: MarkdownDocumentSessionOptions = {}) {
   const sessionState$ = useObservable<MarkdownDocumentSessionState>({
     conflict: null,
     commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
@@ -114,7 +121,8 @@ export function useMarkdownDocumentSession() {
       saveState: "idle",
     });
     markOpenedFile(path);
-  }, [markOpenedFile, sessionState$]);
+    onFileOpened?.(path);
+  }, [markOpenedFile, onFileOpened, sessionState$]);
 
   const openUntitledDocument = useCallback((options: OpenUntitledDocumentOptions = {}) => {
     documentGenerationRef.current += 1;
@@ -141,6 +149,8 @@ export function useMarkdownDocumentSession() {
   }, [handleError, openUntitledDocument, sessionState$]);
 
   const completeSaveAs = useCallback((path: string) => {
+    const { documentSource, filename } = sessionState$.peek();
+    const previousFile = documentSource === "file" ? filename : null;
     documentGenerationRef.current += 1;
     sessionState$.assign({
       conflict: null,
@@ -151,7 +161,8 @@ export function useMarkdownDocumentSession() {
       saveState: "idle",
     });
     markOpenedFile(path);
-  }, [markOpenedFile, sessionState$]);
+    onFileSavedAs?.(previousFile, path);
+  }, [markOpenedFile, onFileSavedAs, sessionState$]);
 
   const saveCurrentDocumentAs = useCallback(async (saveSeparately = false) => {
     const state = sessionState$.peek();
@@ -241,7 +252,7 @@ export function useMarkdownDocumentSession() {
     reason = "close",
   }: {
     autosaveEnabled: boolean;
-    reason?: "close" | "quit";
+    reason?: "close" | "open" | "quit";
   }) => {
     const state = sessionState$.peek();
     if (!state.filename || (!state.isDirty && !state.conflict)) {

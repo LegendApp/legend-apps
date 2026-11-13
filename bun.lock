@@ -113,6 +113,7 @@
         "@legend-apps/syntax-settings": "workspace:*",
         "@legend-apps/theme": "workspace:*",
         "@legend-apps/virtualized-document": "workspace:*",
+        "@legend-apps/workspace": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
@@ -159,6 +160,7 @@
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/storage": "0.0.0",
         "@legend-apps/theme": "workspace:*",
+        "@legend-apps/workspace": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
@@ -893,6 +895,18 @@
         "react-native": "catalog:",
       },
     },
+    "packages/workspace": {
+      "name": "@legend-apps/workspace",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legendapp/list": "catalog:",
+        "@legendapp/spark": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-native": "catalog:",
+      },
+    },
     "shell": {
       "name": "shell",
       "version": "0.0.0",
@@ -1493,6 +1507,8 @@
     "@legend-apps/window-manager": ["@legend-apps/window-manager@workspace:packages/window-manager"],
 
     "@legend-apps/windows": ["@legend-apps/windows@workspace:packages/windows"],
+
+    "@legend-apps/workspace": ["@legend-apps/workspace@workspace:packages/workspace"],
 
     "@legendapp/list": ["@legendapp/list@workspace:packages/legend-list-sparse-layout"],
 

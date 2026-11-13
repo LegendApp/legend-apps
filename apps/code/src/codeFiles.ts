@@ -1,4 +1,10 @@
 import { getSyntaxLanguageForPath } from "@legend-apps/syntax-parser";
+import { openFileDialog } from "@legendapp/spark/dialogs";
+
+export async function openCodeFileDialog() {
+  const result = await openFileDialog({ selection: "files" });
+  return result.canceled ? null : result.paths.find(isCodePath) ?? null;
+}
 
 export function isCodePath(path: string) {
   return path.length > 0 && !path.startsWith("-") && !path.endsWith("/");

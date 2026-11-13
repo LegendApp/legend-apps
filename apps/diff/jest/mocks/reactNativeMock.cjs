@@ -21,6 +21,7 @@ module.exports = {
     select: (values) => values.macos ?? values.native ?? values.default,
   },
   Pressable: createComponent("Pressable"),
+  ScrollView: createComponent("ScrollView"),
   StyleSheet: {
     absoluteFillObject: {},
     create: (styles) => styles,

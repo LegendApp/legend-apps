@@ -1,42 +1,23 @@
 import { observable } from "@legendapp/state";
-import { cancelPreparedDocument, prepareDocument } from "@legend-apps/source-editor/preload";
+import { createDocumentWindowRegistry } from "@legend-apps/workspace";
 
-export type CodeViewerFileRequest = {
-  path: string | null;
-  version: number;
-  preparedDocumentId?: string;
+export type CodeViewerWindowTarget = {
+  command: (itemId: string) => void;
+  openFile: (path: string) => void;
+  windowId: string;
 };
 
-export const codeViewerFileRequest$ = observable<CodeViewerFileRequest>({
-  path: null,
-  version: 0,
-});
+export const codeViewerWindows = createDocumentWindowRegistry<CodeViewerWindowTarget>();
 
+/** Opens the file as a tab in the most recently focused viewer, returning that viewer if one is open. */
 export function requestCodeViewerFile(path: string) {
-  const preparedDocumentId = prepareDocument(path);
-  cancelPreparedDocument(codeViewerFileRequest$.preparedDocumentId.peek());
-  codeViewerFileRequest$.set({
-    path,
-    preparedDocumentId,
-    version: codeViewerFileRequest$.version.peek() + 1,
-  });
+  const target = codeViewerWindows.active();
+  target?.openFile(path);
+  return target;
 }
 
-export function consumeCodeViewerFileRequest(version: number) {
-  const request = codeViewerFileRequest$.peek();
-  if (!request.path || request.version !== version) return undefined;
-  // The viewer now owns this token, including cancellation during confirmation.
-  // Do not replay a consumed single-use token when another window mounts.
-  codeViewerFileRequest$.set({ path: null, version });
-  return request;
-}
-
-const menuHandlers = new Set<(itemId: string) => void>();
-export function subscribeCodeViewerMenu(handler: (itemId: string) => void) {
-  menuHandlers.add(handler);
-  return () => { menuHandlers.delete(handler); };
-}
 export function dispatchCodeViewerMenu(itemId: string) {
-  for (const handler of menuHandlers) handler(itemId);
+  codeViewerWindows.active()?.command(itemId);
 }
+
 export const codeAutomaticPairs$ = observable(true);

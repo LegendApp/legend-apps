@@ -15,9 +15,10 @@ const commitDefinitions = [{ id: "commit", title: "Finish Editing Block", defaul
 type MarkdownKeyboardShortcutsOptions = {
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
   sessionState$: MarkdownDocumentSessionState$;
+  windowId: string;
 };
 
-export function useMarkdownKeyboardShortcuts({ documentCommandsRef, sessionState$ }: MarkdownKeyboardShortcutsOptions) {
+export function useMarkdownKeyboardShortcuts({ documentCommandsRef, sessionState$, windowId }: MarkdownKeyboardShortcutsOptions) {
   const hotkeys = useMarkdownHotkeySettings();
   const canCommitAndBlur = useValue(sessionState$.commandState.canCommitAndBlur);
   const hotkeyHandlers = useMemo(() => ({
@@ -38,7 +39,7 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef, sessionState
     handlers: hotkeyHandlers,
     bindings: hotkeys,
     router: markdownHotkeyRouter,
-    scope: { kind: "window", windowId: "markdown-editor" },
+    scope: { kind: "window", windowId },
     onError: console.error,
   });
 
@@ -47,7 +48,7 @@ export function useMarkdownKeyboardShortcuts({ documentCommandsRef, sessionState
     enabled: canCommitAndBlur,
     handlers: { commit: () => documentCommandsRef.current?.commitAndBlurActiveBlock() },
     router: markdownHotkeyRouter,
-    scope: { kind: "window", windowId: "markdown-editor" },
+    scope: { kind: "window", windowId },
     onError: console.error,
   });
 }
