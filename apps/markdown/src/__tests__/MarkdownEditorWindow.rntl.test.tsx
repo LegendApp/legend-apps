@@ -3,6 +3,7 @@ import { watch } from "@legendapp/spark/files";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { Text } from "react-native";
+import type { TestInstance } from "test-renderer";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
@@ -64,7 +65,7 @@ const mockSession = {
 };
 
 jest.mock("@legendapp/spark/ui/glass", () => ({
-  GlassView: require("react-native").View,
+  GlassView: (props: object) => require("react").createElement(require("react-native").View, { ...props, testID: "mock-glass" }),
 }));
 
 jest.mock("@legendapp/spark/files", () => ({
@@ -168,6 +169,15 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       lastError: null,
       saveState: "idle",
     });
+  });
+
+  it("uses clear glass with a page-color overlay at 0.8", async () => {
+    const view = await render(<MarkdownEditorWindow />);
+    const glass = view.getByTestId("mock-glass");
+    expect(glass.props.glassStyle).toBe("clear");
+    const overlay = glass.parent!.children[1] as TestInstance;
+    expect(overlay.props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
+    await view.unmount();
   });
 
   it("preserves the editor selection only while the link popover is open", async () => {
