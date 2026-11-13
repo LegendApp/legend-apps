@@ -264,8 +264,8 @@ export function MarkdownEditorWindow({ launchArguments }: MarkdownEditorWindowPr
         theme={displayTheme.markdownDocument}
       />
       <View pointerEvents="none" style={styles.titlebar}>
-        <GlassView style={styles.glass} />
-        <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.7 }]} />
+        <GlassView glassStyle="clear" style={styles.glass} />
+        <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
       </View>
     </View>
   );
