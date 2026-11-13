@@ -1,13 +1,10 @@
-import { type DiffDocument, type DiffFileSummary, type DiffLoadSession, type DiffLoadStatus, type DiffRenderRow, type DiffSideBySideRenderRow, loadUnifiedDiff, loadUnifiedDiffFile, loadUnifiedDiffFromUrl, startGitFolderDiff, startUnifiedDiffFromUrl } from "@legend-apps/diff-parser";
+import { type DiffDocument, type DiffFileSummary, type DiffLoadSession, type DiffRenderRow, type DiffSideBySideRenderRow } from "@legend-apps/diff-parser";
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { nowMs } from "@legend-apps/source-viewer";
-import { ensureTreeGrammarsForPaths } from "@legend-apps/syntax-parser";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
-import { type VirtualizedDocumentVisibleRangeInfo, type VirtualizedFixedDocumentListRef, type VirtualizedFixedDocumentListRenderRowProps } from "@legend-apps/virtualized-document";
+import { type VirtualizedFixedDocumentListRef, type VirtualizedFixedDocumentListRenderRowProps } from "@legend-apps/virtualized-document";
 import { type LegendListRenderItemProps } from "@legendapp/list/react-native";
-import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { type DropEvent } from "@legendapp/spark/drag-drop";
-import { revealInFileManager } from "@legendapp/spark/files";
 import { runCommand } from "@legendapp/spark/processes";
 import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { type SidebarSplitViewResizeEvent } from "@legendapp/spark/ui/split-view";
@@ -16,37 +13,34 @@ import { type Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LayoutChangeEvent, Linking, Platform, TextInput, View } from "react-native";
-import { type UnsavedDiffMergeDraftReason, confirmUnsavedDiffMergeDrafts } from "../confirmUnsavedDiffMergeDrafts";
-import { registerDiffWindowExitPreparation } from "../diffAppExit";
-import { addRecentDiffSource, updateSavedDiffWindowSource } from "../diffAppMetadata";
-import { createDiffCompareSource, createDiffCompareSourceForRef, loadDiffCompareRepoState } from "../diffCompareTargets";
+import { type UnsavedDiffMergeDraftReason } from "../confirmUnsavedDiffMergeDrafts";
+import { loadDiffCompareRepoState } from "../diffCompareTargets";
 import { getDroppedDiffSource, getUnsupportedDropMessage } from "../diffDrop";
-import { type DiffOpenSource, getDiffRecentDocumentPath, getDiffSourceLabel, normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "../diffFiles";
+import { normalizeDiffOpenSource, openDiffFilePairDialog, openDiffFolderDialog } from "../diffFiles";
 import { diffHotkeyRouter } from "../diffHotkeys";
-import { type DiffMergeConflictBlock, type DiffMergeConflictChoice, type DiffMergeConflictFile, createDiffMergeDraftFileWithResolvedBlock, createReadyMergeState, loadDiffMergeState, readDiffMergeFileContent, resolveDiffMergeConflictContent, writeDiffMergeFileContent } from "../diffMerge";
-import { diffMergeSaveConflictKey, getMergeConflictKey, isDiffMergeSavePending } from "../diffMergeControls";
+import { createReadyMergeState, writeDiffMergeFileContent } from "../diffMerge";
+import { diffMergeSaveConflictKey } from "../diffMergeControls";
 import { getDiffPalette } from "../diffPalette";
-import { defaultDiffSidebarWidth, getDiffIgnoreWhitespaceChangesSetting, getDiffShowOnlyHunksSetting, setDiffShowOnlyHunksSetting, setDiffSidebarWidthSetting, useDiffAdaptiveLightModeEnabledSetting, useDiffFontFamilySetting, useDiffFontSizeSetting, useDiffHighlightChangedCharactersSetting, useDiffIgnoreWhitespaceChangesSetting, useDiffRestoreWindowsOnStartupSetting, useDiffShowOnlyHunksSetting, useDiffShowWhitespaceCharactersSetting, useDiffSidebarWidthSetting, useDiffSyntaxHighlightingEnabledSetting, useDiffSyntaxTheme, useDiffViewModeSetting } from "../diffSettings";
-import { createDiffStartupSplitView, diffContentMinWidth, focusDiffSearchToolbarItem, setDiffViewerStartupSplitView } from "../diffWindowControls";
-import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "../filePairDiff";
+import { defaultDiffSidebarWidth, setDiffSidebarWidthSetting, useDiffAdaptiveLightModeEnabledSetting, useDiffFontFamilySetting, useDiffFontSizeSetting, useDiffHighlightChangedCharactersSetting, useDiffIgnoreWhitespaceChangesSetting, useDiffRestoreWindowsOnStartupSetting, useDiffShowOnlyHunksSetting, useDiffShowWhitespaceCharactersSetting, useDiffSidebarWidthSetting, useDiffSyntaxHighlightingEnabledSetting, useDiffSyntaxTheme, useDiffViewModeSetting } from "../diffSettings";
+import { createDiffStartupSplitView, diffContentMinWidth, setDiffViewerStartupSplitView } from "../diffWindowControls";
 import { DiffStartScreen } from "../start-screen/DiffStartScreen";
 import { useDiffStartScreenController } from "../start-screen/useDiffStartScreenController";
-import { getActiveDiffFile, getJoinedPath } from "../viewer/diffFilePresentation";
-import { getAdjacentDiffHunkIndex } from "../viewer/diffHunkNavigation";
-import { findFileIndexForRow, getFilesForSourceRowRange, useDiffLoadedModel, useDiffSideBySideRuntime, useVisibleDiffFileTokenizationScheduler } from "../viewer/diffLoadedDocumentModel";
-import { type DiffRowRenderState, createDiffUnifiedHunkRowIndexSet, diffHunkHeaderHeight, diffSideBySideLineNumberWidth, diffSideBySideMarkerWidth, DiffSideBySideRow, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, DiffUnifiedRow, getDiffRowPalette, getSideBySideDividerColor } from "../viewer/DiffRows";
-import { type DiffSearchResult, getDiffSearchSubmitIndex } from "../viewer/diffSearch";
-import { diffBackgroundTokenizeChunkBudgetMs, diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizePollMs, diffBackgroundTokenizeStartDelayMs, diffDocumentErrorHeight, diffDocumentPermissionErrorHeight, diffFileHeaderRowHeight, diffInitialRowCount, diffProgressiveInitialPaintRowCount, diffProgressiveItemCountExpandChunkRowCount, diffProgressiveItemCountExpandThresholdRows, diffProgressivePostInitialLoadPollMs, diffProgressivePostInitialLoadResumeMs, diffTitlebarTopInset } from "../viewer/diffViewerConstants";
+import { diffHunkHeaderHeight, DiffSideBySideRow, DiffUnifiedRow } from "../viewer/DiffRows";
+import { diffDocumentErrorHeight, diffDocumentPermissionErrorHeight, diffFileHeaderRowHeight, diffTitlebarTopInset } from "../viewer/diffViewerConstants";
 import { DiffActionHandlersController, DiffFileWatcherController, DiffLaunchController, DiffLoadCompletionController, DiffWindowChromeController, DiffWindowToolbarItemController } from "../viewer/diffViewerControllers";
-import { type DiffLoadSourceOptions, type DiffLoadTrace, type DiffViewerState, emptyDiffLoadProgressState, emptyDiffViewerState, unavailableDiffMergeState, useDiffViewerModel } from "../viewer/diffViewerModel";
-import { createOpenError, createRefreshError, getDiffVisibleSourceModel, getErrorMessage, shouldPrepareMergeDraftsForSourceChange, sourcesMatch } from "../viewer/diffViewerSupport";
-import { clearDiffMergeDraftFlag, getUnsavedDiffMergeDraftFiles } from "./diffMergeDrafts";
+import { type DiffLoadTrace, useDiffViewerModel } from "../viewer/diffViewerModel";
+import { createRefreshError, getDiffVisibleSourceModel, getErrorMessage, sourcesMatch } from "../viewer/diffViewerSupport";
+import { clearDiffMergeDraftFlag, getUnsavedDiffMergeDraftFiles, useDiffMergeDrafts } from "./diffMergeDrafts";
 import { DiffLoadedContentPane, DiffLoadedSidebarPane, DiffSidebarFileRow, DiffSidebarFolderRow, DiffSplitBody } from "./DiffViewerPane";
 import { DiffCompareRefPrompt, DiffDocumentErrorBody, DiffDownloadingBody, DiffDropSurface, DiffErrorPanel, DiffFatalBody, DiffNativeMenuSavingStateController, DiffNoChangesBody, DiffSearchStatusPanel, DiffStatisticsPanel, DiffUnsavedMergeDraftBannerWithSavingState } from "./DiffWindowChrome";
-import { createDiffRowRenderState, createDiffSidebarRenderState, diffActiveSearchHighlightColor, diffActiveSearchRowHighlightColor, diffSearchHighlightColor, emptyDiffListIndexByFileIndex, getBackgroundTokenizationPlan, getDiffLineRowHeight, hashDiffNativeRowConfigVersion } from "./diffWindowRendering";
+import { createDiffSidebarRenderState, emptyDiffListIndexByFileIndex, getDiffLineRowHeight } from "./diffWindowRendering";
 import { styles } from "./diffWindowStyles";
-import { type DiffItemCountLimitState, type DiffLoadedCacheEntry, type DiffLoadedPayload, type DiffMergeDraftFile, type DiffMergeFileResolveQueue, type DiffNativeRowConfigProps, type DiffRowConfig, type DiffSidebarEntry, type DiffSidebarRenderState, type DiffViewerWindowProps } from "./diffWindowTypes";
-import { applyDiffMergeDraftsToState, clearLoadedCache, createGitDiffCommandError, deleteLoadedCacheEntriesWithPrefix, deleteLoadedCacheEntry, disposeDiffDocument, disposeLoadedCacheEntry, getDiffGitFolderLoadCompareOptions, getDiffLoadedCacheKey, getDiffLoadProgressState, getDiffSourceCacheKey, shouldCacheLoadedDiff, shouldPublishInitialProgress, waitForDiffProgressPoll } from "./useDiffSourceLoader";
+import { type DiffLoadedCacheEntry, type DiffMergeDraftFile, type DiffMergeFileResolveQueue, type DiffSidebarEntry, type DiffSidebarRenderState, type DiffViewerWindowProps } from "./diffWindowTypes";
+import { useDiffRowPresentation } from "./useDiffRowPresentation";
+import { clearLoadedCache, deleteLoadedCacheEntriesWithPrefix, disposeDiffDocument, getDiffSourceCacheKey, useDiffSourceLoader } from "./useDiffSourceLoader";
+import { useDiffViewerNavigation } from "./useDiffViewerNavigation";
+import { useDiffViewerRuntime } from "./useDiffViewerRuntime";
+import { useDiffWindowActions } from "./useDiffWindowActions";
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffMergeSaveWatchSuppressMs = 2000;
@@ -232,597 +226,48 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const selectedSidebarFileBackgroundColor = diffPalette.sidebarSelectedBackground;
     const sidebarConflictBadgeBackgroundColor = diffPalette.sidebarConflictBadgeBackground;
     const sidebarConflictBadgeTextColor = diffPalette.sidebarConflictBadgeText;
-    const loadedDocument = state.status === "loaded" ? state.document : null;
-    const loadedDocumentId = loadedDocument?.documentId ?? 0;
-    const loadedDocumentRowCount = loadedDocument ? Math.max(0, Math.floor(loadedDocument.rowCount)) : 0;
-    const [itemCountLimitState, setItemCountLimitState] = useState<DiffItemCountLimitState | null>(null);
-    const currentItemCountLimit = itemCountLimitState?.documentId === loadedDocumentId
-        ? itemCountLimitState.limit
-        : diffProgressiveInitialPaintRowCount;
-    const isProgressiveLoadIncomplete = state.status === "loaded" && state.loadComplete === false;
-    const initialItemCountLimit = loadedDocument !== null &&
-        isProgressiveLoadIncomplete &&
-        loadedDocumentRowCount > diffProgressiveInitialPaintRowCount
-        ? Math.min(loadedDocumentRowCount, currentItemCountLimit)
-        : null;
-    useEffect(() => {
-        setCollapsedSidebarFolders(new Set());
-    }, [loadedDocumentId, setCollapsedSidebarFolders]);
-    const { collapsedFileIndexList, diffRows, fileHeaderRowIndexes, getRow, getVisibleListIndex, sideBySideFileHeaderByListIndex, sideBySideHunkHeaderIndexes, sideBySideDataSource, sideBySideListIndexByRowIndex, sideBySideRowCount, visibleItemIndexes, } = useDiffLoadedModel({
+    const { loadedDocument, loadedDocumentId, unifiedHunkRowIndexSet, collapsedFileIndexList, diffRows, fileHeaderRowIndexes, getRow, getVisibleListIndex, sideBySideFileHeaderByListIndex, sideBySideHunkHeaderIndexes, sideBySideDataSource, sideBySideListIndexByRowIndex, sideBySideRowCount, visibleItemIndexes, getSideBySideRow, handleSideBySideTopItemChanged, requestSideBySideRange, handleVisibleRowsRequested, handleLimitedSideBySideVisibleRowsRequested, handleTopItemChanged } = useDiffViewerRuntime({
+        state,
+        setCollapsedSidebarFolders,
         collapsedFileIndexes,
         fontFamily,
         fontSize,
-        initialItemCountLimit,
         nativeUnifiedRows,
         rowHeight,
-        state,
-        viewMode: renderViewMode,
-    });
-    // Progressive documents append hunk indexes without changing identity, so row count invalidates this snapshot.
-    const unifiedHunkRowIndexSet = useMemo(() => createDiffUnifiedHunkRowIndexSet(renderViewMode === "unified" ? loadedDocument : null), [loadedDocument, loadedDocumentRowCount, renderViewMode]);
-    const scheduleVisibleFileTokenization = useVisibleDiffFileTokenizationScheduler(syntaxHighlightingEnabled);
-    useEffect(() => {
-        if (loadedDocument) {
-            return () => {
-                const isCached = [...loadedCacheRef.current.values()].some((entry) => entry.loaded.document === loadedDocument);
-                const currentState = state$.peek();
-                const isCurrent = currentState.status === "loaded" && currentState.document === loadedDocument;
-                if (isCached || isCurrent) {
-                    loadedDocument.cancelTokenizationRequests("viewer.cleanup");
-                }
-                else {
-                    disposeDiffDocument(loadedDocument, "viewer.cleanup");
-                }
-            };
-        }
-        return undefined;
-    }, [loadedDocument, state$]);
-    const { getSideBySideRow, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, requestSideBySideRange, resetSideBySideRuntime, } = useDiffSideBySideRuntime({
+        renderViewMode,
+        syntaxHighlightingEnabled,
+        loadedCacheRef,
+        state$,
         activeFileIndex$,
         diffPaneHeight$,
         nativeSideBySideRows,
-        rowHeight,
-        sideBySideDataSource,
-        sideBySideRowCount,
-        state$,
-        syntaxHighlightingEnabled,
-        viewMode: renderViewMode,
-    });
-    const expandItemCountLimit = useCallback((documentId: number, requestedMinimum: number, reason: string) => {
-        setItemCountLimitState((current) => {
-            let nextState = current;
-            if (loadedDocument !== null && loadedDocumentId === documentId && loadedDocumentRowCount > diffProgressiveInitialPaintRowCount) {
-                const currentLimit = current?.documentId === documentId
-                    ? current.limit
-                    : diffProgressiveInitialPaintRowCount;
-                const nextLimit = Math.min(loadedDocumentRowCount, Math.max(Math.ceil(requestedMinimum), currentLimit + diffProgressiveItemCountExpandChunkRowCount));
-                if (nextLimit > currentLimit) {
-                    nextState = {
-                        documentId,
-                        limit: nextLimit,
-                    };
-                }
-            }
-            return nextState;
-        });
-    }, [loadedDocument, loadedDocumentId, loadedDocumentRowCount]);
-    const maybeExpandItemCountLimitForVisibleRange = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo, viewKind: string) => {
-        const isDemandRequest = info.reason === "scroll" || info.reason === "highlight";
-        if (isDemandRequest && loadedDocument !== null && initialItemCountLimit !== null) {
-            const visibleEnd = Math.max(0, Math.floor(start)) + Math.max(0, Math.ceil(count));
-            const requestedMinimum = visibleEnd + diffProgressiveItemCountExpandThresholdRows;
-            if (requestedMinimum >= initialItemCountLimit) {
-                const reason = `${viewKind}:${info.reason}`;
-                expandItemCountLimit(loadedDocumentId, requestedMinimum, reason);
-            }
-        }
-    }, [expandItemCountLimit, initialItemCountLimit, loadedDocument, loadedDocumentId]);
-    useEffect(() => {
-        if (state.status === "loaded" && state.loadComplete !== false) {
-            const document = state.document;
-            if (syntaxHighlightingEnabled) {
-                let cancelled = false;
-                let startTimeout: ReturnType<typeof setTimeout> | undefined;
-                const startedAt = nowMs();
-                startTimeout = setTimeout(() => {
-                    const backgroundPlan = getBackgroundTokenizationPlan(state.files);
-                    if (backgroundPlan.files.length > 0 && backgroundPlan.rowLimit > 0) {
-                        const backgroundFiles = backgroundPlan.files;
-                        const filePaths = backgroundFiles.map((file) => file.path);
-                        ensureTreeGrammarsForPaths(filePaths)
-                            .then(() => {
-                            if (!cancelled) {
-                                document.startBackgroundTokenization(diffBackgroundTokenizeChunkRowCount, diffBackgroundTokenizeChunkBudgetMs, backgroundPlan.rowLimit, backgroundPlan.sourceLineCount);
-                            }
-                        })
-                            .catch((error: unknown) => {
-                            console.error(getErrorMessage(error));
-                        });
-                    }
-                    else {
-                    }
-                }, diffBackgroundTokenizeStartDelayMs);
-                return () => {
-                    cancelled = true;
-                    if (startTimeout) {
-                        clearTimeout(startTimeout);
-                    }
-                    document.stopBackgroundTokenization();
-                };
-            }
-            document.stopBackgroundTokenization();
-        }
-        return undefined;
-    }, [
-        state.status === "loaded" ? state.document : null,
-        state.status === "loaded" ? state.loadComplete : true,
-        syntaxHighlightingEnabled,
-    ]);
-    useEffect(() => {
-        if (state.status === "loaded" && state.loadComplete !== false && syntaxHighlightingEnabled) {
-            const document = state.document;
-            const updateTokenizationVersion = () => {
-                const tokenizationVersion = document.getTokenizedRowVersion();
-                if (syntaxTokenizationState$.version.peek() !== tokenizationVersion) {
-                    const ranges = document.consumeTokenizedRowRanges()
-                        .map((range) => `${Math.floor(range.start)}:${Math.ceil(range.end)}`)
-                        .join(",");
-                    syntaxTokenizationState$.set({ ranges, version: tokenizationVersion });
-                }
-            };
-            updateTokenizationVersion();
-            const intervalHandle = setInterval(updateTokenizationVersion, diffBackgroundTokenizePollMs);
-            return () => {
-                clearInterval(intervalHandle);
-            };
-        }
-        if (syntaxTokenizationState$.version.peek() !== 0) {
-            syntaxTokenizationState$.set({ ranges: "", version: 0 });
-        }
-        return undefined;
-    }, [
-        state.status === "loaded" ? state.document : null,
-        state.status === "loaded" ? state.loadComplete : true,
-        syntaxHighlightingEnabled,
         syntaxTokenizationState$,
-    ]);
-    useEffect(() => {
-        resetSideBySideRuntime();
-        if (state.status === "loaded") {
-            const preserveActiveFilePath = preserveActiveFilePathRef.current;
-            preserveActiveFilePathRef.current = null;
-            if (preserveActiveFilePath) {
-                const preservedFile = state.files.find((file) => file.path === preserveActiveFilePath || file.oldPath === preserveActiveFilePath);
-                activeFileIndex$.set(preservedFile?.index ?? state.files[0]?.index ?? null);
-            }
-            else {
-                activeFileIndex$.set(state.files[0]?.index ?? null);
-                setCollapsedFileIndexesValue((current) => current.size > 0 ? new Set() : current);
-            }
-        }
-        else {
-            activeFileIndex$.set(null);
-        }
-    }, [
-        activeFileIndex$,
-        resetSideBySideRuntime,
+        preserveActiveFilePathRef,
         setCollapsedFileIndexesValue,
-        state.status === "loaded" ? state.document : null,
-    ]);
-    const handleVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-        maybeExpandItemCountLimitForVisibleRange(start, count, info, "unified");
-        const currentState = state$.peek();
-        if (syntaxHighlightingEnabled && currentState.status === "loaded" && currentState.loadComplete !== false) {
-            const files = getFilesForSourceRowRange(currentState.files, start, count);
-            scheduleVisibleFileTokenization(currentState.document, files, info);
-        }
-    }, [maybeExpandItemCountLimitForVisibleRange, scheduleVisibleFileTokenization, state$, syntaxHighlightingEnabled]);
-    const handleLimitedSideBySideVisibleRowsRequested = useCallback((start: number, count: number, info: VirtualizedDocumentVisibleRangeInfo) => {
-        maybeExpandItemCountLimitForVisibleRange(start, count, info, "side-by-side");
-        handleSideBySideVisibleRowsRequested(start, count, info);
-    }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
-    const handleTopItemChanged = useCallback((rowIndex: number) => {
-        const currentState = state$.peek();
-        if (currentState.status === "loaded") {
-            const nextFileIndex = findFileIndexForRow(currentState.files, rowIndex);
-            if (activeFileIndex$.peek() !== nextFileIndex) {
-                activeFileIndex$.set(nextFileIndex);
-            }
-        }
-    }, [activeFileIndex$, state$]);
-    const loadSource = useCallback(async (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => {
-        const stateBeforeTransition = state$.peek();
-        const hasPendingMergeDraftWork = mergeDraftsRef.current.size > 0 || mergeResolveQueuesRef.current.size > 0;
-        const shouldPrepareMergeDrafts = shouldPrepareMergeDraftsForSourceChange(stateBeforeTransition.source, nextSource, hasPendingMergeDraftWork);
-        if (shouldPrepareMergeDrafts) {
-            if (sourceTransitionInFlightRef.current) {
-                return;
-            }
-            sourceTransitionInFlightRef.current = true;
-            let canChangeSource = false;
-            try {
-                canChangeSource = await prepareMergeDraftsForTransitionRef.current("source");
-            }
-            finally {
-                sourceTransitionInFlightRef.current = false;
-            }
-            if (!canChangeSource) {
-                return;
-            }
-        }
-        const requestId = loadRequestIdRef.current + 1;
-        loadRequestIdRef.current = requestId;
-        activeProgressiveSessionRef.current?.cancel();
-        activeProgressiveSessionRef.current = null;
-        const loadStartedAt = nowMs();
-        updateSavedDiffWindowSource(windowIdentifier, nextSource);
-        const initialRowCount = nativeDiffRows ? 0 : diffInitialRowCount;
-        const loadShowOnlyHunks = getDiffShowOnlyHunksSetting();
-        const loadIgnoreWhitespaceChanges = getDiffIgnoreWhitespaceChangesSetting();
-        const sourceCacheKey = getDiffSourceCacheKey(nextSource);
-        const loadedCacheKey = getDiffLoadedCacheKey(nextSource, loadShowOnlyHunks, loadIgnoreWhitespaceChanges);
-        const stateBeforeLoad = state$.peek();
-        const isBackgroundWatchRefresh = options?.reason === "watch" &&
-            stateBeforeLoad.status === "loaded" &&
-            sourcesMatch(stateBeforeLoad.source, nextSource);
-        if (mergeDraftsSourceKeyRef.current !== null && mergeDraftsSourceKeyRef.current !== sourceCacheKey) {
-            mergeDraftsRef.current = new Map();
-            mergeDraftsSourceKeyRef.current = null;
-        }
-        if (options?.force) {
-            deleteLoadedCacheEntriesWithPrefix(loadedCacheRef.current, `${sourceCacheKey}:`, "viewer.load.force");
-        }
-        else if (stateBeforeLoad.status === "loaded" && !sourcesMatch(stateBeforeLoad.source, nextSource)) {
-            clearLoadedCache(loadedCacheRef.current, "viewer.load.sourceChange");
-        }
-        const cachedEntry = !options?.force && options?.reason === "mode-toggle"
-            ? loadedCacheRef.current.get(loadedCacheKey)
-            : undefined;
-        if (cachedEntry) {
-            const trace: DiffLoadTrace = {
-                cacheHit: true,
-                document: cachedEntry.loaded.document,
-                folderPath: nextSource.value,
-                loadStartedAt,
-                nativeResolvedAt: loadStartedAt,
-                requestId,
-                setStateAt: nowMs(),
-            };
-            loadTraceRef.current = trace;
-            setLoadProgressValue(emptyDiffLoadProgressState);
-            setLoadingSourceValue(null);
-            setLoadStatisticsValue(null);
-            setDocumentErrorValue(null);
-            setOpenErrorValue(null);
-            setViewerState({
-                status: "loaded",
-                folderPath: nextSource.value,
-                source: nextSource,
-                document: cachedEntry.loaded.document,
-                files: cachedEntry.loaded.files,
-                initialRows: cachedEntry.loaded.initialRows,
-                loadComplete: cachedEntry.loadComplete,
-                timing: cachedEntry.loaded.timing,
-            });
-            addRecentDiffSource(nextSource);
-            return;
-        }
-        const trace: DiffLoadTrace = {
-            cacheHit: false,
-            document: null,
-            folderPath: nextSource.value,
-            loadStartedAt,
-            nativeResolvedAt: loadStartedAt,
-            requestId,
-            setStateAt: loadStartedAt,
-        };
-        loadTraceRef.current = trace;
-        const shouldStartNativeBeforeLoadingState = options?.reason === "launch" &&
-            !isBackgroundWatchRefresh &&
-            (nextSource.kind === "folder" || nextSource.kind === "github");
-        const publishLoadingState = () => {
-            setLoadProgressValue(nextSource.kind === "folder"
-                ? {
-                    ...emptyDiffLoadProgressState,
-                    requestId,
-                    source: nextSource,
-                    visible: true,
-                }
-                : emptyDiffLoadProgressState);
-            setLoadingSourceValue(nextSource);
-            setLoadStatisticsValue(null);
-            setMergeStateValue(nextSource.kind === "folder" ? { status: "loading" } : unavailableDiffMergeState);
-            if (stateBeforeLoad.status === "loaded") {
-                setDocumentErrorValue(null);
-            }
-            else {
-                setOpenErrorValue(null);
-            }
-        };
-        if (!isBackgroundWatchRefresh && !shouldStartNativeBeforeLoadingState) {
-            publishLoadingState();
-        }
-        const schedulePostLoadSideEffects = (loaded: DiffLoadedPayload) => {
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    if (loadRequestIdRef.current === requestId) {
-                        addRecentDiffSource(nextSource);
-                        const recentDocumentPath = getDiffRecentDocumentPath(nextSource);
-                        if (recentDocumentPath) {
-                            noteRecentDocument(recentDocumentPath);
-                        }
-                        if (nextSource.kind === "folder") {
-                            loadDiffMergeState(nextSource.value)
-                                .then((nextMergeState) => {
-                                const currentState = state$.peek();
-                                if (loadRequestIdRef.current === requestId && currentState.status === "loaded" && sourcesMatch(currentState.source, nextSource)) {
-                                    setMergeStateValue(applyDiffMergeDraftsToState(nextMergeState, mergeDraftsRef.current));
-                                }
-                            })
-                                .catch((error: unknown) => {
-                                if (loadRequestIdRef.current === requestId) {
-                                    setMergeStateValue({
-                                        status: "error",
-                                        message: getErrorMessage(error),
-                                    });
-                                }
-                            });
-                        }
-                    }
-                }, 0);
-            });
-        };
-        const publishLoadedState = (loaded: DiffLoadedPayload, loadComplete: boolean, reason: string) => {
-            const statePayloadStartedAt = nowMs();
-            const nextLoadedState: DiffViewerState = {
-                status: "loaded",
-                folderPath: nextSource.value,
-                source: nextSource,
-                document: loaded.document,
-                files: loaded.files,
-                initialRows: loaded.initialRows,
-                loadComplete,
-                timing: loaded.timing,
-            };
-            const statePayloadFinishedAt = nowMs();
-            if (!trace.document) {
-                trace.document = loaded.document;
-                trace.setStateAt = statePayloadFinishedAt;
-            }
-            if (isBackgroundWatchRefresh) {
-                const currentLoadedState = state$.peek();
-                preserveActiveFilePathRef.current = currentLoadedState.status === "loaded"
-                    ? getActiveDiffFile(currentLoadedState.files, activeFileIndex$.peek())?.path ?? null
-                    : null;
-            }
-            setViewerState(nextLoadedState);
-            if (isBackgroundWatchRefresh) {
-                setDocumentErrorValue(null);
-            }
-            if (loadComplete) {
-                if (shouldCacheLoadedDiff(loaded)) {
-                    disposeLoadedCacheEntry(loadedCacheRef.current.get(loadedCacheKey), "viewer.cache.replace");
-                    loadedCacheRef.current.set(loadedCacheKey, {
-                        loaded,
-                        loadComplete,
-                    });
-                }
-                else {
-                    deleteLoadedCacheEntry(loadedCacheRef.current, loadedCacheKey, "viewer.cache.skip");
-                }
-                setLoadProgressValue(emptyDiffLoadProgressState);
-            }
-        };
-        let loadError: unknown = null;
-        let progressiveSession: DiffLoadSession | null = null;
-        try {
-            const nativeStartedAt = nowMs();
-            let result: DiffLoadedPayload | null = null;
-            if (nextSource.kind === "github") {
-                if (loadIgnoreWhitespaceChanges) {
-                    if (shouldStartNativeBeforeLoadingState) {
-                        publishLoadingState();
-                    }
-                    result = await loadUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label, initialRowCount, true);
-                }
-                else {
-                    progressiveSession = startUnifiedDiffFromUrl(nextSource.diffUrl, nextSource.label);
-                    activeProgressiveSessionRef.current = progressiveSession;
-                    if (shouldStartNativeBeforeLoadingState) {
-                        publishLoadingState();
-                    }
-                    let progressStatus = progressiveSession.getProgress();
-                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                    while (loadRequestIdRef.current === requestId &&
-                        !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)) {
-                        await waitForDiffProgressPoll();
-                        progressStatus = progressiveSession.getProgress();
-                        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                    }
-                    if (loadRequestIdRef.current !== requestId) {
-                        progressiveSession.cancel();
-                    }
-                    else if (progressStatus.error) {
-                        loadError = new Error(progressStatus.error);
-                    }
-                    else {
-                        result = progressiveSession.consumeChanges(initialRowCount);
-                    }
-                }
-            }
-            else if (nextSource.kind === "git") {
-                const commandResult = await runCommand({
-                    args: ["diff", ...(loadIgnoreWhitespaceChanges ? ["--ignore-all-space"] : []), ...nextSource.args],
-                    target: { type: "command", name: "git" },
-                    cwd: nextSource.cwd,
-                    timeoutMs: 60000,
-                });
-                if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 0) {
-                    loadError = createGitDiffCommandError(commandResult);
-                }
-                else {
-                    result = await loadUnifiedDiff(decodeProcessText(commandResult.stdout), nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
-                }
-            }
-            else if (nextSource.kind === "filePair") {
-                const diffCommand = createFilePairDiffCommand(nextSource, loadIgnoreWhitespaceChanges);
-                const commandResult = await runCommand(diffCommand);
-                if (commandResult.timedOut) {
-                    loadError = new Error("File comparison timed out. The files may be too large to compare.");
-                }
-                else if ((commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 0 && (commandResult.exit.type === "exited" ? commandResult.exit.code : -1) !== 1) {
-                    loadError = new Error(decodeProcessText(commandResult.stderr) || `diff exited with code ${(commandResult.exit.type === "exited" ? commandResult.exit.code : -1)}.`);
-                }
-                else {
-                    result = await loadUnifiedDiff(createFilePairUnifiedDiff(nextSource, commandResult), nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
-                }
-            }
-            else if (nextSource.kind === "diffFile") {
-                result = await loadUnifiedDiffFile(nextSource.value, nextSource.label, initialRowCount, loadIgnoreWhitespaceChanges);
-            }
-            else {
-                progressiveSession = startGitFolderDiff(nextSource.value, {
-                    ...getDiffGitFolderLoadCompareOptions(nextSource),
-                    ignoreWhitespaceChanges: loadIgnoreWhitespaceChanges,
-                    showOnlyHunks: loadShowOnlyHunks,
-                });
-                activeProgressiveSessionRef.current = progressiveSession;
-                if (shouldStartNativeBeforeLoadingState) {
-                    publishLoadingState();
-                }
-                let progressStatus = progressiveSession.getProgress();
-                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                while (loadRequestIdRef.current === requestId &&
-                    !shouldPublishInitialProgress(progressStatus, initialRowCount, nowMs() - nativeStartedAt)) {
-                    await waitForDiffProgressPoll();
-                    progressStatus = progressiveSession.getProgress();
-                    setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                }
-                if (loadRequestIdRef.current !== requestId) {
-                    progressiveSession.cancel();
-                }
-                else if (progressStatus.error) {
-                    loadError = new Error(progressStatus.error);
-                }
-                else {
-                    result = progressiveSession.consumeChanges(initialRowCount);
-                }
-            }
-            if (!loadError) {
-                if (result) {
-                    const loadedResult = result;
-                    result = null;
-                    const nativeResolvedAt = nowMs();
-                    trace.nativeResolvedAt = nativeResolvedAt;
-                    if (loadRequestIdRef.current === requestId) {
-                        const initialLoadComplete = "complete" in loadedResult ? loadedResult.complete : true;
-                        if (isBackgroundWatchRefresh && progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
-                            let progressStatus: DiffLoadStatus = loadedResult;
-                            setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                            while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
-                                await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                                progressStatus = progressiveSession.getProgress();
-                                setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                            }
-                            if (loadRequestIdRef.current !== requestId) {
-                                progressiveSession.cancel();
-                            }
-                            else if (progressStatus.error) {
-                                throw new Error(progressStatus.error);
-                            }
-                            else {
-                                const completedProgress = progressiveSession.consumeChanges(0);
-                                publishLoadedState(completedProgress, completedProgress.complete, "complete");
-                                schedulePostLoadSideEffects(completedProgress);
-                            }
-                        }
-                        else {
-                            publishLoadedState(loadedResult, initialLoadComplete, "initial");
-                            if (progressiveSession && "complete" in loadedResult && !loadedResult.complete) {
-                                let lastFileVersion = loadedResult.fileVersion;
-                                let lastRowVersion = loadedResult.rowVersion;
-                                let progressStatus: DiffLoadStatus = loadedResult;
-                                await waitForDiffProgressPoll(diffProgressivePostInitialLoadResumeMs);
-                                while (loadRequestIdRef.current === requestId && !progressStatus.complete && !progressStatus.error) {
-                                    await waitForDiffProgressPoll(diffProgressivePostInitialLoadPollMs);
-                                    progressStatus = progressiveSession.getProgress();
-                                    const hasChanges = progressStatus.rowVersion !== lastRowVersion ||
-                                        progressStatus.fileVersion !== lastFileVersion ||
-                                        progressStatus.complete ||
-                                        !!progressStatus.error;
-                                    if (hasChanges && loadRequestIdRef.current === requestId) {
-                                        setLoadProgressValue(getDiffLoadProgressState(nextSource, requestId, progressStatus));
-                                        lastFileVersion = progressStatus.fileVersion;
-                                        lastRowVersion = progressStatus.rowVersion;
-                                    }
-                                }
-                                if (loadRequestIdRef.current !== requestId) {
-                                    progressiveSession.cancel();
-                                }
-                                else if (progressStatus.error) {
-                                    throw new Error(progressStatus.error);
-                                }
-                                else {
-                                    const completedProgress = progressiveSession.consumeChanges(0);
-                                    publishLoadedState(completedProgress, true, "complete");
-                                    schedulePostLoadSideEffects(completedProgress);
-                                }
-                            }
-                            else {
-                                schedulePostLoadSideEffects(loadedResult);
-                            }
-                        }
-                    }
-                    else {
-                        progressiveSession?.cancel();
-                    }
-                }
-            }
-        }
-        catch (error) {
-            loadError = error;
-        }
-        finally {
-            if (loadRequestIdRef.current !== requestId) {
-                progressiveSession?.cancel();
-            }
-            if (activeProgressiveSessionRef.current === progressiveSession) {
-                activeProgressiveSessionRef.current = null;
-            }
-        }
-        if (loadError && loadRequestIdRef.current === requestId) {
-            if (!isBackgroundWatchRefresh) {
-                loadTraceRef.current = null;
-                setMergeStateValue(unavailableDiffMergeState);
-                setLoadProgressValue(emptyDiffLoadProgressState);
-                setLoadStatisticsValue(null);
-                setLoadingSourceValue((current) => sourcesMatch(current, nextSource) ? null : current);
-            }
-            const message = getErrorMessage(loadError);
-            const currentState = state$.peek();
-            if (currentState.status === "loaded") {
-                const nextError = sourcesMatch(currentState.source, nextSource)
-                    ? createRefreshError(nextSource, message)
-                    : createOpenError(nextSource, message);
-                setDocumentErrorValue(nextError);
-            }
-            else {
-                setOpenErrorValue(createOpenError(nextSource, message));
-                setViewerState(emptyDiffViewerState);
-            }
-        }
-    }, [
+    });
+    const loadSource = useDiffSourceLoader({
+        state$,
+        mergeDraftsRef,
+        mergeResolveQueuesRef,
+        sourceTransitionInFlightRef,
+        prepareMergeDraftsForTransitionRef,
+        loadRequestIdRef,
+        activeProgressiveSessionRef,
+        windowIdentifier,
         nativeDiffRows,
-        setDocumentErrorValue,
+        mergeDraftsSourceKeyRef,
+        loadedCacheRef,
+        loadTraceRef,
         setLoadProgressValue,
-        setLoadStatisticsValue,
         setLoadingSourceValue,
-        setMergeStateValue,
+        setLoadStatisticsValue,
+        setDocumentErrorValue,
         setOpenErrorValue,
         setViewerState,
-        state$,
-        windowIdentifier,
-    ]);
+        setMergeStateValue,
+        preserveActiveFilePathRef,
+        activeFileIndex$,
+    });
     useEffect(() => {
         const changed = previousIgnoreWhitespaceChangesRef.current !== ignoreWhitespaceChanges;
         previousIgnoreWhitespaceChangesRef.current = ignoreWhitespaceChanges;
@@ -940,140 +385,23 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         enabled: state.status === "empty" && !isLoading && !urlInputFocused,
         handlers: { pasteSource: openClipboardSourceFromStartScreen }, onError: console.error,
     });
-    const getCurrentMergeFileForResolve = useCallback((path: string) => {
-        const existingDraft = mergeDraftsRef.current.get(path);
-        if (existingDraft) {
-            return existingDraft.file;
-        }
-        const currentMergeState = mergeState$.peek();
-        return currentMergeState.status === "ready" ? currentMergeState.fileByPath.get(path) ?? null : null;
-    }, [mergeState$]);
-    const resolveMergeConflict = useCallback((file: DiffMergeConflictFile, block: DiffMergeConflictBlock, choice: DiffMergeConflictChoice) => {
-        const currentState = state$.peek();
-        const resolvingKeys = resolvingMergeConflictKeys$.peek();
-        const conflictKey = getMergeConflictKey(file, block);
-        if (currentState.status === "loaded" &&
-            currentState.source.kind === "folder" &&
-            !savingMergeDraftsRef.current &&
-            !isDiffMergeSavePending(resolvingKeys) &&
-            !resolvingKeys.has(conflictKey)) {
-            setResolvingMergeConflictKeyActive(conflictKey, true);
-            setDocumentErrorValue(null);
-            const originalBlockIndex = Math.max(0, file.markerBlocks.findIndex((candidate) => candidate === block || candidate.startLine === block.startLine));
-            const queue = mergeResolveQueuesRef.current.get(file.path) ?? {
-                chain: Promise.resolve(),
-                completedOriginalBlockIndexes: [],
-            };
-            const runResolve = async () => {
-                try {
-                    const existingDraft = mergeDraftsRef.current.get(file.path);
-                    const currentFile = getCurrentMergeFileForResolve(file.path) ?? file;
-                    const resolvedEarlierBlocks = queue.completedOriginalBlockIndexes.filter((index) => index < originalBlockIndex).length;
-                    const currentBlockIndex = Math.max(0, originalBlockIndex - resolvedEarlierBlocks);
-                    const currentBlock = currentFile.markerBlocks[currentBlockIndex] ?? currentFile.markerBlocks.find((candidate) => (candidate.oursLines.length === block.oursLines.length &&
-                        candidate.theirsLines.length === block.theirsLines.length &&
-                        candidate.oursLines.every((line, index) => line === block.oursLines[index]) &&
-                        candidate.theirsLines.every((line, index) => line === block.theirsLines[index])));
-                    if (!currentBlock) {
-                        throw new Error(`Unable to find conflict block in ${file.path}.`);
-                    }
-                    const currentContent = existingDraft?.content ?? await readDiffMergeFileContent({
-                        folderPath: currentState.source.value,
-                        path: file.path,
-                    });
-                    const resolvedContent = resolveDiffMergeConflictContent(currentContent, currentBlock.startLine, choice);
-                    const nextFile = createDiffMergeDraftFileWithResolvedBlock({
-                        block: currentBlock,
-                        choice,
-                        content: resolvedContent,
-                        file: currentFile,
-                    });
-                    const nextDrafts = new Map(mergeDraftsRef.current);
-                    nextDrafts.set(file.path, {
-                        content: resolvedContent,
-                        file: nextFile,
-                    });
-                    mergeDraftsRef.current = nextDrafts;
-                    mergeDraftsSourceKeyRef.current = getDiffSourceCacheKey(currentState.source);
-                    const currentMergeState = mergeState$.peek();
-                    if (currentMergeState.status === "ready") {
-                        setMergeStateValue(createReadyMergeState(currentMergeState.files
-                            .map((currentFile) => currentFile.path === file.path ? nextFile : currentFile)
-                            .filter((currentFile) => currentFile.markerBlocks.length > 0 || currentFile.hasUnsavedDraft)));
-                    }
-                    queue.completedOriginalBlockIndexes.push(originalBlockIndex);
-                }
-                catch (error: unknown) {
-                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-                }
-                finally {
-                    setResolvingMergeConflictKeyActive(conflictKey, false);
-                }
-            };
-            const nextChain = queue.chain
-                .catch(() => undefined)
-                .then(runResolve);
-            queue.chain = nextChain;
-            mergeResolveQueuesRef.current.set(file.path, queue);
-            nextChain.finally(() => {
-                if (mergeResolveQueuesRef.current.get(file.path)?.chain === nextChain) {
-                    mergeResolveQueuesRef.current.delete(file.path);
-                }
-            });
-        }
-    }, [
-        getCurrentMergeFileForResolve,
+    const { resolveMergeConflict, discardMergeDraftsFromCommand } = useDiffMergeDrafts({
+        mergeDraftsRef,
         mergeState$,
-        setDocumentErrorValue,
-        setMergeStateValue,
-        setResolvingMergeConflictKeyActive,
         state$,
         resolvingMergeConflictKeys$,
-    ]);
-    const discardMergeDrafts = useCallback(async () => {
-        await waitForMergeResolveQueues();
-        const currentState = state$.peek();
-        if (currentState.status !== "loaded" || currentState.source.kind !== "folder") {
-            return false;
-        }
-        mergeDraftsRef.current = new Map();
-        mergeDraftsSourceKeyRef.current = null;
-        const nextMergeState = await loadDiffMergeState(currentState.source.value);
-        setMergeStateValue(nextMergeState);
-        return true;
-    }, [setMergeStateValue, state$, waitForMergeResolveQueues]);
-    const discardMergeDraftsFromCommand = useCallback(() => {
-        if (hasUnsavedMergeDrafts && !savingMergeDraftsRef.current) {
-            discardMergeDrafts().catch((error: unknown) => {
-                const currentState = state$.peek();
-                if (currentState.status === "loaded") {
-                    setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-                }
-            });
-        }
-    }, [discardMergeDrafts, hasUnsavedMergeDrafts, setDocumentErrorValue, state$]);
-    const prepareMergeDraftsForTransition = useCallback(async (reason: UnsavedDiffMergeDraftReason) => {
-        await waitForMergeResolveQueues();
-        const currentState = state$.peek();
-        const draftFiles = getUnsavedDiffMergeDraftFiles(mergeState$.peek());
-        if (currentState.status !== "loaded" || draftFiles.length === 0) {
-            return true;
-        }
-        const action = await confirmUnsavedDiffMergeDrafts({
-            fileCount: draftFiles.length,
-            reason,
-            sourceLabel: getDiffSourceLabel(currentState.source),
-        });
-        if (action === "discard") {
-            return true;
-        }
-        if (action === "save") {
-            return saveMergeDrafts();
-        }
-        return false;
-    }, [mergeState$, saveMergeDrafts, state$, waitForMergeResolveQueues]);
-    prepareMergeDraftsForTransitionRef.current = prepareMergeDraftsForTransition;
-    useEffect(() => registerDiffWindowExitPreparation(windowIdentifier, prepareMergeDraftsForTransition), [prepareMergeDraftsForTransition, windowIdentifier]);
+        savingMergeDraftsRef,
+        setResolvingMergeConflictKeyActive,
+        setDocumentErrorValue,
+        mergeResolveQueuesRef,
+        mergeDraftsSourceKeyRef,
+        setMergeStateValue,
+        waitForMergeResolveQueues,
+        hasUnsavedMergeDrafts,
+        saveMergeDrafts,
+        prepareMergeDraftsForTransitionRef,
+        windowIdentifier,
+    });
     const openFolder = useCallback(async () => {
         if (!loadingSource$.peek()) {
             const currentState = state$.peek();
@@ -1176,165 +504,21 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         }
       })().catch(console.error);
     }, [loadSource, loadingSource$, setDocumentErrorValue, setOpenErrorValue, state$]);
-    const reloadCurrentSource = useCallback(() => {
-        const currentState = state$.peek();
-        if (currentState.status !== "loaded") {
-            return false;
-        }
-        loadSource(currentState.source, { force: true, reason: "reload" }).catch((error: unknown) => {
-            setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-        });
-        return true;
-    }, [loadSource, setDocumentErrorValue, state$]);
-    const compareCurrentSource = useCallback((selection: string) => {
-        const currentSource = loadingSource$.peek() ?? state$.peek().source;
-        const repoPath = currentSource?.kind === "folder"
-            ? currentSource.value
-            : currentSource?.kind === "git"
-                ? currentSource.cwd
-                : null;
-        const nextSource = repoPath ? createDiffCompareSource(repoPath, selection, compareRepoState$.peek()) : null;
-        if (!nextSource || loadingSource$.peek()) {
-            return false;
-        }
-        loadSource(nextSource).catch((error: unknown) => {
-            setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
-        });
-        return true;
-    }, [compareRepoState$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
-    const openCompareRefPrompt = useCallback(() => {
-        const currentSource = loadingSource$.peek() ?? state$.peek().source;
-        const repoPath = currentSource?.kind === "folder"
-            ? currentSource.value
-            : currentSource?.kind === "git"
-                ? currentSource.cwd
-                : null;
-        if (!repoPath || loadingSource$.peek()) {
-            return false;
-        }
-        setCompareRefInput("");
-        setCompareRefPromptVisible(true);
-        return true;
-    }, [loadingSource$, state$, setCompareRefInput, setCompareRefPromptVisible]);
-    const closeCompareRefPrompt = useCallback(() => {
-        setCompareRefPromptVisible(false);
-        setCompareRefInput("");
-    }, [setCompareRefPromptVisible, setCompareRefInput]);
-    const submitCompareRefPrompt = useCallback(() => {
-        const ref = compareRefInput$.peek().trim();
-        const currentSource = loadingSource$.peek() ?? state$.peek().source;
-        const repoPath = currentSource?.kind === "folder"
-            ? currentSource.value
-            : currentSource?.kind === "git"
-                ? currentSource.cwd
-                : null;
-        if (ref && repoPath && !loadingSource$.peek()) {
-            const nextSource = createDiffCompareSourceForRef(repoPath, ref);
-            closeCompareRefPrompt();
-            loadSource(nextSource).catch((error: unknown) => {
-                setDocumentErrorValue(createRefreshError(nextSource, getErrorMessage(error)));
-            });
-        }
-    }, [closeCompareRefPrompt, compareRefInput$, loadSource, loadingSource$, setDocumentErrorValue, state$]);
-    const toggleShowOnlyHunks = useCallback(() => {
-        const currentState = state$.peek();
-        let didToggle = false;
-        if (currentState.status === "loaded" && currentState.source.kind === "folder") {
-            const nextShowOnlyHunks = !getDiffShowOnlyHunksSetting();
-            setDiffShowOnlyHunksSetting(nextShowOnlyHunks);
-            loadSource(currentState.source, { reason: "mode-toggle" }).catch((error: unknown) => {
-                setDocumentErrorValue(createRefreshError(currentState.source, getErrorMessage(error)));
-            });
-            didToggle = true;
-        }
-        return didToggle;
-    }, [loadSource, setDocumentErrorValue, state$]);
-    const revealCurrentFolder = useCallback(() => {
-        const currentSource = state$.peek().source;
-        const currentVisibleFolderPath = currentSource?.kind === "folder" ? currentSource.value : null;
-        if (!currentVisibleFolderPath) {
-            return false;
-        }
-        revealInFileManager(currentVisibleFolderPath)
-            .catch((error: unknown) => {
-            console.error(error instanceof Error ? error.message : String(error));
-        });
-        return true;
-    }, [state$]);
-    const copyText = useCallback((text: string) => {
-        runCommand({ target: { type: "command", name: "pbcopy" }, input: text })
-            .then((result) => {
-            if ((result.exit.type === "exited" ? result.exit.code : -1) !== 0) {
-                console.error(decodeProcessText(result.stderr) || "Unable to copy to clipboard.");
-            }
-        })
-            .catch((error: unknown) => {
-            console.error(error instanceof Error ? error.message : String(error));
-        });
-        return true;
-    }, []);
-    const copyCurrentSource = useCallback(() => {
-        let didCopy = false;
-        const currentVisibleSource = state$.peek().source;
-        if (currentVisibleSource) {
-            didCopy = copyText(currentVisibleSource.value);
-        }
-        return didCopy;
-    }, [copyText, state$]);
-    const copyCurrentFilePath = useCallback(() => {
-        let didCopy = false;
-        const currentState = state$.peek();
-        const currentVisibleFolderPath = currentState.source?.kind === "folder" ? currentState.source.value : null;
-        if (currentState.status === "loaded" && currentVisibleFolderPath) {
-            const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
-            if (activeFile) {
-                didCopy = copyText(getJoinedPath(currentVisibleFolderPath, activeFile.path));
-            }
-        }
-        return didCopy;
-    }, [activeFileIndex$, copyText, state$]);
-    const copyCurrentRelativePath = useCallback(() => {
-        let didCopy = false;
-        const currentState = state$.peek();
-        if (currentState.status === "loaded") {
-            const activeFile = getActiveDiffFile(currentState.files, activeFileIndex$.peek());
-            if (activeFile) {
-                didCopy = copyText(activeFile.path);
-            }
-        }
-        return didCopy;
-    }, [activeFileIndex$, copyText, state$]);
-    const toggleSidebar = useCallback(() => {
-        const currentState = state$.peek();
-        const currentLoadingSource = loadingSource$.peek();
-        const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-        const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-        if (!currentToolbarSource) {
-            return false;
-        }
-        setSidebarCollapsedValue((current) => !current);
-        return true;
-    }, [loadingSource$, setSidebarCollapsedValue, state$]);
-    const focusSearchWithValue = useCallback((value: string) => {
-        const currentState = state$.peek();
-        const currentLoadingSource = loadingSource$.peek();
-        const currentLoadedFileCount = currentState.status === "loaded" ? currentState.files.length : 0;
-        const currentToolbarSource = currentLoadingSource ?? (currentLoadedFileCount > 0 ? currentState.source : null);
-        if (!currentToolbarSource) {
-            return false;
-        }
-        setSearchQuery(value);
-        focusDiffSearchToolbarItem(windowIdentifier, value).catch((error: unknown) => {
-            console.error(error instanceof Error ? error.message : String(error));
-        });
-        return true;
-    }, [loadingSource$, state$, windowIdentifier, setSearchQuery]);
-    const focusSearch = useCallback(() => {
-        return focusSearchWithValue(searchQuery$.peek());
-    }, [focusSearchWithValue, searchQuery$]);
-    const focusFileSearch = useCallback(() => {
-        return focusSearchWithValue("@");
-    }, [focusSearchWithValue]);
+    const { reloadCurrentSource, compareCurrentSource, openCompareRefPrompt, closeCompareRefPrompt, submitCompareRefPrompt, toggleShowOnlyHunks, revealCurrentFolder, copyCurrentSource, copyCurrentFilePath, copyCurrentRelativePath, toggleSidebar, focusSearch, focusFileSearch } = useDiffWindowActions({
+        state$,
+        loadSource,
+        setDocumentErrorValue,
+        loadingSource$,
+        compareRepoState$,
+        setCompareRefInput,
+        setCompareRefPromptVisible,
+        compareRefInput$,
+        activeFileIndex$,
+        setSidebarCollapsedValue,
+        setSearchQuery,
+        windowIdentifier,
+        searchQuery$,
+    });
     const toggleFileCollapsed = useCallback((fileIndex: number) => {
         setCollapsedFileIndexesValue((current) => {
             const next = new Set(current);
@@ -1351,9 +535,9 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
             return next;
         });
     }, [renderViewMode, setCollapsedFileIndexesValue, sideBySideDataSource]);
-    const listSyntaxTheme = syntaxTheme.name;
-    const rowConfig = useMemo<DiffRowConfig>(() => ({
-        borderColor: diffPalette.border,
+    const { rowConfig, nativeUnifiedRowConfig, nativeSideBySideRowConfig, rowRender$ } = useDiffRowPresentation({
+        syntaxTheme,
+        diffPalette,
         collapsedFileIndexes,
         fileHeaderBackgroundColor,
         fontFamily,
@@ -1362,316 +546,36 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         mutedColor,
         showOnlyHunks,
         syntaxHighlightingEnabled,
-        syntaxTheme: listSyntaxTheme,
-    }), [
-        collapsedFileIndexes,
-        diffPalette.border,
-        fileHeaderBackgroundColor,
-        fontFamily,
-        fontSize,
-        foregroundColor,
-        listSyntaxTheme,
-        mutedColor,
-        showOnlyHunks,
-        syntaxHighlightingEnabled,
-    ]);
-    const nativeUnifiedRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
-        const palette = getDiffRowPalette(syntaxTheme.appearance);
-        const configId = `diff:${loadedDocumentId}:unified`;
-        const configVersion = hashDiffNativeRowConfigVersion([
-            configId,
-            diffUnifiedChangeBarWidth,
-            diffUnifiedLineNumberWidth,
-            diffUnifiedMarkerWidth,
-            fontFamily,
-            fontSize,
-            foregroundColor,
-            highlightChangedCharacters,
-            mutedColor,
-            palette.addAccent,
-            palette.addBackground,
-            palette.removeAccent,
-            palette.removeBackground,
-            rowHeight,
-            showWhitespaceCharacters,
-            syntaxHighlightingEnabled,
-            listSyntaxTheme,
-        ]);
-        return {
-            addAccentColor: palette.addAccent,
-            addBackgroundColor: palette.addBackground,
-            activeSearchHighlightColor: diffActiveSearchHighlightColor,
-            activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
-            changeBarWidth: diffUnifiedChangeBarWidth,
-            collapsedFileIndexes: "",
-            configId,
-            configVersion,
-            dividerColor: "transparent",
-            documentId: loadedDocumentId,
-            fontFamily,
-            fontSize,
-            foregroundColor,
-            highlightChangedCharacters,
-            lineNumberWidth: diffUnifiedLineNumberWidth,
-            markerWidth: diffUnifiedMarkerWidth,
-            mutedColor,
-            presentation: "unified",
-            projectionId: 0,
-            removeAccentColor: palette.removeAccent,
-            removeBackgroundColor: palette.removeBackground,
-            rowHeight,
-            searchHighlightColor: diffSearchHighlightColor,
-            showWhitespaceCharacters,
-            syntaxHighlightingEnabled,
-            themeName: listSyntaxTheme,
-        };
-    }, [
-        fontFamily,
-        fontSize,
-        foregroundColor,
-        highlightChangedCharacters,
-        listSyntaxTheme,
         loadedDocumentId,
-        mutedColor,
+        highlightChangedCharacters,
         rowHeight,
         showWhitespaceCharacters,
-        syntaxHighlightingEnabled,
-        syntaxTheme.appearance,
-    ]);
-    const nativeSideBySideRowConfig = useMemo<DiffNativeRowConfigProps>(() => {
-        const palette = getDiffRowPalette(syntaxTheme.appearance);
-        const dividerColor = getSideBySideDividerColor(syntaxTheme.appearance);
-        const configId = `diff:${loadedDocumentId}:blocks`;
-        const projectionId = sideBySideDataSource?.getProjectionId() ?? 0;
-        const configVersion = hashDiffNativeRowConfigVersion([
-            configId,
-            projectionId,
-            dividerColor,
-            diffSideBySideLineNumberWidth,
-            diffSideBySideMarkerWidth,
-            fontFamily,
-            fontSize,
-            foregroundColor,
-            highlightChangedCharacters,
-            mutedColor,
-            palette.addAccent,
-            palette.addBackground,
-            palette.removeAccent,
-            palette.removeBackground,
-            rowHeight,
-            showWhitespaceCharacters,
-            syntaxHighlightingEnabled,
-            listSyntaxTheme,
-        ]);
-        return {
-            addAccentColor: palette.addAccent,
-            addBackgroundColor: palette.addBackground,
-            activeSearchHighlightColor: diffActiveSearchHighlightColor,
-            activeSearchRowHighlightColor: diffActiveSearchRowHighlightColor,
-            changeBarWidth: 0,
-            collapsedFileIndexes: "",
-            configId,
-            configVersion,
-            dividerColor,
-            documentId: loadedDocumentId,
-            fontFamily,
-            fontSize,
-            foregroundColor,
-            highlightChangedCharacters,
-            lineNumberWidth: diffSideBySideLineNumberWidth,
-            markerWidth: diffSideBySideMarkerWidth,
-            mutedColor,
-            presentation: "blocks",
-            projectionId,
-            removeAccentColor: palette.removeAccent,
-            removeBackgroundColor: palette.removeBackground,
-            rowHeight,
-            searchHighlightColor: diffSearchHighlightColor,
-            showWhitespaceCharacters,
-            syntaxHighlightingEnabled,
-            themeName: listSyntaxTheme,
-        };
-    }, [
-        fontFamily,
-        fontSize,
-        foregroundColor,
-        highlightChangedCharacters,
-        listSyntaxTheme,
-        loadedDocumentId,
-        mutedColor,
-        rowHeight,
         sideBySideDataSource,
-        showWhitespaceCharacters,
-        syntaxHighlightingEnabled,
-        syntaxTheme.appearance,
-    ]);
-    const rowRenderInitialState = useMemo(() => createDiffRowRenderState(state$, collapsedFileIndexes$), [collapsedFileIndexes$, state$]);
-    const rowRender$ = useObservable(rowRenderInitialState) as unknown as Observable<DiffRowRenderState>;
-    const hunkListIndexes = useMemo(() => {
-        let indexes: number[] = [];
-        if (loadedDocument) {
-            if (viewMode === "unified") {
-                indexes = [...unifiedHunkRowIndexSet]
-                    .map((rowIndex) => getVisibleListIndex(rowIndex))
-                    .filter((index): index is number => index !== undefined);
-            }
-            else {
-                indexes = [...sideBySideHunkHeaderIndexes].sort((left, right) => left - right);
-            }
-        }
-        return indexes;
-    }, [getVisibleListIndex, loadedDocument, sideBySideHunkHeaderIndexes, unifiedHunkRowIndexSet, viewMode]);
-    const navigateToHunk = useCallback((direction: -1 | 1) => {
-        const list = listRef.current;
-        const listState = list?.getState();
-        const currentPosition = listState
-            ? listState.scroll + (documentError ? diffTitlebarTopInset : 0)
-            : 0;
-        const targetIndex = getAdjacentDiffHunkIndex(hunkListIndexes, currentPosition, direction, listState?.positionAtIndex);
-        let didNavigate = false;
-        if (list && targetIndex !== null) {
-            list.scrollToIndex({
-                animated: true,
-                index: targetIndex,
-                viewOffset: diffTitlebarTopInset,
-                viewPosition: 0,
-            }).catch((error: unknown) => {
-                console.error(error instanceof Error ? error.message : String(error));
-            });
-            didNavigate = true;
-        }
-        return didNavigate;
-    }, [documentError, hunkListIndexes]);
-    const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
-    const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
-    const scrollToFile = useCallback((file: DiffFileSummary) => {
-        const rowStart = Math.max(0, Math.floor(file.rowStart));
-        const sourceListIndex = viewMode === "unified"
-            ? getVisibleListIndex(rowStart)
-            : sideBySideListIndexByRowIndex.get(rowStart);
-        const listIndex = inlineListIndexByFileIndexRef.current.get(file.index) ?? sourceListIndex;
-        if (listIndex !== undefined) {
-            listRef.current?.scrollToIndex({
-                animated: false,
-                index: listIndex,
-                viewOffset: diffTitlebarTopInset,
-                viewPosition: 0,
-            }).catch((error: unknown) => {
-                console.error(error instanceof Error ? error.message : String(error));
-            });
-        }
-    }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
-    const handleInlineListIndexesChanged = useCallback((indexes: ReadonlyMap<number, number>) => {
-        inlineListIndexByFileIndexRef.current = indexes;
-    }, []);
-    const scrollToSearchListIndex = useCallback((listIndex: number) => {
-        listRef.current?.scrollToIndex({
-            animated: true,
-            index: listIndex,
-            viewOffset: diffTitlebarTopInset,
-            viewPosition: 0.5,
-        }).catch((error: unknown) => {
-            console.error(error instanceof Error ? error.message : String(error));
-        });
-    }, []);
-    const getSearchResultListIndex = useCallback((result: DiffSearchResult) => {
-        if (viewMode === "unified") {
-            return getVisibleListIndex(result.rowIndex);
-        }
-        if (!loadedDocument) {
-            return undefined;
-        }
-        const collapsedIndexes = [...collapsedFileIndexList];
-        const startIndex = sideBySideListIndexByRowIndex.get(result.rowIndex) ?? 0;
-        for (let listIndex = startIndex; listIndex < sideBySideRowCount; listIndex += 1) {
-            const row = loadedDocument.getPlainSideBySideRow(listIndex, collapsedIndexes);
-            if (row.kind === "file-header") {
-                if (row.sourceStart > result.rowIndex) {
-                    break;
-                }
-            }
-            else if (row.sourceStart <= result.rowIndex && result.rowIndex < row.sourceEnd) {
-                return listIndex;
-            }
-        }
-        return undefined;
-    }, [
-        collapsedFileIndexList,
-        getVisibleListIndex,
-        loadedDocument,
-        sideBySideListIndexByRowIndex,
-        sideBySideRowCount,
-        viewMode,
-    ]);
-    const scrollToSearchResult = useCallback((result: DiffSearchResult) => {
-        const currentState = state$.peek();
-        if (currentState.status !== "loaded") {
-            return;
-        }
-        const file = currentState.files.find((candidate) => candidate.index === result.fileIndex);
-        if (!file) {
-            return;
-        }
-        activeFileIndex$.set(result.fileIndex);
-        if (result.kind === "file") {
-            scrollToFile(file);
-            return;
-        }
-        setCollapsedFileIndexesValue((currentIndexes) => {
-            if (!currentIndexes.has(result.fileIndex)) {
-                return currentIndexes;
-            }
-            const nextIndexes = new Set(currentIndexes);
-            nextIndexes.delete(result.fileIndex);
-            return nextIndexes;
-        });
-        const listIndex = getSearchResultListIndex(result);
-        if (listIndex !== undefined) {
-            scrollToSearchListIndex(listIndex);
-        }
-    }, [
-        activeFileIndex$,
-        getSearchResultListIndex,
-        scrollToFile,
-        scrollToSearchListIndex,
-        setCollapsedFileIndexesValue,
         state$,
-    ]);
-    const activateSearchResult = useCallback((index: number, results: readonly DiffSearchResult[] = searchResults$.peek()) => {
-        const resultCount = results.length;
-        if (resultCount === 0) {
-            return false;
-        }
-        const nextIndex = ((index % resultCount) + resultCount) % resultCount;
-        setActiveSearchResultIndex(nextIndex);
-        const result = results[nextIndex];
-        if (result) {
-            scrollToSearchResult(result);
-        }
-        return true;
-    }, [scrollToSearchResult, searchResults$, setActiveSearchResultIndex]);
-    const advanceSearchResult = useCallback((delta: number) => {
-        return activateSearchResult(Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)) + delta);
-    }, [activateSearchResult, activeSearchResultIndex$, searchResults$]);
-    const handleSearchChange = useCallback((value: string) => {
-        if (value !== searchQuery$.peek()) {
-            lastSubmittedSearchQueryRef.current = "";
-        }
-        setSearchQuery(value);
-    }, [searchQuery$, setSearchQuery]);
-    const handleSearchSubmit = useCallback((value: string, direction: 1 | -1) => {
-        const existingQuery = value === lastSubmittedSearchQueryRef.current;
-        lastSubmittedSearchQueryRef.current = value;
-        setSearchQuery(value);
-        const results = searchResults$.peek();
-        const nextIndex = getDiffSearchSubmitIndex({
-            activeIndex: Math.min(activeSearchResultIndex$.peek(), Math.max(0, searchResults$.peek().length - 1)),
-            direction,
-            repeatedQuery: existingQuery,
-            resultCount: results.length,
-        });
-        return activateSearchResult(nextIndex, results);
-    }, [activateSearchResult, setSearchQuery, searchResults$, activeSearchResultIndex$]);
+        collapsedFileIndexes$,
+    });
+    const { navigateToNextHunk, navigateToPreviousHunk, scrollToFile, handleInlineListIndexesChanged, handleSearchChange, handleSearchSubmit, advanceSearchResult } = useDiffViewerNavigation({
+        loadedDocument,
+        viewMode,
+        unifiedHunkRowIndexSet,
+        getVisibleListIndex,
+        sideBySideHunkHeaderIndexes,
+        listRef,
+        documentError,
+        sideBySideListIndexByRowIndex,
+        inlineListIndexByFileIndexRef,
+        collapsedFileIndexList,
+        sideBySideRowCount,
+        state$,
+        activeFileIndex$,
+        setCollapsedFileIndexesValue,
+        searchResults$,
+        setActiveSearchResultIndex,
+        activeSearchResultIndex$,
+        searchQuery$,
+        lastSubmittedSearchQueryRef,
+        setSearchQuery,
+    });
     useRoutedHotkeys({
         router: diffHotkeyRouter, definitions: fileJumpDefinitions, scope: { kind: "window", windowId: windowIdentifier },
         enabled: Boolean(loadingSource || (state.status === "loaded" && state.files.length)),
