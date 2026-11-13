@@ -10,7 +10,7 @@ import { createDiffInlineMergeItemIndexAllocator } from "../diffInlineMergeModel
 // Compile the actual row boundary in isolation so native window setup is unnecessary.
 function loadCompiledRow(onRender: (file: string) => void) {
   const { transformSync } = require("@babel/core");
-  const filename = path.resolve(__dirname, "../../DiffViewerWindow.tsx");
+  const filename = path.resolve(__dirname, "../../window/useDiffInlineMergeModel.tsx");
   const { code: isolated } = transformSync(readFileSync(filename, "utf8"), {
     filename, babelrc: false, configFile: false,
     parserOpts: { plugins: ["typescript", "jsx"] },

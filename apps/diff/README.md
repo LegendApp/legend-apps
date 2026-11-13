@@ -5,6 +5,7 @@ Legend Diff is a macOS diff viewer built around native parsing and virtualized r
 ## Current scope
 
 - open a Git folder and compare the working tree or another local/remote ref
+- compare unstaged or staged changes, a local commit against its first parent, or a two-dot/three-dot range
 - compare two individual files
 - open `.diff` and `.patch` files
 - open GitHub pull-request and commit URLs
@@ -52,6 +53,12 @@ bun run diff open macos
 
 The Diff Metro server uses port `19095` by default.
 
+## Git comparisons
+
+From a repository, `ldiff --index-vs-workdir` opens unstaged changes and `ldiff --head-vs-index` opens staged changes. Use `ldiff --commit <sha>` for a commit (root commits compare against the empty tree), or `ldiff main..topic` / `ldiff main...topic` for a direct / merge-base range. Other Git diff arguments keep their existing behavior.
+
+The same arguments work in `legend-diff://open?cwd=<encoded-path>&arg=<encoded-argument>` (repeat `arg` for each argument), or as app launch arguments with `--cwd <repo>`. Comparison sources retain their repository and target when windows are restored.
+
 ## Validate
 
 The fast validation command covers the Diff app, both parser packages, native diff-parser tests, package linking, and TypeScript:
@@ -64,12 +71,15 @@ Individual checks are also available:
 
 ```sh
 bun run test:diff --runInBand
+bun run test:diff:git
 bun run test:diff-parser --runInBand
 bun run test:syntax-parser --runInBand
 bun run test:diff-parser:native
 bun run diff verify macos
 bun run typecheck
 ```
+
+The Git integration target creates and removes temporary repositories, including conflict, rebase, detached HEAD, worktree and stash fixtures. Submodules, LFS and large histories are deferred.
 
 The runtime E2E harness is separate:
 
