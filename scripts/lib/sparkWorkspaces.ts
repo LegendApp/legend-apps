@@ -66,7 +66,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
       size: { width: manifest.id === "music" ? 360 : manifest.id === "diff" ? 1180 : manifest.id === "photos" ? 1000 : 1280,
         height: manifest.id === "music" ? 640 : manifest.id === "diff" ? 780 : 720 },
       ...(manifest.id === "music" ? { minSize: { width: 200, height: 300 }, titleBarStyle: "hidden", appearance: "dark", transparent: true } : {}),
-      ...(["chat-history", "diff", "photos"].includes(manifest.id) ? { minSize: { width: 640, height: 460 } } : {}),
+      ...(["chat-history", "diff", "git", "photos"].includes(manifest.id) ? { minSize: { width: 640, height: 460 } } : {}),
       ...(manifest.id === "photos" ? { titleBarStyle: "hidden" } : {}),
     },
     macos: {
@@ -85,7 +85,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
           ...(["music", "chat-history", "photos"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
           ...(manifest.id === "music" ? { glass: true } : {}),
           ...(manifest.id === "diff" ? { closeBehavior: "request", reopenBehavior: "visibleWindows" } : {}),
-          ...(["chat-history", "diff"].includes(manifest.id) ? { toolbarStyle: "unified", titlebarSeparatorStyle: "shadow" } : {}),
+          ...(["chat-history", "diff", "git"].includes(manifest.id) ? { toolbarStyle: "unified", titlebarSeparatorStyle: "shadow" } : {}),
         },
       },
       infoPlist: {

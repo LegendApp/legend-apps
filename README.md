@@ -44,6 +44,11 @@ launch arguments, or the optional `ldiff` command-line helper. Appearance,
 syntax highlighting, context, and window restoration are configurable. Legend
 Diff requires macOS 14 or later. Local repository comparisons require Git.
 
+### [Legend Git](apps/git/README.md)
+
+Legend Git is an empty native macOS app shell with a repository sidebar,
+window toolbar, and system folder chooser. Git features are planned.
+
 ### [Legend Markdown](apps/markdown/README.md) ![Pre-release][pre-release-badge]
 
 Legend Markdown is a local-first block Markdown editor for macOS. It edits the
