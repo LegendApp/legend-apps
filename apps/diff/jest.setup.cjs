@@ -21,6 +21,7 @@ jest.mock("@legendapp/list/react-native", () => {
     LegendList: React.forwardRef(function LegendList({
       data,
       dataSource,
+      keyExtractor,
       renderItem,
       style,
     }, ref) {
@@ -53,7 +54,7 @@ jest.mock("@legendapp/list/react-native", () => {
         { style },
         items.map((item, index) => React.createElement(
           React.Fragment,
-          { key: dataSource?.getKey(index) ?? item ?? index },
+          { key: dataSource?.getKey(index) ?? keyExtractor?.(item, index) ?? item ?? index },
           renderItem({ item, index }),
         )),
       );

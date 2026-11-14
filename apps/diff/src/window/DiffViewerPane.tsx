@@ -33,7 +33,7 @@ const diffSidebarContentInset = {
     bottom: 0,
     left: 0,
     right: 0,
-    top: diffSidebarTopInset,
+    top: diffSidebarTopInset + 36,
 };
 function noopVirtualizedDocumentRequestRange() {
 }
@@ -323,7 +323,8 @@ export const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({ backg
           </View>)) : (<View style={styles.sidebarList}/>)}
     </View>);
 });
-function DiffNativeRowConfigView({ nativeRowConfig, splitPaneMetrics$, syntaxTokenizationState$, }: {
+export function DiffNativeRowConfigView({ nativeRowConfig, splitPaneMetrics$, syntaxTokenizationState$, searchEnabled = true, }: {
+    searchEnabled?: boolean;
     nativeRowConfig: DiffNativeRowConfigProps;
     splitPaneMetrics$: Observable<DiffSplitPaneMetrics>;
     syntaxTokenizationState$: Observable<{
@@ -332,8 +333,9 @@ function DiffNativeRowConfigView({ nativeRowConfig, splitPaneMetrics$, syntaxTok
     }>;
 }) {
     const { searchResults$, activeSearchResultIndex$ } = useDiffViewerModel();
-    const searchHighlights = useValue(() => createDiffSearchHighlightPayload(createDiffSearchHighlightMap(searchResults$.get())));
+    const searchHighlights = useValue(() => searchEnabled ? createDiffSearchHighlightPayload(createDiffSearchHighlightMap(searchResults$.get())) : "");
     const activeSearchHighlights = useValue(() => {
+        if (!searchEnabled) return "";
         const results = searchResults$.get();
         const index = Math.min(activeSearchResultIndex$.get(), Math.max(0, results.length - 1));
         return createDiffSearchHighlightPayload(createActiveDiffSearchHighlightMap(results[index] ?? null));

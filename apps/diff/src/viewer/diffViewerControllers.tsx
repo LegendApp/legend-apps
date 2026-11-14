@@ -29,6 +29,7 @@ import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
   diffCompareToolbarItemId,
   diffSearchToolbarItemId,
+  diffStoryToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
@@ -120,6 +121,7 @@ export function DiffNativeMenuController({
     const currentShowSidebarControl = currentShowViewModeToolbar;
     const hasLoadedFiles = currentLoadedFileCount > 0;
     const patches: MenuItemState[] = [
+      { id: "changeStory", disabled: currentState.status !== "loaded" || currentState.loadComplete === false },
       {
         disabled: !(currentState.status === "loaded"),
         id: "reload",
@@ -200,12 +202,14 @@ export function DiffNativeMenuController({
 }
 
 export function DiffWindowToolbarItemController({
+  openStory,
   compareCurrentSource,
   onSearchChange,
   onSearchSubmit,
   openCompareRefPrompt,
   toggleSidebar,
 }: {
+  openStory: () => boolean;
   compareCurrentSource: (selection: string) => boolean;
   onSearchChange: (value: string) => void;
   onSearchSubmit: (value: string, direction: 1 | -1) => void;
@@ -216,6 +220,7 @@ export function DiffWindowToolbarItemController({
 
   useEffect(() => {
     const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
+      if (event.type === "toolbarAction" && event.itemId === diffStoryToolbarItemId) openStory();
       if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
       if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
         if (event.action.itemId === diffCompareToolbarTargetChooseRef) openCompareRefPrompt();
@@ -228,7 +233,7 @@ export function DiffWindowToolbarItemController({
       }
     }));
     return () => { void subscription.remove().catch(console.error); };
-  }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
+  }, [openStory, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
 
   return null;
 }
@@ -299,6 +304,7 @@ export function DiffWindowChromeController({
 }
 
 export function DiffActionHandlersController({
+  openStory,
   copyCurrentFilePath,
   copyCurrentRelativePath,
   copyCurrentSource,
@@ -311,6 +317,7 @@ export function DiffActionHandlersController({
   toggleShowOnlyHunks,
   toggleSidebar,
 }: {
+  openStory: () => boolean;
   copyCurrentFilePath: () => boolean;
   copyCurrentRelativePath: () => boolean;
   copyCurrentSource: () => boolean;
@@ -330,6 +337,7 @@ export function DiffActionHandlersController({
     windowId: windowIdentifier,
   }), [windowIdentifier]);
   const hotkeyHandlers = useMemo(() => ({
+    changeStory: openStory,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
     filterFiles: focusSearch,
@@ -340,6 +348,7 @@ export function DiffActionHandlersController({
     viewBlocks: () => setDiffViewModeSetting("blocks"),
     viewUnified: () => setDiffViewModeSetting("unified"),
   }), [
+    openStory,
     copyCurrentRelativePath,
     copyCurrentSource,
     focusSearch,
@@ -368,6 +377,7 @@ export function DiffActionHandlersController({
   }, [windowIdentifier]);
 
   useEffect(() => registerDiffViewerActionHandlers(windowIdentifier, {
+    changeStory: openStory,
     copyFilePath: copyCurrentFilePath,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
@@ -380,6 +390,7 @@ export function DiffActionHandlersController({
     showOnlyHunks: toggleShowOnlyHunks,
     toggleSidebar,
   }), [
+    openStory,
     copyCurrentFilePath,
     copyCurrentRelativePath,
     copyCurrentSource,
