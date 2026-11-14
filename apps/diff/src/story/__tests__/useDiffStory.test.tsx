@@ -11,7 +11,10 @@ import { skillPreviewTargets } from "../skillRuntime";
 import { fixtureDocument, fixtureResult, repoSource } from "./storyFixtures";
 
 jest.mock("@legendapp/spark/ai", () => ({ getAICommandAvailability: jest.fn(async () => ({ codex: true, claude: false })), selectPreferredAITool: (available: { codex: boolean; claude: boolean }) => available.codex ? "codex" : available.claude ? "claude" : undefined }));
-jest.mock("../../git/GitService", () => ({ getGitService: () => ({ watchLocations: async () => ({ root: "/repo" }) }) }));
+const mockWatchLocations = jest.fn(async () => ({ root: "/repo" }));
+const mockRepoRoot = jest.fn(async () => "/repo");
+const mockLibraryEnabled = jest.fn();
+jest.mock("../../git/GitService", () => ({ getGitService: () => ({ watchLocations: mockWatchLocations, resolveRoot: mockRepoRoot }) }));
 jest.mock("@legend-apps/storage", () => ({ ...jest.requireActual("@legend-apps/storage"), createStorage: () => ({
   read: (path: string) => mockStorage.get(path), write: (path: string, value: string) => mockStorage.set(path, value),
 }) }));
@@ -20,7 +23,7 @@ jest.mock("../skillRuntime", () => {
   const { observable } = require("@legendapp/state");
   const { useValue } = require("@legendapp/state/react");
   return { skillEditorContext$: observable({}), skillViewerContexts$: observable({}), skillPreviewTargets: new Map(),
-    useSkillLibrary: () => ({ state: useValue(mockSkillState$) }) };
+    useSkillLibrary: (_root: string | undefined, enabled: boolean) => { mockLibraryEnabled(enabled); return { state: useValue(mockSkillState$) }; } };
 });
 const mockSkillState$ = observable({ entries: builtInStorySkills, active: builtInStorySkills, errors: [] as string[], ready: true });
 
@@ -192,5 +195,41 @@ it("keeps streamed byte updates inside the Story pane without rerendering the vi
   await act(() => storyStore.state("stream").progress.set({ phase: "output", receivedBytes: 100 }));
   expect(renders).toBe(before);
   expect(hook.result.current.story$.progress.receivedBytes.peek()).toBe(100);
+  await hook.unmount();
+});
+
+it("keeps ignored-file scans and viewer skill watchers out of Files loading", async () => {
+  const test = setup();
+  const hook = await renderHook(() => useDiffStory("lazy-library", test.state$));
+  await waitFor(() => expect(mockRepoRoot).toHaveBeenCalled());
+  expect(mockWatchLocations).not.toHaveBeenCalled();
+  expect(mockLibraryEnabled.mock.calls.every(([enabled]) => !enabled)).toBe(true);
+  await act(() => hook.result.current.setTab("story"));
+  await waitFor(() => expect(mockLibraryEnabled).toHaveBeenLastCalledWith(true));
+  await hook.unmount();
+});
+
+it("keeps the active run visible when preview and saved generation collide", async () => {
+  const test = setup(); test.cache.setEnabled("repo:/repo", "codex", true);
+  let finish!: (result: ReturnType<typeof fixtureResult>) => void;
+  mockRunner.run.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const hook = await renderHook(() => useDiffStory("run-collision", test.state$));
+  await act(() => hook.result.current.openStory());
+  await waitFor(() => expect(hook.result.current.story.status).toBe("running"));
+  await act(() => expect(skillPreviewTargets.get("run-collision")!(changeStorySkill)).toBe(false));
+  expect(hook.result.current.preview).toBe(false);
+  expect(hook.result.current.story.status).toBe("running");
+  await act(() => finish(fixtureResult()));
+  await waitFor(() => expect(hook.result.current.story.status).toBe("done"));
+  mockRunner.run.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  await act(() => skillPreviewTargets.get("run-collision")!(changeStorySkill));
+  await waitFor(() => expect(hook.result.current.story.status).toBe("running"));
+  await act(() => hook.result.current.openStory());
+  expect(hook.result.current.preview).toBe(true);
+  expect(hook.result.current.story.status).toBe("running");
+  expect(mockRunner.run).toHaveBeenCalledTimes(2);
+  await act(() => hook.result.current.cancel());
+  expect(mockRunner.cancel).toHaveBeenCalledWith("run-collision", "change-story");
+  await act(() => finish(fixtureResult()));
   await hook.unmount();
 });

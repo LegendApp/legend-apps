@@ -44,11 +44,12 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
     let cancelled = false;
     setRepoInfo(undefined);
     if (!source) return;
+    const controller = new AbortController();
     const repoPath = source.kind === "folder" ? source.value : isDiffGitSource(source) ? source.cwd : null;
-    void (repoPath ? getGitService(repoPath).watchLocations().then(locations => locations.root) : Promise.resolve(undefined)).then(root => {
+    void (repoPath ? getGitService(repoPath).resolveRoot({ signal: controller.signal }) : Promise.resolve(undefined)).then(root => {
       if (!cancelled) setRepoInfo({ source, root });
     }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [source]);
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +60,7 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
     }).catch((reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { cancelled = true; };
   }, [input, source, repoInfo]);
-  const { state: skills, error: libraryError } = useSkillLibrary(repoInfo?.root, !!repoInfo && repoInfo.source === source);
+  const { state: skills, error: libraryError } = useSkillLibrary(repoInfo?.root, !!repoInfo && repoInfo.source === source && tab === "story");
   const storySkills = skills?.active.filter(skill => skill.kind === "story" && skill.output === "story") ?? [];
   const skill = storySkills.find(skill => skill.name === skillName) ?? storySkills.find(skill => skill.name === changeStorySkill.name) ?? storySkills[0];
   const story$ = previewName ? storyStore.previewState(windowId, previewName) : storyStore.state(windowId, skill?.name ?? skillName);
@@ -89,12 +90,16 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
   const generate = useCallback((regenerate = false) => {
     setTab("story");
     if (!request) return false;
+    if (previewName) {
+      const status = storyStore.previewState(windowId, previewName).status.peek();
+      if (status === "running" || status === "progress") return true;
+    }
     setPreviewName(null);
     const current = storyStore.state(windowId, request.skill?.name).peek();
     if (storyOpenAction(!!current.result, current.status === "running" || current.status === "progress", regenerate) === "open") return true;
     start({ request, preview: false });
     return true;
-  }, [request, start, windowId]);
+  }, [request, start, windowId, previewName]);
   const generateOnReady = useRef<object | null>(null);
   const previewOnReady = useRef<{ document: object; skill: StorySkill } | null>(null);
   const openStory = useCallback(() => {
@@ -123,6 +128,9 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
     skillViewerContexts$[windowId].set({ repoRoot: repoInfo?.root, hasDiff: !!document });
     skillPreviewTargets.set(windowId, selectedSkill => {
       if (!document || selectedSkill.kind !== "story" || selectedSkill.output !== "story") return false;
+      const savedStatus = storyStore.state(windowId, selectedSkill.name).status.peek();
+      const previewStatus = previewName ? storyStore.previewState(windowId, previewName).status.peek() : null;
+      if (savedStatus === "running" || savedStatus === "progress" || previewStatus === "running" || previewStatus === "progress") return false;
       if (selectedSkill.layer === "repo" && selectedSkill.repoRoot !== repoInfo?.root) return false;
       generateOnReady.current = null;
       setTab("story");
@@ -133,7 +141,7 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
       return true;
     });
     return () => { skillPreviewTargets.delete(windowId); skillViewerContexts$[windowId].delete(); };
-  }, [document, input, request, repoInfo?.root, start, windowId]);
+  }, [document, input, request, repoInfo?.root, start, windowId, previewName]);
   const consent = useCallback((enabled: boolean) => {
     if (!notice) return;
     storyStore.setEnabled(getStoryScope(notice.request.source, notice.request.repoRoot), notice.request.tool, enabled);

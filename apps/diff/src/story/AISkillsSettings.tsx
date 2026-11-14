@@ -61,7 +61,7 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
       <Action title="Reveal in Finder" disabled={busy} onPress={() => void perform(() => revealInFileManager(skill.path ?? library.userDirectory))} />
       <Action title="Try on current diff" disabled={busy || draft.kind !== "story" || draft.output !== "story" || !skillPreviewTargets.has(windowId)} onPress={() => void perform(async () => {
         const candidate = { ...original, ...parseStorySkill(markdown()) };
-        if (!skillPreviewTargets.get(windowId)?.(candidate)) throw new Error("Open a complete diff in the viewer before trying this skill.");
+        if (!skillPreviewTargets.get(windowId)?.(candidate)) throw new Error("Open a complete diff and finish or cancel its running story before trying this skill.");
         await showWindow(windowId);
         setMessage("Preview opened in Story. Your saved story is unchanged.");
       })} />
