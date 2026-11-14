@@ -59,6 +59,37 @@ From a repository, `ldiff --index-vs-workdir` opens unstaged changes and `ldiff 
 
 The same arguments work in `legend-diff://open?cwd=<encoded-path>&arg=<encoded-argument>` (repeat `arg` for each argument), or as app launch arguments with `--cwd <repo>`. Comparison sources retain their repository and target when windows are restored.
 
+## AI skills
+
+Open **Story** to generate a guided review with your signed-in Codex or Claude CLI. Use the skill picker for the compact `change-story` or the longer `change-story-detailed` walkthrough. **Edit skill…** opens **Settings → AI Skills**. Built-ins are read-only; **Duplicate to edit** creates a user override, and **Restore built-in** removes that override.
+
+Skills are Markdown files with flat YAML scalar fields followed by the prompt body:
+
+```markdown
+---
+name: change-story
+kind: story
+output: story
+organization: auto
+tool: auto
+maxDiffTokens: 120000
+timeout: 300
+---
+Explain the problem and resulting behavior. Reference the supplied hunks.
+```
+
+`kind` is `story` or `workflow`; stories output `story`, while workflows output `check`, `comments`, or `patch`. `organization` is `auto`, `concepts`, or `commits`; `tool` is `auto`, `codex`, or `claude`. `maxDiffTokens` is a positive integer. `timeout` is in seconds and defaults to 300; organization defaults to `auto`. Unknown fields, duplicate fields, invalid values, and empty prompts show validation errors. The fixed output contract and coverage accounting remain outside the editable prompt.
+
+Files with the same `name` override lower layers, in this order:
+
+1. `<repository>/.legend-diff/skills/*.md`
+2. `~/Library/Application Support/Legend Diff/skills/*.md`
+3. Bundled built-ins
+
+The list shows all layers and marks the active copy. Repository and user edits reload through the file watcher. Repository prompts require approval for the repository and exact file hash; changed files need approval again. Provider consent is separate and names the CLI account used to send the selected diff content.
+
+**Try on current diff** uses the editor draft in a preview in the current viewer. Closing the preview returns to the saved story; trying does not save the prompt or replace the cached story. Workflow prompts can be stored and edited here; workflow execution is added separately.
+
 ## Validate
 
 The fast validation command covers the Diff app, both parser packages, native diff-parser tests, package linking, and TypeScript:

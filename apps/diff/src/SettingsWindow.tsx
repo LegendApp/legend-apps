@@ -1,3 +1,4 @@
+import { useValue } from "@legendapp/state/react";
 import { SwitchControl } from "@legend-apps/design-system";
 import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legendapp/spark/shortcuts/commands";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +24,8 @@ import {
   useDiffHotkeyBindingsSnapshot,
 } from "./diffHotkeys";
 import {
+  diffSettingsPage$,
+  type DiffSettingsPage,
   diffFontFamilyOptions,
   setDiffAdaptiveLightModeEnabledSetting,
   setDiffFontFamilySetting,
@@ -49,9 +52,8 @@ import {
   useDiffSyntaxThemeSetting,
 } from "./diffSettings";
 import { setDiffManagedWindowRestorationEnabled } from "./diffWindowRestoration";
+import { AISkillsSettings } from "./story/AISkillsSettings";
 import { CustomizeDiffSettings } from "./customization/CustomizeDiffSettings";
-
-type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine" | "customize";
 
 function AppearanceSettingsPage() {
   return (
@@ -416,6 +418,7 @@ function CommandLineSettingsContent() {
 }
 
 const pages: SettingsWindowPage<DiffSettingsPage>[] = [
+  { id: "aiSkills", title: "AI Skills", render: () => <AISkillsSettings /> },
   {
     id: "customize",
     render: () => <CustomizeDiffSettings />,
@@ -450,12 +453,15 @@ const pages: SettingsWindowPage<DiffSettingsPage>[] = [
 
 export function SettingsWindow() {
   const syntaxTheme = useDiffSyntaxTheme();
+  const selectedPageId = useValue(diffSettingsPage$);
 
   return (
     <VirtualizedSettingsWindow
       appearance={syntaxTheme.appearance}
       estimatedItemSize={360}
       pages={pages}
+      selectedPageId={selectedPageId}
+      onSelectionChange={page => diffSettingsPage$.set(page)}
       windowId={diffSettingsWindowIdentifier}
     />
   );

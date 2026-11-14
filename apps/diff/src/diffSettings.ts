@@ -1,3 +1,4 @@
+import { observable } from "@legendapp/state";
 import { createObservableSettings } from "@legend-apps/storage";
 import {
   normalizeBooleanSetting,
@@ -81,6 +82,7 @@ export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
 
 const diffSettings = createObservableSettings({
   fields: {
+    skillApprovals: { defaultValue: {} as Record<string, boolean> },
     autoRefresh: {
       defaultValue: true,
       normalize: (value) => normalizeBooleanSetting(value, true),
@@ -333,3 +335,8 @@ export function setDiffSidebarWidthSetting(sidebarWidth: number) {
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {
   syntaxHighlightingEnabledSetting.set(enabled);
 }
+
+export const diffSkillApprovals$ = diffSettings.settings$.skillApprovals;
+
+export type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine" | "customize" | "aiSkills";
+export const diffSettingsPage$ = observable<DiffSettingsPage>("customize");
