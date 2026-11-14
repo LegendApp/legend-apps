@@ -14,7 +14,7 @@ import type { DiffSplitPaneMetrics } from "../viewer/diffViewerModel";
 import { DiffNativeRowConfigView } from "../window/DiffViewerPane";
 import type { DiffNativeRowConfigProps } from "../window/diffWindowTypes";
 import { DiffButton, DiffCheckbox, DiffNotice } from "../window/DiffControls";
-import { diffSystemColor } from "../window/diffSystemColors";
+import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 import { buildStoryInput, type StoryHunk, type StoryInput } from "./storyHunks";
 import { storyToMarkdown } from "./storyMarkdown";
 import { buildStoryRows, nextStorySection, type StoryRow } from "./storyRows";
@@ -137,11 +137,11 @@ export const StoryPane = forwardRef<StoryPaneRef, {
       {result?.issues.map((issue, index) => <Text key={index} style={{ color: mutedColor }}>Reference dropped: {issue.path}: {issue.message}</Text>)}
       <Text style={{ color: mutedColor }}>Generation settings for this {controller.request?.repoRoot ? "repository" : "source"}</Text>
       <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: 160, height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
-      {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSystemColor("systemBlueColor")}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => { controller.consent(false); setPrivacyStatus("Generation remains disabled."); }} /></View></DiffNotice> : null}
+      {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSymbolColors.blue}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => { controller.consent(false); setPrivacyStatus("Generation remains disabled."); }} /></View></DiffNotice> : null}
       {privacyStatus ? <Text style={{ color: mutedColor }}>{privacyStatus}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
     </>;
     else if (item.type === "section" && result) content = <>
-      <View className="flex-row items-center gap-2">{item.section.lookHere ? <SFSymbol color={diffSystemColor("systemOrangeColor")} name="flag.fill" size={15} /> : null}<Text accessibilityRole="header" className="flex-1" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>{item.section.lookHere ? "Look here · " : ""}{item.section.title}</Text></View>
+      <View className="flex-row items-center gap-2">{item.section.lookHere ? <SFSymbol color={diffSymbolColors.orange} name="flag.fill" size={15} /> : null}<Text accessibilityRole="header" className="flex-1" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>{item.section.lookHere ? "Look here · " : ""}{item.section.title}</Text></View>
       {item.section.commit ? <Text style={{ color: mutedColor }}>{item.section.commit}</Text> : null}
       <StoryDescription markdown={item.section.description} color={foregroundColor} />
       <DiffCheckbox label="Reviewed" accessibilityLabel={`Mark reviewed: ${item.section.title}`} checked={reviewed.includes(item.section.id)} color={foregroundColor} onChange={checked => reviewStore.setReviewed(reviewKey, item.section.id, checked)} />
