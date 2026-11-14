@@ -61,7 +61,7 @@ it("renders the fixture with native rows, explicit uncovered hunks, review progr
   const screen = await render(<StoryPane {...test.props} />);
   await act(async () => {});
   expect(screen.getByText("Improve behavior")).toBeTruthy();
-  expect(screen.getByText("● Look here · A change")).toBeTruthy();
+  expect(screen.getByText("Look here · A change")).toBeTruthy();
   expect(screen.getByText("Not covered by the story")).toBeTruthy();
   expect(screen.getByText("src/a.ts · new 41–41 ↗")).toBeTruthy();
   expect(nativeRows(screen.toJSON())).toHaveLength(6);
@@ -121,7 +121,7 @@ it("exposes the skill picker, editor, preview banner and repository prompt appro
   Object.assign(test.controller, { skills: [changeStorySkill], skill: changeStorySkill, selectSkill: jest.fn(), editSkill: jest.fn(), preview: true, dismissPreview: jest.fn(), approve: jest.fn(),
     trustNotice: { skill: { ...changeStorySkill, layer: "repo", repoRoot: "/repo", path: "/repo/.legend-diff/skills/story.md" } } });
   const screen = await render(<StoryPane {...test.props} />);
-  await fireEvent.press(screen.getByLabelText("✓ change-story · built-in"));
+  await fireEvent.press(screen.getByText("change-story · built-in"));
   expect(test.controller.selectSkill).toHaveBeenCalledWith("change-story");
   await fireEvent.press(screen.getByLabelText("Edit skill…")); expect(test.controller.editSkill).toHaveBeenCalled();
   expect(screen.getByText("Preview — saved story unchanged")).toBeTruthy();

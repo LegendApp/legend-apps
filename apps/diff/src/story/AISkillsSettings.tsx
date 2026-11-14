@@ -3,15 +3,15 @@ import { revealInFileManager } from "@legendapp/spark/files";
 import { showWindow } from "@legendapp/spark/windows";
 import { SettingsSection } from "@legendapp/spark/settings/window";
 import { useState } from "react";
+import { SegmentedControl } from "@legendapp/spark/ui";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { diffActiveMenuWindow$ } from "../diffMenuState";
+import { DiffButton } from "../window/DiffControls";
+import { diffSystemColor } from "../window/diffSystemColors";
 import { builtInStorySkills, parseStorySkill, serializeStorySkill, type StorySkill } from "./storySkill";
 import type { SkillLibrary } from "./skillLibrary";
 import { skillEditorContext$, skillPreviewTargets, skillViewerContexts$, useSkillLibrary } from "./skillRuntime";
 
-function Action({ title, label, onPress, disabled = false, selected = false }: { title: string; label?: string; onPress(): void; disabled?: boolean; selected?: boolean }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress} className={`min-h-8 justify-center rounded-md border border-border-primary px-3 ${selected ? "bg-surface-muted" : "bg-surface"}${disabled ? " opacity-50" : ""}`}><Text className="text-sm text-text-primary">{label ?? title}</Text></Pressable>;
-}
 const skillId = (skill: StorySkill) => skill.path ?? `built-in:${skill.name}`;
 const draftOf = (skill: StorySkill) => ({ ...skill, maxDiffTokens: String(skill.maxDiffTokens), timeout: String(skill.timeout) });
 
@@ -30,7 +30,7 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
     finally { setBusy(false); }
   };
   const input = (key: "name" | "maxDiffTokens" | "timeout", label: string) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><TextInput accessibilityLabel={label} editable={!builtIn && !busy} value={draft[key]} onChangeText={value => update(key, value)} className="min-h-8 rounded border border-border-primary px-2 text-sm text-text-primary" /></View>;
-  const choices = (key: "kind" | "output" | "organization" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><View className="flex-row flex-wrap gap-2">{values.map(value => <Action key={value} title={`${label}: ${value}`} selected={draft[key] === value} disabled={builtIn || busy} onPress={() => update(key, value)} />)}</View></View>;
+  const choices = (key: "kind" | "output" | "organization" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><SegmentedControl accessibilityLabel={label} options={values.map(value => ({ label: value, value }))} value={draft[key]} disabled={builtIn || busy} onValueChange={value => update(key, value)} style={{ width: values.reduce((width, value) => width + value.length * 7 + 28, 0), height: 24 }} /></View>;
   return <View className="gap-3 p-4">
     <Text className="text-base font-semibold text-text-primary">{skill.name} · {skill.layer}</Text>
     {skill.layer === "repo" ? <Text className="text-sm text-text-secondary">From this repository. Each changed prompt needs approval before running.</Text> : null}
@@ -46,20 +46,20 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
     <TextInput accessibilityLabel="Markdown prompt" multiline editable={!builtIn && !busy} textAlignVertical="top" value={draft.body} onChangeText={body => update("body", body)} className="min-h-64 rounded border border-border-primary p-3 font-mono text-sm text-text-primary" style={{ minHeight: 240 }} />
     {changedOnDisk ? <Text className="text-sm text-text-secondary">The file changed on disk. Reload before saving, or keep this draft for preview.</Text> : null}
     <View className="flex-row flex-wrap gap-2">
-      {builtIn ? <Action title="Duplicate to edit" disabled={busy} onPress={() => void perform(async () => { onSelect(await library.duplicate(skill)); })} /> : <Action title="Save skill" disabled={busy || changedOnDisk} onPress={() => void perform(async () => {
+      {builtIn ? <DiffButton title="Duplicate to edit" disabled={busy} onPress={() => void perform(async () => { onSelect(await library.duplicate(skill)); })} /> : <DiffButton title="Save skill" disabled={busy || changedOnDisk} onPress={() => void perform(async () => {
         const text = markdown();
         await library.save(original, text);
         setOriginal({ ...original, ...parseStorySkill(text) }); setMessage("Saved.");
       })} />}
-      {!builtIn ? <Action title="Reload from disk" disabled={busy} onPress={() => void perform(async () => {
+      {!builtIn ? <DiffButton title="Reload from disk" disabled={busy} onPress={() => void perform(async () => {
         await library.reload();
         const latest = library.state$.entries.peek().find(entry => skillId(entry) === skillId(skill));
         if (!latest) throw new Error("The skill is missing or invalid. Check the load errors.");
         setOriginal(latest); setDraft(draftOf(latest));
       })} /> : null}
-      {skill.layer === "user" && builtInStorySkills.some(builtIn => builtIn.name === skill.name) ? <Action title="Restore built-in" disabled={busy || changedOnDisk} onPress={() => void perform(async () => { await library.restore(original); onSelect(`built-in:${skill.name}`); })} /> : null}
-      <Action title="Reveal in Finder" disabled={busy} onPress={() => void perform(() => revealInFileManager(skill.path ?? library.userDirectory))} />
-      <Action title="Try on current diff" disabled={busy || draft.kind !== "story" || draft.output !== "story" || !skillPreviewTargets.has(windowId)} onPress={() => void perform(async () => {
+      {skill.layer === "user" && builtInStorySkills.some(builtIn => builtIn.name === skill.name) ? <DiffButton title="Restore built-in" disabled={busy || changedOnDisk} onPress={() => void perform(async () => { await library.restore(original); onSelect(`built-in:${skill.name}`); })} /> : null}
+      <DiffButton title="Reveal in Finder" disabled={busy} onPress={() => void perform(() => revealInFileManager(skill.path ?? library.userDirectory))} />
+      <DiffButton title="Try on current diff" disabled={busy || draft.kind !== "story" || draft.output !== "story" || !skillPreviewTargets.has(windowId)} onPress={() => void perform(async () => {
         const candidate = { ...original, ...parseStorySkill(markdown()) };
         if (!skillPreviewTargets.get(windowId)?.(candidate)) throw new Error("Open a complete diff and finish or cancel its running story before trying this skill.");
         await showWindow(windowId);
@@ -85,7 +85,13 @@ export function AISkillsSettings() {
       <View className="gap-3 p-4">
         <Text className="text-sm text-text-secondary">Repository skills override user skills, which override built-ins with the same name. Reloads follow file changes.</Text>
         {context?.repoRoot ? <Text selectable className="text-xs text-text-secondary">Repository: {context.repoRoot}</Text> : <Text className="text-xs text-text-secondary">Open a repository diff to see its skills.</Text>}
-        {state?.entries.map(entry => <View key={skillId(entry)} className="flex-row items-center gap-2"><Action title={`${entry.name} · ${entry.layer}`} label={entry.name} selected={selected && skillId(entry) === skillId(selected)} onPress={() => setSelectedId(skillId(entry))} /><Text className="rounded bg-surface-muted px-2 py-1 text-xs text-text-secondary">{entry.layer}</Text><Text className="text-xs text-text-secondary">{state.active.some(active => active === entry) ? "Active" : "Overridden"} · {entry.kind} / {entry.output}</Text></View>)}
+        {state?.entries.length ? <View>{state.entries.map(entry => {
+          const isSelected = !!selected && skillId(entry) === skillId(selected);
+          return <Pressable key={skillId(entry)} accessibilityRole="button" accessibilityLabel={`${entry.name} · ${entry.layer}`} accessibilityState={{ selected: isSelected }} onPress={() => setSelectedId(skillId(entry))} className="flex-row items-center gap-3 rounded-md px-2 py-1" style={isSelected ? { backgroundColor: diffSystemColor("unemphasizedSelectedContentBackgroundColor") } : undefined}>
+            <Text className="flex-1 text-sm text-text-primary">{entry.name}</Text>
+            <Text className="text-xs text-text-secondary">{entry.layer} · {state.active.some(active => active === entry) ? "Active" : "Overridden"} · {entry.kind} / {entry.output}</Text>
+          </Pressable>;
+        })}</View> : null}
         {!state?.ready ? <Text className="text-sm text-text-secondary">Loading skills…</Text> : null}
         {[...(error ? [error] : []), ...(state?.errors ?? [])].map((message, index) => <Text key={index} selectable className="text-sm text-danger">{message}</Text>)}
       </View>
