@@ -2,6 +2,7 @@ import { focusToolbarSearch } from "@legendapp/spark/windows/macos";
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 
 import { type MacOSStartupSplitViewOptions, type NavigatorWindowOptions, type WindowUpdateOptions, closeWindow, hideWindow, setWindowOptions, showWindow, } from "@legendapp/spark/windows";
+import type { DiffViewerTab } from "./story/useDiffStory";
 import { diffPrimaryWindowIdentifier } from "./appConstants";
 import { getDiffCompareToolbarModel, type DiffCompareRepoState } from "./diffCompareTargets";
 import { getDiffRepresentedUrl, type DiffOpenSource } from "./diffFiles";
@@ -11,6 +12,7 @@ import { getDiffViewerWindowTitleVisibility } from "./diffWindowChrome";
 export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
 export const diffCompareToolbarItemId = "diff-compare-target";
+export const diffNavigatorToolbarItemId = "diff-navigator";
 export const diffStoryToolbarItemId = "diff-change-story";
 export const diffSearchToolbarItemId = "diff-global-search";
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
@@ -26,6 +28,19 @@ function createDiffSidebarToolbarItem(sidebarCollapsed?: boolean) {
         symbol: "sidebar.left",
         tooltip: sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
         type: "button" as const,
+    };
+}
+function createDiffNavigatorToolbarItem(value: DiffViewerTab = "files") {
+    return {
+        id: diffNavigatorToolbarItemId,
+        label: "Navigator",
+        placement: "leading" as const,
+        type: "segmented" as const,
+        value,
+        segments: [
+            { label: "Files", value: "files", symbol: "doc.on.doc" },
+            { label: "Story", value: "story", symbol: "text.book.closed" },
+        ],
     };
 }
 function createDiffViewModeToolbarItem(selectedValue: DiffViewMode = getDiffViewModeSetting()) {
@@ -64,18 +79,19 @@ function createDiffSearchToolbarItem() {
         width: 220,
     };
 }
-function createDiffViewerToolbarItems({ showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, }: {
+function createDiffViewerToolbarItems({ showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, navigatorTab, }: {
     showSidebarControl?: boolean;
     showViewModeToolbar?: boolean;
     compareRepoState?: DiffCompareRepoState | null;
     sidebarCollapsed?: boolean;
     source?: DiffOpenSource | null;
     viewMode?: DiffViewMode;
+    navigatorTab?: DiffViewerTab;
 }) {
     const compareToolbarItem = showViewModeToolbar ? createDiffCompareToolbarItem(source, compareRepoState ?? null) : null;
     return [
         ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
-        ...(showViewModeToolbar ? [createDiffSearchToolbarItem()] : []),
+        ...(showViewModeToolbar ? [createDiffNavigatorToolbarItem(navigatorTab), createDiffSearchToolbarItem()] : []),
         ...(compareToolbarItem ? [compareToolbarItem] : []),
         ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode), { id: diffStoryToolbarItemId, label: "Change Story", tooltip: "Change Story (⌘⇧S)", symbol: "text.book.closed", type: "button" as const, bordered: true }] : []),
     ];
@@ -92,7 +108,7 @@ export function createDiffStartupSplitView(options: Pick<MacOSStartupSplitViewOp
 export function setDiffViewerStartupSplitView(windowIdentifier: string, startupSplitView: MacOSStartupSplitViewOptions | null) {
     return setWindowOptions(windowIdentifier, { macos: { startupSplitView } });
 }
-export function createDiffViewerWindowStyle({ appearance, includeFrame, includeToolbarItems = true, showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, }: {
+export function createDiffViewerWindowStyle({ appearance, includeFrame, includeToolbarItems = true, showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, navigatorTab, }: {
     appearance?: "dark" | "light";
     includeFrame: boolean;
     includeToolbarItems?: boolean;
@@ -102,6 +118,7 @@ export function createDiffViewerWindowStyle({ appearance, includeFrame, includeT
     sidebarCollapsed?: boolean;
     source?: DiffOpenSource | null;
     viewMode?: DiffViewMode;
+    navigatorTab?: DiffViewerTab;
 }) {
     const syntaxTheme = getDiffSyntaxTheme();
     const displayTheme = getLegendDisplayTheme(syntaxTheme.appearance);
@@ -113,7 +130,7 @@ export function createDiffViewerWindowStyle({ appearance, includeFrame, includeT
         ...(includeFrame ? { size: { width: 1180, height: 780 }, minSize: { width: 640, height: 460 } } : {}),
         macos: {
             titleBar: { contentLayout: "fullSize", transparent: true, separator: "shadow", titleVisibility: getDiffViewerWindowTitleVisibility(showViewModeToolbar), controls: [] },
-            toolbar: { visible: true, style: "unified", ...(includeToolbarItems ? { items: createDiffViewerToolbarItems({ showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode }) } : {}) },
+            toolbar: { visible: true, style: "unified", ...(includeToolbarItems ? { items: createDiffViewerToolbarItems({ showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, navigatorTab }) } : {}) },
             ...(includeFrame ? { startupSplitView: source ? createDiffStartupSplitView({ appearance: syntaxTheme.appearance, backgroundColor: diffPalette.background, sidebarBackgroundColor: diffPalette.sidebarBackground, sidebarWidth: getDiffSidebarWidthSetting() }) : null } : {}),
         },
     } satisfies NavigatorWindowOptions;
@@ -142,7 +159,7 @@ export function setDiffViewerWindowAppearance({ appearance, windowIdentifier, }:
         }
     });
 }
-export function setDiffViewerWindowToolbarOptions({ source, compareRepoState, hasUnsavedMergeDrafts, showSidebarControl, showViewModeToolbar, sidebarCollapsed, title, viewMode, windowIdentifier, }: {
+export function setDiffViewerWindowToolbarOptions({ source, compareRepoState, hasUnsavedMergeDrafts, showSidebarControl, showViewModeToolbar, sidebarCollapsed, title, viewMode, navigatorTab, windowIdentifier, }: {
     source: DiffOpenSource | null;
     compareRepoState: DiffCompareRepoState | null;
     hasUnsavedMergeDrafts: boolean;
@@ -151,6 +168,7 @@ export function setDiffViewerWindowToolbarOptions({ source, compareRepoState, ha
     sidebarCollapsed: boolean;
     title: string;
     viewMode: DiffViewMode;
+    navigatorTab: DiffViewerTab;
     windowIdentifier: string;
 }) {
     const setOptions = windowIdentifier === diffPrimaryWindowIdentifier
@@ -166,9 +184,10 @@ export function setDiffViewerWindowToolbarOptions({ source, compareRepoState, ha
             sidebarCollapsed,
             source,
             viewMode,
+            navigatorTab,
         }),
         macos: {
-            ...createDiffViewerWindowStyle({ includeFrame: false, showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode }).macos,
+            ...createDiffViewerWindowStyle({ includeFrame: false, showSidebarControl, showViewModeToolbar, compareRepoState, sidebarCollapsed, source, viewMode, navigatorTab }).macos,
             representedUri: getDiffRepresentedUrl(source)
         }
     });

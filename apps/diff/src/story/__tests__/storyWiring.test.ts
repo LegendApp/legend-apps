@@ -2,7 +2,7 @@ import { diffHotkeyDefinitions } from "../../diffHotkeys";
 import { diffMenuConfig } from "../../diffMenus";
 import { diffActiveMenuWindow$ } from "../../diffMenuState";
 import { dispatchDiffViewerAction, registerDiffViewerActionHandlers } from "../../diffViewerActions";
-import { createDiffViewerWindowStyle, diffStoryToolbarItemId } from "../../diffWindowControls";
+import { createDiffViewerWindowStyle, diffStoryToolbarItemId, diffNavigatorToolbarItemId } from "../../diffWindowControls";
 import { storyOpenAction } from "../useDiffStory";
 
 it("routes the menu/shortcut command to the focused viewer and exposes the toolbar button", () => {
@@ -10,6 +10,11 @@ it("routes the menu/shortcut command to the focused viewer and exposes the toolb
   expect(JSON.stringify(diffMenuConfig)).toContain('"id":"changeStory"');
   const window = createDiffViewerWindowStyle({ includeFrame: false, showViewModeToolbar: true });
   expect(window.macos?.toolbar?.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: diffStoryToolbarItemId, label: "Change Story" })]));
+  const selected = createDiffViewerWindowStyle({ includeFrame: false, showViewModeToolbar: true, navigatorTab: "story" });
+  expect(selected.macos?.toolbar?.items).toEqual(expect.arrayContaining([expect.objectContaining({
+    id: diffNavigatorToolbarItemId, type: "segmented", value: "story",
+    segments: [{ label: "Files", value: "files", symbol: "doc.on.doc" }, { label: "Story", value: "story", symbol: "text.book.closed" }],
+  })]));
   const open = jest.fn(() => true);
   const remove = registerDiffViewerActionHandlers("story", { changeStory: open });
   diffActiveMenuWindow$.set("story");

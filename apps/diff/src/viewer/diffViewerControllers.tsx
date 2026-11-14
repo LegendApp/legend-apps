@@ -1,3 +1,4 @@
+import type { DiffViewerTab } from "../story/useDiffStory";
 import type { DiffDocument } from "@legend-apps/diff-parser";
 import { useRoutedHotkeys, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
 import { ownRegistration, type MenuState } from "@legend-apps/runtime-utils";
@@ -30,6 +31,7 @@ import {
   diffCompareToolbarItemId,
   diffSearchToolbarItemId,
   diffStoryToolbarItemId,
+  diffNavigatorToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
@@ -202,6 +204,7 @@ export function DiffNativeMenuController({
 }
 
 export function DiffWindowToolbarItemController({
+  onNavigatorTab,
   openStory,
   compareCurrentSource,
   onSearchChange,
@@ -209,6 +212,7 @@ export function DiffWindowToolbarItemController({
   openCompareRefPrompt,
   toggleSidebar,
 }: {
+  onNavigatorTab: (tab: DiffViewerTab) => void;
   openStory: () => boolean;
   compareCurrentSource: (selection: string) => boolean;
   onSearchChange: (value: string) => void;
@@ -220,6 +224,7 @@ export function DiffWindowToolbarItemController({
 
   useEffect(() => {
     const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
+      if (event.type === "toolbarSelectionChanged" && event.itemId === diffNavigatorToolbarItemId && (event.value === "files" || event.value === "story")) onNavigatorTab(event.value);
       if (event.type === "toolbarAction" && event.itemId === diffStoryToolbarItemId) openStory();
       if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
       if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
@@ -233,14 +238,16 @@ export function DiffWindowToolbarItemController({
       }
     }));
     return () => { void subscription.remove().catch(console.error); };
-  }, [openStory, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
+  }, [onNavigatorTab, openStory, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
 
   return null;
 }
 
 export function DiffWindowChromeController({
+  navigatorTab,
   hasUnsavedMergeDrafts,
 }: {
+  navigatorTab: DiffViewerTab;
   hasUnsavedMergeDrafts: boolean;
 }) {
   const compareRepoState = useValue(useDiffViewerModel().compareRepoState$);
@@ -250,7 +257,7 @@ export function DiffWindowChromeController({
     state$,
   } = useDiffViewerModel();
   const windowIdentifier = useWindowId();
-  const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
+  const lastToolbarModelRef = useRef<(DiffWindowToolbarModel & { navigatorTab: DiffViewerTab }) | null>(null);
   const lastCompareRepoStateKeyRef = useRef("");
 
   const updateDiffWindowToolbar = useCallback((observe: boolean) => {
@@ -263,8 +270,8 @@ export function DiffWindowChromeController({
     });
     const compareRepoStateKey = getCompareRepoStateKey(compareRepoState);
 
-    if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
-      lastToolbarModelRef.current = toolbarModel;
+    if (lastToolbarModelRef.current?.navigatorTab !== navigatorTab || !diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
+      lastToolbarModelRef.current = { ...toolbarModel, navigatorTab };
       lastCompareRepoStateKeyRef.current = compareRepoStateKey;
       setDiffViewerWindowToolbarOptions({
         compareRepoState,
@@ -275,12 +282,13 @@ export function DiffWindowChromeController({
         sidebarCollapsed: toolbarModel.sidebarCollapsed,
         title: toolbarModel.title,
         viewMode: toolbarModel.viewMode,
+        navigatorTab,
         windowIdentifier,
       }).catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
+  }, [navigatorTab, compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
 
   useObserveEffect(() => {
     const syntaxTheme = getDiffSyntaxTheme();
