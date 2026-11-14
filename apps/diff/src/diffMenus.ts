@@ -119,6 +119,7 @@ export const diffMenuConfig: MenuRootItem[] = [
     label: "View",
     target: { menu: "view" },
     items: [
+      { type: "action", id: "changeStory", label: "Change Story", disabled: true, shortcut: "Cmd+Shift+s" },
       { type: "action",
         id: "hideCustomizeToolbar",
         label: "Customize Toolbar...",

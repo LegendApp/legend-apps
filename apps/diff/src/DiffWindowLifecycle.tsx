@@ -2,6 +2,7 @@ import { ownRegistration } from "@legend-apps/runtime-utils";
 import { addWindowListener, beforeWindowClose, useWindowId } from "@legendapp/spark/windows";
 import { useEffect, useRef } from "react";
 import { prepareDiffWindowForTransition } from "./diffAppExit";
+import { storyStore } from "./story/storyStore";
 
 export function DiffWindowLifecycle({ onClose }: { onClose?: () => void }) {
   const windowId = useWindowId();
@@ -15,9 +16,9 @@ export function DiffWindowLifecycle({ onClose }: { onClose?: () => void }) {
       catch (error) { console.error(error); return false; }
     }));
     const closed = ownRegistration(addWindowListener(windowId, "closed", () => {
-      if (active) onCloseRef.current?.();
+      if (active) { storyStore.closeWindow(windowId); onCloseRef.current?.(); }
     }));
-    return () => { active = false; void guard.remove().catch(console.error); void closed.remove().catch(console.error); };
+    return () => { active = false; storyStore.closeWindow(windowId); void guard.remove().catch(console.error); void closed.remove().catch(console.error); };
   }, [windowId]);
   return null;
 }
