@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
+import { SegmentedControl } from "@legendapp/spark/ui";
 import { ScrollView, Text, View } from "react-native";
 import { repoSkillNotice } from "../story/skillTrust";
 import type { StoryHunk } from "../story/storyHunks";
 import { workflowPrivacyNotice, workflowStore } from "./workflowStore";
 import { WorkflowRunRow } from "./WorkflowResults";
-import { WorkflowAction } from "./WorkflowAction";
+import { DiffButton, DiffNotice } from "../window/DiffControls";
+import { diffSystemColor } from "../window/diffSystemColors";
 import { WorkflowPatchPane, type WorkflowPatchViewerProps, type WorkflowProposal } from "./WorkflowPatchPane";
 import type { useDiffWorkflows } from "./useDiffWorkflows";
 import type { WorkflowReviewComment } from "./workflowReview";
+
+const toolOptions = [{ label: "Codex", value: "codex" }, { label: "Claude", value: "claude" }];
 
 export function WorkflowsPane({ controller, focusedComment, onJump, onReload, settings, ...viewer }: WorkflowPatchViewerProps & {
   controller: ReturnType<typeof useDiffWorkflows>; focusedComment: WorkflowReviewComment | null; onJump: (hunk: StoryHunk) => void;
@@ -25,20 +29,20 @@ export function WorkflowsPane({ controller, focusedComment, onJump, onReload, se
   if (proposal) return <WorkflowPatchPane {...viewer} proposal={proposal} currentHash={controller.input?.diffHash} onClose={() => setProposal(null)}
     onDiscard={() => { workflowStore.discard(controller.windowId, proposal.skillName, proposal.output); setProposal(null); }}
     onApplied={() => { setProposal(null); setApplied(true); onReload(); }} />;
-  return <ScrollView ref={list} className="flex-1" contentContainerStyle={{ paddingTop: 64, paddingHorizontal: 20, paddingBottom: 20, gap: 16 }}>
+  return <ScrollView ref={list} className="flex-1" contentContainerStyle={{ paddingTop: 64, paddingHorizontal: 20, paddingBottom: 20, gap: 12 }}>
     <Text accessibilityRole="header" style={{ color, fontSize: 24, fontWeight: "600" }}>Workflows</Text>
     <Text style={{ color: viewer.mutedColor }}>Select workflows in the sidebar and run them with your signed-in AI CLI. Results stay local; proposed patches wait for your review.</Text>
-    <View className="flex-row flex-wrap gap-2">{(["codex", "claude"] as const).map(tool => <WorkflowAction key={tool} color={color} title={`${controller.tool === tool ? "✓ " : ""}${tool === "codex" ? "Codex" : "Claude"}`} onPress={() => controller.setTool(tool)} />)}</View>
+    {controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} onValueChange={tool => controller.setTool(tool as "codex" | "claude")} style={{ width: 160, height: 24 }} /> : null}
     {!controller.ready ? <Text style={{ color: viewer.mutedColor }}>Preparing workflows…</Text> : null}
     {controller.ready && !controller.skills.length ? <Text style={{ color: viewer.mutedColor }}>No workflow skills are available.</Text> : null}
-    {controller.error ? <Text selectable accessibilityRole="alert" style={{ color: "#e5484d" }}>{controller.error}</Text> : null}
+    {controller.error ? <Text selectable accessibilityRole="alert" style={{ color: diffSystemColor("systemRedColor") }}>{controller.error}</Text> : null}
     {controller.skillErrors.map((error, index) => <Text key={index} selectable style={{ color: viewer.mutedColor }}>{error}</Text>)}
     {applied ? <Text accessibilityLiveRegion="polite" style={{ color }}>Patch applied to working files. Refreshing the original diff…</Text> : null}
-    {controller.pending ? <View className="gap-2 rounded border p-3" style={{ borderColor: color }}>
+    {controller.pending ? <DiffNotice symbol={controller.pending.type === "trust" ? "exclamationmark.triangle.fill" : "hand.raised.fill"} symbolColor={diffSystemColor(controller.pending.type === "trust" ? "systemOrangeColor" : "systemBlueColor")}>
       <Text style={{ color }}>{controller.pending.type === "trust" ? repoSkillNotice(controller.pending.request.skill) : workflowPrivacyNotice(controller.pending.request.tool)}</Text>
       {controller.pending.type === "trust" ? <Text selectable style={{ color: viewer.mutedColor, fontFamily: "Menlo" }}>{controller.pending.request.skill.markdown}</Text> : null}
-      <View className="flex-row gap-2"><WorkflowAction title={controller.pending.type === "trust" ? "Approve this skill" : "Enable and run"} color={color} onPress={() => controller.approve(true)} /><WorkflowAction title="Don't run" color={viewer.mutedColor} onPress={() => controller.approve(false)} /></View>
-    </View> : null}
+      <View className="flex-row gap-2"><DiffButton title={controller.pending.type === "trust" ? "Approve this skill" : "Enable and run"} onPress={() => controller.approve(true)} /><DiffButton title="Don't run" onPress={() => controller.approve(false)} /></View>
+    </DiffNotice> : null}
     {controller.skills.map(skill => <View key={skill.name} onLayout={event => {
       const y = event.nativeEvent.layout.y;
       positions.current.set(skill.name, y);

@@ -4,6 +4,7 @@ import { useObservable, useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
 import { runCommand } from "@legendapp/spark/processes";
 import { useEffect, useMemo, useState } from "react";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { Text, View } from "react-native";
 import type { DiffOpenSource } from "../diffFiles";
 import type { DiffViewMode } from "../diffSettings";
@@ -17,7 +18,8 @@ import { diffFileHeaderRowHeight } from "../viewer/diffViewerConstants";
 import { createVisibleDiffRowIndexes } from "../viewer/diffLoadedDocumentIndexes";
 import type { WorkflowPatch } from "./workflowContract";
 import { applyWorkflowPatch, reloadWorkflowPatchInput, workflowPatchApplyDisabled } from "./workflowPatch";
-import { WorkflowAction } from "./WorkflowAction";
+import { DiffButton } from "../window/DiffControls";
+import { diffSystemColor } from "../window/diffSystemColors";
 
 export type WorkflowProposal = { output: WorkflowPatch; source: DiffOpenSource; repoRoot?: string; settings: { ignoreWhitespaceChanges: boolean; showOnlyHunks: boolean } };
 export type WorkflowPatchViewerProps = {
@@ -114,12 +116,12 @@ export function WorkflowPatchPane({ proposal, currentHash, onClose, onDiscard, o
     <View className="gap-2 px-5 py-3"><Text accessibilityRole="header" style={{ color, fontSize: 20, fontWeight: "600" }}>Proposed changes</Text>
       <Text selectable style={{ color: mutedColor, fontSize: 11 }}>{proposal.source.label} · {proposal.output.baseDiffHash}</Text>
       <StoryDescription markdown={proposal.output.description} color={color} />
-      <View className="flex-row flex-wrap gap-2"><WorkflowAction color={color} title={applying ? "Applying…" : "Apply"} disabled={!!disabledReason || !snapshot} onPress={() => { void apply(); }} />
-        <WorkflowAction color={color} title="Copy patch" onPress={() => { void runCommand({ target: { type: "command", name: "pbcopy" }, input: proposal.output.patch }).then(result => setCopyStatus(result.exit.type === "exited" && result.exit.code === 0 ? "Copied patch" : "Unable to copy patch")).catch((reason: unknown) => setCopyStatus(String(reason))); }} />
-        <WorkflowAction color={mutedColor} title="Discard" disabled={applying} onPress={onDiscard} /><WorkflowAction color={mutedColor} title="Back to workflows" disabled={applying} onPress={onClose} />
+      <View className="flex-row flex-wrap gap-2"><DiffButton title={applying ? "Applying…" : "Apply"} disabled={!!disabledReason || !snapshot} onPress={() => { void apply(); }} />
+        <DiffButton title="Copy patch" onPress={() => { void runCommand({ target: { type: "command", name: "pbcopy" }, input: proposal.output.patch }).then(result => setCopyStatus(result.exit.type === "exited" && result.exit.code === 0 ? "Copied patch" : "Unable to copy patch")).catch((reason: unknown) => setCopyStatus(String(reason))); }} />
+        <DiffButton title="Discard" disabled={applying} onPress={onDiscard} /><DiffButton title="Back to workflows" disabled={applying} onPress={onClose} />
       </View>
-      {disabledReason ? <Text style={{ color: mutedColor }}>{disabledReason}</Text> : <Text style={{ color: mutedColor }}>Apply checks the original source again and changes working files only.</Text>}
-      {error ? <Text selectable accessibilityRole="alert" style={{ color: "#e5484d" }}>{error}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
+      {disabledReason ? <View className="flex-row items-center gap-2"><SFSymbol color={diffSystemColor("systemOrangeColor")} name="exclamationmark.triangle.fill" size={12} /><Text className="flex-1" style={{ color: mutedColor }}>{disabledReason}</Text></View> : <Text style={{ color: mutedColor }}>Apply checks the original source again and changes working files only.</Text>}
+      {error ? <Text selectable accessibilityRole="alert" style={{ color: diffSystemColor("systemRedColor") }}>{error}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
       {!snapshot && !error ? <Text style={{ color: mutedColor }}>Loading proposed diff…</Text> : null}
       {!proposal.output.patch.trim() ? <Text style={{ color: mutedColor }}>No proposed changes.</Text> : null}
     </View>
