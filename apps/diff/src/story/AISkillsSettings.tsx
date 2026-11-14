@@ -6,7 +6,7 @@ import { useState } from "react";
 import { SegmentedControl } from "@legendapp/spark/ui";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { diffActiveMenuWindow$ } from "../diffMenuState";
-import { DiffButton } from "../window/DiffControls";
+import { DiffButton, segmentedControlWidth } from "../window/DiffControls";
 import { diffSystemColor } from "../window/diffSystemColors";
 import { builtInStorySkills, parseStorySkill, serializeStorySkill, type StorySkill } from "./storySkill";
 import type { SkillLibrary } from "./skillLibrary";
@@ -30,7 +30,7 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
     finally { setBusy(false); }
   };
   const input = (key: "name" | "maxDiffTokens" | "timeout", label: string) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><TextInput accessibilityLabel={label} editable={!builtIn && !busy} value={draft[key]} onChangeText={value => update(key, value)} className="min-h-8 rounded border border-border-primary px-2 text-sm text-text-primary" /></View>;
-  const choices = (key: "kind" | "output" | "organization" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><SegmentedControl accessibilityLabel={label} options={values.map(value => ({ label: value, value }))} value={draft[key]} disabled={builtIn || busy} onValueChange={value => update(key, value)} style={{ width: values.reduce((width, value) => width + value.length * 7 + 28, 0), height: 24 }} /></View>;
+  const choices = (key: "kind" | "output" | "organization" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><SegmentedControl accessibilityLabel={label} options={values.map(value => ({ label: value, value }))} value={draft[key]} disabled={builtIn || busy} onValueChange={value => update(key, value)} style={{ width: segmentedControlWidth(values), height: 24 }} /></View>;
   return <View className="gap-3 p-4">
     <Text className="text-base font-semibold text-text-primary">{skill.name} · {skill.layer}</Text>
     {skill.layer === "repo" ? <Text className="text-sm text-text-secondary">From this repository. Each changed prompt needs approval before running.</Text> : null}
