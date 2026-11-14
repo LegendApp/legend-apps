@@ -42,3 +42,12 @@ it("uses a single deadline for the workflow and its repair", async () => {
     expect(cli.children[1].terminate).toHaveBeenCalledTimes(1);
   } finally { jest.useRealTimers(); }
 });
+
+it("repairs a patch that echoes a different base hash", async () => {
+  const output = workflowOutput("patch");
+  const cli = fakeWorkflowCLI([JSON.stringify({ ...output, baseDiffHash: `sha256:${"0".repeat(64)}` }), JSON.stringify(output)]);
+  const result = await cli.runner.run(input, { windowId: "w", skill: builtInWorkflowSkills[2], tool: "codex" });
+  expect(cli.children).toHaveLength(2);
+  expect(cli.children[1].options.input).toContain("baseDiffHash");
+  expect(result.output).toEqual(output);
+});

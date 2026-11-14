@@ -603,7 +603,7 @@ const DiffUnifiedLineRow = memo(function DiffUnifiedLineRow(props: DiffUnifiedRo
           nativeConfigId={nativeConfigId}
           nativeRowHeight={nativeRowHeight}
         />
-        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} sourceStart={index} sourceEnd={index + 1} row={props.row} sideBySide={false} /> : null}
+        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} index={index} row={props.row} sideBySide={false} /> : null}
       </View>
     </>
   );
@@ -715,7 +715,7 @@ const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSid
           nativeConfigId={nativeConfigId}
           nativeRowHeight={nativeRowHeight}
         />
-        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} sourceStart={props.itemMetadata?.sourceStart ?? props.row?.sourceStart ?? 0} sourceEnd={props.itemMetadata?.sourceEnd ?? props.row?.sourceEnd ?? 0} sideBySide /> : null}
+        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} index={listIndex} projectedRow={props.row} sideBySide /> : null}
       </View>
     </>
   );

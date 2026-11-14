@@ -1,3 +1,4 @@
+import { useValue } from "@legendapp/state/react";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { WorkflowRunRow } from "../WorkflowResults";
 import { builtInWorkflowSkills } from "../workflowSkills";
@@ -79,4 +80,20 @@ it("disables check links when their content changed instead of jumping to a recy
   expect(screen.getByLabelText("Outdated reference h1")).toBeDisabled();
   expect(test.props.onJump).not.toHaveBeenCalled();
   await screen.unmount();
+});
+
+it("initializes idle rows after render without updating a subscribed parent during render", async () => {
+  const test = setup();
+  workflowStore.closeWindow("results");
+  const errors = jest.spyOn(console, "error").mockImplementation(() => {});
+  function Parent({ show }: { show: boolean }) {
+    useValue(workflowStore.state$.results);
+    return show ? <WorkflowRunRow {...test.props} /> : null;
+  }
+  const screen = await render(<Parent show={false} />);
+  try {
+    await screen.rerender(<Parent show />);
+    expect(screen.getByText("idle · 0s")).toBeTruthy();
+    expect(errors.mock.calls.flat().join(" ")).not.toContain("Cannot update a component");
+  } finally { await screen.unmount(); errors.mockRestore(); }
 });

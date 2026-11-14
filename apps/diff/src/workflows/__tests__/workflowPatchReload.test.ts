@@ -26,7 +26,7 @@ it("rereads Git sources directly without entering the repository transaction que
   const document = setup();
   const source: DiffOpenSource = { kind: "head-vs-index", cwd: "/repo", value: "/repo staged", label: "Staged" };
   await reloadWorkflowPatchInput(source, settings);
-  expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["diff", "-z", "--no-ext-diff", "--no-color", "--ignore-all-space", "--cached", "--"] }));
+  expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/repo", args: ["-c", "core.quotepath=off", "diff", "-z", "--no-ext-diff", "--no-color", "--ignore-all-space", "--cached", "--"] }));
   expect(loadUnifiedDiff).toHaveBeenCalledWith("diff --git a/a b/a\n", "Staged", 0, true);
   expect(document.releaseNativeResources).toHaveBeenCalledTimes(1);
 });

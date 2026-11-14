@@ -88,3 +88,19 @@ it("serializes the complete guard/check/apply transaction before other repositor
   release(); await pending;
   expect(await next).toContain("+typo");
 });
+
+it("lets the write finish and keeps the repository queue held when the caller aborts during apply", async () => {
+  const controller = new AbortController();
+  let writeSignal: AbortSignal | undefined;
+  const service = new GitService(root, async options => {
+    if (options.args?.includes("apply") && !options.args.includes("--check")) {
+      writeSignal = options.signal;
+      controller.abort();
+    }
+    return runner(options);
+  });
+  const pending = service.applyPatch(patch.patch, { signal: controller.signal, baseDiffHash: patch.baseDiffHash, readCurrentDiffHash: async () => currentHash() });
+  await pending;
+  expect(writeSignal).toBeUndefined();
+  expect(readFileSync(join(root, "word.txt"), "utf8")).toBe("typo\n");
+});

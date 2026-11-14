@@ -22,7 +22,7 @@ export async function reloadWorkflowPatchInput(source: DiffOpenSource, settings:
   let document: DiffDocument | undefined;
   async function git(args: string[]) {
     const response = await runCommand({ target: { type: "command", name: "git" }, cwd: "cwd" in source ? source.cwd : source.value,
-      args, signal, timeoutMs: 60_000, env: { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } });
+      args: ["-c", "core.quotepath=off", ...args], signal, timeoutMs: 60_000, env: { GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" } });
     if (response.aborted || signal?.aborted) throw new Error("Patch apply cancelled.");
     if (response.timedOut || response.exit.type !== "exited" || response.exit.code !== 0) throw new Error(decodeProcessText(response.stderr) || "Unable to reload the original diff.");
     return decodeProcessText(response.stdout);

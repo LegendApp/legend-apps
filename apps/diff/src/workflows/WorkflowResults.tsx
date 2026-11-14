@@ -15,15 +15,17 @@ export function WorkflowRunRow({ windowId, skill, input, comments, focusedCommen
   onCommentState: (id: string, state: WorkflowReviewComment["state"]) => void;
   onJump: (hunk: StoryHunk) => void; onPatch: (output: WorkflowPatch) => void; color: string; mutedColor: string;
 }) {
-  const run = useValue(workflowStore.state(windowId, skill.name));
+  const run = useValue(workflowStore.state$[windowId][skill.name]);
+  useEffect(() => { workflowStore.state(windowId, skill.name); }, [windowId, skill.name]);
   const [now, setNow] = useState(Date.now());
   const [showRaw, setShowRaw] = useState(false);
-  const active = ["queued", "running", "cancelling"].includes(run.status);
+  const active = ["queued", "running", "cancelling"].includes(run?.status);
   useEffect(() => {
     if (!active) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [active]);
+  if (!run) return null;
   const output = run.result?.output;
   const rowComments = comments.filter(comment => comment.skillName === skill.name);
   const focusedIndex = rowComments.findIndex(comment => comment.id === focusedComment);

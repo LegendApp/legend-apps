@@ -170,7 +170,7 @@ export class GitService {
 
   // The hash reader must reload the source without enqueueing another operation on this GitService.
   applyPatch(patch: string, options: GitReadOptions & { baseDiffHash: string; readCurrentDiffHash: (signal?: AbortSignal) => Promise<string> }) {
-    return this.enqueue(options, async (gitDir) => {
+    return this.enqueue({}, async (gitDir) => {
       await this.inspect(gitDir, options);
       const verifyBase = async () => {
         const hash = await options.readCurrentDiffHash(options.signal);
@@ -180,7 +180,8 @@ export class GitService {
       await verifyBase();
       await this.git(["apply", "--check", "-"], options, 60_000, patch);
       await verifyBase();
-      await this.git(["apply", "-"], options, 60_000, patch);
+      // Once writes start, finish them even if the caller closes its view.
+      await this.git(["apply", "-"], {}, 60_000, patch);
     });
   }
 
