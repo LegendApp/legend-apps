@@ -40,6 +40,7 @@ function createDiffNavigatorToolbarItem(value: DiffViewerTab = "files") {
         segments: [
             { label: "Files", value: "files", symbol: "doc.on.doc" },
             { label: "Story", value: "story", symbol: "text.book.closed" },
+            { label: "Workflows", value: "workflows", symbol: "checklist" },
         ],
     };
 }

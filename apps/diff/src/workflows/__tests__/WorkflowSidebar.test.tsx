@@ -30,14 +30,13 @@ it("selects workflows, restores named selections, saves presets and runs only on
   await screen.unmount();
 });
 
-it("exposes Files, Story and Workflows in the existing sidebar", async () => {
-  const onTab = jest.fn();
-  const screen = await render(<StorySidebar tab="workflows" onTab={onTab} sections={[]} onSection={jest.fn()} color="#fff" workflows={<Text>Workflow controls</Text>}><Text>Files list</Text></StorySidebar>);
+it("shows the selected navigator content without a sidebar switcher", async () => {
+  const screen = await render(<StorySidebar tab="workflows" sections={[]} onSection={jest.fn()} color="#fff" workflows={<Text>Workflow controls</Text>}><Text>Files list</Text></StorySidebar>);
   expect(screen.getByText("Workflow controls")).toBeTruthy();
   expect(screen.queryByText("Files list")).toBeNull();
-  await fireEvent.press(screen.getByText("Files"));
-  expect(onTab).toHaveBeenCalledWith("files");
-  expect(screen.getByText("Story")).toBeTruthy();
-  expect(screen.getByText("Workflows")).toBeTruthy();
+  expect(screen.queryByLabelText("Sidebar view")).toBeNull();
+  await screen.rerender(<StorySidebar tab="files" sections={[]} onSection={jest.fn()} color="#fff" workflows={<Text>Workflow controls</Text>}><Text>Files list</Text></StorySidebar>);
+  expect(screen.getByText("Files list")).toBeTruthy();
+  expect(screen.queryByText("Workflow controls")).toBeNull();
   await screen.unmount();
 });

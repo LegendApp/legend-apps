@@ -13,7 +13,7 @@ it("routes the menu/shortcut command to the focused viewer and exposes the toolb
   const selected = createDiffViewerWindowStyle({ includeFrame: false, showViewModeToolbar: true, navigatorTab: "story" });
   expect(selected.macos?.toolbar?.items).toEqual(expect.arrayContaining([expect.objectContaining({
     id: diffNavigatorToolbarItemId, type: "segmented", value: "story",
-    segments: [{ label: "Files", value: "files", symbol: "doc.on.doc" }, { label: "Story", value: "story", symbol: "text.book.closed" }],
+    segments: [{ label: "Files", value: "files", symbol: "doc.on.doc" }, { label: "Story", value: "story", symbol: "text.book.closed" }, { label: "Workflows", value: "workflows", symbol: "checklist" }],
   })]));
   const open = jest.fn(() => true);
   const remove = registerDiffViewerActionHandlers("story", { changeStory: open });

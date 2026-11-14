@@ -224,7 +224,7 @@ export function DiffWindowToolbarItemController({
 
   useEffect(() => {
     const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
-      if (event.type === "toolbarSelectionChanged" && event.itemId === diffNavigatorToolbarItemId && (event.value === "files" || event.value === "story")) onNavigatorTab(event.value);
+      if (event.type === "toolbarSelectionChanged" && event.itemId === diffNavigatorToolbarItemId && (event.value === "files" || event.value === "story" || event.value === "workflows")) onNavigatorTab(event.value);
       if (event.type === "toolbarAction" && event.itemId === diffStoryToolbarItemId) openStory();
       if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
       if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
