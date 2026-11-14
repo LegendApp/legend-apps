@@ -14,7 +14,7 @@ export type StoryIssue = { path: string; message: string; ref: StoryRef };
 export type StoryCoverage = { file: string; hunkIds: string[] }[];
 export type ValidatedStory = { story: ChangeStory; issues: StoryIssue[]; uncovered: StoryCoverage; coveredHunkIds: string[] };
 
-type Schema = { type?: "object" | "array" | "string" | "integer" | "boolean"; enum?: readonly unknown[]; const?: unknown;
+export type Schema = { type?: "object" | "array" | "string" | "integer" | "boolean"; enum?: readonly unknown[]; const?: unknown;
   properties?: Record<string, Schema>; required?: string[]; additionalProperties?: false; items?: Schema; minLength?: number };
 const string: Schema = { type: "string" };
 const nonempty: Schema = { type: "string", minLength: 1 };
@@ -39,7 +39,7 @@ export class StoryValidationError extends Error {
   constructor(public readonly errors: string[]) { super(errors.join("\n")); this.name = "StoryValidationError"; }
 }
 
-function checkSchema(value: unknown, schema: Schema, path: string, errors: string[]) {
+export function checkSchema(value: unknown, schema: Schema, path: string, errors: string[]) {
   if (schema.const !== undefined && value !== schema.const) errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
   if (schema.enum && !schema.enum.includes(value)) errors.push(`${path}: expected ${schema.enum.join(" | ")}`);
   if (schema.type === "object") {
@@ -96,7 +96,7 @@ export function validateStory(value: unknown, hunks: readonly StoryHunk[]): Vali
   return { story, issues, uncovered: [...uncovered].map(([file, hunkIds]) => ({ file, hunkIds })), coveredHunkIds: [...covered] };
 }
 
-export function extractStoryJSON(output: string): unknown {
+export function extractStoryJSON(output: string, kind = "story"): unknown {
   const candidates = [output.trim(), ...Array.from(output.matchAll(/```(?:json)?\s*\n?([\s\S]*?)```/gi), match => match[1].trim())];
   // Balance braces outside strings so surrounding CLI prose and braces in Markdown are safe.
   let start = 0, depth = 0, quoted = false, escaped = false;
@@ -110,8 +110,8 @@ export function extractStoryJSON(output: string): unknown {
   for (const candidate of candidates) {
     try {
       const parsed: unknown = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as Record<string, unknown>).kind === "story") return parsed;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as Record<string, unknown>).kind === kind) return parsed;
     } catch { /* Try the next JSON candidate. */ }
   }
-  throw new StoryValidationError(["No valid story JSON object found in the model output"]);
+  throw new StoryValidationError([`No valid ${kind} JSON object found in the model output`]);
 }

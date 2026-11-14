@@ -23,7 +23,7 @@ export type GitRepoState = {
   reverting: boolean;
   bisecting: boolean;
 };
-export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "timed-out" | "output-truncated";
+export type GitErrorCode = "base-drift" | "aborted" | "index-locked" | "command-failed" | "timed-out" | "output-truncated";
 
 export class GitServiceError extends Error {
   constructor(readonly code: GitErrorCode, message: string, readonly args: readonly string[] = []) {
@@ -105,7 +105,7 @@ export class GitService {
     return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
   }
 
-  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000): Promise<string> {
+  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string): Promise<string> {
     checkAborted(options.signal);
     const entry: GitOperationLog = { command, args: [...args], startedAt: Date.now(), endedAt: null, exit: null, stderrTail: "" };
     this.operations.push(entry);
@@ -115,6 +115,7 @@ export class GitService {
         target: { type: "command", name: command },
         args,
         cwd: this.repoRoot,
+        input,
         env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
         signal: options.signal,
         timeoutMs,
@@ -139,8 +140,8 @@ export class GitService {
     }
   }
 
-  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000) {
-    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs);
+  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string) {
+    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs, input);
   }
 
   private async inspect(gitDir: string, options: GitReadOptions): Promise<GitRepoState> {
@@ -164,6 +165,22 @@ export class GitService {
     return this.enqueue(options, async (gitDir) => {
       if (requiresIndex) await this.inspect(gitDir, options);
       return this.git(args, options, timeoutMs);
+    });
+  }
+
+  // The hash reader must reload the source without enqueueing another operation on this GitService.
+  applyPatch(patch: string, options: GitReadOptions & { baseDiffHash: string; readCurrentDiffHash: (signal?: AbortSignal) => Promise<string> }) {
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const verifyBase = async () => {
+        const hash = await options.readCurrentDiffHash(options.signal);
+        checkAborted(options.signal);
+        if (hash !== options.baseDiffHash) throw new GitServiceError("base-drift", "The diff changed since this patch was generated. Generate a new patch before applying.");
+      };
+      await verifyBase();
+      await this.git(["apply", "--check", "-"], options, 60_000, patch);
+      await verifyBase();
+      await this.git(["apply", "-"], options, 60_000, patch);
     });
   }
 

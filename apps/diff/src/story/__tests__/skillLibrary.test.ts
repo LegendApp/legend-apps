@@ -38,7 +38,7 @@ it("loads repo over user over built-in while retaining all layers and workflows 
   await put(t.repoDirectory, "ignored.txt");
   await t.library.start();
   expect(t.library.state$.active.peek().find(skill => skill.name === "change-story")).toMatchObject({ layer: "repo", repoRoot: t.repoRoot, body: expect.stringContaining("Repo text") });
-  expect(t.library.state$.entries.peek()).toHaveLength(5);
+  expect(t.library.state$.entries.peek()).toHaveLength(8);
   expect(t.library.state$.active.peek().find(skill => skill.name === "inspect-tests")?.kind).toBe("workflow");
   await fs.unlink(path.join(t.repoDirectory, "repo.md")); await t.library.reload();
   expect(t.library.state$.active.peek().find(skill => skill.name === "change-story")?.layer).toBe("user");
@@ -52,7 +52,7 @@ it("reports invalid files with paths and duplicate names without failing other s
   await put(t.userDirectory, "first.md"); await put(t.userDirectory, "second.md");
   await t.library.reload();
   expect(t.library.state$.errors.peek()).toEqual(expect.arrayContaining([expect.stringContaining("bad.md: Start"), expect.stringContaining("Duplicate name in user layer")]));
-  expect(t.library.state$.active.peek()).toHaveLength(2);
+  expect(t.library.state$.active.peek()).toHaveLength(5);
 });
 it("duplicates a built-in, saves a user edit and restores the bundled prompt in temp dirs", async () => {
   const t = setup(); await t.library.reload();
