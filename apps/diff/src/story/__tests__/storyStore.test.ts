@@ -74,3 +74,42 @@ it("requires a per-source and per-tool opt-in before starting the CLI", async ()
   await expect(store.run("a", { ...request, tool: "claude" })).rejects.toMatchObject({ code: "consent" });
   await store.run("a", request); expect(runner.run).toHaveBeenCalledTimes(1);
 });
+
+it("keeps try-on-diff results outside the saved state and exact/latest cache", async () => {
+  const { store, runner, cache } = setup();
+  await store.run("viewer", request);
+  const savedState = store.state("viewer").peek();
+  const save = jest.spyOn(cache, "save");
+  runner.run.mockResolvedValueOnce({ ...fixtureResult(), createdAt: 2, story: { ...fixtureResult().story, title: "Preview only" } });
+  await store.preview("viewer", request);
+  expect(store.previewState("viewer").result.peek()?.story.title).toBe("Preview only");
+  expect(store.state("viewer").peek()).toEqual(savedState);
+  expect(save).not.toHaveBeenCalled();
+  store.load("other", request);
+  expect(store.state("other").result.peek()?.story.title).toBe(savedState.result?.story.title);
+  store.clearPreview("viewer");
+  expect(store.state("viewer").peek()).toEqual(savedState);
+  expect(store.state$.peek()["viewer:preview"]).toBeUndefined();
+});
+it("cancels and forgets an in-flight preview when its viewer closes", async () => {
+  const { store, runner } = setup();
+  let finish!: (value: ReturnType<typeof fixtureResult>) => void;
+  runner.run.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = store.preview("viewer", request);
+  store.closeWindow("viewer"); finish(fixtureResult()); await pending;
+  expect(store.state$.peek()).toEqual({});
+  expect(runner.cancel).toHaveBeenCalledWith("viewer");
+});
+it("uses the fixed skill tool for consent and cache identity", async () => {
+  const { changeStorySkill } = require("../storySkill");
+  const { store, runner, cache } = setup();
+  const fixed = { ...request, skill: { ...changeStorySkill, tool: "claude" as const } };
+  await expect(store.run("viewer", fixed)).rejects.toMatchObject({ code: "consent" });
+  expect(runner.run).not.toHaveBeenCalled();
+  cache.setEnabled("repo:/repo", "claude", true);
+  runner.run.mockResolvedValueOnce({ ...fixtureResult(), tool: "claude" });
+  await store.run("viewer", fixed);
+  expect(runner.run).toHaveBeenCalledWith(request.input, expect.objectContaining({ tool: "claude" }));
+  store.load("other", fixed);
+  expect(store.state("other").result.peek()?.tool).toBe("claude");
+});

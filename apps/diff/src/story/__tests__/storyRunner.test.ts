@@ -137,3 +137,25 @@ it("reports unavailable tools and pre-aborted signals without launching", async 
   expect(runCommand).not.toHaveBeenCalled();
 });
 it("exports typed output errors for callers", () => expect(new StoryOutputError("raw", "error", "first")).toBeInstanceOf(Error));
+
+it.each(["codex", "claude"] as const)("honors a skill's %s preference over the viewer fallback", async tool => {
+  const { changeStorySkill } = require("../storySkill");
+  const cli = fakeCLI([JSON.stringify(fixtureStory())]);
+  const result = await cli.runner.run(fixtureInput(), { ...options, skill: { ...changeStorySkill, tool }, tool: tool === "codex" ? "claude" : "codex" });
+  expect(result.tool).toBe(tool);
+  expect(cli.children[0].options.target).toMatchObject({ name: tool });
+});
+it("uses the skill timeout in seconds and refuses workflow output in the story runner", async () => {
+  jest.useFakeTimers();
+  try {
+    const { changeStorySkill } = require("../storySkill");
+    const cli = fakeCLI(["hang"]);
+    const pending = cli.runner.run(fixtureInput(), { ...options, skill: { ...changeStorySkill, timeout: 2 } });
+    const rejected = expect(pending).rejects.toMatchObject({ code: "timeout" });
+    await jest.advanceTimersByTimeAsync(1999);
+    expect(cli.children[0].options.timeoutMs).toBe(2000);
+    expect(cli.children[0].terminate).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1); await rejected;
+    await expect(cli.runner.run(fixtureInput(), { ...options, skill: { ...changeStorySkill, kind: "workflow", output: "check" } })).rejects.toThrow("story skill");
+  } finally { jest.useRealTimers(); }
+});

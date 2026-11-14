@@ -42,7 +42,7 @@ function setup(options: { partial?: boolean; status?: "done" | "progress" | "err
   if (options.partial) result.story.sections[0].refs = [{ hunk: "h1", side: "new", startLine: 41, endLine: 41 }];
   const controller = {
     story: { status: options.status ?? "done", result, input, progress: { phase: "output", receivedBytes: 123 }, error: options.status === "error" ? { message: "Validator: title required", rawOutput: "<script>bad()</script>" } : null },
-    notice: null, preparing: false, error: null,
+    notice: null, preparing: false, error: null, skills: [], skillErrors: [], editSkill: jest.fn(),
     request: { input: options.stale ? fixtureInput({ text: "changed" }) : input, tool: "codex" },
     tool: "codex", setTool: jest.fn(), generate: jest.fn(), cancel: jest.fn(), consent: jest.fn(), disable: jest.fn(),
   } as unknown as ReturnType<typeof useDiffStory>;
@@ -112,5 +112,21 @@ it("keeps cached review marks but clears them for regenerated sections with reus
   expect(screen.getByText(/0\/1 sections reviewed/)).toBeTruthy();
   await act(() => test.controller.story$.result.createdAt.set(20));
   expect(screen.getByText(/1\/1 sections reviewed/)).toBeTruthy();
+  await screen.unmount();
+});
+
+it("exposes the skill picker, editor, preview banner and repository prompt approval", async () => {
+  const { changeStorySkill } = require("../storySkill");
+  const test = setup();
+  Object.assign(test.controller, { skills: [changeStorySkill], skill: changeStorySkill, selectSkill: jest.fn(), editSkill: jest.fn(), preview: true, dismissPreview: jest.fn(), approve: jest.fn(),
+    trustNotice: { skill: { ...changeStorySkill, layer: "repo", repoRoot: "/repo", path: "/repo/.legend-diff/skills/story.md" } } });
+  const screen = await render(<StoryPane {...test.props} />);
+  await fireEvent.press(screen.getByLabelText("✓ change-story · built-in"));
+  expect(test.controller.selectSkill).toHaveBeenCalledWith("change-story");
+  await fireEvent.press(screen.getByLabelText("Edit skill…")); expect(test.controller.editSkill).toHaveBeenCalled();
+  expect(screen.getByText("Preview — saved story unchanged")).toBeTruthy();
+  expect(screen.getByText(/from this repository/)).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText("Approve this skill")); expect(test.controller.approve).toHaveBeenCalledWith(true);
+  await fireEvent.press(screen.getByLabelText("Close preview")); expect(test.controller.dismissPreview).toHaveBeenCalled();
   await screen.unmount();
 });
