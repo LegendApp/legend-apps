@@ -13,7 +13,7 @@ import { requestDiffTokenizedFiles } from "../viewer/diffLoadedDocumentModel";
 import type { DiffSplitPaneMetrics } from "../viewer/diffViewerModel";
 import { DiffNativeRowConfigView } from "../window/DiffViewerPane";
 import type { DiffNativeRowConfigProps } from "../window/diffWindowTypes";
-import { DiffButton, DiffCheckbox, DiffNotice } from "../window/DiffControls";
+import { DiffButton, DiffCheckbox, DiffNotice, segmentedControlWidth } from "../window/DiffControls";
 import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 import { buildStoryInput, type StoryHunk, type StoryInput } from "./storyHunks";
 import { storyToMarkdown } from "./storyMarkdown";
@@ -136,7 +136,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
       {story.error?.rawOutput !== undefined ? <><DiffButton title={showRaw ? "Hide raw output" : "Show raw output"} onPress={() => setShowRaw(value => !value)} />{showRaw ? <Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{story.error.rawOutput}</Text> : null}</> : null}
       {result?.issues.map((issue, index) => <Text key={index} style={{ color: mutedColor }}>Reference dropped: {issue.path}: {issue.message}</Text>)}
       <Text style={{ color: mutedColor }}>Generation settings for this {controller.request?.repoRoot ? "repository" : "source"}</Text>
-      <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: 160, height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
+      <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: segmentedControlWidth(toolOptions.map(option => option.label)), height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
       {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSymbolColors.blue}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => { controller.consent(false); setPrivacyStatus("Generation remains disabled."); }} /></View></DiffNotice> : null}
       {privacyStatus ? <Text style={{ color: mutedColor }}>{privacyStatus}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
     </>;
