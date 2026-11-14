@@ -75,8 +75,9 @@ export const StoryPane = forwardRef<StoryPaneRef, {
   }) : null, [result, snapshot, expanded, viewMode]);
   const rows = useMemo<PaneRow[]>(() => [headerRow, ...(model?.rows ?? [])], [model]);
   const reviewStore = getStoryReviewStore();
-  useEffect(() => { if (result) reviewStore.load(result.diffHash); }, [reviewStore, result]);
-  const reviewed = useValue(() => result ? reviewStore.reviewed$[result.diffHash].get() ?? [] : []);
+  const reviewKey = result ? `${result.diffHash}-${result.createdAt}` : "";
+  useEffect(() => { if (result) reviewStore.load(reviewKey); }, [reviewStore, result, reviewKey]);
+  const reviewed = useValue(() => result ? reviewStore.reviewed$[reviewKey].get() ?? [] : []);
   const reviewedCount = result?.story.sections.filter(section => reviewed.includes(section.id)).length ?? 0;
   const running = story.status === "running" || story.status === "progress";
   const stale = !!result && (story.status === "stale" || result.diffHash !== controller.request?.input.diffHash);
@@ -141,7 +142,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
       <Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>{item.section.lookHere ? "● Look here · " : ""}{item.section.title}</Text>
       {item.section.commit ? <Text style={{ color: mutedColor }}>{item.section.commit}</Text> : null}
       <StoryDescription markdown={item.section.description} color={foregroundColor} />
-      <Pressable accessibilityRole="checkbox" accessibilityLabel={`Mark reviewed: ${item.section.title}`} accessibilityState={{ checked: reviewed.includes(item.section.id) }} onPress={() => reviewStore.setReviewed(result.diffHash, item.section.id, !reviewed.includes(item.section.id))}><Text style={{ color: accent }}>{reviewed.includes(item.section.id) ? "☑ Reviewed" : "☐ Mark reviewed"}</Text></Pressable>
+      <Pressable accessibilityRole="checkbox" accessibilityLabel={`Mark reviewed: ${item.section.title}`} accessibilityState={{ checked: reviewed.includes(item.section.id) }} onPress={() => reviewStore.setReviewed(reviewKey, item.section.id, !reviewed.includes(item.section.id))}><Text style={{ color: accent }}>{reviewed.includes(item.section.id) ? "☑ Reviewed" : "☐ Mark reviewed"}</Text></Pressable>
     </>;
     else if (item.type === "hunk") content = <>
       <Pressable accessibilityRole="button" accessibilityLabel={`Open ${item.hunk.file} hunk in Files`} onPress={() => onJumpToHunk(item.hunk, stale)}><Text style={{ color: accent, fontFamily: "Menlo", fontSize: 12 }}>{item.hunk.file} · {item.partial ? `${item.ref.side} ${item.ref.startLine}–${item.ref.endLine}` : `−${item.hunk.oldStart},${item.hunk.oldLines} +${item.hunk.newStart},${item.hunk.newLines}`} ↗</Text></Pressable>
@@ -151,7 +152,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
     else if (item.type === "uncovered") content = <><Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>Not covered by the story</Text>{item.full ? <Text style={{ color: mutedColor }}>Full coverage</Text> : null}</>;
     else if (item.type === "file") content = <><Text style={{ color: foregroundColor, fontWeight: "600" }}>{item.path}</Text>{item.note ? <Text style={{ color: mutedColor }}>{item.note}</Text> : null}</>;
     return <View className="gap-2 px-5 py-3">{content}</View>;
-  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showRaw, snapshot, snapshotError, stale, story]);
+  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewKey, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showRaw, snapshot, snapshotError, stale, story]);
   return <View className="flex-1" style={{ backgroundColor }}>
     {config ? <DiffNativeRowConfigView searchEnabled={false} nativeRowConfig={config} splitPaneMetrics$={splitPaneMetrics$} syntaxTokenizationState$={syntaxTokenizationState$} /> : null}
     <LegendList ref={listRef} data={rows} extraData={renderItem} renderItem={renderItem} keyExtractor={keyExtractor} getItemType={getItemType} getFixedItemSize={item => item.type === "line" ? rowHeight : undefined} estimatedItemSize={rowHeight} recycleItems contentContainerStyle={{ paddingTop: 52, paddingBottom: 20 }} style={{ flex: 1 }} onViewableItemsChanged={({ viewableItems }) => {

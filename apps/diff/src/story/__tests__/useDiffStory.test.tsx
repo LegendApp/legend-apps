@@ -87,3 +87,23 @@ it("opens cached stories even if neither CLI is currently installed", async () =
   expect(mockRunner.run).toHaveBeenCalledTimes(1);
   await second.unmount();
 });
+
+it("defers story indexing and cache reads while refreshed Files are visible", async () => {
+  const test = setup();
+  test.cache.setEnabled("repo:/repo", "codex", true);
+  const hook = await renderHook(() => useDiffStory("deferred", test.state$));
+  await act(() => hook.result.current.openStory());
+  await waitFor(() => expect(hook.result.current.story.status).toBe("done"));
+  await act(() => hook.result.current.setTab("files"));
+  jest.mocked(getAICommandAvailability).mockClear();
+  const next = loaded("changed") as Extract<DiffViewerState, { status: "loaded" }>;
+  const readRows = jest.spyOn(next.document, "getPlainRows");
+  await act(() => test.state$.set(next));
+  expect(readRows).not.toHaveBeenCalled();
+  expect(getAICommandAvailability).not.toHaveBeenCalled();
+  await act(() => hook.result.current.setTab("story"));
+  await waitFor(() => expect(hook.result.current.story.status).toBe("stale"));
+  expect(readRows).toHaveBeenCalled();
+  expect(mockRunner.run).toHaveBeenCalledTimes(1);
+  await hook.unmount();
+});

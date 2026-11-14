@@ -83,3 +83,37 @@ it("uses repository roots for local CLI cwd and isolates non-repo cache scopes",
   expect(getStoryScope(repoSource, "/resolved/")).toBe("repo:/resolved");
   expect(getStoryScope(patchSource)).toBe("source:diffFile:/tmp/sample.patch");
 });
+
+it("keeps the same compact hunks and hash for whole-file and hunks-only documents", () => {
+  const full = fixtureDocument();
+  full.files.splice(1); full.rows.splice(0);
+  for (let line = 1; line <= 50; line++) {
+    const row = { index: full.rows.length, kind: 2, fileIndex: 0, hunkIndex: 0,
+      oldLineNumber: line, newLineNumber: line, changeType: 0, text: `line ${line}`, tokens: [] };
+    if (line === 10 || line === 40) {
+      full.rows.push({ ...row, newLineNumber: -1, changeType: 2 });
+      full.rows.push({ ...row, index: full.rows.length, oldLineNumber: -1, changeType: 1, text: `changed ${line}` });
+    } else full.rows.push(row);
+  }
+  full.files[0].rowStart = 0; full.files[0].rowCount = full.rows.length;
+  const compact = fixtureDocument();
+  compact.files.splice(1); compact.rows.splice(0);
+  for (const row of full.rows) {
+    const line = Math.max(row.oldLineNumber, row.newLineNumber);
+    if (line >= 7 && line <= 13 || line >= 37 && line <= 43) compact.rows.push({ ...row, index: compact.rows.length, hunkIndex: line < 20 ? 0 : 1 });
+  }
+  compact.files[0].rowStart = 0; compact.files[0].rowCount = compact.rows.length;
+  const whole = buildStoryInput(full, repoSource), hunks = buildStoryInput(compact, repoSource);
+  expect(whole.hunks).toHaveLength(2);
+  expect(whole.hunks.map(hunk => [hunk.oldStart, hunk.oldLines])).toEqual([[7, 7], [37, 7]]);
+  expect(whole.diffHash).toBe(hunks.diffHash);
+  expect(whole.hunks.map(hunk => hunk.hash)).toEqual(hunks.hunks.map(hunk => hunk.hash));
+  expect(whole.diffText).not.toContain("line 20");
+});
+
+it("quotes canonical native paths without JSON-escaping quote or backslash characters", () => {
+  const document = fixtureDocument();
+  document.files[0].path = document.files[0].oldPath = 'src/a"b\\c.ts';
+  const input = buildStoryInput(document, patchSource);
+  expect(input.diffText).toContain('--- "a/src/a"b\\c.ts"\n+++ "b/src/a"b\\c.ts"');
+});

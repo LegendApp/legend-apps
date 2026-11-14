@@ -100,3 +100,17 @@ it("renders Markdown formatting as native text without interactive links or HTML
   expect(screen.toJSON()).not.toBeNull();
   await screen.unmount();
 });
+
+it("keeps cached review marks but clears them for regenerated sections with reused IDs", async () => {
+  const test = setup();
+  test.controller.story$.result.createdAt.set(20);
+  const screen = await render(<StoryPane {...test.props} />);
+  await act(async () => {});
+  await fireEvent.press(screen.getByLabelText("Mark reviewed: A change"));
+  expect(screen.getByText(/1\/1 sections reviewed/)).toBeTruthy();
+  await act(() => test.controller.story$.result.createdAt.set(21));
+  expect(screen.getByText(/0\/1 sections reviewed/)).toBeTruthy();
+  await act(() => test.controller.story$.result.createdAt.set(20));
+  expect(screen.getByText(/1\/1 sections reviewed/)).toBeTruthy();
+  await screen.unmount();
+});

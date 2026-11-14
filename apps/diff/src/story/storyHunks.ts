@@ -38,15 +38,26 @@ export function buildStoryInput(document: Pick<DiffDocument, "getFiles" | "getPl
     const fileHunks: StoryHunk[] = [];
     let rows: DiffRenderRow[] = [];
     let lineOffset = 0;
-    function flush() {
-      if (!rows.length) return;
+    function append(rows: DiffRenderRow[]) {
       const old = lineRange(rows, "old", lineOffset), next = lineRange(rows, "new", lineOffset);
       lineOffset = next.start + Math.max(0, next.lines - 1) - old.start - Math.max(0, old.lines - 1);
       const text = `@@ -${old.start},${old.lines} +${next.start},${next.lines} @@\n${rows.map(storyRowText).join("\n")}\n`;
       const hunk: StoryHunk = { id: `h${hunks.length + 1}`, hash: storyHash(`${file.oldPath}\n${file.path}\n${rows.map(storyRowText).join("\n")}`),
         file: file.path, fileIndex: file.index, hunkIndex: rows[0].hunkIndex, oldStart: old.start, oldLines: old.lines, newStart: next.start, newLines: next.lines,
         rowStart: rows[0].index, rowCount: rows.length, text, rows };
-      fileHunks.push(hunk); hunks.push(hunk); rows = [];
+      fileHunks.push(hunk); hunks.push(hunk);
+    }
+    function flush() {
+      let start = -1, end = 0;
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        if (row.changeType !== diffChangeTypeAdd && row.changeType !== diffChangeTypeRemove && (row.oldLineNumber >= 0 || row.newLineNumber >= 0)) continue;
+        if (start >= 0 && index - 3 > end) { append(rows.slice(start, end)); start = -1; }
+        if (start < 0) start = Math.max(0, index - 3);
+        end = Math.min(rows.length, index + 4);
+      }
+      if (start >= 0) append(rows.slice(start, end));
+      rows = [];
     }
     for (let offset = file.rowStart; offset < file.rowStart + file.rowCount; offset += 1024) {
       for (const row of document.getPlainRows(offset, Math.min(1024, file.rowStart + file.rowCount - offset))) {
@@ -56,8 +67,9 @@ export function buildStoryInput(document: Pick<DiffDocument, "getFiles" | "getPl
       }
     }
     flush();
-    const oldPath = JSON.stringify(`a/${file.oldPath || file.path}`), newPath = JSON.stringify(`b/${file.path}`);
-    const metadata = file.status === "renamed" || file.status === "copied" ? `${file.status === "renamed" ? "rename" : "copy"} from ${JSON.stringify(file.oldPath)}\n${file.status === "renamed" ? "rename" : "copy"} to ${JSON.stringify(file.path)}\n` : "";
+    // The native canonical parser strips surrounding quotes but does not unescape paths.
+    const oldPath = `"a/${file.oldPath || file.path}"`, newPath = `"b/${file.path}"`;
+    const metadata = file.status === "renamed" || file.status === "copied" ? `${file.status === "renamed" ? "rename" : "copy"} from "${file.oldPath}"\n${file.status === "renamed" ? "rename" : "copy"} to "${file.path}"\n` : "";
     const text = `diff --git ${oldPath} ${newPath}\n${metadata}--- ${file.status === "added" || file.status === "untracked" ? "/dev/null" : oldPath}\n+++ ${file.status === "deleted" ? "/dev/null" : newPath}\n${file.isBinary ? "Binary files differ\n" : fileHunks.map(hunk => hunk.text).join("")}`;
     return { file, classification: classifyStoryFile(file.path), hunks: fileHunks, text };
   });

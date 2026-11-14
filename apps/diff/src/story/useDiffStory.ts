@@ -17,7 +17,7 @@ export function storyOpenAction(hasResult: boolean, running: boolean, regenerate
 export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]) {
   const [tab, setTab] = useState<DiffViewerTab>("files");
   const story$ = storyStore.state(windowId);
-  const result = useValue(story$.result);
+  useValue(story$.result);
   useValue(story$.status);
   const story = story$.peek();
   const state = useValue(state$);
@@ -31,11 +31,11 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
   const source = state.source;
   const inputs = useRef(new WeakMap<object, StoryInput>());
   const input = useMemo(() => {
-    if (!document || !source || (tab !== "story" && !result)) return null;
+    if (!document || !source || tab !== "story") return null;
     let value = inputs.current.get(document);
     if (!value) { value = buildStoryInput(document, source); inputs.current.set(document, value); }
     return value;
-  }, [document, source, tab, result]);
+  }, [document, source, tab]);
   useEffect(() => {
     const id = ++preparation.current;
     setNotice(null); setRequest(null); setError(null);
