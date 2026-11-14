@@ -1,6 +1,9 @@
 import { observable } from "@legendapp/state";
 import type { DiffDirectoryWatcher } from "../git/diffRepoWatcher";
 import { builtInStorySkills, parseStorySkill, type StorySkill } from "./storySkill";
+import { builtInWorkflowSkills } from "../workflows/workflowSkills";
+
+const builtInSkills = [...builtInStorySkills, ...builtInWorkflowSkills];
 
 export type SkillFileSystem = {
   exists(path: string): Promise<boolean>;
@@ -27,7 +30,7 @@ export function resolveSkillLayers(entries: StorySkill[]) {
 export function createSkillLibrary({ userDirectory, repoRoot, files, watch }: {
   userDirectory: string; repoRoot?: string; files: SkillFileSystem; watch?: DiffDirectoryWatcher;
 }) {
-  const state$ = observable<SkillLibraryState>({ entries: builtInStorySkills, active: builtInStorySkills, errors: [], ready: false });
+  const state$ = observable<SkillLibraryState>({ entries: builtInSkills, active: builtInSkills, errors: [], ready: false });
   const repoDirectory = repoRoot ? skillDirectory(repoRoot) : undefined;
   let subscription: { remove(): void } | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +67,7 @@ export function createSkillLibrary({ userDirectory, repoRoot, files, watch }: {
         const user = await readLayer(userDirectory, "user", errors);
         const repo = repoDirectory ? await readLayer(repoDirectory, "repo", errors) : [];
         if (!stopped) {
-          const entries = [...repo, ...user, ...builtInStorySkills];
+          const entries = [...repo, ...user, ...builtInSkills];
           state$.set({ entries, active: resolveSkillLayers(entries), errors, ready: !pending });
         }
       } while (pending && !stopped);
@@ -104,7 +107,7 @@ export function createSkillLibrary({ userDirectory, repoRoot, files, watch }: {
       await reload();
     },
     async restore(skill: StorySkill) {
-      if (skill.layer !== "user" || !skill.path || !builtInStorySkills.some(builtIn => builtIn.name === skill.name)) throw new Error("Select a user override of a built-in skill to restore it.");
+      if (skill.layer !== "user" || !skill.path || !builtInSkills.some(builtIn => builtIn.name === skill.name)) throw new Error("Select a user override of a built-in skill to restore it.");
       if (await files.readText(skill.path) !== skill.markdown) throw new Error("This file changed on disk. Reload it before restoring.");
       await files.remove(skill.path);
       await reload();

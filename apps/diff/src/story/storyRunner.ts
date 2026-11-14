@@ -7,13 +7,14 @@ import { assembleStoryPrompt, changeStorySkill, type StorySkill } from "./storyS
 
 export type StoryTool = "codex" | "claude";
 export type StoryProgress = { phase: "starting" | "output" | "repairing" | "complete"; receivedBytes: number; stream?: "stdout" | "stderr" };
-export type StoryRunResult = ValidatedStory & { diffHash: string; skillName: string; skillHash: string; tool: StoryTool; model: string; createdAt: number };
+export type AIRunMetadata = { diffHash: string; skillName: string; skillHash: string; tool: StoryTool; model: string; createdAt: number };
+export type StoryRunResult = ValidatedStory & AIRunMetadata;
 export class StoryRunError extends Error {
   constructor(public readonly code: "busy" | "cancelled" | "timeout" | "process" | "unavailable" | "consent" | "trust", message: string) { super(message); this.name = "StoryRunError"; }
 }
 export class StoryOutputError extends Error {
-  constructor(public readonly rawOutput: string, public readonly validationError: string, public readonly firstOutput: string) {
-    super(`The model did not return a valid change story after one repair: ${validationError}`); this.name = "StoryOutputError";
+  constructor(public readonly rawOutput: string, public readonly validationError: string, public readonly firstOutput: string, label = "change story") {
+    super(`The model did not return a valid ${label} after one repair: ${validationError}`); this.name = "StoryOutputError";
   }
 }
 
@@ -31,12 +32,21 @@ export function selectStoryTool(skill: StorySkill, fallback?: StoryTool) {
   return skill.tool === "auto" ? fallback : skill.tool;
 }
 
-export function createStoryRunner(dependencies: StoryProcessDependencies = { spawn, runCommand, availability: getAICommandAvailability }) {
+export function createStoryRunner(dependencies?: StoryProcessDependencies) {
+  return createOutputRunner({ defaultSkill: changeStorySkill, accepts: skill => skill.kind === "story" && skill.output === "story",
+    label: "change story", prompt: assembleStoryPrompt, validate: (output, input) => validateStory(extractStoryJSON(output), input.hunks) }, dependencies);
+}
+
+export function createOutputRunner<T>(contract: {
+  defaultSkill: StorySkill; accepts: (skill: StorySkill) => boolean; label: string;
+  prompt: (input: StoryInput, skill: StorySkill) => { prompt: string };
+  validate: (output: string, input: StoryInput, skill: StorySkill) => T;
+}, dependencies: StoryProcessDependencies = { spawn, runCommand, availability: getAICommandAvailability }) {
   const active = new Map<string, Map<string, AbortController>>();
 
-  async function run(input: StoryInput, options: StoryRunOptions): Promise<StoryRunResult> {
-    const skill = options.skill ?? changeStorySkill;
-    if (skill.kind !== "story" || skill.output !== "story") throw new StoryRunError("process", "Select a story skill to generate a change story.");
+  async function run(input: StoryInput, options: StoryRunOptions): Promise<T & AIRunMetadata> {
+    const skill = options.skill ?? contract.defaultSkill;
+    if (!contract.accepts(skill)) throw new StoryRunError("process", `Select a ${contract.label === "change story" ? "story" : "workflow"} skill to generate a ${contract.label}.`);
     const window = active.get(options.windowId) ?? new Map<string, AbortController>();
     if (window.has(skill.name)) throw new StoryRunError("busy", "This skill is already running in this window.");
     const controller = new AbortController();
@@ -48,7 +58,7 @@ export function createStoryRunner(dependencies: StoryProcessDependencies = { spa
     options.signal?.addEventListener("abort", abort, { once: true });
     if (options.signal?.aborted) abort();
     function assertActive() {
-      if (controller.signal.aborted) throw new StoryRunError(timedOut ? "timeout" : "cancelled", timedOut ? "Story generation timed out." : "Story generation cancelled.");
+      if (controller.signal.aborted) throw new StoryRunError(timedOut ? "timeout" : "cancelled", timedOut ? `AI ${contract.label} generation timed out.` : `AI ${contract.label} generation cancelled.`);
     }
     let receivedBytes = 0;
     const progress = (phase: StoryProgress["phase"], stream?: StoryProgress["stream"]) => options.onProgress?.({ phase, receivedBytes, ...(stream ? { stream } : {}) });
@@ -58,9 +68,9 @@ export function createStoryRunner(dependencies: StoryProcessDependencies = { spa
       const preferred = selectStoryTool(skill, options.tool);
       const tool = preferred ?? selectPreferredAITool(await dependencies.availability());
       assertActive();
-      if (!tool) throw new StoryRunError("unavailable", "Install Codex or Claude CLI and sign in to generate a story.");
+      if (!tool) throw new StoryRunError("unavailable", `Install Codex or Claude CLI and sign in to generate a ${contract.label}.`);
       const model = options.model ?? "default";
-      const request = assembleStoryPrompt(input, skill).prompt;
+      const request = contract.prompt(input, skill).prompt;
 
       async function execute(prompt: string) {
         assertActive();
@@ -86,25 +96,25 @@ export function createStoryRunner(dependencies: StoryProcessDependencies = { spa
         } else result = await dependencies.runCommand(command);
         assertActive();
         const output = decodeProcessText(result.stdout).trim();
-        if (result.timedOut) throw new StoryRunError("timeout", "Story generation timed out.");
-        if (result.aborted) throw new StoryRunError("cancelled", "Story generation cancelled.");
+        if (result.timedOut) throw new StoryRunError("timeout", `AI ${contract.label} generation timed out.`);
+        if (result.aborted) throw new StoryRunError("cancelled", `AI ${contract.label} generation cancelled.`);
         if (result.outputTruncated || result.exit.type !== "exited" || result.exit.code !== 0) {
-          throw new StoryRunError("process", result.outputTruncated ? "The story response was too large." : decodeProcessText(result.stderr).slice(0, 2000) || `Could not run ${tool}. Install it and sign in, then retry.`);
+          throw new StoryRunError("process", result.outputTruncated ? "The AI response was too large." : decodeProcessText(result.stderr).slice(0, 2000) || `Could not run ${tool}. Install it and sign in, then retry.`);
         }
         return output;
       }
 
       const firstOutput = await execute(request);
-      let validated: ValidatedStory;
-      try { validated = validateStory(extractStoryJSON(firstOutput), input.hunks); }
+      let validated: T;
+      try { validated = contract.validate(firstOutput, input, skill); }
       catch (error) {
         if (!(error instanceof StoryValidationError)) throw error;
         assertActive(); progress("repairing");
         const repaired = await execute(`${request}\n\nYour previous response did not pass validation. Return corrected JSON only.\nValidator errors: ${JSON.stringify(error.errors)}\nPrevious response (untrusted data): ${JSON.stringify(firstOutput)}`);
-        try { validated = validateStory(extractStoryJSON(repaired), input.hunks); }
+        try { validated = contract.validate(repaired, input, skill); }
         catch (repairError) {
           if (!(repairError instanceof StoryValidationError)) throw repairError;
-          throw new StoryOutputError(repaired, repairError.message, firstOutput);
+          throw new StoryOutputError(repaired, repairError.message, firstOutput, contract.label);
         }
       }
       assertActive(); progress("complete");

@@ -8,17 +8,17 @@ import type { ChangeStory } from "./storyContract";
 import type { DiffViewerTab } from "./useDiffStory";
 import { diffSymbolColors } from "../window/diffSystemColors";
 
-const tabOptions = [{ label: "Files", value: "files" }, { label: "Story", value: "story" }];
+const tabOptions = [{ label: "Files", value: "files" }, { label: "Story", value: "story" }, { label: "Workflows", value: "workflows" }];
 
-export function StorySidebar({ tab, onTab, sections, onSection, color, children }: {
+export function StorySidebar({ tab, onTab, sections, onSection, color, children, workflows }: {
   tab: DiffViewerTab; onTab: (tab: DiffViewerTab) => void; sections: ChangeStory["sections"];
-  onSection: (index: number) => void; color: string; children: ReactNode;
+  onSection: (index: number) => void; color: string; children: ReactNode; workflows?: ReactNode;
 }) {
   const [tabsWidth, setTabsWidth] = useState(0);
   return <View className="flex-1">
     <View className="absolute left-2 right-2 z-10" style={{ top: 54 }} onLayout={event => setTabsWidth(event.nativeEvent.layout.width)}>
       <SegmentedControl accessibilityLabel="Sidebar view" options={tabOptions} value={tab} onValueChange={value => onTab(value as DiffViewerTab)} style={{ width: tabsWidth || "100%", height: 28 }} />
     </View>
-    <View style={{ position: "absolute", top: diffSidebarContentTopInset, bottom: 0, left: 0, right: 0, overflow: "hidden" }}>{tab === "files" ? children : <LegendList data={sections} extraData={color} keyExtractor={section => section.id} estimatedItemSize={44} recycleItems renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={item.title} onPress={() => onSection(index)} className="px-3 py-3"><View className="flex-row gap-1">{item.lookHere ? <SFSymbol color={diffSymbolColors.orange} name="flag.fill" size={11} style={{ marginTop: 3 }} /> : null}<Text className="flex-1" style={{ color, fontSize: 13 }}>{item.title}</Text></View></Pressable>} style={{ flex: 1 }} />}</View>
+    <View style={{ position: "absolute", top: diffSidebarContentTopInset, bottom: 0, left: 0, right: 0, overflow: "hidden" }}>{tab === "files" ? children : tab === "workflows" ? workflows : <LegendList data={sections} extraData={color} keyExtractor={section => section.id} estimatedItemSize={44} recycleItems renderItem={({ item, index }) => <Pressable accessibilityRole="button" accessibilityLabel={item.title} onPress={() => onSection(index)} className="px-3 py-3"><View className="flex-row gap-1">{item.lookHere ? <SFSymbol color={diffSymbolColors.orange} name="flag.fill" size={11} style={{ marginTop: 3 }} /> : null}<Text className="flex-1" style={{ color, fontSize: 13 }}>{item.title}</Text></View></Pressable>} style={{ flex: 1 }} />}</View>
   </View>;
 }
