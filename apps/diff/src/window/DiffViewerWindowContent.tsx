@@ -47,6 +47,10 @@ import { StoryPane, type StoryPaneRef } from "../story/StoryPane";
 import { StorySidebar } from "../story/StorySidebar";
 import { useDiffStory } from "../story/useDiffStory";
 import type { StoryHunk } from "../story/storyHunks";
+import { useDiffWorkflows } from "../workflows/useDiffWorkflows";
+import { WorkflowsPane } from "../workflows/WorkflowsPane";
+import { WorkflowSidebar } from "../workflows/WorkflowSidebar";
+import type { WorkflowReviewComment } from "../workflows/workflowReview";
 
 const macOSFilesAndFoldersSettingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders";
 const diffMergeSaveWatchSuppressMs = 2000;
@@ -82,6 +86,9 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const { compareRepoState$, compareRefPromptVisible$, compareRefInput$, collapsedSidebarFolders$, searchQuery$, activeSearchResultIndex$, searchResults$, setSearchQuery, activeFileIndex$, collapsedFileIndexes$, diffPaneHeight$, documentError$, loadingSource$, mergeState$, openError$, setCollapsedFileIndexesValue, setDiffPaneHeightValue, setDocumentErrorValue, setLoadProgressValue, setLoadStatisticsValue, setLoadingSourceValue, setMergeStateValue, setOpenErrorValue, setSidebarCollapsedValue, setSplitPaneMetricsValue, setUrlInputErrorValue, setUrlInputValue, setViewerState, sidebarCollapsed$, splitPaneMetrics$, state$, urlInput$, urlInputError$, } = model;
     const storyController = useDiffStory(windowIdentifier, state$);
     const storyPaneRef = useRef<StoryPaneRef | null>(null);
+    const [focusedWorkflowComment, setFocusedWorkflowComment] = useState<WorkflowReviewComment | null>(null);
+    const openWorkflowComment = useCallback((comment: WorkflowReviewComment) => { setFocusedWorkflowComment(comment); storyController.setTab("workflows"); }, [storyController.setTab]);
+    const workflowController = useDiffWorkflows(windowIdentifier, state$, storyController.tab, storyController.repoRoot, storyController.sourceReady, openWorkflowComment);
     const [pendingStoryHunk, setPendingStoryHunk] = useState<StoryHunk | null>(null);
     const state = useValue(state$);
     const documentError = useValue(documentError$);
@@ -600,7 +607,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         enabled: hasSearchResults, handlers: { previousSearch: () => advanceSearchResult(-1), nextSearch: () => advanceSearchResult(1) }, onError: console.error,
     });
     const jumpToStoryHunk = useCallback((hunk: StoryHunk) => {
-        const currentInput = storyController.request?.input;
+        const currentInput = workflowController.input ?? storyController.request?.input;
         const target = currentInput?.hunks.find(item => item.file === hunk.file && item.hash === hunk.hash)
             ?? currentInput?.hunks.find(item => item.file === hunk.file && item.hunkIndex === hunk.hunkIndex);
         storyController.setTab("files");
@@ -608,7 +615,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
             setCollapsedFileIndexesValue(current => { const next = new Set(current); next.delete(target.fileIndex); return next; });
             setPendingStoryHunk(target);
         }
-    }, [storyController.request, storyController.setTab, setCollapsedFileIndexesValue]);
+    }, [workflowController.input, storyController.request, storyController.setTab, setCollapsedFileIndexesValue]);
     useEffect(() => {
         if (!pendingStoryHunk || storyController.tab !== "files") return;
         const index = viewMode === "unified" ? getVisibleListIndex(pendingStoryHunk.rowStart)
@@ -701,8 +708,8 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         return rowHeight + (unifiedHunkRowIndexSet.has(index) ? diffHunkHeaderHeight : 0);
     }, [getItemType, rowHeight, showOnlyHunks, unifiedHunkRowIndexSet]);
     const renderRow = useCallback(({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffRenderRow>) => {
-        return (<DiffUnifiedRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} hasHunkHeader={showOnlyHunks && unifiedHunkRowIndexSet.has(index)} index={index} isFileHeader={getItemType(index) === "file-header"} nativeConfigId={nativeUnifiedRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row}/>);
-    }, [collapsedFileIndexes$, getItemType, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed, unifiedHunkRowIndexSet]);
+        return (<DiffUnifiedRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} hasHunkHeader={showOnlyHunks && unifiedHunkRowIndexSet.has(index)} index={index} isFileHeader={getItemType(index) === "file-header"} nativeConfigId={nativeUnifiedRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row} workflowGutter={workflowController.gutter}/>);
+    }, [collapsedFileIndexes$, getItemType, nativeUnifiedRowConfig.configId, rowHeight, rowRender$, showOnlyHunks, toggleFileCollapsed, unifiedHunkRowIndexSet, workflowController.gutter]);
     const getSideBySideItemType = useCallback((index: number) => {
         return sideBySideDataSource?.getItemMetadata(index).kind === "file-header"
             ? "file-header"
@@ -718,8 +725,8 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const renderSideBySideRow = useCallback(({ adaptiveRender, index, row }: VirtualizedFixedDocumentListRenderRowProps<DiffSideBySideRenderRow>) => {
         const itemMetadata = sideBySideDataSource?.getItemMetadata(index);
         const sourceListIndex = sideBySideDataSource?.getItemLocation(index).listIndex ?? index;
-        return (<DiffSideBySideRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} index={index} itemMetadata={itemMetadata} listIndex={sourceListIndex} nativeConfigId={nativeSideBySideRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row}/>);
-    }, [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, sideBySideDataSource, toggleFileCollapsed]);
+        return (<DiffSideBySideRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} index={index} itemMetadata={itemMetadata} listIndex={sourceListIndex} nativeConfigId={nativeSideBySideRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row} workflowGutter={workflowController.gutter}/>);
+    }, [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, sideBySideDataSource, toggleFileCollapsed, workflowController.gutter]);
     const documentErrorHeight = documentError
         ? documentError.kind === "permission"
             ? diffDocumentPermissionErrorHeight
@@ -761,11 +768,11 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         body = (<DiffFatalBody borderColor={diffPalette.border} error={state.error} foregroundColor={foregroundColor} mutedColor={mutedColor} onChooseFolder={openFolder} surfaceColor={diffPalette.surface}/>);
     }
     else if (state.status === "loaded") {
-        body = (<DiffSplitBody backgroundColor={backgroundColor} content={(<View style={{ flex: 1 }}><View style={{ flex: 1, display: storyController.tab === "files" ? "flex" : "none" }}><DiffLoadedContentPane key={state.document.documentId} activeFileIndex$={activeFileIndex$} activeItemCount={activeItemCount} adaptiveLightModeEnabled={adaptiveLightModeEnabled} diffPaneHeight$={diffPaneHeight$} diffTopChromeHeight={diffTopChromeHeight} diffRows={diffRows} documentErrorBody={documentErrorBody} floatingDocumentBanner={unsavedMergeDraftBanner} getItemSize={getItemSize} getItemType={getItemType} getRow={getRow} getSideBySideItemSize={getSideBySideItemSize} getSideBySideItemType={getSideBySideItemType} getSideBySideRow={getSideBySideRow} handleDiffPaneLayout={handleDiffPaneLayout} handleSideBySideTopItemChanged={handleSideBySideTopItemChanged} handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested} handleTopItemChanged={handleTopItemChanged} handleVisibleRowsRequested={handleVisibleRowsRequested} rowConfig={rowConfig} listRef={listRef} mergeState={mergeState} mergeState$={mergeState$} nativeSideBySideRowConfig={nativeSideBySideRowConfig} nativeUnifiedRowConfig={nativeUnifiedRowConfig} noChangesBody={(<DiffNoChangesBody foregroundColor={foregroundColor} mutedColor={mutedColor} visibleSourceLabel={visibleSourceLabel}/>)} onInlineListIndexesChanged={handleInlineListIndexesChanged} renderRow={renderRow} renderSideBySideRow={renderSideBySideRow} requestSideBySideRange={requestSideBySideRange} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$} onResolveMergeConflict={resolveMergeConflict} rowHeight={rowHeight} sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex} sideBySideDataSource={sideBySideDataSource} splitPaneMetrics$={splitPaneMetrics$} state={state} syntaxTokenizationState$={syntaxTokenizationState$} viewMode={renderViewMode} visibleItemIndexes={visibleItemIndexes}/></View>{storyController.tab === "story" ? <StoryPane ref={storyPaneRef} controller={storyController} viewMode={viewMode} rowHeight={rowHeight} rowRender$={rowRender$} collapsedFileIndexes$={collapsedFileIndexes$} unifiedConfig={nativeUnifiedRowConfig} blocksConfig={nativeSideBySideRowConfig} splitPaneMetrics$={splitPaneMetrics$} foregroundColor={foregroundColor} mutedColor={mutedColor} backgroundColor={backgroundColor} onJumpToHunk={jumpToStoryHunk} /> : null}</View>)} debugPayload={{
+        body = (<DiffSplitBody backgroundColor={backgroundColor} content={(<View style={{ flex: 1 }}><View style={{ flex: 1, display: storyController.tab === "files" ? "flex" : "none" }}><DiffLoadedContentPane key={state.document.documentId} activeFileIndex$={activeFileIndex$} activeItemCount={activeItemCount} adaptiveLightModeEnabled={adaptiveLightModeEnabled} diffPaneHeight$={diffPaneHeight$} diffTopChromeHeight={diffTopChromeHeight} diffRows={diffRows} documentErrorBody={documentErrorBody} floatingDocumentBanner={unsavedMergeDraftBanner} getItemSize={getItemSize} getItemType={getItemType} getRow={getRow} getSideBySideItemSize={getSideBySideItemSize} getSideBySideItemType={getSideBySideItemType} getSideBySideRow={getSideBySideRow} handleDiffPaneLayout={handleDiffPaneLayout} handleSideBySideTopItemChanged={handleSideBySideTopItemChanged} handleSideBySideVisibleRowsRequested={handleLimitedSideBySideVisibleRowsRequested} handleTopItemChanged={handleTopItemChanged} handleVisibleRowsRequested={handleVisibleRowsRequested} rowConfig={rowConfig} listRef={listRef} mergeState={mergeState} mergeState$={mergeState$} nativeSideBySideRowConfig={nativeSideBySideRowConfig} nativeUnifiedRowConfig={nativeUnifiedRowConfig} noChangesBody={(<DiffNoChangesBody foregroundColor={foregroundColor} mutedColor={mutedColor} visibleSourceLabel={visibleSourceLabel}/>)} onInlineListIndexesChanged={handleInlineListIndexesChanged} renderRow={renderRow} renderSideBySideRow={renderSideBySideRow} requestSideBySideRange={requestSideBySideRange} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$} onResolveMergeConflict={resolveMergeConflict} rowHeight={rowHeight} sideBySideFileHeaderByListIndex={sideBySideFileHeaderByListIndex} sideBySideDataSource={sideBySideDataSource} splitPaneMetrics$={splitPaneMetrics$} state={state} syntaxTokenizationState$={syntaxTokenizationState$} viewMode={renderViewMode} visibleItemIndexes={visibleItemIndexes}/></View>{storyController.tab === "story" ? <StoryPane ref={storyPaneRef} controller={storyController} viewMode={viewMode} rowHeight={rowHeight} rowRender$={rowRender$} collapsedFileIndexes$={collapsedFileIndexes$} unifiedConfig={nativeUnifiedRowConfig} blocksConfig={nativeSideBySideRowConfig} splitPaneMetrics$={splitPaneMetrics$} foregroundColor={foregroundColor} mutedColor={mutedColor} backgroundColor={backgroundColor} onJumpToHunk={jumpToStoryHunk} /> : null}{storyController.tab === "workflows" ? <WorkflowsPane controller={workflowController} focusedComment={focusedWorkflowComment} onJump={jumpToStoryHunk} onReload={reloadCurrentSource} settings={{ ignoreWhitespaceChanges, showOnlyHunks }} viewMode={viewMode} rowHeight={rowHeight} rowRender$={rowRender$} unifiedConfig={nativeUnifiedRowConfig} blocksConfig={nativeSideBySideRowConfig} splitPaneMetrics$={splitPaneMetrics$} foregroundColor={foregroundColor} mutedColor={mutedColor} /> : null}</View>)} debugPayload={{
                 activeItemCount,
                 rows: state.document.rowCount,
                 viewMode: renderViewMode,
-            }} handleSplitViewResize={handleSplitViewResize} sidebar={(<StorySidebar tab={storyController.tab} onTab={storyController.setTab} sections={storyController.story.result?.story.sections ?? []} onSection={index => storyPaneRef.current?.scrollToSection(index)} color={foregroundColor}><DiffLoadedSidebarPane backgroundColor={diffPalette.sidebarBackground} collapsedSidebarFolders$={collapsedSidebarFolders$} handleSidebarListLayout={handleSidebarListLayout} mutedColor={mutedColor} renderSidebarEntry={renderSidebarEntry} sidebarCollapsed={sidebarCollapsed} splitPaneMetrics$={splitPaneMetrics$} state={state}/></StorySidebar>)} sidebarBackgroundColor={diffPalette.sidebarBackground} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} splitPaneMetrics$={splitPaneMetrics$} syntaxAppearance={syntaxTheme.appearance}/>);
+            }} handleSplitViewResize={handleSplitViewResize} sidebar={(<StorySidebar workflows={<WorkflowSidebar controller={workflowController} color={foregroundColor} />} tab={storyController.tab} onTab={storyController.setTab} sections={storyController.story.result?.story.sections ?? []} onSection={index => storyPaneRef.current?.scrollToSection(index)} color={foregroundColor}><DiffLoadedSidebarPane backgroundColor={diffPalette.sidebarBackground} collapsedSidebarFolders$={collapsedSidebarFolders$} handleSidebarListLayout={handleSidebarListLayout} mutedColor={mutedColor} renderSidebarEntry={renderSidebarEntry} sidebarCollapsed={sidebarCollapsed} splitPaneMetrics$={splitPaneMetrics$} state={state}/></StorySidebar>)} sidebarBackgroundColor={diffPalette.sidebarBackground} sidebarCollapsed={sidebarCollapsed} sidebarWidth={sidebarWidth} splitPaneMetrics$={splitPaneMetrics$} syntaxAppearance={syntaxTheme.appearance}/>);
     }
     else if (emptyLoadingSource) {
         body = (<DiffSplitBody backgroundColor={backgroundColor} content={(<View style={styles.diffPane}>

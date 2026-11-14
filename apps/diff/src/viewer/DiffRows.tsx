@@ -16,6 +16,8 @@ import { useValue } from "@legendapp/state/react";
 import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { getFilename } from "../diffFiles";
+import { WorkflowGutterMarkers } from "../workflows/WorkflowGutterMarkers";
+import type { WorkflowGutter } from "../workflows/workflowReview";
 import {
   diffFileHeaderRowHeight,
   diffRowKindFileHeader,
@@ -99,6 +101,7 @@ type DiffObservedFileHeaderRowProps = Omit<DiffFileHeaderRowProps, "isCollapsed"
 };
 
 type DiffUnifiedRowProps = {
+  workflowGutter?: WorkflowGutter;
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   hasHunkHeader: boolean;
@@ -112,6 +115,7 @@ type DiffUnifiedRowProps = {
 };
 
 type DiffSideBySideRowProps = {
+  workflowGutter?: WorkflowGutter;
   adaptiveRender: "light" | "normal";
   collapsedFileIndexes$: Observable<Set<number>>;
   index: number;
@@ -592,12 +596,15 @@ const DiffUnifiedLineRow = memo(function DiffUnifiedLineRow(props: DiffUnifiedRo
   return (
     <>
       {hasHunkHeader ? <DiffUnifiedHunkHeaderRow {...props} /> : null}
-      <DiffNativeUnifiedLineRow
-        adaptiveRender={adaptiveRender}
-        index={index}
-        nativeConfigId={nativeConfigId}
-        nativeRowHeight={nativeRowHeight}
-      />
+      <View>
+        <DiffNativeUnifiedLineRow
+          adaptiveRender={adaptiveRender}
+          index={index}
+          nativeConfigId={nativeConfigId}
+          nativeRowHeight={nativeRowHeight}
+        />
+        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} sourceStart={index} sourceEnd={index + 1} row={props.row} sideBySide={false} /> : null}
+      </View>
     </>
   );
 });
@@ -700,13 +707,16 @@ const DiffSideBySideLineRow = memo(function DiffSideBySideLineRow(props: DiffSid
   return (
     <>
       {hasHunkHeader ? <DiffSideBySideHunkHeaderRow {...props} /> : null}
-      <DiffNativeSideBySideLineRow
-        adaptiveRender={adaptiveRender}
-        index={index}
-        listIndex={listIndex}
-        nativeConfigId={nativeConfigId}
-        nativeRowHeight={nativeRowHeight}
-      />
+      <View>
+        <DiffNativeSideBySideLineRow
+          adaptiveRender={adaptiveRender}
+          index={index}
+          listIndex={listIndex}
+          nativeConfigId={nativeConfigId}
+          nativeRowHeight={nativeRowHeight}
+        />
+        {props.workflowGutter ? <WorkflowGutterMarkers gutter={props.workflowGutter} rowRender$={props.rowRender$} sourceStart={props.itemMetadata?.sourceStart ?? props.row?.sourceStart ?? 0} sourceEnd={props.itemMetadata?.sourceEnd ?? props.row?.sourceEnd ?? 0} sideBySide /> : null}
+      </View>
     </>
   );
 });

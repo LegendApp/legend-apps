@@ -111,6 +111,24 @@ it("retains raw invalid output and process errors as reviewable run failures", a
   t.cli.children[0].complete("invalid"); await flush(); t.cli.children[1].complete("still invalid"); await pending;
   expect(t.store.state("w", builtInWorkflowSkills[0].name).peek()).toMatchObject({ status: "error", error: { rawOutput: "still invalid" } });
 });
+it("discards only a completed proposed patch and prevents cached restoration after reopening", async () => {
+  const t = setup(), request = t.request(builtInWorkflowSkills[2]);
+  const pending = t.store.run("w", request); await flush();
+  t.store.discard("w", request.skill.name, workflowOutput("patch"));
+  expect(t.store.state("w", request.skill.name).status.peek()).toBe("running");
+  t.complete(0, "patch"); await pending;
+  const viewed = t.store.state("w", request.skill.name).result.peek()!.output;
+  t.store.discard("w", request.skill.name, { ...viewed });
+  expect(t.store.state("w", request.skill.name).result.peek()).not.toBeNull();
+  t.store.discard("w", request.skill.name, viewed);
+  expect(t.store.state("w", request.skill.name).peek()).toMatchObject({ status: "idle", result: null, input: null });
+  t.store.closeWindow("w"); t.store.load("new", request);
+  expect(t.store.state("new", request.skill.name).result.peek()).toBeNull();
+  const check = t.request(builtInWorkflowSkills[1]);
+  const second = t.store.run("new", check); await flush(); t.complete(1, "check"); await second;
+  t.store.discard("new", check.skill.name, t.store.state("new", check.skill.name).result.peek()!.output);
+  expect(t.store.state("new", check.skill.name).result.peek()?.output.kind).toBe("check");
+});
 it("waits for a cancelled skill to drain before starting its replacement after source switch", async () => {
   const t = setup(), request = t.request();
   const first = t.store.run("w", request); await flush();

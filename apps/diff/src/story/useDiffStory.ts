@@ -13,7 +13,7 @@ import { changeStorySkill, type StorySkill } from "./storySkill";
 import { skillEditorContext$, skillPreviewTargets, skillViewerContexts$, useSkillLibrary } from "./skillRuntime";
 import { skillTrust } from "./skillTrust";
 
-export type DiffViewerTab = "files" | "story";
+export type DiffViewerTab = "files" | "story" | "workflows";
 export function storyOpenAction(hasResult: boolean, running: boolean, regenerate: boolean) {
   return running || (hasResult && !regenerate) ? "open" : "generate";
 }
@@ -164,7 +164,7 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
     diffSettingsPage$.set("aiSkills");
     void import("../diffWindows").then(windows => windows.openDiffSettingsWindow()).catch((reason: unknown) => setError(String(reason)));
   }, [windowId, skill?.name]);
-  return { tab, setTab, story, story$, tool: request?.tool ?? tool, setTool, request, notice: notice?.request ?? null, consent,
+  return { tab, setTab, repoRoot: repoInfo?.source === source ? repoInfo.root : undefined, sourceReady: repoInfo?.source === source, story, story$, tool: request?.tool ?? tool, setTool, request, notice: notice?.request ?? null, consent,
     trustNotice: trustNotice?.request ?? null, approve, error: error ?? libraryError, preparing: !!input && !request,
     openStory, generate, disable, cancel: () => storyStore.cancel(windowId, previewName ?? skill?.name), skill, skills: storySkills, skillErrors: skills?.errors ?? [],
     selectSkill: (name: string) => { setSkillName(name); setPreviewName(null); }, editSkill,

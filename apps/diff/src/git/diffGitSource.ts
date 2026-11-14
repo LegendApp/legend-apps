@@ -4,7 +4,7 @@ import { getGitService, type GitReadOptions, type GitService } from "./GitServic
 export async function readDiffGitSource(
   source: Extract<DiffOpenSource, { cwd: string }>,
   options: GitReadOptions & { ignoreWhitespaceChanges?: boolean } = {},
-  service?: GitService,
+  service?: Pick<GitService, "diff" | "showCommit">,
 ) {
   const git = service ?? getGitService(source.cwd);
   const whitespace = options.ignoreWhitespaceChanges ? ["--ignore-all-space"] : [];

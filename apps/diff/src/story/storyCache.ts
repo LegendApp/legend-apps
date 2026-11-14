@@ -67,5 +67,10 @@ export function createOutputCache<T extends AIRunMetadata>(storage: Pick<Storage
       storage.write(`${group}/${storyCacheKey(identity)}.json`, entry, { format: "text" });
       storage.write(`${group}/latest`, storyCacheKey(identity), { format: "text" });
     },
+    discard(identity: StoryCacheIdentity) {
+      const group = cacheGroup(identity), key = storyCacheKey(identity);
+      storage.write(`${group}/${key}.json`, "", { format: "text" });
+      if (storage.read(`${group}/latest`, { format: "text" }) === key) storage.write(`${group}/latest`, "", { format: "text" });
+    },
   };
 }

@@ -7,8 +7,10 @@ import { selectStoryTool, StoryOutputError, StoryRunError, type StoryProgress, t
 import { storyStore } from "../story/storyStore";
 import type { StorySkill } from "../story/storySkill";
 import { repoSkillNotice, skillTrust } from "../story/skillTrust";
+import { storyContractVersion } from "../story/storyContract";
 import { createWorkflowCache } from "./workflowCache";
 import { workflowRunner, type WorkflowRunResult } from "./workflowRunner";
+import type { WorkflowOutput } from "./workflowContract";
 
 export type WorkflowRequest = { input: StoryInput; source: DiffOpenSource; repoRoot?: string; skill: StorySkill; tool: StoryTool; model?: string };
 export type WorkflowRunState = {
@@ -149,6 +151,14 @@ export function createWorkflowStore(dependencies: {
     return Promise.all(promises);
   }
   return { state$, state, setDiff, load, runSelected, cancel, closeWindow,
+    discard(windowId: string, skillName: string, output: WorkflowOutput) {
+      const node = state(windowId, skillName), value = node.peek(), scope = current.get(windowId)?.scope;
+      if (operations.get(windowId)?.has(skillName) || value.result?.output.kind !== "patch" || value.result.output !== output || !scope) return;
+      const result = value.result;
+      dependencies.cache().discard({ scope, diffHash: result.diffHash, skillName: result.skillName, skillHash: result.skillHash,
+        contractVersion: storyContractVersion, tool: result.tool, model: result.model });
+      node.assign({ status: "idle", result: null, input: null, error: null });
+    },
     run: (windowId: string, request: WorkflowRequest, options?: { signal?: AbortSignal }) => runSelected(windowId, [request], options).then(results => results[0]),
     isEnabled: dependencies.consent.isEnabled, setEnabled: dependencies.consent.setEnabled,
     presets: (scope: string) => dependencies.cache().presets(scope),

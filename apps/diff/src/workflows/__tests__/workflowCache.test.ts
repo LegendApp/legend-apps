@@ -35,3 +35,16 @@ it("saves named preset sets per source, replaces and deletes them", () => {
   expect(() => cache.savePreset("repo:a", "bad", ["../skill"])).toThrow();
   cache.deletePreset("repo:a", "Pre-PR checks"); expect(cache.presets("repo:a")).toEqual([]);
 });
+it("discards exact and latest proposals while preserving a newer proposal from another window", () => {
+  const storage = memoryStorage(), cache = createWorkflowCache(storage), skill = builtInWorkflowSkills[2], input = fixtureInput();
+  const identity = storyCacheIdentity("repo:/repo", input, skill, "codex");
+  cache.save(identity, workflowResult(skill, input), input);
+  cache.discard(identity);
+  expect(cache.load(identity)).toBeNull();
+  expect(cache.load({ ...identity, diffHash: "different" })).toBeNull();
+  const nextInput = fixtureInput({ text: "newer" }), next = { ...identity, diffHash: nextInput.diffHash };
+  cache.save(identity, workflowResult(skill, input), input);
+  cache.save(next, workflowResult(skill, nextInput), nextInput);
+  cache.discard(identity);
+  expect(cache.load(next)?.result.diffHash).toBe(next.diffHash);
+});
