@@ -12,7 +12,7 @@ import { parseDiffSearchQuery } from "../viewer/diffSearch";
 import { DiffNativeMenuController } from "../viewer/diffViewerControllers";
 import { type DiffFatalError, type DiffRecoverableError, useDiffViewerModel } from "../viewer/diffViewerModel";
 import { sourcesMatch } from "../viewer/diffViewerSupport";
-import { diffSystemColor } from "./diffSystemColors";
+import { diffSymbolColors } from "./diffSystemColors";
 import { styles } from "./diffWindowStyles";
 
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
@@ -343,7 +343,7 @@ export function DiffRepoStateBanner({ text, borderColor, foregroundColor, surfac
     surfaceColor: string;
 }) {
     return text ? (<View accessibilityRole="alert" className="h-7 flex-row items-center gap-2 px-3" style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderColor, backgroundColor: surfaceColor }}>
-      <SFSymbol color={diffSystemColor("systemOrangeColor")} name="exclamationmark.triangle.fill" size={12}/>
+      <SFSymbol color={diffSymbolColors.orange} name="exclamationmark.triangle.fill" size={12}/>
       <Text numberOfLines={1} className="flex-1 text-xs" style={{ color: foregroundColor }}>{text}</Text>
     </View>) : null;
 }
