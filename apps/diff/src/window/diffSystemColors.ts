@@ -6,3 +6,6 @@ export type DiffSystemColor = "systemOrangeColor" | "systemRedColor" | "systemGr
 export function diffSystemColor(name: DiffSystemColor): ColorValue {
   return PlatformColor(name);
 }
+
+// Spark's SF Symbol view reads RGB channels and rejects catalog colors, so symbols use the system color values.
+export const diffSymbolColors = { accent: "#0a84ff", blue: "#0a84ff", green: "#30d158", orange: "#ff9f0a", red: "#ff453a" } as const;
