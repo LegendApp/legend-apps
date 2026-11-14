@@ -61,6 +61,12 @@ it("renders the fixture with native rows, explicit uncovered hunks, review progr
   const screen = await render(<StoryPane {...test.props} />);
   await act(async () => {});
   expect(screen.getByText("Improve behavior")).toBeTruthy();
+  const hash = test.controller.story.result!.diffHash;
+  expect(screen.queryByText(hash)).toBeNull();
+  await fireEvent.press(screen.getByLabelText("Show Details"));
+  expect(screen.getByText(hash)).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText("Hide Details"));
+  expect(screen.queryByText(hash)).toBeNull();
   expect(screen.getByText("Look here · A change")).toBeTruthy();
   expect(screen.getByText("Not covered by the story")).toBeTruthy();
   expect(screen.getByText("src/a.ts · new 41–41 ↗")).toBeTruthy();
@@ -79,7 +85,7 @@ it("shows stale state and exposes cancellation and validator raw output as text"
   const test = setup({ status: "progress", stale: true });
   const screen = await render(<StoryPane {...test.props} />);
   await act(async () => {});
-  expect(screen.getByText(/Stale/)).toBeTruthy();
+  expect(screen.getByText(/Out of date/)).toBeTruthy();
   expect(screen.getByText("output · 123 bytes received")).toBeTruthy();
   await fireEvent.press(screen.getByLabelText("Cancel"));
   expect(test.controller.cancel).toHaveBeenCalled();

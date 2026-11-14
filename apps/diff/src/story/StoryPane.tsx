@@ -47,6 +47,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [showDetails, setShowDetails] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [privacyStatus, setPrivacyStatus] = useState<string | null>(null);
@@ -134,7 +135,10 @@ export const StoryPane = forwardRef<StoryPaneRef, {
         {running ? <DiffButton title="Cancel" onPress={controller.cancel} /> : null}
       </View>
       <Text style={{ color: mutedColor }}>{result ? `${result.story.state} · ${result.story.risk.level} risk — ${result.story.risk.reason}` : "Generate a guided review with your signed-in AI CLI. Stories are never generated automatically."}</Text>
-      {result ? <><Text style={{ color: foregroundColor }}>{result.story.goal}</Text><Text style={{ color: mutedColor }}>{result.skillName} · {result.tool} / {result.model}</Text><Text selectable style={{ color: mutedColor, fontSize: 11 }}>{result.diffHash}{stale ? " · Stale — regenerate for the current diff" : ""}</Text><Text style={{ color: mutedColor }}>{model?.coverage.covered ?? result.coveredHunkIds.length}/{model?.coverage.total ?? input?.hunks.length} hunks covered · {reviewedCount}/{result.story.sections.length} sections reviewed</Text><View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: result.story.sections.length, now: reviewedCount }} className="h-1 overflow-hidden rounded" style={{ backgroundColor: mutedColor }}><View className="h-1" style={{ backgroundColor: accent, width: `${result.story.sections.length ? reviewedCount / result.story.sections.length * 100 : 0}%` }} /></View></> : null}
+      {result ? <><Text style={{ color: foregroundColor }}>{result.story.goal}</Text>{stale ? <Text style={{ color: mutedColor }}>Out of date — Regenerate for the current diff</Text> : null}
+        <View className="flex-row items-center"><SFSymbol name={showDetails ? "chevron.down" : "chevron.right"} size={10} color={mutedColor} /><DiffButton title={showDetails ? "Hide Details" : "Show Details"} label="Details" variant="borderless" onPress={() => setShowDetails(value => !value)} /></View>
+        {showDetails ? <View className="gap-2"><Text style={{ color: mutedColor }}>{result.skillName} · {result.tool} / {result.model}</Text><Text selectable style={{ color: mutedColor, fontSize: 11 }}>{result.diffHash}</Text></View> : null}
+        <Text style={{ color: mutedColor }}>{model?.coverage.covered ?? result.coveredHunkIds.length}/{model?.coverage.total ?? input?.hunks.length} hunks covered · {reviewedCount}/{result.story.sections.length} sections reviewed</Text><View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: result.story.sections.length, now: reviewedCount }} className="h-1 overflow-hidden rounded" style={{ backgroundColor: mutedColor }}><View className="h-1" style={{ backgroundColor: accent, width: `${result.story.sections.length ? reviewedCount / result.story.sections.length * 100 : 0}%` }} /></View></> : null}
       {running ? <Text accessibilityLiveRegion="polite" style={{ color: foregroundColor }}>{story.progress?.phase ?? "starting"} · {story.progress?.receivedBytes ?? 0} bytes received</Text> : null}
       {preparing ? <Text style={{ color: mutedColor }}>Preparing story…</Text> : null}
       {result && !snapshot && !snapshotError ? <Text style={{ color: mutedColor }}>Loading native hunks…</Text> : null}
@@ -162,7 +166,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
     else if (item.type === "uncovered") content = <><Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>Not covered by the story</Text>{item.full ? <Text style={{ color: mutedColor }}>Full coverage</Text> : null}</>;
     else if (item.type === "file") content = <><Text style={{ color: foregroundColor, fontWeight: "600" }}>{item.path}</Text>{item.note ? <Text style={{ color: mutedColor }}>{item.note}</Text> : null}</>;
     return <View className="gap-2 px-5 py-3" style={item.type === "section" || item.type === "uncovered" ? { borderTopWidth: StyleSheet.hairlineWidth, borderColor: diffSystemColor("separatorColor"), marginTop: 8 } : undefined}>{content}</View>;
-  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewKey, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showRaw, snapshot, snapshotError, stale, story]);
+  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewKey, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showDetails, showRaw, snapshot, snapshotError, stale, story]);
   return <View className="flex-1" style={{ backgroundColor }}>
     {config ? <DiffNativeRowConfigView searchEnabled={false} nativeRowConfig={config} splitPaneMetrics$={splitPaneMetrics$} syntaxTokenizationState$={syntaxTokenizationState$} /> : null}
     <LegendList ref={listRef} data={rows} extraData={renderItem} renderItem={renderItem} keyExtractor={keyExtractor} getItemType={getItemType} getFixedItemSize={item => item.type === "line" ? rowHeight : undefined} estimatedItemSize={rowHeight} recycleItems contentContainerStyle={{ paddingTop: 52, paddingBottom: 20 }} style={{ flex: 1 }} onViewableItemsChanged={({ viewableItems }) => {
