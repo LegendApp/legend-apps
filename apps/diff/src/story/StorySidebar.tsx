@@ -6,10 +6,11 @@ import { Pressable, Text, View } from "react-native";
 import { diffSidebarContentTopInset } from "../viewer/diffViewerConstants";
 import type { ChangeStory } from "./storyContract";
 import type { DiffViewerTab } from "./useDiffStory";
+import { segmentedControlWidth } from "../window/DiffControls";
 import { diffSymbolColors } from "../window/diffSystemColors";
 
 const tabOptions = [{ label: "Files", value: "files" }, { label: "Story", value: "story" }, { label: "Workflows", value: "workflows" }];
-const segmentedTabsWidth = tabOptions.reduce((width, option) => width + Math.max(64, option.label.length * 7 + 28), 0);
+const segmentedTabsWidth = segmentedControlWidth(tabOptions.map(option => option.label));
 
 export function StorySidebar({ tab, onTab, sections, onSection, color, children, workflows }: {
   tab: DiffViewerTab; onTab: (tab: DiffViewerTab) => void; sections: ChangeStory["sections"];

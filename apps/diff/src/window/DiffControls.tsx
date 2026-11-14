@@ -11,6 +11,11 @@ export function DiffButton({ title, label = title, onPress, disabled = false, va
   return <Button accessibilityLabel={title} disabled={disabled} onPress={onPress} variant={variant} style={{ width: Math.max(64, Math.ceil(label.length * 7) + 28), height: 24 }}>{label}</Button>;
 }
 
+// Matches Spark's NSSegmentedControl, which gives each segment max(64, label + 28) points.
+export function segmentedControlWidth(labels: readonly string[]) {
+  return labels.reduce((width, label) => width + Math.max(64, Math.ceil(label.length * 7) + 28), 0);
+}
+
 // Spark has no native checkbox yet; this mirrors NSButton's checkbox with SF Symbols.
 export function DiffCheckbox({ label, accessibilityLabel = label, checked, onChange, color, detail, detailColor }: {
   label: string; accessibilityLabel?: string; checked: boolean; onChange: (checked: boolean) => void; color: string; detail?: string; detailColor?: string;
@@ -21,9 +26,9 @@ export function DiffCheckbox({ label, accessibilityLabel = label, checked, onCha
   </Pressable>;
 }
 
-// An inline notice: a system symbol beside its content, set off by separators instead of a box.
+// An inline notice: a system symbol beside its content, set off by a separator instead of a box.
 export function DiffNotice({ symbol, symbolColor, children }: { symbol: string; symbolColor: string; children: ReactNode }) {
-  return <View className="flex-row gap-3 py-3" style={{ borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: diffSystemColor("separatorColor") }}>
+  return <View className="flex-row gap-3 py-3" style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: diffSystemColor("separatorColor") }}>
     <SFSymbol color={symbolColor} name={symbol} size={16} style={{ marginTop: 1 }} />
     <View className="flex-1 gap-2">{children}</View>
   </View>;
