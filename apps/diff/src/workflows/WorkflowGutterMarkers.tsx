@@ -21,8 +21,8 @@ export function WorkflowGutterMarkers({ gutter, rowRender$, index, row, projecte
     });
   });
   return <>
-    {markers.map(({ side, comments }) => <Pressable key={side} pointerEvents="box-only" accessibilityRole="button" accessibilityLabel={`${comments.length} workflow comment${comments.length === 1 ? "" : "s"}, ${side} line ${comments[0].ref.startLine}`} onPress={() => gutter.onOpen(comments[0])}
-      style={{ position: "absolute", zIndex: 1, top: 0, bottom: 0, left: side === "old" ? 2 : sideBySide ? "50%" : 48, width: 14, alignItems: "center", justifyContent: "center" }}>
+    {markers.map(({ side, comments }) => <Pressable key={side} accessibilityRole="button" accessibilityLabel={`${comments.length} workflow comment${comments.length === 1 ? "" : "s"}, ${side} line ${comments[0].ref.startLine}`} onPress={() => gutter.onOpen(comments[0])}
+      style={{ position: "absolute", top: 0, bottom: 0, left: side === "old" ? 2 : sideBySide ? "50%" : 48, width: 14, alignItems: "center", justifyContent: "center" }}>
       <Text style={{ fontSize: 12, color: comments.some(comment => comment.severity === "error") ? "#e5484d" : comments.some(comment => comment.severity === "warn") ? "#d99a20" : "#3987e8" }}>●</Text>
     </Pressable>)}
   </>;
