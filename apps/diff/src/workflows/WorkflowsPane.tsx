@@ -5,7 +5,7 @@ import { repoSkillNotice } from "../story/skillTrust";
 import type { StoryHunk } from "../story/storyHunks";
 import { workflowPrivacyNotice, workflowStore } from "./workflowStore";
 import { WorkflowRunRow } from "./WorkflowResults";
-import { DiffButton, DiffNotice } from "../window/DiffControls";
+import { DiffButton, DiffNotice, segmentedControlWidth } from "../window/DiffControls";
 import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 import { WorkflowPatchPane, type WorkflowPatchViewerProps, type WorkflowProposal } from "./WorkflowPatchPane";
 import type { useDiffWorkflows } from "./useDiffWorkflows";
@@ -32,7 +32,7 @@ export function WorkflowsPane({ controller, focusedComment, onJump, onReload, se
   return <ScrollView ref={list} className="flex-1" contentContainerStyle={{ paddingTop: 64, paddingHorizontal: 20, paddingBottom: 20, gap: 12 }}>
     <Text accessibilityRole="header" style={{ color, fontSize: 24, fontWeight: "600" }}>Workflows</Text>
     <Text style={{ color: viewer.mutedColor }}>Select workflows in the sidebar and run them with your signed-in AI CLI. Results stay local; proposed patches wait for your review.</Text>
-    {controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} onValueChange={tool => controller.setTool(tool as "codex" | "claude")} style={{ width: 160, height: 24 }} /> : null}
+    {controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} onValueChange={tool => controller.setTool(tool as "codex" | "claude")} style={{ width: segmentedControlWidth(toolOptions.map(option => option.label)), height: 24 }} /> : null}
     {!controller.ready ? <Text style={{ color: viewer.mutedColor }}>Preparing workflows…</Text> : null}
     {controller.ready && !controller.skills.length ? <Text style={{ color: viewer.mutedColor }}>No workflow skills are available.</Text> : null}
     {controller.error ? <Text selectable accessibilityRole="alert" style={{ color: diffSystemColor("systemRedColor") }}>{controller.error}</Text> : null}
