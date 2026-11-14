@@ -1,4 +1,5 @@
 import { type DropEvent, DragDropView } from "@legendapp/spark/drag-drop";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { type Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { type ReactNode, useCallback, useState } from "react";
@@ -11,6 +12,7 @@ import { parseDiffSearchQuery } from "../viewer/diffSearch";
 import { DiffNativeMenuController } from "../viewer/diffViewerControllers";
 import { type DiffFatalError, type DiffRecoverableError, useDiffViewerModel } from "../viewer/diffViewerModel";
 import { sourcesMatch } from "../viewer/diffViewerSupport";
+import { diffSystemColor } from "./diffSystemColors";
 import { styles } from "./diffWindowStyles";
 
 const diffStatNumberFormatter = new Intl.NumberFormat("en-US");
@@ -340,7 +342,8 @@ export function DiffRepoStateBanner({ text, borderColor, foregroundColor, surfac
     foregroundColor: string;
     surfaceColor: string;
 }) {
-    return text ? (<View className="h-7 justify-center border-b px-3" style={{ borderColor, backgroundColor: surfaceColor }}>
-      <Text numberOfLines={1} className="text-xs" style={{ color: foregroundColor }}>{text}</Text>
+    return text ? (<View accessibilityRole="alert" className="h-7 flex-row items-center gap-2 px-3" style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderColor, backgroundColor: surfaceColor }}>
+      <SFSymbol color={diffSystemColor("systemOrangeColor")} name="exclamationmark.triangle.fill" size={12}/>
+      <Text numberOfLines={1} className="flex-1 text-xs" style={{ color: foregroundColor }}>{text}</Text>
     </View>) : null;
 }
