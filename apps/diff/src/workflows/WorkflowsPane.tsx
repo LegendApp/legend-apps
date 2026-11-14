@@ -6,7 +6,7 @@ import type { StoryHunk } from "../story/storyHunks";
 import { workflowPrivacyNotice, workflowStore } from "./workflowStore";
 import { WorkflowRunRow } from "./WorkflowResults";
 import { DiffButton, DiffNotice } from "../window/DiffControls";
-import { diffSystemColor } from "../window/diffSystemColors";
+import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 import { WorkflowPatchPane, type WorkflowPatchViewerProps, type WorkflowProposal } from "./WorkflowPatchPane";
 import type { useDiffWorkflows } from "./useDiffWorkflows";
 import type { WorkflowReviewComment } from "./workflowReview";
@@ -38,7 +38,7 @@ export function WorkflowsPane({ controller, focusedComment, onJump, onReload, se
     {controller.error ? <Text selectable accessibilityRole="alert" style={{ color: diffSystemColor("systemRedColor") }}>{controller.error}</Text> : null}
     {controller.skillErrors.map((error, index) => <Text key={index} selectable style={{ color: viewer.mutedColor }}>{error}</Text>)}
     {applied ? <Text accessibilityLiveRegion="polite" style={{ color }}>Patch applied to working files. Refreshing the original diff…</Text> : null}
-    {controller.pending ? <DiffNotice symbol={controller.pending.type === "trust" ? "exclamationmark.triangle.fill" : "hand.raised.fill"} symbolColor={diffSystemColor(controller.pending.type === "trust" ? "systemOrangeColor" : "systemBlueColor")}>
+    {controller.pending ? <DiffNotice symbol={controller.pending.type === "trust" ? "exclamationmark.triangle.fill" : "hand.raised.fill"} symbolColor={controller.pending.type === "trust" ? diffSymbolColors.orange : diffSymbolColors.blue}>
       <Text style={{ color }}>{controller.pending.type === "trust" ? repoSkillNotice(controller.pending.request.skill) : workflowPrivacyNotice(controller.pending.request.tool)}</Text>
       {controller.pending.type === "trust" ? <Text selectable style={{ color: viewer.mutedColor, fontFamily: "Menlo" }}>{controller.pending.request.skill.markdown}</Text> : null}
       <View className="flex-row gap-2"><DiffButton title={controller.pending.type === "trust" ? "Approve this skill" : "Enable and run"} onPress={() => controller.approve(true)} /><DiffButton title="Don't run" onPress={() => controller.approve(false)} /></View>

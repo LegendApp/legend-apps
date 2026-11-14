@@ -10,17 +10,17 @@ import type { WorkflowPatch } from "./workflowContract";
 import type { WorkflowReviewComment } from "./workflowReview";
 import { workflowElapsed, workflowStore } from "./workflowStore";
 import { DiffButton } from "../window/DiffControls";
-import { diffSystemColor, type DiffSystemColor } from "../window/diffSystemColors";
+import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 
-const checkPresentation: Record<"pass" | "fail" | "warn", { symbol: string; color: DiffSystemColor; title: string }> = {
-  pass: { symbol: "checkmark.circle.fill", color: "systemGreenColor", title: "Pass" },
-  fail: { symbol: "xmark.octagon.fill", color: "systemRedColor", title: "Fail" },
-  warn: { symbol: "exclamationmark.triangle.fill", color: "systemOrangeColor", title: "Warning" },
+const checkPresentation: Record<"pass" | "fail" | "warn", { symbol: string; color: keyof typeof diffSymbolColors; title: string }> = {
+  pass: { symbol: "checkmark.circle.fill", color: "green", title: "Pass" },
+  fail: { symbol: "xmark.octagon.fill", color: "red", title: "Fail" },
+  warn: { symbol: "exclamationmark.triangle.fill", color: "orange", title: "Warning" },
 };
-const severityPresentation: Record<WorkflowReviewComment["severity"], { symbol: string; color: DiffSystemColor }> = {
-  error: { symbol: "xmark.octagon.fill", color: "systemRedColor" },
-  warn: { symbol: "exclamationmark.triangle.fill", color: "systemOrangeColor" },
-  info: { symbol: "info.circle.fill", color: "systemBlueColor" },
+const severityPresentation: Record<WorkflowReviewComment["severity"], { symbol: string; color: keyof typeof diffSymbolColors }> = {
+  error: { symbol: "xmark.octagon.fill", color: "red" },
+  warn: { symbol: "exclamationmark.triangle.fill", color: "orange" },
+  info: { symbol: "info.circle.fill", color: "blue" },
 };
 
 export function WorkflowRunRow({ windowId, skill, input, comments, focusedComment, onCommentState, onJump, onPatch, color, mutedColor }: {
@@ -60,7 +60,7 @@ export function WorkflowRunRow({ windowId, skill, input, comments, focusedCommen
     {run.error?.rawOutput !== undefined ? <><DiffButton variant="borderless" title={showRaw ? "Hide raw output" : "Show raw output"} onPress={() => setShowRaw(value => !value)} />{showRaw ? <Text selectable style={{ color, fontFamily: "Menlo" }}>{run.error.rawOutput}</Text> : null}</> : null}
     {output ? <StoryDescription markdown={output.summary} color={color} /> : null}
     {output?.kind === "check" ? <>
-      <View className="flex-row items-center gap-2"><SFSymbol color={diffSystemColor(checkPresentation[output.result].color)} name={checkPresentation[output.result].symbol} size={14} /><Text accessibilityLabel={`Check ${output.result}`} style={{ color, fontWeight: "600" }}>{checkPresentation[output.result].title}</Text></View>
+      <View className="flex-row items-center gap-2"><SFSymbol color={diffSymbolColors[checkPresentation[output.result].color]} name={checkPresentation[output.result].symbol} size={14} /><Text accessibilityLabel={`Check ${output.result}`} style={{ color, fontWeight: "600" }}>{checkPresentation[output.result].title}</Text></View>
       {output.reasons.map((reason, index) => <View key={index} className="gap-1"><StoryDescription markdown={reason.text} color={color} />{reason.refs?.map((ref, index) => {
         const hunk = target(ref);
         const title = hunk ? `Open ${hunk.file} hunk ${hunk.hunkIndex + 1}` : `Outdated reference ${ref.hunk}`;
@@ -70,7 +70,7 @@ export function WorkflowRunRow({ windowId, skill, input, comments, focusedCommen
     {output?.kind === "comments" ? <>
       {!output.comments.length ? <Text style={{ color: mutedColor }}>No comments.</Text> : null}
       {rowComments.map(comment => <View key={comment.id} className="gap-2 rounded-md px-3 py-2" style={{ backgroundColor: focusedComment === comment.id ? diffSystemColor("unemphasizedSelectedContentBackgroundColor") : undefined, opacity: comment.state === "open" ? 1 : 0.6 }}>
-        <View className="flex-row items-center gap-2"><SFSymbol color={diffSystemColor(severityPresentation[comment.severity].color)} name={severityPresentation[comment.severity].symbol} size={12} /><Text className="flex-1" style={{ color: mutedColor }}>{comment.severity} · {comment.file} · {comment.ref.side} {comment.ref.startLine}–{comment.ref.endLine}{comment.outdated ? " · Outdated" : ""}{comment.state !== "open" ? ` · ${comment.state}` : ""}</Text></View>
+        <View className="flex-row items-center gap-2"><SFSymbol color={diffSymbolColors[severityPresentation[comment.severity].color]} name={severityPresentation[comment.severity].symbol} size={12} /><Text className="flex-1" style={{ color: mutedColor }}>{comment.severity} · {comment.file} · {comment.ref.side} {comment.ref.startLine}–{comment.ref.endLine}{comment.outdated ? " · Outdated" : ""}{comment.state !== "open" ? ` · ${comment.state}` : ""}</Text></View>
         <StoryDescription markdown={comment.body} color={color} />
         {comment.suggestion !== undefined ? <Text selectable style={{ color, fontFamily: "Menlo" }}>{comment.suggestion}</Text> : null}
         <View className="flex-row flex-wrap gap-2"><DiffButton title="Open in Files" disabled={comment.outdated} onPress={() => { const hunk = input?.hunks.find(hunk => hunk.id === comment.ref.hunk); if (hunk) onJump(hunk); }} />

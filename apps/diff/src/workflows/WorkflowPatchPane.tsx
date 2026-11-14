@@ -19,7 +19,7 @@ import { createVisibleDiffRowIndexes } from "../viewer/diffLoadedDocumentIndexes
 import type { WorkflowPatch } from "./workflowContract";
 import { applyWorkflowPatch, reloadWorkflowPatchInput, workflowPatchApplyDisabled } from "./workflowPatch";
 import { DiffButton } from "../window/DiffControls";
-import { diffSystemColor } from "../window/diffSystemColors";
+import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 
 export type WorkflowProposal = { output: WorkflowPatch; source: DiffOpenSource; repoRoot?: string; settings: { ignoreWhitespaceChanges: boolean; showOnlyHunks: boolean } };
 export type WorkflowPatchViewerProps = {
@@ -120,7 +120,7 @@ export function WorkflowPatchPane({ proposal, currentHash, onClose, onDiscard, o
         <DiffButton title="Copy patch" onPress={() => { void runCommand({ target: { type: "command", name: "pbcopy" }, input: proposal.output.patch }).then(result => setCopyStatus(result.exit.type === "exited" && result.exit.code === 0 ? "Copied patch" : "Unable to copy patch")).catch((reason: unknown) => setCopyStatus(String(reason))); }} />
         <DiffButton title="Discard" disabled={applying} onPress={onDiscard} /><DiffButton title="Back to workflows" disabled={applying} onPress={onClose} />
       </View>
-      {disabledReason ? <View className="flex-row items-center gap-2"><SFSymbol color={diffSystemColor("systemOrangeColor")} name="exclamationmark.triangle.fill" size={12} /><Text className="flex-1" style={{ color: mutedColor }}>{disabledReason}</Text></View> : <Text style={{ color: mutedColor }}>Apply checks the original source again and changes working files only.</Text>}
+      {disabledReason ? <View className="flex-row items-center gap-2"><SFSymbol color={diffSymbolColors.orange} name="exclamationmark.triangle.fill" size={12} /><Text className="flex-1" style={{ color: mutedColor }}>{disabledReason}</Text></View> : <Text style={{ color: mutedColor }}>Apply checks the original source again and changes working files only.</Text>}
       {error ? <Text selectable accessibilityRole="alert" style={{ color: diffSystemColor("systemRedColor") }}>{error}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
       {!snapshot && !error ? <Text style={{ color: mutedColor }}>Loading proposed diff…</Text> : null}
       {!proposal.output.patch.trim() ? <Text style={{ color: mutedColor }}>No proposed changes.</Text> : null}
