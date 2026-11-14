@@ -81,12 +81,14 @@ jest.mock("@legendapp/spark/ui/glass", () => {
 
 jest.mock("@legendapp/spark/ui", () => {
   const React = require("react");
-  const { View } = require("react-native");
+  const { Pressable, Text, View } = require("react-native");
+  const selectOptions = ({ accessibilityLabel, disabled, onValueChange, options, value }) => options?.map((option) => React.createElement(Pressable, { key: option.value, accessibilityLabel: accessibilityLabel ? `${accessibilityLabel}: ${option.label}` : undefined, accessibilityRole: "button", accessibilityState: { disabled: !!disabled, selected: option.value === value }, disabled, onPress: () => onValueChange(option.value) }, React.createElement(Text, null, option.label)));
 
   return {
     __esModule: true,
-    Select: (props) => React.createElement(View, props),
-    SegmentedControl: (props) => React.createElement(View, props),
+    Button: ({ children, accessibilityLabel = children, disabled = false, onPress, testID }) => React.createElement(Pressable, { accessibilityLabel, accessibilityRole: "button", accessibilityState: { disabled }, disabled, onPress, testID }, React.createElement(Text, null, children)),
+    Select: (props) => React.createElement(View, props, selectOptions(props)),
+    SegmentedControl: (props) => React.createElement(View, props, selectOptions(props)),
   };
 });
 
