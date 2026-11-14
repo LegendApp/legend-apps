@@ -61,7 +61,7 @@ it("renders the fixture with native rows, explicit uncovered hunks, review progr
   const screen = await render(<StoryPane {...test.props} />);
   await act(async () => {});
   expect(screen.getByText("Improve behavior")).toBeTruthy();
-  expect(screen.getByText("● Look here · A change")).toBeTruthy();
+  expect(screen.getByText("Look here · A change")).toBeTruthy();
   expect(screen.getByText("Not covered by the story")).toBeTruthy();
   expect(screen.getByText("src/a.ts · new 41–41 ↗")).toBeTruthy();
   expect(nativeRows(screen.toJSON())).toHaveLength(6);
