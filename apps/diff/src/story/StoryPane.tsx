@@ -154,7 +154,7 @@ export const StoryPane = forwardRef<StoryPaneRef, {
   }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showRaw, snapshot, snapshotError, stale, story]);
   return <View className="flex-1" style={{ backgroundColor }}>
     {config ? <DiffNativeRowConfigView searchEnabled={false} nativeRowConfig={config} splitPaneMetrics$={splitPaneMetrics$} syntaxTokenizationState$={syntaxTokenizationState$} /> : null}
-    <LegendList ref={listRef} data={rows} renderItem={renderItem} keyExtractor={keyExtractor} getItemType={getItemType} getFixedItemSize={item => item.type === "line" ? rowHeight : undefined} estimatedItemSize={rowHeight} recycleItems contentContainerStyle={{ paddingTop: 52, paddingBottom: 20 }} style={{ flex: 1 }} onViewableItemsChanged={({ viewableItems }) => {
+    <LegendList ref={listRef} data={rows} extraData={renderItem} renderItem={renderItem} keyExtractor={keyExtractor} getItemType={getItemType} getFixedItemSize={item => item.type === "line" ? rowHeight : undefined} estimatedItemSize={rowHeight} recycleItems contentContainerStyle={{ paddingTop: 52, paddingBottom: 20 }} style={{ flex: 1 }} onViewableItemsChanged={({ viewableItems }) => {
       if (!model || !snapshot) return;
       const firstIndex = viewableItems[0]?.index ?? 0;
       currentSection.current = -1;

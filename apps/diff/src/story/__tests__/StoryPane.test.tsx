@@ -9,6 +9,18 @@ import type { DiffNativeRowConfigProps } from "../../window/diffWindowTypes";
 import type { useDiffStory } from "../useDiffStory";
 import { fixtureDocument, fixtureInput, fixtureResult, memoryStorage } from "./storyFixtures";
 
+jest.mock("@legendapp/list/react-native", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const Cell = React.memo(({ item, index, renderItem }: { item: unknown; index: number; renderItem: (props: unknown) => unknown }) => renderItem({ item, index }),
+    (previous: { item: unknown; extraData: unknown }, next: { item: unknown; extraData: unknown }) => previous.item === next.item && previous.extraData === next.extraData);
+  return { LegendList: React.forwardRef(({ data, extraData, keyExtractor, renderItem }: {
+    data: unknown[]; extraData: unknown; keyExtractor: (item: unknown) => string; renderItem: (props: unknown) => unknown;
+  }, ref: unknown) => {
+    React.useImperativeHandle(ref, () => ({ scrollToIndex: jest.fn() }));
+    return <View>{data.map((item, index) => <Cell key={keyExtractor(item)} item={item} index={index} extraData={extraData} renderItem={renderItem} />)}</View>;
+  }) };
+});
 jest.mock("../storyReview", () => ({ ...jest.requireActual("../storyReview"), getStoryReviewStore: () => mockReviews }));
 jest.mock("../../window/DiffViewerPane", () => ({ DiffNativeRowConfigView: () => null }));
 const mockReviews = createStoryReviewStore(memoryStorage());
