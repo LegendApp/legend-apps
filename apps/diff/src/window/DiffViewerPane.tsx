@@ -14,7 +14,7 @@ import { getConflictedFileStatusPresentation, getDirectoryPath, getFileStatusPre
 import { DiffGrammarProgress } from "../viewer/DiffGrammarProgress";
 import { type DiffInlineMergeRow } from "../viewer/diffInlineMergeModel";
 import { createActiveDiffSearchHighlightMap, createDiffSearchHighlightMap } from "../viewer/diffSearch";
-import { diffAdaptiveRender, diffLineOverscan, diffOverscanRequestDelayMs, diffSidebarFileRowHeight, diffSidebarTopInset, diffTitlebarTopInset } from "../viewer/diffViewerConstants";
+import { diffAdaptiveRender, diffLineOverscan, diffOverscanRequestDelayMs, diffSidebarFileRowHeight, diffSidebarContentTopInset, diffSidebarTopInset, diffTitlebarTopInset } from "../viewer/diffViewerConstants";
 import { type DiffSplitPaneMetrics, useDiffViewerModel } from "../viewer/diffViewerModel";
 import { DiffProgressiveLoadingBanner } from "./DiffWindowChrome";
 import { createDiffSearchHighlightPayload, emptyDiffListIndexByFileIndex } from "./diffWindowRendering";
@@ -29,12 +29,6 @@ const diffListContentInset = {
     top: diffTitlebarTopInset,
 };
 const diffListViewabilityConfig = { startOffset: diffTitlebarTopInset };
-const diffSidebarContentInset = {
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: diffSidebarTopInset + 36,
-};
 function noopVirtualizedDocumentRequestRange() {
 }
 function useRenderLatestRef<T>(value: T) {
@@ -297,7 +291,7 @@ export const DiffLoadedContentPane = memo(function DiffLoadedContentPane({ activ
 export const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({ backgroundColor, collapsedSidebarFolders$, handleSidebarListLayout, mutedColor, renderSidebarEntry, sidebarCollapsed, splitPaneMetrics$, state, }: DiffLoadedSidebarPaneProps) {
     const splitPaneMetrics = useValue(splitPaneMetrics$);
     const isSidebarLayoutReady = splitPaneMetrics.sidebarHeight > 0 && splitPaneMetrics.sidebarWidth > 0;
-    const sidebarListHeight = isSidebarLayoutReady ? splitPaneMetrics.sidebarHeight : 0;
+    const sidebarListHeight = isSidebarLayoutReady ? Math.max(0, splitPaneMetrics.sidebarHeight - diffSidebarContentTopInset) : 0;
     const shouldRenderSidebarList = !sidebarCollapsed && isSidebarLayoutReady && sidebarListHeight > 0;
     const sidebarListStyle = useMemo(() => [styles.sidebarList, {
             height: sidebarListHeight,
@@ -309,11 +303,11 @@ export const DiffLoadedSidebarPane = memo(function DiffLoadedSidebarPane({ backg
             styles.sidebar,
             {
                 backgroundColor: Platform.OS === "macos" ? "transparent" : backgroundColor,
-                height: splitPaneMetrics.sidebarHeight || undefined, width: splitPaneMetrics.sidebarWidth || undefined,
-                minHeight: splitPaneMetrics.sidebarHeight || undefined
+                height: sidebarListHeight || undefined, width: splitPaneMetrics.sidebarWidth || undefined,
+                minHeight: sidebarListHeight || undefined
             },
         ]}>
-      {shouldRenderSidebarList ? (state.files.length > 0 ? (<LegendList contentContainerStyle={styles.sidebarContent} contentInset={diffSidebarContentInset} data={sidebarEntries} estimatedItemSize={diffSidebarFileRowHeight} getFixedItemSize={getDiffSidebarItemSize} getItemType={getDiffSidebarItemType} keyExtractor={getDiffSidebarItemKey} onLayout={handleSidebarListLayout} recycleItems renderItem={renderSidebarEntry} style={sidebarListStyle}/>) : (<View style={[styles.sidebarEmpty, {
+      {shouldRenderSidebarList ? (state.files.length > 0 ? (<LegendList contentContainerStyle={styles.sidebarContent} data={sidebarEntries} estimatedItemSize={diffSidebarFileRowHeight} getFixedItemSize={getDiffSidebarItemSize} getItemType={getDiffSidebarItemType} keyExtractor={getDiffSidebarItemKey} onLayout={handleSidebarListLayout} recycleItems renderItem={renderSidebarEntry} style={sidebarListStyle}/>) : (<View style={[styles.sidebarEmpty, {
                 height: sidebarListHeight,
                 minHeight: sidebarListHeight
             }]}>

@@ -22,6 +22,7 @@ export const diffOverscanRequestDelayMs = 80;
 export const diffFileHeaderRowHeight = 40;
 export const diffTitlebarTopInset = 52;
 export const diffSidebarTopInset = 52;
+export const diffSidebarContentTopInset = diffSidebarTopInset + 38;
 export const diffDocumentErrorHeight = 78;
 export const diffDocumentPermissionErrorHeight = 134;
 export const diffScrollIdleMs = 120;
