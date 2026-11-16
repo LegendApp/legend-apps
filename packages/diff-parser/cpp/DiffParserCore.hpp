@@ -76,4 +76,35 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     DiffGitCompareOptions compareOptions = {});
 std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<DiffRenderRow>& rows);
 
+struct GitHistoryCommitRow {
+  std::string oid;
+  std::vector<std::string> parents;
+  std::string authorName;
+  std::string authorEmail;
+  double time = 0;
+  std::string summary;
+};
+
+/**
+ * Walks HEAD's history in `git log --topo-order` order, in pages. The walk is anchored to the HEAD
+ * commit seen when the walker opened, so pages stay consistent while refs move.
+ */
+class GitHistoryWalker {
+public:
+  explicit GitHistoryWalker(const std::string& folderPath);
+  ~GitHistoryWalker();
+  GitHistoryWalker(const GitHistoryWalker&) = delete;
+  GitHistoryWalker& operator=(const GitHistoryWalker&) = delete;
+
+  const std::string& headOid() const;
+  bool unborn() const;
+  bool detached() const;
+  /** Up to `count` commits starting at `offset`; an offset other than the next one re-walks from the start. */
+  std::vector<GitHistoryCommitRow> page(size_t offset, size_t count, const std::function<bool()>& shouldCancel = {});
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 } // namespace margelo::nitro::legendapps::diffparser

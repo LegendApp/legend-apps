@@ -112,6 +112,42 @@ function serialize<T>(queues: Map<string, Promise<void>>, key: string, operation
   return pending;
 }
 
+export type GitPerson = { name: string; email: string; time: number };
+export type GitCommitDetails = { oid: string; parents: string[]; author: GitPerson; committer: GitPerson; message: string };
+export type GitRefDecoration = { kind: "branch" | "remote" | "tag"; name: string };
+
+export function parseCommitDetails(output: string): GitCommitDetails {
+  const [oid = "", parents = "", authorName = "", authorEmail = "", authorTime = "", committerName = "", committerEmail = "", committerTime = "", ...message] = output.split("\0");
+  return {
+    oid,
+    parents: parents.split(" ").filter(Boolean),
+    author: { name: authorName, email: authorEmail, time: Number(authorTime) },
+    committer: { name: committerName, email: committerEmail, time: Number(committerTime) },
+    message: message.join("\0").replace(/\n+$/, ""),
+  };
+}
+
+export function parseRefDecorations(output: string) {
+  const decorations = new Map<string, GitRefDecoration[]>();
+  for (const line of output.split("\n")) {
+    const [object = "", peeled = "", ref = "", symref = ""] = line.split("\0");
+    if (!object || symref) continue;
+    const kind = ref.startsWith("refs/heads/") ? "branch" : ref.startsWith("refs/remotes/") ? "remote" : ref.startsWith("refs/tags/") ? "tag" : null;
+    if (!kind) continue;
+    const oid = peeled || object;
+    const list = decorations.get(oid) ?? [];
+    list.push({ kind, name: ref.slice(ref.indexOf("/", 5) + 1) });
+    decorations.set(oid, list);
+  }
+  return decorations;
+}
+
+/** The github.com page for a commit, or null when the remote URL is not on github.com. */
+export function githubCommitUrl(remoteUrl: string | null, oid: string) {
+  const match = remoteUrl?.trim().match(/^(?:(?:https?|ssh|git):\/\/(?:[^@/]+@)?github\.com(?::\d+)?\/|[^@/]+@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
+  return match ? `https://github.com/${match[1]}/${match[2]}/commit/${oid}` : null;
+}
+
 export function getGitService(repoRoot: string) {
   const root = repoRoot.replace(/\/+$/, "") || "/";
   let service = services.get(root);
@@ -511,6 +547,39 @@ export class GitService {
       const commit = (await this.git(["rev-parse", "--verify", "--end-of-options", `${sha}^{commit}`], options)).trim();
       return this.git(["show", "-z", "--format=", "--first-parent", "--root", "--patch", "--no-ext-diff", "--no-color", ...(options.ignoreWhitespaceChanges ? ["--ignore-all-space"] : []), commit, "--"], options);
     });
+  }
+
+  /** One commit's message, people, dates and parents; `oid` must name a commit. */
+  commitDetails(oid: string, options: GitReadOptions = {}) {
+    return this.read(["show", "-s", "--no-show-signature", "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%B", "--end-of-options", `${oid}^{commit}`, "--"], options).then(parseCommitDetails);
+  }
+
+  /**
+   * A commit's patch against its first parent (or the empty tree for a root commit), in `fileDiff`'s
+   * stable format with renames detected.
+   */
+  commitPatch(oid: string, options: GitReadOptions = {}) {
+    if (!/^[0-9a-f]{4,64}$/i.test(oid)) return Promise.reject(new Error("Expected a commit id."));
+    return this.enqueue(options, async () => {
+      const [commit = "", parent] = (await this.git(["rev-list", "--parents", "--no-walk", `${oid}^{commit}`], options)).trim().split(" ");
+      const base = parent ?? (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 60_000, "")).trim();
+      return this.git(["-c", "diff.submodule=short", ...diffFormat, "-M", base, commit, "--"], options);
+    });
+  }
+
+  /** Branches, remote branches and tags by the commit they point at; annotated tags are peeled. */
+  refDecorations(options: GitReadOptions = {}) {
+    return this.read(["for-each-ref", "--format=%(objectname)%00%(*objectname)%00%(refname)%00%(symref)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000).then(parseRefDecorations);
+  }
+
+  /** The checked-out branch's short name, or null when HEAD is detached. */
+  currentBranch(options: GitReadOptions = {}) {
+    return this.read(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
+  }
+
+  /** The fetch URL of a remote, or null when it is not configured. */
+  remoteUrl(name: string, options: GitReadOptions = {}) {
+    return this.read(["config", "--get", `remote.${name}.url`], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
   }
 
   mergeBase(a: string, b: string, options: GitReadOptions = {}) {

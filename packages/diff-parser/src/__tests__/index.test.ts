@@ -43,7 +43,63 @@ function loadModuleWithParser(parser = createParser()) {
   return { diffParser, nitroModules, parser };
 }
 
+function historyParser() {
+  const head = { handle: 7, headOid: "abc", unborn: false, detached: false };
+  let release: (() => void) | undefined;
+  return {
+    ...createParser(),
+    openGitHistory: jest.fn(async () => head),
+    readGitHistoryPage: jest.fn((_handle: number, offset: number, count: number) => new Promise((resolve, reject) => {
+      release = () => reject(new Error("History read was cancelled."));
+      if (offset === 0) resolve({ offset, commits: [{ oid: "abc" }], done: count > 1 });
+    })),
+    closeGitHistory: jest.fn(() => release?.()),
+  };
+}
+
 describe("@legend-apps/diff-parser", () => {
+  it("pages git history in 500s and releases the native walk once on close", async () => {
+    const parser = historyParser();
+    const { diffParser } = loadModuleWithParser(parser);
+    const reader = await diffParser.openGitHistory("/tmp/repo");
+
+    expect(reader.head.headOid).toBe("abc");
+    await expect(reader.page(0)).resolves.toEqual({ offset: 0, commits: [{ oid: "abc" }], done: true });
+    expect(parser.readGitHistoryPage).toHaveBeenCalledWith(7, 0, 500);
+    const pending = reader.page(500);
+    reader.close();
+    reader.close();
+    await expect(pending).rejects.toThrow(diffParser.GitHistoryCancelledError);
+    await expect(reader.page(0)).rejects.toThrow(diffParser.GitHistoryCancelledError);
+    await Promise.resolve();
+    expect(parser.closeGitHistory).toHaveBeenCalledTimes(1);
+    expect(parser.closeGitHistory).toHaveBeenCalledWith(7);
+  });
+
+  it("closes a history walk that finishes opening after its signal aborts", async () => {
+    const parser = historyParser();
+    const { diffParser } = loadModuleWithParser(parser);
+    const controller = new AbortController();
+    const opening = diffParser.openGitHistory("/tmp/repo", controller.signal);
+    controller.abort();
+
+    await expect(opening).rejects.toThrow(diffParser.GitHistoryCancelledError);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(parser.closeGitHistory).toHaveBeenCalledWith(7);
+  });
+
+  it("rejects an aborted page without closing the walk", async () => {
+    const parser = historyParser();
+    const { diffParser } = loadModuleWithParser(parser);
+    const reader = await diffParser.openGitHistory("/tmp/repo");
+    const controller = new AbortController();
+    const pending = reader.page(500, 500, controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toThrow(diffParser.GitHistoryCancelledError);
+    expect(parser.closeGitHistory).not.toHaveBeenCalled();
+  });
+
   it("exports the native diff rendering surfaces", () => {
     const { diffParser } = loadModuleWithParser();
 

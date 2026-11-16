@@ -5,6 +5,11 @@ import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane } from "./DiffPane";
+import { HistoryView, type HistoryActions } from "./HistoryView";
+import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
+import { setStringAsync } from "@legendapp/spark/clipboard";
+import { showContextMenu } from "@legendapp/spark/context-menu";
+import { openURL } from "@legendapp/spark/links";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
@@ -17,6 +22,12 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [changes, setChanges] = useState(emptyChanges);
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
+  const [view, setView] = useState<"changes" | "history">("changes");
+  const [history, setHistory] = useState(emptyHistory);
+  const historyController = useRef<ReturnType<typeof createGitHistory> | null>(null);
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const selectedCommit = view === "history" ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
   const selected = changes.selection;
@@ -43,7 +54,19 @@ export function App() {
       },
       {
         type: "submenu", id: "view", label: "View", target: { menu: "view" },
-        items: [{ type: "action", id: "toggle-sidebar", label: sidebarLabel, shortcut: "Cmd+Ctrl+s" }],
+        items: [
+          { type: "action", id: "toggle-sidebar", label: sidebarLabel, shortcut: "Cmd+Ctrl+s" },
+          { type: "separator" },
+          { type: "action", id: "show-changes", label: "Changes", shortcut: "Cmd+1", disabled: !changes.root },
+          { type: "action", id: "show-history", label: "History", shortcut: "Cmd+2", disabled: !changes.root },
+        ],
+      },
+      {
+        type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" },
+        items: [
+          { type: "action", id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", disabled: !selectedCommit },
+          { type: "action", id: "open-github", label: "Open Commit on GitHub", disabled: !selectedCommit || !commitGitHubUrl(history, selectedCommit) },
+        ],
       },
       {
         type: "submenu", id: "changes", label: "Changes",
@@ -62,6 +85,10 @@ export function App() {
     onAction: (action) => {
       if (action.itemId === "open-repository") void chooseRepository();
       if (action.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
+      if (action.itemId === "show-changes" && changes.root) setView("changes");
+      if (action.itemId === "show-history" && changes.root) setView("history");
+      if (action.itemId === "copy-sha" && selectedCommit) historyActions.copySha(selectedCommit);
+      if (action.itemId === "open-github" && selectedCommit) historyActions.openOnGitHub(selectedCommit);
       if (action.itemId === "apply-lines") applyLines.current?.();
       if (action.itemId === "discard-file") void discardFile();
       if (action.itemId === "discard-lines") discardLines.current?.();
@@ -98,6 +125,37 @@ export function App() {
   }
 
   useEffect(() => {
+    historyController.current?.setRoot(changes.root);
+    if (!changes.root) setView("changes");
+  }, [changes.root]);
+  useEffect(() => {
+    if (view === "history") void historyController.current?.activate();
+  }, [view, changes.root]);
+
+  const [historyActions] = useState<HistoryActions>(() => ({
+    select: oid => void historyController.current?.select(oid),
+    loadMore: () => void historyController.current?.loadMore(),
+    selectFile: path => historyController.current?.selectFile(path),
+    copySha: oid => { setStringAsync(oid).catch(console.error); },
+    openOnGitHub: oid => {
+      const url = commitGitHubUrl(historyRef.current, oid);
+      if (url) openURL(url).catch(console.error);
+    },
+    contextMenu: (oid, position) => {
+      void historyController.current?.select(oid);
+      const url = commitGitHubUrl(historyRef.current, oid);
+      showContextMenu({ windowId: "main", position, items: [
+        { type: "action", id: "copy-sha", label: "Copy SHA" },
+        { type: "action", id: "open-github", label: "Open on GitHub", disabled: !url },
+      ] }).then(result => {
+        if (result.canceled) return;
+        if (result.itemId === "copy-sha") historyActions.copySha(oid);
+        if (result.itemId === "open-github") historyActions.openOnGitHub(oid);
+      }, console.error);
+    },
+  }));
+
+  useEffect(() => {
     void setWindowOptions("main", {
       title: changes.root ? `${changes.root.split("/").pop()} — Legend Git` : "Legend Git",
       appearance: "system",
@@ -109,7 +167,7 @@ export function App() {
           items: [
             { type: "button", id: "toggle-sidebar", label: sidebarLabel, symbol: "sidebar.left", placement: "leading", tooltip: sidebarLabel },
             { type: "button", id: "open-repository", label: "Open Repository…", symbol: "folder", tooltip: "Open Repository…" },
-            { type: "button", id: "refresh", label: "Refresh", symbol: "arrow.clockwise", tooltip: "Refresh Changes" },
+            { type: "button", id: "refresh", label: "Refresh", symbol: "arrow.clockwise", tooltip: "Refresh" },
             { type: "button", id: "restore-discard", label: "Restore Last Discard…", symbol: "arrow.uturn.backward", tooltip: "Restore Last Discard…", disabled: !lastDiscard },
           ],
         },
@@ -123,9 +181,11 @@ export function App() {
     let disposed = false;
     const owner = createGitChanges(setChanges, watchDirectories);
     controller.current = owner;
+    const historyOwner = createGitHistory(setHistory, watchDirectories);
+    historyController.current = historyOwner;
     const registration = addMacOSWindowListener("main", event => {
       if (!disposed && event.type === "toolbarAction") {
-        if (event.itemId === "refresh") void owner.refresh();
+        if (event.itemId === "refresh") { void owner.refresh(); void historyOwner.refresh(); }
         if (event.itemId === "restore-discard") void restoreRef.current();
         if (event.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
         if (event.itemId === "open-repository") {
@@ -137,7 +197,9 @@ export function App() {
       disposed = true;
       generator.current?.reset();
       owner.dispose();
+      historyOwner.dispose();
       controller.current = null;
+      historyController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     });
@@ -147,7 +209,9 @@ export function App() {
       if (disposed) return;
       disposed = true;
       owner.dispose();
+      historyOwner.dispose();
       controller.current = null;
+      historyController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     };
@@ -164,18 +228,24 @@ export function App() {
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: 52, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={changes.root ? "changes" : null} onSelectionChange={() => {}} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={changes.root ? view : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history") setView(event.id); }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{changes.root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
-          {changes.root ? <SidebarItem id="changes"><Text style={styles.label}>Changes</Text></SidebarItem> :
+          {changes.root ? [
+            <SidebarItem key="changes" id="changes"><Text style={styles.label}>Changes</Text></SidebarItem>,
+            <SidebarItem key="history" id="history"><Text style={styles.label}>History</Text></SidebarItem>,
+          ] :
             <SidebarItem id="empty" selectable={false}><Text style={styles.secondary}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
       content={
         <View style={styles.content}>
           {changes.error && <Text accessibilityRole="alert" style={styles.error}>{changes.error}</Text>}
-          {changes.root ? <>
+          {changes.root && view === "history" ? <>
+            <Text style={styles.repository} numberOfLines={1}>{changes.root}</Text>
+            <HistoryView history={history} actions={historyActions} />
+          </> : changes.root ? <>
             <Text style={styles.repository} numberOfLines={1}>{changes.root}</Text>
             <View style={styles.split}>
               <View style={styles.lists}>

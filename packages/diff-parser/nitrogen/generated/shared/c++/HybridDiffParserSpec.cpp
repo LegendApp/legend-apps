@@ -20,6 +20,9 @@ namespace margelo::nitro::legendapps::diffparser {
       prototype.registerHybridMethod("loadUnifiedDiff", &HybridDiffParserSpec::loadUnifiedDiff);
       prototype.registerHybridMethod("loadUnifiedDiffFile", &HybridDiffParserSpec::loadUnifiedDiffFile);
       prototype.registerHybridMethod("loadUnifiedDiffFromUrl", &HybridDiffParserSpec::loadUnifiedDiffFromUrl);
+      prototype.registerHybridMethod("openGitHistory", &HybridDiffParserSpec::openGitHistory);
+      prototype.registerHybridMethod("readGitHistoryPage", &HybridDiffParserSpec::readGitHistoryPage);
+      prototype.registerHybridMethod("closeGitHistory", &HybridDiffParserSpec::closeGitHistory);
     });
   }
 

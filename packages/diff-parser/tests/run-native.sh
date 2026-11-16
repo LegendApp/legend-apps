@@ -130,6 +130,24 @@ echo "untracked" > "$EXCLUDE_FIXTURE/.reviewer/keep.md"
 echo "untracked" > "$EXCLUDE_FIXTURE/docs/.review/keep.md"
 echo "untracked" > "$EXCLUDE_FIXTURE/docs/generated-notes.md"
 
+HISTORY_FIXTURE="$BUILD_DIR/history-fixture"
+HISTORY_GRAPH_FIXTURE="$BUILD_DIR/history-graph-fixture"
+HISTORY_DETACHED_FIXTURE="$BUILD_DIR/history-detached-fixture"
+HISTORY_UNBORN_FIXTURE="$BUILD_DIR/history-unborn-fixture"
+rm -rf "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE"
+git init --quiet "$HISTORY_FIXTURE"
+python3 "$ROOT/packages/diff-parser/tests/history-fixture.py" | git -C "$HISTORY_FIXTURE" fast-import --quiet
+git -C "$HISTORY_FIXTURE" checkout --quiet main
+git -C "$HISTORY_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_FIXTURE.expected"
+git clone --quiet --no-local "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE"
+git -C "$HISTORY_GRAPH_FIXTURE" commit-graph write --reachable
+test -f "$HISTORY_GRAPH_FIXTURE/.git/objects/info/commit-graph"
+git -C "$HISTORY_GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_GRAPH_FIXTURE.expected"
+git clone --quiet --no-local "$HISTORY_FIXTURE" "$HISTORY_DETACHED_FIXTURE"
+git -C "$HISTORY_DETACHED_FIXTURE" checkout --quiet --detach main~7
+git -C "$HISTORY_DETACHED_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_DETACHED_FIXTURE.expected"
+git init --quiet "$HISTORY_UNBORN_FIXTURE"
+
 clang++ \
   -std=c++20 \
   -Wall \
@@ -156,4 +174,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE"

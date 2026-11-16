@@ -869,6 +869,77 @@ void assertGitRepositoryExcludePaths(const std::string& fixturePath) {
   expectEqual(findFile(parsed, ".reviewer/keep.md").status, "untracked", "git exclude kept sibling status");
 }
 
+std::vector<std::string> readExpectedHistory(const std::string& path) {
+  std::ifstream input(path);
+  expect(static_cast<bool>(input), "history expected file opens");
+  std::vector<std::string> lines;
+  for (std::string line; std::getline(input, line);) {
+    while (!line.empty() && line.back() == ' ') line.pop_back();
+    lines.push_back(line);
+  }
+  return lines;
+}
+
+std::string historyLine(const diffparser::GitHistoryCommitRow& row) {
+  std::string line = row.oid;
+  for (const auto& parent : row.parents) line += " " + parent;
+  return line;
+}
+
+std::vector<diffparser::GitHistoryCommitRow> readAllHistory(diffparser::GitHistoryWalker& walker, size_t pageSize) {
+  std::vector<diffparser::GitHistoryCommitRow> rows;
+  while (true) {
+    auto page = walker.page(rows.size(), pageSize);
+    const auto size = page.size();
+    for (auto& row : page) rows.push_back(std::move(row));
+    if (size < pageSize) return rows;
+  }
+}
+
+void assertGitHistory(const std::string& repositoryPath, bool detached) {
+  const auto expected = readExpectedHistory(repositoryPath + ".expected");
+  diffparser::GitHistoryWalker walker(repositoryPath);
+  expect(!walker.unborn(), "history head is born");
+  expect(walker.detached() == detached, "history detached flag");
+  expectEqual(walker.headOid(), expected.front().substr(0, expected.front().find(' ')), "history head oid");
+  const auto rows = readAllHistory(walker, 500);
+  expectEqual(static_cast<double>(rows.size()), static_cast<double>(expected.size()), "history commit count");
+  for (size_t index = 0; index < rows.size(); ++index) {
+    expectEqual(historyLine(rows[index]), expected[index], "history row " + std::to_string(index) + " matches git log --topo-order");
+  }
+  const auto& root = rows.back();
+  expect(root.parents.empty(), "history root commit has no parents");
+  expectEqual(root.summary, "Root commit", "history root summary");
+  size_t merges = 0;
+  for (const auto& row : rows) merges += row.parents.size() == 2 ? 1 : 0;
+  expect(merges > 0, "history lists merge commits with both parents");
+  if (!detached) {
+    expectEqual(rows.front().summary, "\xC3\x9C" "n\xC3\xAF" "code \xE2\x9C\x93 summary line", "history summary is the first message line");
+    expectEqual(rows.front().authorName, "H\xC3\xAFstory Author", "history author name");
+    expectEqual(rows.front().authorEmail, "author@example.com", "history author email");
+    expect(rows.front().time > 1700000000, "history author time");
+    const auto repeated = walker.page(1000, 500);
+    expectEqual(static_cast<double>(repeated.size()), 500, "history re-read page size");
+    expectEqual(repeated.front().oid, rows[1000].oid, "history re-read from an earlier offset");
+    expectEqual(walker.page(1500, 500).front().oid, rows[1500].oid, "history continues after a re-read");
+    expect(walker.page(rows.size(), 500).empty(), "history page past the end is empty");
+  }
+  bool cancelledRead = false;
+  try {
+    walker.page(0, 500, [] { return true; });
+  } catch (const std::runtime_error&) {
+    cancelledRead = true;
+  }
+  expect(cancelledRead, "history read stops when cancelled");
+}
+
+void assertUnbornGitHistory(const std::string& repositoryPath) {
+  diffparser::GitHistoryWalker walker(repositoryPath);
+  expect(walker.unborn(), "unborn history is reported");
+  expect(walker.headOid().empty(), "unborn history has no head oid");
+  expect(walker.page(0, 500).empty(), "unborn history has no commits");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -896,6 +967,12 @@ int main(int argc, char** argv) {
     }
     if (argc > 4) {
       assertGitRepositoryExcludePaths(argv[4]);
+    }
+    if (argc > 8) {
+      assertGitHistory(argv[5], false);
+      assertGitHistory(argv[6], false);
+      assertGitHistory(argv[7], true);
+      assertUnbornGitHistory(argv[8]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

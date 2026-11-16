@@ -11,14 +11,22 @@ import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
+import { loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-parser";
+import { setStringAsync } from "@legendapp/spark/clipboard";
+import { showContextMenu } from "@legendapp/spark/context-menu";
+import { openURL } from "@legendapp/spark/links";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
   PlatformColor: (name: string) => name,
   StyleSheet: { create: (styles: unknown) => styles },
-  Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", Switch: "Switch", TextInput: "TextInput", useColorScheme: () => "light",
+  Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", ScrollView: "ScrollView", Switch: "Switch", TextInput: "TextInput", useColorScheme: () => "light",
 }));
-jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn() }));
+jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn(), gitHistoryPageSize: 500, openGitHistory: jest.fn() }));
+jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList" }));
+jest.mock("@legendapp/spark/clipboard", () => ({ setStringAsync: jest.fn(async () => true) }));
+jest.mock("@legendapp/spark/context-menu", () => ({ showContextMenu: jest.fn(async () => ({ canceled: false, itemId: "copy-sha" })) }));
+jest.mock("@legendapp/spark/links", () => ({ openURL: jest.fn(async () => true) }));
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })) }));
@@ -177,4 +185,78 @@ it("generates a commit message from the staged diff, shows progress, cancels on 
   expect(button("Generate")!.props.disabled).toBe(true);
   expect(menuItem().disabled).toBe(true);
   await act(async () => { renderer.unmount(); });
+});
+
+it("shows History from the sidebar and View menu, selects commits, and copies or opens them on GitHub", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), parent = "b".repeat(40);
+  const commits = [
+    { oid: head, parents: [parent], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Second" },
+    { oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_699_000_000, summary: "First" },
+  ];
+  const reader = { head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() };
+  jest.mocked(openGitHistory).mockResolvedValue(reader);
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const locations = { root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] };
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => locations),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map([[head, [{ kind: "branch", name: "main" }, { kind: "tag", name: "v1.0" }]]])),
+    remoteUrl: jest.fn(async () => "git@github.com:LegendApp/legend-apps.git"), currentBranch: jest.fn(async () => "main"),
+    commitDetails: jest.fn(async (oid: string) => ({ oid, parents: oid === head ? [parent] : [], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: oid === head ? "Second\n\nBody" : "First" })),
+    commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n") };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const toolbar = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  const menu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
+  const item = (id: string) => menu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  expect(item("show-history")).toMatchObject({ label: "History", shortcut: "Cmd+2", disabled: false });
+  expect(item("copy-sha")).toMatchObject({ label: "Copy SHA", disabled: true });
+  expect(openGitHistory).not.toHaveBeenCalled();
+
+  await act(async () => { renderer.root.findAllByType(Sidebar)[0]!.props.onSelectionChange({ id: "history" }); });
+  expect(openGitHistory).toHaveBeenCalledWith("/repo", expect.any(AbortSignal));
+  expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBe("history");
+  const list = renderer.root.findByType("LegendList" as any);
+  expect(list.props.data.map((commit: { summary: string }) => commit.summary)).toEqual(["Second", "First"]);
+  expect(list.props.getFixedItemSize()).toBe(44);
+
+  let row!: ReactTestRenderer;
+  await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
+  const text = (node: ReactTestRenderer) => node.root.findAllByType(Text).map(entry => [entry.props.children].flat().join("")).join("\n");
+  expect(text(row)).toContain("main\nv1.0\nSecond\naaaaaaa\nAda");
+  await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
+  expect(git.commitDetails).toHaveBeenCalledWith(head, expect.anything());
+  expect(text(renderer)).toContain("Body");
+  expect(item("copy-sha")).toMatchObject({ disabled: false });
+  await act(async () => { menu().onAction({ itemId: "copy-sha" }); });
+  expect(setStringAsync).toHaveBeenLastCalledWith(head);
+  await act(async () => { menu().onAction({ itemId: "open-github" }); });
+  expect(openURL).toHaveBeenLastCalledWith(`https://github.com/LegendApp/legend-apps/commit/${head}`);
+
+  // Right-click shows the commit's native context menu; parents are clickable.
+  await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onTouchEnd({ nativeEvent: { button: 2, pageX: 30, pageY: 40 } }); });
+  expect(showContextMenu).toHaveBeenCalledWith(expect.objectContaining({ windowId: "main", position: { x: 30, y: 40 } }));
+  expect(setStringAsync).toHaveBeenCalledTimes(2);
+  // A primary-button touch end only selects, through onPress.
+  await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onTouchEnd({ nativeEvent: { button: 0 } }); });
+  expect(showContextMenu).toHaveBeenCalledTimes(1);
+  await act(async () => { renderer.root.findByProps({ accessibilityLabel: "Parent bbbbbbb" }).props.onPress(); });
+  expect(git.commitDetails).toHaveBeenLastCalledWith(parent, expect.anything());
+  expect(text(renderer)).toContain("None (root commit)");
+
+  // A ref that moves while HEAD stays still redraws the recycled rows' badges.
+  const before = renderer.root.findByType("LegendList" as any).props.extraData;
+  git.refDecorations.mockResolvedValueOnce(new Map([[parent, [{ kind: "remote", name: "origin/main" }]]]));
+  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  expect(renderer.root.findByType("LegendList" as any).props.extraData).not.toBe(before);
+  expect(renderer.root.findAllByProps({ children: "Open on GitHub" }).length).toBeGreaterThan(0);
+
+  await act(async () => { menu().onAction({ itemId: "show-changes" }); });
+  expect(renderer.root.findAllByType("LegendList" as any)).toHaveLength(0);
+  await act(async () => { renderer.unmount(); });
+  expect(reader.close).toHaveBeenCalled();
 });

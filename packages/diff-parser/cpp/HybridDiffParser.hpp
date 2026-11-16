@@ -43,6 +43,9 @@ public:
       const std::string& sourceLabel,
       double initialRowCount,
       bool ignoreWhitespaceChanges) override;
+  std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) override;
+  std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) override;
+  void closeGitHistory(double handle) override;
 };
 
 } // namespace margelo::nitro::legendapps::diffparser

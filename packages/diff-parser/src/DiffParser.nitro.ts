@@ -161,6 +161,31 @@ export interface DiffGitFolderLoadOptions {
   excludePaths?: string[];
 }
 
+export interface GitHistoryCommit {
+  oid: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  /** Author time, in seconds since the epoch. */
+  time: number;
+  /** The first line of the message. */
+  summary: string;
+}
+
+export interface GitHistoryHead {
+  handle: number;
+  headOid: string;
+  unborn: boolean;
+  detached: boolean;
+}
+
+export interface GitHistoryPage {
+  offset: number;
+  commits: GitHistoryCommit[];
+  /** No commits follow this page. */
+  done: boolean;
+}
+
 export interface DiffDocument
   extends HybridObject<{
     ios: "c++";
@@ -244,4 +269,9 @@ export interface DiffParser
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFile(filePath: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
+  /** Opens a paged walk of HEAD's history; release it with closeGitHistory. */
+  openGitHistory(folderPath: string): Promise<GitHistoryHead>;
+  readGitHistoryPage(handle: number, offset: number, count: number): Promise<GitHistoryPage>;
+  /** Releases the walk; a page still being read fails as cancelled. */
+  closeGitHistory(handle: number): void;
 }

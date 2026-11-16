@@ -7,8 +7,12 @@
 #include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <cmath>
 #include <fstream>
+#include <map>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -84,6 +88,22 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(
       std::move(parsed.headTreeOid),
       std::move(backingStore),
       parsed.timing);
+}
+
+struct GitHistoryEntry {
+  std::shared_ptr<GitHistoryWalker> walker;
+  std::shared_ptr<std::atomic<bool>> closed;
+};
+
+std::mutex gitHistoryMutex;
+std::map<double, GitHistoryEntry> gitHistories;
+double nextGitHistoryHandle = 1;
+
+GitHistoryEntry findGitHistory(double handle) {
+  std::lock_guard<std::mutex> lock(gitHistoryMutex);
+  const auto found = gitHistories.find(handle);
+  if (found == gitHistories.end()) throw std::runtime_error("History read was cancelled.");
+  return found->second;
 }
 
 } // namespace
@@ -229,6 +249,48 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     result.timing = timing;
     return result;
   });
+}
+
+std::shared_ptr<Promise<GitHistoryHead>> HybridDiffParser::openGitHistory(const std::string& folderPath) {
+  return Promise<GitHistoryHead>::async([folderPath]() -> GitHistoryHead {
+    auto walker = std::make_shared<GitHistoryWalker>(folderPath);
+    GitHistoryHead head;
+    head.headOid = walker->headOid();
+    head.unborn = walker->unborn();
+    head.detached = walker->detached();
+    std::lock_guard<std::mutex> lock(gitHistoryMutex);
+    head.handle = nextGitHistoryHandle++;
+    gitHistories.emplace(head.handle, GitHistoryEntry{std::move(walker), std::make_shared<std::atomic<bool>>(false)});
+    return head;
+  });
+}
+
+std::shared_ptr<Promise<GitHistoryPage>> HybridDiffParser::readGitHistoryPage(double handle, double offset, double count) {
+  return Promise<GitHistoryPage>::async([handle, offset, count]() -> GitHistoryPage {
+    if (!(offset >= 0) || !(count >= 0) || std::floor(offset) != offset || std::floor(count) != count) {
+      throw std::runtime_error("History pages need a whole, non-negative offset and count.");
+    }
+    const auto entry = findGitHistory(handle);
+    const auto start = static_cast<size_t>(offset);
+    const auto rows = entry.walker->page(start, static_cast<size_t>(count), [closed = entry.closed] { return closed->load(); });
+    if (entry.closed->load()) throw std::runtime_error("History read was cancelled.");
+    GitHistoryPage page;
+    page.offset = offset;
+    page.done = rows.size() < static_cast<size_t>(count);
+    page.commits.reserve(rows.size());
+    for (const auto& row : rows) {
+      page.commits.push_back(GitHistoryCommit(row.oid, row.parents, row.authorName, row.authorEmail, row.time, row.summary));
+    }
+    return page;
+  });
+}
+
+void HybridDiffParser::closeGitHistory(double handle) {
+  std::lock_guard<std::mutex> lock(gitHistoryMutex);
+  const auto found = gitHistories.find(handle);
+  if (found == gitHistories.end()) return;
+  found->second.closed->store(true);
+  gitHistories.erase(found);
 }
 
 } // namespace margelo::nitro::legendapps::diffparser

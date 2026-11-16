@@ -1819,4 +1819,104 @@ DiffParsedDocument parseGitRepositoryDiff(
   return document;
 }
 
+struct GitHistoryWalker::Impl {
+  std::unique_ptr<git_repository, GitRepositoryDeleter> repo;
+  git_revwalk* walk = nullptr;
+  git_oid head = {};
+  std::string headOid;
+  bool unborn = false;
+  bool detached = false;
+  size_t position = 0;
+  bool exhausted = false;
+  std::mutex mutex;
+
+  ~Impl() {
+    if (walk != nullptr) git_revwalk_free(walk);
+  }
+
+  // GIT_SORT_TOPOLOGICAL alone matches `git log --topo-order`; adding GIT_SORT_TIME gives `--date-order`.
+  void restart() {
+    git_revwalk_reset(walk);
+    if (git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL) != 0 || git_revwalk_push(walk, &head) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to start the history walk"));
+    }
+    position = 0;
+    exhausted = false;
+  }
+};
+
+GitHistoryWalker::GitHistoryWalker(const std::string& folderPath) : impl_(std::make_unique<Impl>()) {
+  ensureLibGit2Initialized();
+  git_repository* rawRepo = nullptr;
+  const std::string normalizedPath = normalizeFolderPath(folderPath);
+  if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
+  }
+  impl_->repo.reset(rawRepo);
+  const int unborn = git_repository_head_unborn(rawRepo);
+  if (unborn < 0) throw std::runtime_error(gitErrorMessage("Failed to read HEAD"));
+  impl_->unborn = unborn == 1;
+  if (impl_->unborn) return;
+  impl_->detached = git_repository_head_detached(rawRepo) == 1;
+  if (git_reference_name_to_id(&impl_->head, rawRepo, "HEAD") != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to resolve HEAD"));
+  }
+  char text[GIT_OID_MAX_HEXSIZE + 1] = {};
+  git_oid_tostr(text, sizeof(text), &impl_->head);
+  impl_->headOid = text;
+  if (git_revwalk_new(&impl_->walk, rawRepo) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to create the history walk"));
+  }
+  impl_->restart();
+}
+
+GitHistoryWalker::~GitHistoryWalker() = default;
+
+const std::string& GitHistoryWalker::headOid() const { return impl_->headOid; }
+bool GitHistoryWalker::unborn() const { return impl_->unborn; }
+bool GitHistoryWalker::detached() const { return impl_->detached; }
+
+std::vector<GitHistoryCommitRow> GitHistoryWalker::page(size_t offset, size_t count, const std::function<bool()>& shouldCancel) {
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  std::vector<GitHistoryCommitRow> rows;
+  if (impl_->unborn || count == 0) return rows;
+  if (offset != impl_->position) impl_->restart();
+  const auto cancelled = [&] { return shouldCancel && shouldCancel(); };
+  const auto toText = [](const git_oid* oid) {
+    char text[GIT_OID_MAX_HEXSIZE + 1] = {};
+    git_oid_tostr(text, sizeof(text), oid);
+    return std::string(text);
+  };
+  git_oid oid;
+  while (!impl_->exhausted && impl_->position < offset + count) {
+    if ((impl_->position & 63) == 0 && cancelled()) throw std::runtime_error("History read was cancelled.");
+    const int next = git_revwalk_next(&oid, impl_->walk);
+    if (next == GIT_ITEROVER) { impl_->exhausted = true; break; }
+    if (next != 0) throw std::runtime_error(gitErrorMessage("Failed to walk history"));
+    if (impl_->position++ < offset) continue;
+    git_commit* rawCommit = nullptr;
+    if (git_commit_lookup(&rawCommit, impl_->repo.get(), &oid) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to read commit"));
+    }
+    std::unique_ptr<git_commit, GitCommitDeleter> commit(rawCommit);
+    GitHistoryCommitRow row;
+    row.oid = toText(&oid);
+    const unsigned int parentCount = git_commit_parentcount(rawCommit);
+    row.parents.reserve(parentCount);
+    for (unsigned int index = 0; index < parentCount; ++index) row.parents.push_back(toText(git_commit_parent_id(rawCommit, index)));
+    if (const git_signature* author = git_commit_author(rawCommit)) {
+      row.authorName = author->name ? author->name : "";
+      row.authorEmail = author->email ? author->email : "";
+      row.time = static_cast<double>(author->when.time);
+    }
+    const char* message = git_commit_message(rawCommit);
+    std::string_view text = message ? message : "";
+    text = text.substr(0, text.find('\n'));
+    if (!text.empty() && text.back() == '\r') text.remove_suffix(1);
+    row.summary = std::string(text);
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
 } // namespace margelo::nitro::legendapps::diffparser
