@@ -1,10 +1,11 @@
-import { GitIndexLockedError, type GitService, type GitStatus, type GitReadOptions, type GitDirectoryChangeEvent } from "@legend-apps/git-core";
-import { createGitChanges, type ChangesState } from "../gitChanges";
+import { GitIndexLockedError, GitServiceError, type GitCommitInput, type GitDiscardBackup, type GitService, type GitStatus, type GitReadOptions, type GitDirectoryChangeEvent } from "@legend-apps/git-core";
+import { conflictedEntries, createGitChanges, stagedEntries, unstagedEntries, type ChangesState } from "../gitChanges";
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 const status = (xy = "MM"): GitStatus => ({ entries: [{ kind: "ordinary", path: "both.txt", indexStatus: xy[0]!, worktreeStatus: xy[1]! }], branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 } });
 const unstagedPatch = "diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1,2 +1,2 @@\n-index\n+worktree\n keep\n";
 const stagedPatch = "diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1 +1 @@\n-head\n+index\n";
+const backup: GitDiscardBackup = { ref: "refs/legend-git/discarded/000001763300000000-0", oid: "f".repeat(40), entries: [{ path: "both.txt", mode: "100644", oid: "e".repeat(40) }] };
 function setup() {
   let state!: ChangesState, notify!: (event: GitDirectoryChangeEvent) => void;
   const remove = jest.fn();
@@ -13,6 +14,11 @@ function setup() {
     watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git/worktrees/linked", commonDir: "/repo/.git", ignoredPaths: ["ignored/"] })),
     status: jest.fn(async () => status()), stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}),
     fileDiff: jest.fn(async (_file: { path: string }, staged: boolean) => staged ? stagedPatch : unstagedPatch), applyPatch: jest.fn(async (_patch: string, _options: GitReadOptions & { reverse?: boolean }) => {}),
+    repoState: jest.fn(async (_options?: GitReadOptions) => ({ merging: false })),
+    lastDiscard: jest.fn(async (_options?: GitReadOptions): Promise<GitDiscardBackup | null> => null),
+    discardFiles: jest.fn(async (_paths: readonly string[], _options?: GitReadOptions) => backup), discardPatch: jest.fn(async (_path: string, _patch: string, _options?: GitReadOptions) => backup),
+    restoreDiscard: jest.fn(async (_ref: string, _options?: GitReadOptions) => ({ restored: backup, replaced: backup })),
+    commit: jest.fn(async (_input: GitCommitInput, _options?: GitReadOptions) => {}), headMessage: jest.fn(async (_options?: GitReadOptions) => "Subject\n\nBody"),
   };
   const watch = jest.fn((_paths: string[], listener: typeof notify) => { notify = listener; return { remove }; });
   const serviceFor = jest.fn((_path: string) => git as unknown as GitService);
@@ -126,5 +132,49 @@ it("reports a failed patch write and still refreshes from authoritative status",
   await t.controller.changeLines(new Set(["+1"]), unstagedPatch);
   expect(t.state()).toMatchObject({ writing: false, error: expect.stringContaining("index is locked") });
   expect(t.git.status.mock.calls.length).toBe(reads + 1);
+  t.controller.dispose();
+});
+
+it("discards whole files and reversed line selections, then exposes and restores the last backup", async () => {
+  const t = setup(); await t.controller.open("/repo");
+  t.git.lastDiscard.mockResolvedValue(backup);
+  await t.controller.discardFile("both.txt");
+  expect(t.git.discardFiles).toHaveBeenCalledWith(["both.txt"], expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  expect(t.state()).toMatchObject({ writing: false, error: null, lastDiscard: backup });
+  await t.controller.select({ section: "unstaged", path: "both.txt" });
+  expect(await t.controller.discardLines(new Set(["+1"]), "stale")).toBe(false);
+  expect(t.git.discardPatch).not.toHaveBeenCalled();
+  expect(await t.controller.discardLines(new Set(["+1"]), unstagedPatch)).toBe(true);
+  // Reversed onto the worktree: the selected addition is undone, the unselected removal stays out of the patch.
+  expect(t.git.discardPatch).toHaveBeenCalledWith("both.txt", "diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1,1 +1,2 @@\n+worktree\n keep\n", expect.anything());
+  await t.controller.select({ section: "staged", path: "both.txt" });
+  expect(await t.controller.discardLines(new Set(["+1"]), stagedPatch)).toBe(false);
+  expect(t.state().error).toBe("Only unstaged changes can be discarded.");
+  expect(await t.controller.restoreLastDiscard()).toBe(true);
+  expect(t.git.restoreDiscard).toHaveBeenCalledWith(backup.ref, expect.anything());
+  t.controller.dispose();
+});
+
+it("lists conflicts once without loading their patch, and reports commit failures with Git's stderr", async () => {
+  const t = setup();
+  const conflicted: GitStatus = { ...status(), entries: [...status().entries, { kind: "unmerged", path: "conflict.txt", indexStatus: "U", worktreeStatus: "U" }] };
+  t.git.status.mockResolvedValue(conflicted);
+  await t.controller.open("/repo");
+  expect(conflictedEntries(t.state().status).map(entry => entry.path)).toEqual(["conflict.txt"]);
+  expect(unstagedEntries(t.state().status).map(entry => entry.path)).toEqual(["both.txt", "conflict.txt"]);
+  expect(stagedEntries(t.state().status).map(entry => entry.path)).toEqual(["both.txt"]);
+  await t.controller.select({ section: "unstaged", path: "conflict.txt" });
+  expect(t.state().patch).toMatchObject({ conflicted: true, file: null });
+  expect(t.git.fileDiff).not.toHaveBeenCalled();
+  t.git.commit.mockRejectedValueOnce(new GitServiceError("command-failed", "pre-commit: lint failed"));
+  expect(await t.controller.commit({ message: "Subject\n" })).toBe(false);
+  expect(t.state().error).toBe("pre-commit: lint failed");
+  expect(await t.controller.commit({ message: "Subject\n", signoff: true })).toBe(true);
+  expect(t.git.commit).toHaveBeenLastCalledWith({ message: "Subject\n", signoff: true }, expect.anything());
+  expect(await t.controller.headMessage()).toBe("Subject\n\nBody");
+  t.git.status.mockResolvedValue({ ...status(), branch: { ...status().branch, oid: "(initial)" } });
+  await t.controller.refresh();
+  expect(await t.controller.headMessage()).toBeNull();
+  expect(t.git.headMessage).toHaveBeenCalledTimes(1);
   t.controller.dispose();
 });

@@ -3,9 +3,10 @@ import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
-import { createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
+import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane } from "./DiffPane";
-import { openFileDialog } from "@legendapp/spark/dialogs";
+import { CommitComposer } from "./CommitComposer";
+import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -21,6 +22,12 @@ export function App() {
   const selected = changes.selection;
   const busy = changes.writing || changes.loading;
   const applyLines = useRef<(() => void) | null>(null);
+  const discardLines = useRef<(() => void) | null>(null);
+  const commit = useRef<(() => void) | null>(null);
+  const conflicts = conflictedEntries(changes.status).length;
+  const selectedEntry = selected?.section === "unstaged" ? unstaged.find(entry => entry.path === selected.path) : undefined;
+  const canDiscardFile = !busy && !!selectedEntry && selectedEntry.kind !== "unmerged";
+  const lastDiscard = changes.lastDiscard;
   const linesLabel = `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`;
   const sidebarLabel = sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar";
 
@@ -38,13 +45,25 @@ export function App() {
       },
       {
         type: "submenu", id: "changes", label: "Changes",
-        items: [{ type: "action", id: "apply-lines", label: linesLabel, shortcut: "Cmd+Shift+l", disabled: !changes.patch?.file?.hunks.length }],
+        items: [
+          { type: "action", id: "apply-lines", label: linesLabel, shortcut: "Cmd+Shift+l", disabled: !changes.patch?.file?.hunks.length },
+          { type: "separator" },
+          { type: "action", id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", disabled: !canDiscardFile },
+          { type: "action", id: "discard-lines", label: "Discard Selected Lines…", disabled: busy || changes.patch?.section !== "unstaged" || !changes.patch.file?.hunks.length },
+          { type: "action", id: "restore-discard", label: "Restore Last Discard…", disabled: busy || !lastDiscard },
+          { type: "separator" },
+          { type: "action", id: "commit", label: "Commit", shortcut: "Cmd+Enter", disabled: busy },
+        ],
       },
     ],
     onAction: (action) => {
       if (action.itemId === "open-repository") void chooseRepository();
       if (action.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
       if (action.itemId === "apply-lines") applyLines.current?.();
+      if (action.itemId === "discard-file") void discardFile();
+      if (action.itemId === "discard-lines") discardLines.current?.();
+      if (action.itemId === "restore-discard") void restoreDiscard();
+      if (action.itemId === "commit") commit.current?.();
     },
   });
 
@@ -54,6 +73,24 @@ export function App() {
       const result = await openFileDialog({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
       if (!result.canceled && controller.current === owner) await owner?.open(result.paths[0]!);
     } catch (error) { console.error(error); }
+  }
+
+  async function discardFile() {
+    const entry = selectedEntry;
+    if (!canDiscardFile || !entry) return;
+    const what = entry.kind === "untracked" ? `untracked file “${entry.path}”` : `changes to “${entry.path}”`;
+    if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardFile(entry.path);
+  }
+
+  async function restoreDiscard() {
+    const backup = controller.current && lastDiscard;
+    if (!backup) return;
+    const names = backup.entries.map(entry => entry.path);
+    const files = names.length === 1 ? `“${names[0]}”` : `${names.length} files`;
+    const message = names.length === 1
+      ? `Legend Git writes ${files} back as it was before the last discard. Its current contents are backed up first, under refs/legend-git/replaced/.`
+      : `Legend Git writes ${files} back as they were before the last discard. Their current contents are backed up first, under refs/legend-git/replaced/.`;
+    if (await confirmDestructive(`Restore ${files}?`, "Restore", message)) await controller.current?.restoreLastDiscard();
   }
 
   useEffect(() => {
@@ -69,12 +106,15 @@ export function App() {
             { type: "button", id: "toggle-sidebar", label: sidebarLabel, symbol: "sidebar.left", placement: "leading", tooltip: sidebarLabel },
             { type: "button", id: "open-repository", label: "Open Repository…", symbol: "folder", tooltip: "Open Repository…" },
             { type: "button", id: "refresh", label: "Refresh", symbol: "arrow.clockwise", tooltip: "Refresh Changes" },
+            { type: "button", id: "restore-discard", label: "Restore Last Discard…", symbol: "arrow.uturn.backward", tooltip: "Restore Last Discard…", disabled: !lastDiscard },
           ],
         },
       },
     }).catch(console.error);
-  }, [sidebarLabel, changes.root]);
+  }, [sidebarLabel, changes.root, !lastDiscard]); // eslint-disable-line react-hooks/exhaustive-deps -- only availability changes the toolbar
 
+  const restoreRef = useRef(restoreDiscard);
+  restoreRef.current = restoreDiscard;
   useEffect(() => {
     let disposed = false;
     const owner = createGitChanges(setChanges, watchDirectories);
@@ -82,6 +122,7 @@ export function App() {
     const registration = addMacOSWindowListener("main", event => {
       if (!disposed && event.type === "toolbarAction") {
         if (event.itemId === "refresh") void owner.refresh();
+        if (event.itemId === "restore-discard") void restoreRef.current();
         if (event.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
         if (event.itemId === "open-repository") {
           void chooseRepository();
@@ -135,12 +176,17 @@ export function App() {
               <View style={styles.lists}>
                 <ChangesList title="Unstaged" entries={unstaged} selectedPath={selected?.section === "unstaged" ? selected.path : null}
                   onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
-                  action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)} />
+                  action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)}
+                  secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
                 <ChangesList title="Staged" entries={staged} selectedPath={selected?.section === "staged" ? selected.path : null}
                   onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
                   action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
+                <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"}
+                  commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)} />
               </View>
-              {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} onApply={(keys, text) => void controller.current?.changeLines(keys, text)} />
+              {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
+                onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
+                onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
                 : <View style={styles.placeholder}><Text style={styles.secondary}>{selected ? "Loading diff…" : "Select a file to view its changes"}</Text></View>}
             </View>
           </> : <View style={styles.empty}>
@@ -153,21 +199,35 @@ export function App() {
   );
 }
 
-function ChangesList({ title, entries, selectedPath, onSelect, action, disabled, onAction }: {
+/** A native warning sheet on the main window; resolves true when the user picks the action. */
+async function confirmDestructive(title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.") {
+  try {
+    const result = await showMessage({ windowId: "main", kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: "confirm", cancelButtonId: "cancel" });
+    return result.buttonId === "confirm";
+  } catch (error) { console.error(error); return false; }
+}
+
+function ChangesList({ title, entries, selectedPath, onSelect, action, disabled, onAction, secondaryAction, secondaryDisabled, onSecondaryAction }: {
   title: string; entries: GitStatusEntry[]; selectedPath: string | null; onSelect: (path: string | null) => void;
   action: string; disabled: boolean; onAction: (path: string) => void;
+  secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
   return <View style={styles.listSection}>
     <View style={styles.heading}>
       <Text style={styles.headingLabel}>{title} ({entries.length})</Text>
+      {secondaryAction ? <Button style={styles.action} disabled={secondaryDisabled} onPress={() => onSecondaryAction?.()}>{secondaryAction}</Button> : null}
       <Button style={styles.action} disabled={disabled || selectedPath === null} onPress={() => { if (selectedPath !== null) onAction(selectedPath); }}>{action}</Button>
     </View>
     {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={30}>
       {entries.map(entry => <SidebarItem key={entry.path} id={entry.path}>
-        <View style={styles.row}>
+        {entry.kind === "unmerged" ? <View style={styles.row} accessibilityLabel={`${entry.path}, conflicted`}>
+          <Text style={[styles.status, styles.conflict]}>{entry.indexStatus + entry.worktreeStatus}</Text>
+          <Text style={styles.file} numberOfLines={1}>{entry.path}</Text>
+          <Text style={styles.conflictLabel}>Conflict</Text>
+        </View> : <View style={styles.row}>
           <Text style={styles.status}>{title === "Staged" ? entry.indexStatus : entry.worktreeStatus}</Text>
           <Text style={styles.file} numberOfLines={1}>{entry.originalPath ? `${entry.originalPath} → ${entry.path}` : entry.path}</Text>
-        </View>
+        </View>}
       </SidebarItem>)}
     </Sidebar> : <Text style={styles.secondary}>No {title.toLowerCase()} changes</Text>}
   </View>;
@@ -178,11 +238,11 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingTop: 58, backgroundColor: PlatformColor("windowBackgroundColor") },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   split: { flex: 1, flexDirection: "row" },
-  lists: { width: 320 },
+  lists: { width: 340 },
   placeholder: { flex: 1, alignItems: "center", justifyContent: "center", borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   listSection: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8 },
-  headingLabel: { fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
+  heading: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  headingLabel: { flex: 1, fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
   action: { width: 88, height: 28 },
   repository: { fontSize: 12, paddingHorizontal: 16, paddingBottom: 12, color: PlatformColor("secondaryLabelColor") },
   section: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 12, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
@@ -191,6 +251,8 @@ const styles = StyleSheet.create({
   error: { padding: 12, fontSize: 13, color: PlatformColor("systemRedColor") },
   row: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8 },
   status: { width: 20, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
+  conflict: { color: PlatformColor("systemRedColor"), fontWeight: "600" },
+  conflictLabel: { fontSize: 11, fontWeight: "600", color: PlatformColor("systemRedColor") },
   file: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
 });
 

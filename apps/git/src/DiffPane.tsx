@@ -43,8 +43,10 @@ export function nextLineSelection(items: readonly DiffPaneItem[], selected: Read
   return { selected: new Set([item.key]), anchor: index };
 }
 
-export function DiffPane({ patch, disabled, onApply, applyRef }: {
+export function DiffPane({ patch, disabled, onApply, applyRef, onDiscard, discardRef }: {
   patch: NonNullable<ChangesState["patch"]>; disabled: boolean; onApply: (keys: ReadonlySet<string>, text: string) => void; applyRef?: { current: (() => void) | null };
+  /** Unstaged side only: asks to discard the keys from the worktree. */
+  onDiscard?: (keys: ReadonlySet<string>, text: string, what: string) => void; discardRef?: { current: (() => void) | null };
 }) {
   const appearance = useColorScheme() === "dark" ? "dark" : "light";
   const [loaded, setLoaded] = useState<{ text: string; document: DiffDocument; rows: DiffRenderRow[] } | null>(null);
@@ -54,6 +56,8 @@ export function DiffPane({ patch, disabled, onApply, applyRef }: {
   const [selection, setSelection] = useState<{ selected: ReadonlySet<string>; anchor: number | null }>({ selected: new Set(), anchor: null });
   const staged = patch.section === "staged";
   const verb = staged ? "Unstage" : "Stage";
+  const discard = staged ? undefined : onDiscard;
+  const linesLabel = (count: number) => count === 1 ? "1 selected line" : `${count} selected lines`;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +84,13 @@ export function DiffPane({ patch, disabled, onApply, applyRef }: {
     applyRef.current = () => { if (!disabled && selected.size) onApply(selected, patch.text); };
     return () => { applyRef.current = null; };
   }, [applyRef, disabled, onApply, selected, patch.text]);
-  const message = patch.file?.binary ? `Binary file. ${verb} the whole file from the list.`
+  useEffect(() => {
+    if (!discardRef) return;
+    discardRef.current = () => { if (!disabled && selected.size) discard?.(selected, patch.text, linesLabel(selected.size)); };
+    return () => { discardRef.current = null; };
+  });
+  const message = patch.conflicted ? "This file has merge conflicts. Resolve them in the file, then stage the whole file to mark it resolved."
+    : patch.file?.binary ? `Binary file. ${verb}${discard ? " or discard" : ""} the whole file from the list.`
     : !patch.file ? "No changes to show."
     : !patch.file.hunks.length ? `No content changes. ${verb} the whole file to include mode or rename changes.`
     : error;
@@ -88,6 +98,7 @@ export function DiffPane({ patch, disabled, onApply, applyRef }: {
   return <View style={styles.root}>
     <View style={styles.header}>
       <Text style={styles.path} numberOfLines={1}>{patch.path}</Text>
+      {discard ? <Button style={styles.action} disabled={disabled || !selected.size || !!message} onPress={() => discard(selected, patch.text, linesLabel(selected.size))}>Discard Lines…</Button> : null}
       <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>
     </View>
     {message ? <Text style={styles.message}>{message}</Text> : loaded && <>
@@ -105,6 +116,7 @@ export function DiffPane({ patch, disabled, onApply, applyRef }: {
         keyExtractor={(item, index) => item.type === "hunk" ? `hunk:${item.hunkIndex}` : `row:${item.row.index}:${index}`}
         renderItem={({ item, index }) => item.type === "hunk" ? <View style={styles.hunk}>
           <Text style={[styles.hunkTitle, { fontFamily }]}>Hunk {item.hunkIndex + 1}</Text>
+          {discard ? <Button style={styles.action} disabled={disabled} onPress={() => discard(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text, `hunk ${item.hunkIndex + 1} of “${patch.path}”`)}>Discard Hunk…</Button> : null}
           <Button style={styles.action} disabled={disabled} onPress={() => onApply(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text)}>{`${verb} Hunk`}</Button>
         </View> : <Pressable
           accessibilityRole="button" accessibilityLabel={`${item.row.changeType === 1 ? "Added" : item.row.changeType === 2 ? "Removed" : "Context"} line ${item.row.text}`}
@@ -131,8 +143,8 @@ const styles = StyleSheet.create({
   action: { width: 110, height: 24 },
   message: { padding: 16, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
   config: { width: 0, height: 0, overflow: "hidden" },
-  hunk: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, height: 32, backgroundColor: PlatformColor("underPageBackgroundColor") },
-  hunkTitle: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
+  hunk: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, height: 32, backgroundColor: PlatformColor("underPageBackgroundColor") },
+  hunkTitle: { flex: 1, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   row: { width: "100%", height: rowHeight },
   hitTarget: { ...StyleSheet.absoluteFillObject },
   selected: { backgroundColor: PlatformColor("selectedContentBackgroundColor"), opacity: 0.28 },

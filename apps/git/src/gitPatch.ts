@@ -13,3 +13,8 @@ export function applyPatchSelection(git: GitService, file: UnifiedPatchFile, sta
   const patch = buildUnifiedPatchSelection(file, selected, { reverse: staged });
   return git.applyPatch(patch, { reverse: staged, signal });
 }
+
+/** Discards the selected changed lines of a file's unstaged diff from the worktree, after Git backs the file up. */
+export function discardPatchSelection(git: GitService, path: string, file: UnifiedPatchFile, selected: ReadonlySet<string>, signal?: AbortSignal) {
+  return git.discardPatch(path, buildUnifiedPatchSelection(file, selected, { reverse: true }), { signal });
+}

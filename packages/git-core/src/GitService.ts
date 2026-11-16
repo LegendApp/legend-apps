@@ -24,6 +24,47 @@ export type GitRepoState = {
   bisecting: boolean;
 };
 export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "timed-out" | "output-truncated";
+/** One path's worktree state saved by a discard: its mode and blob, or `mode: null` when the path did not exist. */
+export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
+export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
+export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
+export const discardRefPrefix = "refs/legend-git/discarded/";
+const restoredRefPrefix = "refs/legend-git/restored/";
+const replacedRefPrefix = "refs/legend-git/replaced/";
+const backupMarker = "Legend Git discard backup";
+// Refuses a path whose parent is a symbolic link, so neither script can read or write outside the worktree.
+const parentCheck = `inside() { d=$(dirname -- "$1"); while test "$d" != .; do if test -L "$d"; then echo "Refusing $2: its folder $d is a symbolic link." >&2; exit 1; fi; d=$(dirname -- "$d"); done; }`;
+// Prints "<mode> <oid>" or "-" (missing) per path, NUL-separated, storing the exact worktree bytes (no clean filters).
+const backupProbe = `${parentCheck}
+cd "$1" || exit; shift
+for p do
+  f="./$p"; inside "$f" "$p"
+  if test -L "$f"; then o=$(readlink -n "$f" | git hash-object -w --stdin) || exit 1; printf '120000 %s\\0' "$o"
+  elif test -f "$f"; then o=$(git hash-object -w --no-filters -- "$f") || exit 1; if test -x "$f"; then m=100755; else m=100644; fi; printf '%s %s\\0' "$m" "$o"
+  elif test -e "$f"; then echo "Cannot back up $p: it is not a regular file or symbolic link." >&2; exit 1
+  else printf -- '-\\0'; fi
+done`;
+// Writes "<mode> <oid> <path>" triples back to the worktree byte-for-byte; mode "-" deletes the path.
+// Every path is checked before anything is written.
+const restoreScript = `${parentCheck}
+cd "$1" || exit; shift
+i=0; for x do i=$((i + 1)); if test $((i % 3)) -eq 0; then inside "./$x" "$x"; fi; done
+while test $# -ge 3; do m=$1; o=$2; f="./$3"; shift 3
+  if test "$m" = -; then rm -f -- "$f" || exit 1; continue; fi
+  d=$(dirname -- "$f"); mkdir -p -- "$d" || exit 1
+  t=$(mktemp "$d/.legend-git-restore.XXXXXX") || exit 1
+  if test "$m" = 120000; then l=$(git cat-file blob "$o" && printf x) || { rm -f -- "$t"; exit 1; }; rm -f -- "$t"; ln -s -- "\${l%x}" "$t" || exit 1
+  else git cat-file blob "$o" > "$t" || { rm -f -- "$t"; exit 1; }; if test "$m" = 100755; then chmod 755 -- "$t"; else chmod 644 -- "$t"; fi; fi
+  rm -f -- "$f"; mv -f -- "$t" "$f" || exit 1
+done`;
+// Prints "plain" when the file's bytes survive Git's clean and smudge conversions unchanged, so a
+// worktree \`git apply\` (which converts on read and write) touches only the patched lines.
+const plainProbe = `cd "$1" || exit; f="./$2"
+test -L "$f" && exit 0
+r=$(git hash-object -w --no-filters -- "$f") || exit 1
+c=$(git hash-object -- "$f") || exit 1
+s=$(git cat-file --filters --path="$2" "$r" | git hash-object --no-filters --stdin) || exit 1
+if test "$r" = "$c" && test "$r" = "$s"; then echo plain; fi`;
 
 export class GitServiceError extends Error {
   constructor(readonly code: GitErrorCode, message: string, readonly args: readonly string[] = []) {
@@ -229,6 +270,166 @@ export class GitService {
     return this.enqueue(options, async (gitDir) => {
       await this.inspect(gitDir, options);
       await this.git(["apply", "--cached", "--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : []), "-"], options, 60_000, patch);
+    });
+  }
+
+  /** Paths' authoritative status entries, refusing anything a worktree write must not touch. */
+  private async worktreeEntries(paths: readonly string[], options: GitReadOptions) {
+    if (!paths.length || paths.some(path => !isRepoPath(path))) throw new Error("Expected repository-relative file paths.");
+    const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+    const status = parseGitStatus(await this.git(["-C", root, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"], options));
+    const entries = paths.map(path => {
+      const entry = status.entries.find(item => item.path === path);
+      if (!entry || entry.worktreeStatus === ".") throw new Error(`${path} has no unstaged changes. Refresh and try again.`);
+      if (entry.kind === "unmerged") throw new Error(`${path} has merge conflicts. Resolve them before discarding.`);
+      if (entry.submodule?.startsWith("S")) throw new Error(`${path} is a submodule; discard its changes inside the submodule.`);
+      if (entry.worktreeStatus === "A") throw new Error(`${path} is marked intent-to-add; unstage it before discarding.`);
+      return entry;
+    });
+    return { root, entries };
+  }
+
+  /** Saves the paths' current worktree bytes as a parentless commit on a new hidden ref, without touching the index or stash. */
+  private async backup(root: string, paths: readonly string[], prefix: string, options: GitReadOptions): Promise<GitDiscardBackup> {
+    const records = (await this.process("sh", ["-c", backupProbe, "legend-git-backup", root, ...paths], options)).split("\0");
+    const entries: GitBackupEntry[] = paths.map((path, index) => {
+      const [mode, oid] = records[index]!.split(" ");
+      return mode === "-" ? { path, mode: null } : { path, mode: mode as "100644", oid: oid! };
+    });
+    const tree = await this.tree(entries.flatMap(entry => entry.mode ? [entry] : []), options);
+    const message = `${backupMarker}\n\n${JSON.stringify({ version: 1, entries })}\n`;
+    const identity = ["-c", "user.name=Legend Git", "-c", "user.email=legend-git@localhost", "-c", "commit.gpgsign=false"];
+    const oid = (await this.git([...identity, "commit-tree", tree], options, 60_000, message)).trim();
+    for (let attempt = 0; ; attempt += 1) {
+      const ref = `${prefix}${String(Date.now()).padStart(15, "0")}-${attempt}`;
+      try {
+        await this.git(["update-ref", "-m", "legend-git: backup before worktree write", ref, oid, "0".repeat(oid.length)], options);
+        return { ref, oid, entries };
+      } catch (error) {
+        if (attempt >= 5) throw error;
+      }
+    }
+  }
+
+  private async tree(entries: readonly { path: string; mode: string; oid: string }[], options: GitReadOptions): Promise<string> {
+    const children = new Map<string, { path: string; mode: string; oid: string }[]>();
+    const lines: string[] = [];
+    for (const entry of entries) {
+      const slash = entry.path.indexOf("/");
+      if (slash < 0) { lines.push(`${entry.mode} blob ${entry.oid}\t${entry.path}`); continue; }
+      const name = entry.path.slice(0, slash);
+      children.set(name, [...children.get(name) ?? [], { ...entry, path: entry.path.slice(slash + 1) }]);
+    }
+    for (const [name, nested] of children) lines.push(`040000 tree ${await this.tree(nested, options)}\t${name}`);
+    return (await this.git(["mktree", "-z"], options, 60_000, lines.map(line => `${line}\0`).join(""))).trim();
+  }
+
+  /**
+   * Discards the unstaged changes of whole files after backing them up to a hidden ref:
+   * tracked files are restored from the index, untracked files are deleted. The index is not written.
+   */
+  discardFiles(paths: readonly string[], options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const { root, entries } = await this.worktreeEntries(paths, options);
+      const backup = await this.backup(root, paths, discardRefPrefix, options);
+      const tracked = entries.filter(entry => entry.kind !== "untracked").map(entry => entry.path);
+      const untracked = entries.filter(entry => entry.kind === "untracked").map(entry => entry.path);
+      return this.withBackup(backup, async () => {
+        if (tracked.length) await this.git(["-C", root, "checkout-index", "--force", "--", ...tracked], options);
+        if (untracked.length) await this.git(["-C", root, "--literal-pathspecs", "clean", "--force", "--quiet", "--", ...untracked], options);
+      });
+    });
+  }
+
+  /** Reverse-applies a patch built from one file's unstaged diff to the worktree (never the index), after backing the file up. */
+  discardPatch(path: string, patch: string, options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const { root } = await this.worktreeEntries([path], options);
+      if ((await this.process("sh", ["-c", plainProbe, "legend-git-plain", root, path], options)).trim() !== "plain") {
+        throw new Error(`${path} uses line-ending conversion or a filter, so discarding part of it could rewrite other lines. Discard the whole file instead.`);
+      }
+      const backup = await this.backup(root, [path], discardRefPrefix, options);
+      return this.withBackup(backup, () => this.git(["-C", root, "apply", "--reverse", "--whitespace=nowarn", "--no-ignore-whitespace", "-"], options, 60_000, patch));
+    });
+  }
+
+  /** Runs a worktree write; when it fails or is cancelled, its backup ref is dropped so it is never offered for restore. */
+  private async withBackup(backup: GitDiscardBackup, write: () => Promise<unknown>) {
+    try {
+      await write();
+      return backup;
+    } catch (error) {
+      await this.git(["update-ref", "-d", backup.ref, backup.oid], {}).catch(() => {});
+      throw error;
+    }
+  }
+
+  private async readBackup(ref: string, options: GitReadOptions): Promise<GitDiscardBackup> {
+    const oid = (await this.git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], options)).trim();
+    const commit = await this.git(["cat-file", "commit", oid], options);
+    const body = commit.slice(commit.indexOf("\n\n") + 2);
+    if (!body.startsWith(`${backupMarker}\n\n`)) throw new Error(`${ref} is not a Legend Git discard backup.`);
+    const { entries } = JSON.parse(body.slice(backupMarker.length + 2)) as { entries: GitBackupEntry[] };
+    if (!Array.isArray(entries) || entries.some(entry => !isRepoPath(entry.path) || (entry.mode !== null && (!["100644", "100755", "120000"].includes(entry.mode) || !/^[0-9a-f]{40,64}$/.test(entry.oid))))) {
+      throw new Error(`${ref} has an unreadable backup record.`);
+    }
+    return { ref, oid, entries };
+  }
+
+  /** The newest discard backup that has not been restored, or null. */
+  lastDiscard(options: GitReadOptions = {}) {
+    return this.enqueue(options, async () => {
+      // Only the newest discard is offered; once it is restored, older discards are not.
+      const name = (ref: string) => ref.slice(ref.lastIndexOf("/") + 1);
+      const newest = (await this.git(["for-each-ref", "--format=%(refname)", discardRefPrefix, restoredRefPrefix], options)).split("\n").filter(Boolean)
+        .reduce<string | null>((best, ref) => best === null || name(ref) > name(best) ? ref : best, null);
+      return newest?.startsWith(discardRefPrefix) ? this.readBackup(newest, options) : null;
+    });
+  }
+
+  /**
+   * Writes a discard backup's files back into the worktree. The files' current contents are first
+   * backed up under refs/legend-git/replaced/, and the discard ref moves to refs/legend-git/restored/.
+   */
+  restoreDiscard(ref: string, options: GitReadOptions = {}) {
+    if (!ref.startsWith(discardRefPrefix) || !isRepoPath(ref)) return Promise.reject(new Error("Expected a Legend Git discard ref."));
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const backup = await this.readBackup(ref, options);
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const status = parseGitStatus(await this.git(["-C", root, "status", "--porcelain=v2", "-z", "--untracked-files=no"], options));
+      const conflicted = backup.entries.find(entry => status.entries.some(item => item.kind === "unmerged" && item.path === entry.path));
+      if (conflicted) throw new Error(`${conflicted.path} has merge conflicts. Resolve them before restoring.`);
+      const replaced = await this.backup(root, backup.entries.map(entry => entry.path), replacedRefPrefix, options);
+      await this.process("sh", ["-c", restoreScript, "legend-git-restore", root, ...backup.entries.flatMap(entry => [entry.mode ?? "-", entry.oid ?? "-", entry.path])], options);
+      await this.git(["update-ref", "-m", "legend-git: restored discard", `${restoredRefPrefix}${ref.slice(discardRefPrefix.length)}`, backup.oid, "0".repeat(backup.oid.length)], options);
+      await this.git(["update-ref", "-m", "legend-git: restored discard", "-d", ref, backup.oid], options);
+      return { restored: backup, replaced };
+    });
+  }
+
+  /** The full message of HEAD, for prefilling an amend. */
+  headMessage(options: GitReadOptions = {}) {
+    return this.read(["log", "-1", "--format=%B", "HEAD", "--"], options).then(message => message.replace(/\n+$/, ""));
+  }
+
+  /**
+   * Commits the index with the message on stdin (`git commit -F -`). Hooks and the user's signing
+   * configuration apply; the commit is refused while conflicts remain or, outside amend and merges, nothing is staged.
+   */
+  commit(input: GitCommitInput, options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      const state = await this.inspect(gitDir, options);
+      if (!input.message.trim()) throw new Error("Enter a commit message.");
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const status = parseGitStatus(await this.git(["-C", root, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=no"], options));
+      const conflicts = status.entries.filter(entry => entry.kind === "unmerged").length;
+      if (conflicts) throw new Error(`Resolve the merge conflicts in ${conflicts === 1 ? "1 file" : `${conflicts} files`} and stage the results before committing.`);
+      if (input.amend && status.branch.oid === "(initial)") throw new Error("There is no commit to amend yet. Turn off Amend to make the first commit.");
+      if (!input.amend && !state.merging && !status.entries.some(entry => entry.indexStatus !== ".")) throw new Error("Nothing is staged. Stage changes before committing.");
+      await this.git(["-C", root, "commit", "--file=-", ...(input.amend ? ["--amend"] : []), ...(input.signoff ? ["--signoff"] : [])], options, 600_000, input.message);
     });
   }
 
