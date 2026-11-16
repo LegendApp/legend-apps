@@ -46,10 +46,13 @@ namespace margelo::nitro::legendapps::diffparser {
     std::string authorEmail     SWIFT_PRIVATE;
     double time     SWIFT_PRIVATE;
     std::string summary     SWIFT_PRIVATE;
+    double lane     SWIFT_PRIVATE;
+    double color     SWIFT_PRIVATE;
+    std::vector<double> edges     SWIFT_PRIVATE;
 
   public:
     GitHistoryCommit() = default;
-    explicit GitHistoryCommit(std::string oid, std::vector<std::string> parents, std::string authorName, std::string authorEmail, double time, std::string summary): oid(oid), parents(parents), authorName(authorName), authorEmail(authorEmail), time(time), summary(summary) {}
+    explicit GitHistoryCommit(std::string oid, std::vector<std::string> parents, std::string authorName, std::string authorEmail, double time, std::string summary, double lane, double color, std::vector<double> edges): oid(oid), parents(parents), authorName(authorName), authorEmail(authorEmail), time(time), summary(summary), lane(lane), color(color), edges(edges) {}
 
   public:
     friend bool operator==(const GitHistoryCommit& lhs, const GitHistoryCommit& rhs) = default;
@@ -70,7 +73,10 @@ namespace margelo::nitro {
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "authorName"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "authorEmail"))),
         JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "time"))),
-        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "summary")))
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "summary"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lane"))),
+        JSIConverter<double>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "color"))),
+        JSIConverter<std::vector<double>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "edges")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::legendapps::diffparser::GitHistoryCommit& arg) {
@@ -81,6 +87,9 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "authorEmail"), JSIConverter<std::string>::toJSI(runtime, arg.authorEmail));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "time"), JSIConverter<double>::toJSI(runtime, arg.time));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "summary"), JSIConverter<std::string>::toJSI(runtime, arg.summary));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "lane"), JSIConverter<double>::toJSI(runtime, arg.lane));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "color"), JSIConverter<double>::toJSI(runtime, arg.color));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "edges"), JSIConverter<std::vector<double>>::toJSI(runtime, arg.edges));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -97,6 +106,9 @@ namespace margelo::nitro {
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "authorEmail")))) return false;
       if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "time")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "summary")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "lane")))) return false;
+      if (!JSIConverter<double>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "color")))) return false;
+      if (!JSIConverter<std::vector<double>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "edges")))) return false;
       return true;
     }
   };

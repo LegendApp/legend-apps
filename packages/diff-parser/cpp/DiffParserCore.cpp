@@ -1819,6 +1819,68 @@ DiffParsedDocument parseGitRepositoryDiff(
   return document;
 }
 
+void GitGraphLayout::reset() {
+  lanes_.clear();
+  nextColor_ = 0;
+}
+
+int GitGraphLayout::allocate(const std::string& oid) {
+  size_t column = 0;
+  while (column < lanes_.size() && lanes_[column].active) ++column;
+  if (column == lanes_.size()) lanes_.emplace_back();
+  lanes_[column] = {oid, nextColor_++, true};
+  return static_cast<int>(column);
+}
+
+// Each lane waits for one commit. A commit takes the first lane waiting for it (or a new one at a branch
+// tip), other lanes waiting for it end at its node, its first parent continues its lane, and each other
+// parent joins the lane already waiting for it or opens a new one.
+void GitGraphLayout::add(GitHistoryCommitRow& row) {
+  std::vector<int> edges;
+  const auto clamp = [](int column) { return column < 0 ? column : std::min(column, kGitGraphMaxLanes); };
+  const auto push = [&](int top, int bottom, int color) {
+    top = clamp(top);
+    bottom = clamp(bottom);
+    for (size_t index = 0; index < edges.size(); index += 3) {
+      if (edges[index] == top && edges[index + 1] == bottom) return;
+    }
+    edges.insert(edges.end(), {top, bottom, color});
+  };
+
+  int column = -1;
+  for (size_t index = 0; index < lanes_.size(); ++index) {
+    Lane& lane = lanes_[index];
+    if (!lane.active) continue;
+    if (lane.oid != row.oid) {
+      push(static_cast<int>(index), static_cast<int>(index), lane.color);
+      continue;
+    }
+    push(static_cast<int>(index), -1, lane.color);
+    if (column < 0) column = static_cast<int>(index);
+    else lane.active = false;
+  }
+  if (column < 0) column = allocate(row.oid);
+  Lane& own = lanes_[static_cast<size_t>(column)];
+  row.lane = clamp(column);
+  row.color = own.color;
+  if (row.parents.empty()) {
+    own.active = false;
+  } else {
+    own.oid = row.parents.front();
+    push(-1, column, own.color);
+  }
+  for (size_t parent = 1; parent < row.parents.size(); ++parent) {
+    int target = -1;
+    for (size_t index = 0; index < lanes_.size(); ++index) {
+      if (lanes_[index].active && lanes_[index].oid == row.parents[parent]) { target = static_cast<int>(index); break; }
+    }
+    if (target < 0) target = allocate(row.parents[parent]);
+    push(-1, target, lanes_[static_cast<size_t>(target)].color);
+  }
+  while (!lanes_.empty() && !lanes_.back().active) lanes_.pop_back();
+  row.edges = std::move(edges);
+}
+
 struct GitHistoryWalker::Impl {
   std::unique_ptr<git_repository, GitRepositoryDeleter> repo;
   git_revwalk* walk = nullptr;
@@ -1828,6 +1890,7 @@ struct GitHistoryWalker::Impl {
   bool detached = false;
   size_t position = 0;
   bool exhausted = false;
+  GitGraphLayout layout;
   std::mutex mutex;
 
   ~Impl() {
@@ -1842,6 +1905,7 @@ struct GitHistoryWalker::Impl {
     }
     position = 0;
     exhausted = false;
+    layout.reset();
   }
 };
 
@@ -1893,7 +1957,8 @@ std::vector<GitHistoryCommitRow> GitHistoryWalker::page(size_t offset, size_t co
     const int next = git_revwalk_next(&oid, impl_->walk);
     if (next == GIT_ITEROVER) { impl_->exhausted = true; break; }
     if (next != 0) throw std::runtime_error(gitErrorMessage("Failed to walk history"));
-    if (impl_->position++ < offset) continue;
+    // Rows before `offset` (only after a re-walk) still go through the layout so lanes stay continuous.
+    const bool skipped = impl_->position++ < offset;
     git_commit* rawCommit = nullptr;
     if (git_commit_lookup(&rawCommit, impl_->repo.get(), &oid) != 0) {
       throw std::runtime_error(gitErrorMessage("Failed to read commit"));
@@ -1904,6 +1969,8 @@ std::vector<GitHistoryCommitRow> GitHistoryWalker::page(size_t offset, size_t co
     const unsigned int parentCount = git_commit_parentcount(rawCommit);
     row.parents.reserve(parentCount);
     for (unsigned int index = 0; index < parentCount; ++index) row.parents.push_back(toText(git_commit_parent_id(rawCommit, index)));
+    impl_->layout.add(row);
+    if (skipped) continue;
     if (const git_signature* author = git_commit_author(rawCommit)) {
       row.authorName = author->name ? author->name : "";
       row.authorEmail = author->email ? author->email : "";

@@ -7,6 +7,10 @@ export type CommandContext = {
   sidebarCollapsed: boolean;
   busy: boolean;
   selectedCommit: string | null;
+  /** The file selected in Changes or in the selected commit. */
+  selectedFile: string | null;
+  /** The file whose history History shows, if any. */
+  fileHistoryPath: string | null;
   gitHubUrl(oid: string): string | null;
   canApplyLines: boolean;
   linesLabel: string;
@@ -23,6 +27,8 @@ export type CommandContext = {
     refresh(): void;
     copySha(oid: string): void;
     openOnGitHub(oid: string): void;
+    showFileHistory(path: string): void;
+    closeFileHistory(): void;
     applyLines(): void;
     discardFile(): void;
     discardLines(): void;
@@ -32,7 +38,7 @@ export type CommandContext = {
   };
 };
 
-/** `target` is a commit picked by a context menu; menu and toolbar commands act on the selection. */
+/** `target` is the commit or file picked by a context menu; menu and toolbar commands act on the selection. */
 export type Command = {
   id: string;
   label: string | ((context: CommandContext) => string);
@@ -55,6 +61,12 @@ export const commands = [
     enabled: (context, target) => { const oid = commit(context, target); return !!oid && !!context.gitHubUrl(oid); },
     run: (context, target) => context.run.openOnGitHub(commit(context, target)!),
   },
+  {
+    id: "show-file-history", label: "Show File History", shortcut: "Cmd+Shift+h",
+    enabled: (context, target) => context.hasRepository && !!(target ?? context.selectedFile),
+    run: (context, target) => context.run.showFileHistory((target ?? context.selectedFile)!),
+  },
+  { id: "show-all-history", label: "Show All History", enabled: context => !!context.fileHistoryPath, run: context => context.run.closeFileHistory() },
   { id: "apply-lines", label: context => context.linesLabel, shortcut: "Cmd+Shift+l", enabled: context => context.canApplyLines, run: context => context.run.applyLines() },
   { id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", enabled: context => context.canDiscardFile, run: context => context.run.discardFile() },
   { id: "discard-lines", label: "Discard Selected Lines…", enabled: context => context.canDiscardLines, run: context => context.run.discardLines() },

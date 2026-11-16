@@ -83,3 +83,49 @@ it("builds github.com commit URLs from remote URLs and ignores other hosts", () 
     expect(githubCommitUrl(url, oid)).toBeNull();
   }
 });
+
+it("follows one file's history across a rename, a delete and re-add, and a path with spaces and unicode, paged", async () => {
+  const { path, git } = repo("file-history");
+  mkdirSync(join(path, "dir é"));
+  const added = commit(path, "dir é/old name.txt", "line\n", "Add the file");
+  commit(path, "other.txt", "x\n", "Unrelated");
+  const edited = commit(path, "dir é/old name.txt", "line\nmore\n", "Edit the file");
+  fixtureGit(path, "mv", "dir é/old name.txt", "new ü.txt");
+  fixtureGit(path, "commit", "-q", "-m", "Rename the file");
+  const renamed = fixtureGit(path, "rev-parse", "HEAD");
+  fixtureGit(path, "rm", "-q", "new ü.txt");
+  fixtureGit(path, "commit", "-q", "-m", "Delete the file");
+  const deleted = fixtureGit(path, "rev-parse", "HEAD");
+  const readded = commit(path, "new ü.txt", "back\n", "Re-add the file");
+  commit(path, "other.txt", "y\n", "Unrelated again");
+
+  const expected = fixtureGit(path, "log", "--follow", "--format=%H", "--", "new ü.txt").split("\n");
+  const page = await git.fileHistory("new ü.txt");
+  expect(page.done).toBe(true);
+  expect(page.commits.map(commit => commit.oid)).toEqual(expected);
+  expect(expected).toEqual([readded, deleted, renamed, edited, added]);
+  expect(page.commits.map(({ status, path, oldPath }) => [status, path, oldPath])).toEqual([
+    ["A", "new ü.txt", null],
+    ["D", "new ü.txt", null],
+    ["R", "new ü.txt", "dir é/old name.txt"],
+    ["M", "dir é/old name.txt", null],
+    ["A", "dir é/old name.txt", null],
+  ]);
+  expect(page.commits[2]).toMatchObject({ summary: "Rename the file", authorName: "Git Test", parents: [edited] });
+
+  const first = await git.fileHistory("new ü.txt", { offset: 0, count: 2 });
+  const second = await git.fileHistory("new ü.txt", { offset: 2, count: 2 });
+  const third = await git.fileHistory("new ü.txt", { offset: 4, count: 2 });
+  expect([first.done, second.done, third.done]).toEqual([false, false, true]);
+  expect([...first.commits, ...second.commits, ...third.commits].map(commit => commit.oid)).toEqual(expected);
+  // A page boundary right after the rename keeps following the old path.
+  expect(third.commits[0]!.path).toBe("dir é/old name.txt");
+
+  await expect(git.fileHistory("../outside")).rejects.toThrow("Expected a repository path");
+  expect(await git.fileHistory("*")).toEqual({ commits: [], done: true });
+});
+
+it("has no file history on an unborn HEAD", async () => {
+  const { git } = repo("file-history-unborn");
+  expect(await git.fileHistory("a.txt")).toEqual({ commits: [], done: true });
+});

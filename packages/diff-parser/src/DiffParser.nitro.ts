@@ -170,6 +170,15 @@ export interface GitHistoryCommit {
   time: number;
   /** The first line of the message. */
   summary: string;
+  /** Graph column of the commit's node; 12 stands for every column past the cap. */
+  lane: number;
+  /** Color index of the commit's lane. */
+  color: number;
+  /**
+   * The row's graph segments as (top, bottom, color) triples: the column a segment enters at the top
+   * edge and leaves at the bottom edge, with -1 for the commit's node. Top equal to bottom passes through.
+   */
+  edges: number[];
 }
 
 export interface GitHistoryHead {

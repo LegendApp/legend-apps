@@ -279,7 +279,8 @@ std::shared_ptr<Promise<GitHistoryPage>> HybridDiffParser::readGitHistoryPage(do
     page.done = rows.size() < static_cast<size_t>(count);
     page.commits.reserve(rows.size());
     for (const auto& row : rows) {
-      page.commits.push_back(GitHistoryCommit(row.oid, row.parents, row.authorName, row.authorEmail, row.time, row.summary));
+      page.commits.push_back(GitHistoryCommit(row.oid, row.parents, row.authorName, row.authorEmail, row.time, row.summary,
+                                              row.lane, row.color, std::vector<double>(row.edges.begin(), row.edges.end())));
     }
     return page;
   });

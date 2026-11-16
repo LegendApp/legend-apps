@@ -1,9 +1,11 @@
 import { openGitHistory, gitHistoryPageSize, type GitHistoryCommit, type GitHistoryReader } from "@legend-apps/diff-parser";
 import { parseUnifiedPatch, type UnifiedPatchFile } from "@legend-apps/diff-parser/src/unifiedPatch";
-import { getGitService, githubCommitUrl, watchGitRepo, type GitCommitDetails, type GitDirectoryWatcher, type GitRefDecoration, type GitService } from "@legend-apps/git-core";
+import { getGitService, githubCommitUrl, watchGitRepo, type GitCommitDetails, type GitDirectoryWatcher, type GitFileHistoryCommit, type GitRefDecoration, type GitService } from "@legend-apps/git-core";
 
 export type CommitFile = { path: string; text: string; file: UnifiedPatchFile };
 export type CommitDetailsState = { oid: string; commit: GitCommitDetails | null; files: CommitFile[]; selectedPath: string | null; loading: boolean; error: string | null };
+/** One file's history (`git log --follow`), shown in place of the full history while set. */
+export type FileHistoryState = { path: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
 export type HistoryState = {
   root: string | null;
   /** HEAD as read when the loaded pages were walked; null until History first loads. */
@@ -17,8 +19,16 @@ export type HistoryState = {
   remoteUrl: string | null;
   selectedOid: string | null;
   details: CommitDetailsState | null;
+  file: FileHistoryState | null;
 };
-export const emptyHistory: HistoryState = { root: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null };
+export const emptyHistory: HistoryState = { root: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null, file: null };
+
+/** The path a file had in a commit of its history, so selecting the commit selects that file's patch. */
+function preferredPath(state: HistoryState, oid: string, files: CommitFile[]) {
+  const entry = state.file?.commits.find(commit => commit.oid === oid);
+  const candidates = entry ? [entry.path, entry.oldPath] : [];
+  return candidates.find(path => path && files.some(file => file.path === path)) ?? files[0]?.path ?? null;
+}
 
 export const shortOid = (oid: string) => oid.slice(0, 7);
 export const commitGitHubUrl = (state: HistoryState, oid: string) => githubCommitUrl(state.remoteUrl, oid);
@@ -65,7 +75,9 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
   let reader: GitHistoryReader | undefined;
   let watcher: { remove(): void } | undefined;
   let paging: Promise<void> | undefined;
+  let filePaging: Promise<void> | undefined;
   let detailsRun = 0;
+  let fileRun = 0;
   const publish = (patch: Partial<HistoryState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
   const current = (controller: AbortController) => !closed && active === controller && !controller.signal.aborted;
   const report = (error: unknown, controller: AbortController) => {
@@ -76,7 +88,9 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     reader?.close(); reader = undefined;
     watcher?.remove(); watcher = undefined;
     paging = undefined;
+    filePaging = undefined;
     detailsRun++;
+    fileRun++;
   };
 
   const readDetails = async (git: GitService, oid: string, controller: AbortController) => {
@@ -85,9 +99,30 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     try {
       const [commit, patch] = await Promise.all([git.commitDetails(oid, { signal: controller.signal }), git.commitPatch(oid, { signal: controller.signal })]);
       const files = splitCommitPatch(patch);
-      if (current(controller) && run === detailsRun) publish({ details: { oid, commit, files, selectedPath: files[0]?.path ?? null, loading: false, error: null } });
+      if (current(controller) && run === detailsRun) publish({ details: { oid, commit, files, selectedPath: preferredPath(state, oid, files), loading: false, error: null } });
     } catch (error) {
       if (current(controller) && run === detailsRun && !cancelled(error)) publish({ details: { oid, commit: null, files: [], selectedPath: null, loading: false, error: message(error) } });
+    }
+  };
+
+  /** Reads `path`'s history from HEAD, at least `count` commits, and keeps the selection when it is listed. */
+  const readFileHistory = async (git: GitService, controller: AbortController, path: string, count = gitHistoryPageSize) => {
+    const run = ++fileRun;
+    filePaging = undefined;
+    if (state.file?.path !== path) publish({ file: { path, commits: [], done: false, loading: true, error: null } });
+    try {
+      const page = await git.fileHistory(path, { offset: 0, count: Math.max(count, gitHistoryPageSize), signal: controller.signal });
+      if (!current(controller) || run !== fileRun) return;
+      publish({ file: { path, commits: page.commits, done: page.done, loading: false, error: null } });
+      const keep = state.selectedOid && page.commits.some(commit => commit.oid === state.selectedOid) ? state.selectedOid : page.commits[0]?.oid ?? null;
+      if (keep !== state.selectedOid) {
+        publish({ selectedOid: keep, details: null });
+        if (keep) await readDetails(git, keep, controller);
+      } else if (keep && state.details?.commit) {
+        publish({ details: { ...state.details, selectedPath: preferredPath(state, keep, state.details.files) } });
+      }
+    } catch (error) {
+      if (current(controller) && run === fileRun && !cancelled(error)) publish({ file: { path, commits: state.file?.commits ?? [], done: true, loading: false, error: message(error) } });
     }
   };
 
@@ -120,10 +155,12 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     reader?.close();
     reader = next;
     paging = undefined;
-    const selectedOid = state.selectedOid && commits.some(commit => commit.oid === state.selectedOid) ? state.selectedOid : null;
+    const listed = (oid: string) => commits.some(commit => commit.oid === oid) || !!state.file?.commits.some(commit => commit.oid === oid);
+    const selectedOid = state.selectedOid && listed(state.selectedOid) ? state.selectedOid : null;
     const { head } = next;
     publish({ head: { oid: head.headOid, unborn: head.unborn, detached: head.detached }, commits, done, refs, remoteUrl, currentBranch, loading: false, error: null, selectedOid, ...selectedOid ? {} : { details: null } });
     if (selectedOid && state.details?.oid !== selectedOid) await readDetails(git, selectedOid, controller);
+    if (state.file) await readFileHistory(git, controller, state.file.path, state.file.commits.length);
   };
 
   // Watcher, toolbar and first-load reloads run one at a time, so an older read never lands last.
@@ -136,7 +173,7 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
 
   let service: GitService | undefined;
   let activation: Promise<void> | undefined;
-  return {
+  const api = {
     /** Points History at a repository root (or none); reading starts on `activate`. */
     setRoot(root: string | null) {
       if (root === state.root) return;
@@ -160,9 +197,37 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
         } catch (error) { report(error, controller); }
       })();
     },
+    /** Shows only the commits that touched `path`, following renames; starts History if needed. */
+    async showFileHistory(path: string): Promise<void> {
+      if (!service || closed) return;
+      await api.activate();
+      const git = service, controller = active;
+      // Showing the same file again re-reads as many commits as are loaded.
+      if (git && controller) await readFileHistory(git, controller, path, state.file?.path === path ? state.file.commits.length : undefined);
+    },
+    closeFileHistory() {
+      if (!state.file) return;
+      fileRun++;
+      filePaging = undefined;
+      publish({ file: null });
+    },
     /** Reads the next page of 500; concurrent calls share one read. */
     loadMore() {
       const git = service, controller = active, walk = reader;
+      const file = state.file;
+      if (file) {
+        if (!git || !controller || file.done || file.loading) return Promise.resolve();
+        const run = fileRun;
+        const latest = () => current(controller) && run === fileRun && state.file === file;
+        return filePaging ??= (async () => {
+          try {
+            const page = await git.fileHistory(file.path, { offset: file.commits.length, count: gitHistoryPageSize, signal: controller.signal });
+            if (latest()) publish({ file: { ...file, commits: [...file.commits, ...page.commits], done: page.done } });
+          } catch (error) {
+            if (latest() && !cancelled(error)) publish({ file: { ...file, done: true, error: message(error) } });
+          } finally { if (run === fileRun) filePaging = undefined; }
+        })();
+      }
       if (!git || !controller || !walk || state.done || state.loading) return Promise.resolve();
       return paging ??= (async () => {
         try {
@@ -188,4 +253,5 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     },
     dispose() { closed = true; reset(); },
   };
+  return api;
 }

@@ -1,7 +1,7 @@
 import { getGitService, type GitService } from "@legend-apps/git-core";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { Button } from "@legendapp/spark/ui";
-import { Sidebar } from "@legendapp/spark/ui/sidebar";
+import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -196,8 +196,8 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const head = "a".repeat(40), parent = "b".repeat(40);
   const commits = [
-    { oid: head, parents: [parent], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Second" },
-    { oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_699_000_000, summary: "First" },
+    { oid: head, parents: [parent], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Second", lane: 0, color: 0, edges: [-1, 0, 0] },
+    { oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_699_000_000, summary: "First", lane: 0, color: 0, edges: [0, -1, 0] },
   ];
   const reader = { head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() };
   jest.mocked(openGitHistory).mockResolvedValue(reader);
@@ -208,7 +208,8 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map([[head, [{ kind: "branch", name: "main" }, { kind: "tag", name: "v1.0" }]]])),
     remoteUrl: jest.fn(async () => "git@github.com:LegendApp/legend-apps.git"), currentBranch: jest.fn(async () => "main"),
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: oid === head ? [parent] : [], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: oid === head ? "Second\n\nBody" : "First" })),
-    commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n") };
+    commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n"),
+    fileHistory: jest.fn(async () => ({ commits: [{ oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_699_000_000, summary: "First", status: "A", path: "old/a.txt", oldPath: null }], done: true })) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -217,6 +218,7 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   await act(async () => { openRepository(); });
   const menu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
   const item = (id: string) => menu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  expect(item("show-file-history")).toMatchObject({ label: "Show File History", disabled: true });
   expect(item("show-history")).toMatchObject({ label: "History", shortcut: "Cmd+2", disabled: false });
   expect(item("copy-sha")).toMatchObject({ label: "Copy SHA", disabled: true });
   expect(openGitHistory).not.toHaveBeenCalled();
@@ -237,7 +239,10 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   const refText = (name: string) => row.root.findAllByType(Text).find(entry => [entry.props.children].flat().join("") === name)!;
   expect([refText("main").props.style].flat()).toContainEqual({ fontWeight: "600", color: "labelColor" });
   expect(refText(", v1.0").props.style).toBeUndefined();
-  expect(JSON.stringify(row.toJSON())).not.toMatch(/borderWidth/);
+  const [graph, textColumn] = (row.toJSON() as { children: unknown[] }).children;
+  expect(JSON.stringify(textColumn)).not.toMatch(/borderWidth/);
+  // The graph cell draws the tip's line from its node down to the parent's row in the same lane.
+  expect(JSON.stringify(graph)).toContain('"top":22,"height":22');
   await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
   expect(git.commitDetails).toHaveBeenCalledWith(head, expect.anything());
   expect(text(renderer)).toContain("Body");
@@ -265,6 +270,26 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   expect(renderer.root.findByType("LegendList" as any).props.extraData).not.toBe(before);
   expect(renderer.root.findAllByProps({ children: "Open on GitHub" }).length).toBeGreaterThan(0);
 
+  // A changed file's context menu opens its history (following renames); Show All returns to the graph.
+  expect(item("show-file-history")).toMatchObject({ disabled: false, shortcut: "Cmd+Shift+h" });
+  expect(item("show-all-history")).toMatchObject({ disabled: true });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "show-file-history" } as never);
+  const fileItem = renderer.root.findAllByType(SidebarItem).find(entry => entry.props.id === "a.txt")!;
+  await act(async () => { fileItem.props.onContextMenu({ id: "a.txt", position: { x: 1, y: 2 }, windowPosition: { x: 50, y: 60 } }); });
+  expect(showContextMenu).toHaveBeenLastCalledWith({ windowId: "main", position: { x: 50, y: 60 }, items: [{ type: "action", id: "show-file-history", label: "Show File History", disabled: false }] });
+  expect(git.fileHistory).toHaveBeenCalledWith("a.txt", expect.objectContaining({ offset: 0, count: 500 }));
+  const fileList = renderer.root.findByType("LegendList" as any);
+  expect(fileList.props.data.map((commit: { oid: string }) => commit.oid)).toEqual([parent]);
+  expect(text(renderer)).toContain("File History: a.txt");
+  let fileRow!: ReactTestRenderer;
+  await act(async () => { fileRow = create(fileList.props.renderItem({ item: fileList.props.data[0] })); });
+  expect(text(fileRow)).toContain("Ada · old/a.txt");
+  expect(fileRow.root.findAllByProps({ importantForAccessibility: "no-hide-descendants" })).toHaveLength(0);
+  expect(item("show-all-history")).toMatchObject({ disabled: false });
+  await act(async () => { menu().onAction({ itemId: "show-all-history" }); });
+  expect(renderer.root.findByType("LegendList" as any).props.data).toHaveLength(2);
+  expect(text(renderer)).not.toContain("File History:");
+
   await act(async () => { menu().onAction({ itemId: "show-changes" }); });
   expect(renderer.root.findAllByType("LegendList" as any)).toHaveLength(0);
   await act(async () => { renderer.unmount(); });
@@ -275,7 +300,7 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   jest.clearAllMocks();
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const head = "c".repeat(40);
-  const commits = [{ oid: head, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Only" }];
+  const commits = [{ oid: head, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Only", lane: 0, color: 0, edges: [] }];
   jest.mocked(openGitHistory).mockResolvedValue({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() });
   jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
   const branch = { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 };

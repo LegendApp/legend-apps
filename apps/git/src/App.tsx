@@ -86,6 +86,8 @@ export function App() {
     sidebarCollapsed,
     busy,
     selectedCommit,
+    selectedFile: !root ? null : section === "changes" ? selected?.path ?? null : history.details?.selectedPath ?? null,
+    fileHistoryPath: root ? history.file?.path ?? null : null,
     gitHubUrl: oid => commitGitHubUrl(historyRef.current, oid),
     canApplyLines: !!root && section === "changes" && !!changes.patch?.file?.hunks.length,
     linesLabel: `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`,
@@ -105,6 +107,8 @@ export function App() {
         const url = commitGitHubUrl(historyRef.current, oid);
         if (url) openURL(url).catch(console.error);
       },
+      showFileHistory: path => { setSection("history"); void historyController.current?.showFileHistory(path); },
+      closeFileHistory: () => historyController.current?.closeFileHistory(),
       applyLines: () => applyLines.current?.(),
       discardFile: () => void discardFile(),
       discardLines: () => discardLines.current?.(),
@@ -124,7 +128,7 @@ export function App() {
       { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository")] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
-      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history")] },
+      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
@@ -158,7 +162,14 @@ export function App() {
       showContextMenu({ windowId: "main", position, items: (["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })) })
         .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
     },
+    fileContextMenu: (path, position) => { historyController.current?.selectFile(path); showFileMenu(path, position); },
+    closeFileHistory: () => { runCommand("show-all-history", contextRef.current); },
   }));
+
+  function showFileMenu(path: string, position: { x: number; y: number }) {
+    showContextMenu({ windowId: "main", position, items: [commandMenuItem("show-file-history", contextRef.current, { target: path, shortcut: false })] })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
+  }
 
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
@@ -251,11 +262,11 @@ export function App() {
   const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
     <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
-      action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)}
+      action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)} onContextMenu={showFileMenu}
       secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
     <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
-      action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
+      action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />
     <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
       readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
@@ -329,8 +340,9 @@ async function confirmDestructive(title: string, action: string, message = "Lege
   } catch (error) { console.error(error); return false; }
 }
 
-function ChangesList({ title, entries, filtered, selectedPath, onSelect, action, disabled, onAction, secondaryAction, secondaryDisabled, onSecondaryAction }: {
+function ChangesList({ title, entries, filtered, selectedPath, onSelect, onContextMenu, action, disabled, onAction, secondaryAction, secondaryDisabled, onSecondaryAction }: {
   title: string; entries: GitStatusEntry[]; filtered: boolean; selectedPath: string | null; onSelect: (path: string | null) => void;
+  onContextMenu: (path: string, position: { x: number; y: number }) => void;
   action: string; disabled: boolean; onAction: (path: string) => void;
   secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
@@ -341,7 +353,7 @@ function ChangesList({ title, entries, filtered, selectedPath, onSelect, action,
       <Button style={styles.action} disabled={disabled || selectedPath === null} onPress={() => { if (selectedPath !== null) onAction(selectedPath); }}>{action}</Button>
     </View>
     {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
-      {entries.map(entry => <SidebarItem key={entry.path} id={entry.path}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
+      {entries.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => onContextMenu(entry.path, event.windowPosition)}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
     </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{filtered ? "No matching files" : `No ${title.toLowerCase()} changes`}</Text></View>}
   </View>;
 }

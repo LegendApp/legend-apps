@@ -83,6 +83,35 @@ struct GitHistoryCommitRow {
   std::string authorEmail;
   double time = 0;
   std::string summary;
+  /** The commit's graph column; `kGitGraphMaxLanes` stands for every column past the cap. */
+  int lane = 0;
+  /** Color index of the commit's lane. */
+  int color = 0;
+  /**
+   * Line segments in this row as (top, bottom, color) triples: `top` is the column the segment enters
+   * at the row's top edge, `bottom` the column it leaves at the bottom edge, and -1 means the commit's
+   * node. A column passing through has top == bottom.
+   */
+  std::vector<int> edges;
+};
+
+constexpr int kGitGraphMaxLanes = 12;
+
+/**
+ * Lays out graph lanes for commits fed in `git log --topo-order` order. State carries from one row to
+ * the next, so pages are laid out incrementally and a row never changes once returned.
+ */
+class GitGraphLayout {
+public:
+  /** Fills `row.lane`, `row.color` and `row.edges` from `row.oid` and `row.parents`. */
+  void add(GitHistoryCommitRow& row);
+  void reset();
+
+private:
+  struct Lane { std::string oid; int color = 0; bool active = false; };
+  int allocate(const std::string& oid);
+  std::vector<Lane> lanes_;
+  int nextColor_ = 0;
 };
 
 /**

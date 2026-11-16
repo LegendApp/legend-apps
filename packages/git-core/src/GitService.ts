@@ -144,6 +144,39 @@ export function parseCommitDetails(output: string): GitCommitDetails {
   };
 }
 
+/** One commit in a file's history: the path the file had in it, and the path it was renamed from there. */
+export type GitFileHistoryCommit = {
+  oid: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  time: number;
+  summary: string;
+  status: string;
+  path: string;
+  oldPath: string | null;
+};
+export type GitFileHistoryPage = { commits: GitFileHistoryCommit[]; done: boolean };
+
+/**
+ * Parses `git log --follow -z --name-status` records that each start with \x1e. A record without a
+ * status line (a merge) keeps the path of the newer record, starting from `path`.
+ */
+export function parseFileHistory(output: string, path: string): GitFileHistoryCommit[] {
+  const commits: GitFileHistoryCommit[] = [];
+  let current = path;
+  for (const record of output.split("\x1e")) {
+    if (!record) continue;
+    const [oid = "", parents = "", authorName = "", authorEmail = "", time = "", summary = "", rawStatus = "", first = "", second] = record.split("\0");
+    const status = rawStatus.trim();
+    const renamed = status.startsWith("R") && second !== undefined;
+    if (status) current = renamed ? second : first;
+    commits.push({ oid, parents: parents.split(" ").filter(Boolean), authorName, authorEmail, time: Number(time), summary, status: status.slice(0, 1), path: current, oldPath: renamed ? first : null });
+    if (renamed) current = first;
+  }
+  return commits;
+}
+
 export function parseRefDecorations(output: string) {
   const decorations = new Map<string, GitRefDecoration[]>();
   for (const line of output.split("\n")) {
@@ -600,6 +633,24 @@ export class GitService {
       const base = parent ?? (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 60_000, "")).trim();
       return this.git(["-c", "diff.submodule=short", ...diffFormat, "-M", base, commit, "--"], options);
     });
+  }
+
+  /**
+   * Commits that touched `path` from HEAD back, following renames like `git log --follow`, `count` at a
+   * time from `offset`. Git's own walk is used because it applies its rename heuristics and the
+   * commit-graph's changed-path filters. Every page walks from HEAD: `--skip` would skip the commits
+   * where `--follow` learns a rename. An unborn HEAD has no history.
+   */
+  async fileHistory(path: string, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitFileHistoryPage> {
+    if (!isRepoPath(path)) throw new Error(`Expected a repository path, got ${JSON.stringify(path)}.`);
+    const head = await this.read(["rev-parse", "--verify", "-q", "HEAD"], options, 5_000, false, [0, 1]);
+    if (!head.trim()) return { commits: [], done: true };
+    const output = await this.read([
+      "log", "--follow", "-z", "--no-show-signature", "--name-status", "-M", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s",
+      `--max-count=${offset + count + 1}`, "HEAD", "--", `:(literal)${path}`,
+    ], options);
+    const commits = parseFileHistory(output, path).slice(offset);
+    return { commits: commits.slice(0, count), done: commits.length <= count };
   }
 
   /** Branches, remote branches and tags by the commit they point at; annotated tags are peeled. */

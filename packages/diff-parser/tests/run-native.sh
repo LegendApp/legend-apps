@@ -147,6 +147,14 @@ git clone --quiet --no-local "$HISTORY_FIXTURE" "$HISTORY_DETACHED_FIXTURE"
 git -C "$HISTORY_DETACHED_FIXTURE" checkout --quiet --detach main~7
 git -C "$HISTORY_DETACHED_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_DETACHED_FIXTURE.expected"
 git init --quiet "$HISTORY_UNBORN_FIXTURE"
+GRAPH_FIXTURE="$BUILD_DIR/graph-fixture"
+rm -rf "$GRAPH_FIXTURE"
+git init --quiet "$GRAPH_FIXTURE"
+python3 "$ROOT/packages/diff-parser/tests/graph-fixture.py" | git -C "$GRAPH_FIXTURE" fast-import --quiet
+git -C "$GRAPH_FIXTURE" checkout --quiet main
+git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$GRAPH_FIXTURE.expected"
+git -C "$GRAPH_FIXTURE" log --topo-order --all --format='%H %P' > "$GRAPH_FIXTURE.all"
+git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' unrelated > "$GRAPH_FIXTURE.linear"
 
 clang++ \
   -std=c++20 \
@@ -174,4 +182,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE" "$GRAPH_FIXTURE"

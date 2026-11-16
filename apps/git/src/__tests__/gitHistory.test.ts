@@ -41,7 +41,7 @@ function gitReader(path: string, opened: GitHistoryReader[]) {
         const out = fixtureGit(path, "log", "--topo-order", `--skip=${offset}`, `-n${count}`, "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%s", headOid);
         const commits: GitHistoryCommit[] = out ? out.split("\n").map(line => {
           const [oid = "", parents = "", authorName = "", authorEmail = "", time = "", summary = ""] = line.split("\0");
-          return { oid, parents: parents.split(" ").filter(Boolean), authorName, authorEmail, time: Number(time), summary };
+          return { oid, parents: parents.split(" ").filter(Boolean), authorName, authorEmail, time: Number(time), summary, lane: 0, color: 0, edges: [] };
         }) : [];
         return { offset, commits, done: commits.length < count };
       },
@@ -187,4 +187,102 @@ it("runs overlapping reloads one at a time so the newest HEAD always lands last,
   expect(t.state().commits).toHaveLength(1000);
   expect(t.opened.slice(0, -1).every(reader => (reader as unknown as { closed(): boolean }).closed())).toBe(true);
   t.controller.dispose();
+});
+
+it("shows one file's history across a rename, selects the file's patch in each commit, refreshes it, and returns to the full history", async () => {
+  const path = repo("file-history", false);
+  const commit = (file: string, content: string, message: string) => {
+    writeFileSync(join(path, file), content);
+    fixtureGit(path, "add", "--", file);
+    fixtureGit(path, "commit", "-q", "-m", message);
+  };
+  commit("old name.txt", "one\n", "Add");
+  commit("other.txt", "x\n", "Other");
+  fixtureGit(path, "mv", "old name.txt", "new ü.txt");
+  writeFileSync(join(path, "other.txt"), "y\n");
+  fixtureGit(path, "add", "other.txt");
+  fixtureGit(path, "commit", "-q", "-m", "Rename and touch other");
+  const t = setup(path);
+  await t.controller.showFileHistory("new ü.txt");
+  const expected = fixtureGit(path, "log", "--follow", "--format=%H", "--", "new ü.txt").split("\n");
+  expect(t.state().file).toMatchObject({ path: "new ü.txt", done: true, loading: false, error: null });
+  expect(t.state().file!.commits.map(commit => commit.oid)).toEqual(expected);
+  expect(t.state().commits.length).toBe(3);
+  // The newest commit is selected with the file's own patch, not the other file in that commit.
+  expect(t.state().selectedOid).toBe(expected[0]);
+  expect(t.state().details).toMatchObject({ selectedPath: "new ü.txt" });
+  expect(t.state().details!.files.map(file => file.path)).toEqual(["new ü.txt", "other.txt"].sort());
+  // Before the rename the file had its old path.
+  await t.controller.select(expected[1]!);
+  expect(t.state().details).toMatchObject({ oid: expected[1], selectedPath: "old name.txt" });
+
+  commit("new ü.txt", "two\n", "Edit after rename");
+  t.notify(join(path, ".git/refs/heads/main"));
+  await new Promise(resolve => setTimeout(resolve, 600));
+  expect(t.state().file!.commits).toHaveLength(3);
+  expect(t.state().selectedOid).toBe(expected[1]);
+
+  t.controller.closeFileHistory();
+  expect(t.state().file).toBeNull();
+  expect(t.state().commits).toHaveLength(4);
+  t.controller.dispose();
+});
+
+it("keeps a file-history selection older than the loaded full history when HEAD moves", async () => {
+  const path = repo("file-history-deep");
+  const t = setup(path);
+  await t.controller.showFileHistory("file.txt");
+  await t.controller.loadMore();
+  await t.controller.loadMore();
+  const expected = fixtureGit(path, "log", "--follow", "--format=%H", "--", "file.txt").split("\n");
+  expect(t.state().file!.commits.map(commit => commit.oid)).toEqual(expected.slice(0, 1500));
+  const deep = expected[1200]!;
+  expect(t.state().commits.some(commit => commit.oid === deep)).toBe(false);
+  await t.controller.select(deep);
+  writeFileSync(join(path, "file.txt"), "moved\n");
+  fixtureGit(path, "commit", "-q", "-am", "Move HEAD");
+  t.notify(join(path, ".git/refs/heads/main"));
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  expect(t.state().file!.commits).toHaveLength(1500);
+  expect(t.state().file!.commits[0]!.summary).toBe("Move HEAD");
+  expect(t.state().selectedOid).toBe(deep);
+  expect(t.state().details).toMatchObject({ oid: deep, selectedPath: "file.txt" });
+  t.controller.dispose();
+});
+
+it("shows a failed file-history page in the file list, pages full and file history independently, and keeps loaded pages on a repeat", async () => {
+  const path = repo("file-history-errors");
+  const real = new GitService(path, realRunner);
+  let failFiles = false;
+  let releaseFull!: () => void;
+  const opened: GitHistoryReader[] = [];
+  const open = gitReader(path, opened);
+  const controller = createGitHistory(next => { state = next; }, jest.fn(() => ({ remove: jest.fn() })), {
+    serviceFor: () => Object.assign(Object.create(real) as GitService, {
+      fileHistory: (file: string, options: Parameters<GitService["fileHistory"]>[1]) => failFiles && options?.offset ? Promise.reject(new Error("log failed")) : real.fileHistory(file, options),
+    }),
+    open: async (p: string) => {
+      const reader = await open(p);
+      const page = reader.page.bind(reader);
+      return { ...reader, page: async (offset: number, count?: number, signal?: AbortSignal) => { if (offset) await new Promise<void>(resolve => { releaseFull = resolve; }); return page(offset, count, signal); } };
+    },
+  });
+  let state!: HistoryState;
+  controller.setRoot(path);
+  await controller.activate();
+  const fullPage = controller.loadMore();
+  await controller.showFileHistory("file.txt");
+  await controller.loadMore();
+  expect(state.file!.commits).toHaveLength(1000);
+  releaseFull();
+  await fullPage;
+  expect(state.commits).toHaveLength(1000);
+  await controller.showFileHistory("file.txt");
+  expect(state.file!.commits).toHaveLength(1000);
+  failFiles = true;
+  await controller.loadMore();
+  expect(state.file).toMatchObject({ error: "log failed", done: true, loading: false });
+  expect(state.file!.commits).toHaveLength(1000);
+  expect(state.error).toBeNull();
+  controller.dispose();
 });

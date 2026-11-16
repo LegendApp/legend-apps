@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 #include <iterator>
 #include <iostream>
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -940,6 +943,182 @@ void assertUnbornGitHistory(const std::string& repositoryPath) {
   expect(walker.page(0, 500).empty(), "unborn history has no commits");
 }
 
+std::vector<diffparser::GitHistoryCommitRow> layoutFromLog(const std::string& path) {
+  diffparser::GitGraphLayout layout;
+  std::vector<diffparser::GitHistoryCommitRow> rows;
+  for (const auto& line : readExpectedHistory(path)) {
+    std::istringstream words(line);
+    diffparser::GitHistoryCommitRow row;
+    words >> row.oid;
+    for (std::string parent; words >> parent;) row.parents.push_back(parent);
+    layout.add(row);
+    rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
+std::string edgeText(const diffparser::GitHistoryCommitRow& row) {
+  std::string text;
+  for (size_t index = 0; index < row.edges.size(); index += 3) {
+    text += (text.empty() ? "" : " ") + std::to_string(row.edges[index]) + ">" + std::to_string(row.edges[index + 1]);
+  }
+  return text;
+}
+
+/**
+ * Follows every line from row to row: a column entering a row's top must be the column a line left the
+ * row above at, it ends at the node exactly when it leads to this commit, each parent gets a line, and
+ * no line is left open after the last row of a complete history.
+ */
+void validateGraph(const std::vector<diffparser::GitHistoryCommitRow>& rows, const std::string& name) {
+  std::map<int, std::string> targets;
+  std::map<int, int> colors;
+  for (size_t index = 0; index < rows.size(); ++index) {
+    const auto& row = rows[index];
+    const std::string label = name + " row " + std::to_string(index) + " (" + edgeText(row) + ")";
+    expect(row.edges.size() % 3 == 0, label + " edges are triples");
+    std::map<int, std::string> next;
+    std::map<int, int> nextColors;
+    std::set<int> tops;
+    bool reachesNode = false;
+    std::vector<int> outs;
+    for (size_t edge = 0; edge < row.edges.size(); edge += 3) {
+      const int top = row.edges[edge], bottom = row.edges[edge + 1], color = row.edges[edge + 2];
+      expect(top >= 0 || bottom >= 0, label + " no edge joins the node to itself");
+      expect(top < diffparser::kGitGraphMaxLanes && bottom < diffparser::kGitGraphMaxLanes, label + " stays under the lane cap");
+      if (top >= 0) {
+        tops.insert(top);
+        expect(targets.count(top) == 1, label + " enters at a column the row above left at");
+        expectEqual(static_cast<double>(color), static_cast<double>(colors[top]), label + " keeps the line's color");
+        if (bottom < 0) {
+          expectEqual(targets[top], row.oid, label + " ends a line at the commit it leads to");
+          if (!reachesNode) expectEqual(static_cast<double>(top), static_cast<double>(row.lane), label + " the commit sits in the first lane leading to it");
+          reachesNode = true;
+        } else {
+          expectEqual(static_cast<double>(top), static_cast<double>(bottom), label + " passes straight through");
+          expect(targets[top] != row.oid, label + " a line for this commit does not pass it by");
+          next[bottom] = targets[top];
+          nextColors[bottom] = color;
+        }
+      } else {
+        outs.push_back(bottom);
+        nextColors[bottom] = color;
+      }
+    }
+    expectEqual(static_cast<double>(tops.size()), static_cast<double>(targets.size()), label + " continues every line from the row above");
+    expectEqual(static_cast<double>(outs.size()), static_cast<double>(std::set<std::string>(row.parents.begin(), row.parents.end()).size()), label + " has one line per parent");
+    std::vector<std::string> unassigned;
+    std::set<std::string> carried;
+    for (const auto& [column, oid] : next) carried.insert(oid);
+    if (!row.parents.empty()) {
+      expect(std::find(outs.begin(), outs.end(), row.lane) != outs.end(), label + " first parent continues the commit's lane");
+      next[row.lane] = row.parents.front();
+    }
+    for (size_t parent = 1; parent < row.parents.size(); ++parent) {
+      if (!carried.count(row.parents[parent]) && row.parents[parent] != row.parents.front()) unassigned.push_back(row.parents[parent]);
+    }
+    std::vector<int> opened;
+    for (const int column : outs) if (column != row.lane && !next.count(column)) opened.push_back(column);
+    std::sort(opened.begin(), opened.end());
+    expectEqual(static_cast<double>(opened.size()), static_cast<double>(unassigned.size()), label + " opens a lane per new parent");
+    for (size_t open = 0; open < opened.size(); ++open) next[opened[open]] = unassigned[open];
+    targets = std::move(next);
+    colors = std::move(nextColors);
+  }
+  expect(targets.empty(), name + " leaves no line open after the last commit");
+}
+
+void expectSameLanes(const std::vector<diffparser::GitHistoryCommitRow>& actual, const std::vector<diffparser::GitHistoryCommitRow>& expected, size_t offset, const std::string& name) {
+  for (size_t index = 0; index < actual.size(); ++index) {
+    const auto& row = actual[index];
+    const auto& other = expected[offset + index];
+    const std::string label = name + " row " + std::to_string(offset + index);
+    expectEqual(row.oid, other.oid, label + " oid");
+    expectEqual(static_cast<double>(row.lane), static_cast<double>(other.lane), label + " lane");
+    expectEqual(static_cast<double>(row.color), static_cast<double>(other.color), label + " color");
+    expectEqual(edgeText(row), edgeText(other), label + " edges");
+  }
+}
+
+const diffparser::GitHistoryCommitRow& rowWithSummary(const std::vector<diffparser::GitHistoryCommitRow>& rows, const std::string& summary) {
+  for (const auto& row : rows) if (row.summary == summary) return row;
+  throw std::runtime_error("no history row " + summary);
+}
+
+void assertGraphLanes(const std::string& graphFixture, const std::string& historyFixture, const std::string& commitGraphFixture) {
+  const auto linear = layoutFromLog(graphFixture + ".linear");
+  validateGraph(linear, "linear");
+  expectEqual(static_cast<double>(linear.size()), 3, "linear commit count");
+  for (const auto& row : linear) expectEqual(static_cast<double>(row.lane), 0, "linear history stays in lane 0");
+  expectEqual(edgeText(linear[0]), "-1>0", "linear tip starts its lane");
+  expectEqual(edgeText(linear[1]), "0>-1 -1>0", "linear middle continues");
+  expectEqual(edgeText(linear[2]), "0>-1", "linear root ends its lane");
+
+  diffparser::GitHistoryWalker walker(graphFixture);
+  const auto rows = readAllHistory(walker, 4);
+  const auto expected = readExpectedHistory(graphFixture + ".expected");
+  expectEqual(static_cast<double>(rows.size()), static_cast<double>(expected.size()), "graph commit count");
+  for (size_t index = 0; index < rows.size(); ++index) expectEqual(historyLine(rows[index]), expected[index], "graph row matches git log --topo-order");
+  validateGraph(rows, "graph");
+  expectSameLanes(rows, layoutFromLog(graphFixture + ".expected"), 0, "graph walker matches the layout of git log");
+  for (const auto* summary : {"Tip", "Merge unrelated", "Octopus", "B1", "Merge feature", "A2", "A1", "Root"}) {
+    expectEqual(static_cast<double>(rowWithSummary(rows, summary).lane), 0, std::string("first-parent line stays in lane 0: ") + summary);
+  }
+  const auto& octopus = rowWithSummary(rows, "Octopus");
+  expectEqual(edgeText(octopus), "0>-1 -1>0 -1>1 -1>2 -1>3", "octopus opens a lane per extra parent");
+  const auto& merge = rowWithSummary(rows, "Merge feature");
+  expectEqual(edgeText(merge), "0>-1 1>-1 2>-1 3>-1 -1>0 -1>1", "merge opens a lane for its second parent; the octopus arms end at it");
+  const auto& unrelatedRoot = rowWithSummary(rows, "Unrelated root");
+  expect(&unrelatedRoot != &rows.back(), "unrelated root sits in the middle of history");
+  expectEqual(static_cast<double>(unrelatedRoot.lane), 1, "unrelated history runs in its own lane");
+  expectEqual(edgeText(unrelatedRoot), "0>0 1>-1", "a root in the middle ends its lane");
+  const auto& fork = rowWithSummary(rows, "F1");
+  expectEqual(edgeText(fork), "0>0 1>-1 -1>1", "the feature lane runs down to its fork point");
+  expectEqual(edgeText(rowWithSummary(rows, "A1")), "0>-1 1>-1 -1>0", "the feature lane ends at the commit it forked from");
+
+  const auto all = layoutFromLog(graphFixture + ".all");
+  validateGraph(all, "graph --all");
+  std::vector<const diffparser::GitHistoryCommitRow*> tips;
+  for (const auto& row : all) {
+    bool entered = false;
+    for (size_t edge = 0; edge < row.edges.size(); edge += 3) entered = entered || (row.edges[edge] >= 0 && row.edges[edge + 1] < 0);
+    if (!entered) tips.push_back(&row);
+  }
+  expectEqual(static_cast<double>(tips.size()), 2, "graph --all starts lanes only at main and the never-merged branch");
+  expect(tips[0]->lane == 0 && tips[1]->lane > 0, "the never-merged branch gets its own lane");
+  const int staleLane = tips[1]->lane;
+  bool staleJoins = false;
+  for (const auto& row : all) {
+    if (row.oid != rowWithSummary(rows, "A2").oid) continue;
+    for (size_t edge = 0; edge < row.edges.size(); edge += 3) staleJoins = staleJoins || (row.edges[edge] == staleLane && row.edges[edge + 1] < 0);
+  }
+  expect(staleJoins, "the never-merged branch's lane ends at its fork point");
+
+  diffparser::GitGraphLayout wide;
+  diffparser::GitHistoryCommitRow fan{.oid = "fan"};
+  for (int parent = 0; parent < 16; ++parent) fan.parents.push_back("p" + std::to_string(parent));
+  wide.add(fan);
+  for (const int edge : fan.edges) expect(edge <= diffparser::kGitGraphMaxLanes, "lanes past the cap fold into the overflow column");
+  expectEqual(edgeText(fan).substr(edgeText(fan).size() - 5), "-1>12", "an overflow lane is drawn once");
+  diffparser::GitHistoryCommitRow last{.oid = "p15"};
+  wide.add(last);
+  expectEqual(static_cast<double>(last.lane), diffparser::kGitGraphMaxLanes, "a commit past the cap sits in the overflow column");
+
+  diffparser::GitHistoryWalker paged(historyFixture);
+  const auto pagedRows = readAllHistory(paged, 500);
+  validateGraph(pagedRows, "history");
+  diffparser::GitHistoryWalker whole(historyFixture);
+  const auto wholeRows = whole.page(0, 5000);
+  expectSameLanes(pagedRows, wholeRows, 0, "lanes are continuous across the 500/501 page boundary");
+  expectEqual(edgeText(pagedRows[500]), edgeText(wholeRows[500]), "row 501 lanes");
+  expectSameLanes(paged.page(1000, 500), wholeRows, 1000, "lanes after a re-walk to an earlier offset");
+  diffparser::GitHistoryWalker withCommitGraph(commitGraphFixture);
+  expectSameLanes(readAllHistory(withCommitGraph, 500), wholeRows, 0, "lanes are identical with a commit-graph file");
+  size_t lanes = 0;
+  for (const auto& row : wholeRows) lanes = std::max(lanes, static_cast<size_t>(row.lane) + 1);
+  expect(lanes >= 2, "history fixture draws its side branches in a second lane");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -973,6 +1152,9 @@ int main(int argc, char** argv) {
       assertGitHistory(argv[6], false);
       assertGitHistory(argv[7], true);
       assertUnbornGitHistory(argv[8]);
+    }
+    if (argc > 9) {
+      assertGraphLanes(argv[9], argv[5], argv[6]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;
