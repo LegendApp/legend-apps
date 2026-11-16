@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
-import { GitBranchNotMergedError, type GitRefList, type GitStatusEntry } from "@legend-apps/git-core";
+import { GitBranchNotMergedError, GitLocalChangesError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
-import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, type CommandContext, type CommandId, type Section } from "./commands";
+import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, sectionShowsHistory, sectionStash, type CommandContext, type CommandId, type Section } from "./commands";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName } from "./gitRefs";
 import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
+import { createStashPreview, emptyStashPreview, sidebarDate, stashLabel, type StashPreviewState } from "./gitStashes";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
 import { EmptyState } from "./EmptyState";
-import { FileRow, useSymbolColor } from "./FileRow";
+import { FileRow, pathParts, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
@@ -47,8 +48,11 @@ export function App() {
   const refsController = useRef<ReturnType<typeof createGitRefs> | null>(null);
   const refsRef = useRef(refs);
   refsRef.current = refs;
+  const [stashPreview, setStashPreview] = useState(emptyStashPreview);
+  const stashController = useRef<ReturnType<typeof createStashPreview> | null>(null);
   const root = changes.root;
-  const showsHistory = section !== "changes";
+  const showsHistory = sectionShowsHistory(section);
+  const selectedStash = sectionStash(section);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -126,14 +130,47 @@ export function App() {
     message: (error instanceof Error ? error.message : String(error)).replace(/^(error|fatal): /gm, "").trim(),
   }).catch(console.error);
 
+  /** Checks out the branch; when Git refuses because uncommitted changes would be overwritten, offers Stash and Switch. */
   async function checkout(ref: string) {
     const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
     if (!entry || entry.kind === "tag" || !owner) return;
+    // A selected remote branch gives way to the local branch made from it.
+    const switched = (local: string) => { if (entry.kind === "remote") setSection(current => current === `ref:${ref}` ? `ref:${local}` : current); };
     try {
-      const local = await owner.checkout(entry);
-      // A selected remote branch gives way to the local branch made from it.
-      if (entry.kind === "remote") setSection(current => current === `ref:${ref}` ? `ref:${local}` : current);
-    } catch (error) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); }
+      switched(await owner.checkout(entry));
+    } catch (error) {
+      if (!(error instanceof GitLocalChangesError)) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); return; }
+      if (!await confirmStashAndSwitch(error.branch, error.message)) return;
+      try { switched(await owner.stashAndCheckout(entry)); } catch (failed) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, failed); }
+    }
+  }
+
+  async function stashChanges(includeUntracked: boolean) {
+    const owner = refsController.current;
+    if (!owner) return;
+    const untracked = changes.status?.entries.filter(entry => entry.kind === "untracked").length ?? 0;
+    const message = includeUntracked ? "Your changes and untracked files are saved as a stash and removed from the working tree."
+      : `Your changes are saved as a stash and removed from the working tree.${untracked ? " Untracked files stay; use Stash Changes Including Untracked… to stash them too." : ""}`;
+    const result = await showPrompt({ windowId: "main", title: "Stash Changes", message, placeholder: "Message (optional)", confirmLabel: "Stash" })
+      .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    if (result.canceled) return;
+    try { await owner.stash(result.value.trim(), includeUntracked); } catch (error) { await reportBranchError("Couldn’t Stash the Changes", error); }
+  }
+
+  /** Apply, Pop or Drop (after a warning sheet) one stash; Git's message is shown when it refuses or conflicts. */
+  async function stashWrite(oid: string, action: "apply" | "pop" | "drop") {
+    const owner = refsController.current, entry = refsRef.current.stashes?.find(stash => stash.oid === oid);
+    if (!owner || !entry) return;
+    if (action === "drop" && !await confirmDestructive(`Drop the stash “${stashLabel(entry.message)}”?`, "Drop", "Its changes are deleted from the stash list.", true)) return;
+    try {
+      if (action === "apply") await owner.applyStash(oid);
+      else if (action === "pop") await owner.popStash(oid);
+      else await owner.dropStash(oid);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      const title = { apply: "Couldn’t Apply the Stash", pop: "Couldn’t Pop the Stash", drop: "Couldn’t Drop the Stash" }[action];
+      await reportBranchError(title, action === "drop" || error instanceof GitStashDropError ? text : `${text}\n\nThe stash was kept.`);
+    }
   }
 
   async function switchBranch() {
@@ -214,6 +251,8 @@ export function App() {
     refs: root ? refs.refs : null,
     unborn: !root || changes.status?.branch.oid === "(initial)",
     branchBusy: refs.writing,
+    stashes: root ? refs.stashes : null,
+    hasChanges: !!changes.status?.entries.length,
     run: {
       openRepository: () => void chooseRepository(),
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -247,6 +286,10 @@ export function App() {
       renameBranch: ref => void renameBranch(ref),
       deleteBranch: ref => void deleteBranch(ref),
       copyText: text => { setStringAsync(text).catch(console.error); },
+      stashChanges: includeUntracked => void stashChanges(includeUntracked),
+      applyStash: oid => void stashWrite(oid, "apply"),
+      popStash: oid => void stashWrite(oid, "pop"),
+      dropStash: oid => void stashWrite(oid, "drop"),
     },
   };
   const contextRef = useRef(context);
@@ -268,6 +311,7 @@ export function App() {
         items: [
           item("apply-lines"), { type: "separator" },
           item("discard-file"), item("discard-lines"), item("restore-discard"), { type: "separator" },
+          item("stash-changes"), item("stash-all-changes"), item("apply-stash"), item("pop-stash"), item("drop-stash"), { type: "separator" },
           item("generate-message"), item("commit"),
         ],
       },
@@ -282,12 +326,14 @@ export function App() {
   useEffect(() => {
     historyController.current?.setRoot(root);
     refsController.current?.setRoot(root);
+    stashController.current?.setRoot(root);
     if (!root) setSection("changes");
   }, [root]);
   // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
   useEffect(() => { if (changes.status) void refsController.current?.refresh(); }, [changes.status]);
+  useEffect(() => { void stashController.current?.show(selectedStash); }, [selectedStash, root]);
   useEffect(() => {
-    if (section === "changes") return;
+    if (!sectionShowsHistory(section)) return;
     historyController.current?.setRef(sectionRef(section));
     void historyController.current?.activate();
   }, [section, root]);
@@ -295,7 +341,10 @@ export function App() {
   useEffect(() => {
     const ref = sectionRef(section);
     if (ref && refs.refs && !findRef(refs.refs, ref)) setSection("history");
-  }, [refs.refs, section]);
+    // A stash that was popped or dropped falls back to Changes, where popped work shows up.
+    const stash = sectionStash(section);
+    if (stash && refs.stashes && !refs.stashes.some(entry => entry.oid === stash)) setSection("changes");
+  }, [refs.refs, refs.stashes, section]);
 
   const [historyActions] = useState<HistoryActions>(() => ({
     select: oid => void historyController.current?.select(oid),
@@ -340,6 +389,13 @@ export function App() {
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
+  function showStashMenu({ oid, position }: { oid: string; position: { x: number; y: number } }) {
+    const menuContext = contextRef.current;
+    const items = [...(["apply-stash", "pop-stash"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const }, commandMenuItem("drop-stash", menuContext, { target: oid, shortcut: false })];
+    showContextMenu({ windowId: "main", position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
+  }
+
   function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
@@ -352,7 +408,8 @@ export function App() {
   }
 
   // A ref deleted or renamed since it was selected has no row; History is shown until the effect above moves there.
-  const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history" : section;
+  const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history"
+    : selectedStash && !refs.stashes?.some(entry => entry.oid === selectedStash) ? "changes" : section;
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
   const button = (id: CommandId, symbol: string) => {
@@ -368,14 +425,14 @@ export function App() {
         commandMenuItem("switch-branch", context, { shortcut: false }),
         commandMenuItem("new-branch", context, { shortcut: false }),
       ] },
-      { type: "segmented", id: "section", label: "View", value: showsHistory && section !== "history" ? null : section, segments: [
+      { type: "segmented", id: "section", label: "View", value: section === "changes" || section === "history" ? section : null, segments: [
         { value: "changes", label: "Changes", symbol: "square.and.pencil" },
         { value: "history", label: "History", symbol: "clock" },
       ] },
       // Fetch, Pull and Push arrive with M3: a `disabled` toolbar button still shows and acts enabled (Spark ask), so they are left out until then.
       button("refresh", "arrow.clockwise"),
       // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
-      { type: "search", id: "search", label: "Search", placeholder: section === "changes" ? "Filter Files" : "Search Commits", width: 200 },
+      { type: "search", id: "search", label: "Search", placeholder: showsHistory ? "Search Commits" : "Filter Files", width: 200 },
       ...showsHistory ? [{
         type: "menu" as const, id: "search-scope", label: searchScopes.find(entry => entry.scope === searchScope)!.label, tooltip: "Search in",
         items: searchScopes.map(({ scope, label }) => ({ type: "checkbox" as const, id: `search-${scope}`, label, checked: scope === searchScope })),
@@ -418,6 +475,8 @@ export function App() {
     historyController.current = historyOwner;
     const refsOwner = createGitRefs(setRefs);
     refsController.current = refsOwner;
+    const stashOwner = createStashPreview(setStashPreview);
+    stashController.current = stashOwner;
     const registration = addMacOSWindowListener("main", event => {
       if (disposed) return;
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
@@ -430,7 +489,7 @@ export function App() {
       // Typing already filters or searches. AppKit also sends the field's action when the field loses focus (a click
       // on Show All, a section switch), with the text from before, so submits are ignored.
       else if (event.type === "toolbarSearchChanged") {
-        if (contextRef.current.section === "changes") setFilter(event.value);
+        if (!sectionShowsHistory(contextRef.current.section)) setFilter(event.value);
         else {
           setHistoryQuery(event.value);
           historyOwner.search(contextRef.current.searchScope, event.value);
@@ -443,9 +502,11 @@ export function App() {
       owner.dispose();
       historyOwner.dispose();
       refsOwner.dispose();
+      stashOwner.dispose();
       controller.current = null;
       historyController.current = null;
       refsController.current = null;
+      stashController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     });
@@ -457,9 +518,11 @@ export function App() {
       owner.dispose();
       historyOwner.dispose();
       refsOwner.dispose();
+      stashOwner.dispose();
       controller.current = null;
       historyController.current = null;
       refsController.current = null;
+      stashController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     };
@@ -480,6 +543,17 @@ export function App() {
       confirmReplace={() => confirmDestructive("Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
       generatorRef={generator} onGeneratingChange={setGenerating} />
   </View>;
+
+  const stashEntry = selectedStash ? refs.stashes?.find(entry => entry.oid === selectedStash) ?? null : null;
+  const stashFile = stashPreview.oid === selectedStash ? stashPreview.files.find(file => file.path === stashPreview.selectedPath) : undefined;
+  const stashButton = (id: "apply-stash" | "pop-stash" | "drop-stash", label: string) => stashEntry
+    ? <Button style={styles.action} disabled={!commandEnabled(id, context, stashEntry.oid)} onPress={() => runCommand(id, contextRef.current, stashEntry.oid)}>{label}</Button> : null;
+  const stashButtons = <>{stashButton("apply-stash", "Apply")}{stashButton("pop-stash", "Pop")}{stashButton("drop-stash", "Drop…")}</>;
+  const stashDetail = stashFile
+    ? <DiffPane readOnly disabled patch={{ path: stashFile.path, text: stashFile.text, file: stashFile.file, section: "unstaged", conflicted: false }} onApply={() => {}} accessory={stashButtons} />
+    : <EmptyState title={stashPreview.loading ? "Loading Stash…" : stashPreview.error ? "Couldn’t Read the Stash" : "No Changes"} message={stashPreview.error ?? undefined}>
+      {stashPreview.loading ? null : <View style={styles.stashButtons}>{stashButtons}</View>}
+    </EmptyState>;
 
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
@@ -503,7 +577,7 @@ export function App() {
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:")) setSection(event.id as Section); }} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:")) setSection(event.id as Section); }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
@@ -511,6 +585,7 @@ export function App() {
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
+            ...stashSidebarItems(refs.stashes, showStashMenu),
           ] :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
@@ -518,11 +593,12 @@ export function App() {
       list={root ? <>
         {changesList}
         {showsHistory ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
+        {stashEntry ? <View style={styles.listPane}><StashFiles stash={stashEntry} preview={stashPreview} filter={filter} onSelect={path => stashController.current?.selectFile(path)} /></View> : null}
       </> : undefined}
       content={
         <View style={styles.content}>
           {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
-          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : changesDetail}</View>
+          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -533,13 +609,14 @@ export function App() {
   );
 }
 
-function SidebarRow({ symbol, label, count, current, indent }: { symbol: string; label: string; count?: number; current?: boolean; indent?: boolean }) {
+function SidebarRow({ symbol, label, count, current, indent, detail }: { symbol: string; label: string; count?: number; current?: boolean; indent?: boolean; detail?: string }) {
   const color = useSymbolColor("blue");
   const secondary = useSymbolColor("secondary");
-  return <View style={[styles.sidebarRow, indent && styles.indented]} accessible accessibilityLabel={count ? `${label}, ${count}` : current ? `${label}, current branch` : label}>
+  return <View style={[styles.sidebarRow, indent && styles.indented]} accessible accessibilityLabel={count ? `${label}, ${count}` : current ? `${label}, current branch` : detail ? `${label}, ${detail}` : label}>
     <View style={styles.sidebarIcon}><SFSymbol name={symbol} color={color} size={15} /></View>
     <Text style={styles.label} numberOfLines={1}>{label}</Text>
     {count ? <Text style={styles.count}>{count}</Text> : null}
+    {detail ? <Text style={styles.count} numberOfLines={1}>{detail}</Text> : null}
     {current ? <SFSymbol name="checkmark" color={secondary} size={12} /> : null}
   </View>;
 }
@@ -561,6 +638,52 @@ function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: 
     ])] : [],
     ...refs.tags.length ? [group("group:tags", "Tags"), ...refs.tags.map(tag => row(tag.ref, "tag", tag.name))] : [],
   ];
+}
+
+/** Stashes under a group row, newest first, with how long ago each was made; left out when there are none. */
+function stashSidebarItems(stashes: GitStash[] | null, onContextMenu: (event: { oid: string; position: { x: number; y: number } }) => void) {
+  if (!stashes?.length) return [];
+  return [
+    <SidebarItem key="group:stashes" id="group:stashes" selectable={false}><Text style={styles.section} accessibilityRole="header">Stashes</Text></SidebarItem>,
+    ...stashes.map(stash => <SidebarItem key={stash.oid} id={`stash:${stash.oid}`} onContextMenu={event => onContextMenu({ oid: stash.oid, position: event.windowPosition })}>
+      <SidebarRow symbol="archivebox" label={stashLabel(stash.message)} detail={stash.time ? sidebarDate(stash.time) : undefined} />
+    </SidebarItem>),
+  ];
+}
+
+/** The selected stash's message and files; selecting a file shows its diff. */
+function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; preview: StashPreviewState; filter: string; onSelect: (path: string) => void }) {
+  const files = preview.oid === stash.oid ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
+  return <View style={styles.listSection}>
+    <View style={styles.heading}>
+      <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1}>{stash.message}</Text>
+    </View>
+    {files.length ? <Sidebar style={styles.root} selectedId={preview.selectedPath} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
+      {files.map(file => {
+        const { name, folder } = pathParts(file.path);
+        return <SidebarItem key={file.path} id={file.path}>
+          <View style={styles.fileRow} accessible accessibilityLabel={folder ? `${name}, ${folder}` : name}>
+            <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
+            {folder ? <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text> : null}
+          </View>
+        </SidebarItem>;
+      })}
+    </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{preview.loading ? "Loading…" : filter ? "No matching files" : "No files"}</Text></View>}
+  </View>;
+}
+
+/** Offers to stash the changes Git refused to carry along, then switch. */
+async function confirmStashAndSwitch(branch: string, gitMessage: string) {
+  const files = gitMessage.split("\n").filter(line => line.startsWith("\t")).length;
+  try {
+    const result = await showMessage({
+      windowId: "main", kind: "warning",
+      title: files ? `You have uncommitted changes in ${files === 1 ? "1 file" : `${files} files`} that switching to “${branch}” would overwrite.` : `Switching to “${branch}” would overwrite your uncommitted changes.`,
+      message: `Stash and Switch saves all your changes, untracked files included, as the stash “auto-stash before switching to ${branch}”. Apply or pop it from Stashes later.`,
+      buttons: [{ id: "stash", label: "Stash and Switch" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "stash", cancelButtonId: "cancel",
+    });
+    return result.buttonId === "stash";
+  } catch (error) { console.error(error); return false; }
 }
 
 /**
@@ -604,6 +727,10 @@ const styles = StyleSheet.create({
   heading: { flexDirection: "row", alignItems: "center", gap: 8, height: 36, paddingLeft: 16, paddingRight: 12 },
   headingLabel: { flex: 1, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
   action: { width: 72, height: 24 },
+  stashButtons: { flexDirection: "row", gap: 8 },
+  fileRow: { height: 24, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  fileName: { flexShrink: 0, maxWidth: "70%", fontSize: 13, color: PlatformColor("labelColor") },
+  fileFolder: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   discard: { width: 80, height: 24 },
   emptyList: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 24 },
   emptyListText: { fontSize: 12, color: PlatformColor("tertiaryLabelColor") },

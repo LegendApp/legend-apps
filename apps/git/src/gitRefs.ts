@@ -1,7 +1,7 @@
-import { getGitService, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitTag } from "@legend-apps/git-core";
+import { getGitService, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag } from "@legend-apps/git-core";
 
-export type RefsState = { root: string | null; refs: GitRefList | null; writing: boolean; error: string | null };
-export const emptyRefs: RefsState = { root: null, refs: null, writing: false, error: null };
+export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; writing: boolean; error: string | null };
+export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, writing: false, error: null };
 
 /** A sidebar ref: a local branch, a remote branch or a tag, found by its full ref name. */
 export type RefEntry = { kind: "branch"; ref: GitBranch } | { kind: "remote"; ref: GitRemoteBranch } | { kind: "tag"; ref: GitTag };
@@ -34,7 +34,7 @@ export function resolveBranchName(refs: GitRefList | null, name: string): RefEnt
 export const recentBranches = (refs: GitRefList | null, count = 10) => [...refs?.branches ?? []].sort((a, b) => b.time - a.time).slice(0, count);
 
 /**
- * Branches, remote branches and tags of one repository, and the branch writes. Reads happen on
+ * Branches, remote branches, tags and stashes of one repository, and their writes. Reads happen on
  * `refresh`, which the window calls whenever Changes re-reads status (its watcher sees ref and HEAD
  * changes). Writes run one at a time through git-core's repository queue and reject with Git's error.
  */
@@ -49,8 +49,8 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
 
   const read = async (git: GitService, controller: AbortController, current: number) => {
     try {
-      const refs = await git.listRefs({ signal: controller.signal });
-      if (current === run && active === controller && !closed) publish({ refs, error: null });
+      const [refs, stashes] = await Promise.all([git.listRefs({ signal: controller.signal }), git.listStashes({ signal: controller.signal })]);
+      if (current === run && active === controller && !closed) publish({ refs, stashes, error: null });
     } catch (error) {
       if (current === run && active === controller && !closed && !controller.signal.aborted) publish({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -68,7 +68,7 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
   const write = async <T>(operation: (git: GitService, signal: AbortSignal) => Promise<T>): Promise<T> => {
     const git = service, controller = active;
     if (!git || !controller || closed) throw new Error("Open a repository first.");
-    if (state.writing) throw new Error("Another branch operation is still running.");
+    if (state.writing) throw new Error("Another branch or stash operation is still running.");
     publish({ writing: true });
     try {
       return await operation(git, controller.signal);
@@ -99,6 +99,21 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
         return `refs/heads/${await git.checkoutRemoteBranch(entry.ref, { signal })}`;
       });
     },
+    /**
+     * Stashes all changes, untracked files included, and checks out the branch; when the checkout still fails the
+     * stash is popped back. Resolves with the local branch's ref name.
+     */
+    stashAndCheckout(entry: RefEntry) {
+      if (entry.kind === "tag") return Promise.reject(new Error("Check out a branch, not a tag."));
+      return write(async (git, signal) => `refs/heads/${(await git.stashAndSwitch(entry.kind === "branch" ? entry.ref.name : entry.ref, { signal })).branch}`);
+    },
+    /** Resolves with the new stash's oid. */
+    stash(message: string, includeUntracked: boolean) {
+      return write((git, signal) => git.stashPush(message, { includeUntracked, signal }));
+    },
+    applyStash(oid: string) { return write((git, signal) => git.stashApply(oid, { signal })); },
+    popStash(oid: string) { return write((git, signal) => git.stashPop(oid, { signal })); },
+    dropStash(oid: string) { return write((git, signal) => git.stashDrop(oid, { signal })); },
     /** Creates and checks out branch `name` at `startPoint` (a ref name or commit; HEAD when omitted). */
     create(name: string, startPoint?: string) {
       return write((git, signal) => git.createBranch(name, startPoint, { signal }));

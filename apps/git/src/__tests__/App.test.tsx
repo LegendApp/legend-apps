@@ -11,6 +11,7 @@ import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
+import { sidebarDate } from "../gitStashes";
 import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-parser";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
@@ -595,7 +596,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: "m" })),
     commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n"),
     fileHistory: jest.fn(async () => ({ commits: [{ oid: head, parents: [], authorName: "Ada", authorEmail: "a@x", time: 1, summary: "On HEAD", status: "M", path: "a.txt", oldPath: null }], done: true })),
-    listRefs: jest.fn(async () => refs),
+    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []),
     checkoutBranch: jest.fn(async () => {}), checkoutRemoteBranch: jest.fn(async () => "fix/x"), createBranch: jest.fn(async () => {}), renameBranch: jest.fn(async () => {}),
     deleteBranch: jest.fn(async (_name: string, { force }: { force?: boolean }) => { if (!force) throw new GitBranchNotMergedError("old", "error: the branch 'old' is not fully merged"); }) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
@@ -733,7 +734,7 @@ it("has no branches and no New Branch on an unborn HEAD", async () => {
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
-    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })) };
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -753,7 +754,7 @@ it("leaves a selected ref when another repository opens, without walking that re
   const service = (root: string) => ({ repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: `${root}/.git`, ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
-    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })) });
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) });
   const services = new Map([["/a", service("/a")], ["/b", service("/b")]]);
   jest.mocked(getGitService).mockImplementation(path => services.get(path.startsWith("/b") ? "/b" : "/a") as unknown as GitService);
   let renderer!: ReactTestRenderer;
@@ -767,5 +768,164 @@ it("leaves a selected ref when another repository opens, without walking that re
   await act(async () => { openRepository(); });
   expect(sidebar().props.selectedId).toBe("changes");
   expect(jest.mocked(openGitHistory).mock.calls.filter(call => call[0] === "/b")).toEqual([]);
+  await act(async () => { renderer.unmount(); });
+});
+
+it("lists Stashes in the sidebar, previews one with Apply, Pop and Drop…, stashes changes, and offers Stash and Switch when a checkout is refused", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const head = "a".repeat(40), older = "d".repeat(40), newer = "e".repeat(40);
+  const now = Math.floor(Date.now() / 1000);
+  let stashes = [
+    { oid: newer, index: 0, message: "On main: ünïcode ✓ work", time: now - 3 * 3600 },
+    { oid: older, index: 1, message: "WIP on main: 1234567 First", time: now - 2 * 86400 },
+  ];
+  const { GitLocalChangesError } = jest.requireActual("@legend-apps/git-core");
+  const entries = [{ kind: "ordinary" as const, path: "a.txt", indexStatus: ".", worktreeStatus: "M" }, { kind: "untracked" as const, path: "new.txt", indexStatus: "?", worktreeStatus: "?" }];
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    fileDiff: jest.fn(async () => ""),
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 2 }, { name: "other", ref: "refs/heads/other", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })),
+    listStashes: jest.fn(async () => stashes),
+    stashPatch: jest.fn(async () => "diff --git a/dir/a.txt b/dir/a.txt\n--- a/dir/a.txt\n+++ b/dir/a.txt\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+n\n"),
+    stashPush: jest.fn(async () => newer), stashApply: jest.fn(async () => {}), stashPop: jest.fn(async () => {}), stashDrop: jest.fn(async () => {}),
+    checkoutBranch: jest.fn(async () => {}), stashAndSwitch: jest.fn(async () => ({ branch: "other", stash: newer })) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const items = () => sidebar().findAllByType(SidebarItem);
+  const row = (id: string) => items().find(item => item.props.id === id)!;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label)!;
+  const texts = (node: { findAllByType: typeof renderer.root.findAllByType }) => node.findAllByType(Text).map(text => [text.props.children].flat().join(""));
+
+  // A Stashes group after Branches: archivebox rows labelled with the message (without "On main: ") and a relative date.
+  expect(items().map(item => item.props.id).slice(-3)).toEqual(["group:stashes", `stash:${newer}`, `stash:${older}`]);
+  expect(row(`stash:${newer}`).findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["archivebox"]);
+  expect(texts(row(`stash:${newer}`))).toEqual(["ünïcode ✓ work", sidebarDate(now - 3 * 3600)]);
+  expect(texts(row(`stash:${older}`))).toEqual(["WIP on main: 1234567 First", sidebarDate(now - 2 * 86400)]);
+
+  // Changes ▸ Stash Changes… (⌘⌥S) asks for a message; the untracked variant stashes untracked files too.
+  expect(menuItem("stash-changes")).toMatchObject({ label: "Stash Changes…", shortcut: "Cmd+Alt+s", disabled: false });
+  expect(menuItem("apply-stash")).toMatchObject({ disabled: true });
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: " ünï message " });
+  await act(async () => { lastMenu().onAction({ itemId: "stash-changes" }); });
+  expect(showPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Stash Changes", confirmLabel: "Stash", message: expect.stringContaining("Untracked files stay") }));
+  expect(git.stashPush).toHaveBeenLastCalledWith("ünï message", expect.objectContaining({ includeUntracked: false }));
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "" });
+  await act(async () => { lastMenu().onAction({ itemId: "stash-all-changes" }); });
+  expect(git.stashPush).toHaveBeenLastCalledWith("", expect.objectContaining({ includeUntracked: true }));
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: true });
+  await act(async () => { lastMenu().onAction({ itemId: "stash-changes" }); });
+  expect(git.stashPush).toHaveBeenCalledTimes(2);
+
+  // Selecting a stash lists its files and shows the first one's diff with Apply, Pop and Drop… in the diff header.
+  await act(async () => { sidebar().props.onSelectionChange({ id: `stash:${newer}` }); });
+  expect(git.stashPatch).toHaveBeenLastCalledWith(newer, expect.anything());
+  const fileList = renderer.root.findAllByType(Sidebar).at(-1)!;
+  expect(fileList.props.selectedId).toBe("dir/a.txt");
+  expect(fileList.findAllByType(SidebarItem).map(item => item.props.id)).toEqual(["dir/a.txt", "new.txt"]);
+  expect(texts(renderer.root)).toContain("On main: ünïcode ✓ work");
+  await act(async () => { fileList.props.onSelectionChange({ id: "new.txt" }); });
+  expect(renderer.root.findAllByType(Sidebar).at(-1)!.props.selectedId).toBe("new.txt");
+  expect(texts(renderer.root)).toContain("new.txt");
+  expect(menuItem("apply-stash")).toMatchObject({ label: "Apply Stash", disabled: false });
+  const toolbarItems = jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[];
+  expect(toolbarItems.find(entry => entry.id === "section")).toMatchObject({ value: null });
+  expect(toolbarItems.find(entry => entry.id === "search")).toMatchObject({ placeholder: "Filter Files" });
+
+  await act(async () => { button("Apply").props.onPress(); });
+  expect(git.stashApply).toHaveBeenLastCalledWith(newer, expect.anything());
+  // A conflicting Pop reports Git's message and that the stash was kept.
+  git.stashPop.mockRejectedValueOnce(new Error("CONFLICT (content): Merge conflict in a.txt"));
+  await act(async () => { button("Pop").props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Pop the Stash", message: "CONFLICT (content): Merge conflict in a.txt\n\nThe stash was kept." }));
+  // When only the drop failed, the stash was applied: no "kept" note that invites applying it twice.
+  const { GitStashDropError } = jest.requireActual("@legend-apps/git-core");
+  git.stashPop.mockRejectedValueOnce(new GitStashDropError("index.lock exists"));
+  await act(async () => { button("Pop").props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Pop the Stash", message: "The stash was applied, but Git couldn’t remove it from the list: index.lock exists" }));
+  // Refreshes keep the selection by oid even when the index moves.
+  stashes = [{ oid: "f".repeat(40), index: 0, message: "On main: newest", time: now }, ...stashes.map(stash => ({ ...stash, index: stash.index + 1 }))];
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(sidebar().props.selectedId).toBe(`stash:${newer}`);
+  expect(git.stashPatch).toHaveBeenCalledTimes(1);
+
+  // Drop… asks with a warning sheet whose default is Cancel; cancelling keeps the stash.
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { button("Drop…").props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Drop the stash “ünïcode ✓ work”?", defaultButtonId: "cancel", buttons: [{ id: "confirm", label: "Drop" }, { id: "cancel", label: "Cancel" }] }));
+  expect(git.stashDrop).not.toHaveBeenCalled();
+  // Once dropped, the stash's row is gone and the selection falls back to Changes without the sidebar throwing.
+  git.stashDrop.mockImplementationOnce(async () => { stashes = stashes.filter(stash => stash.oid !== newer); });
+  await act(async () => { button("Drop…").props.onPress(); });
+  expect(git.stashDrop).toHaveBeenLastCalledWith(newer, expect.anything());
+  expect(sidebar().props.selectedId).toBe("changes");
+  expect(items().some(item => item.props.id === `stash:${newer}`)).toBe(false);
+
+  // A stash whose patch can't be read still offers Apply, Pop and Drop….
+  git.stashPatch.mockRejectedValueOnce(new Error("bad object"));
+  await act(async () => { sidebar().props.onSelectionChange({ id: `stash:${older}` }); });
+  expect(texts(renderer.root)).toContain("bad object");
+  expect(["Apply", "Pop", "Drop…"].map(label => !!button(label))).toEqual([true, true, true]);
+
+  // The stash row's context menu acts on that row.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "pop-stash" });
+  await act(async () => { row(`stash:${older}`).props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Apply Stash", "Pop Stash", "-", "Drop Stash…"]);
+  expect(git.stashPop).toHaveBeenLastCalledWith(older, expect.anything());
+
+  // A checkout Git refuses over local changes offers Stash and Switch (default) or Cancel.
+  const refused = () => new GitLocalChangesError("other", "error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\n\tb.txt\nAborting");
+  git.checkoutBranch.mockRejectedValueOnce(refused());
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
+  await act(async () => { row("ref:refs/heads/other").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+    kind: "warning", title: "You have uncommitted changes in 2 files that switching to “other” would overwrite.",
+    buttons: [{ id: "stash", label: "Stash and Switch" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "stash", cancelButtonId: "cancel",
+  }));
+  expect(git.stashAndSwitch).not.toHaveBeenCalled();
+  git.checkoutBranch.mockRejectedValueOnce(refused());
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "stash" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
+  await act(async () => { row("ref:refs/heads/other").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(git.stashAndSwitch).toHaveBeenLastCalledWith("other", expect.anything());
+  // When the switch still fails, Git's reason is shown (git-core has popped the stash back).
+  git.checkoutBranch.mockRejectedValueOnce(refused());
+  git.stashAndSwitch.mockRejectedValueOnce(new Error("fatal: invalid reference: other"));
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "stash" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
+  await act(async () => { row("ref:refs/heads/other").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Switch to “other”", message: "invalid reference: other" }));
+  await act(async () => { renderer.unmount(); });
+});
+
+it("disables stashing on an unborn HEAD, with nothing to stash, and leaves out Stashes when there are none", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  let entries = [{ kind: "untracked" as const, path: "a.txt", indexStatus: "?", worktreeStatus: "?" }];
+  let oid = "(initial)";
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  expect(menuItem("stash-changes")).toMatchObject({ disabled: true });
+  expect(renderer.root.findAllByType(SidebarItem).some(item => item.props.id === "group:stashes")).toBe(false);
+  oid = "a".repeat(40);
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(menuItem("stash-changes")).toMatchObject({ disabled: false });
+  entries = [];
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(menuItem("stash-changes")).toMatchObject({ disabled: true });
   await act(async () => { renderer.unmount(); });
 });

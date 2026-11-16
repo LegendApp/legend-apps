@@ -1,10 +1,13 @@
-import type { GitRefList } from "@legend-apps/git-core";
+import type { GitRefList, GitStash } from "@legend-apps/git-core";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef } from "./gitRefs";
 
-/** A sidebar item: Changes, History, or a branch, remote branch or tag by its full ref name. */
-export type Section = "changes" | "history" | `ref:${string}`;
+/** A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, or a stash by its oid. */
+export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}`;
 export const sectionRef = (section: Section) => section.startsWith("ref:") ? section.slice(4) : null;
+export const sectionStash = (section: Section) => section.startsWith("stash:") ? section.slice(6) : null;
+/** History lists commits: HEAD's, or a ref's. */
+export const sectionShowsHistory = (section: Section) => section === "history" || section.startsWith("ref:");
 
 /** What every command reads to decide its label and whether it is enabled, plus the actions it runs. */
 export type CommandContext = {
@@ -35,8 +38,12 @@ export type CommandContext = {
   refs: GitRefList | null;
   /** HEAD has no commit yet. */
   unborn: boolean;
-  /** A branch write is running. */
+  /** A branch or stash write is running. */
   branchBusy: boolean;
+  /** Stash entries, newest first; null until read. */
+  stashes: GitStash[] | null;
+  /** The worktree or index has changes to stash. */
+  hasChanges: boolean;
   run: {
     openRepository(): void;
     toggleSidebar(): void;
@@ -62,6 +69,10 @@ export type CommandContext = {
     renameBranch(ref: string): void;
     deleteBranch(ref: string): void;
     copyText(text: string): void;
+    stashChanges(includeUntracked: boolean): void;
+    applyStash(oid: string): void;
+    popStash(oid: string): void;
+    dropStash(oid: string): void;
   };
 };
 
@@ -84,6 +95,12 @@ const renameTarget = (context: CommandContext, target?: string) => {
   return target ? null : context.refs?.branches.find(branch => branch.current) ?? null;
 };
 const canWriteBranch = (context: CommandContext) => context.hasRepository && !context.branchBusy && !context.unborn;
+/** The stash a stash command acts on: the context menu's, else the selected one. */
+const stash = (context: CommandContext, target?: string) => {
+  const oid = target ?? sectionStash(context.section);
+  return context.stashes?.find(entry => entry.oid === oid) ?? null;
+};
+const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
 export const commands = [
   { id: "open-repository", label: "Open Repository…", shortcut: "Cmd+o", enabled: () => true, run: context => context.run.openRepository() },
@@ -153,6 +170,11 @@ export const commands = [
     enabled: (context, target) => !!ref(context, target),
     run: (context, target) => context.run.copyText(ref(context, target)!.ref.name),
   },
+  { id: "stash-changes", label: "Stash Changes…", shortcut: "Cmd+Alt+s", enabled: canStash, run: context => context.run.stashChanges(false) },
+  { id: "stash-all-changes", label: "Stash Changes Including Untracked…", shortcut: "Cmd+Alt+Shift+s", enabled: canStash, run: context => context.run.stashChanges(true) },
+  { id: "apply-stash", label: "Apply Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.applyStash(stash(context, target)!.oid) },
+  { id: "pop-stash", label: "Pop Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.popStash(stash(context, target)!.oid) },
+  { id: "drop-stash", label: "Drop Stash…", enabled: (context, target) => context.hasRepository && !context.branchBusy && !!stash(context, target), run: (context, target) => context.run.dropStash(stash(context, target)!.oid) },
 ] as const satisfies readonly Command[];
 
 export type CommandId = (typeof commands)[number]["id"];

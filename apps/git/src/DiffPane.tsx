@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FlatList, PlatformColor, Pressable, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
 import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, loadUnifiedDiff, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
@@ -62,10 +62,13 @@ export function nextLineSelection(items: readonly DiffPaneItem[], selected: Read
   return { selected: new Set([item.key]), anchor: index };
 }
 
-export function DiffPane({ patch, disabled, readOnly = false, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu }: {
+export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu }: {
   patch: NonNullable<ChangesState["patch"]>; disabled: boolean;
   /** History: no staging or discard actions and no line selection. */
-  readOnly?: boolean; onApply: (keys: ReadonlySet<string>, text: string) => void; applyRef?: { current: (() => void) | null };
+  readOnly?: boolean;
+  /** Buttons at the end of the header (a stash's Apply, Pop and Drop…). */
+  accessory?: ReactNode;
+  onApply: (keys: ReadonlySet<string>, text: string) => void; applyRef?: { current: (() => void) | null };
   /** Unstaged side only: asks to discard the keys from the worktree. */
   onDiscard?: (keys: ReadonlySet<string>, text: string, what: string) => void; discardRef?: { current: (() => void) | null };
   /** The line clicked last (what Blame Line acts on), or null when the patch changes or the pane goes away. */
@@ -138,6 +141,7 @@ export function DiffPane({ patch, disabled, readOnly = false, onApply, applyRef,
       <Text style={styles.path} numberOfLines={1} accessibilityRole="header">{name}{folder ? <Text style={styles.folder}>{`  ${folder}`}</Text> : null}</Text>
       {discard ? <Button style={styles.action} disabled={disabled || !selected.size || !!message} onPress={() => discard(selected, patch.text, linesLabel(selected.size))}>Discard Lines…</Button> : null}
       {readOnly ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
+      {accessory}
     </View>
     {message ? <Text style={styles.message}>{message}</Text> : loaded && <>
       <DiffNativeRowConfig

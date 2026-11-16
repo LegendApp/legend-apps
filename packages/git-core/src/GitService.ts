@@ -45,6 +45,9 @@ export type GitRemoteBranch = { name: string; ref: string; oid: string; remote: 
 /** A tag; `oid` is the commit it points at (annotated tags are peeled). */
 export type GitTag = { name: string; ref: string; oid: string };
 export type GitRefList = { branches: GitBranch[]; remotes: { name: string; branches: GitRemoteBranch[] }[]; tags: GitTag[] };
+/** A stash entry: its commit, its current `stash@{n}` index, its reflog subject ("On main: message") and when it was made. */
+export type GitStash = { oid: string; index: number; message: string; time: number };
+export type GitStashPushOptions = GitReadOptions & { includeUntracked?: boolean };
 export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
 /** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
 export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
@@ -106,6 +109,25 @@ export class GitBranchNotMergedError extends Error {
     super(message);
     this.name = "GitBranchNotMergedError";
     this.branch = branch;
+  }
+}
+
+/** `git switch` refused because uncommitted changes would be overwritten; nothing changed. */
+export class GitLocalChangesError extends Error {
+  readonly branch: string;
+
+  constructor(branch: string, message: string) {
+    super(message);
+    this.name = "GitLocalChangesError";
+    this.branch = branch;
+  }
+}
+
+/** `git stash pop` applied the stash but couldn't drop it; the changes are in the worktree and the stash is still listed. */
+export class GitStashDropError extends Error {
+  constructor(message: string) {
+    super(`The stash was applied, but Git couldn’t remove it from the list: ${message}`);
+    this.name = "GitStashDropError";
   }
 }
 
@@ -245,6 +267,18 @@ export function parseRefList(output: string, remoteNames: readonly string[]): Gi
 }
 
 /** The github.com page for a commit, or null when the remote URL is not on github.com. */
+/** Parses `git stash list -z --format=%H%x00%gd%x00%gs%x00%ct`. */
+export function parseStashList(output: string): GitStash[] {
+  const fields = output.split("\0");
+  const stashes: GitStash[] = [];
+  for (let index = 0; index + 3 < fields.length; index += 4) {
+    const [oid = "", selector = "", message = "", time = ""] = fields.slice(index, index + 4);
+    const position = /^stash@\{(\d+)\}$/.exec(selector);
+    if (oid && position) stashes.push({ oid, index: Number(position[1]), message, time: Number(time) || 0 });
+  }
+  return stashes;
+}
+
 export function githubCommitUrl(remoteUrl: string | null, oid: string) {
   const match = remoteUrl?.trim().match(/^(?:(?:https?|ssh|git):\/\/(?:[^@/]+@)?github\.com(?::\d+)?\/|[^@/]+@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
   return match ? `https://github.com/${match[1]}/${match[2]}/commit/${oid}` : null;
@@ -320,7 +354,9 @@ export class GitService {
       if (result.outputTruncated) throw new GitServiceError("output-truncated", `${command} output exceeded the capture limit.`, args);
       if (result.exit.type !== "exited" || !okCodes.includes(result.exit.code)) {
         if (/index\.lock/.test(entry.stderrTail)) throw new GitIndexLockedError(`${this.gitDir ?? `${this.repoRoot}/.git`}/index.lock`);
-        throw new GitServiceError("command-failed", entry.stderrTail || `${command} failed (${result.exit.type === "exited" ? result.exit.code : "terminated"}).`, args);
+        // Merges (stash apply) report conflicts on stdout.
+        const conflicts = this.decode(result.stdout).split("\n").filter(line => line.startsWith("CONFLICT")).join("\n");
+        throw new GitServiceError("command-failed", [entry.stderrTail.trim(), conflicts].filter(Boolean).join("\n") || `${command} failed (${result.exit.type === "exited" ? result.exit.code : "terminated"}).`, args);
       }
       return this.decode(result.stdout);
     } catch (error) {
@@ -777,12 +813,35 @@ export class GitService {
   }
 
   /**
+   * Switches to local branch `name`, or to remote branch `remote` as a local branch tracking it (the existing local
+   * branch of that name when there is one), inside a queued write. Returns the local branch's name. When Git refuses
+   * and the target exists while the worktree has changes, rejects with GitLocalChangesError.
+   */
+  private async switchTo(target: string | GitRemoteBranch, options: GitReadOptions) {
+    const local = typeof target === "string" ? target : target.branch;
+    const exists = async (ref: string) => !!(await this.git(["rev-parse", "--verify", "-q", "--end-of-options", `${ref}^{commit}`], options, 5_000, undefined, [0, 1])).trim();
+    const tracking = typeof target !== "string" && !await exists(`refs/heads/${local}`);
+    try {
+      await this.git(tracking ? ["switch", "--no-guess", "--track", "-c", local, "--end-of-options", target.ref] : ["switch", "--no-guess", "--end-of-options", local], options, 120_000);
+    } catch (error) {
+      // Git's message may be translated, so the cause is read from the repository: the target is there, not checked out in
+      // another worktree, there are no conflicts, and the worktree isn't clean.
+      if (error instanceof GitServiceError && error.code === "command-failed" && await exists(tracking ? target.ref : `refs/heads/${local}`)
+        && !(await this.git(["worktree", "list", "--porcelain", "-z"], options)).split("\0").includes(`branch refs/heads/${local}`)
+        && !(await this.git(["ls-files", "-u", "-z"], options)).length
+        && (await this.git(["status", "--porcelain", "-z", "--untracked-files=normal"], options)).length) throw new GitLocalChangesError(local, error.message);
+      throw error;
+    }
+    return local;
+  }
+
+  /**
    * Checks out local branch `name` with `git switch`, which carries uncommitted changes along and refuses,
-   * changing nothing, when they would be overwritten. Never forces.
+   * changing nothing, when they would be overwritten (GitLocalChangesError). Never forces.
    */
   async checkoutBranch(name: string, options: GitReadOptions = {}) {
     await this.validateBranchName(name, options);
-    return this.branchWrite(options, () => this.git(["switch", "--no-guess", "--end-of-options", name], options, 120_000));
+    await this.branchWrite(options, () => this.switchTo(name, options));
   }
 
   /**
@@ -790,12 +849,8 @@ export class GitService {
    * remote's branch. When that local branch exists already, it is checked out instead. Returns the local name.
    */
   async checkoutRemoteBranch(remoteBranch: GitRemoteBranch, options: GitReadOptions = {}) {
-    const local = remoteBranch.branch;
-    await this.validateBranchName(local, options);
-    const exists = !!(await this.read(["rev-parse", "--verify", "-q", `refs/heads/${local}`], options, 5_000, false, [0, 1])).trim();
-    if (exists) await this.checkoutBranch(local, options);
-    else await this.branchWrite(options, () => this.git(["switch", "--no-guess", "--track", "-c", local, "--end-of-options", remoteBranch.ref], options, 120_000));
-    return local;
+    await this.validateBranchName(remoteBranch.branch, options);
+    return this.branchWrite(options, () => this.switchTo(remoteBranch, options));
   }
 
   /**
@@ -823,6 +878,101 @@ export class GitService {
         await this.git(["branch", force ? "-D" : "-d", "--end-of-options", name], options);
       } catch (error) {
         if (!force && error instanceof GitServiceError && !await this.branchMerged(name, options)) throw new GitBranchNotMergedError(name, error.message);
+        throw error;
+      }
+    });
+  }
+
+  /** Stash entries, newest first. */
+  listStashes(options: GitReadOptions = {}) {
+    return this.read(["stash", "list", "-z", "--format=%H%x00%gd%x00%gs%x00%ct"], options, 10_000).then(parseStashList);
+  }
+
+  /** The current `stash@{n}` of stash `oid`, read inside a queued operation so a newer push can't shift it. */
+  private async stashSelector(oid: string, options: GitReadOptions) {
+    const index = (await this.git(["stash", "list", "--format=%H"], options, 10_000)).split("\n").indexOf(oid);
+    if (index < 0) throw new Error("That stash is no longer in the stash list.");
+    return `stash@{${index}}`;
+  }
+
+  private async unborn(options: GitReadOptions) {
+    return !(await this.git(["rev-parse", "--verify", "-q", "HEAD"], options, 5_000, undefined, [0, 1])).trim();
+  }
+
+  /** Pushes a stash (`git stash push`) and resolves with its oid; rejects when there is nothing to stash or no first commit yet. */
+  private async push(message: string | undefined, includeUntracked: boolean, options: GitReadOptions) {
+    if (await this.unborn(options)) throw new Error("Stashing needs a first commit. Commit once, then stash.");
+    const top = () => this.git(["rev-parse", "--verify", "-q", "refs/stash"], options, 5_000, undefined, [0, 1]).then(value => value.trim());
+    const before = await top();
+    await this.git(["stash", "push", ...includeUntracked ? ["--include-untracked"] : [], ...message ? ["--message", message] : [], "--"], options, 120_000);
+    const after = await top();
+    if (!after || after === before) throw new Error("There are no local changes to stash.");
+    return after;
+  }
+
+  /** Stashes the uncommitted changes, and untracked files with `includeUntracked`; resolves with the new stash's oid. */
+  stashPush(message?: string, { includeUntracked = false, ...options }: GitStashPushOptions = {}) {
+    return this.branchWrite(options, () => this.push(message?.trim() || undefined, includeUntracked, options));
+  }
+
+  /** Applies stash `oid` (`git stash apply`); on conflicts or refusal the stash stays and Git's message is the error. */
+  stashApply(oid: string, options: GitReadOptions = {}) {
+    return this.branchWrite(options, async () => { await this.git(["stash", "apply", await this.stashSelector(oid, options)], options, 120_000); });
+  }
+
+  /** Applies stash `oid` and drops it only when Git applied it cleanly; rejects with GitStashDropError when only the drop failed. */
+  stashPop(oid: string, options: GitReadOptions = {}) {
+    return this.branchWrite(options, async () => {
+      await this.git(["stash", "apply", await this.stashSelector(oid, options)], options, 120_000);
+      try {
+        await this.git(["stash", "drop", await this.stashSelector(oid, options)], options);
+      } catch (error) {
+        throw new GitStashDropError(error instanceof Error ? error.message : String(error));
+      }
+    });
+  }
+
+  stashDrop(oid: string, options: GitReadOptions = {}) {
+    return this.branchWrite(options, async () => { await this.git(["stash", "drop", await this.stashSelector(oid, options)], options); });
+  }
+
+  /**
+   * Stash `oid`'s changes in `commitPatch`'s format: its worktree against its first parent (the commit it was made
+   * on), then its untracked files (the third parent, when stashed with them) as added files.
+   */
+  stashPatch(oid: string, options: GitReadOptions = {}) {
+    if (!/^[0-9a-f]{40,64}$/i.test(oid)) return Promise.reject(new Error("Expected a stash id."));
+    return this.enqueue(options, async () => {
+      const [commit = "", base = "", , untracked] = (await this.git(["rev-list", "--parents", "--no-walk", `${oid}^{commit}`], options)).trim().split(" ");
+      const tracked = await this.git(["-c", "diff.submodule=short", ...diffFormat, "-M", base, commit, "--"], options);
+      if (!untracked) return tracked;
+      const empty = (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 60_000, "")).trim();
+      return tracked + await this.git(["-c", "diff.submodule=short", ...diffFormat, empty, untracked, "--"], options);
+    });
+  }
+
+  /**
+   * Stashes everything, untracked files included, as "auto-stash before switching to <branch>", then switches like
+   * checkoutBranch/checkoutRemoteBranch. When the switch still fails, the stash is popped back (with its index) and the
+   * switch's error rejects; nothing is lost. Resolves with the local branch name and the stash oid (null when nothing needed stashing).
+   */
+  async stashAndSwitch(target: string | GitRemoteBranch, options: GitReadOptions = {}) {
+    const local = typeof target === "string" ? target : target.branch;
+    await this.validateBranchName(local, options);
+    return this.branchWrite(options, async () => {
+      const stash = await this.push(`auto-stash before switching to ${local}`, true, options).catch(async (error: unknown) => {
+        if (error instanceof Error && error.message === "There are no local changes to stash.") return null;
+        throw error;
+      });
+      try {
+        return { branch: await this.switchTo(target, options), stash };
+      } catch (error) {
+        if (!stash) throw error;
+        try {
+          await this.git(["stash", "pop", "--index", await this.stashSelector(stash, options)], options, 120_000);
+        } catch (restore) {
+          throw new Error(`${error instanceof Error ? error.message : String(error)}\nYour changes are kept in the stash “auto-stash before switching to ${local}”: ${restore instanceof Error ? restore.message : String(restore)}`);
+        }
         throw error;
       }
     });
