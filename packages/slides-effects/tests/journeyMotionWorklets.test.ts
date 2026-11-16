@@ -9,7 +9,7 @@ type Worklet = Function & { __closure?: Record<string, unknown> };
 
 test("compiled motion samplers capture initialized dependencies for the UI runtime", async () => {
   const root = path.resolve(import.meta.dirname, "../../..");
-  const compiled = await compileDeck(path.join(root, "apps/slides/examples/assembly.mdx"), { source: `---
+  const compiled = await compileDeck(path.join(root, "packages/slides-effects/tests/fixtures/journey-tour.mdx"), { source: `---
 title: Sampler audit
 ---
 
