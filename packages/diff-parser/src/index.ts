@@ -90,12 +90,13 @@ function untilAborted<T>(pending: Promise<T>, signal?: AbortSignal, onAbort?: ()
 }
 
 /**
- * Opens a paged native walk of HEAD's history, anchored at the HEAD commit read now. Only the pages
- * asked for cross into JS. Aborting `signal` while opening releases the walk.
+ * Opens a paged native walk of the history of HEAD, or of `startRef` (a full ref name or commit), anchored
+ * at the commit read now; `head.headOid` is that commit. Only the pages asked for cross into JS. Aborting
+ * `signal` while opening releases the walk.
  */
-export async function openGitHistory(folderPath: string, signal?: AbortSignal): Promise<GitHistoryReader> {
+export async function openGitHistory(folderPath: string, signal?: AbortSignal, startRef = ""): Promise<GitHistoryReader> {
   const parser = getDiffParser();
-  const opening = parser.openGitHistory(folderPath);
+  const opening = parser.openGitHistory(folderPath, startRef);
   let closed = false;
   const close = () => {
     if (closed) return;

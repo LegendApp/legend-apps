@@ -296,8 +296,8 @@ export interface DiffParser
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFile(filePath: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
-  /** Opens a paged walk of HEAD's history; release it with closeGitHistory. */
-  openGitHistory(folderPath: string): Promise<GitHistoryHead>;
+  /** Opens a paged walk of the history of `startRef` (a ref name or commit), or of HEAD when it is empty; release it with closeGitHistory. */
+  openGitHistory(folderPath: string, startRef: string): Promise<GitHistoryHead>;
   readGitHistoryPage(handle: number, offset: number, count: number): Promise<GitHistoryPage>;
   /** Releases the walk; a page still being read fails as cancelled. */
   closeGitHistory(handle: number): void;

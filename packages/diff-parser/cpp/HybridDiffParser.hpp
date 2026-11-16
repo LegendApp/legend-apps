@@ -43,7 +43,7 @@ public:
       const std::string& sourceLabel,
       double initialRowCount,
       bool ignoreWhitespaceChanges) override;
-  std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) override;
+  std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath, const std::string& startRef) override;
   std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) override;
   void closeGitHistory(double handle) override;
   std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) override;

@@ -260,9 +260,9 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
   });
 }
 
-std::shared_ptr<Promise<GitHistoryHead>> HybridDiffParser::openGitHistory(const std::string& folderPath) {
-  return Promise<GitHistoryHead>::async([folderPath]() -> GitHistoryHead {
-    auto walker = std::make_shared<GitHistoryWalker>(folderPath);
+std::shared_ptr<Promise<GitHistoryHead>> HybridDiffParser::openGitHistory(const std::string& folderPath, const std::string& startRef) {
+  return Promise<GitHistoryHead>::async([folderPath, startRef]() -> GitHistoryHead {
+    auto walker = std::make_shared<GitHistoryWalker>(folderPath, startRef);
     GitHistoryHead head;
     head.headOid = walker->headOid();
     head.unborn = walker->unborn();

@@ -1055,6 +1055,24 @@ void assertGraphLanes(const std::string& graphFixture, const std::string& histor
   expectEqual(edgeText(linear[1]), "0>-1 -1>0", "linear middle continues");
   expectEqual(edgeText(linear[2]), "0>-1", "linear root ends its lane");
 
+  // A start ref walks that ref's history: a branch, an annotated tag peeled to its commit, or a commit id.
+  const auto linearExpected = readExpectedHistory(graphFixture + ".linear");
+  for (const std::string& ref : std::vector<std::string>{"refs/heads/unrelated", "refs/tags/unrelated-annotated", linearExpected.front().substr(0, 40)}) {
+    diffparser::GitHistoryWalker branch(graphFixture, ref);
+    expect(!branch.unborn() && !branch.detached(), "a start ref is neither unborn nor detached");
+    expectEqual(branch.headOid(), linearExpected.front().substr(0, 40), "a start ref anchors at its commit: " + ref);
+    const auto branchRows = readAllHistory(branch, 2);
+    expectEqual(static_cast<double>(branchRows.size()), static_cast<double>(linearExpected.size()), "start ref commit count: " + ref);
+    for (size_t index = 0; index < branchRows.size(); ++index) expectEqual(historyLine(branchRows[index]), linearExpected[index], "start ref row matches git log: " + ref);
+  }
+  bool missingRef = false;
+  try {
+    diffparser::GitHistoryWalker missing(graphFixture, "refs/heads/no-such-branch");
+  } catch (const std::runtime_error&) {
+    missingRef = true;
+  }
+  expect(missingRef, "a missing start ref fails to open");
+
   diffparser::GitHistoryWalker walker(graphFixture);
   const auto rows = readAllHistory(walker, 4);
   const auto expected = readExpectedHistory(graphFixture + ".expected");

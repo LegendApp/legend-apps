@@ -28,8 +28,8 @@ function repo(name: string, commits = true) {
 
 /** Stands in for the native walk: the same order as `git log --topo-order`, read lazily per page. */
 function gitReader(path: string, opened: GitHistoryReader[]) {
-  return async (_path: string): Promise<GitHistoryReader> => {
-    const headOid = (() => { try { return fixtureGit(path, "rev-parse", "--verify", "-q", "HEAD"); } catch { return ""; } })();
+  return async (_path: string, _signal?: AbortSignal, startRef = ""): Promise<GitHistoryReader> => {
+    const headOid = (() => { try { return fixtureGit(path, "rev-parse", "--verify", "-q", startRef ? `${startRef}^{commit}` : "HEAD"); } catch { return ""; } })();
     let closed = false;
     const reader: GitHistoryReader & { closed(): boolean; pages: number[] } = {
       head: { handle: opened.length + 1, headOid, unborn: !headOid, detached: false },
@@ -449,5 +449,45 @@ it("keeps search results when the same query arrives again, and re-runs the sear
   t.notify(join(path, ".git/refs/heads/main"));
   await until(() => t.state().search !== first && t.state().search?.loading === false);
   expect(t.state().search!.commits[0]!.summary).toBe("Merge-like new commit");
+  t.controller.dispose();
+});
+
+it("lists a ref's history, keeps the selection by oid, follows the ref when it moves, and a newer ref wins over a walk still running", async () => {
+  const path = repo("ref-scoped");
+  fixtureGit(path, "branch", "feature/ünï", "main~5");
+  fixtureGit(path, "tag", "-a", "-m", "Annotated", "v-old", "main~8");
+  const t = setup(path);
+  await t.controller.activate();
+  const shared = fixtureGit(path, "rev-parse", "main~6");
+  await t.controller.showFileHistory("a.txt");
+  await t.controller.select(shared);
+  t.controller.setRef("refs/heads/feature/ünï");
+  expect(t.state()).toMatchObject({ ref: "refs/heads/feature/ünï", commits: [], loading: true, file: null });
+  await t.controller.refresh();
+  expect(t.state().head?.oid).toBe(fixtureGit(path, "rev-parse", "main~5"));
+  expect(oids(t.state()).slice(0, 3)).toEqual(fixtureGit(path, "rev-list", "--topo-order", "-n3", "feature/ünï").split("\n"));
+  expect(t.state()).toMatchObject({ loading: false, selectedOid: shared });
+
+  // The branch moving re-walks it; the selection stays when listed.
+  fixtureGit(path, "update-ref", "refs/heads/feature/ünï", "main~4");
+  await t.controller.refresh();
+  expect(oids(t.state())[0]).toBe(fixtureGit(path, "rev-parse", "main~4"));
+  expect(t.state().selectedOid).toBe(shared);
+
+  // An annotated tag lists its commit's history; a commit outside it is deselected.
+  await t.controller.select(fixtureGit(path, "rev-parse", "main"));
+  t.controller.setRef("refs/tags/v-old");
+  await t.controller.refresh();
+  expect(oids(t.state())[0]).toBe(fixtureGit(path, "rev-parse", "main~8"));
+  expect(t.state().selectedOid).toBeNull();
+
+  // Switching again before the walk lands: only the newest ref's walk is kept.
+  t.controller.setRef("refs/heads/feature/ünï");
+  t.controller.setRef(null);
+  await t.controller.refresh();
+  expect(t.state()).toMatchObject({ ref: null, loading: false });
+  expect(oids(t.state())[0]).toBe(fixtureGit(path, "rev-parse", "HEAD"));
+  expect(t.state().commits).toHaveLength(500);
+  expect(t.opened.slice(0, -1).every(reader => (reader as unknown as { closed(): boolean }).closed())).toBe(true);
   t.controller.dispose();
 });

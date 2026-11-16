@@ -115,12 +115,13 @@ private:
 };
 
 /**
- * Walks HEAD's history in `git log --topo-order` order, in pages. The walk is anchored to the HEAD
- * commit seen when the walker opened, so pages stay consistent while refs move.
+ * Walks the history of HEAD, or of `startRef` (a ref name or commit) when given, in `git log --topo-order`
+ * order, in pages. The walk is anchored to the commit seen when the walker opened, so pages stay
+ * consistent while refs move.
  */
 class GitHistoryWalker {
 public:
-  explicit GitHistoryWalker(const std::string& folderPath);
+  explicit GitHistoryWalker(const std::string& folderPath, const std::string& startRef = "");
   ~GitHistoryWalker();
   GitHistoryWalker(const GitHistoryWalker&) = delete;
   GitHistoryWalker& operator=(const GitHistoryWalker&) = delete;

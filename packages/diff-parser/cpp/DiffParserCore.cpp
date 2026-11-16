@@ -1913,7 +1913,7 @@ struct GitHistoryWalker::Impl {
   }
 };
 
-GitHistoryWalker::GitHistoryWalker(const std::string& folderPath) : impl_(std::make_unique<Impl>()) {
+GitHistoryWalker::GitHistoryWalker(const std::string& folderPath, const std::string& startRef) : impl_(std::make_unique<Impl>()) {
   ensureLibGit2Initialized();
   git_repository* rawRepo = nullptr;
   const std::string normalizedPath = normalizeFolderPath(folderPath);
@@ -1921,13 +1921,23 @@ GitHistoryWalker::GitHistoryWalker(const std::string& folderPath) : impl_(std::m
     throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
   }
   impl_->repo.reset(rawRepo);
-  const int unborn = git_repository_head_unborn(rawRepo);
-  if (unborn < 0) throw std::runtime_error(gitErrorMessage("Failed to read HEAD"));
-  impl_->unborn = unborn == 1;
-  if (impl_->unborn) return;
-  impl_->detached = git_repository_head_detached(rawRepo) == 1;
-  if (git_reference_name_to_id(&impl_->head, rawRepo, "HEAD") != 0) {
-    throw std::runtime_error(gitErrorMessage("Failed to resolve HEAD"));
+  if (!startRef.empty()) {
+    // Annotated tags peel to their commit.
+    git_object* object = nullptr;
+    if (git_revparse_single(&object, rawRepo, (startRef + "^{commit}").c_str()) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to resolve " + startRef));
+    }
+    git_oid_cpy(&impl_->head, git_object_id(object));
+    git_object_free(object);
+  } else {
+    const int unborn = git_repository_head_unborn(rawRepo);
+    if (unborn < 0) throw std::runtime_error(gitErrorMessage("Failed to read HEAD"));
+    impl_->unborn = unborn == 1;
+    if (impl_->unborn) return;
+    impl_->detached = git_repository_head_detached(rawRepo) == 1;
+    if (git_reference_name_to_id(&impl_->head, rawRepo, "HEAD") != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to resolve HEAD"));
+    }
   }
   char text[GIT_OID_MAX_HEXSIZE + 1] = {};
   git_oid_tostr(text, sizeof(text), &impl_->head);

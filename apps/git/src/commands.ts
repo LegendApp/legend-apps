@@ -1,6 +1,10 @@
+import type { GitRefList } from "@legend-apps/git-core";
 import { searchScopes, type SearchScope } from "./gitHistory";
+import { findRef } from "./gitRefs";
 
-export type Section = "changes" | "history";
+/** A sidebar item: Changes, History, or a branch, remote branch or tag by its full ref name. */
+export type Section = "changes" | "history" | `ref:${string}`;
+export const sectionRef = (section: Section) => section.startsWith("ref:") ? section.slice(4) : null;
 
 /** What every command reads to decide its label and whether it is enabled, plus the actions it runs. */
 export type CommandContext = {
@@ -27,6 +31,12 @@ export type CommandContext = {
   generating: boolean;
   canGenerate: boolean;
   canCommit: boolean;
+  /** Branches, remote branches and tags; null until read. */
+  refs: GitRefList | null;
+  /** HEAD has no commit yet. */
+  unborn: boolean;
+  /** A branch write is running. */
+  branchBusy: boolean;
   run: {
     openRepository(): void;
     toggleSidebar(): void;
@@ -45,6 +55,13 @@ export type CommandContext = {
     restoreDiscard(): void;
     toggleGenerate(): void;
     commit(): void;
+    checkout(ref: string): void;
+    switchBranch(): void;
+    /** `start` is a ref name or commit; HEAD when omitted. */
+    newBranch(start?: string): void;
+    renameBranch(ref: string): void;
+    deleteBranch(ref: string): void;
+    copyText(text: string): void;
   };
 };
 
@@ -58,6 +75,15 @@ export type Command = {
 };
 
 const commit = (context: CommandContext, target?: string) => target ?? context.selectedCommit;
+/** The ref a branch command acts on: the context menu's, else the selected sidebar ref. */
+const ref = (context: CommandContext, target?: string) => findRef(context.refs, target ?? sectionRef(context.section));
+/** The local branch Rename acts on: the target or selected one, else (no target, no branch selected) the current branch. */
+const renameTarget = (context: CommandContext, target?: string) => {
+  const entry = ref(context, target);
+  if (entry?.kind === "branch") return entry.ref;
+  return target ? null : context.refs?.branches.find(branch => branch.current) ?? null;
+};
+const canWriteBranch = (context: CommandContext) => context.hasRepository && !context.branchBusy && !context.unborn;
 
 export const commands = [
   { id: "open-repository", label: "Open Repository…", shortcut: "Cmd+o", enabled: () => true, run: context => context.run.openRepository() },
@@ -85,7 +111,7 @@ export const commands = [
   },
   ...searchScopes.map(({ scope, label }) => ({
     id: `search-${scope}` as const, label,
-    enabled: (context: CommandContext) => context.hasRepository && context.section === "history",
+    enabled: (context: CommandContext) => context.hasRepository && context.section !== "changes",
     run: (context: CommandContext) => context.run.setSearchScope(scope),
   })),
   { id: "apply-lines", label: context => context.linesLabel, shortcut: "Cmd+Shift+l", enabled: context => context.canApplyLines, run: context => context.run.applyLines() },
@@ -97,6 +123,36 @@ export const commands = [
     enabled: context => context.generating || context.canGenerate, run: context => context.run.toggleGenerate(),
   },
   { id: "commit", label: "Commit", shortcut: "Cmd+Enter", enabled: context => context.canCommit, run: context => context.run.commit() },
+  {
+    id: "checkout-ref", label: "Check Out",
+    enabled: (context, target) => { const entry = ref(context, target); return canWriteBranch(context) && (entry?.kind === "remote" || (entry?.kind === "branch" && !entry.ref.current)); },
+    run: (context, target) => context.run.checkout(ref(context, target)!.ref.ref),
+  },
+  {
+    id: "switch-branch", label: "Switch Branch…", shortcut: "Cmd+Shift+b",
+    enabled: context => canWriteBranch(context) && !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length)),
+    run: context => context.run.switchBranch(),
+  },
+  {
+    id: "new-branch", label: "New Branch…", shortcut: "Cmd+Shift+n",
+    enabled: canWriteBranch,
+    run: (context, target) => context.run.newBranch(target),
+  },
+  {
+    id: "rename-branch", label: "Rename Branch…",
+    enabled: (context, target) => canWriteBranch(context) && !!renameTarget(context, target),
+    run: (context, target) => context.run.renameBranch(renameTarget(context, target)!.ref),
+  },
+  {
+    id: "delete-branch", label: "Delete Branch…",
+    enabled: (context, target) => { const entry = ref(context, target); return canWriteBranch(context) && entry?.kind === "branch" && !entry.ref.current; },
+    run: (context, target) => context.run.deleteBranch(ref(context, target)!.ref.ref),
+  },
+  {
+    id: "copy-ref-name", label: "Copy Name",
+    enabled: (context, target) => !!ref(context, target),
+    run: (context, target) => context.run.copyText(ref(context, target)!.ref.name),
+  },
 ] as const satisfies readonly Command[];
 
 export type CommandId = (typeof commands)[number]["id"];

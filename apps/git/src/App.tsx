@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
-import type { GitStatusEntry } from "@legend-apps/git-core";
+import { GitBranchNotMergedError, type GitRefList, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
-import { commandEnabled, commandLabel, commandMenuItem, runCommand, type CommandContext, type CommandId, type Section } from "./commands";
+import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, type CommandContext, type CommandId, type Section } from "./commands";
+import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName } from "./gitRefs";
 import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
@@ -14,7 +15,7 @@ import { openURL } from "@legendapp/spark/links";
 import { EmptyState } from "./EmptyState";
 import { FileRow, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
-import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
+import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
@@ -42,8 +43,13 @@ export function App() {
   const setBlameTarget = (target: BlameTarget | null) => { blameTargetRef.current = target; setBlameTargetState(target); };
   const historyRef = useRef(history);
   historyRef.current = history;
+  const [refs, setRefs] = useState(emptyRefs);
+  const refsController = useRef<ReturnType<typeof createGitRefs> | null>(null);
+  const refsRef = useRef(refs);
+  refsRef.current = refs;
   const root = changes.root;
-  const selectedCommit = root && section === "history" ? history.selectedOid : null;
+  const showsHistory = section !== "changes";
+  const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
   const selected = changes.selection;
@@ -89,7 +95,7 @@ export function App() {
         await showMessage({ windowId: "main", kind: "info", title: "Not Committed Yet", message: `Line ${target.line} of “${target.path}” has changes that are not committed yet.` });
         return;
       }
-      setSection("history");
+      showHistory();
       await owner.showFileHistory(target.path, hunk.oid);
     } catch (error) {
       if (error instanceof Error && error.name === "GitHistoryCancelledError") return;
@@ -108,6 +114,83 @@ export function App() {
     if (await confirmDestructive(`Restore ${files}?`, "Restore", message)) await controller.current?.restoreLastDiscard();
   }
 
+  /** Shows HEAD's History now, so a file history started next isn't closed when History leaves a ref. */
+  function showHistory() {
+    historyController.current?.setRef(null);
+    setSection("history");
+  }
+
+  /** Shows a branch write's failure (Git's own message) in a warning sheet. */
+  const reportBranchError = (title: string, error: unknown) => showMessage({
+    windowId: "main", kind: "warning", title,
+    message: (error instanceof Error ? error.message : String(error)).replace(/^(error|fatal): /gm, "").trim(),
+  }).catch(console.error);
+
+  async function checkout(ref: string) {
+    const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
+    if (!entry || entry.kind === "tag" || !owner) return;
+    try {
+      const local = await owner.checkout(entry);
+      // A selected remote branch gives way to the local branch made from it.
+      if (entry.kind === "remote") setSection(current => current === `ref:${ref}` ? `ref:${local}` : current);
+    } catch (error) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); }
+  }
+
+  async function switchBranch() {
+    const selectedRef = findRef(refsRef.current.refs, sectionRef(section));
+    const result = await showPrompt({
+      windowId: "main", title: "Switch Branch", message: "Enter the name of a local branch, or of a remote branch to check out as a new tracking branch.",
+      placeholder: "Branch name", defaultValue: selectedRef && selectedRef.kind !== "tag" ? selectedRef.ref.name : undefined, confirmLabel: "Switch",
+    }).catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    if (result.canceled || !result.value.trim()) return;
+    const entry = resolveBranchName(refsRef.current.refs, result.value.trim());
+    if (!entry) { await reportBranchError(`There’s No Branch Named “${result.value.trim()}”`, "Check the name, or pick a branch in the sidebar."); return; }
+    await checkout(entry.ref.ref);
+  }
+
+  /** `start` is a ref name or commit id; HEAD when omitted. */
+  async function newBranch(start?: string) {
+    const owner = refsController.current;
+    if (!owner) return;
+    const entry = findRef(refsRef.current.refs, start);
+    const from = entry ? `“${entry.ref.name}”` : start ? `commit ${start.slice(0, 7)}` : currentBranch ? `“${currentBranch}”` : "the current commit";
+    const result = await showPrompt({ windowId: "main", title: "New Branch", message: `The new branch starts at ${from} and is checked out.`, placeholder: "Branch name", confirmLabel: "Create" })
+      .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    const name = result.canceled ? "" : result.value.trim();
+    if (!name) return;
+    try { await owner.create(name, start); } catch (error) { await reportBranchError("Couldn’t Create the Branch", error); }
+  }
+
+  async function renameBranch(ref: string) {
+    const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
+    if (entry?.kind !== "branch" || !owner) return;
+    const result = await showPrompt({ windowId: "main", title: `Rename “${entry.ref.name}”`, message: "Enter a new name for the branch.", defaultValue: entry.ref.name, confirmLabel: "Rename" })
+      .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    const name = result.canceled ? "" : result.value.trim();
+    if (!name || name === entry.ref.name) return;
+    try {
+      await owner.rename(entry.ref.name, name);
+      setSection(current => current === `ref:${ref}` ? `ref:refs/heads/${name}` : current);
+    } catch (error) { await reportBranchError(`Couldn’t Rename “${entry.ref.name}”`, error); }
+  }
+
+  /** Asks first; when Git refuses because the branch is not fully merged, asks again before `git branch -D`. */
+  async function deleteBranch(ref: string) {
+    const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
+    if (entry?.kind !== "branch" || !owner) return;
+    const name = entry.ref.name;
+    if (!await confirmDestructive(`Delete the branch “${name}”?`, "Delete", "Its commits stay in the repository only while another branch or tag contains them.")) return;
+    try {
+      await owner.delete(name);
+    } catch (error) {
+      if (!(error instanceof GitBranchNotMergedError)) { await reportBranchError(`Couldn’t Delete “${name}”`, error); return; }
+      const upstream = entry.ref.upstream;
+      if (!await confirmDestructive(`“${name}” isn’t fully merged.`, "Delete Anyway", `It has commits that aren’t on ${upstream ? `its upstream “${upstream}”` : "the current branch"}. Deleting it may lose them.`, true)) return;
+      try { await owner.delete(name, true); } catch (forced) { await reportBranchError(`Couldn’t Delete “${name}”`, forced); }
+    }
+  }
+
+  const currentBranch = refs.refs?.branches.find(branch => branch.current)?.name ?? null;
   const context: CommandContext = {
     hasRepository: !!root,
     section,
@@ -128,6 +211,9 @@ export function App() {
     generating,
     canGenerate: !!root && section === "changes" && !busy && !!staged.length && !conflicts,
     canCommit: !!root && section === "changes" && !busy,
+    refs: root ? refs.refs : null,
+    unborn: !root || changes.status?.branch.oid === "(initial)",
+    branchBusy: refs.writing,
     run: {
       openRepository: () => void chooseRepository(),
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -138,7 +224,7 @@ export function App() {
         const url = commitGitHubUrl(historyRef.current, oid);
         if (url) openURL(url).catch(console.error);
       },
-      showFileHistory: path => { setSection("history"); void historyController.current?.showFileHistory(path); },
+      showFileHistory: path => { showHistory(); void historyController.current?.showFileHistory(path); },
       closeFileHistory: () => {
         historyController.current?.closeFileHistory();
         if (historyQuery) { setHistoryQuery(""); setSearchEpoch(value => value + 1); }
@@ -155,6 +241,12 @@ export function App() {
       restoreDiscard: () => void restoreDiscard(),
       toggleGenerate: () => generator.current?.toggle(),
       commit: () => commit.current?.(),
+      checkout: ref => void checkout(ref),
+      switchBranch: () => void switchBranch(),
+      newBranch: start => void newBranch(start),
+      renameBranch: ref => void renameBranch(ref),
+      deleteBranch: ref => void deleteBranch(ref),
+      copyText: text => { setStringAsync(text).catch(console.error); },
     },
   };
   const contextRef = useRef(context);
@@ -170,6 +262,7 @@ export function App() {
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
         items: [
@@ -188,11 +281,21 @@ export function App() {
   }, [history.search]); // eslint-disable-line react-hooks/exhaustive-deps -- only when the search ends
   useEffect(() => {
     historyController.current?.setRoot(root);
+    refsController.current?.setRoot(root);
     if (!root) setSection("changes");
   }, [root]);
+  // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
+  useEffect(() => { if (changes.status) void refsController.current?.refresh(); }, [changes.status]);
   useEffect(() => {
-    if (section === "history") void historyController.current?.activate();
+    if (section === "changes") return;
+    historyController.current?.setRef(sectionRef(section));
+    void historyController.current?.activate();
   }, [section, root]);
+  // A selected ref that was deleted or renamed elsewhere falls back to History.
+  useEffect(() => {
+    const ref = sectionRef(section);
+    if (ref && refs.refs && !findRef(refs.refs, ref)) setSection("history");
+  }, [refs.refs, section]);
 
   const [historyActions] = useState<HistoryActions>(() => ({
     select: oid => void historyController.current?.select(oid),
@@ -205,6 +308,7 @@ export function App() {
       // The row keeps the selection, so Compare with Selected can compare the two.
       const items = [
         commandMenuItem("compare-with-selected", menuContext, { target: oid, shortcut: false }), { type: "separator" as const },
+        { ...commandMenuItem("new-branch", menuContext, { target: oid, shortcut: false }), label: "New Branch from Commit…" }, { type: "separator" as const },
         ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
       ];
       showContextMenu({ windowId: "main", position, items })
@@ -236,6 +340,19 @@ export function App() {
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
+  function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
+    const menuContext = contextRef.current;
+    const entry = findRef(menuContext.refs, ref);
+    if (!entry) return;
+    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, "rename-branch", "delete-branch", null, "copy-ref-name"]
+      : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
+    const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...id === "new-branch" ? { label: `New Branch from “${entry.ref.name}”…` } : {} } : { type: "separator" as const });
+    showContextMenu({ windowId: "main", position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
+  }
+
+  // A ref deleted or renamed since it was selected has no row; History is shown until the effect above moves there.
+  const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history" : section;
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
   const button = (id: CommandId, symbol: string) => {
@@ -246,10 +363,12 @@ export function App() {
     { ...button("toggle-sidebar", "sidebar.left"), placement: "leading" },
     ...root ? [
       { type: "menu", id: "branch", label: branchLabel ?? "Branch", symbol: "arrow.triangle.branch", placement: "leading", tooltip: "Current branch", items: [
-        { type: "action", id: "switch-branch", label: "Switch Branch…", disabled: true },
-        { type: "action", id: "new-branch", label: "New Branch…", disabled: true },
+        ...recentBranches(context.refs).map(branch => ({ type: "checkbox" as const, id: `checkout:${branch.ref}`, label: branch.name, checked: branch.current, disabled: branch.current || !commandEnabled("checkout-ref", context, branch.ref) && !branch.current })),
+        ...context.refs?.branches.length ? [{ type: "separator" as const }] : [],
+        commandMenuItem("switch-branch", context, { shortcut: false }),
+        commandMenuItem("new-branch", context, { shortcut: false }),
       ] },
-      { type: "segmented", id: "section", label: "View", value: section, segments: [
+      { type: "segmented", id: "section", label: "View", value: showsHistory && section !== "history" ? null : section, segments: [
         { value: "changes", label: "Changes", symbol: "square.and.pencil" },
         { value: "history", label: "History", symbol: "clock" },
       ] },
@@ -257,14 +376,14 @@ export function App() {
       button("refresh", "arrow.clockwise"),
       // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
       { type: "search", id: "search", label: "Search", placeholder: section === "changes" ? "Filter Files" : "Search Commits", width: 200 },
-      ...section === "history" ? [{
+      ...showsHistory ? [{
         type: "menu" as const, id: "search-scope", label: searchScopes.find(entry => entry.scope === searchScope)!.label, tooltip: "Search in",
         items: searchScopes.map(({ scope, label }) => ({ type: "checkbox" as const, id: `search-${scope}`, label, checked: scope === searchScope })),
       }] : [],
     ] satisfies MacOSToolbarItem[] : [],
   ];
   // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
-  const searchText = section === "history" ? historyQuery : filter;
+  const searchText = showsHistory ? historyQuery : filter;
   const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry) };
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
@@ -297,10 +416,16 @@ export function App() {
     controller.current = owner;
     const historyOwner = createGitHistory(setHistory, watchDirectories);
     historyController.current = historyOwner;
+    const refsOwner = createGitRefs(setRefs);
+    refsController.current = refsOwner;
     const registration = addMacOSWindowListener("main", event => {
       if (disposed) return;
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
-      else if (event.type === "toolbarMenuAction") runCommand(event.action.itemId, contextRef.current);
+      else if (event.type === "toolbarMenuAction") {
+        const { itemId } = event.action;
+        if (itemId.startsWith("checkout:")) runCommand("checkout-ref", contextRef.current, itemId.slice(9));
+        else runCommand(itemId, contextRef.current);
+      }
       else if (event.type === "toolbarSelectionChanged" && event.itemId === "section") runCommand(event.value === "history" ? "show-history" : "show-changes", contextRef.current);
       // Typing already filters or searches. AppKit also sends the field's action when the field loses focus (a click
       // on Show All, a section switch), with the text from before, so submits are ignored.
@@ -317,8 +442,10 @@ export function App() {
       generator.current?.reset();
       owner.dispose();
       historyOwner.dispose();
+      refsOwner.dispose();
       controller.current = null;
       historyController.current = null;
+      refsController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     });
@@ -329,8 +456,10 @@ export function App() {
       disposed = true;
       owner.dispose();
       historyOwner.dispose();
+      refsOwner.dispose();
       controller.current = null;
       historyController.current = null;
+      refsController.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
       void closeRegistration.then(listener => listener.remove()).catch(console.error);
     };
@@ -374,25 +503,26 @@ export function App() {
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={root ? section : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history") setSection(event.id); }} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:")) setSection(event.id as Section); }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
           {root ? [
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
+            ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
           ] :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
       list={root ? <>
         {changesList}
-        {section === "history" ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
+        {showsHistory ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
       </> : undefined}
       content={
         <View style={styles.content}>
           {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
-          {root ? <View style={styles.detail}>{section === "history" ? <CommitDetails history={history} actions={historyActions} /> : changesDetail}</View>
+          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -403,19 +533,43 @@ export function App() {
   );
 }
 
-function SidebarRow({ symbol, label, count }: { symbol: string; label: string; count?: number }) {
+function SidebarRow({ symbol, label, count, current, indent }: { symbol: string; label: string; count?: number; current?: boolean; indent?: boolean }) {
   const color = useSymbolColor("blue");
-  return <View style={styles.sidebarRow} accessible accessibilityLabel={count ? `${label}, ${count}` : label}>
+  const secondary = useSymbolColor("secondary");
+  return <View style={[styles.sidebarRow, indent && styles.indented]} accessible accessibilityLabel={count ? `${label}, ${count}` : current ? `${label}, current branch` : label}>
     <View style={styles.sidebarIcon}><SFSymbol name={symbol} color={color} size={15} /></View>
     <Text style={styles.label} numberOfLines={1}>{label}</Text>
     {count ? <Text style={styles.count}>{count}</Text> : null}
+    {current ? <SFSymbol name="checkmark" color={secondary} size={12} /> : null}
   </View>;
 }
 
-/** A native warning sheet on the main window; resolves true when the user picks the action. */
-async function confirmDestructive(title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.") {
+/** Branches, Remotes (each remote, then its branches) and Tags, each under a group row; an empty section is left out. */
+function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: string; position: { x: number; y: number } }) => void) {
+  if (!refs) return [];
+  const row = (ref: string, symbol: string, label: string, options: { current?: boolean; indent?: boolean } = {}) =>
+    <SidebarItem key={ref} id={`ref:${ref}`} onContextMenu={event => onContextMenu({ ref, position: event.windowPosition })}>
+      <SidebarRow symbol={symbol} label={label} current={options.current} indent={options.indent} />
+    </SidebarItem>;
+  const group = (id: string, title: string) => <SidebarItem key={id} id={id} selectable={false}><Text style={styles.section} accessibilityRole="header">{title}</Text></SidebarItem>;
+  const remotes = refs.remotes.filter(remote => remote.branches.length);
+  return [
+    ...refs.branches.length ? [group("group:branches", "Branches"), ...refs.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.name, { current: branch.current }))] : [],
+    ...remotes.length ? [group("group:remotes", "Remotes"), ...remotes.flatMap(remote => [
+      <SidebarItem key={`remote:${remote.name}`} id={`remote:${remote.name}`} selectable={false}><SidebarRow symbol="network" label={remote.name} /></SidebarItem>,
+      ...remote.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.branch, { indent: true })),
+    ])] : [],
+    ...refs.tags.length ? [group("group:tags", "Tags"), ...refs.tags.map(tag => row(tag.ref, "tag", tag.name))] : [],
+  ];
+}
+
+/**
+ * A native warning sheet on the main window; resolves true when the user picks the action. With `safeDefault`,
+ * Return picks Cancel (for actions that can lose work without a backup).
+ */
+async function confirmDestructive(title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.", safeDefault = false) {
   try {
-    const result = await showMessage({ windowId: "main", kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: "confirm", cancelButtonId: "cancel" });
+    const result = await showMessage({ windowId: "main", kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: safeDefault ? "cancel" : "confirm", cancelButtonId: "cancel" });
     return result.buttonId === "confirm";
   } catch (error) { console.error(error); return false; }
 }
@@ -455,6 +609,7 @@ const styles = StyleSheet.create({
   emptyListText: { fontSize: 12, color: PlatformColor("tertiaryLabelColor") },
   section: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4, fontSize: 11, fontWeight: "700", color: PlatformColor("tertiaryLabelColor") },
   sidebarRow: { height: 28, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 },
+  indented: { paddingLeft: 24 },
   sidebarIcon: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
   label: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
   count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },

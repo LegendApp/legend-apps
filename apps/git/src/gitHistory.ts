@@ -16,7 +16,9 @@ export type SearchState = { scope: SearchScope; text: string; commits: GitFileHi
 export type CompareState = { base: string; target: string; files: CommitFile[]; selectedPath: string | null; loading: boolean; error: string | null };
 export type HistoryState = {
   root: string | null;
-  /** HEAD as read when the loaded pages were walked; null until History first loads. */
+  /** The full ref name History lists (a branch, remote branch or tag), or null for HEAD. */
+  ref: string | null;
+  /** The listed ref's commit (HEAD's, without a ref) as read when the loaded pages were walked; null until History first loads. */
   head: { oid: string; unborn: boolean; detached: boolean } | null;
   commits: GitHistoryCommit[];
   done: boolean;
@@ -31,7 +33,7 @@ export type HistoryState = {
   search: SearchState | null;
   compare: CompareState | null;
 };
-export const emptyHistory: HistoryState = { root: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null, file: null, search: null, compare: null };
+export const emptyHistory: HistoryState = { root: null, ref: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null, file: null, search: null, compare: null };
 
 /** The path a file had in a commit of its history, so selecting the commit selects that file's patch. */
 function preferredPath(state: HistoryState, oid: string, files: CommitFile[]) {
@@ -82,7 +84,7 @@ export const listedCommits = (state: HistoryState): readonly { oid: string }[] =
 export function createGitHistory(onChange: (state: HistoryState) => void, watch: GitDirectoryWatcher, {
   serviceFor = getGitService, open = openGitHistory, blame = blameLine, searchDelay = 250,
 }: {
-  serviceFor?: (path: string) => GitService; open?: (path: string, signal?: AbortSignal) => Promise<GitHistoryReader>;
+  serviceFor?: (path: string) => GitService; open?: (path: string, signal?: AbortSignal, startRef?: string) => Promise<GitHistoryReader>;
   blame?: (root: string, path: string, source: GitBlameSource, line: number, signal?: AbortSignal) => Promise<GitBlameHunk | null>;
   /** Milliseconds a search waits for typing to pause. */
   searchDelay?: number;
@@ -206,22 +208,24 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     }
   };
 
-  /** Reads HEAD, refs and the remote; re-walks history only when HEAD moved (or on the first load). */
+  /** Reads the listed ref (or HEAD), refs and the remote; re-walks history only when its commit moved (or on the first load). */
   const reload = async (git: GitService, controller: AbortController, first: boolean) => {
     const signal = controller.signal;
+    const ref = state.ref;
     const [headOid, refs, remoteUrl, currentBranch] = await Promise.all([
-      git.revParse("HEAD", { signal }).catch(() => null),
+      git.revParse(ref ? `${ref}^{commit}` : "HEAD", { signal }).catch(() => null),
       git.refDecorations({ signal }),
       git.remoteUrl("origin", { signal }),
       git.currentBranch({ signal }),
     ]);
-    if (!current(controller)) return;
+    // A newer reload, queued by setRef, lists the other ref.
+    if (!current(controller) || state.ref !== ref) return;
     if (!first && state.head && headOid === (state.head.unborn ? null : state.head.oid)) {
       publish({ refs, remoteUrl, currentBranch });
       return;
     }
-    const next = await open(git.repoRoot, signal);
-    if (!current(controller)) { next.close(); return; }
+    const next = await open(git.repoRoot, signal, ref ?? "");
+    if (!current(controller) || state.ref !== ref) { next.close(); return; }
     // Re-read at least as much as is loaded, including pages that arrive while this walk runs.
     const want = () => Math.max(gitHistoryPageSize, Math.ceil(state.commits.length / gitHistoryPageSize) * gitHistoryPageSize);
     const commits: GitHistoryCommit[] = [];
@@ -231,7 +235,7 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
       commits.push(...page.commits);
       done = page.done;
     }
-    if (!current(controller)) { next.close(); return; }
+    if (!current(controller) || state.ref !== ref) { next.close(); return; }
     reader?.close();
     reader = next;
     paging = undefined;
@@ -262,6 +266,21 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
       activation = undefined;
       service = root ? serviceFor(root) : undefined;
       publish({ ...emptyHistory, root });
+    },
+    /**
+     * Lists the history of `ref` (a full ref name), or of HEAD when null. File history, a search and a
+     * comparison close; the selection stays when the new list has it.
+     */
+    setRef(ref: string | null) {
+      if (ref === state.ref) return;
+      reader?.close();
+      reader = undefined;
+      paging = undefined;
+      api.closeFileHistory();
+      api.closeCompare();
+      const git = service, controller = active;
+      publish({ ref, head: null, commits: [], done: false, loading: !!controller, error: null });
+      if (git && controller) void queueReload(git, controller, true).catch(error => report(error, controller));
     },
     /** Loads the first page and starts watching refs; later calls do nothing. */
     activate() {

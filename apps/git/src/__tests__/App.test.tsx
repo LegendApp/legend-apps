@@ -2,7 +2,7 @@ import { getGitService, type GitService } from "@legend-apps/git-core";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { Button } from "@legendapp/spark/ui";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
-import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
+import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
@@ -30,10 +30,22 @@ jest.mock("@legendapp/spark/links", () => ({ openURL: jest.fn(async () => true) 
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
-jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })) }));
+jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
 jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn(async () => ({ claude: true, codex: false, preferredTool: "claude" })) }));
-jest.mock("@legendapp/spark/ui/sidebar", () => ({ Sidebar: "Sidebar", SidebarItem: "SidebarItem" }));
+jest.mock("@legendapp/spark/ui/sidebar", () => {
+  const React = jest.requireActual("react");
+  const ids = (children: unknown): unknown[] => React.Children.toArray(children).flatMap((child: any) =>
+    child?.type === React.Fragment ? ids(child.props.children) : child?.props?.id !== undefined && child.props.selectable !== false ? [child.props.id] : []);
+  return {
+    SidebarItem: "SidebarItem",
+    // Like Spark's, it throws when the selection names no selectable row.
+    Sidebar: function Sidebar({ selectedId, children, ...props }: any) {
+      if (selectedId != null && !ids(children).includes(selectedId)) throw new Error(`Selected sidebar ID must identify a selectable item: ${selectedId}`);
+      return React.createElement("Sidebar", { selectedId, ...props }, children);
+    },
+  };
+});
 jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, list, content }: any) => <>{sidebar}{list}{content}</>,
 }));
@@ -224,7 +236,7 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   expect(openGitHistory).not.toHaveBeenCalled();
 
   await act(async () => { renderer.root.findAllByType(Sidebar)[0]!.props.onSelectionChange({ id: "history" }); });
-  expect(openGitHistory).toHaveBeenCalledWith("/repo", expect.any(AbortSignal));
+  expect(openGitHistory).toHaveBeenCalledWith("/repo", expect.any(AbortSignal), "");
   expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBe("history");
   const list = renderer.root.findByType("LegendList" as any);
   expect(list.props.data.map((commit: { summary: string }) => commit.summary)).toEqual(["Second", "First"]);
@@ -329,7 +341,7 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
 
   // Toolbar: sidebar toggle and branch menu leading, segmented sections, Refresh, search; no Open or Restore.
   expect(toolbar().map(entry => entry.id)).toEqual(["toggle-sidebar", "branch", "section", "refresh", "search"]);
-  expect(toolbarItem("branch")).toMatchObject({ type: "menu", label: "main", items: [{ id: "switch-branch", disabled: true }, { id: "new-branch", disabled: true }] });
+  expect(toolbarItem("branch")).toMatchObject({ type: "menu", label: "main", items: [{ id: "switch-branch", disabled: true }, { id: "new-branch", disabled: false }] });
   expect(toolbarItem("section")).toMatchObject({ type: "segmented", value: "changes" });
   expect(split().props.list).toBeDefined();
 
@@ -557,5 +569,203 @@ it("blames a diff line into History, says when it is not committed, searches His
   { const button = await rowButton(commits[1]!); await act(async () => { button.props.onTouchEnd({ nativeEvent: { button: 2, pageX: 1, pageY: 2 } }); }); }
   expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items[0]).toEqual({ type: "action", id: "compare-with-selected", label: "Compare with Selected", disabled: false });
   expect(git.compareCommits).toHaveBeenLastCalledWith(parent, head, expect.anything());
+  await act(async () => { renderer.unmount(); });
+});
+
+it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, and checks out, creates, renames and deletes branches", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), side = "c".repeat(40);
+  const commit = (oid: string, summary: string) => ({ oid, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary, lane: 0, color: 0, edges: [] });
+  jest.mocked(openGitHistory).mockImplementation(async (_root, _signal, startRef) => {
+    const tip = startRef ? side : head;
+    return { head: { handle: 1, headOid: tip, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : [commit(tip, startRef ? "On a ref" : "On HEAD")], done: true })), close: jest.fn() };
+  });
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = (name: string, current = false, upstream: string | null = null, time = 1) => ({ name, ref: `refs/heads/${name}`, oid: current ? head : side, current, upstream, time });
+  let refs = {
+    branches: [branch("feature/ünï", false, "origin/feature/ünï", 3), branch("main", true, null, 2), branch("old", false, null, 1)],
+    remotes: [{ name: "origin", branches: [{ name: "origin/fix/x", ref: "refs/remotes/origin/fix/x", oid: side, remote: "origin", branch: "fix/x" }] }],
+    tags: [{ name: "v1.0", ref: "refs/tags/v1.0", oid: side }],
+  };
+  const { GitBranchNotMergedError } = jest.requireActual("@legend-apps/git-core");
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    revParse: jest.fn(async (ref: string) => ref === "HEAD" ? head : side), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: "m" })),
+    commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n"),
+    fileHistory: jest.fn(async () => ({ commits: [{ oid: head, parents: [], authorName: "Ada", authorEmail: "a@x", time: 1, summary: "On HEAD", status: "M", path: "a.txt", oldPath: null }], done: true })),
+    listRefs: jest.fn(async () => refs),
+    checkoutBranch: jest.fn(async () => {}), checkoutRemoteBranch: jest.fn(async () => "fix/x"), createBranch: jest.fn(async () => {}), renameBranch: jest.fn(async () => {}),
+    deleteBranch: jest.fn(async (_name: string, { force }: { force?: boolean }) => { if (!force) throw new GitBranchNotMergedError("old", "error: the branch 'old' is not fully merged"); }) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const listener = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const items = () => sidebar().findAllByType(SidebarItem);
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const toolbarItem = (id: string) => (jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === id);
+
+  // Group rows (not selectable), then branches with the current one marked by a trailing checkmark, remotes with their branches, tags.
+  expect(items().map(item => item.props.id)).toEqual(["repositories", "changes", "history",
+    "group:branches", "ref:refs/heads/feature/ünï", "ref:refs/heads/main", "ref:refs/heads/old",
+    "group:remotes", "remote:origin", "ref:refs/remotes/origin/fix/x", "group:tags", "ref:refs/tags/v1.0"]);
+  expect(items().filter(item => item.props.selectable === false).map(item => item.props.id)).toEqual(["repositories", "group:branches", "group:remotes", "remote:origin", "group:tags"]);
+  const row = (id: string) => items().find(item => item.props.id === id)!;
+  expect(row("ref:refs/heads/main").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["arrow.triangle.branch", "checkmark"]);
+  expect(row("ref:refs/heads/old").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["arrow.triangle.branch"]);
+  expect(row("ref:refs/remotes/origin/fix/x").findAllByType(Text).map(text => text.props.children)).toEqual(["fix/x"]);
+
+  // Toolbar branch menu: recent branches (current checked), then Switch Branch… and New Branch…; the Branch menu has the shortcuts.
+  expect(toolbarItem("branch").items.map((entry: any) => [entry.id, entry.checked, entry.disabled])).toEqual([
+    ["checkout:refs/heads/feature/ünï", false, false], ["checkout:refs/heads/main", true, true], ["checkout:refs/heads/old", false, false],
+    [undefined, undefined, undefined], ["switch-branch", undefined, false], ["new-branch", undefined, false]]);
+  expect(menuItem("switch-branch")).toMatchObject({ label: "Switch Branch…", shortcut: "Cmd+Shift+b", disabled: false });
+  expect(menuItem("new-branch")).toMatchObject({ label: "New Branch…", shortcut: "Cmd+Shift+n", disabled: false });
+  // Rename acts on the current branch; Delete needs a selected branch that isn't current.
+  expect(menuItem("rename-branch")).toMatchObject({ disabled: false });
+  expect(menuItem("delete-branch")).toMatchObject({ disabled: true });
+
+  // With a tag (not a branch) selected, Rename acts on the current branch and Delete has nothing to delete.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/tags/v1.0" }); });
+  expect(menuItem("rename-branch")).toMatchObject({ disabled: false });
+  expect(menuItem("delete-branch")).toMatchObject({ disabled: true });
+
+  // Selecting a branch lists its commits; the toolbar segment shows no value.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/feature/ünï" }); });
+  expect(openGitHistory).toHaveBeenLastCalledWith("/repo", expect.any(AbortSignal), "refs/heads/feature/ünï");
+  expect(renderer.root.findByType("LegendList" as any).props.data.map((entry: { summary: string }) => entry.summary)).toEqual(["On a ref"]);
+  expect(toolbarItem("section").value).toBeNull();
+  expect(menuItem("delete-branch")).toMatchObject({ disabled: false });
+
+  // The scope menu works in a ref's list too.
+  await act(async () => { listener({ type: "toolbarMenuAction", windowId: "main", itemId: "search-scope", action: { type: "checkbox", itemId: "search-author" } as any }); });
+  expect(toolbarItem("search-scope").label).toBe("Author");
+
+  // Show File History from a ref's commit lists HEAD's history of that file, and isn't closed by leaving the ref.
+  let refRow!: ReactTestRenderer;
+  await act(async () => { refRow = create(renderer.root.findByType("LegendList" as any).props.renderItem({ item: commit(side, "On a ref") })); });
+  await act(async () => { refRow.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
+  expect(menuItem("show-file-history")).toMatchObject({ disabled: false });
+  // The file's history is still being read when the section effect runs.
+  const fileCommits = await git.fileHistory();
+  git.fileHistory.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(fileCommits), 20)));
+  await act(async () => { lastMenu().onAction({ itemId: "show-file-history" }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 40)); });
+  expect(sidebar().props.selectedId).toBe("history");
+  expect(git.fileHistory).toHaveBeenLastCalledWith("a.txt", expect.anything());
+  expect(renderer.root.findByType("LegendList" as any).props.data.map((entry: { oid: string }) => entry.oid)).toEqual([head]);
+  await act(async () => { lastMenu().onAction({ itemId: "show-all-history" }); });
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/feature/ünï" }); });
+
+  // Check Out from the toolbar menu.
+  await act(async () => { listener({ type: "toolbarMenuAction", windowId: "main", itemId: "branch", action: { type: "checkbox", itemId: "checkout:refs/heads/old" } as any }); });
+  expect(git.checkoutBranch).toHaveBeenLastCalledWith("old", expect.anything());
+  // A refused checkout keeps the work and shows Git's reason in a warning sheet.
+  git.checkoutBranch.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\nPlease commit your changes or stash them before you switch branches.\nAborting"));
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
+  await act(async () => { row("ref:refs/heads/feature/ünï").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Switch to “feature/ünï”", message: expect.stringMatching(/^Your local changes .*would be overwritten[\s\S]*Aborting$/) }));
+
+  // A remote branch checks out as a tracking local branch, and its selection moves to that branch.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/remotes/origin/fix/x" }); });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
+  refs = { ...refs, branches: [...refs.branches, branch("fix/x")] };
+  await act(async () => { row("ref:refs/remotes/origin/fix/x").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(git.checkoutRemoteBranch).toHaveBeenCalledWith(expect.objectContaining({ ref: "refs/remotes/origin/fix/x" }), expect.anything());
+  expect(sidebar().props.selectedId).toBe("ref:refs/heads/fix/x");
+
+  // Switch Branch… (⌘⇧B) takes a typed name; New Branch… starts at HEAD, or at a commit from the History row menu.
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "feature/ünï" });
+  await act(async () => { lastMenu().onAction({ itemId: "switch-branch" }); });
+  expect(git.checkoutBranch).toHaveBeenLastCalledWith("feature/ünï", expect.anything());
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "topic/✓" });
+  await act(async () => { lastMenu().onAction({ itemId: "new-branch" }); });
+  expect(showPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ windowId: "main", title: "New Branch", message: "The new branch starts at “main” and is checked out.", confirmLabel: "Create" }));
+  expect(git.createBranch).toHaveBeenLastCalledWith("topic/✓", undefined, expect.anything());
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "from-commit" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "new-branch" });
+  let commitRow!: ReactTestRenderer;
+  await act(async () => { commitRow = create(renderer.root.findByType("LegendList" as any).props.renderItem({ item: commit(side, "On a ref") })); });
+  await act(async () => { commitRow.root.findByProps({ accessibilityRole: "button" }).props.onTouchEnd({ nativeEvent: { button: 2, pageX: 1, pageY: 2 } }); });
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items).toContainEqual({ type: "action", id: "new-branch", label: "New Branch from Commit…", disabled: false });
+  expect(git.createBranch).toHaveBeenLastCalledWith("from-commit", side, expect.anything());
+
+  // An invalid name is refused with Git's reason.
+  git.createBranch.mockRejectedValueOnce(new Error("“a b” isn’t a valid branch name."));
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "a b" });
+  await act(async () => { listener({ type: "toolbarMenuAction", windowId: "main", itemId: "branch", action: { type: "action", itemId: "new-branch" } as any }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Create the Branch", message: "“a b” isn’t a valid branch name." }));
+
+  // Rename the selected branch; the selection follows the new name.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/old" }); });
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "older" });
+  refs = { ...refs, branches: refs.branches.map(entry => entry.name === "old" ? branch("older") : entry) };
+  await act(async () => { lastMenu().onAction({ itemId: "rename-branch" }); });
+  expect(showPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Rename “old”", defaultValue: "old", confirmLabel: "Rename" }));
+  expect(git.renameBranch).toHaveBeenLastCalledWith("old", "older", expect.anything());
+  expect(sidebar().props.selectedId).toBe("ref:refs/heads/older");
+
+  // Delete asks first, runs `-d`, and on "not fully merged" asks again before `-D`; cancelling the second keeps the branch.
+  refs = { ...refs, branches: refs.branches.map(entry => entry.name === "older" ? { ...branch("old"), name: "older", ref: "refs/heads/older" } : entry) };
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" }).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { lastMenu().onAction({ itemId: "delete-branch" }); });
+  expect(git.deleteBranch.mock.calls.map(call => call[1].force)).toEqual([false]);
+  expect(jest.mocked(showMessage).mock.calls.at(-1)![0]).toMatchObject({ kind: "warning", title: "“older” isn’t fully merged.", buttons: [{ id: "confirm", label: "Delete Anyway" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "cancel" });
+  await act(async () => { lastMenu().onAction({ itemId: "delete-branch" }); });
+  expect(jest.mocked(showMessage).mock.calls.at(-2)![0]).toMatchObject({ title: "Delete the branch “older”?", buttons: [{ id: "confirm", label: "Delete" }, { id: "cancel", label: "Cancel" }] });
+  expect(git.deleteBranch.mock.calls.map(call => [call[0], call[1].force])).toEqual([["older", false], ["older", false], ["older", true]]);
+
+  // A selected branch deleted elsewhere falls back to History.
+  refs = { ...refs, branches: refs.branches.filter(entry => entry.name !== "older") };
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  expect(sidebar().props.selectedId).toBe("history");
+  await act(async () => { renderer.unmount(); });
+});
+
+it("has no branches and no New Branch on an unborn HEAD", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  expect(renderer.root.findAllByType(Sidebar)[0]!.findAllByType(SidebarItem).map(item => item.props.id)).toEqual(["repositories", "changes", "history"]);
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  for (const id of ["switch-branch", "new-branch", "rename-branch", "delete-branch"]) expect(menuItem(id)).toMatchObject({ disabled: true });
+  await act(async () => { renderer.unmount(); });
+});
+
+it("leaves a selected ref when another repository opens, without walking that ref in the new one", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40);
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
+  const service = (root: string) => ({ repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: `${root}/.git`, ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })) });
+  const services = new Map([["/a", service("/a")], ["/b", service("/b")]]);
+  jest.mocked(getGitService).mockImplementation(path => services.get(path.startsWith("/b") ? "/b" : "/a") as unknown as GitService);
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/a"] });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/only-in-a" }); });
+  expect(openGitHistory).toHaveBeenLastCalledWith("/a", expect.any(AbortSignal), "refs/heads/only-in-a");
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/b"] });
+  await act(async () => { openRepository(); });
+  expect(sidebar().props.selectedId).toBe("changes");
+  expect(jest.mocked(openGitHistory).mock.calls.filter(call => call[0] === "/b")).toEqual([]);
   await act(async () => { renderer.unmount(); });
 });

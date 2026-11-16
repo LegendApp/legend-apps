@@ -38,6 +38,13 @@ export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "time
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
+/** A local branch; `upstream` is the short name of the branch it tracks. */
+export type GitBranch = { name: string; ref: string; oid: string; current: boolean; upstream: string | null; time: number };
+/** A remote-tracking branch: `name` is "origin/feature", `branch` is "feature". */
+export type GitRemoteBranch = { name: string; ref: string; oid: string; remote: string; branch: string };
+/** A tag; `oid` is the commit it points at (annotated tags are peeled). */
+export type GitTag = { name: string; ref: string; oid: string };
+export type GitRefList = { branches: GitBranch[]; remotes: { name: string; branches: GitRemoteBranch[] }[]; tags: GitTag[] };
 export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
 /** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
 export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
@@ -88,6 +95,17 @@ export class GitServiceError extends Error {
     this.name = "GitServiceError";
     this.code = code;
     this.args = args;
+  }
+}
+
+/** `git branch -d` refused because the branch has commits that are not merged. */
+export class GitBranchNotMergedError extends Error {
+  readonly branch: string;
+
+  constructor(branch: string, message: string) {
+    super(message);
+    this.name = "GitBranchNotMergedError";
+    this.branch = branch;
   }
 }
 
@@ -202,6 +220,28 @@ export function parseRefDecorations(output: string) {
     decorations.set(oid, list);
   }
   return decorations;
+}
+
+/** Splits `for-each-ref` output (fields joined by NUL) into branches, remote branches by remote and tags. */
+export function parseRefList(output: string, remoteNames: readonly string[]): GitRefList {
+  const list: GitRefList = { branches: [], remotes: remoteNames.map(name => ({ name, branches: [] })), tags: [] };
+  // The longest remote name that prefixes the ref wins, so "a/b" is not split as remote "a".
+  const remotes = [...list.remotes].sort((a, b) => b.name.length - a.name.length);
+  for (const line of output.split("\n")) {
+    const [ref = "", object = "", peeled = "", head = "", upstream = "", symref = "", time = ""] = line.split("\0");
+    if (!object || symref) continue;
+    const oid = peeled || object;
+    if (ref.startsWith("refs/heads/")) {
+      list.branches.push({ name: ref.slice(11), ref, oid, current: head === "*", upstream: upstream || null, time: Number(time) || 0 });
+    } else if (ref.startsWith("refs/tags/")) {
+      list.tags.push({ name: ref.slice(10), ref, oid });
+    } else if (ref.startsWith("refs/remotes/")) {
+      const name = ref.slice(13);
+      const remote = remotes.find(entry => name.startsWith(`${entry.name}/`));
+      if (remote) remote.branches.push({ name, ref, oid, remote: remote.name, branch: name.slice(remote.name.length + 1) });
+    }
+  }
+  return list;
 }
 
 /** The github.com page for a commit, or null when the remote URL is not on github.com. */
@@ -694,6 +734,98 @@ export class GitService {
   /** Branches, remote branches and tags by the commit they point at; annotated tags are peeled. */
   refDecorations(options: GitReadOptions = {}) {
     return this.read(["for-each-ref", "--format=%(objectname)%00%(*objectname)%00%(refname)%00%(symref)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000).then(parseRefDecorations);
+  }
+
+  /** Local branches, remote branches grouped by remote (symbolic refs such as origin/HEAD left out) and tags, by name. */
+  listRefs(options: GitReadOptions = {}) {
+    return this.enqueue(options, async () => {
+      const [output, remotes] = await Promise.all([
+        this.git(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(HEAD)%00%(upstream:short)%00%(symref)%00%(committerdate:unix)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000),
+        this.git(["remote"], options, 5_000),
+      ]);
+      return parseRefList(output, remotes.split("\n").filter(Boolean));
+    });
+  }
+
+  /** Resolves when `name` is a valid branch name (`git check-ref-format --branch`); rejects with a readable message otherwise. */
+  async validateBranchName(name: string, options: GitReadOptions = {}) {
+    const invalid = new Error(`“${name}” isn’t a valid branch name.`);
+    if (!name.trim() || name !== name.trim() || name.startsWith("-") || name.includes("\0") || name.startsWith("@{")) throw invalid;
+    // `--branch` expands "@{-1}" and similar to another branch's name; only a name that comes back unchanged is literal.
+    const output = await this.read(["check-ref-format", "--branch", name], options, 5_000, false, [0, 1, 128]).catch(() => "");
+    if (output.replace(/\n$/, "") !== name) throw invalid;
+  }
+
+  /**
+   * Whether local branch `name` is merged by `git branch -d`'s rule: into its upstream when it has one,
+   * otherwise into HEAD. Read from the history, not Git's (possibly translated) message.
+   */
+  private async branchMerged(name: string, options: GitReadOptions) {
+    const ref = `refs/heads/${name}`;
+    const upstream = (await this.git(["for-each-ref", "--format=%(upstream)", ref], options, 5_000)).split("\n")[0] ?? "";
+    // Exit 1 means not an ancestor; any failure counts as not merged, so the user is asked before `-D`.
+    return this.git(["merge-base", "--is-ancestor", ref, upstream || "HEAD"], options).then(() => true, () => false);
+  }
+
+  /** Runs a branch write on the repository queue after checking for index.lock. */
+  private branchWrite<T>(options: GitReadOptions, write: () => Promise<T>) {
+    return this.enqueue(options, async (gitDir, commit) => {
+      await this.inspect(gitDir, options);
+      commit();
+      return write();
+    });
+  }
+
+  /**
+   * Checks out local branch `name` with `git switch`, which carries uncommitted changes along and refuses,
+   * changing nothing, when they would be overwritten. Never forces.
+   */
+  async checkoutBranch(name: string, options: GitReadOptions = {}) {
+    await this.validateBranchName(name, options);
+    return this.branchWrite(options, () => this.git(["switch", "--no-guess", "--end-of-options", name], options, 120_000));
+  }
+
+  /**
+   * Checks out remote branch `remoteBranch` ("origin/feature") as a local branch tracking it, named after the
+   * remote's branch. When that local branch exists already, it is checked out instead. Returns the local name.
+   */
+  async checkoutRemoteBranch(remoteBranch: GitRemoteBranch, options: GitReadOptions = {}) {
+    const local = remoteBranch.branch;
+    await this.validateBranchName(local, options);
+    const exists = !!(await this.read(["rev-parse", "--verify", "-q", `refs/heads/${local}`], options, 5_000, false, [0, 1])).trim();
+    if (exists) await this.checkoutBranch(local, options);
+    else await this.branchWrite(options, () => this.git(["switch", "--no-guess", "--track", "-c", local, "--end-of-options", remoteBranch.ref], options, 120_000));
+    return local;
+  }
+
+  /**
+   * Creates branch `name` at `startPoint` (HEAD when omitted) and checks it out with `git switch -c`; when
+   * uncommitted changes would be overwritten nothing is created.
+   */
+  async createBranch(name: string, startPoint?: string, options: GitReadOptions = {}) {
+    await this.validateBranchName(name, options);
+    return this.branchWrite(options, () => this.git(["switch", "--no-guess", "-c", name, ...startPoint ? ["--end-of-options", startPoint] : []], options, 120_000));
+  }
+
+  /** Renames local branch `from` to `to` (`git branch -m`), which refuses when `to` exists. */
+  async renameBranch(from: string, to: string, options: GitReadOptions = {}) {
+    await this.validateBranchName(to, options);
+    return this.branchWrite(options, () => this.git(["branch", "-m", "--end-of-options", from, to], options));
+  }
+
+  /**
+   * Deletes local branch `name`. Without `force` it runs `git branch -d` and rejects with
+   * GitBranchNotMergedError when the branch has unmerged commits; `force` runs `git branch -D`.
+   */
+  deleteBranch(name: string, { force = false, ...options }: GitReadOptions & { force?: boolean } = {}) {
+    return this.branchWrite(options, async () => {
+      try {
+        await this.git(["branch", force ? "-D" : "-d", "--end-of-options", name], options);
+      } catch (error) {
+        if (!force && error instanceof GitServiceError && !await this.branchMerged(name, options)) throw new GitBranchNotMergedError(name, error.message);
+        throw error;
+      }
+    });
   }
 
   /** The checked-out branch's short name, or null when HEAD is detached. */

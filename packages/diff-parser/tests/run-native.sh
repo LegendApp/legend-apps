@@ -155,6 +155,7 @@ git -C "$GRAPH_FIXTURE" checkout --quiet main
 git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$GRAPH_FIXTURE.expected"
 git -C "$GRAPH_FIXTURE" log --topo-order --all --format='%H %P' > "$GRAPH_FIXTURE.all"
 git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' unrelated > "$GRAPH_FIXTURE.linear"
+git -C "$GRAPH_FIXTURE" -c user.name=Tagger -c user.email=tagger@example.com tag -a -m "Annotated" unrelated-annotated unrelated
 BLAME_FIXTURE="$BUILD_DIR/blame-fixture"
 bash "$ROOT/packages/diff-parser/tests/blame-fixture.sh" "$BLAME_FIXTURE" > /dev/null
 

@@ -71,7 +71,7 @@ namespace margelo::nitro::legendapps::diffparser {
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(const std::string& diffText, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFile(const std::string& filePath, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
-      virtual std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) = 0;
+      virtual std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath, const std::string& startRef) = 0;
       virtual std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) = 0;
       virtual void closeGitHistory(double handle) = 0;
       virtual std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) = 0;
