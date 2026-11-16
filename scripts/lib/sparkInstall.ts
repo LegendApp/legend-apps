@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { rootDir } from "./apps";
 
 const ignoredDirectories = new Set(["node_modules", ".git"]);
@@ -28,6 +28,8 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
   const hash = createHash("sha256");
   hash.update(JSON.stringify(process.versions.bun));
   const files = new Set([path.join(project, "package.json")]);
+  const config = path.join(project, "bunfig.toml");
+  if (fs.existsSync(config)) files.add(config);
   const lock = path.join(project, "bun.lock");
   if (includeLock && fs.existsSync(lock)) files.add(lock);
   const pkg = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
@@ -43,7 +45,11 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
   }
   for (const patch of Object.values(pkg.patchedDependencies ?? {}) as string[]) files.add(path.resolve(project, patch));
   for (const workspace of pkg.workspaces ?? []) {
-    const directory = path.resolve(project, workspace.replace(/\/\*$/, ""));
+    if (!workspace.endsWith("/*")) {
+      files.add(path.resolve(project, workspace, "package.json"));
+      continue;
+    }
+    const directory = path.resolve(project, workspace.slice(0, -2));
     for (const entry of fs.readdirSync(directory)) {
       const manifest = path.join(directory, entry, "package.json");
       if (fs.existsSync(manifest)) files.add(manifest);
@@ -67,6 +73,19 @@ export function sparkInstallHash(project: string, repoRoot = rootDir, includeLoc
     hash.update(createHash("sha256").update(fs.readFileSync(file)).digest());
   }
   return hash.digest("hex");
+}
+
+export function stampPreparedSparkInstall(project: string, lockfileHash: string, repoRoot = rootDir) {
+  const lock = path.join(project, "bun.lock");
+  if (!/^[a-f0-9]{64}$/.test(lockfileHash) || !fs.existsSync(lock) ||
+    createHash("sha256").update(fs.readFileSync(lock)).digest("hex") !== lockfileHash) {
+    throw new SparkInstallError("Prepared dependencies do not match the verified wt-deps lockfile.");
+  }
+  const nodeModules = path.join(project, "node_modules");
+  if (!fs.existsSync(nodeModules) || !fs.lstatSync(nodeModules).isDirectory()) {
+    throw new SparkInstallError("Prepared dependencies require a real node_modules directory.");
+  }
+  fs.writeFileSync(path.join(nodeModules, ".legend-install-stamp"), `${sparkInstallHash(project, repoRoot)}\n`);
 }
 
 export function parseSparkInstallArgs(args: string[], env: Record<string, string | undefined> = process.env) {
@@ -100,7 +119,7 @@ function runInstall(args: string[], options: InstallOptions) {
   if (result.status !== 0) throw new SparkInstallError(`Bun install failed for ${options.appId} (${result.signal ?? result.status}).`, result.status ?? 1);
 }
 
-function acquireInstallLock(project: string) {
+export function acquireInstallLock(project: string, timeoutMs = 60_000) {
   const lock = path.join(project, ".legend-install.lock");
   const owner = `${process.pid}-${randomUUID()}`;
   const candidate = `${lock}.${owner}`;
@@ -145,7 +164,7 @@ function acquireInstallLock(project: string) {
         if (["ENOENT", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code!)) continue;
         throw error;
       }
-      if (Date.now() - started >= 60_000) throw new SparkInstallError(`Timed out waiting for ${lock}. Another process may be installing this workspace.`);
+      if (Date.now() - started >= timeoutMs) throw new SparkInstallError(`Timed out waiting for ${lock}. Another process may be preparing this workspace.`);
       Atomics.wait(sleeper, 0, 0, 50);
     }
   } finally {
@@ -189,33 +208,11 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   return "installed";
 }
 
-export const sparkOfflineHelp = "Offline builds require installed Bun dependencies and current native preparation. Spark SDK interactive supervisor keys (b/g/d) are outside this offline guard; use this script's run/build commands offline.";
+export const sparkOfflineHelp = "Offline builds require installed Bun dependencies and current native preparation.";
 
 export function assertSparkOfflineArgs(args: string[]) {
   if (args.some(arg => arg === "--project" || arg.startsWith("--project="))) {
     throw new SparkInstallError("Offline mode does not support --project redirects; use the named app's prepared workspace.");
-  }
-}
-
-export async function assertSparkOfflineStart(project: string, cli: string, args: string[]) {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    // Spark consumes the next token for these options, even if it looks like
-    // a startup flag. An app argument must not bypass the offline guard.
-    if (arg === "--app-arg" || arg === "--platform") { i++; continue; }
-    if (["--no-open", "--help", "-h", "--runner-binary"].includes(arg) || arg.startsWith("--runner-binary=")) return;
-  }
-  const settingsFile = path.join(project, ".spark/settings.json");
-  const settings = fs.existsSync(settingsFile) ? JSON.parse(fs.readFileSync(settingsFile, "utf8")) : {};
-  if (settings.target === "dev") return;
-  const dist = path.resolve(path.dirname(cli), "../vendor/node_modules/@legendapp/spark-cli/dist");
-  const sdk = await import(pathToFileURL(path.join(dist, "project.js")).href);
-  const { findGo } = await import(pathToFileURL(path.join(dist, "local.js")).href);
-  sdk.prepareConfig(project);
-  const native = sdk.nativePackages(project);
-  const runner = findGo(native, settings.goApp ? path.resolve(project, settings.goApp) : undefined, "macos");
-  if (!runner || sdk.incompatible(runner.runtime, native, "macos").length) {
-    throw new SparkInstallError("Spark Go startup may download a Runner and is disabled offline without a compatible local Runner. Use start, --no-open, --runner-binary <local path>, or select the dev target online first.");
   }
 }
 
@@ -261,4 +258,8 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
     const reason = needsProject ? "native project needs generation" : prepared?.fingerprint !== fingerprint ? "native preparation is missing or out of date" : missing.length ? `native frameworks missing: ${missing.join(", ")}` : "Pods/Manifest.lock missing";
     throw new SparkInstallError(`Spark build needs ${needsProject ? "template prebuild and " : ""}pod install (${reason}), which may require the network. Reconnect and rerun this command without --offline and with LEGEND_OFFLINE=0. ${sparkOfflineHelp}`);
   }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  stampPreparedSparkInstall(rootDir, process.env.WT_DEPS_LOCKFILE_SHA256 ?? "");
 }

@@ -1,22 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { appIds, appsDir, loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
+import { loadAppPackageMetadata, packagesDir, rootDir, shellDir } from "./apps";
 import { writeMacOSInfoPlist } from "./macosInfoPlist";
 import type { AppManifest, MacOSReleaseArch, NativePackage, Platform } from "./types";
 import { sparkSdkPackages } from "./sparkSdk";
 
 export type NativeGraphMode = "dev" | "release";
 
-/**
- * Registry native modules are installed per consuming app, so resolve their
- * installed copy instead of pinning one app's `node_modules`. App copies run
- * the package's install hooks; the root copy can be an unvendored extract.
- */
 function installedNativePackage(name: string) {
-  for (const app of appIds) {
-    const root = path.join(appsDir, app, "node_modules", name);
-    if (fs.existsSync(path.join(root, "package.json"))) return path.resolve(root);
-  }
   const root = path.join(rootDir, "node_modules", name);
   if (fs.existsSync(path.join(root, "package.json"))) return path.resolve(root);
   throw new Error(`${name} is not installed. Run bun install before building a native app.`);

@@ -1,3 +1,4 @@
+import { observable } from "@legendapp/state";
 import { createObservableSettings } from "@legend-apps/storage";
 import {
   normalizeBooleanSetting,
@@ -18,6 +19,7 @@ import { useValue } from "@legendapp/state/react";
 
 export type DiffSettingsFile = {
   adaptiveLightModeEnabled?: boolean;
+  autoRefresh?: boolean;
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   highlightChangedCharacters?: boolean;
@@ -80,6 +82,11 @@ export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
 
 const diffSettings = createObservableSettings({
   fields: {
+    skillApprovals: { defaultValue: {} as Record<string, boolean> },
+    autoRefresh: {
+      defaultValue: true,
+      normalize: (value) => normalizeBooleanSetting(value, true),
+    },
     adaptiveLightModeEnabled: {
       defaultValue: defaultDiffAdaptiveLightModeEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffAdaptiveLightModeEnabled),
@@ -149,6 +156,10 @@ const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
 const sidebarWidthSetting = diffSettings.field("sidebarWidth");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
+
+export function useDiffAutoRefreshSetting(): boolean {
+  return normalizeBooleanSetting(useValue(diffSettings$.autoRefresh), true);
+}
 
 export function getDiffAdaptiveLightModeEnabledSetting(): boolean {
   return adaptiveLightModeEnabledSetting.get();
@@ -324,3 +335,8 @@ export function setDiffSidebarWidthSetting(sidebarWidth: number) {
 export function setDiffSyntaxHighlightingEnabledSetting(enabled: boolean) {
   syntaxHighlightingEnabledSetting.set(enabled);
 }
+
+export const diffSkillApprovals$ = diffSettings.settings$.skillApprovals;
+
+export type DiffSettingsPage = "appearance" | "syntax" | "hotkeys" | "debugging" | "commandLine" | "customize" | "aiSkills";
+export const diffSettingsPage$ = observable<DiffSettingsPage>("customize");

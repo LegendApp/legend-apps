@@ -2,6 +2,7 @@ import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
 import { createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows";
 import { showWindow, setWindowOptions } from "@legendapp/spark/windows";
 import { cancelPreparedDocument, prepareDocument } from "@legend-apps/source-editor/preload";
+import { openDocumentWindow, type WorkspaceWindowProps } from "@legend-apps/workspace";
 import { codeSettingsWindowIdentifier, codeSettingsWindowModuleName, codeViewerWindowIdentifier, codeViewerWindowModuleName, } from "./appConstants";
 import { getCodeSyntaxTheme } from "./codeSettings";
 import { getFilename, getLaunchCodeFile, getCodeRepresentedUri } from "./codeFiles";
@@ -20,8 +21,18 @@ function createCodeViewerWindowStyle({ appearance, backgroundColor, includeFrame
         macos: {
             titleBar: {
                 contentLayout: "fullSize" as const,
-                transparent: true
+                transparent: true,
+                titleVisibility: "hidden" as const
             }
+        }
+    };
+}
+function createCodeViewerWindowOptions() {
+    return {
+        title: "Legend Code",
+        ...createCodeViewerWindowStyle({ includeFrame: true }),
+        macos: {
+            restoreOnLaunch: true, titleBar: { contentLayout: "fullSize" as const, transparent: true, titleVisibility: "hidden" as const }
         }
     };
 }
@@ -31,13 +42,7 @@ function createCodeWindowsNavigator() {
         [codeViewerWindowModuleName]: {
             component: CodeViewerWindow,
             id: codeViewerWindowIdentifier,
-            options: {
-                title: "Legend Code",
-                ...createCodeViewerWindowStyle({ includeFrame: true }),
-                macos: {
-                    restoreOnLaunch: true, titleBar: { contentLayout: "fullSize", transparent: true }
-                }
-            },
+            options: createCodeViewerWindowOptions(),
         },
         [codeSettingsWindowModuleName]: {
             component: SettingsWindow,
@@ -54,34 +59,34 @@ export function registerCodeWindows() {
 export function openCodeSettingsWindow() {
     return openOrShowWindow(codeSettingsWindowIdentifier, () => CodeWindowsNavigator.open(codeSettingsWindowModuleName));
 }
-export async function openCodeViewerWindow(launchArguments?: string[]) {
-    const path = getLaunchCodeFile(launchArguments);
+export type CodeViewerWindowProps = WorkspaceWindowProps & {
+    launchArguments?: string[];
+    preparedDocumentId?: string;
+};
+/** Opens a new viewer window; the first takes the restorable base ID and later ones are numbered. */
+export async function openCodeViewerWindow({ launchArguments, ...props }: CodeViewerWindowProps = {}) {
+    const path = props.files?.[0] ?? getLaunchCodeFile(launchArguments);
     const preparedDocumentId = path ? prepareDocument(path) : undefined;
     try {
-        return await CodeWindowsNavigator.open(codeViewerWindowModuleName, {
-            props: {
-                ...(launchArguments !== undefined ? { launchArguments } : {}),
-                ...(preparedDocumentId !== undefined ? { preparedDocumentId } : {}),
-            },
-            options: {
-                ...createCodeViewerWindowStyle({ includeFrame: true })
-            }
-        });
+        return await openDocumentWindow(codeViewerWindowIdentifier, {
+            ...props, files: props.files ?? (path ? [path] : undefined), preparedDocumentId,
+        }, createCodeViewerWindowOptions());
     }
     catch (error) {
         cancelPreparedDocument(preparedDocumentId);
         throw error;
     }
 }
-export function focusCodeViewerWindow() {
-    return showWindow(codeViewerWindowIdentifier);
+export function focusCodeViewerWindow(windowId = codeViewerWindowIdentifier) {
+    return showWindow(windowId);
 }
-export function setCodeViewerWindowOptions({ appearance, backgroundColor, filePath, }: {
+export function setCodeViewerWindowOptions({ appearance, backgroundColor, filePath, windowId, }: {
     appearance: "dark" | "light";
     backgroundColor: string;
     filePath: string | null;
+    windowId: string;
 }) {
-    return setWindowOptions(codeViewerWindowIdentifier, {
+    return setWindowOptions(windowId, {
         title: filePath ? getFilename(filePath) : "Legend Code",
         ...createCodeViewerWindowStyle({
             appearance,

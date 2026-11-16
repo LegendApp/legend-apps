@@ -6,7 +6,7 @@ import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import { markdownFileTypes } from "../appConstants";
 import { confirmDirtyDocumentTransition } from "../confirmDirtyDocumentTransition";
-import { useMarkdownDocumentSession, type MarkdownDocumentSessionState$ } from "../useMarkdownDocumentSession";
+import { useMarkdownDocumentSession, type MarkdownDocumentSessionOptions, type MarkdownDocumentSessionState$ } from "../useMarkdownDocumentSession";
 
 const mockOpenFileDialog = openFileDialog as jest.MockedFunction<typeof openFileDialog>;
 const mockConfirmDirtyDocumentTransition = confirmDirtyDocumentTransition as jest.MockedFunction<typeof confirmDirtyDocumentTransition>;
@@ -48,8 +48,8 @@ function SessionHarness({ onState }: { onState: (state$: MarkdownDocumentSession
 
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 
-function SessionApiHarness({ onSession }: { onSession: (session: MarkdownDocumentSession) => void }) {
-  const session = useMarkdownDocumentSession();
+function SessionApiHarness({ onSession, options }: { onSession: (session: MarkdownDocumentSession) => void; options?: MarkdownDocumentSessionOptions }) {
+  const session = useMarkdownDocumentSession(options);
 
   useEffect(() => {
     onSession(session);
@@ -165,6 +165,24 @@ describe("useMarkdownDocumentSession", () => {
     expect(saveAs).toHaveBeenCalledWith("/tmp/notes copy.md");
     expect(session.sessionState$.filename.peek()).toBe("/tmp/notes copy.md");
     expect(session.sessionState$.conflict.peek()).toBeNull();
+    await view.unmount();
+  });
+
+  it("reports opened files and Save As renames so window tabs can follow", async () => {
+    let session!: MarkdownDocumentSession;
+    const options = { onFileOpened: jest.fn(), onFileSavedAs: jest.fn() };
+    const saveAs = jest.fn(async () => {});
+    const view = await render(<SessionApiHarness onSession={(value) => { session = value; }} options={options} />);
+    await act(async () => session.openSelectedFile("/tmp/notes.md"));
+    expect(options.onFileOpened).toHaveBeenCalledWith("/tmp/notes.md");
+    session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
+    (saveFileDialog as jest.Mock).mockResolvedValueOnce({ canceled: false, path: "/tmp/renamed.md" });
+    await act(async () => { await session.saveCurrentDocumentAs(); });
+    expect(options.onFileSavedAs).toHaveBeenCalledWith("/tmp/notes.md", "/tmp/renamed.md");
+    await act(async () => session.openUntitledDocument());
+    (saveFileDialog as jest.Mock).mockResolvedValueOnce({ canceled: false, path: "/tmp/new.md" });
+    await act(async () => { await session.saveCurrentDocumentAs(); });
+    expect(options.onFileSavedAs).toHaveBeenLastCalledWith(null, "/tmp/new.md");
     await view.unmount();
   });
 

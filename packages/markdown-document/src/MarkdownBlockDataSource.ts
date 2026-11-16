@@ -181,7 +181,7 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
     this.length = previousLength - deleteCount + blockIds.length;
 
     if (move) {
-      this.publish(previousLength, [move, { type: "update", index: startBlockIndex, count: blockIds.length, layout: "invalidate" }]);
+      this.publish(previousLength, [move, { type: "update", index: startBlockIndex, count: blockIds.length, layout: "preserve" }]);
       return;
     }
 
@@ -201,7 +201,7 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
       if (trailingDelete > 0 || trailingInsert > 0) {
         operations.push({ type: "splice", index: startBlockIndex + retainedOffset + 1, deleteCount: trailingDelete, insertCount: trailingInsert });
       }
-      operations.push({ type: "update", index: startBlockIndex, count: blockIds.length, layout: "invalidate" });
+      operations.push({ type: "update", index: startBlockIndex, count: blockIds.length, layout: "preserve" });
       this.publish(previousLength, operations);
       return;
     }
@@ -213,7 +213,7 @@ export class MarkdownBlockDataSource implements LegendListDataSource<string> {
       deleteCount === result.retiredBlockIds.length + 1
     );
     const operations: DataSourceOperation[] = preservesFirstBlock
-      ? [{ type: "update", index: startBlockIndex, count: 1, layout: "invalidate" }]
+      ? [{ type: "update", index: startBlockIndex, count: 1, layout: "preserve" }]
       : [];
     const remainingDeleteCount = preservesFirstBlock ? deleteCount - 1 : deleteCount;
     const remainingInsertCount = preservesFirstBlock ? blockIds.length - 1 : blockIds.length;

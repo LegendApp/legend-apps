@@ -1,5 +1,5 @@
+import type { DiffViewerTab } from "../story/useDiffStory";
 import type { DiffDocument } from "@legend-apps/diff-parser";
-import { watch } from "@legendapp/spark/files";
 import { useRoutedHotkeys, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
 import { ownRegistration, type MenuState } from "@legend-apps/runtime-utils";
 import { diffMenuState$, diffActiveMenuWindow$ } from "../diffMenuState";
@@ -13,7 +13,7 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { diffCompareToolbarTargetChooseRef, type DiffCompareRepoState } from "../diffCompareTargets";
-import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
+import { normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   diffHotkeyDefinitions,
   diffHotkeyRouter,
@@ -30,6 +30,8 @@ import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
   diffCompareToolbarItemId,
   diffSearchToolbarItemId,
+  diffStoryToolbarItemId,
+  diffNavigatorToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
   setDiffViewerWindowAppearance,
@@ -44,7 +46,6 @@ import {
   type DiffLoadTrace,
 } from "./diffViewerModel";
 import {
-  createRefreshError,
   diffToolbarModelsEqual,
   getDiffWindowToolbarModel,
   getErrorMessage,
@@ -122,6 +123,7 @@ export function DiffNativeMenuController({
     const currentShowSidebarControl = currentShowViewModeToolbar;
     const hasLoadedFiles = currentLoadedFileCount > 0;
     const patches: MenuItemState[] = [
+      { id: "changeStory", disabled: currentState.status !== "loaded" || currentState.loadComplete === false },
       {
         disabled: !(currentState.status === "loaded"),
         id: "reload",
@@ -202,12 +204,16 @@ export function DiffNativeMenuController({
 }
 
 export function DiffWindowToolbarItemController({
+  onNavigatorTab,
+  openStory,
   compareCurrentSource,
   onSearchChange,
   onSearchSubmit,
   openCompareRefPrompt,
   toggleSidebar,
 }: {
+  onNavigatorTab: (tab: DiffViewerTab) => void;
+  openStory: () => boolean;
   compareCurrentSource: (selection: string) => boolean;
   onSearchChange: (value: string) => void;
   onSearchSubmit: (value: string, direction: 1 | -1) => void;
@@ -218,6 +224,8 @@ export function DiffWindowToolbarItemController({
 
   useEffect(() => {
     const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
+      if (event.type === "toolbarSelectionChanged" && event.itemId === diffNavigatorToolbarItemId && (event.value === "files" || event.value === "story")) onNavigatorTab(event.value);
+      if (event.type === "toolbarAction" && event.itemId === diffStoryToolbarItemId) openStory();
       if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
       if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
         if (event.action.itemId === diffCompareToolbarTargetChooseRef) openCompareRefPrompt();
@@ -230,14 +238,16 @@ export function DiffWindowToolbarItemController({
       }
     }));
     return () => { void subscription.remove().catch(console.error); };
-  }, [compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
+  }, [onNavigatorTab, openStory, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
 
   return null;
 }
 
 export function DiffWindowChromeController({
+  navigatorTab,
   hasUnsavedMergeDrafts,
 }: {
+  navigatorTab: DiffViewerTab;
   hasUnsavedMergeDrafts: boolean;
 }) {
   const compareRepoState = useValue(useDiffViewerModel().compareRepoState$);
@@ -247,7 +257,7 @@ export function DiffWindowChromeController({
     state$,
   } = useDiffViewerModel();
   const windowIdentifier = useWindowId();
-  const lastToolbarModelRef = useRef<DiffWindowToolbarModel | null>(null);
+  const lastToolbarModelRef = useRef<(DiffWindowToolbarModel & { navigatorTab: DiffViewerTab }) | null>(null);
   const lastCompareRepoStateKeyRef = useRef("");
 
   const updateDiffWindowToolbar = useCallback((observe: boolean) => {
@@ -260,8 +270,8 @@ export function DiffWindowChromeController({
     });
     const compareRepoStateKey = getCompareRepoStateKey(compareRepoState);
 
-    if (!diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
-      lastToolbarModelRef.current = toolbarModel;
+    if (lastToolbarModelRef.current?.navigatorTab !== navigatorTab || !diffToolbarModelsEqual(lastToolbarModelRef.current, toolbarModel) || lastCompareRepoStateKeyRef.current !== compareRepoStateKey) {
+      lastToolbarModelRef.current = { ...toolbarModel, navigatorTab };
       lastCompareRepoStateKeyRef.current = compareRepoStateKey;
       setDiffViewerWindowToolbarOptions({
         compareRepoState,
@@ -272,12 +282,13 @@ export function DiffWindowChromeController({
         sidebarCollapsed: toolbarModel.sidebarCollapsed,
         title: toolbarModel.title,
         viewMode: toolbarModel.viewMode,
+        navigatorTab,
         windowIdentifier,
       }).catch((error: unknown) => {
         console.error(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
+  }, [navigatorTab, compareRepoState, hasUnsavedMergeDrafts, loadingSource$, sidebarCollapsed$, state$, windowIdentifier]);
 
   useObserveEffect(() => {
     const syntaxTheme = getDiffSyntaxTheme();
@@ -301,6 +312,7 @@ export function DiffWindowChromeController({
 }
 
 export function DiffActionHandlersController({
+  openStory,
   copyCurrentFilePath,
   copyCurrentRelativePath,
   copyCurrentSource,
@@ -313,6 +325,7 @@ export function DiffActionHandlersController({
   toggleShowOnlyHunks,
   toggleSidebar,
 }: {
+  openStory: () => boolean;
   copyCurrentFilePath: () => boolean;
   copyCurrentRelativePath: () => boolean;
   copyCurrentSource: () => boolean;
@@ -332,6 +345,7 @@ export function DiffActionHandlersController({
     windowId: windowIdentifier,
   }), [windowIdentifier]);
   const hotkeyHandlers = useMemo(() => ({
+    changeStory: openStory,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
     filterFiles: focusSearch,
@@ -342,6 +356,7 @@ export function DiffActionHandlersController({
     viewBlocks: () => setDiffViewModeSetting("blocks"),
     viewUnified: () => setDiffViewModeSetting("unified"),
   }), [
+    openStory,
     copyCurrentRelativePath,
     copyCurrentSource,
     focusSearch,
@@ -370,6 +385,7 @@ export function DiffActionHandlersController({
   }, [windowIdentifier]);
 
   useEffect(() => registerDiffViewerActionHandlers(windowIdentifier, {
+    changeStory: openStory,
     copyFilePath: copyCurrentFilePath,
     copyRelativePath: copyCurrentRelativePath,
     copySource: copyCurrentSource,
@@ -382,6 +398,7 @@ export function DiffActionHandlersController({
     showOnlyHunks: toggleShowOnlyHunks,
     toggleSidebar,
   }), [
+    openStory,
     copyCurrentFilePath,
     copyCurrentRelativePath,
     copyCurrentSource,
@@ -532,59 +549,6 @@ export function DiffLaunchController({
     source,
     urlInputRef,
   ]);
-
-  return null;
-}
-
-export function DiffFileWatcherController({
-  loadSource,
-  suppressReloadUntilRef,
-}: {
-  loadSource: (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => Promise<void>;
-  suppressReloadUntilRef?: RefObject<number>;
-}) {
-  const {
-    setDocumentErrorValue,
-    state$,
-  } = useDiffViewerModel();
-
-  useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentVisibleSource = currentState.source;
-    const currentVisibleFolderSource = currentVisibleSource?.kind === "folder" ? currentVisibleSource : null;
-    if (!currentVisibleFolderSource) {
-      return undefined;
-    }
-
-    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = ownRegistration(watch(currentVisibleFolderSource.value, () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      if ((suppressReloadUntilRef?.current ?? 0) > Date.now()) {
-        return;
-      }
-      reloadTimeout = setTimeout(() => {
-        if ((suppressReloadUntilRef?.current ?? 0) <= Date.now()) {
-          loadSource({
-            ...(currentVisibleFolderSource.compareBase ? { compareBase: currentVisibleFolderSource.compareBase } : {}),
-            kind: "folder",
-            label: getDiffSourceLabel(currentVisibleFolderSource),
-            value: currentVisibleFolderSource.value,
-          }, { force: true, reason: "watch" }).catch((error: unknown) => {
-            setDocumentErrorValue(createRefreshError(currentVisibleFolderSource, getErrorMessage(error)));
-          });
-        }
-      }, 250);
-    }, { recursive: true }));
-
-    return () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      void subscription.remove().catch(console.error);
-    };
-  });
 
   return null;
 }

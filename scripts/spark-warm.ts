@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
-import { appIds, loadAppManifest } from "./lib/apps";
+import { appIds, loadAppManifest, rootDir } from "./lib/apps";
 import { installSparkWorkspace, parseSparkInstallArgs, SparkInstallError } from "./lib/sparkInstall";
-import { prepareSharedSparkInstall, prepareSparkReleasePackages, prepareSparkWorkspace } from "./lib/sparkWorkspaces";
+import { prepareSparkWorkspace } from "./lib/sparkWorkspaces";
 
 const options = parseSparkInstallArgs(process.argv.slice(2));
 if (options.extra.length) throw new Error("Usage: bun run spark:warm [--offline] [--reinstall]");
 try {
-  const project = await prepareSharedSparkInstall();
-  await prepareSparkReleasePackages(project, options.offline);
+  const project = rootDir;
   const result = installSparkWorkspace({ project, appId: "shared Spark", ...options });
   if (result === "installed") console.log("Shared Spark dependencies installed.");
   for (const appId of appIds) {

@@ -20,7 +20,9 @@ module.exports = {
     OS: "macos",
     select: (values) => values.macos ?? values.native ?? values.default,
   },
+  PlatformColor: (...names) => ({ semantic: names }),
   Pressable: createComponent("Pressable"),
+  ScrollView: createComponent("ScrollView"),
   StyleSheet: {
     absoluteFillObject: {},
     create: (styles) => styles,

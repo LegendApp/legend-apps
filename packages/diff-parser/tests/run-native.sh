@@ -3,22 +3,29 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BUILD_DIR="$ROOT/packages/diff-parser/tests/.build"
-PODS_PUBLIC_HEADERS="$ROOT/shell/.legend/workspaces/dev/diff/macos/Pods/Headers/Public"
-PODS_PRIVATE_HEADERS="$ROOT/shell/.legend/workspaces/dev/diff/macos/Pods/Headers/Private"
-GIT2_ROOT="$ROOT/shell/.legend/workspaces/dev/diff/macos/Pods/LegendLibGit2"
+SPARK_WORKSPACE="$(cd "$ROOT" && bun -e 'import { sharedDebugWorkspace } from "./scripts/lib/sharedDebugHost"; console.log(sharedDebugWorkspace);')"
+PODS_ROOT="$SPARK_WORKSPACE/macos/Pods"
+PODS_PUBLIC_HEADERS="$PODS_ROOT/Headers/Public"
+PODS_PRIVATE_HEADERS="$PODS_ROOT/Headers/Private"
+GIT2_ROOT="$PODS_ROOT/LegendLibGit2"
 NITRO_HEADERS="$PODS_PUBLIC_HEADERS/NitroModules"
 TEST_BINARY="$BUILD_DIR/native_unified_diff_parser_test"
 GIT_FIXTURE="$BUILD_DIR/git-fixture"
 
-if [[ ! -d "$NITRO_HEADERS" ]]; then
-  echo "Nitro headers are missing at $NITRO_HEADERS"
-  echo "Run: bun run diff verify macos"
-  exit 1
-fi
+MISSING_PATHS=()
+for required_path in \
+  "$NITRO_HEADERS/NitroDefines.hpp" \
+  "$GIT2_ROOT/build/include/git2.h" \
+  "$GIT2_ROOT/build/libgit2.a"; do
+  if [[ ! -f "$required_path" ]]; then
+    MISSING_PATHS+=("$required_path")
+  fi
+done
 
-if [[ ! -f "$GIT2_ROOT/build/libgit2.a" ]]; then
-  echo "libgit2 is missing at $GIT2_ROOT/build/libgit2.a"
-  echo "Run: bun run diff verify macos"
+if [[ ${#MISSING_PATHS[@]} -gt 0 ]]; then
+  echo "Native Diff parser dependencies are missing. Searched:" >&2
+  printf '  %s\n' "${MISSING_PATHS[@]}" >&2
+  echo "Run: bun run diff pods macos" >&2
   exit 1
 fi
 

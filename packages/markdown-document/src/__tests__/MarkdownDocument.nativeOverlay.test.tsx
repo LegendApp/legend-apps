@@ -578,7 +578,7 @@ describe("native document text selection", () => {
     await flushPromises();
     expect(source.getLength()).toBe(3);
     expect(mutations).toHaveBeenCalledWith(expect.objectContaining({ operations: expect.arrayContaining([
-      expect.objectContaining({ type: "update", layout: "invalidate" }),
+      expect.objectContaining({ type: "update", layout: "preserve" }),
     ]) }));
     unsubscribe();
     await act(async () => renderer.unmount());

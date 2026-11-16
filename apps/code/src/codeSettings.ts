@@ -18,6 +18,7 @@ import { useValue } from "@legendapp/state/react";
 export type CodeSettingsFile = {
   fontFamily?: CodeFontFamilySetting;
   fontSize?: number;
+  sidebarOpen?: boolean;
   syntaxHighlightingEnabled?: boolean;
   syntaxTheme: string;
 };
@@ -48,6 +49,10 @@ const codeSettings = createObservableSettings({
       defaultValue: defaultCodeFontSize,
       normalize: normalizeCodeFontSize,
     },
+    sidebarOpen: {
+      defaultValue: true,
+      normalize: (value) => normalizeBooleanSetting(value, true),
+    },
     syntaxHighlightingEnabled: {
       defaultValue: defaultCodeSyntaxHighlightingEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultCodeSyntaxHighlightingEnabled),
@@ -61,6 +66,7 @@ const codeSettings = createObservableSettings({
 });
 const fontFamilySetting = codeSettings.field("fontFamily");
 const fontSizeSetting = codeSettings.field("fontSize");
+const sidebarOpenSetting = codeSettings.field("sidebarOpen");
 const syntaxHighlightingEnabledSetting = codeSettings.field("syntaxHighlightingEnabled");
 const syntaxThemeSetting = codeSettings.field("syntaxTheme");
 export const codeSettings$ = codeSettings.settings$;
@@ -71,6 +77,15 @@ export function getCodeFontFamilySetting(): CodeFontFamilySetting {
 
 export function getCodeFontSizeSetting(): number {
   return fontSizeSetting.get();
+}
+
+/** Whether folder and workspace windows open with the sidebar shown. */
+export function getCodeSidebarOpenSetting(): boolean {
+  return sidebarOpenSetting.get();
+}
+
+export function setCodeSidebarOpenSetting(open: boolean) {
+  sidebarOpenSetting.set(open);
 }
 
 export function getCodeSyntaxHighlightingEnabledSetting(): boolean {

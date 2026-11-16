@@ -5,6 +5,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { matchingMetro } from "../lib/sparkDevServer";
 import { assertPreviewHashes, assertRecorderSucceeded, audienceCropTop, audienceKeyboardScripts, audienceTarget, exampleStepPresses, observeRecorder, packArchiveHash, presenterCounterScript, presenterWindowTitle, recordingDeckSource, recordingExportArgs, recordingMotionCrop, recordingMotionIntervals, recordingSchedule, sha256, snapshotEffectPacks, type RecordingWindow } from "./recording";
 
 const usage = `Usage: bun run effects:record <slug> [options]
@@ -110,7 +111,7 @@ function listWindows(): RecordingWindow[] {
   return message.windows ?? [];
 }
 
-const buildRecord = path.join(repo, `shell/.legend/spark/slides${release ? "-release" : ""}/.spark/${release ? "release" : "dev"}-build.json`);
+const buildRecord = path.join(repo, `shell/.legend/spark/slides${release ? "-release" : "-shared-debug"}/.spark/${release ? "release-build" : "shared-debug"}.json`);
 const appPath = fs.existsSync(buildRecord) ? JSON.parse(fs.readFileSync(buildRecord, "utf8")).app as string : undefined;
 
 // Preflight: everything that can fail before touching the app.
@@ -129,7 +130,7 @@ if (flag("--apply")) {
   assertPreviewHashes(hashes, { exampleSha256: effect.example.sha256, packSha256: pack.versions[pack.latest].sha256 });
 }
 if (flag("--preflight")) { console.log(JSON.stringify({ ok: true, recorder, app: appPath, example, previews, steps, seconds })); process.exit(0); }
-if (run("pgrep", ["-f", "LegendSlides.app/Contents/MacOS/"], { allowFail: true }).stdout.trim()) throw new Error("Legend Slides is already running. Save and quit it first; this script only quits the instance it launches.");
+if (run("pgrep", ["-f", "/(Legend Slides|LegendSlides)[.]app/Contents/MacOS/"], { allowFail: true }).stdout.trim()) throw new Error("Legend Slides is already running. Save and quit it first; this script only quits the instance it launches.");
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), `slides-effect-${slug}-`));
 const deck = path.join(work, `${slug}.mdx`);
@@ -152,6 +153,9 @@ try {
   if (!release) {
     const { resolveDevServerPort } = await import(path.join(repo, "scripts/lib/apps.ts"));
     const port = resolveDevServerPort("slides", args);
+    if (!await matchingMetro(path.join(repo, "shell/.legend/spark/slides-shared-debug"), port, false)) {
+      throw new Error(`Start Metro first: bun run slides start macos --port ${port}`);
+    }
     env.push(`SPARK_BUNDLE_URL=http://127.0.0.1:${port}/index.bundle?platform=macos&dev=true&minify=false`);
     devArgs.push("-RCT_jsLocation", `127.0.0.1:${port}`);
   }

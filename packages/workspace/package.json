@@ -1,0 +1,15 @@
+{
+  "name": "@legend-apps/workspace",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "dependencies": {
+    "@legendapp/list": "catalog:",
+    "@legendapp/spark": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-native": "catalog:"
+  }
+}

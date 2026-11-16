@@ -55,6 +55,7 @@ type MarkdownSettingsFile = {
   layoutTheme: MarkdownLayoutThemeSetting;
   lineHeight: MarkdownLineHeightSetting;
   selectionToolbarLayout: MarkdownToolbarLayout;
+  sidebarOpen: boolean;
   startupBehavior: MarkdownStartupBehaviorSetting;
   theme?: MarkdownDisplayThemeSetting;
   topToolbarLayout: MarkdownToolbarLayout;
@@ -73,6 +74,7 @@ const initialMarkdownSettings: MarkdownSettingsFile = {
   layoutTheme: "default",
   lineHeight: "normal",
   selectionToolbarLayout: getDefaultMarkdownToolbarLayout("selection"),
+  sidebarOpen: true,
   startupBehavior: "newDocument",
   topToolbarLayout: getDefaultMarkdownToolbarLayout("top"),
 };
@@ -140,6 +142,15 @@ export function getMarkdownLayoutThemeSetting(): MarkdownLayoutThemeSetting {
 export function getMarkdownStartupBehaviorSetting(): MarkdownStartupBehaviorSetting {
   const startupBehavior = markdownSettings$.startupBehavior.get();
   return isMarkdownStartupBehaviorSetting(startupBehavior) ? startupBehavior : initialMarkdownSettings.startupBehavior;
+}
+
+/** Whether folder and workspace windows open with the sidebar shown. */
+export function getMarkdownSidebarOpenSetting(): boolean {
+  return markdownSettings$.sidebarOpen.get() !== false;
+}
+
+export function setMarkdownSidebarOpenSetting(open: boolean) {
+  markdownSettings$.sidebarOpen.set(open);
 }
 
 export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {

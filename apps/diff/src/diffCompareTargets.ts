@@ -1,6 +1,7 @@
-import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { runCommand } from "@legendapp/spark/processes";
-import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
+import { getGitService, GitServiceError, gitRefFormat, parseDiffCompareRepoRefs, uniqueValues } from "@legend-apps/git-core";
+import { getFilename, isDiffGitSource, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
+
+export { parseDiffCompareRepoRefs } from "@legend-apps/git-core";
 
 export const diffCompareToolbarTargetHead = "head";
 export const diffCompareToolbarTargetChooseRef = "choose-ref";
@@ -37,19 +38,6 @@ export type DiffCompareToolbarModel = {
   tooltip: string;
 };
 
-function uniqueValues(values: readonly string[]) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value.trim();
-    if (trimmed && !seen.has(trimmed)) {
-      seen.add(trimmed);
-      result.push(trimmed);
-    }
-  }
-  return result;
-}
-
 function stripRemoteHead(value: string) {
   return value.endsWith("/HEAD") ? null : value;
 }
@@ -66,7 +54,7 @@ function getLocalRepoPath(source: DiffOpenSource | null | undefined) {
   if (source?.kind === "folder") {
     return source.value;
   }
-  if (source?.kind === "git") {
+  if (source && isDiffGitSource(source)) {
     return source.cwd;
   }
   return null;
@@ -80,6 +68,7 @@ export function getDiffFolderCompareBaseLabel(compareBase: DiffFolderCompareBase
 }
 
 function getActiveSelection(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return refSelection(source.range);
   if (source?.kind === "folder") {
     return source.compareBase?.kind === "ref"
       ? refSelection(source.compareBase.ref)
@@ -92,6 +81,7 @@ function getActiveSelection(source: DiffOpenSource | null | undefined) {
 }
 
 function getActiveLabel(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return source.range;
   if (source?.kind === "folder") {
     return getDiffFolderCompareBaseLabel(source.compareBase);
   }
@@ -240,54 +230,16 @@ export function getDiffCompareToolbarModel(
   };
 }
 
-const gitRefFormat = "%(refname)%09%(HEAD)%09%(upstream:short)%09%(symref:short)";
-const localRefPrefix = "refs/heads/";
-const remoteRefPrefix = "refs/remotes/";
-
-export function parseDiffCompareRepoRefs(value: string | null) {
-  let currentBranch: string | null = null;
-  let defaultBranch: string | null = null;
-  let upstreamBranch: string | null = null;
-  const localBranches: string[] = [];
-  const remoteBranches: string[] = [];
-
-  for (const line of value?.split("\n") ?? []) {
-    const [refName = "", head = "", upstream = "", symref = ""] = line.split("\t");
-    if (refName.startsWith(localRefPrefix)) {
-      const branch = refName.slice(localRefPrefix.length);
-      localBranches.push(branch);
-      if (head === "*") {
-        currentBranch = branch;
-        upstreamBranch = upstream || null;
-      }
-    } else if (refName.startsWith(remoteRefPrefix)) {
-      const branch = refName.slice(remoteRefPrefix.length);
-      remoteBranches.push(branch);
-      if (refName === "refs/remotes/origin/HEAD") {
-        defaultBranch = symref || null;
-      }
-    }
-  }
-
-  return {
-    currentBranch,
-    defaultBranch,
-    localBranches: uniqueValues(localBranches),
-    remoteBranches: uniqueValues(remoteBranches),
-    upstreamBranch,
-  };
-}
-
 export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
-  const commands = [
-    { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
-    { args: ["remote"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
-  ];
-  const [refsResult, remotesResult] = await Promise.all(commands.map(command => runCommand({ ...command, target: { type: "command", name: "git" } })));
-  const refsValue = (refsResult.exit.type === "exited" ? refsResult.exit.code : -1) === 0 ? decodeProcessText(refsResult.stdout).trim() || null : null;
-  const remoteNames = (remotesResult.exit.type === "exited" ? remotesResult.exit.code : -1) === 0
-    ? decodeProcessText(remotesResult.stdout).split("\n").map((line) => line.trim()).filter(Boolean)
-    : [];
+  const git = getGitService(repoPath);
+  const [refsValue, remotesValue] = await Promise.all([
+    git.refs(gitRefFormat),
+    git.remotes(),
+  ].map((read) => read.catch((error: unknown) => {
+    if (error instanceof GitServiceError && (error.code === "command-failed" || error.code === "timed-out")) return "";
+    throw error;
+  })));
+  const remoteNames = remotesValue.split("\n").map((line) => line.trim()).filter(Boolean);
   const refs = parseDiffCompareRepoRefs(refsValue);
 
   return {

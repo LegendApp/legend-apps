@@ -12,7 +12,7 @@ uses_diff_parser = app_config
     .fetch("activeNativePackages", [])
     .any? { |native_package| native_package["name"] == "@legend-apps/diff-parser" }
 uses_expo_modules = ENV['LEGEND_USE_EXPO_MODULES'] != '0'
-rn_macos_absolute_path = shell_dir.join("node_modules", "react-native-macos")
+rn_macos_absolute_path = repo_root.join("node_modules", "react-native-macos")
 rn_macos_path = rn_macos_absolute_path.relative_path_from(Pathname.new(__dir__)).to_s
 require "#{rn_macos_absolute_path}/scripts/react_native_pods.rb"
 

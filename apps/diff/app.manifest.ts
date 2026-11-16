@@ -36,6 +36,7 @@ const manifest = {
       "@legendapp/spark/processes",
       "@legendapp/spark/context-menu",
       "@legend-apps/diff-parser",
+      "@legend-apps/file-system-watcher",
       "@legendapp/spark/drag-drop",
       "@legendapp/spark/dialogs",
       "@legendapp/spark/files",

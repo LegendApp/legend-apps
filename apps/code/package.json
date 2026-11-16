@@ -11,6 +11,7 @@
     "@legend-apps/syntax-settings": "workspace:*",
     "@legend-apps/theme": "workspace:*",
     "@legend-apps/virtualized-document": "workspace:*",
+    "@legend-apps/workspace": "workspace:*",
     "@legendapp/list": "catalog:",
     "@legendapp/state": "catalog:",
     "@legendapp/spark": "catalog:",

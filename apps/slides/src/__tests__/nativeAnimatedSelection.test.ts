@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { transformSync } from "@babel/core";
 
 const require = createRequire(import.meta.url);
-const filename = new URL("../../../../shell/node_modules/react-native-macos/Libraries/Animated/shouldUseTurboAnimatedModule.js", import.meta.url).pathname;
+const filename = new URL("../../../../node_modules/react-native-macos/Libraries/Animated/shouldUseTurboAnimatedModule.js", import.meta.url).pathname;
 const { code } = transformSync(readFileSync(filename, "utf8"), {
   filename, babelrc: false, configFile: false,
   presets: [require.resolve("@react-native/babel-preset")],
