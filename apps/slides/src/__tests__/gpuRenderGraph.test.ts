@@ -12,7 +12,7 @@ function gpu() {
   const textures = [], views = [], pipelines = [], groups = [], commands = [], writes = [];
   const device = {
     queue: { writeBuffer: (...args) => writes.push(args) },
-    createBuffer: descriptor => ({ descriptor }), createSampler: () => ({}),
+    createBuffer: descriptor => ({ descriptor, destroyed: false, destroy() { this.destroyed = true; } }), createSampler: () => ({}),
     createShaderModule: descriptor => ({ descriptor, getCompilationInfo: async () => ({ messages: [] }) }),
     createBindGroupLayout: descriptor => descriptor, createPipelineLayout: descriptor => descriptor,
     createComputePipelineAsync: async descriptor => { pipelines.push(descriptor); return descriptor; },
@@ -274,6 +274,33 @@ test("native callback copies retain one mutable graph across draws and resizing"
   expect(resources.graph.value.scale).toBe(.75);
   expect(g.textures.slice(3, 6).every(texture => texture.destroyed)).toBe(true);
   stop();
+  // Retiring a surface frees its own targets and buffers; the shared device stays alive.
+  expect(g.textures.every(texture => texture.destroyed)).toBe(true);
+  expect(Object.values(resources.graph.value ?? {})).toEqual([]);
+  expect([resources.clock, resources.frameData].every(buffer => buffer.destroyed)).toBe(true);
+});
+
+test("a shared cache reuses modules and pipelines across graph setups but not across formats or failures", async () => {
+  const g = gpu(), cache = { modules: new Map(), pipelines: new Map() }, module = g.device.createShaderModule;
+  let modules = 0;
+  g.device.createShaderModule = descriptor => { modules++; return module(descriptor); };
+  const first = await prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {}, cache);
+  const second = await prepareRenderGraph(g.device, definition, "bgra8unorm", {}, {}, cache);
+  expect(g.pipelines).toHaveLength(4);
+  expect(second.passes.map(pass => pass.pipeline)).toEqual(first.passes.map(pass => pass.pipeline));
+  expect(second.passes.map(pass => pass.layout)).toEqual(first.passes.map(pass => pass.layout));
+  // Per-surface buffers are never shared.
+  expect(second.buffers.instances).not.toBe(first.buffers.instances);
+  await prepareRenderGraph(g.device, definition, "rgba8unorm", {}, {}, cache);
+  expect(g.pipelines).toHaveLength(5);
+  // Every pass has empty source; fullscreen passes append the shared vertex stage.
+  expect(modules).toBe(2);
+  const failing = { ...definition, passes: [{ ...definition.passes[0], entry: "broken" }] };
+  let attempts = 0;
+  g.device.createComputePipelineAsync = async () => { attempts++; throw Error("compile failed"); };
+  await expect(prepareRenderGraph(g.device, failing, "bgra8unorm", {}, {}, cache)).rejects.toThrow("compile failed");
+  await expect(prepareRenderGraph(g.device, failing, "bgra8unorm", {}, {}, cache)).rejects.toThrow("compile failed");
+  expect(attempts).toBe(2);
 });
 
 test("UI graph descriptors retain draw data without copying compile-only shader source", async () => {

@@ -33,7 +33,7 @@ function frames({ compiled = false, scaling = true, suspended = false, preview =
       beginComputePass: () => { events.push(["begin", "compute"]); return pass("compute"); },
       beginRenderPass: ({ colorAttachments }) => { events.push(["begin", "render", colorAttachments[0].loadOp]); return pass("render"); }, finish() {},
     }),
-    destroy: () => calls.push(["destroy"]),
+    destroy: () => calls.push(["destroy-device"]),
   };
   let rendering = false, inUI = false;
   const onUI = fn => { const previous = inUI; inUI = true; try { return fn(); } finally { inUI = previous; } };
@@ -66,7 +66,7 @@ function frames({ compiled = false, scaling = true, suspended = false, preview =
     name => mocks[name] ?? require(name), {}, encode,
   );
   rendering = true;
-  UIFrames({ resources: { alive: { value: true, get() { return this.value; }, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
+  UIFrames({ resources: { owned: [{ destroy: () => calls.push(["destroy"]) }], alive: { value: true, get() { return this.value; }, set(value) { this.value = value; } }, disposed: { value: false }, configured: { value: false }, format: "bgra8unorm", device, context: { canvas: { width: 16, height: 9 }, configure() {}, getCurrentTexture: () => ({ createView() {} }), present: () => events.push(["present"]) },
     clock: {}, graph: graph ? { value: {} } : undefined, states: [], groups: simulation ? ["A", "B"] : ["A"], compute: simulation ? {} : undefined, render: {}, particles: {}, frameData: data ? { size: 16 } : undefined,
     composite: composite ? { pipeline: {}, group: "lens", texture: { createView() {} } } : undefined },
     suspended, suspendedOnUI, still, effectActive, maxTime, frameTimeIndex, clockMode, renderScale, frameData: data ? frameData : undefined, aspect: 2.61, brightness: 1, particleCount, particleVertexCount, previewTime: 7, onError: error => errors.push(error), onReady: () => ready++ });
@@ -131,6 +131,8 @@ test("active GPU frames alternate storage buffers and dispatch the configured pa
   f.tick();
   expect(f.calls.length).toBe(count);
   expect(f.calls.filter(call => call[0] === "destroy")).toHaveLength(1);
+  // The device is shared across surfaces; retiring one never destroys it.
+  expect(f.calls.filter(call => call[0] === "destroy-device")).toHaveLength(0);
 });
 
 test("particle-free frames skip empty particle work but still clear, draw fullscreen passes and present", () => {
@@ -358,7 +360,7 @@ test("missing WebGPU and renderer errors surface instead of switching renderers"
   const renderer=new Function("require","exports",code+"\nreturn TypeGPUShader;")(
     name=>name.startsWith("@babel/") ? require(name) : name==="react" ? {
       useContext:()=>1,useRef:value=>({current:value}),useEffect(){},useLayoutEffect(){},
-      useState:()=>[state++%3===2 ? error : undefined,()=>{}],
+      useState:()=>[state++%4===2 ? error : undefined,()=>{}],
     } : name==="react-native" ? {Platform:{OS:"web"}} : name==="@legend-apps/presentation" ? {
       useSurfaceSuspension:()=>null,useBackgroundSize:()=>({width:1920,height:1080}),useBackgroundIntensity:()=>1,
       usePresentationValue:()=>0,usePreparationTask(){},

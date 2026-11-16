@@ -10,6 +10,15 @@ struct GraphVertex { @builtin(position) position: vec4f, @location(0) uv: vec2f 
 type CullRanges = { cull: { offset: number; stride: number; threshold: number }; ranges: Uint32Array; length: number; frame: number };
 type RuntimePass<P = GPUPass> = P extends GPUPass ? Omit<P, "code"> : never;
 type PassResources = { pass: RuntimePass; pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout; group?: GPUBindGroup; resolves: boolean[]; cull?: number; descriptor?: GPURenderPassDescriptor };
+/** Shader modules and pipelines for one device, keyed by everything their descriptors depend on. */
+export type RenderGraphCache = { modules: Map<string, Promise<GPUShaderModule>>; pipelines: Map<string, Promise<{ pipeline: GPUComputePipeline | GPURenderPipeline; layout: GPUBindGroupLayout }>> };
+// Failures are not cached, so a later setup reports them again.
+function remember<T>(map: Map<string, Promise<T>>, key: string, value: Promise<T>) {
+  map.set(key, value);
+  value.catch(() => { if (map.get(key) === value) map.delete(key); });
+  return value;
+}
+
 export type RenderGraphResources = {
   targets: GPUTarget[]; views: Record<string, GPUTextureView>; textures: Record<string, GPUTexture>; buffers: Record<string, GPUBuffer>;
   passes: PassResources[]; clock: GPUBuffer; uniforms: GPUBuffer; sampler: GPUSampler;
@@ -54,7 +63,7 @@ function dimensions(r: RenderGraphResources, value: string, width: number, heigh
 
 /** Setup is shared by native/web hosts and standalone browser measurements. */
 export async function prepareRenderGraph(device: GPUDevice, definition: GPURenderGraphDefinition, format: GPUTextureFormat,
-  clock: GPUBuffer, uniforms: GPUBuffer): Promise<RenderGraphResources> {
+  clock: GPUBuffer, uniforms: GPUBuffer, cache?: RenderGraphCache): Promise<RenderGraphResources> {
   const { targets, buffers = [], passes } = definition;
   const ids = new Set<string>();
   for (const resource of [...targets, ...buffers]) {
@@ -103,36 +112,44 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     }
     // Fulfilled diagnostics can otherwise parse the entire graph in one JS turn.
     // Yield after small parsing batches while independent pipelines keep compiling.
-    const moduleReady = modules.then(async () => {
-      if (parsingMs >= 4) { await new Promise<void>(resolve => setTimeout(resolve, 0)); parsingMs = 0; }
-      const start = performance.now();
-      const module = device.createShaderModule({ code: code + (pass.kind === "fullscreen" ? graphVertex : "") });
-      const compilation = module.getCompilationInfo();
-      parsingMs += performance.now() - start;
-      const diagnostics = await compilation;
-      const errors = diagnostics.messages.filter(message => message.type === "error");
-      if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));
-      return module;
-    });
-    modules = moduleReady.then(() => undefined, () => undefined);
-    const module = await moduleReady;
-    const layout = device.createBindGroupLayout({ entries });
-    const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
-    let pipeline: GPUComputePipeline | GPURenderPipeline;
-    if (pass.kind === "compute") {
-      pipeline = await device.createComputePipelineAsync({ layout: pipelineLayout, compute: { module, entryPoint: pass.entry } });
-    } else {
-      const colors = pass.kind === "render" ? pass.color : [output(pass)];
-      const blend = pass.kind === "render" ? pass.blend : "none";
-      pipeline = await device.createRenderPipelineAsync({ layout: pipelineLayout,
-        vertex: { module, entryPoint: pass.kind === "render" ? pass.vertex : "graphVertex" },
-        fragment: { module, entryPoint: pass.fragment, targets: colors.map(color => ({ format: color === "screen" ? format : targetFor(targets, color).format,
-          ...(blend && blend !== "none" ? { blend: { color: { srcFactor: "one" as const, dstFactor: blend === "over" ? "one-minus-src-alpha" as const : "one" as const, operation: "add" as const },
-            alpha: { srcFactor: "one" as const, dstFactor: "one-minus-src-alpha" as const, operation: "add" as const } } } : {}) })) },
-        ...(pass.kind === "render" && pass.depth ? { depthStencil: { format: targetFor(targets, pass.depth).format, depthWriteEnabled: true, depthCompare: pass.depthCompare ?? "less" } } : {}),
-        ...(pass.kind === "render" ? { multisample: { count: targetFor(targets, pass.color[0] ?? pass.depth!).samples ?? 1 } } : {}),
+    const moduleCode = code + (pass.kind === "fullscreen" ? graphVertex : "");
+    const compile = () => {
+      const moduleReady = modules.then(async () => {
+        if (parsingMs >= 4) { await new Promise<void>(resolve => setTimeout(resolve, 0)); parsingMs = 0; }
+        const start = performance.now();
+        const module = device.createShaderModule({ code: moduleCode });
+        const compilation = module.getCompilationInfo();
+        parsingMs += performance.now() - start;
+        const diagnostics = await compilation;
+        const errors = diagnostics.messages.filter(message => message.type === "error");
+        if (errors.length) throw new Error(pass.id + ": " + errors.map(message => message.message).join("\n"));
+        return module;
       });
-    }
+      modules = moduleReady.then(() => undefined, () => undefined);
+      return moduleReady;
+    };
+    const stages = pass.kind === "compute" ? { compute: { entryPoint: pass.entry } } : {
+      vertex: { entryPoint: pass.kind === "render" ? pass.vertex : "graphVertex" },
+      fragment: { entryPoint: pass.fragment, targets: (pass.kind === "render" ? pass.color : [output(pass)]).map(color => {
+        const blend = pass.kind === "render" ? pass.blend : "none";
+        return { format: color === "screen" ? format : targetFor(targets, color).format,
+          ...(blend && blend !== "none" ? { blend: { color: { srcFactor: "one" as const, dstFactor: blend === "over" ? "one-minus-src-alpha" as const : "one" as const, operation: "add" as const },
+            alpha: { srcFactor: "one" as const, dstFactor: "one-minus-src-alpha" as const, operation: "add" as const } } } : {}) };
+      }) },
+      ...(pass.kind === "render" && pass.depth ? { depthStencil: { format: targetFor(targets, pass.depth).format, depthWriteEnabled: true, depthCompare: pass.depthCompare ?? "less" as const } } : {}),
+      ...(pass.kind === "render" ? { multisample: { count: targetFor(targets, pass.color[0] ?? pass.depth!).samples ?? 1 } } : {}),
+    };
+    const createPipeline = async () => {
+      const module = await (cache ? cache.modules.get(moduleCode) ?? remember(cache.modules, moduleCode, compile()) : compile());
+      const layout = device.createBindGroupLayout({ entries });
+      const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
+      const pipeline = "compute" in stages
+        ? await device.createComputePipelineAsync({ layout: pipelineLayout, compute: { ...stages.compute, module } })
+        : await device.createRenderPipelineAsync({ ...stages, layout: pipelineLayout, vertex: { ...stages.vertex, module }, fragment: { ...stages.fragment, module } });
+      return { pipeline, layout };
+    };
+    const key = JSON.stringify([moduleCode, entries, stages]);
+    const { pipeline, layout } = await (cache ? cache.pipelines.get(key) ?? remember(cache.pipelines, key, createPipeline()) : createPipeline());
     let cullIndex: number | undefined;
     if (pass.kind === "render" && pass.instanceCull) {
       const cull = pass.instanceCull, instances = pass.instanceCount ?? 1;
@@ -148,10 +165,12 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
   });
   // Finish every device operation before the caller may tear down a failed setup.
   const prepared = await Promise.allSettled(preparing);
-  for (const result of prepared) {
-    if (result.status === "rejected") throw result.reason;
-    r.passes.push(result.value);
+  const failed = prepared.find(result => result.status === "rejected");
+  if (failed) {
+    for (const id in r.buffers) r.buffers[id].destroy();
+    throw failed.reason;
   }
+  for (const result of prepared) if (result.status === "fulfilled") r.passes.push(result.value);
   // A multisampled colour target resolves once, in the last render pass that writes it.
   const resolved = new Set<string>();
   for (let i = r.passes.length - 1; i >= 0; i--) {
