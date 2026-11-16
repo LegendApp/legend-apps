@@ -175,6 +175,10 @@ export class GitService {
     return this.enqueue(options, (gitDir) => this.inspect(gitDir, options));
   }
 
+  resolveRoot(options: GitReadOptions = {}) {
+    return this.read(["rev-parse", "--show-toplevel"], options).then(value => value.replace(/\n$/, ""));
+  }
+
   watchLocations(options: GitReadOptions = {}) {
     return this.enqueue(options, async (gitDir) => {
       const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");

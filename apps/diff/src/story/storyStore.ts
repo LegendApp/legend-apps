@@ -3,7 +3,8 @@ import type { DiffOpenSource } from "../diffFiles";
 import { createStoryCache, storyCacheIdentity } from "./storyCache";
 import type { StoryInput } from "./storyHunks";
 import { getStoryCwd, getStoryScope } from "./storySource";
-import { StoryOutputError, StoryRunError, storyRunner, type StoryProgress, type StoryRunResult, type StoryTool } from "./storyRunner";
+import { selectStoryTool, StoryOutputError, StoryRunError, storyRunner, type StoryProgress, type StoryRunResult, type StoryTool } from "./storyRunner";
+import { skillTrust, repoSkillNotice } from "./skillTrust";
 import { changeStorySkill, type StorySkill } from "./storySkill";
 
 export type StoryRunState = {
@@ -47,6 +48,7 @@ export function createStoryStore(dependencies: { runner: typeof storyRunner; cac
   function load(windowId: string, request: StoryRequest) {
     setDiff(windowId, request.input, request.source, request.repoRoot);
     const skill = request.skill ?? changeStorySkill;
+    request = { ...request, tool: selectStoryTool(skill, request.tool)! };
     const node = state(windowId, skill.name);
     if (operations.get(windowId)?.has(skill.name)) return;
     const cached = dependencies.cache().load(storyCacheIdentity(getStoryScope(request.source, request.repoRoot), request.input, skill, request.tool, request.model));
@@ -54,10 +56,14 @@ export function createStoryStore(dependencies: { runner: typeof storyRunner; cac
     else node.set({ status: "idle", progress: null, error: null, result: null, input: null });
   }
 
-  async function run(windowId: string, request: StoryRequest, options: { signal?: AbortSignal; timeoutMs?: number } = {}) {
+  async function run(windowId: string, request: StoryRequest, options: { signal?: AbortSignal; timeoutMs?: number; preview?: boolean } = {}) {
     const skill = request.skill ?? changeStorySkill;
+    request = { ...request, tool: selectStoryTool(skill, request.tool)! };
+    const runnerWindowId = windowId;
+    if (options.preview) windowId = `${windowId}:preview`;
     if (operations.get(windowId)?.has(skill.name)) throw new StoryRunError("busy", "This skill is already running in this window.");
     if (!dependencies.cache().isEnabled(getStoryScope(request.source, request.repoRoot), request.tool)) throw new StoryRunError("consent", storyPrivacyNotice(request.tool));
+    if (!skillTrust.isTrusted(skill, request.repoRoot)) throw new StoryRunError("trust", repoSkillNotice(skill));
     setDiff(windowId, request.input, request.source, request.repoRoot);
     const scope = getStoryScope(request.source, request.repoRoot);
     const operation = {};
@@ -67,13 +73,13 @@ export function createStoryStore(dependencies: { runner: typeof storyRunner; cac
     node.assign({ status: "running", progress: null, error: null });
     const isCurrent = () => operations.get(windowId)?.get(skill.name) === operation;
     try {
-      const result = await dependencies.runner.run(request.input, { ...options, windowId, skill, tool: request.tool, model: request.model,
+      const result = await dependencies.runner.run(request.input, { signal: options.signal, timeoutMs: options.timeoutMs, windowId: runnerWindowId, skill, tool: request.tool, model: request.model,
         cwd: getStoryCwd(request.source, request.repoRoot), onProgress: progress => {
           if (isCurrent()) node.assign({ status: "progress", progress });
         } });
       if (!isCurrent()) return;
-      node.assign({ status: current.get(windowId)?.hash === result.diffHash ? "done" : "stale", result, input: request.input, progress: null });
-      dependencies.cache().save(storyCacheIdentity(scope, request.input, skill, result.tool, result.model), result, request.input);
+      node.assign({ status: (current.get(runnerWindowId) ?? current.get(windowId))?.hash === result.diffHash ? "done" : "stale", result, input: request.input, progress: null });
+      if (!options.preview) dependencies.cache().save(storyCacheIdentity(scope, request.input, skill, result.tool, result.model), result, request.input);
       return result;
     } catch (error) {
       if (!isCurrent()) return;
@@ -87,13 +93,24 @@ export function createStoryStore(dependencies: { runner: typeof storyRunner; cac
     }
   }
 
+  function closeWindow(windowId: string) {
+    dependencies.runner.cancel(windowId); operations.delete(windowId); current.delete(windowId); state$[windowId].delete();
+    const previewId = `${windowId}:preview`;
+    operations.delete(previewId); current.delete(previewId); state$[previewId].delete();
+  }
+
   return { state$, state, setDiff, load, run,
+    previewState: (windowId: string, skillName = changeStorySkill.name) => state(`${windowId}:preview`, skillName),
+    preview: (windowId: string, request: StoryRequest, options: { signal?: AbortSignal } = {}) => run(windowId, request, { ...options, preview: true }),
+    clearPreview(windowId: string) {
+      const id = `${windowId}:preview`;
+      operations.get(id)?.forEach((_operation, skillName) => dependencies.runner.cancel(windowId, skillName));
+      operations.delete(id); current.delete(id); state$[id].delete();
+    },
     isEnabled: (scope: string, tool: StoryTool) => dependencies.cache().isEnabled(scope, tool),
     setEnabled: (scope: string, tool: StoryTool, enabled: boolean) => dependencies.cache().setEnabled(scope, tool, enabled),
     cancel: (windowId: string, skillName?: string) => dependencies.runner.cancel(windowId, skillName),
-    closeWindow(windowId: string) {
-      dependencies.runner.cancel(windowId); operations.delete(windowId); current.delete(windowId); state$[windowId].delete();
-    },
+    closeWindow,
   };
 }
 

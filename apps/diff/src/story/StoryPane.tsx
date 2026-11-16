@@ -3,7 +3,7 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useObservable, useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { SegmentedControl } from "@legendapp/spark/ui";
+import { SegmentedControl, Select } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { runCommand } from "@legendapp/spark/processes";
@@ -21,6 +21,7 @@ import { buildStoryRows, nextStorySection, type StoryRow } from "./storyRows";
 import { getStoryReviewStore } from "./storyReview";
 import { StoryDescription } from "./StoryDescription";
 import { useStoryAppearance } from "./storyAppearance";
+import { repoSkillNotice } from "./skillTrust";
 import { storyPrivacyNotice } from "./storyStore";
 import type { useDiffStory } from "./useDiffStory";
 
@@ -124,7 +125,12 @@ export const StoryPane = forwardRef<StoryPaneRef, {
     if (item.type === "header") content = <>
       <Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: appearance.titleSize ?? 24, fontWeight: "600" }}>{result?.story.title ?? "Change Story"}</Text>
       <View className="flex-row flex-wrap gap-2">
-        <DiffButton title={result ? "Regenerate" : "Generate story"} disabled={running || preparing || !controller.request} onPress={() => controller.generate(true)} />
+        {controller.skill && controller.skills.some(skill => skill.name === controller.skill?.name) ? <Select accessibilityLabel="Story skill" options={controller.skills.map(skill => ({ label: `${skill.name} · ${skill.layer}`, value: skill.name }))} value={controller.skill.name} disabled={running} onValueChange={controller.selectSkill} style={{ width: Math.max(...controller.skills.map(skill => `${skill.name} · ${skill.layer}`.length)) * 7 + 48, height: 24 }} /> : null}
+        <DiffButton title="Edit skill…" onPress={controller.editSkill} />
+      </View>
+      {controller.preview ? <View className="flex-row items-center gap-2"><Text style={{ color: accent }}>Preview — saved story unchanged</Text><DiffButton title="Close preview" onPress={controller.dismissPreview} /></View> : null}
+      <View className="flex-row flex-wrap gap-2">
+        <DiffButton title={controller.preview ? "Generate saved story" : result ? "Regenerate" : "Generate story"} disabled={running || preparing || !controller.request} onPress={() => controller.generate(true)} />
         {result ? <DiffButton title="Copy as Markdown" onPress={copy} /> : null}
         {running ? <DiffButton title="Cancel" onPress={controller.cancel} /> : null}
       </View>
@@ -140,7 +146,9 @@ export const StoryPane = forwardRef<StoryPaneRef, {
       {story.error?.rawOutput !== undefined ? <><DiffButton title={showRaw ? "Hide raw output" : "Show raw output"} onPress={() => setShowRaw(value => !value)} />{showRaw ? <Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{story.error.rawOutput}</Text> : null}</> : null}
       {result?.issues.map((issue, index) => <Text key={index} style={{ color: mutedColor }}>Reference dropped: {issue.path}: {issue.message}</Text>)}
       <Text style={{ color: mutedColor }}>Generation settings for this {controller.request?.repoRoot ? "repository" : "source"}</Text>
-      <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: segmentedControlWidth(toolOptions.map(option => option.label)), height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
+      <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running || (controller.skill?.tool ?? "auto") !== "auto"} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: segmentedControlWidth(toolOptions.map(option => option.label)), height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
+      {controller.skillErrors.map((message, index) => <Text key={index} selectable style={{ color: foregroundColor }}>{message}</Text>)}
+      {controller.trustNotice?.skill ? <DiffNotice symbol="exclamationmark.triangle.fill" symbolColor={diffSymbolColors.orange}><Text style={{ color: foregroundColor }}>{repoSkillNotice(controller.trustNotice.skill)}</Text><Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{controller.trustNotice.skill.markdown}</Text><View className="flex-row gap-2"><DiffButton title="Approve this skill" onPress={() => controller.approve(true)} /><DiffButton title="Don't run" onPress={() => controller.approve(false)} /></View></DiffNotice> : null}
       {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSymbolColors.blue}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => { controller.consent(false); setPrivacyStatus("Generation remains disabled."); }} /></View></DiffNotice> : null}
       {privacyStatus ? <Text style={{ color: mutedColor }}>{privacyStatus}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
     </>;

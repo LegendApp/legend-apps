@@ -190,6 +190,7 @@ it("reloads a changed fixture once through filesystem events and Git reads", asy
   const git = service(repos.changes);
   const locations = await git.watchLocations();
   expect(locations.root).toBe(realpathSync(repos.changes));
+  expect(await service(repos.changes).resolveRoot()).toBe(locations.root);
   expect(locations.ignoredPaths).toContain("ignored.txt");
   const reload = jest.fn(async () => {
     await git.repoState();
@@ -224,6 +225,7 @@ it("discovers worktree/common watch roots from a subdirectory and renders real d
   writeFileSync(join(repos.worktree, "ignored.txt"), "ignored fixture\n");
   const locations = await service(nested).watchLocations();
   expect(locations.root).toBe(realpathSync(repos.worktree));
+  expect(await service(nested).resolveRoot()).toBe(locations.root);
   expect(locations.ignoredPaths).toContain("ignored.txt");
   expect(locations.gitDir).toContain("/.git/worktrees/linked");
   expect(locations.commonDir).not.toBe(locations.gitDir);

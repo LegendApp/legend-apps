@@ -9,7 +9,7 @@ export type StoryTool = "codex" | "claude";
 export type StoryProgress = { phase: "starting" | "output" | "repairing" | "complete"; receivedBytes: number; stream?: "stdout" | "stderr" };
 export type StoryRunResult = ValidatedStory & { diffHash: string; skillName: string; skillHash: string; tool: StoryTool; model: string; createdAt: number };
 export class StoryRunError extends Error {
-  constructor(public readonly code: "busy" | "cancelled" | "timeout" | "process" | "unavailable" | "consent", message: string) { super(message); this.name = "StoryRunError"; }
+  constructor(public readonly code: "busy" | "cancelled" | "timeout" | "process" | "unavailable" | "consent" | "trust", message: string) { super(message); this.name = "StoryRunError"; }
 }
 export class StoryOutputError extends Error {
   constructor(public readonly rawOutput: string, public readonly validationError: string, public readonly firstOutput: string) {
@@ -27,17 +27,22 @@ export type StoryRunOptions = {
   signal?: AbortSignal; timeoutMs?: number; onProgress?: (progress: StoryProgress) => void;
 };
 
+export function selectStoryTool(skill: StorySkill, fallback?: StoryTool) {
+  return skill.tool === "auto" ? fallback : skill.tool;
+}
+
 export function createStoryRunner(dependencies: StoryProcessDependencies = { spawn, runCommand, availability: getAICommandAvailability }) {
   const active = new Map<string, Map<string, AbortController>>();
 
   async function run(input: StoryInput, options: StoryRunOptions): Promise<StoryRunResult> {
     const skill = options.skill ?? changeStorySkill;
+    if (skill.kind !== "story" || skill.output !== "story") throw new StoryRunError("process", "Select a story skill to generate a change story.");
     const window = active.get(options.windowId) ?? new Map<string, AbortController>();
     if (window.has(skill.name)) throw new StoryRunError("busy", "This skill is already running in this window.");
     const controller = new AbortController();
     window.set(skill.name, controller); active.set(options.windowId, window);
     let timedOut = false;
-    const timeoutMs = options.timeoutMs ?? 300_000;
+    const timeoutMs = options.timeoutMs ?? skill.timeout * 1000;
     const abort = () => controller.abort();
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     options.signal?.addEventListener("abort", abort, { once: true });
@@ -50,7 +55,7 @@ export function createStoryRunner(dependencies: StoryProcessDependencies = { spa
     try {
       assertActive();
       progress("starting");
-      const preferred = options.tool ?? (skill.tool === "auto" ? undefined : skill.tool);
+      const preferred = selectStoryTool(skill, options.tool);
       const tool = preferred ?? selectPreferredAITool(await dependencies.availability());
       assertActive();
       if (!tool) throw new StoryRunError("unavailable", "Install Codex or Claude CLI and sign in to generate a story.");
