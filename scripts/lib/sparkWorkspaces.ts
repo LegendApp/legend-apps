@@ -41,12 +41,18 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
     path.join(appsDir, manifest.id, "macos/legendapp-shell-macos/Assets.xcassets/AppIcon.appiconset"),
     path.join(appsDir, manifest.id, "AppIcon.appiconset"),
   ].find(directory => fs.existsSync(directory));
+  // Release config is embedded in the app (EXConstants app.config), so it names files relative to the workspace.
+  const reference = (file: string) => mode === "release" ? path.relative(sparkWorkspace(manifest.id, mode), file) : file;
   const iconPluginPath = path.join(rootDir, "scripts/lib/macosAppIcon.cjs");
-  const iconPlugin = icon ? [[iconPluginPath, {
-    source: icon,
+  const iconPlugin = icon ? [[reference(iconPluginPath), {
+    source: reference(icon),
     hash: createHash("sha256").update(fs.readFileSync(iconPluginPath)).update(fs.readdirSync(icon).sort().map(file =>
       `${file}:${createHash("sha256").update(fs.readFileSync(path.join(icon, file))).digest("hex")}`).join("\n")).digest("hex"),
   }] as [string, { source: string; hash: string }]] : [];
+  const releasePathsPlugin = mode === "release" ? [[reference(path.join(rootDir, "scripts/lib/macosReleasePaths.cjs")), {
+    hash: createHash("sha256").update(fs.readFileSync(path.join(rootDir, "scripts/lib/macosReleasePaths.cjs")))
+      .update(fs.readFileSync(path.join(rootDir, "scripts/lib/hermesc-relative.sh"))).digest("hex"),
+  }] as [string, { hash: string }]] : [];
   const active = getActiveNativePackages(manifest, "macos");
   const excluded: string[] = [];
   if (mode === "release") {
@@ -124,10 +130,11 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
       slug: manifest.id,
       // Metro aliases are generated below; Expo's TS setup expects the pre-7 compiler API.
       experiments: { tsconfigPaths: false },
-      ...((iconPlugin.length || manifest.nativeModules.macos.includes("@legend-apps/diff-parser")) ? {
+      ...((iconPlugin.length || releasePathsPlugin.length || manifest.nativeModules.macos.includes("@legend-apps/diff-parser")) ? {
         plugins: [
           ...iconPlugin,
-          ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")] : []),
+          ...releasePathsPlugin,
+          ...(manifest.nativeModules.macos.includes("@legend-apps/diff-parser") ? [reference(path.join(rootDir, "packages/diff-parser/app.plugin.cjs"))] : []),
         ],
       } : {}),
       autolinking: { exclude: excluded },

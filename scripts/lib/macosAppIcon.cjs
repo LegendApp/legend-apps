@@ -1,7 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-module.exports = function withMacOSAppIcon(config, { source }) {
+module.exports = function withMacOSAppIcon(config, options) {
+  const source = path.resolve(config._internal.projectRoot, options.source);
   const { withXcodeProject } = require(require.resolve("expo-desktop-config-plugins", {
     paths: [config._internal.projectRoot],
   }));
