@@ -16,6 +16,7 @@
     "@legendapp/state": "catalog:",
     "@legendapp/spark": "catalog:",
     "@legend-apps/storage": "0.0.0",
-    "@legend-apps/runtime-utils": "0.0.0"
+    "@legend-apps/runtime-utils": "0.0.0",
+    "@legend-apps/git-core": "workspace:*"
   }
 }

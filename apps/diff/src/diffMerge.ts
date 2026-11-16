@@ -1,6 +1,6 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { runCommand } from "@legendapp/spark/processes";
-import { getGitService, GitService } from "./git/GitService";
+import { getGitService, GitService } from "@legend-apps/git-core";
 type DiffMergeCommands = Pick<typeof import("@legendapp/spark/processes"), "runCommand">;
 
 export type DiffMergeConflictStage = {

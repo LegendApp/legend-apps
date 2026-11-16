@@ -1,7 +1,7 @@
 import { getAICommandAvailability, selectPreferredAITool } from "@legendapp/spark/ai";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getGitService } from "../git/GitService";
+import { getGitService } from "@legend-apps/git-core";
 import { isDiffGitSource, type DiffOpenSource } from "../diffFiles";
 import { diffSettingsPage$ } from "../diffSettings";
 import type { DiffViewerModel } from "../viewer/diffViewerModel";

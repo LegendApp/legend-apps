@@ -2,13 +2,13 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, watch as watchFS, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "@legendapp/spark/processes";
-import { createDiffGitSource } from "../../src/diffFiles";
-import { loadDiffCompareRepoState } from "../../src/diffCompareTargets";
-import { loadDiffMergeState } from "../../src/diffMerge";
-import { readDiffGitSource } from "../../src/git/diffGitSource";
-import { watchDiffRepo } from "../../src/git/diffRepoWatcher";
-import { getDiffRepoStateBanner } from "../../src/git/diffRepoStateBanner";
-import { GitService, type GitRunner } from "../../src/git/GitService";
+import { createDiffGitSource } from "../../src/gitSource";
+import { loadDiffCompareRepoState } from "../../../../apps/diff/src/diffCompareTargets";
+import { loadDiffMergeState } from "../../../../apps/diff/src/diffMerge";
+import { readDiffGitSource } from "../../src/gitSource";
+import { watchDiffRepo } from "../../../../apps/diff/src/git/diffRepoWatcher";
+import { getDiffRepoStateBanner } from "../../../../apps/diff/src/git/diffRepoStateBanner";
+import { GitService, type GitRunner } from "../../src/GitService";
 import { fixtureGit, makeGitRepos } from "../fixtures/make-repos";
 
 const realRunner: GitRunner = (options) => new Promise((resolve, reject) => {

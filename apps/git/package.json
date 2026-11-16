@@ -6,6 +6,7 @@
   "dependencies": {
     "@legendapp/spark": "catalog:",
     "react": "catalog:",
-    "react-native": "catalog:"
+    "react-native": "catalog:",
+    "@legend-apps/git-core": "workspace:*"
   }
 }

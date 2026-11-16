@@ -2,12 +2,11 @@ import { loadUnifiedDiff, type DiffLoadResult } from "@legend-apps/diff-parser";
 import { observable } from "@legendapp/state";
 import { act, renderHook } from "@testing-library/react-native";
 import { createDiffGitSource } from "../../diffFiles";
-import { GitIndexLockedError } from "../../git/GitService";
-import { readDiffGitSource } from "../../git/diffGitSource";
+import { GitIndexLockedError, readDiffGitSource } from "@legend-apps/git-core";
 import { emptyDiffViewerState, type DiffViewerState } from "../../viewer/diffViewerModel";
 import { useDiffSourceLoader } from "../useDiffSourceLoader";
 
-jest.mock("../../git/diffGitSource", () => ({ readDiffGitSource: jest.fn() }));
+jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), readDiffGitSource: jest.fn() }));
 jest.mock("../../diffAppMetadata", () => ({ addRecentDiffSource: jest.fn(), updateSavedDiffWindowSource: jest.fn() }));
 jest.mock("@legendapp/spark/app/documents", () => ({ noteRecentDocument: jest.fn() }));
 jest.mock("@legendapp/spark/windows", () => ({ useWindowId: jest.fn() }));

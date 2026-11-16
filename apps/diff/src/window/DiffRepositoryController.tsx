@@ -3,7 +3,7 @@ import { useValue } from "@legendapp/state/react";
 import { type RefObject, useEffect } from "react";
 import { isDiffGitSource, type DiffOpenSource } from "../diffFiles";
 import { useDiffAutoRefreshSetting } from "../diffSettings";
-import { getGitService, GitServiceError } from "../git/GitService";
+import { getGitService, GitServiceError } from "@legend-apps/git-core";
 import { getDiffRepoStateBanner } from "../git/diffRepoStateBanner";
 import { watchDiffRepo } from "../git/diffRepoWatcher";
 import { useDiffViewerModel, type DiffLoadSourceOptions } from "../viewer/diffViewerModel";

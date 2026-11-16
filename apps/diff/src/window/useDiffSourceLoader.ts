@@ -12,8 +12,7 @@ import { type UnsavedDiffMergeDraftReason } from "../confirmUnsavedDiffMergeDraf
 import { addRecentDiffSource, updateSavedDiffWindowSource } from "../diffAppMetadata";
 import { type DiffOpenSource, getDiffFolderCompareBaseKey, getDiffRecentDocumentPath, isDiffGitSource } from "../diffFiles";
 import { type DiffMergeState, createReadyMergeState, loadDiffMergeState } from "../diffMerge";
-import { GitServiceError } from "../git/GitService";
-import { readDiffGitSource } from "../git/diffGitSource";
+import { GitServiceError, readDiffGitSource } from "@legend-apps/git-core";
 import { getDiffIgnoreWhitespaceChangesSetting, getDiffShowOnlyHunksSetting } from "../diffSettings";
 import { createFilePairDiffCommand, createFilePairUnifiedDiff } from "../filePairDiff";
 import { getActiveDiffFile } from "../viewer/diffFilePresentation";

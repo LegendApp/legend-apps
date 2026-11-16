@@ -103,6 +103,7 @@ Individual checks are also available:
 ```sh
 bun run test:diff --runInBand
 bun run test:diff:git
+bun run test:git-core
 bun run test:diff-parser --runInBand
 bun run test:syntax-parser --runInBand
 bun run test:diff-parser:native
@@ -110,7 +111,9 @@ bun run diff verify macos
 bun run typecheck
 ```
 
-The Git integration target creates and removes temporary repositories, including conflict, rebase, detached HEAD, worktree and stash fixtures. Submodules, LFS and large histories are deferred.
+The shared Git service, parsers, source helpers and fixtures live in `packages/git-core` (`@legend-apps/git-core`). Diff keeps repository watching, banners and comparison UI glue.
+
+The Git integration target runs from that package and creates and removes temporary repositories, including conflict, rebase, detached HEAD, worktree and stash fixtures. Submodules, LFS and large histories are deferred.
 
 The runtime E2E harness is separate:
 

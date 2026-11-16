@@ -1,7 +1,7 @@
 import type { ProcessOptions } from "@legendapp/spark/processes";
 import { GitIndexLockedError, GitService, getGitService, type GitRunner } from "../GitService";
 import { parseGitStatus } from "../gitStatus";
-import { processResult } from "../../__tests__/processFixtures";
+import { processResult } from "../../test/fixtures/processFixtures";
 
 function runnerFor(run: (options: ProcessOptions) => ReturnType<GitRunner> = async () => processResult()) {
   return jest.fn<ReturnType<GitRunner>, [ProcessOptions]>(async (options) => {

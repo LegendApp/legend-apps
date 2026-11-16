@@ -1,4 +1,4 @@
-import type { GitRepoState } from "../GitService";
+import type { GitRepoState } from "@legend-apps/git-core";
 import { getDiffRepoStateBanner } from "../diffRepoStateBanner";
 
 const normal: GitRepoState = {

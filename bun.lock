@@ -16,6 +16,7 @@
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/document-scanner": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
+        "@legend-apps/git-core": "workspace:*",
         "@legend-apps/markdown-block-editor": "workspace:*",
         "@legend-apps/markdown-document": "workspace:*",
         "@legend-apps/markdown-parser": "workspace:*",
@@ -127,6 +128,7 @@
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
+        "@legend-apps/git-core": "workspace:*",
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/source-viewer": "workspace:*",
         "@legend-apps/storage": "0.0.0",
@@ -143,6 +145,7 @@
       "name": "@legend-apps/app-git",
       "version": "0.0.1",
       "dependencies": {
+        "@legend-apps/git-core": "workspace:*",
         "@legendapp/spark": "catalog:",
         "react": "catalog:",
         "react-native": "catalog:",
@@ -464,6 +467,14 @@
       "peerDependencies": {
         "react": "catalog:",
         "react-native": "catalog:",
+      },
+    },
+    "packages/git-core": {
+      "name": "@legend-apps/git-core",
+      "version": "0.0.0",
+      "dependencies": {
+        "@legend-apps/runtime-utils": "workspace:*",
+        "@legendapp/spark": "catalog:",
       },
     },
     "packages/glass-effect-view": {
@@ -1445,6 +1456,8 @@
     "@legend-apps/file-scanner": ["@legend-apps/file-scanner@workspace:packages/file-scanner"],
 
     "@legend-apps/file-system-watcher": ["@legend-apps/file-system-watcher@workspace:packages/file-system-watcher"],
+
+    "@legend-apps/git-core": ["@legend-apps/git-core@workspace:packages/git-core"],
 
     "@legend-apps/glass-effect-view": ["@legend-apps/glass-effect-view@workspace:packages/glass-effect-view"],
 

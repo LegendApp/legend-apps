@@ -1,5 +1,5 @@
 import type { DirectoryChangeEvent } from "@legend-apps/file-system-watcher";
-import { GitServiceError, type GitService } from "./GitService";
+import { GitServiceError, type GitService } from "@legend-apps/git-core";
 
 export type DiffRepoWatchLocations = Awaited<ReturnType<GitService["watchLocations"]>>;
 export type DiffDirectoryWatcher = (directories: string[], listener: (event: DirectoryChangeEvent) => void) => { remove(): void };

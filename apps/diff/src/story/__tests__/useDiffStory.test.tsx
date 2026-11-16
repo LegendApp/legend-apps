@@ -14,7 +14,7 @@ jest.mock("@legendapp/spark/ai", () => ({ getAICommandAvailability: jest.fn(asyn
 const mockWatchLocations = jest.fn(async () => ({ root: "/repo" }));
 const mockRepoRoot = jest.fn(async () => "/repo");
 const mockLibraryEnabled = jest.fn();
-jest.mock("../../git/GitService", () => ({ getGitService: () => ({ watchLocations: mockWatchLocations, resolveRoot: mockRepoRoot }) }));
+jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: () => ({ watchLocations: mockWatchLocations, resolveRoot: mockRepoRoot }) }));
 jest.mock("@legend-apps/storage", () => ({ ...jest.requireActual("@legend-apps/storage"), createStorage: () => ({
   read: (path: string) => mockStorage.get(path), write: (path: string, value: string) => mockStorage.set(path, value),
 }) }));

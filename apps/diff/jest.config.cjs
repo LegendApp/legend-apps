@@ -4,12 +4,13 @@ module.exports = require("../../scripts/jest/spark.cjs")({
   testMatch: [
     "<rootDir>/apps/diff/src/**/__tests__/**/*.test.ts",
     "<rootDir>/apps/diff/src/**/__tests__/**/*.test.tsx",
+    "<rootDir>/packages/git-core/src/**/__tests__/**/*.test.ts",
   ],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
     "^@legendapp/spark/app$": "<rootDir>/apps/diff/jest/mocks/appExitMock.cjs",
     "^@legendapp/spark/ui/split-view$": "<rootDir>/apps/diff/jest/mocks/appKitSplitViewMock.cjs",
-    "^@legendapp/spark/processes$": "<rootDir>/apps/diff/jest/mocks/commandRunnerMock.cjs",
+    "^@legendapp/spark/processes$": "<rootDir>/packages/git-core/jest/mocks/commandRunnerMock.cjs",
     "^@legend-apps/diff-parser$": "<rootDir>/apps/diff/jest/mocks/diffParserMock.cjs",
     "^@legendapp/spark/dialogs$": "<rootDir>/apps/diff/jest/mocks/fileDialogMock.cjs",
     "^@legendapp/spark/ui/symbol$": "<rootDir>/apps/diff/jest/mocks/sfSymbolMock.cjs",

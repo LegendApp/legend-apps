@@ -1,5 +1,5 @@
 import type { DirectoryChangeEvent } from "@legend-apps/file-system-watcher";
-import { GitIndexLockedError } from "../GitService";
+import { GitIndexLockedError } from "@legend-apps/git-core";
 import { shouldRefreshDiffRepo, watchDiffRepo, type DiffRepoWatchLocations } from "../diffRepoWatcher";
 
 const locations: DiffRepoWatchLocations = {

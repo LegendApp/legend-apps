@@ -43,3 +43,7 @@ it("renders the empty window, toggles its sidebar, opens the folder panel and cl
   await act(async () => { renderer.unmount(); });
   expect(registration.remove).toHaveBeenCalledTimes(1);
 });
+
+it("resolves the shared git workspace package without loading native capabilities", () => {
+  expect(require.resolve("@legend-apps/git-core")).toMatch(/packages\/git-core\/src\/index\.ts$/);
+});

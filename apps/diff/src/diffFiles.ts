@@ -1,4 +1,7 @@
+import { createDiffGitSource, isDiffGitSource, type DiffGitComparison, type DiffGitOpenSource, type GitCommandSource } from "@legend-apps/git-core";
 import { openFileDialog } from "@legendapp/spark/dialogs";
+
+export { createDiffGitSource, isDiffGitSource, type DiffGitComparison, type DiffGitOpenSource } from "@legend-apps/git-core";
 
 const diffFolderLaunchArgument = "--diff-folder";
 const diffSourceLaunchArgument = "--diff-source";
@@ -6,18 +9,6 @@ const diffUrlLaunchArgument = "--diff-url";
 const diffCwdLaunchArgument = "--cwd";
 const diffNamespacedCwdLaunchArgument = "--diff-cwd";
 const diffUrlScheme = "legend-diff:";
-
-export type DiffGitComparison =
-  | { kind: "index-vs-workdir" }
-  | { kind: "head-vs-index" }
-  | { kind: "commit"; sha: string }
-  | { kind: "range"; range: string };
-
-export type DiffGitOpenSource = DiffGitComparison & {
-  cwd: string;
-  label: string;
-  value: string;
-};
 
 export type DiffOpenSource =
   | DiffGitOpenSource
@@ -33,13 +24,7 @@ export type DiffOpenSource =
       label: string;
       value: string;
     }
-  | {
-      args: string[];
-      cwd: string;
-      kind: "git";
-      label: string;
-      value: string;
-    }
+  | GitCommandSource
   | {
       kind: "filePair";
       label: string;
@@ -64,20 +49,6 @@ export type DiffFolderCompareBase =
       ref: string;
       useMergeBase?: boolean;
     };
-
-export function createDiffGitSource(cwd: string, comparison: DiffGitComparison): DiffGitOpenSource {
-  const target = comparison.kind === "commit" ? comparison.sha
-    : comparison.kind === "range" ? comparison.range : comparison.kind;
-  const label = comparison.kind === "index-vs-workdir" ? "Worktree vs Index"
-    : comparison.kind === "head-vs-index" ? "Index vs HEAD"
-    : comparison.kind === "commit" ? `Commit ${comparison.sha.slice(0, 12)}` : comparison.range;
-  return { ...comparison, cwd, label, value: `${cwd} ${target}` };
-}
-
-export function isDiffGitSource(source: DiffOpenSource): source is DiffGitOpenSource | Extract<DiffOpenSource, { kind: "git" }> {
-  return source.kind === "git" || source.kind === "index-vs-workdir" || source.kind === "head-vs-index"
-    || source.kind === "commit" || source.kind === "range";
-}
 
 function isGitRange(value: string) {
   return !value.startsWith("-") && /^[^\s.]+(?:\.[^\s.]+)*\.{2,3}[^\s.]+(?:\.[^\s.]+)*$/.test(value);

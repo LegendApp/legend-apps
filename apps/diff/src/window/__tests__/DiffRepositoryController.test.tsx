@@ -3,12 +3,12 @@ import { observable } from "@legendapp/state";
 import { act, render } from "@testing-library/react-native";
 import { createDiffGitSource, type DiffOpenSource } from "../../diffFiles";
 import { diffSettings$ } from "../../diffSettings";
-import { getGitService, GitIndexLockedError, type GitRepoState, type GitService } from "../../git/GitService";
+import { getGitService, GitIndexLockedError, type GitRepoState, type GitService } from "@legend-apps/git-core";
 import { emptyDiffViewerState, type DiffViewerState } from "../../viewer/diffViewerModel";
 import { DiffRepositoryController } from "../DiffRepositoryController";
 
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn() }));
-jest.mock("../../git/GitService", () => ({ ...jest.requireActual("../../git/GitService"), getGitService: jest.fn() }));
+jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("../../viewer/diffViewerModel", () => ({
   ...jest.requireActual("../../viewer/diffViewerModel"),
   useDiffViewerModel: () => mockModel,
