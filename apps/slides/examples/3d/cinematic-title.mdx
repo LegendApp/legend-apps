@@ -10,7 +10,7 @@ theme:
 
 import { Background } from "@legend-apps/presentation"
 import { Text } from "react-native"
-import { World, Camera, Box, Ring, Orbs, Material, Floor, SpotLight, RimLight, Fog, Shafts, DOF, Bloom, Vignette, Grain } from "slides:world/World"
+import { Journey, Camera, Box, Ring, Orbs, Material, Floor, SpotLight, RimLight, Fog, Shafts, DOF, Bloom, Vignette, Grain } from "slides:journey/Journey"
 
 export const structures = <>
   <Material id="stone" albedo="#101827" roughness={0.45} metal={0.2} rim={1.5} emissive={0} />
@@ -24,7 +24,7 @@ export const structures = <>
 </>
 
 <Background>
-  <World id="quiet-structures" background quality="auto" exposure={1.1} scrim={0.12}>
+  <Journey id="quiet-structures" background quality="auto" exposure={1.1} scrim={0.12}>
     <Camera shots={[{ step: 0, orbit: { center: [0, 0, 0], radius: 20, height: 5, speed: 0.045 }, fov: 38 }]} />
     {structures}
     <Orbs count={24} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[16, 6, 12]} position={[0, 1, 0]} seed={7} drift={0.25} emissive={3} />
@@ -34,7 +34,7 @@ export const structures = <>
     <Shafts intensity={0.55} density={0.025} anisotropy={0.35} samples={32} />
     <DOF focus={20} aperture={0.25} maxBlur={6} />
     <Bloom intensity={0.9} /><Vignette amount={0.35} /><Grain amount={0.01} />
-  </World>
+  </Journey>
 </Background>
 
 # Quiet structures
@@ -44,7 +44,7 @@ export const structures = <>
 ---
 
 <Background>
-  <World id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={[{ step: 0, value: 0.55 }, { step: 1, value: 1.2, duration: 2.5 }]} scrim={0.1}>
+  <Journey id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={[{ step: 0, value: 0.55 }, { step: 1, value: 1.2, duration: 2.5 }]} scrim={0.1}>
     <Camera duration={2.5} shots={[{ step: 0, position: [9, 4, 15], target: [0, 0, 0], fov: 38 }, { step: 1, orbit: { center: [0, 0, 0], radius: 18, height: 4, speed: 0.04 } }]} />
     {structures}
     <Orbs count={24} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[16, 6, 12]} position={[0, 1, 0]} seed={7} drift={0.25} emissive={3} />
@@ -54,7 +54,7 @@ export const structures = <>
     <Shafts intensity={[{ step: 0, value: 0.1 }, { step: 1, value: 0.7, duration: 2.5 }]} density={0.025} anisotropy={0.35} samples={32} />
     <DOF focus={18} aperture={0.25} maxBlur={6} />
     <Bloom intensity={1} /><Vignette amount={0.35} /><Grain amount={0.01} />
-  </World>
+  </Journey>
 </Background>
 
 # Through the air
@@ -64,7 +64,7 @@ export const structures = <>
 ---
 
 <Background>
-  <World id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={1} scrim={0.12}>
+  <Journey id="quiet-structures" background quality="auto" enter={{ from: "previous", duration: 1.5 }} exposure={1} scrim={0.12}>
     <Camera shots={[{ at: 0, position: [8, 5, 20], target: [0, 0, 0], fov: 38 }, { at: 1.5, position: [0, 7, 34], target: [0, 0, 0], duration: 6, ease: "smoothstep" }]} />
     {structures}
     <Orbs count={64} colors={["#22d3ee", "#f59e0b"]} radius={0.035} spread={[24, 10, 18]} position={[0, 2, 0]} seed={7} drift={0.25} emissive={2} />
@@ -74,7 +74,7 @@ export const structures = <>
     <Shafts intensity={0.4} density={0.025} anisotropy={0.35} samples={32} />
     <DOF focus={26} aperture={0.2} maxBlur={5} />
     <Bloom intensity={0.8} /><Vignette amount={0.3} /><Grain amount={0.01} />
-  </World>
+  </Journey>
 </Background>
 
 # Room to breathe

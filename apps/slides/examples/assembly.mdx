@@ -9,7 +9,7 @@ theme:
 ---
 
 import { Text, View } from "react-native"
-import { World, Camera, Choreography, Floor, Bloom, Fog, Vignette, Grain, PointLight, Material, primitive, cardInstances } from "slides:world/World"
+import { Journey, Camera, Choreography, Floor, Bloom, Fog, Vignette, Grain, PointLight, Material, primitive, cardInstances } from "slides:journey/Journey"
 
 export const colors = ["#79dbff", "#a7b7ff", "#efb96b"]
 export const mesh = (kind, scale, color) => [primitive(kind, { size: 0.5, scale, color, emissive: 0.12, material: "alloy" })]
@@ -39,7 +39,7 @@ export const transitions = [
 ]
 
 <Background>
-  <World background quality="high" renderScale={1} exposure={1.15} previewTime={4}>
+  <Journey background quality="high" renderScale={1} exposure={1.15} previewTime={4}>
     <Camera shots={[
       { step: 0, position: [8, 5, 19], target: [0, 0.25, 0], fov: 38 },
       { step: 1, position: [4, 3.5, 20], target: [0, 0.25, 0], duration: 2.5, ease: "smoothstep" },
@@ -53,7 +53,7 @@ export const transitions = [
     <Fog color="#060b15" density={0.009} />
     <Bloom intensity={0.65} threshold={1.4} radius={0.55} />
     <Vignette amount={0.24} /><Grain amount={0.006} />
-  </World>
+  </Journey>
 </Background>
 
 <Steps count={3}>{step => <View style={{ position: "absolute", top: 16, left: 0, right: 0 }}>

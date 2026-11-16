@@ -1,0 +1,185 @@
+import { describe, expect, test } from "bun:test";
+import type { ClockSample, Vec3 } from "../packs/journey/camera";
+import { glyphMetrics, glyphKernings, glyphPixelCount, glyphFirst } from "../packs/journey/glyphs";
+import { buildJourneyGraph } from "../packs/journey/render";
+import { cardInstances, compileTrack, formatRowLabel, sampleTrack, instanceOpacity, instancePosition, labelInstance, labelWidth, packLabelText, prepareJourneyScene, primitive,
+  recyclePathPoint, recycleSlot, rowInstances, sampleJourneyUniforms, journeyHeaderSize, journeyInstanceSize } from "../packs/journey/scene";
+
+function clock(time: number, step = 0, origins: Record<number, number> = { 0: 0 }): ClockSample {
+  return { slideTime: time, stepTime: time - (origins[step] ?? 0), stepIndex: step, stepOrigins: origins };
+}
+function unpack(values: ArrayLike<number>, index: number, length: number) {
+  let text = "";
+  for (let i = 0; i < length; i++) {
+    const k = Math.floor(i / 3), field = index + (k < 11 ? 12 + k : 13 + k);
+    text += String.fromCharCode(Math.floor(values[field] / 128 ** (i % 3)) % 128);
+  }
+  return text;
+}
+
+describe("journey labels", () => {
+  test("measures proportional text from the atlas advances and mono text in fixed cells", () => {
+    const advance = (c: string) => glyphMetrics[1][c.charCodeAt(0) - glyphFirst][0];
+    expect(labelWidth("Ada", false)).toBeCloseTo(advance("A") + advance("d") + advance("a"));
+    expect(labelWidth("{ id: 1 }", true)).toBeCloseTo(9 * 0.6);
+    expect(labelWidth("é", false)).toBeCloseTo(advance("?"));
+  });
+  test("uses GPOS kerning, real monospace shapes and distinct face weights", () => {
+    const pair = ("A".charCodeAt(0) - glyphFirst) * 95 + "V".charCodeAt(0) - glyphFirst;
+    for (const [face, weight] of (["regular", "medium", "bold"] as const).entries()) {
+      expect(glyphKernings[face][pair]).toBeLessThan(0);
+      expect(labelWidth("AV", false, weight)).toBeCloseTo(labelWidth("A", false, weight) + labelWidth("V", false, weight) + glyphKernings[face][pair]);
+      const scene = prepareJourneyScene({ instances: [labelInstance({ text: "AV", weight })] });
+      const values = sampleJourneyUniforms(scene, clock(0)) as number[];
+      expect(values[journeyHeaderSize + 11]).toBe(face);
+      expect(values[journeyHeaderSize + 8]).toBeCloseTo(labelWidth("AV", false, weight));
+    }
+    expect(glyphMetrics[3].every(glyph => Math.abs(glyph[0] - 0.6) < 1e-6)).toBe(true);
+    expect(glyphMetrics[3]["i".charCodeAt(0) - glyphFirst][3]).not.toBe(glyphMetrics[1]["i".charCodeAt(0) - glyphFirst][3]);
+    expect(labelWidth("Wide", false, "regular")).not.toBe(labelWidth("Wide", false, "bold"));
+    const scene = prepareJourneyScene({ instances: [labelInstance({ text: "iW", mono: true, weight: "bold" })] });
+    expect((sampleJourneyUniforms(scene, clock(0)) as number[])[journeyHeaderSize + 11]).toBe(3);
+  });
+  test("uploads distinct RGB channels and preserves counters and stems in every face", () => {
+    const graph = buildJourneyGraph(prepareJourneyScene({ instances: [labelInstance({ text: "Sharp" })] }));
+    const pixels = new Uint32Array(graph.buffers![0].init!.buffer).subarray(4 * 95 * 6 + 4 * 95 * 95);
+    expect(pixels.length).toBe(glyphPixelCount);
+    expect(pixels.some(pixel => (pixel & 255) !== (pixel >>> 8 & 255))).toBe(true);
+    for (const face of glyphMetrics) {
+      const center = (character: string) => {
+        const [, , , width, height, offset] = face[character.charCodeAt(0) - glyphFirst];
+        const pixel = pixels[offset + Math.floor(height / 2) * width + Math.floor(width / 2)];
+        return [pixel & 255, pixel >>> 8 & 255, pixel >>> 16 & 255].sort((a, b) => a - b)[1];
+      };
+      expect(center("I")).toBeGreaterThan(127);
+      expect(center("O")).toBeLessThan(127);
+    }
+  });
+  test("packs three characters per float into the slot's spare fields and round-trips them exactly", () => {
+    const values = new Float32Array(journeyInstanceSize);
+    const text = `{ id: 3, name: "Linus" } -> rendered row #3 with extra tail`.slice(0, 57);
+    packLabelText(text, values, 0);
+    expect(unpack(values, 0, text.length)).toBe(text);
+    for (const field of [0, 3, 7, 8, 9, 10, 11, 23]) expect(values[field]).toBe(0);
+  });
+  test("formats row templates from items, logical index and slot", () => {
+    expect(formatRowLabel("{item}", ["Ada", "Grace"], 3, 1)).toBe("Grace");
+    expect(formatRowLabel("item {index} · C{slot}", undefined, 12, 4)).toBe("item 12 · C4");
+  });
+  test("attaches to a moving parent and draws in its own pass after the opaque geometry", () => {
+    const card = primitive("box", { id: "card", position: { 0: [0, 0, 0], 1: [4, 0, 0] } });
+    const scene = prepareJourneyScene({ instances: [labelInstance({ text: "Ada", attach: "card", position: [0.1, 0, 0.2], color: "#ffb547" }), card] });
+    expect(scene.instances.at(-1)!.label).toBeDefined();
+    const label = scene.instances.at(-1)!;
+    expect(instancePosition(label, clock(10, 1, { 0: 0, 1: 0 }))).toEqual([4.1, 0, 0.2]);
+    const values = sampleJourneyUniforms(scene, clock(0)) as number[];
+    const index = journeyHeaderSize + journeyInstanceSize;
+    expect(values[index + 9]).toBe(3);
+    expect(unpack(values, index, 3)).toBe("Ada");
+    const graph = buildJourneyGraph(scene);
+    const pass = graph.passes.find(item => item.id === "scene-labels")!;
+    expect(pass).toMatchObject({ kind: "render", instanceCount: 1, reads: ["glyphs"] });
+    expect(graph.buffers?.[0]).toMatchObject({ id: "glyphs", size: (4 * 95 * 6 + 4 * 95 * 95 + glyphPixelCount) * 4 });
+    expect(graph.passes.indexOf(pass)).toBe(graph.passes.length - 1 - graph.passes.slice().reverse().findIndex(item => item.id.startsWith("scene-")));
+    expect(() => prepareJourneyScene({ instances: [labelInstance({ text: "x", attach: "missing" })] })).toThrow("Unknown Journey label parent");
+  });
+});
+
+test("delayed step keyframes hold the previous value until their delay elapses", () => {
+  const track = compileTrack([{ step: 0, value: 0 }, { step: 1, value: 1, duration: 1, ease: "linear" as const, delay: 2 }, { step: 1, value: 0, duration: 1, ease: "linear" as const, delay: 4 }]);
+  const origins = { 0: 0, 1: 10 };
+  expect(sampleTrack(track, clock(11, 1, origins))).toBe(0);
+  expect(sampleTrack(track, clock(12.5, 1, origins))).toBeCloseTo(0.5);
+  expect(sampleTrack(track, clock(13.5, 1, origins))).toBe(1);
+  expect(sampleTrack(track, clock(14.5, 1, origins))).toBeCloseTo(0.5);
+  // A completed step without an origin settles every delayed frame.
+  expect(sampleTrack(track, clock(20, 2, { 2: 20 }))).toBe(0);
+});
+
+describe("recycled rows", () => {
+  test("each container holds the mounted row congruent to its slot; only the top one travels", () => {
+    expect([0, 1, 2, 3, 4].map(slot => recycleSlot(slot, 5, 1, 1).logical)).toEqual([0, 1, 2, 3, 4]);
+    expect(recycleSlot(0, 5, 1, 1.4)).toEqual({ logical: 0, travel: expect.closeTo(0.4) });
+    expect(recycleSlot(1, 5, 1, 1.4).travel).toBe(-1);
+    // After a full row the container that travelled holds the next row past the bottom buffer.
+    expect(recycleSlot(0, 5, 1, 2).logical).toBe(5);
+  });
+  test("the path leaves upward, loops right of the column and docks horizontally", () => {
+    const start: Vec3 = [0, 3, 0], end: Vec3 = [0, -3, 0];
+    expect(recyclePathPoint(start, end, 6, 1, 0)).toEqual([0, 3, 0]);
+    const last = recyclePathPoint(start, end, 6, 1, 1);
+    expect(last[0]).toBeCloseTo(0); expect(last[1]).toBeCloseTo(-3);
+    let previous = start, longest = 0;
+    for (let i = 1; i <= 200; i++) {
+      const point = recyclePathPoint(start, end, 6, 1, i / 200);
+      longest = Math.max(longest, Math.hypot(point[0] - previous[0], point[1] - previous[1]));
+      expect(point[0]).toBeGreaterThanOrEqual(-1e-9); expect(point[0]).toBeLessThanOrEqual(6 + 1e-9);
+      expect(point[1]).toBeLessThanOrEqual(4 + 1e-9);
+      previous = point;
+    }
+    // Uniform arc-length sampling: no step is much longer than the average.
+    expect(longest).toBeLessThan(0.15);
+    expect(recyclePathPoint(start, end, 6, 1, 0.01)[1]).toBeGreaterThan(3);
+    expect(recyclePathPoint(start, end, 6, 1, 0.5)[0]).toBeCloseTo(6);
+  });
+  test("a recycled container moves continuously across row boundaries and swaps content at the dock", () => {
+    const options = { id: "list", count: 5, spacing: 1, scroll: [{ at: 0, value: 1 }, { at: 1, value: 3, duration: 2, ease: "linear" as const }],
+      items: ["Ada", "Grace", "Linus", "Margaret", "Alan", "Barbara", "Ken"], labels: [{ text: "{item}" }], recycle: { above: 1, below: 1, ghosts: 2 } };
+    const scene = prepareJourneyScene({ instances: rowInstances(options) });
+    const slot = scene.instances.find(item => item.id === "list:slot:0")!;
+    const at = (time: number) => instancePosition(slot, clock(time));
+    for (const boundary of [2, 3]) {
+      const before = at(boundary - 1e-4), after = at(boundary + 1e-4);
+      expect(Math.hypot(before[0] - after[0], before[1] - after[1])).toBeLessThan(0.01);
+    }
+    expect(at(1)[1]).toBeCloseTo(2); // top buffer row of a three-row window centred on 0
+    expect(at(2)[1]).toBeCloseTo(-2); // docked in the bottom buffer
+    expect(at(3)[1]).toBeCloseTo(-1); // then scrolls up into the window
+    const label = scene.instances.find(item => item.id === "list:slot:0:label:0")!;
+    const text = (time: number) => {
+      const index = scene.instances.indexOf(label), values = sampleJourneyUniforms(scene, clock(time)) as number[];
+      return unpack(values, journeyHeaderSize + index * journeyInstanceSize, values[journeyHeaderSize + index * journeyInstanceSize + 9]);
+    };
+    expect(text(1)).toBe("Ada");
+    expect(text(1.4)).toBe("Ada");
+    expect(text(1.9)).toBe("Barbara");
+    expect(instanceOpacity(label, clock(1.75))).toBeCloseTo(0, 1);
+    const ghost = scene.instances.find(item => item.id === "list:ghost:0")!;
+    expect(instanceOpacity(ghost, clock(1))).toBe(0);
+    expect(instanceOpacity(ghost, clock(1.5))).toBeGreaterThan(0);
+  });
+});
+
+describe("journey cards", () => {
+  test("lay out an avatar initial, title, subtitle and meta from the card's largest size", () => {
+    const [card, ...labels] = cardInstances({ id: "ada", title: "ada", subtitle: "Lovelace", meta: "key 1", scale: [{ step: 0, value: [4, 0, 0] }, { step: 1, value: [4, 0.6, 0.2] }] });
+    expect(card.card).toMatchObject({ radius: 0.12, glow: 0, edge: 0.6, avatar: 0.62, fill: 1, line: 1.5 });
+    expect(labels.map(label => [label.id, label.label!.text, label.label!.attach])).toEqual([
+      ["ada:initials", "A", "ada"], ["ada:title", "ada", "ada"], ["ada:subtitle", "Lovelace", "ada"], ["ada:meta", "key 1", "ada"]]);
+    const [initials, title, , meta] = labels.map(label => label.label!.offset.initial);
+    expect(initials[0]).toBeCloseTo(-2 + 0.3);
+    expect(title[0]).toBeGreaterThan(initials[0] + 0.6 * 0.62 / 2);
+    expect(meta[0]).toBeLessThan(2);
+    expect(initials[2]).toBeCloseTo(0.11);
+    expect(cardInstances({ id: "code", title: "{ id: 1 }", avatar: 0 }).map(item => item.id)).toEqual(["code", "code:title"]);
+    expect(() => cardInstances({ title: "Ada" })).toThrow("needs an id");
+  });
+  test("write their shape into the slot and draw in card passes before labels", () => {
+    const scene = prepareJourneyScene({ instances: [...cardInstances({ id: "ada", title: "Ada", radius: 0.2, fill: 0.6 }), primitive("box")], floor: {} });
+    const index = scene.instances.findIndex(item => item.card);
+    const values = sampleJourneyUniforms(scene, clock(0)) as number[];
+    const base = journeyHeaderSize + index * journeyInstanceSize;
+    expect([values[base + 11], values[base + 16], values[base + 17], values[base + 18], values[base + 19], values[base + 21]]).toEqual([0.2, 0, 0.6, 0.62, 0.6, 0]);
+    const ids = buildJourneyGraph(scene).passes.map(pass => pass.id);
+    expect(ids.indexOf("scene-cards")).toBeGreaterThan(ids.indexOf("scene-box"));
+    expect(ids.indexOf("scene-labels")).toBeGreaterThan(ids.indexOf("scene-cards"));
+    const pass = buildJourneyGraph(scene).passes.find(pass => pass.id === "scene-cards");
+    expect(pass).toMatchObject({ vertexCount: 6, depthCompare: "less-equal" });
+  });
+  test("rows can be cards and their labels can show the item's initial", () => {
+    const [slot] = rowInstances({ id: "pool", count: 2, height: 0.66, card: { avatar: 0.62 } });
+    expect(slot.card).toEqual({ radius: 0.12, glow: 0, edge: 0.6, avatar: 0.62, fill: 1, line: 1.5 });
+    expect(slot.scale.initial[1]).toBe(0.66);
+    expect(formatRowLabel("{initial}", ["grace"], 0, 0)).toBe("G");
+  });
+});

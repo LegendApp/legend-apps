@@ -4,8 +4,8 @@
     "charts": {
       "path": "../../../packages/slides-effects/packs/charts"
     },
-    "world": {
-      "path": "../../../packages/slides-effects/packs/world"
+    "journey": {
+      "path": "../../../packages/slides-effects/packs/journey"
     }
   }
 }

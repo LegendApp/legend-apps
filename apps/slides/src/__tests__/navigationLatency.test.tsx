@@ -1,4 +1,4 @@
-// @ts-nocheck Native input delivery and UI scheduling are deterministic; navigation and World are real.
+// @ts-nocheck Native input delivery and UI scheduling are deterministic; navigation and Journey are real.
 import "./nativeMock";
 import { frames, flushUI } from "./uiClockMock";
 import { expect, test } from "bun:test";
@@ -7,9 +7,9 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { act, create } from "react-test-renderer";
 import { BackgroundHost, DeckContentContext, GPUShaderProvider, PresentationObservableProvider, useRuntimeProjection } from "@legend-apps/presentation";
-import { Box, Camera, World, WorldSlide } from "../../../../packages/slides-effects/packs/world/World";
+import { Box, Camera, Journey, JourneyStop } from "../../../../packages/slides-effects/packs/journey/Journey";
 import { useValue } from "@legendapp/state/react";
-import { worldHeaderSize } from "../../../../packages/slides-effects/packs/world/scene";
+import { journeyHeaderSize } from "../../../../packages/slides-effects/packs/journey/scene";
 import { getSlidesState, nextSlide, previousSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
 const { buildSync } = createRequire(new URL("../../../../packages/presentation/package.json", import.meta.url))("esbuild");
@@ -36,7 +36,7 @@ Function("require", "module", "exports", outputFiles[0].text)(
 const { createHotkeyRouter } = module.exports;
 const tick = timestamp => frames.forEach(frame => frame.tick(timestamp));
 
-test("Right publishes navigation synchronously and World moves on the next UI frame", async () => {
+test("Right publishes navigation synchronously and Journey moves on the next UI frame", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState();
   const router = createHotkeyRouter();
@@ -53,10 +53,10 @@ test("Right publishes navigation synchronously and World moves on the next UI fr
       direction: slidesState$.direction.get(), isActive: true, isPreview: false, playbackPhase: "playing",
     }), []);
     return <PresentationObservableProvider value={runtime$}>
-      <World buildDuration={10} clock="step" quality="high" track={{ duration: 1 }}>
+      <Journey buildDuration={10} clock="step" quality="high" track={{ duration: 1 }}>
         <Camera shots={[{ at: 0, position: [0, 4, 18] }]} />
         <Box id="part" position={{ 0: [0, 0, 0], 1: [4, 0, 0] }} />
-      </World>
+      </Journey>
     </PresentationObservableProvider>;
   }
   let tree;
@@ -80,7 +80,7 @@ test("Right publishes navigation synchronously and World moves on the next UI fr
     flushUI(); tick(101); // The navigation frame establishes time zero.
     const start = values();
     tick(101 + 1000 / 60);
-    expect(values()[worldHeaderSize]).toBeGreaterThan(start[worldHeaderSize]);
+    expect(values()[journeyHeaderSize]).toBeGreaterThan(start[journeyHeaderSize]);
     await act(() => { press(); expect(getSlidesState().currentSlide).toBe(1); });
     flushUI(); tick(200);
     const camera = values().slice(0, 3);
@@ -101,10 +101,10 @@ test.each([false, true])("retained scene changes establish time zero then move t
     definitions: [{ id: "next", title: "Next Slide", defaultBindings: ["Right"], repeat: true }],
     handlers: { next: nextSlide }, scope: { kind: "window", windowId: "slides-presenter" },
   });
-  const declarations = [0, 1].map(index => <WorldSlide world="latency-scenes" quality="high"
+  const declarations = [0, 1].map(index => <JourneyStop journey="latency-scenes" quality="high"
     track={{ duration: 1.2, ease: "inOut", steps: { 1: { shift: [2, 0, 0], duration: 1 } } }}>
     <Box id="part" position={[index, 0, 0]} />
-  </WorldSlide>);
+  </JourneyStop>);
   function Renderer(props) { return <gpu {...props} />; }
   function Slide({ index }) {
     const runtime$ = useRuntimeProjection(() => {

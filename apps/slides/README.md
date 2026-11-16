@@ -935,7 +935,7 @@ lists or inclusive ranges with `--slides` and `--steps`, or `all` (the default).
 Each state lasts `--step-seconds` (default 3), rounded to a whole number of
 `--fps` frames (default 60). PNGs capture the last frame of each selected state,
 named `slide-14-step-1.png`. Earlier steps are simulated before a selected later
-step, so reveals and World motion have their history. Selected slides run in
+step, so reveals and Journey motion have their history. Selected slides run in
 deck order; gaps jump directly between the selected slides. Existing output
 files are never overwritten.
 
@@ -946,8 +946,8 @@ completion, and streams frames to the encoder with backpressure. Render speed
 does not change playback speed. JSON output reports frame counts, dimensions,
 wall time, throughput, and browser/GPU diagnostics.
 
-The CLI reuses the web export's native slide tree, World scene sampling, WGSL,
-and GPU pass encoder. World geometry, shading, text atlas, and post effects use
+The CLI reuses the web export's native slide tree, Journey scene sampling, WGSL,
+and GPU pass encoder. Journey geometry, shading, text atlas, and post effects use
 the app's implementation. The existing web adapters still apply: browser text
 and native fonts can differ, native shader slide transitions become cuts, and
 native-only capabilities are rejected. Embedded pages with their own clocks,

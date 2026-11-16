@@ -35,9 +35,9 @@ test("frame sampling uses elapsed time, rolls over one second and publishes at m
 test("I-key debug guard mounts one callback, isolates updates, and stops on OFF/unmount", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState(), previousDev = globalThis.__DEV__;
-  let tree, hostRenders = 0, worldRenders = 0, commits = 0;
-  function World() { worldRenders++; return <world />; }
-  function Host() { hostRenders++; return <><World /><Profiler id="hud" onRender={() => commits++}><PerformanceHUD /></Profiler></>; }
+  let tree, hostRenders = 0, journeyRenders = 0, commits = 0;
+  function Journey() { journeyRenders++; return <journey />; }
+  function Host() { hostRenders++; return <><Journey /><Profiler id="hud" onRender={() => commits++}><PerformanceHUD /></Profiler></>; }
   try {
     globalThis.__DEV__ = true;
     setSlidesState({ slideReferences: false, config: {}, deckLocked: false });
@@ -56,7 +56,7 @@ test("I-key debug guard mounts one callback, isolates updates, and stops on OFF/
     // The second unchanged sample is a React state no-op.
     expect(commits - beforeSamples).toBeLessThanOrEqual(2);
     expect(hostRenders).toBe(1);
-    expect(worldRenders).toBe(1);
+    expect(journeyRenders).toBe(1);
     await act(() => toggleSlideReferences());
     expect(frame.active).toBe(false);
     expect(tree.root.findAllByType("safe-area")).toHaveLength(0);

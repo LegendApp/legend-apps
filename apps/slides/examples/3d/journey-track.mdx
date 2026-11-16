@@ -1,0 +1,22 @@
+---
+title: Camera travel
+width: 1920
+height: 1080
+transition: none
+---
+
+import { JourneyStop, Box, Sphere, Text3D, Bloom, Floor, KeyLight } from "slides:journey/Journey"
+
+<JourneyStop journey="gallery" track={{ spacing: 40, duration: 1.5, position: [0, 4, 16], target: [0, 2, 0] }}>
+  <Box id="exhibit" position={[-2, 2, 0]} scale={[2, 3, 2]} color="#38bdf8" />
+  <Text3D id="title" text="Gallery" position={[0, 5, 0]} size={1} />
+  <KeyLight /><Floor /><Bloom intensity={.5} />
+</JourneyStop>
+
+---
+
+<JourneyStop journey="gallery" track={{ spacing: 40, duration: 1.5, position: [3, 4, 16], target: [0, 2, 0], via: [-4, 7, 24] }}>
+  <Sphere id="sculpture" position={[2, 2, 0]} size={2} color="#a78bfa" />
+  <Text3D id="title" text="Sculpture" position={[0, 5, 0]} size={1} />
+  <KeyLight /><Floor /><Bloom intensity={.5} />
+</JourneyStop>

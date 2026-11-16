@@ -1,5 +1,5 @@
 ---
-title: World lighting
+title: Journey lighting
 width: 1920
 height: 1080
 transition: fade
@@ -10,7 +10,7 @@ theme:
 
 import { Background } from "@legend-apps/presentation"
 import { Text } from "react-native"
-import { World, Camera, Box, Sphere, Material, Floor, KeyLight, Environment, PointLight, Orbs, Fog, Bloom, Vignette, Grain } from "slides:world/World"
+import { Journey, Camera, Box, Sphere, Material, Floor, KeyLight, Environment, PointLight, Orbs, Fog, Bloom, Vignette, Grain } from "slides:journey/Journey"
 
 export const grid = { spacing: 2, intensity: 0.02 }
 
@@ -31,14 +31,14 @@ export const look = <>
 </>
 
 <Background>
-  <World id="lighting" background quality="auto" exposure={1.1}>
+  <Journey id="lighting" background quality="auto" exposure={1.1}>
     <Camera shots={[{ step: 0, orbit: { center: [0, 1, 0], radius: 15, height: 5, speed: 0.05 }, fov: 40 }]} />
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
     <Environment intensity={0.9} />
     <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} />
     {look}
-  </World>
+  </Journey>
 </Background>
 
 # Key light and shadows
@@ -48,14 +48,14 @@ export const look = <>
 ---
 
 <Background>
-  <World id="lighting" background quality="auto" exposure={1.1} enter={{ from: "previous", duration: 1.2 }}>
+  <Journey id="lighting" background quality="auto" exposure={1.1} enter={{ from: "previous", duration: 1.2 }}>
     <Camera duration={1.6} shots={[{ step: 0, position: [7, 3, 9], target: [0, 1.2, 0], fov: 34 }, { step: 1, position: [-6, 2.5, 8], target: [0, 1.2, 0] }]} />
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
     <Environment intensity={[{ step: 0, value: 0 }, { step: 1, value: 1.2, duration: 1.6 }]} />
     <Floor y={0} color="#0a0a0c" roughness={0.08} size={200} grid={grid} />
     {look}
-  </World>
+  </Journey>
 </Background>
 
 # Environment lighting
@@ -65,7 +65,7 @@ export const look = <>
 ---
 
 <Background>
-  <World id="lighting-floor" background quality="auto" exposure={1.1}>
+  <Journey id="lighting-floor" background quality="auto" exposure={1.1}>
     <Camera shots={[{ at: 0, position: [0, 2.4, 40], target: [0, 0.2, -40], fov: 44 }, { at: 0.5, position: [-1.5, 2.8, 22], target: [0, 0.2, -40], duration: 8, ease: "smoothstep" }]} />
     {parts}
     <KeyLight position={[8, 14, -10]} target={[0, 0, 0]} intensity={2} shadowSize={14} />
@@ -74,7 +74,7 @@ export const look = <>
     <PointLight position={[0, 4, -30]} color="#ff3b30" intensity={30} range={40} />
     <Orbs count={40} colors={["#ffffff", "#ff3b30"]} radius={0.03} spread={[24, 6, 40]} position={[0, 3, -10]} seed={5} drift={0.2} emissive={3} />
     {look}
-  </World>
+  </Journey>
 </Background>
 
 # Floor grid
@@ -84,14 +84,14 @@ export const look = <>
 ---
 
 <Background>
-  <World id="lighting-contact" background quality="auto" exposure={1.1}>
+  <Journey id="lighting-contact" background quality="auto" exposure={1.1}>
     <Camera shots={[{ step: 0, orbit: { center: [0, 1, 0], radius: 15, height: 5, speed: 0.05 }, fov: 40 }]} />
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} shadow="contact" />
     <Environment intensity={0.9} />
     <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} />
     {look}
-  </World>
+  </Journey>
 </Background>
 
 # Contact shadow fallback

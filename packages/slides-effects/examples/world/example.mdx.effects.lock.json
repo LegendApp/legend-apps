@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "packs": {
-    "world": {
-      "path": "../../packs/world"
-    }
-  }
-}

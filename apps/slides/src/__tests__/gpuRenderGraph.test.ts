@@ -5,8 +5,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { transformSync } from "@babel/core";
 import { prepareRenderGraph, encodeRenderGraph } from "../gpuRenderGraph";
-import { buildWorldGraph } from "../../../../packages/slides-effects/packs/world/render";
-import { labelInstance, prepareWorldScene, primitive } from "../../../../packages/slides-effects/packs/world/scene";
+import { buildJourneyGraph } from "../../../../packages/slides-effects/packs/journey/render";
+import { labelInstance, prepareJourneyScene, primitive } from "../../../../packages/slides-effects/packs/journey/scene";
 
 function gpu() {
   const textures = [], views = [], pipelines = [], groups = [], commands = [], writes = [];
@@ -95,10 +95,10 @@ test("empty draws and dispatches still run their passes without a zero-count GPU
   expect(g.commands[0][1].colorAttachments[0].loadOp).toBe("clear");
 });
 
-test("world sharp layer clears transparent color and loads scene depth after post effects", async () => {
+test("journey sharp layer clears transparent color and loads scene depth after post effects", async () => {
   for (const msaaSamples of [1, 4]) {
     const g = gpu();
-    const graph = buildWorldGraph(prepareWorldScene({ msaaSamples, dof: {}, instances: [primitive("box"), labelInstance({ text: "Sharp" })] }));
+    const graph = buildJourneyGraph(prepareJourneyScene({ msaaSamples, dof: {}, instances: [primitive("box"), labelInstance({ text: "Sharp" })] }));
     const r = await prepareRenderGraph(g.device, graph, "bgra8unorm", {}, {});
     encodeRenderGraph(r, g.device, g.encoder, { width: 64, height: 64, createView: () => "screen" });
     const draws = g.commands.filter(c => c[0] === "render").map(c => c[1]);

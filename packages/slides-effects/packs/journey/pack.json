@@ -1,0 +1,13 @@
+{
+  "id": "journey",
+  "version": "1.0.0",
+  "hostApiVersion": 2,
+  "exports": {
+    "Journey": "./Journey.tsx"
+  },
+  "capabilities": [
+    "webgpu",
+    "webgpu-multipass",
+    "reanimated"
+  ]
+}
