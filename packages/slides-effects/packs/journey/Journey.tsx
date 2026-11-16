@@ -10,6 +10,7 @@ import { advanceResolution, createResolutionState } from "./resolution";
 import type { EnvironmentOptions, KeyLightOptions } from "./lighting";
 import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
 import { text3dInstances, type Text3DOptions } from "./text3d";
+import { spriteInstance, type SpriteOptions } from "./sprite";
 import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareJourneySample, prepareJourneyScene, primitive, pulseInstances, rowInstances,
   sampleJourneyCamera, sampleJourneyUniforms, sdfInstance, sprayInstances, voxelInstances,
   type Animated, type CardOptions, type CustomOptions, type GraphOptions, type Instance, type LabelOptions, type LightOptions, type MaterialOptions, type OrbsOptions, type JourneySampleScene,
@@ -29,7 +30,9 @@ export { buildJourneyGraph } from "./render";
 export { cardInstances, orbInstances, graphInstances, labelInstance, primitive, prepareJourneyScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleJourneyUniforms } from "./scene";
 export { contentClearance } from "./camera";
 export { colorVector, compileTrack } from "./scene";
-export type { Keyframe } from "./scene";
+export type { Keyframe, Shading } from "./scene";
+export { spriteInstance } from "./sprite";
+export type { SpriteOptions } from "./sprite";
 export type { Ease, Shot, CameraPose, Vec3 } from "./camera";
 export type { RenderFlash, RenderTreeOptions } from "./renderTree";
 export { layoutText3D, registerText3DFont, text3dInstances } from "./text3d";
@@ -55,6 +58,7 @@ export function Graph(_: GraphOptions) { return null; }
 export function Orbs(_: OrbsOptions) { return null; }
 export function Sphere(_: PrimitiveOptions) { return null; }
 export function Box(_: PrimitiveOptions) { return null; }
+export function Sprite(_: SpriteOptions) { return null; }
 export function RoundedBox(_: RoundedBoxOptions) { return null; }
 export function RoutedTube(_: RoutedTubeOptions) { return null; }
 export function Pillar(_: PillarOptions) { return null; }
@@ -122,8 +126,13 @@ export type JourneyProps = {
   renderScale?: number;
   track?: JourneyTrack;
   clock?: JourneyClock;
-  /** Added to the step index with `clock="step"`, so slides sharing one scene can address its tracks by a running step number. */
-  stepOffset?: number;
+  /** Added to the step index with `clock="step"`, so slides sharing one scene can address its tracks by a running step number.
+   * On a `JourneyStop`, `"auto"` adds the steps of the journey's earlier slides, from the deck's step counts. */
+  stepOffset?: number | "auto";
+  /** Duration in seconds of keyframes that set none (default 0.65); `"flight"` uses the track's flight `duration`, so parts keep pace with the camera. */
+  keyframeDuration?: number | "flight";
+  /** `"cartoon"`: neutral tone mapping, no vignette, grain or rim, toon shading on every shape and softer key shadows. Explicit props still win. */
+  look?: "cartoon";
   /** End time of this build, in seconds, for settled back steps and optional early-advance settling. */
   buildDuration?: number;
   /** Seconds to finish an early build before Next; zero (default) navigates immediately. */
@@ -133,8 +142,26 @@ export type JourneyProps = {
   postOrder?: JourneyScene["postOrder"];
 };
 /** Each slide declares its own scene; the background host retains the named Journey surface. */
-export function JourneyStop({ journey, ...props }: Omit<JourneyProps, "id" | "background"> & { journey: string; track: JourneyTrack }) {
-  return <Background><Journey {...props} id={journey} background /></Background>;
+export function JourneyStop({ journey, stepOffset, ...props }: Omit<JourneyProps, "id" | "background"> & { journey: string; track: JourneyTrack }) {
+  const offset = useJourneyStepOffset(journey, stepOffset);
+  return <Background><Journey {...props} stepOffset={offset} id={journey} background /></Background>;
+}
+const journeySlides = new Map<string, Set<number>>();
+/** Slides a journey's stops have rendered on. Stops are assumed consecutive: slides between two known stops count too. */
+function useJourneyStepOffset(journey: string, stepOffset: JourneyProps["stepOffset"]) {
+  const slideIndex = usePresentationValue("slideIndex"), counts = usePresentationValue("slideStepCounts");
+  if (stepOffset !== "auto") return stepOffset;
+  let slides = journeySlides.get(journey);
+  if (!slides) journeySlides.set(journey, slides = new Set());
+  slides.add(slideIndex);
+  return journeyStepOffset(slides, slideIndex, counts);
+}
+export function journeyStepOffset(slides: Iterable<number>, slideIndex: number, counts: number[] | undefined) {
+  let first = slideIndex;
+  for (const slide of slides) if (slide < first) first = slide;
+  let offset = 0;
+  for (let slide = first; slide < slideIndex; slide++) offset += counts?.[slide] ?? 1;
+  return offset;
 }
 export function Journey(props: JourneyProps) {
   const background = usePresentationValue("playbackScope") === "background";
@@ -154,14 +181,15 @@ function JourneySlideClock({ children }: { children: ReactNode }) {
 }
 type JourneyContent = { prepared: PreparedJourneyScene; overlay: ReactNode[] };
 const journeyContents = new WeakMap<object, { options: unknown[]; content: JourneyContent }>();
-function journeyContent(children: ReactNode, quality: JourneyScene["quality"], msaaSamples: JourneyScene["msaaSamples"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: JourneyScene["postOrder"], toneMapping: JourneyScene["toneMapping"], outputColorSpace: JourneyScene["outputColorSpace"], emissiveScale: Animated<number>): JourneyContent {
+function journeyContent(children: ReactNode, quality: JourneyScene["quality"], msaaSamples: JourneyScene["msaaSamples"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: JourneyScene["postOrder"], toneMapping: JourneyScene["toneMapping"], outputColorSpace: JourneyScene["outputColorSpace"], emissiveScale: Animated<number>,
+  look?: JourneyProps["look"], keyframeDuration?: number): JourneyContent {
   // Prepared scene declarations are shared by presenter, audience and neighbor surfaces.
   const key = children !== null && typeof children === "object" ? children : undefined;
-  const options = [quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale];
+  const options = [quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale, look, keyframeDuration];
   const cached = key && journeyContents.get(key);
   if (cached && options.every((value, i) => Object.is(value, cached.options[i]))) return cached.content;
-  const scene: JourneyScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], effects: [], quality, msaaSamples, exposure, backgroundColor, postOrder, toneMapping, outputColorSpace, emissiveScale,
-    scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
+  const scene: JourneyScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], effects: [], quality, msaaSamples, exposure, backgroundColor, postOrder, toneMapping: toneMapping ?? (look === "cartoon" ? "neutral" : undefined), outputColorSpace, emissiveScale,
+    look, keyframeDuration, scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
   function add(instances: Instance[], stages: StageMotion[]) { for (const instance of instances) { if (stages.length) instance.stages = stages; scene.instances.push(instance); } }
   function collect(content: ReactNode, stages: StageMotion[] = []) {
@@ -189,6 +217,7 @@ function journeyContent(children: ReactNode, quality: JourneyScene["quality"], m
       else if (child.type === Orbs) add(orbInstances(options), stages);
       else if (child.type === Sphere) add([primitive("sphere", options)], stages);
       else if (child.type === Box) add([primitive("box", options)], stages);
+      else if (child.type === Sprite) add([spriteInstance(options as SpriteOptions)], stages);
       else if (child.type === RoundedBox) add(roundedBoxInstances(options as RoundedBoxOptions), stages);
       else if (child.type === RoutedTube) add(routedTubeInstances(options as RoutedTubeOptions), stages);
       else if (child.type === Pillar) add(pillarInstances(options as PillarOptions), stages);
@@ -228,10 +257,13 @@ function journeyContent(children: ReactNode, quality: JourneyScene["quality"], m
   if (key) journeyContents.set(key, { options, content });
   return content;
 }
+function keyframeSeconds({ keyframeDuration, track }: JourneyProps) {
+  return keyframeDuration === "flight" ? track?.duration ?? 1.7 : keyframeDuration;
+}
 /** Bake declarations and one compatible GPU layout before navigation starts. */
 export function prepareJourneyStops(slides: JourneyProps[]): JourneyProps[] {
   const contents = slides.map(props => journeyContent(props.children, props.quality ?? "auto", props.msaaSamples, props.exposure ?? 1,
-    props.backgroundColor ?? "#05060a", props.scrim ?? false, props.postOrder, props.toneMapping, props.outputColorSpace, props.emissiveScale ?? 1));
+    props.backgroundColor ?? "#05060a", props.scrim ?? false, props.postOrder, props.toneMapping, props.outputColorSpace, props.emissiveScale ?? 1, props.look, keyframeSeconds(props)));
   const pools = prepareJourneyPlans(contents.map(content => content.prepared));
   return slides.map((props, i) => ({ ...props, scenePlan: { content: contents[i], pool: props.track?.frame === "world" ? undefined : pools.get(contents[i].prepared) } }));
 }
@@ -241,7 +273,7 @@ function JourneySurface(props: JourneyProps) {
   const size = useBackgroundSize();
   const width = background ? size.width : configuredWidth;
   const height = background ? size.height : configuredHeight;
-  const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? journeyContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale]);
+  const { prepared, overlay } = useMemo(() => props.scenePlan?.content ?? journeyContent(children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale, props.look, keyframeSeconds(props)), [props.scenePlan, children, quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale, props.look, props.keyframeDuration, props.track?.duration]);
   const declared = useMemo(() => trackIds(prepared), [prepared]);
   const preview = usePresentationValue("isPreview");
   const requestedPool = preview ? undefined : props.scenePlan?.pool;
@@ -283,9 +315,11 @@ function JourneySurface(props: JourneyProps) {
   </View>;
 }
 function JourneySceneRuntime({ width, height, background = false, quality = "auto",
-  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active: requestedActive = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
+  buildDuration, previewTime = buildDuration ?? 4, borderRadius = 0, renderScale = 1, clock: clockMode = "slide", stepOffset: requestedStepOffset = 0, advanceDuration = 0, replayOnBack = false, enter, fallback, active: requestedActive = true, content: { prepared, retained, declared }, topology, pool, continuity, origin, resolution, track, trackFrame, retainLiveIds }:
   JourneyProps & { width: number; height: number; content: { prepared: PreparedJourneyScene; retained: PreparedJourneyScene; declared: string[] }; topology: string; pool?: JourneyPlan; continuity?: SharedValue<CameraPose | null>;
     origin: SharedValue<{ key: string; pose: CameraPose | null }>; resolution: SharedValue<ReturnType<typeof createResolutionState>>; trackFrame: SharedValue<TrackFrame>; retainLiveIds: (ids: string[], slide: number) => void }) {
+  if (requestedStepOffset === "auto") throw new Error('Journey stepOffset="auto" needs a JourneyStop');
+  const stepOffset = requestedStepOffset;
   const suspension = useSurfaceSuspension();
   const suspendedOnUI = suspension?.signal;
   const active = requestedActive && !suspension?.suspended;
@@ -300,6 +334,7 @@ function JourneySceneRuntime({ width, height, background = false, quality = "aut
     leg.bank !== undefined && !(leg.bank >= 0 && leg.bank <= 45) || [leg.spacing, leg.duration].some(value => value !== undefined && !(value > 0 && Number.isFinite(value)))))) {
     throw new Error("Journey track turn must be within ±60 degrees, bank 0–45 degrees, rise finite, and spacing and duration positive");
   }
+  if (track?.advance && [track, ...track.course ?? []].some(leg => leg?.turn)) throw new Error("Journey track turns need the default advance direction");
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildJourneyGraph(JSON.parse(topology)), [topology]);
   // Planned station scenes are immutable; each surface keeps its own sampled output and track state.

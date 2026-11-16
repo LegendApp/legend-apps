@@ -64,6 +64,8 @@ import { Background } from "@legend-apps/presentation";
 | `quality`, `renderScale`, `msaaSamples` | `"auto"`, `1` | See [Performance](#performance). |
 | `exposure` | `1` | Animated exposure before tone mapping. |
 | `toneMapping` | `"aces"` | `"aces"`, `"neutral"`, `"aces-filmic"` or `"agx"`. |
+| `look` | | `"cartoon"`: neutral tone mapping, no vignette, grain or default rim, toon shading on every shape and softer key shadows. Explicit props still win. |
+| `keyframeDuration` | `0.65` | Seconds for keyframes that set no `duration`; `"flight"` uses the track's flight time, so moving parts keep pace with the camera. |
 | `outputColorSpace` | `"srgb"` | `"srgb"` or `"linear-srgb"`. |
 | `emissiveScale` | `1` | Animated multiplier for all emission, including the floor. |
 | `postOrder` | `["fog", "dof", "bloom"]` | Order of the HDR post stages. |
@@ -89,6 +91,17 @@ is the baseline. Colors are `#RGB` or `#RRGGBB` and interpolate in linear light.
 `linear`, `cubic` (default), `inOut`, `out`, `smoothstep`, `expo` and `spring`. Jumping straight
 to a later step settles the earlier steps and animates only the current one; going back
 resamples the clock, so nothing depends on earlier frames.
+
+Vector keyframes can bow their segment: `arc` lifts its middle by that many world units (a hop)
+and `via` passes through a point halfway. `loop: { every, frames }` repeats local `at` frames
+every `every` seconds from the keyframe's `value`, on any clock, for ambient motion such as a
+spinning pickup:
+
+```tsx
+<Sprite id="hero" position={[{ step: 0, value: [0, 0, 0] }, { step: 1, value: [6, 2, 0], arc: 2 }]} … />
+<Box id="gem" rotation={[{ step: 0, value: [0, 0, 45],
+  loop: { every: 2.4, frames: [{ at: 0, value: [0, 360, 45], duration: 2.4, ease: "linear" }] } }]} />
+```
 
 ### Camera shots
 
@@ -175,6 +188,7 @@ components share one Journey. Each slide's `track` shapes the leg into its stop:
 | `via`, `viaTarget` | Points that bend the flight's curve. |
 | `course` | Legs by slide index, so stops sit on one track before they are visited. |
 | `steps` | Camera moves within a stop by step: `{ orbit, dolly, shift, fov, focus, duration, ease }`. |
+| `advance` | Direction stops advance in, `spacing` units per slide (default `[0, 0, -1]`, forward). `[1, 0, 0]` pans sideways. Turns need the default. |
 | `carry` | How matching parts fly between stops; see below. |
 | `frame`, `fixed` | Coordinate frame for parts; see below. |
 
@@ -191,17 +205,26 @@ By default (`frame: "station"`), content is authored relative to each stop and t
 With `frame: "world"`, parts and lights use fixed world coordinates and the camera stays local
 to each stop. Slides that pass the same `children` array then share one prepared scene, so
 navigation sends no new scene data. `stepOffset` adds to the step index, so tracks in the shared
-scene can address a running step number:
+scene can address a running step number. `stepOffset="auto"` counts the steps of the journey's
+earlier slides from the deck, so a slide with `steps: 2` advances the next stop by two:
 
 ```tsx
 const scene = buildScene(); // build once, outside the component
-export function Chapter({ slide }: { slide: number }) {
-  return <JourneyStop journey="tour" clock="step" stepOffset={FIRST_STEP[slide]}
+export function Chapter() {
+  return <JourneyStop journey="tour" clock="step" stepOffset="auto" keyframeDuration="flight"
     track={{ frame: "world", position: [0, 3.6, 13], carry: { lift: 3, spread: 3, spin: 40, stagger: 0.28 } }}>
     {scene}
   </JourneyStop>;
 }
 ```
+
+Automatic offsets assume a journey's stops are consecutive slides. They count from the earliest
+stop already shown, so jumping straight to a later stop before an earlier one has rendered
+counts from the stop you landed on.
+
+For a side-on scene, `advance: [1, 0, 0]` with `spacing` set to the distance between stops pans
+the camera sideways; `position` and `target` stay the same on every slide. See
+`apps/slides/examples/journey-platformer.mdx`.
 
 `carry` shapes the flight of any id whose pose changes on navigation: `lift` and `spread` bow
 the path up and sideways (world units), `spin` is the peak tumble in degrees, and `stagger` is
@@ -218,7 +241,9 @@ that must not jump.
 ### Shapes
 
 `Sphere`, `Box`, `Tube` and `Ring` accept `id`, `position`, `size` (default 0.5), `scale`,
-`rotation` (Euler XYZ degrees), `color`, `emissive` and `material`. `Tube` adds `end`, `curve`
+`rotation` (Euler XYZ degrees), `color`, `emissive` and `material`. `extent={[w, h, d]}` sets the
+full width, height and depth instead of `size` and `scale`. Without a material a shape glows
+(`emissive` 1.5) with a rim; with one it is matte unless `emissive` is set on it or its material. `Tube` adds `end`, `curve`
 and `thickness`; `Ring` adds `radius` and `thickness`. Instance ids must be unique in a scene.
 `RoundedBox` adds `radius` (default 0.1), `edge` (rim highlight, default 0.6) and `gradient`
 (darkens toward the bottom, 0 to 1); its default `scale` is `[2, 0.7, 0.35]`.
@@ -226,6 +251,24 @@ and `thickness`; `Ring` adds `radius` and `thickness`. Instance ids must be uniq
 `Orbs` places a seeded field of glowing spheres: `count` (default 48), `colors`, `radius`,
 `spread`, `position`, `seed`, `drift`, `emissive` and an `id` prefix (default `orb`). Use
 distinct prefixes for several fields.
+
+`Sprite` draws a flat picture in the scene, from an image or from pixel art. `source` is an
+image URI (data, file or web); it holds `frames` equal frames side by side (default 1), each
+`aspect` wide per unit of height (default 1), and texels under half opacity are cut out,
+including from its shadow. `pixels` is a list of frames, each a list of equal-length rows (top
+first) whose characters are `palette` keys, with `.` or a space left clear. `fps` (default 8)
+advances frames on the continuous clock, `size` is half the height (default 0.5), and
+`billboard` (default true) keeps it facing the camera. Colors draw exactly (`shading="flat"`);
+pass `shading="toon"` or `"lit"` to light them. Position, scale and rotation animate like any
+shape.
+
+```tsx
+<Sprite id="walker" fps={3} size={0.75} palette={{ o: "#ff8a3d", k: "#1b1b2b" }}
+  pixels={[[".oo.", "okko", "oooo", "o..o"], [".oo.", "okko", "oooo", ".oo."]]} position={[0, 0.75, 0]} />
+<Sprite id="butterfly" source={butterflyStrip} frames={2} fps={6} size={0.4} position={[3, 2, 0]} />
+```
+
+A scene holds up to eight distinct images across sprites and material maps.
 
 ### Graphs, pulses and sprays
 
@@ -408,16 +451,21 @@ const Sculpture = defineSceneComponent(({ color }: { color: string }) =>
 ```
 
 `Material` declares a reusable material by `id`; a primitive's `material` prop also accepts an
-inline object. Fields are `albedo` (lit surface color), `emissive`, `roughness`, `metal` and
-`rim`, all animatable. Emission feeds bloom but does not light nearby surfaces; add a point
-light for that.
+inline object. Fields are `albedo` (lit surface color), `emissive` (default 0), `roughness`,
+`metal` and `rim` (default 0; set about 1 for a cinematic edge), all animatable, plus `shading`:
+`"lit"` (default), `"flat"` draws the albedo's exact display color, like a flat `Card`, and
+`"toon"` lights it in three hard bands from the key light, including its shadows. `map` is an
+image URI multiplied into `albedo` on each face of a `Box`. Emission feeds
+bloom but does not light nearby surfaces; add a point light for that.
 
 - `KeyLight` is a directional light from `position` toward `target`, with `color` and
   `intensity` (default 2.2). `shadow` is `"map"` (default), `"contact"` for a cheaper
   screen-space shadow, or `false`. `shadowSize` is the half-width of the shadow box around
   `target` (default 20), `softness` the penumbra in texels, `shadowStrength` the share of light
   removed (default 0.85) and `shadowScale` the static map resolution (default 0.5). Cards,
-  labels and SDFs do not cast shadows.
+  labels and SDFs do not cast shadows. `follow="camera"` makes `position` and `target` offsets
+  from the camera target, so the light and its shadow box travel with the view along a long
+  course.
 - `PointLight` and `SpotLight` take animated `position`, `color`, `intensity` and `range`; spot
   lights add `target` and `angle`, the outer cone half-angle in radians.
 - `RimLight` adds a view-dependent rim `color` and `intensity`, visible even on dark materials.

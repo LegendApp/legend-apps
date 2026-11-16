@@ -106,7 +106,8 @@ const mesh: Record<PrimitiveKind, { count: number; code: string }> = {
 };
 
 /** Key light, environment and the shadow-map binding (when this pass receives shadows). */
-type Look = { key?: boolean; environment?: boolean; shadowBinding?: number; shadowCaster?: boolean; shadeAll?: boolean };
+/** `maps` image textures bind from `mapBinding` on; passes without them get a stub sampler. */
+type Look = { key?: boolean; environment?: boolean; shadowBinding?: number; shadowCaster?: boolean; shadeAll?: boolean; toneMapping?: JourneyScene["toneMapping"]; maps?: number; mapBinding?: number };
 function lightingCode(lightCount: number, look: Look = {}) {
   return `${look.key ? keyLightCode(look.shadowBinding, !look.shadeAll) : ""}${look.environment ? environmentCode : ""}
 fn eye()->vec3f { return vector(0u); }
@@ -241,17 +242,73 @@ fn fogAt(z:f32,y:f32)->f32 { return 1.-exp(-z*uniforms[12]*exp(clamp(-(y-uniform
  return CardResult(vec4f(color*fade,alpha*fade),depth);
 }`;
 }
+/** Image maps: \`mapTexel(index, uv, nearest)\` returns a linear, unpremultiplied texel; index -1 or a pass without maps returns white. */
+function mapCode(look: Look) {
+  const count = look.mapBinding === undefined ? 0 : look.maps ?? 0;
+  return `
+${Array.from({ length: count }, (_, i) => `@group(0) @binding(${look.mapBinding! + i}) var map${i}:texture_2d<f32>;`).join("\n")}
+fn mapRead(map:texture_2d<f32>,uv:vec2f,nearest:bool)->vec4f {
+ let size=vec2f(textureDimensions(map)); let p=clamp(uv,vec2f(0.),vec2f(1.));
+ let c=select(textureSampleLevel(map,linearSampler,p,0.),textureLoad(map,min(vec2i(p*size),vec2i(size)-vec2i(1)),0),nearest);
+ let rgb=c.rgb/max(c.a,.0001);
+ return vec4f(select(rgb/12.92,pow((rgb+.055)/1.055,vec3f(2.4)),rgb>vec3f(.04045)),c.a);
+}
+fn mapTexel(index:i32,uv:vec2f,nearest:bool)->vec4f {
+ ${Array.from({ length: count }, (_, i) => `if(index==${i}) { return mapRead(map${i},uv,nearest); }`).join("\n ")}
+ return vec4f(1.);
+}
+/** The instance's \`detail\` field packs shading plus 4 × (map index + 1). */
+fn partShading(detail:f32)->f32 { return f32(u32(round(max(detail,0.)))%4u); }
+fn partMap(detail:f32)->i32 { return i32(u32(round(max(detail,0.)))/4u)-1; }
+`;
+}
+/** Material shading for world geometry, read from the instance's \`detail\` field: 0 lit, 1 flat (the albedo's exact display color), 2 toon (three bands of key light). */
+function surfaceCode(look: Look) {
+  // Flat colors invert the scene's tone curve. Neutral is the identity below its shoulder after a small toe offset. Above it, the curve also
+  // desaturates, so peaks are capped at 0.9, where that stays near 2%, and the highlight compression is undone.
+  const display = look.toneMapping === "neutral" ? `
+fn displayScene(display:vec3f)->vec3f {
+ var y=max(select(display/12.92,pow((display+.055)/1.055,vec3f(2.4)),display>vec3f(.04045)),vec3f(0.));
+ let peak=max(y.r,max(y.g,y.b)); if(peak>.9) { y*=.9/peak; }
+ let top=min(peak,.9); if(top>=.76) { y*=(.0576/(1.-top)+.52)/top; }
+ let low=min(y.r,min(y.g,y.b)); let offset=select(.04,sqrt(low/6.25)-low,low<.04);
+ return (y+offset)/max(uniforms[8]*frame.brightness,.0001);
+}` : `
+fn displayScene(display:vec3f)->vec3f { return toScene(display); }`;
+  return `${display}
+fn surface(world:vec3f,normal:vec3f,material:Material,rimColor:vec3f,rimIntensity:f32,activation:f32,shading:f32)->vec3f {
+ if(shading<.5) { return illuminate(world,normal,material,rimColor,rimIntensity,activation); }
+ var color=displayScene(encode(material.albedo));
+ if(shading>1.5) {
+  ${look.key ? "let lit=select(max(0.,dot(normal,-keyDirection()))*keyShadow(world,normal),1.,uniforms[115]<=0.);"
+    : "let lit=max(0.,dot(normal,normalize(vec3f(-.4,1.,.6))));"}
+  color*=select(select(.62,.82,lit>.12),1.,lit>.5);
+ }
+ return (color+material.emissive*uniforms[18])*depthFade(world);
+}
+`;
+}
+/** Face coordinates on a box, each face's image upright when seen from outside. */
+const boxUVCode = `
+fn boxUV(base:u32,world:vec3f)->vec2f {
+ let part=instanceAt(base); let local=transpose(partRotation(base))*(unbend(world)-part.position)/(max(part.scale,vec3f(.0001))*max(part.radius,.0001));
+ let a=abs(local);
+ if(a.x>=a.y && a.x>=a.z) { return vec2f(-local.z*sign(local.x),-local.y)*.5+.5; }
+ if(a.y>=a.z) { return vec2f(local.x,local.z*sign(local.y))*.5+.5; }
+ return vec2f(local.x*sign(local.z),-local.y)*.5+.5;
+}`;
 const instanceLoader = loaderCode(JourneyInstance, "fn instanceAt(base:u32)", key => `base+${instanceField[key as keyof typeof instanceField]}u`);
 function geometryCode(kind: PrimitiveKind, offset: number, lights: number, custom?: CustomGeometry, sdf?: SDFGeometry, look: Look = {}) {
   const shape = custom ? `let shapeVertex=shape(geometryId(iid),vid,shapeContext()); point=shapeVertex.position*radius; normal=shapeVertex.normal;` : mesh[kind].code;
   const sphere = kind === "sphere" && !custom && !sdf;
   const bounds = sdf ? sdf.bounds.map(v => `vec3f(${v.map(n => Number.isInteger(n) ? n + "." : n).join(",")})`) : [];
-  return `${journeyBindings}${triangleCorner}${lightingCode(lights, look)}${vertexFields}
-${look.shadowCaster ? "@fragment fn shadowFragment(in:WorldVertex) { if(in.opacity<.5) { discard; } }" : ""}
+  return `${journeyBindings}${triangleCorner}${lightingCode(lights, look)}${vertexFields}${displayCode}${surfaceCode(look)}${mapCode(look)}
+${look.shadowCaster ? `@fragment fn shadowFragment(in:WorldVertex) { if(in.opacity<.5) { discard; }${look.mapBinding !== undefined ? " _=shade(geometryId(in.instance),in.world,normalize(in.normal),shapeContext());" : ""} }` : ""}
 ${custom?.wgsl ?? sdf?.wgsl ?? ""}
 fn slot(iid:u32)->u32 { return ${journeyHeaderSize}u+(iid+${offset}u)*${journeyInstanceSize}u; }
 ${instanceLoader}
 ${custom ? "fn geometryId(iid:u32)->u32 { let marker=instanceAt(slot(iid)).geometry; if(marker>0.) { return u32(marker)-1u; } return iid; }" : ""}
+${kind === "box" && !custom && !sdf ? boxUVCode : ""}
 @vertex fn worldVertex(@builtin(vertex_index) vid:u32,@builtin(instance_index) iid:u32)->WorldVertex {
  let base=slot(iid); let part=instanceAt(base);
  let origin=part.position; let radius=max(part.radius,.0001);
@@ -300,7 +357,7 @@ struct SphereResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let normal=normalize(rotation*(local/radii)); let facing=max(0.,dot(normal,normalize(eye()-hit)));
  let emission=(in.color*(.1+.9*pow(facing,3.))+vec3f(.35*pow(facing,16.)))*in.emissive;
  let material=Material(in.albedo,emission,in.material.x,in.material.y);
- let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w);
+ let color=surface(hit,normal,material,in.color,in.material.z,in.material.w,partShading(part.detail));
  let opacity=in.opacity*smoothstep(0.,edge,field);
  return SphereResult(vec4f(color*opacity,opacity),clip.z/clip.w);
 }` : sdf ? `
@@ -323,15 +380,18 @@ struct SDFResult { @location(0) color:vec4f, @builtin(frag_depth) depth:f32 }
  let hit=origin+rotation*(local*scale);
  let e=.001; let normal=normalize(rotation*(vec3f(sdf(local+vec3f(e,0.,0.))-sdf(local-vec3f(e,0.,0.)),sdf(local+vec3f(0.,e,0.))-sdf(local-vec3f(0.,e,0.)),sdf(local+vec3f(0.,0.,e))-sdf(local-vec3f(0.,0.,e)))/scale));
  let material=Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y);
- let color=illuminate(hit,normal,material,in.color,in.material.z,in.material.w); let clip=projected(hit);
+ let color=surface(hit,normal,material,in.color,in.material.z,in.material.w,partShading(part.detail)); let clip=projected(hit);
  return SDFResult(vec4f(color*in.opacity,in.opacity),clamp(clip.z/clip.w,0.,1.));
 }` : `
 @fragment fn worldFragment(in:WorldVertex)->@location(0) vec4f {
  if(in.opacity<=.001) { discard; }
  let normal=normalize(in.normal);
  ${kind === "box" && !custom ? "if(in.opacity>=.999 && dot(normal,eye()-in.world)<0.) { discard; }" : ""}
- let material=${custom ? "shade(geometryId(in.instance),in.world,normal,shapeContext())" : "Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y)"};
- let color=illuminate(in.world,normal,material,in.color,in.material.z,in.material.w);
+ let detail=uniforms[slot(in.instance)+${instanceField.detail}u];
+ ${custom ? "let material=shade(geometryId(in.instance),in.world,normal,shapeContext());"
+    : kind === "box" ? "let map=partMap(detail); var albedo=in.albedo; if(map>=0) { albedo*=mapTexel(map,boxUV(slot(in.instance),in.world),false).rgb; }\n let material=Material(albedo,in.color*in.emissive,in.material.x,in.material.y);"
+    : "let material=Material(in.albedo,in.color*in.emissive,in.material.x,in.material.y);"}
+ let color=surface(in.world,normal,material,in.color,in.material.z,in.material.w,partShading(detail));
  return vec4f(color*in.opacity,in.opacity);
 }`}`;
 }
@@ -556,7 +616,7 @@ export type JourneyGraphTopology = {
   quality: JourneyScene["quality"]; msaaSamples?: JourneyScene["msaaSamples"]; toneMapping?: JourneyScene["toneMapping"]; outputColorSpace?: JourneyScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   bloomScale?: number; dofScale?: number; dofSamples?: number; shaftScale?: number; shaftSamples?: number;
-  key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorSurface?: FloorSurface;
+  key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorSurface?: FloorSurface; maps?: string[];
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: JourneyPostPass[]; postOrder?: string[];
   effects?: { effect: string; options: Record<string, unknown>; before?: JourneyEffectStage; after?: JourneyEffectStage; base: number }[];
 };
@@ -593,7 +653,7 @@ export function journeyGraphTopology(scene: PreparedJourneyScene): JourneyGraphT
     floor: !!scene.floor, dof: !!scene.dof, shafts: !!scene.shafts, lightCount: scene.lights?.length ?? 0,
     bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
-    shadowScale: scene.keyLight?.shadowScale,
+    shadowScale: scene.keyLight?.shadowScale, ...scene.maps?.length ? { maps: scene.maps } : {},
     floorSurface: scene.floor && { lit: scene.floor.lit, grid: scene.floor.grid, shader: scene.floor.shader },
     customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder,
     effects: scene.effectUses.map(({ effect, options, before, after, base }) => ({ effect, options, before, after, base })) };
@@ -615,14 +675,19 @@ export function buildJourneyGraph(scene: PreparedJourneyScene | JourneyGraphTopo
   const labels = topology.labels, cards = topology.cards;
   const instanceCount = Object.values(topology.counts).reduce((a, b) => a + b, 0) + [...customDraws, ...sdfDraws, ...glyphDraws].reduce((sum, draw) => sum + draw.count, 0) + (cards?.count ?? 0) + (labels?.count ?? 0);
   const shadowMap = topology.shadow === "map";
-  const look: Look = { key: topology.key, environment: topology.environment, shadowBinding: shadowMap ? 3 : undefined };
+  const maps = topology.maps ?? [], mapIds = maps.map((_, i) => `map${i}`);
+  const look: Look = { key: topology.key, environment: topology.environment, shadowBinding: shadowMap ? 3 : undefined, toneMapping: topology.toneMapping,
+    maps: maps.length, mapBinding: maps.length ? shadowMap ? 4 : 3 : undefined };
   if (shadowMap) {
     targets.push({ id: "shadow", format: "depth32float", scale: topology.shadowScale ?? .5 });
     let offset = 0, draws = 0;
+    // Custom shapes read their image maps here too, so cut-out sprites cast cut-out shadows.
     const cast = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry) => passes.push({ kind: "render", id: `shadow-${id}`,
-      code: kind === "sphere" && !custom ? sphereShadowCode(start) : geometryCode(kind, start, 0, custom, undefined, { key: true, shadowCaster: true }),
+      code: kind === "sphere" && !custom ? sphereShadowCode(start) : geometryCode(kind, start, 0, custom, undefined,
+        { key: true, shadowCaster: true, ...custom && maps.length ? { maps: maps.length, mapBinding: 3 } : {} }),
       vertex: kind === "sphere" && !custom ? "shadowVertex" : "worldVertex", fragment: "shadowFragment", color: [], depth: "shadow",
-      vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, clear: draws++ === 0 ? [0, 0, 0, 0] : false });
+      vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, clear: draws++ === 0 ? [0, 0, 0, 0] : false,
+      ...custom && maps.length ? { reads: mapIds } : {} });
     for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) cast(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
     for (const [index, draw] of customDraws.entries()) cast(`custom-${index}`, "box", draw.count, draw.offset, draw);
     for (const [index, draw] of glyphDraws.entries()) passes.push({ kind: "render", id: `shadow-glyphs-${index}`,
@@ -639,7 +704,7 @@ export function buildJourneyGraph(scene: PreparedJourneyScene | JourneyGraphTopo
   const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {
     passes.push({ kind: "render", id: `scene-${id}`, code: geometryCode(kind, start, lights, custom, sdf, look), vertex: "worldVertex", fragment: "worldFragment",
       color: ["hdr"], depth: "depth", vertexCount: custom?.vertexCount ?? mesh[kind].count, instanceCount: count, blend: "over", clear: draws++ === 0 && !topology.floor ? clear : false,
-      ...shadowMap ? { reads: ["shadow"] } : {} });
+      ...shadowMap || maps.length ? { reads: [...shadowMap ? ["shadow"] : [], ...mapIds] } : {} });
   };
   for (const kind of ["box", "ring", "sphere", "tube"] as const) { if (topology.counts[kind]) add(kind, kind, topology.counts[kind], offset); offset += topology.counts[kind]; }
   for (const [index, draw] of customDraws.entries()) add(`custom-${index}`, "box", draw.count, draw.offset, draw);
@@ -765,5 +830,5 @@ export function buildJourneyGraph(scene: PreparedJourneyScene | JourneyGraphTopo
   }
   const buffers = [...labels ? [glyphBuffer()] : [], ...glyphFonts.map((font, index) => text3dBuffer(font, `text3d-${index}`))];
   const effectEnd = effectUses.reduce((end, use) => Math.max(end, use.base + journeyEffect(use.effect).size), 0);
-  return { targets, ...buffers.length ? { buffers } : {}, passes, uniformsSize: Math.max(journeyHeaderSize + instanceCount * journeyInstanceSize, effectEnd) + lights * journeyLightSize };
+  return { targets, ...buffers.length ? { buffers } : {}, ...maps.length ? { images: maps.map((source, i) => ({ id: mapIds[i], source })) } : {}, passes, uniformsSize: Math.max(journeyHeaderSize + instanceCount * journeyInstanceSize, effectEnd) + lights * journeyLightSize };
 }
